@@ -40,7 +40,7 @@ func rawAt(t *testing.T, path string) *sql.DB {
 
 // testStores is the per-org store set Mount builds, over a throwaway data dir.
 // A test that reaches storage through it exercises the REAL resolution path
-// (org → SanitizeOrg → file → cek), not a hand-placed handle, so an isolation
+// (org → namespace.Sanitize → file → cek), not a hand-placed handle, so an isolation
 // assertion is a statement about the shipped code.
 func testStores(t *testing.T) *cloud.OrgStore[*Store] {
 	t.Helper()

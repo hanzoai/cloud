@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/namespace"
 
-	"github.com/hanzoai/cloud/apps/provisioning"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -221,13 +221,13 @@ func (k *k8sClient) ready() error {
 // tenantNamespace derives the physical namespace for an org. This is the
 // cross-tenant isolation boundary: the org is the VALIDATED tenant (c.Org()),
 // so the namespace is not attacker-controlled. The slug is produced by the ONE
-// hardened, INJECTIVE org normalizer (provisioning.SanitizeOrg — identity on a
+// hardened, INJECTIVE org normalizer (namespace.Sanitize — identity on a
 // clean DNS label, else fold + a SHA-256 suffix of the raw owner), so two
 // distinct owners can NEVER collapse onto the same namespace (CRIT-2). Reusing
 // that single function keeps cloud's whole tenant→namespace/bucket/DB boundary
 // consistent, rather than forking a third, lossy slug rule.
 func tenantNamespace(org string) string {
-	org = provisioning.SanitizeOrg(org)
+	org = namespace.Sanitize(org)
 	if org == "" {
 		org = "unknown"
 	}
@@ -241,7 +241,7 @@ func tenantNamespace(org string) string {
 
 // buildImageRef is the deterministic per-tenant output image for a git build:
 // <prefix>/tenant-<org>/<app>:<tag>. org and app live in SEPARATE path
-// components, joined by '/', which neither an org slug (provisioning.SanitizeOrg
+// components, joined by '/', which neither an org slug (namespace.Sanitize
 // output) nor an app slug (slugRE) can contain — so the (org,app) pair is
 // UNIQUELY recoverable from the ref and the mapping is INJECTIVE (CRIT-2). The
 // previous single-component "tenant-<org>-<app>" join was ambiguous: (org=a-b,
@@ -256,7 +256,7 @@ func (k *k8sClient) buildImageRef(org, app, tag string) string {
 	if tag == "" {
 		tag = "latest"
 	}
-	return fmt.Sprintf("%s/tenant-%s/%s:%s", strings.TrimRight(prefix, "/"), provisioning.SanitizeOrg(org), app, tag)
+	return fmt.Sprintf("%s/tenant-%s/%s:%s", strings.TrimRight(prefix, "/"), namespace.Sanitize(org), app, tag)
 }
 
 // ensureNamespaceExists creates tenant-<org> if it does not exist (idempotent).
@@ -824,7 +824,7 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// collides (409 AlreadyExists) rather than spawning a duplicate — the
 	// idempotency key, no monotonic counter. The org slug is the INJECTIVE
 	// normalizer so two orgs' identically-named apps never share a Job name.
-	jobName := truncate("pf-build-"+provisioning.SanitizeOrg(org)+"-"+a.Slug+"-"+jobIDSuffix(buildID), 63)
+	jobName := truncate("pf-build-"+namespace.Sanitize(org)+"-"+a.Slug+"-"+jobIDSuffix(buildID), 63)
 
 	// buildctl-daemonless git frontend context: https://<repo>.git#<ref>.
 	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
@@ -1425,7 +1425,7 @@ func mustStatus(job *unstructured.Unstructured) map[string]any {
 // ── pure helpers ─────────────────────────────────────────────────────────────
 //
 // The org→slug normalizer is NOT here: cloud has exactly ONE, the injective
-// provisioning.SanitizeOrg (see tenantNamespace / buildImageRef). A second,
+// namespace.Sanitize (see tenantNamespace / buildImageRef). A second,
 // lossy copy previously lived here and was the CRIT-2 collision — deleted.
 
 func splitImageRef(ref string) (repo, tag string) {

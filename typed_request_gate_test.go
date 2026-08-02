@@ -57,7 +57,7 @@ var allowedRequestUses = map[string]string{
 		"caller, no mutation.",
 	"apps/provisioning/typed.go": "tenantOf — the provisioning control plane ALLOCATES and DESTROYS real " +
 		"backend resources, and its tenant is not the org principal.OrgFrom carries. Two facts differ, both " +
-		"live: the org is folded through sanitizeOrg (cloud.SanitizeOrg — the slug every physical name, S3 " +
+		"live: the org is folded through namespace.Sanitize (the slug every physical name, S3 " +
 		"bucket and tenant-<org> namespace is keyed on, so a read that skipped the fold would look in a " +
 		"different bucket than the create wrote), and an ORG-LESS SuperAdmin is bucketed under the literal " +
 		"\"admin\" org, which OrgFrom cannot express — it refuses an empty org outright, so reading the tenant " +
@@ -252,7 +252,7 @@ var allowedRequestUses = map[string]string{
 		"org principal.OrgFrom carries. Two facts say why, both live: a platform SuperAdmin has NO org at all " +
 		"(X-User-IsAdmin, a header OrgFrom does not carry) and reads every platform namespace rather than one " +
 		"tenant's, so an org is not merely absent from that scope, it would be wrong; and a normal org's scope " +
-		"is the injective provisioning.SanitizeOrg slug — the name of the tenant-<org> namespace its App CRs " +
+		"is the injective namespace.Sanitize slug — the name of the tenant-<org> namespace its App CRs " +
 		"live in — not the verbatim owner claim. consoleUser is the second: the session read must ANSWER for " +
 		"an anonymous caller rather than refuse one, and it reports the validated user ID (X-User-Id) " +
 		"beside admin-ness. TWO functions in ONE file, delegating to the same resolveScope every raw handler " +
