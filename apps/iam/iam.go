@@ -84,6 +84,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/sqlpool"
 	iamserver "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
@@ -293,6 +294,38 @@ func patterns() []string {
 		out = append(out, p+"/*")
 	}
 	return append(out, "/.well-known/*")
+}
+
+// The device-approval lookup states itself HERE because the graft leaves it nowhere
+// else to. It is an untyped route in another module, so neither seam that normally
+// carries prose reaches it: zipdoc lifts doc comments off TYPED ops, and the doc
+// comment on its handler therefore never enters zip's extraction for a host to read.
+// openapi.Describe is the seam for exactly that route, and it is additive metadata on
+// a route the router already carries — it cannot add, move or rename an operation.
+//
+// This is the host speaking for a route it mounts, so it is second-best by
+// construction: the sentence belongs upstream, on the operation, where the handler
+// lives. When github.com/hanzoai/iam gives the op its own prose, delete this.
+func init() {
+	openapi.Describe("/v1/iam/oauth/device/info", http.MethodPost,
+		"Name the application a pending device code is asking to sign in.",
+		"Answers \"what am I approving?\" for a pending user_code, so the approval page can "+
+			"name the application a human is about to authorize. Both fields come off the "+
+			"pending code's OWN application — never off the portal the browser happens to be "+
+			"on — so the screen cannot name one application while the code belongs to "+
+			"another.\n\n"+
+			"Requires a signed-in session, resolved from the browser's session cookie exactly "+
+			"as the approval itself resolves it. Not signed in is not a refusal to explain: it "+
+			"carries the stable login-required code the approval page branches on to sign the "+
+			"human in first.\n\n"+
+			"POST for a read, deliberately, for the same reason RFC 7662 introspection beside "+
+			"it is POST: the argument is a SECRET. A user_code in a request line is copied into "+
+			"ingress and proxy access logs, which a POST body is not.\n\n"+
+			"Unknown, expired, already used and already approved all get ONE opaque refusal — "+
+			"the same one the approval attempt would get. The user_code carries only 40 bits, "+
+			"so an answer that distinguished those states would be an oracle for hunting live "+
+			"codes; gated and opaque, this reveals strictly less than the approval the same "+
+			"caller could already attempt.")
 }
 
 // safeMount GRAFTS the IAM app into cloud, under a recover so its only panic path —
