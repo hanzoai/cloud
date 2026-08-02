@@ -294,7 +294,14 @@ func (w writer) write(ctx context.Context, m message) error {
 	if strings.TrimSpace(m.Org) == "" {
 		return fmt.Errorf("refusing an unattributed %s fact (id %q)", w.signal, m.ID)
 	}
-	return warehouseExec(ctx, w.statement(), w.args(m)...)
+	if err := warehouseExec(ctx, w.statement(), w.args(m)...); err != nil {
+		return err
+	}
+	// The second writer into event.* — the bus drain. It counts on the same
+	// series as the o11y plane sink so a table's row rate is the whole truth
+	// about that table, whichever path is carrying it.
+	cloud.ObserveRows(w.signal.table(), 1)
+	return nil
 }
 
 // drain owns the consumers — one per writer, all on the one bus connection. It is the
