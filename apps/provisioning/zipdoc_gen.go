@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/datastore/:name", zip.Doc{
-		Description: "DropDatastore deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
+		Description: "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
@@ -31,14 +31,14 @@ func init() {
 		Example: json.RawMessage(`{"name":"sessions"}`),
 	})
 	zip.Describe("DELETE /v1/s3/:name", zip.Doc{
-		Description: "DropS3 deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
+		Description: "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"uploads"}`),
 	})
 	zip.Describe("DELETE /v1/search/:name", zip.Doc{
-		Description: "DropSearch deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
+		Description: "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
@@ -52,14 +52,14 @@ func init() {
 		Example: json.RawMessage(`{"name":"orders"}`),
 	})
 	zip.Describe("DELETE /v1/vector/:name", zip.Doc{
-		Description: "DropVector deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
+		Description: "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"embeddings"}`),
 	})
 	zip.Describe("GET /v1/datastore", zip.Doc{
-		Description: "ListDatastore lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
+		Description: "Lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
 			"provisionedSummary.host":      "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.\nNever the internal admin address of a shared backend.",
@@ -71,7 +71,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/datastore/:name", zip.Doc{
-		Description: "GetDatastore returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
+		Description: "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
 			"provisionedResource.host":     "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.",
@@ -140,7 +140,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"sessions"}`),
 	})
 	zip.Describe("GET /v1/s3", zip.Doc{
-		Description: "ListS3 lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
+		Description: "Lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
 			"provisionedSummary.host":      "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.\nNever the internal admin address of a shared backend.",
@@ -152,7 +152,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/s3/:name", zip.Doc{
-		Description: "GetS3 returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
+		Description: "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
 			"provisionedResource.host":     "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.",
@@ -167,7 +167,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"uploads"}`),
 	})
 	zip.Describe("GET /v1/search", zip.Doc{
-		Description: "ListSearch lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
+		Description: "Lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
 			"provisionedSummary.host":      "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.\nNever the internal admin address of a shared backend.",
@@ -179,7 +179,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/search/:name", zip.Doc{
-		Description: "GetSearch returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
+		Description: "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
 			"provisionedResource.host":     "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.",
@@ -221,7 +221,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"orders"}`),
 	})
 	zip.Describe("GET /v1/vector", zip.Doc{
-		Description: "ListVector lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
+		Description: "Lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
 			"provisionedSummary.host":      "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.\nNever the internal admin address of a shared backend.",
@@ -233,7 +233,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/vector/:name", zip.Doc{
-		Description: "GetVector returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
+		Description: "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
 			"provisionedResource.host":     "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.",

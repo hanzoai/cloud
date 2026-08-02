@@ -54,7 +54,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/company/register", zip.Doc{
-		Description: "ListRegister returns the platform's whole formation register, newest activity\nfirst — every org's formation, not the caller's. It is a Hanzo platform\noperation: a caller who is not a platform reviewer gets 403.\n\nFilter by stage and structure, page with limit and offset. An unknown stage is\nrefused with 400 rather than returning a silently empty page.",
+		Description: "Returns the platform's whole formation register, newest activity\nfirst — every org's formation, not the caller's. It is a Hanzo platform\noperation: a caller who is not a platform reviewer gets 403.\n\nFilter by stage and structure, page with limit and offset. An unknown stage is\nrefused with 400 rather than returning a silently empty page.",
 		Fields: map[string]string{
 			"Registration.createdAt":   "CreatedAt is the unix second the formation was opened.",
 			"Registration.name":        "Name is the company name the entity is being formed under.",
@@ -74,14 +74,14 @@ func init() {
 		Example: json.RawMessage(`{"stage":"founders","limit":50}`),
 	})
 	zip.Describe("GET /v1/company/register/summary", zip.Doc{
-		Description: "SummarizeRegister counts the platform's formations by stage — the register's\nshape in one read, so a queue that is growing is visible as a number rather\nthan inferred by paging the list. A Hanzo platform operation: a caller who is\nnot a platform reviewer gets 403.",
+		Description: "Counts the platform's formations by stage — the register's\nshape in one read, so a queue that is growing is visible as a number rather\nthan inferred by paging the list. A Hanzo platform operation: a caller who is\nnot a platform reviewer gets 403.",
 		Fields: map[string]string{
 			"registerCounts.byStage": "ByStage counts formations per stage, keyed by the stage name.",
 			"registerCounts.total":   "Total is every formation in the register.",
 		},
 	})
 	zip.Describe("GET /v1/company/review", zip.Doc{
-		Description: "ReviewQueue reports the founders whose KYC is not yet settled, oldest formation\nfirst, so the queue drains in the order founders have been waiting. A Hanzo\nplatform operation: a caller who is not a platform reviewer gets 403.\n\nIt only says who is waiting; the decision itself is POST\n/v1/company/kyc/decision.",
+		Description: "Reports the founders whose KYC is not yet settled, oldest formation\nfirst, so the queue drains in the order founders have been waiting. A Hanzo\nplatform operation: a caller who is not a platform reviewer gets 403.\n\nIt only says who is waiting; the decision itself is POST\n/v1/company/kyc/decision.",
 		Fields: map[string]string{
 			"reviewFilter.limit": "Limit bounds how many formations are scanned; 0 or less means the default of 200.",
 			"reviewQueue.count":  "Count is how many founders are waiting.",
@@ -192,7 +192,7 @@ func init() {
 		Example: json.RawMessage(`{"to":"founders"}`),
 	})
 	zip.Describe("POST /v1/company/documents", zip.Doc{
-		Description: "GenerateDocuments renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing seam.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
+		Description: "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing seam.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -236,7 +236,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/company/esign", zip.Doc{
-		Description: "RequestEsign sends the generated formation documents for signature by every\nfounder and records the provider's reference on the formation. Available only\nat the esign stage.",
+		Description: "Sends the generated formation documents for signature by every\nfounder and records the provider's reference on the formation. Available only\nat the esign stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -281,7 +281,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/company/esign/complete", zip.Doc{
-		Description: "CompleteEsign records whether the formation documents have been signed. It\nconsults the e-signature provider, which a real provider's webhook drives; the\nsignal is idempotent.\n\nAn explicit `signed` in the request overrides the provider's answer, which is\nthe manual path for the stub provider that never self-completes.",
+		Description: "Records whether the formation documents have been signed. It\nconsults the e-signature provider, which a real provider's webhook drives; the\nsignal is idempotent.\n\nAn explicit `signed` in the request overrides the provider's answer, which is\nthe manual path for the stub provider that never self-completes.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -327,7 +327,7 @@ func init() {
 		Example: json.RawMessage(`{"signed":true}`),
 	})
 	zip.Describe("POST /v1/company/founders", zip.Doc{
-		Description: "SetFounders replaces the formation's founders. Each founder needs a name, an\nemail and an equity share in basis points; every founder is (re)set to pending\nKYC, so a previously settled decision does not survive a change of the list.",
+		Description: "Replaces the formation's founders. Each founder needs a name, an\nemail and an equity share in basis points; every founder is (re)set to pending\nKYC, so a previously settled decision does not survive a change of the list.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -372,8 +372,11 @@ func init() {
 		},
 		Example: json.RawMessage(`{"founders":[{"name":"Ada","email":"ada@acme.com","equityBps":10000}]}`),
 	})
+	zip.Describe("POST /v1/company/fundraise/deck", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("POST /v1/company/fundraise/round", zip.Doc{
-		Description: "RecordRound records a fundraising round on the org's canonical cap table.\nAvailable only after incorporation (stage company); roundType defaults to\nPRICED.",
+		Description: "Records a fundraising round on the org's canonical cap table.\nAvailable only after incorporation (stage company); roundType defaults to\nPRICED.",
 		Fields: map[string]string{
 			"RoundInput.name":              "Name is the round's name on the cap table, e.g. \"Seed\". Required.",
 			"RoundInput.preMoneyValuation": "PreMoneyValuation is the valuation the round prices off, before the new money.",
@@ -386,7 +389,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Seed","roundType":"PRICED","targetAmount":2000000}`),
 	})
 	zip.Describe("POST /v1/company/fundraise/safe", zip.Doc{
-		Description: "RequestSafe raises an e-signature request over documents already in the org's\ndata room — a SAFE, a convertible note, or any other fundraising paper.\nAvailable only after incorporation (stage company).",
+		Description: "Raises an e-signature request over documents already in the org's\ndata room — a SAFE, a convertible note, or any other fundraising paper.\nAvailable only after incorporation (stage company).",
 		Fields: map[string]string{
 			"Signer.email":       "Email is the address the signature request is sent to.",
 			"Signer.name":        "Name is the recipient's name, as it appears on the signature request.",
@@ -398,7 +401,7 @@ func init() {
 		Example: json.RawMessage(`{"documentIds":["doc_safe"],"signers":[{"name":"Ada","email":"ada@acme.com"}]}`),
 	})
 	zip.Describe("POST /v1/company/genesis", zip.Doc{
-		Description: "RecordGenesis seeds the canonical cap table with the founding allocation\n(stakeholders, a common share class, issued shares) and anchors the\ndeterministic equity-genesis root on-chain.\n\nIt is idempotent: once a root is recorded the cap table is NOT re-seeded, which\nwould double-issue founder share certificates. The root is persisted even when\nthe on-chain submit fails, because the root is the tamper-evident witness and\nmust not be recomputed on retry. Available only at the genesis stage.",
+		Description: "Seeds the canonical cap table with the founding allocation\n(stakeholders, a common share class, issued shares) and anchors the\ndeterministic equity-genesis root on-chain.\n\nIt is idempotent: once a root is recorded the cap table is NOT re-seeded, which\nwould double-issue founder share certificates. The root is persisted even when\nthe on-chain submit fails, because the root is the tamper-evident witness and\nmust not be recomputed on retry. Available only at the genesis stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -442,7 +445,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/company/import/captable", zip.Doc{
-		Description: "ImportCapTable reads an existing company's cap table from a Google Sheet and\nadds its stakeholders to the canonical cap table.\n\nThe first row is a header and columns are matched by name (case-insensitive):\nname and email are required, type/relationship/institution optional. A sheet\nwithout name and email columns, or with no usable data rows, is refused with\n400. Available only at the import stage.",
+		Description: "Reads an existing company's cap table from a Google Sheet and\nadds its stakeholders to the canonical cap table.\n\nThe first row is a header and columns are matched by name (case-insensitive):\nname and email are required, type/relationship/institution optional. A sheet\nwithout name and email columns, or with no usable data rows, is refused with\n400. Available only at the import stage.",
 		Fields: map[string]string{
 			"Filing.at":                              "At is the unix second the filing record was written.",
 			"Filing.note":                            "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -490,7 +493,7 @@ func init() {
 		Example: json.RawMessage(`{"spreadsheetId":"1AbCdEfGhIjKlMnOpQrStUvWxYz","range":"Cap Table!A1:E100"}`),
 	})
 	zip.Describe("POST /v1/company/import/documents", zip.Doc{
-		Description: "ImportDocuments ingests an existing company's corporate documents from a Google\nDrive folder into the org's data room. The import is shallow — sub-folders are\nskipped, not walked — and available only at the import stage.",
+		Description: "Ingests an existing company's corporate documents from a Google\nDrive folder into the org's data room. The import is shallow — sub-folders are\nskipped, not walked — and available only at the import stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -675,6 +678,9 @@ func init() {
 			"kycRefreshOut.provider":        "Provider is the identity-verification provider that was consulted.",
 		},
 	})
+	zip.Describe("POST /v1/company/payment", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("POST /v1/company/skip", zip.Doc{
 		Description: "Skip marks the org as already incorporated and moves it onto the import path,\nso an existing company brings its documents and cap table in instead of forming\na new entity. Available only at the structure stage.",
 		Fields: map[string]string{
@@ -720,7 +726,7 @@ func init() {
 		},
 	})
 	zip.Describe("PUT /v1/company/structure", zip.Doc{
-		Description: "SetStructure records the entity kind, the state of formation and the proposed\nname. Available only at the structure stage; an unknown structure or\njurisdiction, or an empty name, is refused with 400.",
+		Description: "Records the entity kind, the state of formation and the proposed\nname. Available only at the structure stage; an unknown structure or\njurisdiction, or an empty name, is refused with 400.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
