@@ -9,7 +9,7 @@ func TestPublishableKeyIsNotAPrincipal(t *testing.T) {
 	if !IsPublishableKey("pk-abc123") {
 		t.Fatal("pk- must be recognised as publishable")
 	}
-	for _, tok := range []string{"sk-abc123", "hk-abc123", "eyJhbGciOi.x.y", ""} {
+	for _, tok := range []string{"sk-abc123", "eyJhbGciOi.x.y", ""} {
 		if IsPublishableKey(tok) {
 			t.Fatalf("%q must NOT be publishable", tok)
 		}

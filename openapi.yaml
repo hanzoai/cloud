@@ -42533,7 +42533,7 @@ paths:
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
       operationId: delete_v1_dns_by_wildcard1
       parameters:
       - in: path
@@ -42551,7 +42551,7 @@ paths:
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
       operationId: get_v1_dns_by_wildcard1
       parameters:
       - in: path
@@ -42569,7 +42569,7 @@ paths:
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
       operationId: options_v1_dns_by_wildcard1
       parameters:
       - in: path
@@ -42587,7 +42587,7 @@ paths:
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
       operationId: patch_v1_dns_by_wildcard1
       parameters:
       - in: path
@@ -42605,7 +42605,7 @@ paths:
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
       operationId: post_v1_dns_by_wildcard1
       parameters:
       - in: path
@@ -42623,7 +42623,7 @@ paths:
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
       operationId: put_v1_dns_by_wildcard1
       parameters:
       - in: path
@@ -42641,7 +42641,7 @@ paths:
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
       operationId: trace_v1_dns_by_wildcard1
       parameters:
       - in: path

@@ -111,7 +111,7 @@ func TestRegisterListGetRevoke(t *testing.T) {
 
 	// Register an api-key account (bills via commerce).
 	code, body = req(t, app, http.MethodPost, "/v1/links", "acme", "alice", map[string]any{
-		"machine": "m1", "host": "box", "provider": "hanzo", "account": "hk-1", "kind": "apikey",
+		"machine": "m1", "host": "box", "provider": "hanzo", "account": "sk-1", "kind": "apikey",
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("register apikey want 201, got %d (%s)", code, body)
