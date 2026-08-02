@@ -854,24 +854,49 @@ func TestHydrateCostsAMapRead(t *testing.T) {
 		}
 	}
 
-	var before, after runtime.MemStats
-	const runs = 2000
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-	for i := 0; i < runs; i++ {
-		hydrate(s, tn, db)
+	// THE SECOND HALF, AND IT IS THE DETERMINISTIC ONE: steady-state hydrate does
+	// not touch the tenant's FILE either. Handed no file at all, a hydrate that
+	// still reads one cannot run, and one that is a map read does not notice.
+	// Stated this way rather than as a byte count because a count is a
+	// measurement and this is a fact.
+	hydrate(s, tn, nil)
+
+	// AND IT DOES NOT COPY THE FOREST. That half is a cost, so it is measured.
+	//
+	// COUNTED, AND AS THE MINIMUM OVER SEVERAL BATCHES. runtime.MemStats is
+	// PROCESS-WIDE, and the rest of this binary is not idle while the loop runs:
+	// measured in BYTES the same call reads 260 B alone and 5,192 B with another
+	// test's estimation allocating beside it — twenty times the signal, entirely
+	// from somebody else's forest. The ALLOCATION COUNT is what the neighbour
+	// barely moves (8 alone, 10–12 beside one) while the defect moves it by a
+	// factor of nineteen, so that is what is asserted; the bytes go in the
+	// message, where a number that cannot be trusted to fail is still worth
+	// reading. The minimum then removes what noise is left, and cannot hide the
+	// defect: the defect is in every batch.
+	const batches, runs = 8, 500
+	var best, bytes uint64 = ^uint64(0), 0
+	for b := 0; b < batches; b++ {
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		for i := 0; i < runs; i++ {
+			hydrate(s, tn, db)
+		}
+		runtime.ReadMemStats(&after)
+		if per := (after.Mallocs - before.Mallocs) / runs; per < best {
+			best, bytes = per, (after.TotalAlloc-before.TotalAlloc)/runs
+		}
 	}
-	runtime.ReadMemStats(&after)
-	perCall := (after.TotalAlloc - before.TotalAlloc) / runs
 
 	// A snapshot of ONE forest at the shipped geometry is 2 * 25 * 511 * 8 B =
-	// 204 KB before the histogram; red measured 209 KB per hydrate with one role
-	// cached and ~630 KB with two. The bound here is three orders of magnitude
-	// under that and still ample for the closure the role walk allocates.
-	const bound = 4096
-	if perCall > bound {
-		t.Fatalf("hydrate allocates %d B per call, bound is %d — it is copying forests on the request path, "+
-			"which is %d B/s of garbage at a thousand decisions a second", perCall, bound, perCall*1000)
+	// 204 KB and 152 allocations; red measured 209 KB per hydrate with one role
+	// cached and ~630 KB with two. Measured here at 8 allocations — the closure
+	// the role walk makes and nothing else — so the bound is three times the
+	// truth and six times under the defect.
+	const bound = 24
+	if best > bound {
+		t.Fatalf("hydrate makes %d allocations per call (%d B), bound is %d — it is copying forests on the "+
+			"request path, which is %d B/s of garbage at a thousand decisions a second", best, bytes, bound, bytes*1000)
 	}
 }
 
