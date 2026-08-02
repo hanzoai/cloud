@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -43,12 +44,41 @@ var untypedByDesign = map[string]string{
 		"(plane/shelf/surface/error), which a typed op's error envelope would drop.",
 }
 
+// TestSurface_IsOnlyUnderRisk is the namespace boundary as a gate.
+//
+// /v1/ml belongs to a DIFFERENT live product — the Kubernetes model-serving plane
+// (apps/ml): /v1/ml/health, /v1/ml/models, /v1/ml/models/{name}/predict, with
+// customers on them. This app used to mount its learning leaves inside that
+// prefix, which made /v1/ml/models mean "models you serve" and "models that
+// learn" at once and put a second owner inside a live product's namespace.
+//
+// The rule is structural, so it is checked structurally: every operation this app
+// serves is under /v1/risk, and nothing it serves is under /v1/ml. A route added
+// back into the serving product's prefix fails here rather than in production, on
+// somebody else's customers.
+func TestSurface_IsOnlyUnderRisk(t *testing.T) {
+	served, _, _ := riskOps(t)
+	if len(served) == 0 {
+		t.Fatal("the app serves nothing at all")
+	}
+	for key := range served {
+		_, path, _ := strings.Cut(key, " ")
+		if strings.HasPrefix(path, "/v1/ml") {
+			t.Errorf("%s is inside /v1/ml, which the model-SERVING plane owns and is live on — "+
+				"a learning op belongs at /v1/risk", key)
+		}
+		if !strings.HasPrefix(path, "/v1/risk/") {
+			t.Errorf("%s is outside /v1/risk — this app has exactly one face", key)
+		}
+	}
+}
+
 // One decision recorded here rather than discovered at integration, because it is
 // about the WIRE and is not visible in a handler:
 //
 // EVERY PRICED OP IS TYPED AND REFUSES IN THE FLEET'S OWN MONEY CONTRACT. A typed
 // op's returned error renders as zip's FLAT envelope, which is a second vocabulary
-// for a refusal the platform already has words for — so the /v1/ml group carries
+// for a refusal the platform already has words for — so the /v1/risk group carries
 // cloud.DenyEnvelope and each gated op returns cloud.Denied, and a 402 from here
 // is byte-for-byte a 402 from anywhere else. Held by
 // [TestScoreAndLearn_AreGatedOnTheCallersOwnBalance].
@@ -121,7 +151,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		sort.Strings(untyped)
 		t.Errorf("operation(s) with no registry entry and no reason: %s\n"+
 			"A route that is not a typed op has no schema, no prose, no MCP tool, no CLI command and no "+
-			"SDK method. Convert it (zip.Get/Post/... on the /v1/ml group), or add it to untypedByDesign "+
+			"SDK method. Convert it (zip.Get/Post/... on the /v1/risk group), or add it to untypedByDesign "+
 			"with the reason typing it would move the wire.", strings.Join(untyped, ", "))
 	}
 	for key := range untypedByDesign {
@@ -208,10 +238,10 @@ func TestNoInputCarriesAnOrganisation(t *testing.T) {
 		}
 		props, _ := sch["properties"].(map[string]any)
 		for field := range props {
-			// mlModelState.tenant and mlSnapshotOut.tenant are OUTPUTS — the server
+			// riskModelState.tenant and riskSnapshotOut.tenant are OUTPUTS — the server
 			// echoing the tenant it resolved, so a reader can see the answer is its
 			// own. Only INPUT shapes are gated here.
-			if !strings.HasSuffix(name, "In") && name != "mlEvent" && name != "mlRunRef" {
+			if !strings.HasSuffix(name, "In") && name != "riskEvent" && name != "riskRunRef" {
 				continue
 			}
 			for _, b := range bad {
@@ -257,15 +287,15 @@ func TestTypedOpsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 	probe.reset(true)
 	app := mountApp(t)
 	for _, tc := range []struct{ method, path, body string }{
-		{http.MethodPost, "/v1/ml/score", `{"event":{"kind":"account","subject":"u_1"}}`},
-		{http.MethodPost, "/v1/ml/learn", `{"events":[{"kind":"account","subject":"u_1"}]}`},
-		{http.MethodGet, "/v1/ml/state", ""},
-		{http.MethodPut, "/v1/ml/state/appetite", `{"review":0.01,"sample":0.001}`},
-		{http.MethodPost, "/v1/ml/state/snapshot", ""},
-		{http.MethodPost, "/v1/ml/state/restore", `{"body":{"version":1}}`},
-		{http.MethodGet, "/v1/ml/features", ""},
-		{http.MethodPost, "/v1/ml/search", `{"days":7}`},
-		{http.MethodGet, "/v1/ml/search/srch_1", ""},
+		{http.MethodPost, "/v1/risk/score", `{"event":{"kind":"account","subject":"u_1"}}`},
+		{http.MethodPost, "/v1/risk/learn", `{"events":[{"kind":"account","subject":"u_1"}]}`},
+		{http.MethodGet, "/v1/risk/state", ""},
+		{http.MethodPut, "/v1/risk/state/appetite", `{"review":0.01,"sample":0.001}`},
+		{http.MethodPost, "/v1/risk/state/snapshot", ""},
+		{http.MethodPost, "/v1/risk/state/restore", `{"body":{"version":1}}`},
+		{http.MethodGet, "/v1/risk/features", ""},
+		{http.MethodPost, "/v1/risk/search", `{"days":7}`},
+		{http.MethodGet, "/v1/risk/search/srch_1", ""},
 	} {
 		code, body := req(t, app, tc.method, tc.path, orgA, "", tc.body)
 		if code != http.StatusForbidden {
@@ -281,11 +311,11 @@ func TestTypedOpsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 func TestTypedOpsResolveTheTenantFromTheValidatedPrincipal(t *testing.T) {
 	probe.reset(true)
 	app := mountApp(t)
-	code, body := req(t, app, http.MethodGet, "/v1/ml/state", orgA, "u_"+orgA, "")
+	code, body := req(t, app, http.MethodGet, "/v1/risk/state", orgA, "u_"+orgA, "")
 	if code != http.StatusOK {
-		t.Fatalf("GET /v1/ml/state = %d %s", code, body)
+		t.Fatalf("GET /v1/risk/state = %d %s", code, body)
 	}
-	var st mlModelState
+	var st riskModelState
 	if err := json.Unmarshal(body, &st); err != nil {
 		t.Fatalf("unmarshal %s: %v", body, err)
 	}
@@ -307,12 +337,12 @@ func TestTypedOpsResolveTheTenantFromTheValidatedPrincipal(t *testing.T) {
 func TestScoreRefusesRatherThanReportingClean(t *testing.T) {
 	probe.reset(true)
 	app := mountApp(t)
-	code, body := req(t, app, http.MethodPost, "/v1/ml/score", orgA, "u_"+orgA,
+	code, body := req(t, app, http.MethodPost, "/v1/risk/score", orgA, "u_"+orgA,
 		`{"event":{"id":"e1","kind":"account","subject":"u_1","nano":1000000000}}`)
 	if code != http.StatusOK {
-		t.Fatalf("POST /v1/ml/score = %d %s", code, body)
+		t.Fatalf("POST /v1/risk/score = %d %s", code, body)
 	}
-	var out mlScoreOut
+	var out riskScoreOut
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("unmarshal %s: %v", body, err)
 	}
@@ -338,9 +368,9 @@ func TestLearnRefusesAnEmptyBatchAndAnUnknownKind(t *testing.T) {
 		{`{"events":[{"kind":"nosuchkind","subject":"u_1"}]}`},
 		{`{"events":[{"kind":"account","subject":""}]}`},
 	} {
-		code, body := req(t, app, http.MethodPost, "/v1/ml/learn", orgA, "u_"+orgA, tc.body)
+		code, body := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA, tc.body)
 		if code != http.StatusBadRequest {
-			t.Errorf("POST /v1/ml/learn %s = %d %s, want 400", tc.body, code, body)
+			t.Errorf("POST /v1/risk/learn %s = %d %s, want 400", tc.body, code, body)
 		}
 	}
 }
@@ -365,5 +395,51 @@ func TestHealthCarriesItsReport(t *testing.T) {
 	}
 	if rep["surface"] != true {
 		t.Errorf("the probe reports the surface as %v with the warehouse up", rep["surface"])
+	}
+}
+
+// TestManifest_ClaimsNoPrefixOfTheServingPlane is the OTHER half of the namespace
+// boundary, and it is the half that decides where production traffic goes.
+//
+// [TestSurface_IsOnlyUnderRisk] reads the routes this app REGISTERS. The manifest
+// row decides which binary a request REACHES: it is longest-prefix routing over
+// manifest.Apps, so a row here claiming a leaf of /v1/ml would take that path
+// away from the live model-serving plane — /v1/ml/models, /v1/ml/models/{name}/
+// predict, and customers on them — and hand it to a binary that serves nothing
+// at that path. A 404 on somebody else's live product, from a row in a table.
+//
+// The two halves are separate because they fail separately: a route can be
+// unregistered and still routed, and routed and still unregistered.
+func TestManifest_ClaimsNoPrefixOfTheServingPlane(t *testing.T) {
+	var mine, serving []string
+	for _, a := range manifest.Apps {
+		switch a.Name {
+		case "risk":
+			mine = a.Prefixes
+		case "ml":
+			serving = a.Prefixes
+		}
+	}
+	if len(mine) == 0 {
+		t.Fatal("the risk app claims no prefix at all, so nothing routes to it")
+	}
+	for _, p := range mine {
+		if !strings.HasPrefix(p, "/v1/risk") {
+			t.Errorf("the risk app claims %q — this app has exactly one face and it is /v1/risk", p)
+		}
+	}
+	// And the serving plane keeps everything it had. Its own leaves are the live
+	// product; this list is what production answers on today.
+	for _, want := range []string{"/v1/ml/health", "/v1/ml/models"} {
+		var held bool
+		for _, p := range serving {
+			if p == want {
+				held = true
+			}
+		}
+		if !held {
+			t.Errorf("the model-SERVING plane no longer claims %q — that path is live with customers "+
+				"on it and this track must not have moved it", want)
+		}
 	}
 }

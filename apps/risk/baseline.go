@@ -6,10 +6,10 @@ package risk
 // across organisations is the thing that would destroy it, so the cross-org
 // surface is exactly one table and it is AGGREGATE-ONLY:
 //
-//	hanzo.risk_baseline(bucket, subject_kind, dim, q10, q50, q90, q99, orgs, n)
+//	hanzo.risk_baseline(bucket, subject_kind, dim, q10, q50, q90, orgs, n)
 //
 // There is NO org column. No subject, no identifier, no pseudonym, no hash of
-// one. A row is four quantiles of one dim over one day, plus how many
+// one. A row is three quantiles of one dim over one day, plus how many
 // organisations and how many buckets went into them. That is not a redaction of
 // per-tenant data — there is nothing to redact, because the shape cannot hold a
 // tenant. The leak is UNCOMPUTABLE rather than merely disallowed, which is the
@@ -71,7 +71,6 @@ const baselineDDL = `
 		q10           Float64,
 		q50           Float64,
 		q90           Float64,
-		q99           Float64,
 		orgs          UInt32,
 		n             UInt64
 	) ENGINE = ReplacingMergeTree()
@@ -112,6 +111,25 @@ func publishable(orgs uint32, n uint64) bool {
 // the allowlist. Its placeholders bind, in order: the dim's published name, the
 // window start, the window end, the organisation floor and the subject-day floor.
 //
+// THE OUTER QUANTILE IS INTERPOLATED AND THE INNER ONE IS EXACT, and the
+// difference is the whole disclosure argument. `quantileExact` over k values
+// SELECTS AN ELEMENT: bounding every contributor to one vote and then taking an
+// exact quantile over exactly [kAnonOrgs] votes publishes one contributing
+// organisation's own daily median, verbatim — a sharper leak than the domination
+// the vote reduction removed, because twenty-four colluding organisations read
+// the twenty-fifth's number exactly rather than merely moving it. `quantile` is
+// ClickHouse's interpolating estimator: the published figure lies BETWEEN two
+// organisations' values and is therefore nobody's. Inside one organisation there
+// is nothing to disclose, so [vote] stays exact and stays modelled in Go.
+//
+// THE EXTREME LEVEL IS NOT PUBLISHED. At twenty-five votes a 99th percentile is
+// the maximum however it is estimated, and a maximum is one organisation's value
+// by definition. q10/q50/q90 are the levels a comparison actually reads.
+//
+// This is k-anonymity with bounded influence and it is NOT differential privacy:
+// it bounds what one organisation can move and what one published figure can be
+// attributed to, not what an adversary learns from many figures over time.
+//
 // THREE STAGES, and the middle one is the weight bound. The innermost reduces the
 // surface to one value per SUBJECT per day. The middle reduces each ORGANISATION
 // to one value — its own median over its own subjects — so every contributor
@@ -127,9 +145,9 @@ func publishable(orgs uint32, n uint64) bool {
 // [dimBy]. There is no path by which a caller's string becomes an identifier
 // here, which [TestBaseline_StatementIsConstant] holds to.
 func populate(d dim) string {
-	return fmt.Sprintf(`INSERT INTO %s (bucket, subject_kind, dim, q10, q50, q90, q99, orgs, n)
-		SELECT b, subject_kind, ?, quantileExact(0.10)(x), quantileExact(0.50)(x),
-		       quantileExact(0.90)(x), quantileExact(0.99)(x), uniqExact(org), sum(subjects)
+	return fmt.Sprintf(`INSERT INTO %s (bucket, subject_kind, dim, q10, q50, q90, orgs, n)
+		SELECT b, subject_kind, ?, quantile(0.10)(x), quantile(0.50)(x),
+		       quantile(0.90)(x), uniqExact(org), sum(subjects)
 		FROM (
 		  SELECT b, subject_kind, org, quantileExact(0.50)(sx) AS x, count() AS subjects
 		  FROM (
@@ -166,7 +184,7 @@ func vote(subjects []float64) float64 {
 	return xs[len(xs)/2]
 }
 
-// band is one published bucket of the network baseline: four quantiles of one
+// band is one published bucket of the network baseline: three quantiles of one
 // dim on one day, and the two counts that prove the bucket is anonymous.
 //
 // The type is the argument. There is no field a tenant could be recovered from,
@@ -178,7 +196,6 @@ type band struct {
 	Q10  float64
 	Q50  float64
 	Q90  float64
-	Q99  float64
 	Orgs uint32
 	N    uint64
 }
@@ -228,7 +245,7 @@ func baseline(ctx context.Context, dimName string, start, end time.Time) ([]band
 		args = append(args, dimName)
 	}
 	stmt := fmt.Sprintf(
-		"SELECT bucket, subject_kind, dim, q10, q50, q90, q99, orgs, n FROM %s WHERE %s ORDER BY bucket, subject_kind, dim LIMIT %d",
+		"SELECT bucket, subject_kind, dim, q10, q50, q90, orgs, n FROM %s WHERE %s ORDER BY bucket, subject_kind, dim LIMIT %d",
 		baselineTable, strings.Join(where, " AND "), maxRows)
 	raw, err := storeQuery(ctx, stmt, args...)
 	if err != nil {
@@ -244,7 +261,6 @@ func baseline(ctx context.Context, dimName string, start, end time.Time) ([]band
 		b.Q10, _ = number(r["q10"])
 		b.Q50, _ = number(r["q50"])
 		b.Q90, _ = number(r["q90"])
-		b.Q99, _ = number(r["q99"])
 		orgs, _ := number(r["orgs"])
 		n, _ := number(r["n"])
 		b.Orgs, b.N = uint32(orgs), uint64(n)

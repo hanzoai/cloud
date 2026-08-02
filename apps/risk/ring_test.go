@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/luxfi/aml/pkg/anomaly"
+	"github.com/luxfi/aml/pkg/types"
 	"github.com/luxfi/aml/pkg/velocity"
 )
 
@@ -48,7 +49,15 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 	// on a resident they are that resident's own.
 	tenantState := map[reflect.Type]string{
 		reflect.TypeOf(&velocity.Store{}): "sliding aggregates",
+		reflect.TypeOf(&rings{}):          "sliding aggregates",
 		reflect.TypeOf(&anomaly.Store{}):  "a model",
+	}
+	// The resident must hold the WRAPPER, because the wrapper is where the bound
+	// is counted; holding the bare store back would put the eviction out of sight
+	// again.
+	onResident := map[reflect.Type]bool{
+		reflect.TypeOf(&rings{}):         true,
+		reflect.TypeOf(&anomaly.Store{}): true,
 	}
 	pt := reflect.TypeOf(plane{})
 	for i := 0; i < pt.NumField(); i++ {
@@ -65,7 +74,7 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 	// And the resident does hold them, so the test above is about PLACEMENT and not
 	// about the fields having been deleted.
 	rt := reflect.TypeOf(resident{})
-	for want := range tenantState {
+	for want := range onResident {
 		var found bool
 		for i := 0; i < rt.NumField(); i++ {
 			if rt.Field(i).Type == want {
@@ -92,7 +101,7 @@ func TestRings_OneOrganisationCannotEvictAnother(t *testing.T) {
 	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
 	at := time.Now().UTC().Add(-time.Hour)
 
-	quiet := observation{ID: "a_1", Kind: kindAccount, Subject: "u_quiet", USD: 250, At: at}
+	quiet := ob(t, "a_1", kindAccount, "u_quiet", 250, at)
 	if _, err := p.learn(a, quiet); err != nil {
 		t.Fatalf("learn(A): %v", err)
 	}
@@ -103,13 +112,10 @@ func TestRings_OneOrganisationCannotEvictAnother(t *testing.T) {
 
 	// B fills its OWN bound several times over. Every one of these is ordinary use:
 	// distinct subjects, one event each, well inside every limit the API states.
-	flood := make([]observation, 0, residentKeys*3)
-	for i := 0; i < residentKeys*3; i++ {
-		flood = append(flood, observation{
-			ID: "b_" + strconv.Itoa(i), Kind: kindAccount,
-			Subject: "u_" + strconv.Itoa(i), USD: 10,
-			At: at.Add(time.Duration(i) * time.Millisecond),
-		})
+	flood := make([]observation, 0, ringKeyCeiling*3)
+	for i := 0; i < ringKeyCeiling*3; i++ {
+		flood = append(flood, ob(t, "b_"+strconv.Itoa(i), kindAccount, "u_"+strconv.Itoa(i), 10,
+			at.Add(time.Duration(i)*time.Millisecond)))
 	}
 	for i := 0; i < len(flood); i += maxBatch {
 		end := min(i+maxBatch, len(flood))
@@ -124,17 +130,17 @@ func TestRings_OneOrganisationCannotEvictAnother(t *testing.T) {
 			before, after)
 	}
 	// And B really did hit its own bound, so the experiment was the experiment.
-	if held := residentRings(t, p, b).Keys(); held > residentKeys+shards {
-		t.Fatalf("organisation B holds %d keys against a per-tenant bound of %d — the bound is not being applied",
-			held, residentKeys)
+	if held := residentRings(t, p, b).Keys(); held > ringKeyCeiling {
+		t.Fatalf("organisation B holds %d keys against a per-tenant ceiling of %d — the bound is not being applied",
+			held, ringKeyCeiling)
+	}
+	// And B knows it: a bound that binds must be readable, not inferred.
+	if st := residentStrain(t, p, b); !st.Saturated || st.Forgotten == 0 {
+		t.Fatalf("organisation B flooded %d subjects past a %d ceiling and its own state reports "+
+			"saturated=%v forgotten=%d — a control that starts forgetting must say so",
+			ringKeyCeiling*3, ringKeyCeiling, st.Saturated, st.Forgotten)
 	}
 }
-
-// shards is velocity's own sharding factor. The bound is applied per shard
-// (MaxKeys/shards+1), so the effective ceiling is the stated one plus at most one
-// key per shard — stated here so the assertion above measures the real bound
-// rather than an idealised one.
-const shards = 64
 
 // TestRings_SurviveARolloutExactly: the binary deploys one replica at a time with
 // the old pod stopped first, so anything held only in memory is gone on every
@@ -189,7 +195,7 @@ func TestRings_SurviveAnEviction(t *testing.T) {
 	evs := stream(300, time.Now().UTC().Add(-3*time.Hour))
 	teach(t, p, k, evs)
 	before := velocitySnapshot(t, p, k, evs)
-	learnedBefore, _ := p.state(k)
+	learnedBefore, _, _ := p.state(k)
 
 	// Evict exactly the way the bound does: write the state down, then drop it.
 	p.mu.Lock()
@@ -206,11 +212,11 @@ func TestRings_SurviveAnEviction(t *testing.T) {
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("an eviction changed this organisation's aggregates.\nbefore: %v\nafter:  %v", before, after)
 	}
-	learnedAfter, _ := p.state(k)
+	learnedAfter, _, _ := p.state(k)
 	if learnedAfter.Learned != learnedBefore.Learned {
 		t.Fatalf("an eviction unlearned %d events", learnedBefore.Learned-learnedAfter.Learned)
 	}
-	if _, evicted := p.residents(); evicted == 0 {
+	if _, _, evicted, _ := p.residents(); evicted == 0 {
 		t.Fatal("the probe reports no evictions — a bound being hit must be visible to an operator")
 	}
 }
@@ -235,14 +241,14 @@ func TestRings_AFutureStampCannotBlindASubject(t *testing.T) {
 	k := key(t, brandA, orgA)
 	now := time.Now().UTC()
 
-	poison := observation{ID: "poison", Kind: kindAccount, Subject: "u_evader", USD: 1, At: now.AddDate(100, 0, 0)}
+	poison := ob(t, "poison", kindAccount, "u_evader", 1, now.AddDate(100, 0, 0))
 	if _, err := p.learn(k, poison); err != nil {
 		t.Fatalf("learn(poison): %v", err)
 	}
 	real := []observation{
-		{ID: "r_1", Kind: kindAccount, Subject: "u_evader", USD: 9500, At: now.Add(-30 * time.Minute)},
-		{ID: "r_2", Kind: kindAccount, Subject: "u_evader", USD: 9600, At: now.Add(-20 * time.Minute)},
-		{ID: "r_3", Kind: kindAccount, Subject: "u_evader", USD: 9700, At: now.Add(-10 * time.Minute)},
+		ob(t, "r_1", kindAccount, "u_evader", 9500, now.Add(-30*time.Minute)),
+		ob(t, "r_2", kindAccount, "u_evader", 9600, now.Add(-20*time.Minute)),
+		ob(t, "r_3", kindAccount, "u_evader", 9700, now.Add(-10*time.Minute)),
 	}
 	if _, err := p.learn(k, real...); err != nil {
 		t.Fatalf("learn(real): %v", err)
@@ -272,13 +278,12 @@ func TestRecord_TwoBrandsShareAFileAndNotARecord(t *testing.T) {
 	}
 	at := time.Now().UTC().Add(-time.Hour)
 	// The SAME event id under both brands: an id-keyed record would collapse them.
-	shared := observation{ID: "e_1", Kind: kindAccount, Subject: "u_1", USD: 100, At: at}
+	shared := ob(t, "e_1", kindAccount, "u_1", 100, at)
 	if _, err := p.learn(a, shared); err != nil {
 		t.Fatalf("learn(A): %v", err)
 	}
 	for i := 0; i < 5; i++ {
-		one := observation{ID: "e_1", Kind: kindAccount, Subject: "u_1", USD: 100, At: at.Add(time.Duration(i) * time.Second)}
-		one.ID = "e_" + strconv.Itoa(i)
+		one := ob(t, "e_"+strconv.Itoa(i), kindAccount, "u_1", 100, at.Add(time.Duration(i)*time.Second))
 		if _, err := p.learn(b, one); err != nil {
 			t.Fatalf("learn(B): %v", err)
 		}
@@ -288,10 +293,10 @@ func TestRecord_TwoBrandsShareAFileAndNotARecord(t *testing.T) {
 			"events reached it through the shared file", got, got-1)
 	}
 	// And the record itself: rebuilt from disk, each brand replays only its own.
-	if _, _, n, err := p.rings(a); err != nil || n != 1 {
+	if _, _, n, err := p.rebuild(a); err != nil || n != 1 {
 		t.Fatalf("brand A's record replays %d observation(s) (err %v), want 1", n, err)
 	}
-	if _, _, n, err := p.rings(b); err != nil || n != 5 {
+	if _, _, n, err := p.rebuild(b); err != nil || n != 5 {
 		t.Fatalf("brand B's record replays %d observation(s) (err %v), want 5", n, err)
 	}
 }
@@ -306,7 +311,7 @@ func TestRecord_IsIdempotentOnTheCallersOwnEventID(t *testing.T) {
 	evs := stream(20, time.Now().UTC().Add(-2*time.Hour))
 	teach(t, p, k, evs)
 	teach(t, p, k, evs) // the retry
-	if _, _, n, err := p.rings(k); err != nil || n != len(evs) {
+	if _, _, n, err := p.rebuild(k); err != nil || n != len(evs) {
 		t.Fatalf("a retried batch left %d observations on the record (err %v), want %d", n, err, len(evs))
 	}
 }
@@ -324,7 +329,18 @@ func residentRings(t *testing.T, p *plane, k tenant) *velocity.Store {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.vel
+	return r.vel.vel
+}
+
+// residentStrain is what that tenant's own state reports about its aggregates.
+func residentStrain(t *testing.T, p *plane, k tenant) strain {
+	t.Helper()
+	r, err := p.resident(k)
+	if err != nil {
+		t.Fatalf("resident(%q): %v", string(k), err)
+	}
+	r.vel.reconcile()
+	return r.vel.strain()
 }
 
 // velocityOf is the 24h count for an observation's own account axis — the number
@@ -405,26 +421,23 @@ func TestRecord_IsBoundedPerTenant(t *testing.T) {
 	k := key(t, brandA, orgA)
 	at := time.Now().UTC().Add(-2 * time.Hour)
 	// Comfortably past the bound, in batches the API itself allows.
-	for i := 0; i < ringRows+2*maxBatch; i += maxBatch {
+	for i := 0; i < recordRows+2*maxBatch; i += maxBatch {
 		batch := make([]observation, 0, maxBatch)
 		for j := 0; j < maxBatch; j++ {
 			n := i + j
-			batch = append(batch, observation{
-				ID: "e_" + strconv.Itoa(n), Kind: kindAccount,
-				Subject: "u_" + strconv.Itoa(n%64), USD: 1,
-				At: at.Add(time.Duration(n) * time.Millisecond),
-			})
+			batch = append(batch, ob(t, "e_"+strconv.Itoa(n), kindAccount, "u_"+strconv.Itoa(n%64), 1,
+				at.Add(time.Duration(n)*time.Millisecond)))
 		}
 		if _, err := p.learn(k, batch...); err != nil {
 			t.Fatalf("learn: %v", err)
 		}
 	}
 	held := recorded(t, p, k)
-	if held > ringRows {
+	if held > recordRows {
 		t.Fatalf("this organisation's record holds %d observations against a stated bound of %d — "+
-			"an unbounded record is one tenant filling the volume every tenant's shelf lives on", held, ringRows)
+			"an unbounded record is one tenant filling the volume every tenant's shelf lives on", held, recordRows)
 	}
-	if held < ringRows/2 {
+	if held < recordRows/2 {
 		t.Fatalf("the record holds only %d observations — the prune is throwing away history the rebuild reads", held)
 	}
 	// What survives is the RECENT end: a bound that kept the oldest rows would
@@ -471,11 +484,10 @@ func TestWarm_FoldsAHistoryOnce(t *testing.T) {
 	probe.reset(true)
 	dir := t.TempDir()
 	k := key(t, brandA, orgA)
-	now := time.Now().UTC()
 	for i := 0; i < 30; i++ {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%5),
-			"bucket": now.Add(-time.Duration(i+1) * 10 * time.Minute),
+			"bucket": surfaceAt(i + 1),
 			"events": uint32(2), "spend_nano": int64(120_000_000),
 		})
 	}
@@ -485,7 +497,7 @@ func TestWarm_FoldsAHistoryOnce(t *testing.T) {
 	if f.Folded == 0 {
 		t.Fatalf("the first fold read nothing: %+v", f)
 	}
-	learned, err := first.state(k)
+	learned, _, err := first.state(k)
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
@@ -501,12 +513,141 @@ func TestWarm_FoldsAHistoryOnce(t *testing.T) {
 		t.Fatalf("a restored model re-read %d buckets of history it had already folded — "+
 			"its masses now count that history twice", again.Folded)
 	}
-	after, err := second.state(k)
+	after, _, err := second.state(k)
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
 	if after.Learned != learned.Learned {
 		t.Fatalf("the model learned %d events, was %d — the fold is not idempotent across a restart",
 			after.Learned, learned.Learned)
+	}
+}
+
+// TestRings_TheCeilingIsMeasuredNotAsserted: [shards] mirrors velocity's own
+// sharding factor, and a mirror nobody checks is a guess. The store applies
+// MaxKeys as MaxKeys/shards+1 PER SHARD, so the most it can hold is
+// [ringKeyCeiling] — measure it.
+//
+// Mutation proof: set shards to 1 (or derive ringKeys without the shard
+// discount) and the store holds more keys than the ceiling states, which is the
+// per-tenant byte budget being exceeded.
+func TestRings_TheCeilingIsMeasuredNotAsserted(t *testing.T) {
+	vel := newRings()
+	at := time.Now().UTC()
+	for i := 0; i < ringKeyCeiling*4; i++ {
+		vel.record(types.Transaction{
+			ID: strconv.Itoa(i), OrgID: "b/o", AccountID: "account:u_" + strconv.Itoa(i),
+			USD: 1, Timestamp: at,
+		})
+	}
+	vel.reconcile()
+	if held := vel.vel.Keys(); held > ringKeyCeiling {
+		t.Fatalf("one tenant's rings hold %d keys against a published ceiling of %d — the per-tenant "+
+			"byte budget of %d MiB is understated by %.1fx",
+			held, ringKeyCeiling, residentRingBudget>>20, float64(held)/float64(ringKeyCeiling))
+	}
+	st := vel.strain()
+	if !st.Saturated || st.Forgotten == 0 {
+		t.Fatalf("%d subjects went into a %d ceiling and the aggregates report saturated=%v forgotten=%d — "+
+			"a bound that binds must be readable, not inferred", ringKeyCeiling*4, ringKeyCeiling, st.Saturated, st.Forgotten)
+	}
+	if st.Bound != ringKeyCeiling {
+		t.Fatalf("the reported bound is %d, want the real ceiling %d", st.Bound, ringKeyCeiling)
+	}
+}
+
+// TestEvent_DefaultIdsDoNotCollideInOneSecond: a caller that sends no id of its
+// own is ordinary traffic, and it was being silently dropped.
+//
+// The default id used to be minted from the kind, the subject and the STAMP —
+// and the stamp is truncated to the second, so forty events for one subject
+// inside one second were forty events with one id. The record deduplicates on
+// (tenant, id), so thirty-nine never reached it; the rings are a projection of
+// that record, so after every rollout that subject read as having acted ONCE.
+// A detector going quiet on a schedule, for the most ordinary caller there is.
+//
+// Mutation proof: mint the default id from kind+subject+stamp again and the
+// record below holds 1 row instead of 40.
+func TestEvent_DefaultIdsDoNotCollideInOneSecond(t *testing.T) {
+	probe.reset(true)
+	dir := t.TempDir()
+	k := key(t, brandA, orgA)
+	const n = 40
+	at := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+
+	p := planeAt(t, dir)
+	holdFolds(t, p)
+	obs := make([]observation, 0, n)
+	for i := 0; i < n; i++ {
+		// The wire shape a caller sends when it has no id of its own, and every one
+		// of them inside the SAME second.
+		o, err := riskEvent{Kind: kindAccount, Subject: "u_1", Nano: 1_000_000_000, At: at.Format(time.RFC3339)}.observation(at)
+		if err != nil {
+			t.Fatalf("observation: %v", err)
+		}
+		obs = append(obs, o)
+	}
+	if _, err := p.learn(k, obs...); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	if held := recorded(t, p, k); held != n {
+		t.Fatalf("%d events for one subject inside one second left %d row(s) on the record — "+
+			"the rest are dropped, and the aggregates are a projection of this record", n, held)
+	}
+	if err := p.close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// And the rollout: the replay must find all of them.
+	second := planeAt(t, dir)
+	defer func() { _ = second.close() }()
+	holdFolds(t, second)
+	if _, _, replayed, err := second.rebuild(k); err != nil || replayed != n {
+		t.Fatalf("a rollout replayed %d of %d events (err %v) — that subject's velocity reads %d "+
+			"after every deploy", replayed, n, err, replayed)
+	}
+}
+
+// TestLearn_ARetriedBatchConvergesInMemoryToo: the record is idempotent on the
+// caller's own event id, which is the property a client with a timeout needs.
+// Convergence of the DURABLE half alone is not convergence: the rings and the
+// masses are what a decision is made from, and a retry that skipped the rows and
+// still moved them counts every event twice in exactly those numbers.
+//
+// Mutation proof: apply every observation in plane.learn regardless of what note
+// reported, and Learned below doubles.
+func TestLearn_ARetriedBatchConvergesInMemoryToo(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	at := time.Now().UTC().Add(-time.Hour)
+	batch := []observation{
+		ob(t, "evt-1", kindAccount, "u_1", 100, at),
+		ob(t, "evt-2", kindAccount, "u_1", 200, at.Add(time.Second)),
+	}
+	for i := 0; i < 2; i++ { // the client timed out and sent it again
+		verdicts, err := p.learn(k, batch...)
+		if err != nil {
+			t.Fatalf("learn %d: %v", i, err)
+		}
+		if len(verdicts) != len(batch) {
+			t.Fatalf("a retried batch answered %d verdicts, want one per event", len(verdicts))
+		}
+	}
+	if held := recorded(t, p, k); held != len(batch) {
+		t.Fatalf("the record holds %d rows after a retry of a %d-event batch", held, len(batch))
+	}
+	st, _, err := p.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if st.Learned != int64(len(batch)) {
+		t.Fatalf("the model learned %d times from a retried %d-event batch — the record converged and "+
+			"the masses did not, so the numbers a decision is made from are double the events",
+			st.Learned, len(batch))
+	}
+	if got := velocityOf(t, p, k, batch[0]); got != len(batch) {
+		t.Fatalf("the subject's 24h count is %d after a retried %d-event batch", got, len(batch))
 	}
 }

@@ -121,6 +121,17 @@ func (w *warehouse) fold(sql string, args []any) {
 	}
 }
 
+// surfaceAt is a bucket stamp a real surface could hold: aligned to the surface's
+// own grain and `back` buckets before [horizon].
+//
+// Fixtures derive their stamps from the production constants instead of picking
+// `now`, because a rollup never writes the newest [rollLag] minutes and no reader
+// ever asks for them. A fixture row stamped `now` is a row that could not exist,
+// and it silently stops exercising anything the moment the window is honoured.
+func surfaceAt(back int) time.Time {
+	return horizon(time.Now().UTC()).Add(-time.Duration(back) * featureBucket)
+}
+
 // hold files rows under an org key. A read binds an org; only rows filed under
 // exactly that key come back, which is what makes "a foreign subject returns zero
 // rows" a measurement and not a stub.
@@ -136,6 +147,16 @@ func (w *warehouse) ready() bool {
 	return w.up
 }
 
+// query answers a read the way the warehouse would: under the BOUND org and
+// within the BOUND window, half-open.
+//
+// It honours the window rather than returning the org's whole table, because a
+// fake that ignores it makes every window assertion in this package a stub — a
+// watermark that marked past what the surface holds, or a read that asked for
+// the wrong span, would come back with the right rows anyway and no test could
+// tell. The window is read out of the BOUND args for the same reason the fold
+// reads the org out of them: a value that had been interpolated into the text
+// would not be there to find.
 func (w *warehouse) query(sql string, args []any) ([]map[string]any, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -147,7 +168,42 @@ func (w *warehouse) query(sql string, args []any) ([]map[string]any, error) {
 		return nil, nil
 	}
 	org, _ := args[0].(string)
-	return w.table[org], nil
+	rows := w.table[org]
+	from, to, bounded := boundWindow(args)
+	if !bounded {
+		return rows, nil
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, r := range rows {
+		b, ok := r["bucket"].(time.Time)
+		if !ok {
+			out = append(out, r)
+			continue
+		}
+		if b := b.UTC(); b.Before(from) || !b.Before(to) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// boundWindow recovers the half-open window a statement bound. [featureWhere] binds it
+// last and as [tsLiteral] text, so the last two args that parse under that layout
+// are it.
+func boundWindow(args []any) (from, to time.Time, ok bool) {
+	if len(args) < 3 {
+		return
+	}
+	a, aok := args[len(args)-2].(string)
+	b, bok := args[len(args)-1].(string)
+	if !aok || !bok {
+		return
+	}
+	const layout = "2006-01-02 15:04:05"
+	from, aerr := time.Parse(layout, a)
+	to, berr := time.Parse(layout, b)
+	return from.UTC(), to.UTC(), aerr == nil && berr == nil
 }
 
 func (w *warehouse) exec(sql string, args []any) error {
