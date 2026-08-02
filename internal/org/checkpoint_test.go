@@ -43,7 +43,7 @@ func TestSyncCheckpointsBeforeShip(t *testing.T) {
 			checkpoints.Add(1)
 			return nil
 		}))
-	d := dy.For(orgID, dbKey, filepath.Join(t.TempDir(), "research.db"))
+	d := dy.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
 	if err := d.Hydrate(ctx); err != nil {
 		t.Fatalf("hydrate: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestSyncFailsClosedOnCheckpointError(t *testing.T) {
 		WithCheckpoint(func(context.Context, *sql.DB) error {
 			return fmt.Errorf("envelope re-encrypt failed")
 		}))
-	d := dy.For(orgID, dbKey, filepath.Join(t.TempDir(), "research.db"))
+	d := dy.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
 	if err := d.Hydrate(ctx); err != nil {
 		t.Fatalf("hydrate: %v", err)
 	}

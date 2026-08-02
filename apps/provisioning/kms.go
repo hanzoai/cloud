@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	kms "github.com/hanzoai/cloud/apps/mpc"
 	luxlog "github.com/luxfi/log"
 )
@@ -62,7 +63,14 @@ func openSecrets(brand string, log luxlog.Logger) *secrets {
 		}
 	}
 
-	client, err := kms.NewClient(kms.Config{Nodes: nodes, OrgSlug: org, Threshold: threshold})
+	// cloud.OrgNamespace is the one door a string becomes a tenant name at; the
+	// MPC client takes the name so it never has to fold a slug itself.
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		log.Error("provisioning KMS org is not a valid namespace; degrading", "org", org, "err", err)
+		return s
+	}
+	client, err := kms.NewClient(kms.Config{Nodes: nodes, Namespace: ns, Threshold: threshold})
 	if err != nil {
 		log.Error("provisioning KMS init failed; degrading", "err", err)
 		return s
