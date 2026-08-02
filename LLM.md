@@ -4172,7 +4172,7 @@ nested body from them and a typed 402 costs nothing.
 **Untyped by design: exactly one route.** `GET /v1/risk/health` answers 503
 carrying the degraded REPORT as its body. `apps/risk/typed_wire_test.go` holds the
 closed list, and it also pins the whole served surface as a diffable list —
-34 operations, 33 MCP tools.
+35 operations, 34 MCP tools.
 
 **Using this plane is not GOVERNING it.** One predicate, one place
 (`governState`): a write that can turn a control off — `PUT /v1/risk/mode`,
