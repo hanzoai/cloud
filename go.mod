@@ -14,8 +14,8 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.1
-	github.com/hanzoai/cek v0.2.2
-	github.com/hanzoai/commerce v1.49.43
+	github.com/hanzoai/cek v0.2.1
+	github.com/hanzoai/commerce v1.49.45
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
@@ -29,7 +29,7 @@ require (
 	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.4.0
+	github.com/hanzoai/sqlite v0.5.0
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/lib/pq v1.12.3
@@ -440,7 +440,7 @@ require (
 	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
-	github.com/hanzoai/tasks v1.52.4
+	github.com/hanzoai/tasks v1.52.9
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
