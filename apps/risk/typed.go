@@ -532,8 +532,49 @@ type riskCatalog struct {
 	// blind here — the model reads its neutral value and a reviewer has to be able
 	// to see that.
 	Surface []riskOrgFeature `json:"surface"`
-	// Gap says why the surface could not be measured, when that is the case.
+	// Network is the published cross-organisation baseline over the same window,
+	// so the surface above has something to be read AGAINST. It is the same for
+	// every caller and it names nobody.
+	//
+	// It carries no tenant and cannot be made to: the table it reads has no org
+	// column, every figure is a quantile over at least kAnonOrgs organisations
+	// weighted one vote each, and a band that does not meet that floor is dropped
+	// on the way out.
+	Network []riskBand `json:"network,omitempty"`
+	// Gap says why a lens could not be measured, when that is the case. Each
+	// reason names its own lens, because "the surface is unreadable" and "the
+	// network baseline is unreadable" are different facts.
 	Gap string `json:"gap,omitempty"`
+}
+
+// riskBand is one published day of the network baseline for one dimension: what
+// the network's own days look like, in the same unit the surface above reports.
+//
+// The levels are INTERPOLATED rather than exact, so a published figure lies
+// between two organisations' values and is therefore nobody's. No extreme level
+// is published: at this floor a 99th percentile is the maximum however it is
+// estimated, and a maximum is one organisation's number by definition.
+type riskBand struct {
+	// Day is the day the band covers.
+	Day time.Time `json:"day"`
+	// Kind is the subject kind it was computed over.
+	Kind string `json:"kind"`
+	// Dim is the dimension, named as this API publishes it.
+	Dim string `json:"dim"`
+	// Q10 is the quiet end of the network's day: a tenth of contributing
+	// organisations sit at or below it.
+	Q10 float64 `json:"q10"`
+	// Q50 is the network's median day.
+	Q50 float64 `json:"q50"`
+	// Q90 is the busy end: a tenth of contributing organisations sit at or above
+	// it. It is the highest level published.
+	Q90 float64 `json:"q90"`
+	// Orgs is how many organisations contributed, each weighted exactly one vote
+	// whatever its size. It is published so a reader can judge the band rather
+	// than trust it.
+	Orgs uint32 `json:"orgs"`
+	// N is how many subject-days went into it.
+	N uint64 `json:"n"`
 }
 
 // riskModelFeature is one dimension of the model space and the obligation it serves.
@@ -963,8 +1004,51 @@ func (o ops) features(ctx context.Context, in *riskCatalogIn) (*riskCatalog, err
 			Buckets: c.Buckets, Present: c.Present, Mean: c.Mean, Max: c.Max, Blind: c.Blind(),
 		})
 	}
+	// THE THIRD LENS, and the reason the baseline is computed at all.
+	//
+	// The daily recompute writes [baselineTable] whether or not anything ever
+	// reads it, and until this nothing did: a warehouse cost paid every day and
+	// collected on never, which is the same "declared but unwired" defect as a
+	// reader with no writer, inverted. One published table, one reader, so the
+	// disclosure argument has exactly one place to hold.
+	out.Network, err = bands(ctx, end.Add(-days), end)
+	if err != nil {
+		out.gap(err)
+	}
 	pay(int(days / (24 * time.Hour)))
 	return &out, nil
+}
+
+// bands reads the published network baseline for a window and renders it. It
+// narrows by no dim, because the catalogue reports every dimension.
+func bands(ctx context.Context, start, end time.Time) ([]riskBand, error) {
+	bs, err := baseline(ctx, "", start, end)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]riskBand, 0, len(bs))
+	for _, b := range bs {
+		out = append(out, riskBand{
+			Day: b.Day, Kind: b.Kind, Dim: b.Dim,
+			Q10: b.Q10, Q50: b.Q50, Q90: b.Q90, Orgs: b.Orgs, N: b.N,
+		})
+	}
+	return out, nil
+}
+
+// gap records why a lens is missing WITHOUT losing one already recorded. Two
+// lenses can fail in one response — an unreachable warehouse fails both — and a
+// field that only ever holds the last writer's message reports one outage as the
+// other's.
+func (c *riskCatalog) gap(err error) {
+	switch {
+	case err == nil:
+		return
+	case c.Gap == "":
+		c.Gap = err.Error()
+	case c.Gap != err.Error():
+		c.Gap += "; " + err.Error()
+	}
 }
 
 // Search runs an exhaustive search for the model shape that best fits the caller
