@@ -483,10 +483,10 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
 	github.com/luxfi/age v1.6.0 // indirect
+	github.com/luxfi/aml v0.3.5
 	github.com/luxfi/cache v1.3.1 // indirect
 	github.com/luxfi/consensus v1.36.11
 	github.com/luxfi/container v0.2.1 // indirect
-	github.com/luxfi/aml v0.3.5
 	github.com/luxfi/corona v0.10.4 // indirect
 	github.com/luxfi/crypto v1.20.2
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
@@ -684,7 +684,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.832.12
+	github.com/hanzoai/ai v1.832.13
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.11
 	github.com/hanzoai/licensing v0.1.5
