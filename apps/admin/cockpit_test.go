@@ -180,7 +180,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 			f.mu.Unlock()
 			w.WriteHeader(201)
 			fmt.Fprintf(w, `{"transactionId":"dep-%d","user":%q,"amount":%d,"currency":%q,"type":"deposit"}`, req.Amount, req.User, req.Amount, req.Currency)
-		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
+		case strings.HasSuffix(r.URL.Path, "/usage/rollup"):
 			fmt.Fprintf(w, `{"consumedCents":%d,"overageCents":0,"balance":{"balanceCents":%d,"availableCents":%d}}`, sp, bal, bal)
 		case strings.HasSuffix(r.URL.Path, "/balance"):
 			fmt.Fprintf(w, `{"user":%q,"currency":"usd","available":%d,"balance":%d}`, user, bal, bal)
