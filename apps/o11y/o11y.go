@@ -487,6 +487,12 @@ func mountRuntime(deps cloud.Deps) error {
 		// Runtime (and its ONE datastore connection) is live; start native
 		// metrics ingest — opt-in, fail-soft (metrics.go).
 		startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
+		// …and start carrying THIS process's own measurements to the same
+		// store. The line above receives other processes' metrics; this one
+		// sends ours. Without it cloud is the only service in the fleet whose
+		// metrics exist nowhere, because its single exit was a Prometheus
+		// scrape and Prometheus is gone (metricspush.go).
+		startNativeMetricsPush(embeddedRuntime.TelemetryStore, log)
 		log.Info("o11y runtime handler installed (in-process runtime)")
 		return nil
 	}

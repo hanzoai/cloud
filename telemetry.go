@@ -212,6 +212,18 @@ var metricRegistry = prometheus.NewRegistry()
 // fleet shares the host's environment, so a listener opened here would have every
 // child fighting for one address (the trap listenOn documents). The app that owns
 // the fleet prober owns the listener that publishes it — see apps/o11y.
+// MetricGatherer exposes this process's registry for the in-process push to the
+// telemetry store (apps/o11y/metricspush.go).
+//
+// The registry is no longer a PUBLISHED SURFACE. Prometheus is gone and nothing
+// scrapes this process; what remains is a buffer the meter provider renders into
+// and the push drains, in the same family model the datastore receiver already
+// speaks. Handing out the Gatherer rather than the *Registry is the point: the
+// caller may READ what was measured and cannot register anything, so the rule
+// this registry exists to enforce — what appears here is what this process chose
+// to instrument — survives having a second reader.
+func MetricGatherer() prometheus.Gatherer { return metricRegistry }
+
 func Metrics() http.Handler {
 	return promhttp.HandlerFor(metricRegistry, promhttp.HandlerOpts{
 		// A scrape that fails should say so to the scraper, which records it as a
