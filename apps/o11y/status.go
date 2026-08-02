@@ -2,13 +2,9 @@ package o11y
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"sort"
-	"strconv"
+	"strings"
 	"time"
 )
 
@@ -51,7 +47,7 @@ func probeStatus(ctx context.Context, svc service) statusResult {
 	probeUp, latency := probeHealth(ctx, svc.HealthHost)
 	res.LatencyMs = latency.Milliseconds()
 
-	deps := vmUpInventory(ctx, svc)
+	deps := upInventory(ctx, svc)
 	res.Deployments = deps
 
 	anyVMUp := false
@@ -67,7 +63,7 @@ func probeStatus(ctx context.Context, svc service) statusResult {
 		res.Source = "probe"
 	case len(deps) > 0:
 		res.Up = anyVMUp
-		res.Source = "victoria-metrics"
+		res.Source = "datastore"
 	default:
 		res.Up = false
 		res.Source = "unreachable"
@@ -116,81 +112,34 @@ func probeHealth(ctx context.Context, host string) (bool, time.Duration) {
 	return false, 0
 }
 
-// vmUpInventory reads `up{service="<product>"}` as an instant query and projects
-// each series into a deployment row (instance + up). Any failure degrades to an
-// empty inventory (honest), never a fabricated replica.
-func vmUpInventory(ctx context.Context, svc service) []deployment {
-	c := newVMClient()
-	series, err := c.queryInstant(ctx, `up{service="`+promLabel(svc.PromService)+`"}`)
+// upInventory reads the fleet prober's own gauge and projects it into
+// deployment rows. Any failure degrades to an empty inventory (honest), never a
+// fabricated replica.
+//
+// ⚠️ PER-REPLICA IDENTITY IS GONE, AND THAT IS NOT A REGRESSION TO PAPER OVER.
+// This used to read `up{service=…}`, which is the SCRAPE's own metric: one
+// series per target, so `instance`/`pod` came free because something had
+// visited each pod to produce it. Nothing scrapes anything now. What remains is
+// hanzo_service_up, which the prober records per SERVICE — it asks a Service
+// address whether the service answered, and a Service address is not a replica.
+//
+// So the inventory is one row per service, keyed by the thing actually
+// measured. Synthesising a pod name here would be inventing a fact no
+// measurement supports, which is the failure mode this whole file exists to
+// avoid. If per-replica health is wanted back it has to be MEASURED — the
+// prober would have to resolve endpoints and probe each — not derived.
+func upInventory(ctx context.Context, svc service) []deployment {
+	name := strings.TrimSpace(svc.PromService)
+	if name == "" {
+		return []deployment{}
+	}
+	byService, err := latestGaugeBy(ctx, upMetric, "service")
 	if err != nil {
 		return []deployment{}
 	}
-	out := make([]deployment, 0, len(series))
-	for _, s := range series {
-		inst := s.metric["instance"]
-		if inst == "" {
-			inst = s.metric["pod"]
-		}
-		out = append(out, deployment{Instance: inst, Up: s.value == 1})
+	v, ok := byService[name]
+	if !ok {
+		return []deployment{}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Instance < out[j].Instance })
-	return out
-}
-
-// instantSeries is one VM instant-query series: its label set + scalar value.
-type instantSeries struct {
-	metric map[string]string
-	value  float64
-}
-
-// vmInstantResponse is the Prometheus/VM query envelope (vector result).
-type vmInstantResponse struct {
-	Status string `json:"status"`
-	Data   struct {
-		Result []struct {
-			Metric map[string]string  `json:"metric"`
-			Value  [2]json.RawMessage `json:"value"`
-		} `json:"result"`
-	} `json:"data"`
-}
-
-// queryInstant issues GET /api/v1/query with a SERVER-built PromQL (URL-encoded).
-func (c *vmClient) queryInstant(ctx context.Context, query string) ([]instantSeries, error) {
-	u := c.base + "/api/v1/query?query=" + url.QueryEscape(query)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("vm: status %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return nil, err
-	}
-	var vr vmInstantResponse
-	if err := json.Unmarshal(body, &vr); err != nil {
-		return nil, err
-	}
-	if vr.Status != "success" {
-		return nil, fmt.Errorf("vm: non-success status")
-	}
-	out := make([]instantSeries, 0, len(vr.Data.Result))
-	for _, r := range vr.Data.Result {
-		var raw string
-		if err := json.Unmarshal(r.Value[1], &raw); err != nil {
-			continue
-		}
-		v, err := strconv.ParseFloat(raw, 64)
-		if err != nil {
-			continue
-		}
-		out = append(out, instantSeries{metric: r.Metric, value: v})
-	}
-	return out, nil
+	return []deployment{{Instance: name, Up: v == 1}}
 }
