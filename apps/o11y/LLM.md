@@ -257,33 +257,39 @@ Three planes, one datastore:
   READS Datastore via the branded `github.com/hanzo-ds/go` **v1.0.1**. `/v1/settings/:product`
   is NOT here — it is console product config, split out to `apps/settings`.
 
-- **Ingest / write plane** — `ingest.go`. An in-process OpenTelemetry Collector
-  that folds the standalone `otel-collector` Deployment into cloud. Accepts OTLP
-  (gRPC :4317, HTTP :4318) and writes spans+logs into the same Datastore the
-  query plane reads (`o11y_traces` / `o11y_logs`). Trimmed pipeline:
-  `otlp -> memory_limiter, resource(namespace=hanzo, env), batch -> {clickhousetraces, clickhouselogsexporter}`.
-  - **OFF by default.** Enable with `CLOUD_OTLP_INGEST_ENABLED=true` (+ a
-    datastore DSN). Fail-soft: any error leaves the standalone collector as the
-    ingest path. Registered with a ShutdownFunc so batches flush on stop.
-  - DSN rides `${env:CLOUD_OTLP_INGEST_DSN}` (envprovider) — never written to
-    disk. `service.telemetry.metrics.level=none` so the collector binds ONLY
-    :4317/:4318 (no :8888/:8889/:13133) — avoids the :9090 class of clash.
+- **Ingest / write plane** — `planesink.go`. A ZAP span receiver (:4317) and log
+  receiver (:4318) decode the same wire the retired embedded collector bound, and
+  a native `datastoreSink` appends prepared batches to the EVENT PLANE —
+  `event.span` / `event.log`, the same 15-column envelope `event.event` /
+  `event.error` / `event.metric` share. The `o11y_*` databases are closed.
+  - The whole otelcol pipeline (`ingest.go` + `zapingest.go` + `spanconv.go` +
+    `tracesink.go`) was DELETED, not ported: it existed to feed the SigNoz-schema
+    exporters, and with the plane as the store the translation layer has no job.
+  - **Bound by CAPABILITY, not a flag** — ingest runs exactly when a datastore DSN
+    is configured, because the DSN is the thing it writes to. Fail-soft at every
+    branch; a bad telemetry config can never take cloud down.
+  - Row identity is DERIVED (a span's id is its span_id, a log line's a content
+    hash salted by batch position), so ReplacingMergeTree idempotency is structural.
+  - `service` is the WORKLOAD, resolved in ONE place (`planeService`) for spans and
+    logs alike: `service.name`, else the wire app name, else the legacy `app` label,
+    else OTel's k8s derivation (`k8s.deployment.name` → replicaset → statefulset →
+    daemonset → cronjob → job → container). That last leg is not optional — the
+    fleet's biggest log producer is the otel-agent's filelog receiver, which stamps
+    `k8s.*` and NO `service.name`, and every reader keys on this column.
 
-## Metrics ingest is DEFERRED (driver-fork conflict — do not "fix" naively)
+## Metrics ingest — LANDED, natively (`metrics.go`)
 
-The metrics write path (the datastore metrics exporter + the `o11yspanmetrics`
-connector) is intentionally NOT embedded. That exporter references the upstream
-**dd-sketch fork** of ch-go (`chproto.DD/Store/IndexMapping`), which does NOT
-compile against cloud's `hanzo-ds/native` v0.72.0 / `hanzo-ds/go` v1.0.1 (verified:
-`undefined: chproto.DD` etc.). The two driver lines cannot coexist in one binary
-because the o11y QUERY plane pins upstream. Traces + logs exporters DO compile
-against upstream and are embedded.
+Metrics were deferred once because the SigNoz metrics exporter needed a **dd-sketch
+fork** of ch-go that cannot coexist with the upstream driver the query plane pins.
+The fork is not needed: `startNativeMetricsIngest` runs a ZAP metric receiver
+(`O11Y_METRICS_ZAP_LISTEN`, `:4319`) that decodes `MsgMetricBatch` and writes via
+o11y's `pkg/datastoremetrics` over UPSTREAM ch-go, into `event.series` /
+`event.metric`. Classic bucket/quantile decomposition, no DDSketch, one datastore
+connection shared with the query plane.
 
-Consequence: `otel-collector` cannot be fully ripped yet — 16 `otel-agent` pods
-(+ the logs-agent) forward metrics to it over ZAP :4319, and cloud can't persist
-metrics without the fork. Full rip requires porting the metrics exporter onto
-upstream ch-go (or aligning drivers). Until then the standalone collector stays
-for metrics; cloud takes traces+logs.
+That native writer is the shape `planesink.go` copied for spans and logs — a
+receiver decodes the wire, a writer appends a prepared batch. **One write path per
+signal, all four the same shape, all four on the event plane.**
 
 ## cloud's own telemetry — split host / sink
 
@@ -309,44 +315,47 @@ The ai adoption (`aiobject.AdoptHostTracerProvider`) moved to
 `cloud.TracerProviderInstalled()` — `apps/` already links ai; the host must not
 (`hanzoai/ai/object` is 1270 packages).
 
-## cloud's own spans → in-process trace sink (`tracesink.go`)
+## cloud's own spans → the plane (`planesink.go`)
 
-The dogfood: cloud's OWN spans (service + ai GenAI/LLM-obs) reach the embedded
-Datastore trace store WITHOUT a socket, via the ZAP locality-adaptive **Router**
-(`github.com/luxfi/zap`: `Router`/`InProcessInterface`/`Destination`/`Payload`).
-One Send API, Cost-table routing — not a caller branch. **The router lives in the
-host now** (`cloud/telemetry.go`); this package registers a handler on it.
+The dogfood: cloud's OWN spans (service + ai GenAI/LLM-obs) reach `event.span`
+WITHOUT a socket, via the ZAP locality-adaptive **Router** (`github.com/luxfi/zap`:
+`Router`/`InProcessInterface`/`Destination`/`Payload`). One Send API, Cost-table
+routing — not a caller branch. **The router lives in the host**
+(`cloud/telemetry.go`); this package registers a handler on it.
 
 - Seam: `cloud.RegisterTraceSink(cloud.TraceSink)` where
-  `TraceSink = func(ctx, []sdktrace.ReadOnlySpan) error`. `mountTraceSink`
-  registers `traceSink(exp)`; `shutdownTraceSink` registers nil. The payload is
-  SDK spans, not pdata, so the conversion — and therefore the collector import —
-  stays on this side.
-- **Same code, both deployments.** Registration is process-local. Linked in, the
-  host's `Send` to `traceDest` ("hanzo.o11y.traces") finds this handler and hands
-  over the LIVE batch by value (zero serialize, zero socket, no second collector
-  hop). As a plugin, the handler is registered in the CHILD, the host's router
-  returns `ErrNoRoute`, and the identical `Send` falls through to the ZAP wire
-  (`luxfi/trace` → this package's `zapreceiver` on :4317). Neither producer nor
-  exporter branches on where o11y lives.
-- The handler converts SDK spans → collector pdata **in place** (`spanconv.go`;
-  no proto, no marshal, no OTLP) and writes via the REAL `dstraces` exporter
-  (`ConsumeTraces`), the one writer that produces the `o11y_index_v3` schema the
-  query plane reads. The pdata→SpanV3 conversion is unexported there, so the sink
-  reuses the exporter as a `consumer.Traces` rather than duplicating ~90 lines of
-  schema-coupled conversion.
-- **OPT-IN + fail-soft.** Mounts (via `mountTraceSink` in the one order-69 mount)
-  only when `O11Y_TRACES_ZAP_INPROCESS` is truthy AND a datastore DSN is set.
-  `cloud.TraceInprocEnabled()` is the ONE gate, read by both the sink (whether to
-  mount) and the host producer (whether to install a provider with no wire
-  endpoint). Any construction error leaves cloud's spans on the wire — activating
-  it can never take cloud down. Shutdown deregisters the handler then flushes the
-  exporter's sending queue.
+  `TraceSink = func(ctx, []sdktrace.ReadOnlySpan) error`. `mountPlaneIngest`
+  registers it; `shutdownPlaneIngest` registers nil. The payload is SDK spans —
+  and now it stays SDK spans: `sdkSpanRowsOf` renders them straight to
+  `event.span` rows, one converter fewer than the retired pdata detour, sharing
+  every helper (`planeOrg`, `planeService`, `planeSpanKind`, `planeStatus`) with
+  the wire path.
+- **Same code, both deployments — but the wire needs an ADDRESS.** Registration is
+  process-local. Linked in, the host's `Send` to `traceDest` ("hanzo.o11y.traces")
+  finds this handler and hands over the LIVE batch by value (zero serialize, zero
+  socket). As a plugin, the handler is registered in the CHILD, the host's router
+  returns `ErrNoRoute`, and the identical `Send` falls through to the ZAP wire.
+  - Cloud runs its ~20 subsystems as sibling plugin PROCESSES in one pod, so
+    "co-resident" means loopback for all but one of them. `wireEndpointFor`
+    (host, `telemetry.go`) resolves that: explicit `OTEL_EXPORTER_ZAP_ENDPOINT`,
+    else the fleet collector when a legacy OTLP endpoint declares remote intent,
+    else `127.0.0.1:4317` — `planeSpanListen` — whenever
+    `O11Y_TRACES_ZAP_INPROCESS` says a sink exists in this DEPLOYMENT. Without
+    that last leg the siblings had neither a route nor an endpoint and every span
+    they produced was dropped, which is precisely how `event.span` stayed empty
+    while five migrated read paths queried it. The process HOLDING the sink is
+    routed and never reaches the fallback, so it cannot self-dial.
+- **Capability-bound + fail-soft.** `mountPlaneIngest` (in the one order-69 mount)
+  starts when a datastore DSN is set; the in-process sink additionally honours
+  `cloud.TraceInprocEnabled()` — the ONE gate, read by both the sink (whether to
+  register) and the host producer (whether a wire address is even needed). Any
+  construction error leaves cloud's spans on the wire; activating it can never
+  take cloud down. Shutdown deregisters the handler, stops the listeners, closes
+  the connection.
 - Boot window: the provider installs before `MountAll` but the sink registers at
   mount (order 69); spans in between take the wire fallback, else surface
-  `ErrNoRoute` (visible, never a silent drop). Steady state is in-process. A ZAP
-  `NodeInterface` for traces slots behind the same Send call site with no producer
-  change.
-- Covered by `TestTracing_EndToEnd_WithO11yLinkedIn` (this pkg — real provider,
-  real `RegisterTraceSink`, real `traceSink`, asserts the converted pdata and its
-  resource) and the routing/Cost-table tests in `cloud/telemetry_test.go`.
+  `ErrNoRoute` (visible, never a silent drop).
+- Covered by `planesink_test.go` (the pure row builders — wire span, wire log, SDK
+  span, the k8s workload derivation and the filelog regression it closes, with a
+  column-count guard pinning each row to its column list) and the routing /
+  Cost-table / `wireEndpointFor` tests in `cloud/telemetry_test.go`.

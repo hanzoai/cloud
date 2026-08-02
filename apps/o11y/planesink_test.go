@@ -330,10 +330,83 @@ func TestPlaneService(t *testing.T) {
 		t.Errorf("AppName is second: got %q", got)
 	}
 	if got := planeService(map[string]string{"app": "b"}, ""); got != "b" {
-		t.Errorf("app label is last: got %q", got)
+		t.Errorf("app label is third: got %q", got)
 	}
 	if got := planeService(nil, ""); got != "" {
 		t.Errorf("nothing -> empty: got %q", got)
+	}
+}
+
+// The k8s derivation, in OTel's precedence order. A more-specific workload
+// alongside a less-specific one resolves to the owner the spec names first.
+func TestPlaneService_K8sWorkloadPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		resource map[string]string
+		want     string
+	}{
+		{"deployment beats container", map[string]string{
+			"k8s.deployment.name": "ingress", "k8s.container.name": "ingress-sidecar"}, "ingress"},
+		{"deployment beats replicaset", map[string]string{
+			"k8s.deployment.name": "cloud", "k8s.replicaset.name": "cloud-5685c4d7b5"}, "cloud"},
+		{"statefulset", map[string]string{
+			"k8s.statefulset.name": "hanzod-mv", "k8s.container.name": "hanzod"}, "hanzod-mv"},
+		{"daemonset", map[string]string{
+			"k8s.daemonset.name": "csi-do-node", "k8s.container.name": "csi-do-plugin"}, "csi-do-node"},
+		{"cronjob beats job", map[string]string{
+			"k8s.cronjob.name": "reindex", "k8s.job.name": "reindex-29..."}, "reindex"},
+		{"container is the floor", map[string]string{"k8s.container.name": "mpc-node"}, "mpc-node"},
+		{"pod name is NOT a service", map[string]string{
+			"k8s.pod.name": "ingress-b7854888d-gb8xw"}, ""},
+		{"app label beats the k8s derivation", map[string]string{
+			"app": "gateway", "k8s.deployment.name": "gateway-canary"}, "gateway"},
+	} {
+		if got := planeService(tc.resource, ""); got != tc.want {
+			t.Errorf("%s: planeService(%v) = %q, want %q", tc.name, tc.resource, got, tc.want)
+		}
+	}
+}
+
+// The production regression this derivation closes, end to end on the builder: the
+// otel-agent's filelog receiver states k8s.* and NOTHING else, and the infra log
+// lens filters `service = <workload>`. An empty service column is that lens dark.
+func TestLogRowsOf_FilelogResourceResolvesWorkload(t *testing.T) {
+	rows := logRowsOf(&zaplogreceiver.LogBatch{
+		Resource: map[string]string{
+			"k8s.namespace.name":  "hanzo",
+			"k8s.pod.name":        "ingress-b7854888d-gb8xw",
+			"k8s.container.name":  "ingress",
+			"k8s.deployment.name": "ingress",
+			"host.name":           "otel-agent-4gppg",
+			"log.iostream":        "stdout",
+		},
+		Records: []zaplogreceiver.LogRecord{{TimeUnixNs: 1, Body: "GET /v2/sessions"}},
+	})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if got := logCol(t, rows[0], "service"); got != "ingress" {
+		t.Errorf("service = %q, want ingress — an empty service is the infra log lens dark", got)
+	}
+}
+
+// The in-process span path shares the resolver, so a resource with no service.name
+// resolves its workload identically instead of writing an empty service.
+func TestSdkSpanRowsOf_DerivesWorkloadService(t *testing.T) {
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(sr),
+		sdktrace.WithResource(resource.NewSchemaless(attribute.String("k8s.deployment.name", "cloud"))),
+	)
+	_, span := tp.Tracer("planesink-test").Start(context.Background(), "job")
+	span.End()
+
+	rows := sdkSpanRowsOf(sr.Ended())
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if got := spanCol(t, rows[0], "service"); got != "cloud" {
+		t.Errorf("service = %q, want cloud (derived from k8s.deployment.name)", got)
 	}
 }
 
