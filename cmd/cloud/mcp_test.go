@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/zap-proto/zip"
 )
@@ -32,13 +33,16 @@ func doMethod(t *testing.T, app *zip.App, method, path, body string) (int, strin
 	return resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Location"), string(b)
 }
 
-// app308 builds the host the way run() does: the MCP door at /v1/mcp, the alias
-// in front of it, then the console catch-all LAST. The order is the test — an
-// alias registered after webui.Mount would never be reached.
+// app308 builds the host the way run() does: the MCP door at manifest.MCPPath,
+// then the console catch-all LAST. There is no second registration in between,
+// and that is the point — webui's handler is TERMINAL, so it answers the bare
+// /mcp precisely because nothing else claimed it. This test is therefore a test
+// of the COMPOSED host and not of a helper: neuter mcpDoor (webui/mcp.go) and
+// every case below fails with the console shell.
 //
 // The typed op is not decoration. zip installs the door only when the app has at
 // least one op, plugin tool or caller (installMCP), so a host with an empty
-// registry serves no /v1/mcp at all — and an alias onto a door that was never
+// registry serves no /v1/mcp at all — and a redirect onto a door that was never
 // installed is the very bug this file is about. One op is the smallest thing that
 // makes the target real.
 func app308(t *testing.T) *zip.App {
@@ -46,13 +50,12 @@ func app308(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{
 		AppName:               "cloud",
 		DisableStartupMessage: true,
-		MCP:                   zip.MCPConfig{Path: "/v1/mcp"},
+		MCP:                   zip.MCPConfig{Path: manifest.MCPPath},
 	})
 	type ping struct{ Ok bool }
 	zip.Get(app, "/v1/ping", func(context.Context, *ping) (*ping, error) {
 		return &ping{Ok: true}, nil
 	})
-	mcpAlias(app)
 	if err := webui.Mount(app); err != nil {
 		t.Skipf("console embed unavailable in this build: %v", err)
 	}
@@ -67,7 +70,7 @@ func app308(t *testing.T) *zip.App {
 // client configured with the host and the conventional /mcp path could not open
 // the door, and neither answer looked like an outage.
 //
-// Without mcpAlias both probes fall to webui's catch-all and this fails.
+// Without mcpDoor both probes fall through to webui's SPA fallback and this fails.
 func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
 	app := app308(t)
 
@@ -83,8 +86,8 @@ func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
 		if code != http.StatusPermanentRedirect {
 			t.Fatalf("POST /mcp = %d, want 308; 301/302 would drop the JSON-RPC body", code)
 		}
-		if loc != "/v1/mcp" {
-			t.Errorf("POST /mcp Location = %q, want %q — the alias must name the one door", loc, "/v1/mcp")
+		if loc != manifest.MCPPath {
+			t.Errorf("POST /mcp Location = %q, want %q — the signpost must name the one door", loc, manifest.MCPPath)
 		}
 	})
 
@@ -96,8 +99,8 @@ func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
 		if code != http.StatusPermanentRedirect {
 			t.Fatalf("GET /mcp = %d, want 308", code)
 		}
-		if loc != "/v1/mcp" {
-			t.Errorf("GET /mcp Location = %q, want %q", loc, "/v1/mcp")
+		if loc != manifest.MCPPath {
+			t.Errorf("GET /mcp Location = %q, want %q", loc, manifest.MCPPath)
 		}
 	})
 
@@ -105,10 +108,10 @@ func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
 	// serve is the same dead end with an extra hop, and that is exactly the shape
 	// of the bug being fixed — so assert the target is real, not just named.
 	t.Run("the target is actually served", func(t *testing.T) {
-		code, _, _, body := doMethod(t, app, "POST", "/v1/mcp",
+		code, _, _, body := doMethod(t, app, "POST", manifest.MCPPath,
 			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)
 		if code == http.StatusNotFound || code == http.StatusMethodNotAllowed {
-			t.Fatalf("POST /v1/mcp = %d — the alias points at a door that is not there: %s", code, body)
+			t.Fatalf("POST /v1/mcp = %d — the signpost points at a door that is not there: %s", code, body)
 		}
 		if !strings.Contains(body, `"jsonrpc"`) {
 			t.Errorf("POST /v1/mcp body = %q, want a JSON-RPC envelope", body)

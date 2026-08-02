@@ -68,15 +68,29 @@ var (
 	planeOnce sync.Once
 
 	ingestItems metric.Int64Counter // hanzo_ingest_items_total{door,outcome}
-	planeRows   metric.Int64Counter // hanzo_plane_rows_written_total{table}
+	planeRows   metric.Int64Counter // hanzo_plane_rows_written_total{table} — table = the STREAM (see warehouseTables)
 	alertEgress metric.Int64Counter // hanzo_alert_delivery_total{egress,outcome}
 )
 
-// warehouseTables are the event-warehouse tables this estate writes. Seeding
-// them at zero is what makes "no span has landed in 30 minutes" a statement the
-// metric store can answer — event.span is the series that was missing for four
-// and a half months.
-var warehouseTables = []string{"event.event", "event.error", "event.log", "event.span"}
+// warehouseTables are the event STREAMS this estate writes. Seeding them at zero
+// is what makes "no span has landed in 30 minutes" a statement the metric store
+// can answer — event.span is the series that was missing for four and a half
+// months.
+//
+// A STREAM, not a table, since the occurrence tables merged into event.fact
+// discriminated by `signal`. The distinction is the difference between a rule
+// that works and one that cannot: five signals in one table report one series,
+// so a table-keyed counter can only say "something still arrives" — never which
+// signal stopped, which is the only question this exists to answer. Both writers
+// therefore report the signal's own name (apps/analytics writes it as the
+// signal's subject; the o11y plane sink's two tables ARE signals), so a row
+// counts on one series whichever path carried it.
+//
+// event.event is gone from this list because the signal was renamed act — a
+// namespace cannot also be a member of itself. Leaving it would seed a series
+// that can only ever read zero, which is the same false "it stopped" this
+// seeding exists to prevent, pointed the other way.
+var warehouseTables = []string{"event.act", "event.clip", "event.error", "event.log", "event.span"}
 
 // ingestDoors are the ingest doors whose admission outcome is counted. One
 // door today (POST /v1/event, the ONE event door); the list exists so seeding
@@ -155,9 +169,13 @@ func ObserveIngest(door string, accepted, dropped int) {
 	}
 }
 
-// ObserveRows records rows landed in an event-warehouse table. Called from the
-// two writers that put rows there — the o11y plane sink and the analytics bus
-// drain — so `event.span` counts whichever one is carrying it.
+// ObserveRows records rows landed in one event STREAM. Called from the two
+// writers that put rows there — the o11y plane sink and the analytics bus drain
+// — so `event.span` counts whichever one is carrying it.
+//
+// The argument is the stream (event.span, event.log, event.act …), not the
+// physical table: since the occurrence tables merged into event.fact the table
+// no longer identifies what stopped. See warehouseTables.
 func ObserveRows(table string, n int) {
 	planeInstruments()
 	if planeRows == nil || table == "" || n <= 0 {

@@ -183,7 +183,7 @@ var proseless = map[string]bool{
 	// shapes and reaching the document through the same Register seam. Their fields
 	// carry doc comments in Go — reflection simply cannot see them, which is the one
 	// reason they are listed here rather than described.
-	"LogBody": true, "SpanBody": true, "MetricBody": true, "Frame": true,
+	"LogBody": true, "SpanBody": true, "MetricBody": true, "ClipBody": true, "Frame": true,
 	// Every door's receipt.
 	"CaptureResult": true,
 	// The PostHog wire — now served on /v1/event, sniffed by decodeEvent.
@@ -456,7 +456,7 @@ func TestHealthReportKeepsTheMapItReplaced(t *testing.T) {
 		Service: "analytics", Status: "ok", Datastore: true, Warehouse: "hanzo",
 		Lenses: &healthLenses{
 			LLM:    healthLens{Table: llmTable, Available: true},
-			Events: healthLens{Table: eventsTable, Available: false},
+			Events: healthLens{Table: factTable, Available: false},
 		},
 	})
 	if err != nil {
@@ -475,7 +475,7 @@ func TestHealthReportKeepsTheMapItReplaced(t *testing.T) {
 	if llm["table"] != llmTable || llm["available"] != true {
 		t.Errorf("lenses.llm = %v, want {table:%s, available:true}", llm, llmTable)
 	}
-	if events["table"] != eventsTable || events["available"] != false {
-		t.Errorf("lenses.events = %v, want {table:%s, available:false}", events, eventsTable)
+	if events["table"] != factTable || events["available"] != false {
+		t.Errorf("lenses.events = %v, want {table:%s, available:false}", events, factTable)
 	}
 }

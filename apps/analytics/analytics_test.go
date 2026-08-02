@@ -34,6 +34,9 @@ func TestLLMWhereBindsOrgPositionally(t *testing.T) {
 		if strings.Contains(sql, org) {
 			t.Fatalf("org %q must NOT be interpolated into sql: %q", org, sql)
 		}
+		// hanzo.cloud_usage is the LLM LEDGER, not the event plane: it has no signal
+		// column and its tenant key is `organization`. So it keeps its own arg order —
+		// the plane's leading-tenant rule is about the plane's sort key, not a style.
 		if len(args) != 3 {
 			t.Fatalf("want 3 bound args (start,end,org), got %d: %v", len(args), args)
 		}
@@ -62,8 +65,19 @@ func TestEventsWhereBindsOrgPositionally(t *testing.T) {
 	if strings.Contains(sql, "maxpower") {
 		t.Fatalf("org must not be interpolated: %q", sql)
 	}
-	if got, ok := args[2].(string); !ok || got != "maxpower" {
-		t.Fatalf("org must be trailing bound arg, got %v", args[2])
+	// THE TENANT LEADS. org is the first bound value of every read on the plane,
+	// because it is the first column of the sort key — and the signal is the second,
+	// because it is the first column of the partition key. Anything that narrows
+	// further comes after both.
+	if got, ok := args[0].(string); !ok || got != "maxpower" {
+		t.Fatalf("org must be the FIRST bound arg, got %v", args[0])
+	}
+	if !strings.Contains(sql, "signal = ?") {
+		t.Fatalf("eventsWhere must bind the signal — one table means the signal is a "+
+			"predicate, and a lens that omits it reads every other signal as a product event: %q", sql)
+	}
+	if got, ok := args[1].(string); !ok || got != string(signalAct) {
+		t.Fatalf("signal must be the SECOND bound arg, got %v", args[1])
 	}
 }
 
@@ -185,8 +199,8 @@ func TestBuildTopProductsHonestEmpty(t *testing.T) {
 	if tp.Items == nil || len(tp.Items) != 0 {
 		t.Fatalf("items must be an empty (non-nil) slice, got %#v", tp.Items)
 	}
-	if tp.Reason == "" || tp.Source != eventsTable {
-		t.Fatalf("must carry honest reason + source (%s), got %+v", eventsTable, tp)
+	if tp.Reason == "" || tp.Source != factTable {
+		t.Fatalf("must carry honest reason + source (%s), got %+v", factTable, tp)
 	}
 }
 
@@ -212,11 +226,14 @@ func TestBreakdownSQLBindsOrgPositionally(t *testing.T) {
 		if !strings.Contains(sql, "time >= ? AND time < ?") {
 			t.Fatalf("time bounds must be parameterized: %q", sql)
 		}
-		if len(args) != 3 {
-			t.Fatalf("want 3 bound args (start,end,org), got %d: %v", len(args), args)
+		if len(args) != 4 {
+			t.Fatalf("want 4 bound args (org,signal,start,end), got %d: %v", len(args), args)
 		}
-		if got, ok := args[2].(string); !ok || got != org {
-			t.Fatalf("org must be the trailing bound arg verbatim, want %q got %v", org, args[2])
+		if got, ok := args[0].(string); !ok || got != org {
+			t.Fatalf("org must be the FIRST bound arg verbatim, want %q got %v", org, args[0])
+		}
+		if got, ok := args[1].(string); !ok || got != string(signalAct) {
+			t.Fatalf("signal must be the second bound arg, got %v", args[1])
 		}
 		if !strings.Contains(sql, "kind = 'page'") {
 			t.Fatalf("behavior lenses count only kind='page' rows (the plane's discriminator, "+
@@ -277,8 +294,8 @@ func TestBuildBreakdownPctShareOfTotal(t *testing.T) {
 	if b.Items[0].Pct != 60 || b.Items[1].Pct != 20 {
 		t.Fatalf("pct must be share of the in-window total: %v / %v", b.Items[0].Pct, b.Items[1].Pct)
 	}
-	if b.Source != "event.event" {
-		t.Fatalf("source want event.event (the plane table the lens reads), got %q", b.Source)
+	if b.Source != factTable {
+		t.Fatalf("source want %s (the plane's one fact table), got %q", factTable, b.Source)
 	}
 }
 
@@ -293,8 +310,8 @@ func TestBuildBreakdownHonestEmpty(t *testing.T) {
 	if b.Items == nil || len(b.Items) != 0 {
 		t.Fatalf("items must be an empty (non-nil) slice, got %#v", b.Items)
 	}
-	if b.Reason == "" || b.Source != eventsTable {
-		t.Fatalf("must carry honest reason + source (%s), got %+v", eventsTable, b)
+	if b.Reason == "" || b.Source != factTable {
+		t.Fatalf("must carry honest reason + source (%s), got %+v", factTable, b)
 	}
 }
 

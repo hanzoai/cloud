@@ -85,6 +85,10 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{}, plane.StarterIn{},
 		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
 		plane.ObsErrorIn{}, plane.ObsErrorOut{}, plane.Header{},
+		// ScopeRules is walked, not ScopeRule: the walk descends a slice of
+		// structs, so the row type is reached through the reply that carries it
+		// — which is also the only way it ever crosses.
+		plane.ScopeRules{},
 		plane.SlackSendIn{},
 		plane.StartIn{}, plane.Started{},
 	}
