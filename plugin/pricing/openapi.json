@@ -738,6 +738,31 @@
         }
       }
     },
+    "/v1/pricing/services": {
+      "get": {
+        "operationId": "get_v1_pricing_services",
+        "summary": "Returns the managed-service rate cards — Search, Crawl, Vector, Console and Managed Services — each with its own tiers, and some with usage rates or a comparison table.",
+        "description": "Returns the managed-service rate cards — Search, Crawl,\nVector, Console and Managed Services — each with its own tiers, and some with\nusage rates or a comparison table. It is the section as authored, un-gated.\n\nThese are DISPLAY rate cards: what a product costs, not what a plan grants. No\nentitlement or limit fields ride here, so nothing can bill off them.",
+        "tags": [
+          "pricing"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/pricing/subscriptions": {
       "get": {
         "operationId": "get_v1_pricing_subscriptions",

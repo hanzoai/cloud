@@ -189,6 +189,14 @@
     "name": "get_v1_pricing_providers"
   },
   {
+    "description": "Returns the managed-service rate cards — Search, Crawl,\nVector, Console and Managed Services — each with its own tiers, and some with\nusage rates or a comparison table. It is the section as authored, un-gated.\n\nThese are DISPLAY rate cards: what a product costs, not what a plan grants. No\nentitlement or limit fields ride here, so nothing can bill off them.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_pricing_services"
+  },
+  {
     "description": "Returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
     "inputSchema": {
       "properties": {},
