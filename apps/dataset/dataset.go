@@ -18,23 +18,38 @@
 //	              their partition expressions, and it arrives only as a
 //	              [tenant.Key], which cannot be written as a literal here and
 //	              cannot be decoded from a request body.
-//	immutability  A published version is `ready`, which is the GREATEST rank of
-//	              the ReplacingMergeTree version column — no later write of any
-//	              other stage can displace it — and the door refuses any
-//	              transition out of a terminal state. Two layers, engine and door.
+//	immutability  A published version is `ready`, and the only rank above it is
+//	              `disposed` — the tenant's own retention decision, the one write
+//	              that may outrank a publication. No other stage can displace it,
+//	              in the engine or at the door. Two layers.
 //	bounds        spec.go — the window, the horizon, the row cap, the number of
 //	              names and the number of versions are all bounded at the door, and
-//	              materialisation is one job per tenant at a time.
+//	              every scan of the source is admitted through ONE gate: priced at
+//	              the meter, one per tenant, [maxJobs] in the process, each with a
+//	              deadline of its own ([plane.admit]).
 //	expiry        There is NO table TTL. Disposal is the tenant's own DROP
-//	              PARTITION on (org, name), which cannot be spelled cross-tenant.
+//	              PARTITION on (org, dataset), which cannot be spelled cross-tenant.
 //
 // WHY IT IS ITS OWN APP. It shares no state with a scorer: there is no in-memory
-// model, no ring, no single-writer file. Everything it knows is in the warehouse,
-// so it restarts empty and answers identically — which is exactly what a plane
-// holding the record of what a model trained on must do, and exactly what a
-// process pinned to one replica for its in-memory forests cannot promise. Its
-// surface is five leaves under /v1/ml that no other app claims; zip refuses two
-// owners for one prefix at compose time, so that is checked rather than agreed.
+// model, no ring, no single-writer file. Every ANSWER it gives is a function of
+// the store, so it restarts empty and a restart loses nothing but the jobs in
+// flight — which is exactly what a plane holding the record of what a model
+// trained on must do, and exactly what a process pinned to one replica for its
+// in-memory forests cannot promise. Its surface is five leaves under /v1/ml that
+// no other app claims; zip refuses two owners for one prefix at compose time, so
+// that is checked rather than agreed.
+//
+// WHAT IS PER PROCESS, SAID PLAINLY. Every read, every declaration and every
+// disposal is a pure function of the store and answers identically from any
+// process. ADMISSION is not: the one-scan-per-tenant gate and the [maxJobs]
+// ceiling are this process's own map, so N replicas are N ceilings, and two
+// processes can admit one version's materialisation between them — both would
+// then write rows under one number and the register would keep whichever `ready`
+// landed last. This plane is therefore deployed as a SINGLE WRITER. That is a
+// deployment fact stated here rather than a property claimed and not held: a
+// durable lease is the only thing that would make it a property, and inventing
+// one for a plane that runs at one replica would be machinery nobody's
+// requirements asked for.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 package dataset
@@ -58,16 +73,16 @@ import (
 var errNoTenant = zip.ErrForbidden("no tenant, so there is no dataset plane to reach")
 
 // plane is everything this app is. It holds no dataset state: the register and
-// the rows are in the store, so two processes over one store answer identically
-// and a restart loses nothing but the jobs in flight.
+// the rows are in the store, so every answer is a function of the store and a
+// restart loses nothing but the jobs in flight.
 type plane struct {
 	// store is the warehouse. An interface so a test drives the plane, and so
 	// nothing here can reach the connection for anything else.
 	store store
 	// brand is the deployment's brand — half the tenant key, and never a header.
 	brand string
-	// bill gates and meters the one expensive op.
-	bill *cloud.ResourceMeter
+	// bill gates and meters every priced act.
+	bill meter
 	// log is the scoped subsystem logger.
 	log interface {
 		Info(string, ...any)
@@ -77,20 +92,45 @@ type plane struct {
 
 	// mu guards the two facts that are this process's rather than the store's.
 	mu sync.Mutex
-	// busy is the in-flight materialisation per tenant — the R5 gate. ONE job per
-	// tenant, so a tenant looping the op queues nothing and spends nothing: the
-	// second call is refused, not admitted and then starved.
-	busy map[string]inflight
+	// busy is the in-flight source scan per tenant — the R5 gate. ONE scan per
+	// tenant, so a tenant looping any op that reaches the source queues nothing
+	// and spends nothing: the second call is refused, not admitted and then
+	// starved.
+	busy map[string]scan
 	// schema records whether the owned tables have been created. Only success
 	// latches, so a warehouse that was still connecting at boot is retried.
 	schema bool
 }
 
-// inflight is one running materialisation, as this process sees it.
-type inflight struct {
-	Name    string
-	Version int
-	Since   time.Time
+// meter is the plane's half of the fleet's billing seam: GATE before a priced act
+// and DEBIT after it. *cloud.ResourceMeter is the production value.
+//
+// It is an interface for one reason a concrete meter cannot give: a gate can fail
+// with a FOREIGN error — "commerce unreachable: <transport detail>" — and what a
+// caller is shown when that happens is a property this package must be able to
+// test. Reaching that state with a real meter needs a commerce peer to be down,
+// which is not a state a unit test can stand up.
+type meter interface {
+	Gate(ctx context.Context, org, project string, projectValidated bool, kind string, costCents int64) error
+	Meter(org, project, kind string, amountCents int64, requestID, clientIP string)
+	Enabled() bool
+}
+
+// scan is PROOF that a read of the source surface was ADMITTED: priced at the
+// meter, bounded to one per tenant and to [maxJobs] in this process.
+//
+// It has no exported field and no constructor outside [plane.admit], so a
+// warehouse scan nobody paid for and nobody counted is not a thing this package
+// can spell. [plane.census] and [plane.facts] take one, and they are the only
+// functions that read [sourceTable] — which is what makes "every source scan is
+// gated, metered and bounded" a property of the type rather than a rule each new
+// op has to remember. A free lineage read is how that rule was broken the first
+// time.
+type scan struct {
+	k       tenant.Key
+	name    string
+	version int
+	since   time.Time
 }
 
 // Mount wires the dataset leaves of /v1/ml onto app.
@@ -115,11 +155,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("dataset.Mount: nil deps.Logger")
 	}
-	if deps.Brand == "" {
-		// The brand is half the tenant key. A deployment that did not state one
-		// cannot mint a key and every request would 403 — better said at boot than
-		// once per request.
-		return fmt.Errorf("dataset.Mount: no brand, so no tenant key can be minted")
+	if err := tenant.Vouches(deps.Brand); err != nil {
+		// The brand is half the tenant key, and the half that must be a brand the
+		// registry carries — the rollup that WRITES this plane's source refuses any
+		// other, so a key minted under one would read a tenant nobody can write.
+		// A deployment that cannot mint a key would 403 every request; better said
+		// once at boot than once per caller.
+		return fmt.Errorf("dataset.Mount: %q cannot mint a tenant key: %w", deps.Brand, err)
 	}
 	base := cloud.NewBase(deps, "dataset")
 	p := &plane{
@@ -127,7 +169,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		brand: deps.Brand,
 		bill:  base.Bill,
 		log:   base.Log,
-		busy:  map[string]inflight{},
+		busy:  map[string]scan{},
 	}
 
 	// The tables are created once, in the background, off every request path. A
@@ -192,6 +234,11 @@ func mount(p *plane, app cloud.Router) error {
 		return fmt.Errorf("dataset.Mount: the router carries no typed-op registry")
 	}
 	app.Use(cloud.Bridge())
+	// DenyEnvelope renders a gate refusal as the money wire's own bytes, the same
+	// ones every other Hanzo surface emits — one error contract for "no funds"
+	// across the fleet instead of this plane's private spelling of it. It touches
+	// nothing else: any error that is not a gate denial passes through untouched.
+	app.Use(cloud.DenyEnvelope())
 	o := ops{p: p}
 
 	zip.Post(z, "/v1/ml/datasets", o.create,
@@ -276,7 +323,7 @@ func (p *plane) who(ctx context.Context) (caller, error) {
 	}, nil
 }
 
-// maxJobs is how many materialisations this process runs at once, across every
+// maxJobs is how many source scans this process runs at once, across every
 // tenant. It is the OTHER half of the bound, and the half a per-tenant limit
 // cannot give: one-per-tenant stops a tenant spending the plane on itself, but a
 // thousand tenants each holding their own one slot is still a thousand concurrent
@@ -289,32 +336,79 @@ func (p *plane) who(ctx context.Context) (caller, error) {
 // somebody made.
 const maxJobs = 8
 
-// claim takes the tenant's one materialisation slot.
+// admit is THE door to the source surface: it prices the act at the meter, takes
+// the tenant's single slot and one of the plane's, and hands back the [scan] the
+// read itself requires.
 //
-// ONE JOB PER TENANT, AND [maxJobs] IN THE PROCESS. Both refusals are REFUSALS
+// EVERY op that touches the source goes through here — materialising, and tracing
+// a lineage, which re-asks the source the SAME measured question and is therefore
+// the same cost wearing a different verb. Lineage once did it with no gate, no
+// meter and no bound at all: an unauthenticated-cheap GET that ran an exact
+// distinct-count over up to 400 days of one tenant's feature surface, as many
+// times in parallel as a client cared to ask. The fix is not a check added to that
+// op; it is that the read cannot be spelled without the thing this returns.
+//
+// The DEBIT is not taken here. Admission can still fail after the gate — the
+// attempt has to be recorded before any work starts — and a caller must not pay
+// for work the plane then refused. Each op meters once its own act is on record.
+func (p *plane) admit(ctx context.Context, c caller, name string, version int, cost int64) (scan, error) {
+	if err := p.charge(ctx, c, cost); err != nil {
+		return scan{}, err
+	}
+	return p.claim(c.key, name, version)
+}
+
+// charge is the ONE call to the meter's gate, and the ONE place its refusal
+// becomes an answer.
+//
+// A gate refuses in three ways and only two of them are the caller's business:
+// out of funds and cap reached are 402s a caller can act on, and everything else
+// means the BILLER could not be asked — which arrives as a foreign error carrying
+// the peer's transport detail ("gate: commerce unreachable: dial tcp
+// 10.x.y.z:8080..."). zip's default handler puts an unrecognised error's own text
+// in the response body, so returning that verbatim publishes an internal address
+// to whoever asked. [cloud.Denied] is the fleet's ONE rendering of all three —
+// 402 insufficient_balance, 402 spend_cap_exceeded, 503 balance_unavailable —
+// with a fixed sentence per class and no room for a peer's words. The reason goes
+// to the log, where the operator is.
+//
+// It is one function because it is called from two ops, and "remember to wrap the
+// gate" is not a property; being unable to call the gate any other way is.
+func (p *plane) charge(ctx context.Context, c caller, cost int64) error {
+	err := p.bill.Gate(ctx, c.ledger, c.project, c.validated, "dataset", cost)
+	if err == nil {
+		return nil
+	}
+	p.log.Warn("dataset: the gate refused", "tenant", c.key.String(), "cents", cost, "err", err)
+	return cloud.Denied(err)
+}
+
+// claim takes the tenant's one source-scan slot.
+//
+// ONE SCAN PER TENANT, AND [maxJobs] IN THE PROCESS. Both refusals are REFUSALS
 // and not queues: a queue admits the same work later, so it converts a bound into
 // a delay and hides the fact that the plane is full. The two are distinguished
 // because they are different facts — one is this tenant's own doing and is
 // answered 409, the other is the plane's and is answered 503, which is the one a
 // caller should retry.
-func (p *plane) claim(k tenant.Key, name string, version int) (inflight, error) {
+func (p *plane) claim(k tenant.Key, name string, version int) (scan, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if held, busy := p.busy[k.String()]; busy {
-		return held, zip.ErrConflict(fmt.Sprintf(
-			"a materialisation of %q version %d is already running for this org; one at a time",
-			held.Name, held.Version))
+		return scan{}, zip.ErrConflict(fmt.Sprintf(
+			"this org is already reading the source for %q version %d; one at a time",
+			held.name, held.version))
 	}
 	if len(p.busy) >= maxJobs {
-		return inflight{}, zip.Errorf(503,
-			"this plane is running its %d concurrent materialisations; try again shortly", maxJobs)
+		return scan{}, zip.Errorf(503,
+			"this plane is running its %d concurrent source scans; try again shortly", maxJobs)
 	}
-	held := inflight{Name: name, Version: version, Since: time.Now().UTC()}
+	held := scan{k: k, name: name, version: version, since: time.Now().UTC()}
 	p.busy[k.String()] = held
 	return held, nil
 }
 
-// release gives the slot back. Always deferred by the job, so a panic in the job
+// release gives the slot back. Always deferred by whoever claimed it, so a panic
 // does not wedge a tenant out of its own plane for the life of the process.
 func (p *plane) release(k tenant.Key) {
 	p.mu.Lock()
@@ -322,11 +416,11 @@ func (p *plane) release(k tenant.Key) {
 	p.mu.Unlock()
 }
 
-// running reports the materialisation this process holds for a tenant, if any.
-// It is how `describe` tells "in flight right now" from "started by a process
-// that is gone" — two states the store cannot tell apart, because the store
-// cannot know which processes are alive.
-func (p *plane) running(k tenant.Key) (inflight, bool) {
+// running reports the scan this process holds for a tenant, if any. It is how
+// `describe` tells "in flight right now" from "started by a process that is
+// gone" — two states the store cannot tell apart, because the store cannot know
+// which processes are alive.
+func (p *plane) running(k tenant.Key) (scan, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	held, ok := p.busy[k.String()]

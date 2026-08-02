@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	t0   = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	t0    = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	edges = [2]time.Time{t0.Add(70 * time.Hour), t0.Add(85 * time.Hour)}
 )
 
