@@ -2,12 +2,18 @@
 //
 // Apps is every subsystem that ships as its own binary, in mount order — which
 // IS the routing order: the host loads them in this sequence and the router
-// takes the first prefix that matches. Three facts per app and no more — name,
-// the absolute paths it answers, and whether it must already be running when the
-// first request arrives — because that is the whole of what the light host needs
-// to know (cmd/cloud links this package and zip and NOTHING else). What an app
-// DOES lives in the app's own binary (plugin/<name>/main.go), which states its
+// takes the first prefix that matches. Four facts per app and no more — name,
+// the absolute paths it answers, whether it must already be running when the
+// first request arrives, and whether the host should take traffic at all without
+// it — because that is the whole of what the light host needs to know (cmd/cloud
+// links this package and zip and NOTHING else). What an app DOES lives in the
+// app's own binary (plugin/<name>/main.go), which states its
 // Mount/Shutdown/OwnsHealth/Price once, where they are used.
+//
+// The fourth fact is Vital, and it earns its place here rather than in the app
+// because readiness is the HOST's answer: the host is what a probe reaches, what
+// a Service routes to, and the only process that can see one child missing while
+// the other 111 serve. See App.Vital — exactly one row sets it.
 //
 // This list was the composition root once removed (apps.Wire()); that root is
 // gone. Editing an app is now two coordinated edits with no generator between
@@ -223,7 +229,14 @@ var Apps = []App{
 	// (hanzoai/ai mount), so whichever row holds "/v1" decides whether that
 	// surface exists at all. Every deeper prefix above still wins; ai takes only
 	// what nobody named.
-	{Name: "ai", Prefixes: []string{"/v1"}},
+	//
+	// Vital, and the ONLY app that is: "/v1" is not one subsystem's prefix, it is
+	// the product API's remainder, so a pod serving without ai answers 503 to
+	// every model, completion and embedding call while its 111 siblings look
+	// perfect. That is not a degraded deployment, it is one there is no reason to
+	// route to — which is exactly what Vital says and all it says. The pod stays
+	// up and keeps reporting why (App.Vital).
+	{Name: "ai", Prefixes: []string{"/v1"}, Vital: true},
 	// zen serves only CO-RESIDENT: its mount is a Claim middleware on ai's router
 	// (apps/zen), routing zen-SKU requests and Next()ing the rest. It therefore
 	// routes NO prefix of its own — see App.Coresident. The row exists because
