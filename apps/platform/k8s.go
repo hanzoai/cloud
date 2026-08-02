@@ -992,6 +992,16 @@ const gitTokenSecret = "console-git-token"
 // from (H2). It is a public image on Docker Hub — no pull secret needed.
 const buildkitRootlessImage = "moby/buildkit:v0.16.0-rootless"
 
+// buildCacheLimit bounds the buildkitd emptyDir — the build's whole working set,
+// and the only thing in the pod that grows without bound.
+//
+// It is a bound, not a measurement: half of a runner node's ~105G, which also
+// carries the node's images, its snapshots and any concurrent build. The number
+// matters far less than having one, because the failure it prevents is not this
+// build running out of room — it is the NODE running out, which the kubelet
+// answers by evicting every pod on it.
+const buildCacheLimit = "50Gi"
+
 // buildPushSecretPrefix + buildPushSecret select the PER-ORG push credential a
 // build mounts. The Secret is named push-<namespace> (push-hanzoai / push-luxfi /
 // push-zooai) and holds ONLY that one org's registry write token, so a build for
@@ -1165,7 +1175,14 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							"name":   "ghcr",
 							"secret": map[string]any{"secretName": pushSecret, "items": []any{map[string]any{"key": ".dockerconfigjson", "path": "config.json"}}},
 						},
-						map[string]any{"name": "buildkitd", "emptyDir": map[string]any{}},
+						// buildkitd's worker cache + snapshots — the whole of a build's
+						// working set, and the only thing in this pod that grows without
+						// bound. An emptyDir is charged to the NODE's ephemeral storage,
+						// so uncapped, one runaway build fills the node rootfs, trips
+						// DiskPressure, and the kubelet evicts every pod on that node
+						// rather than the build that caused it. A cap makes an overrun
+						// evict THIS pod only, which is the one that can be retried.
+						map[string]any{"name": "buildkitd", "emptyDir": map[string]any{"sizeLimit": buildCacheLimit}},
 					},
 				},
 			},
