@@ -1,6 +1,6 @@
 {
-  "paths": 1399,
-  "operations": 1968,
+  "paths": 1405,
+  "operations": 1975,
   "products": {
     "admin": 87,
     "ads": 7,
@@ -112,7 +112,7 @@
     "mesh": 1,
     "messages": 2,
     "metrics": 4,
-    "ml": 7,
+    "ml": 14,
     "models": 3,
     "mq": 15,
     "networks": 3,
