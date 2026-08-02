@@ -21,10 +21,10 @@
 // VM, so every reader (the public /v1/summary, the scoped /v1/o11y/status) held
 // a VM client, and VM could not be removed without those endpoints going dark.
 //
-// One question is asked here and nowhere else: what is the latest value of this
-// gauge, per label set? That is what an availability read needs, and answering
-// it in ONE place is what keeps the two callers from growing two dialects of
-// the same SQL.
+// Two questions are asked here and nowhere else, and they are the only two an
+// availability reader has ever asked: what is the latest value of this gauge per
+// label set, and what was it across a window? Answering them in ONE place is
+// what keeps the callers from growing dialects of the same SQL.
 //
 // THE SCHEMA. Metrics land in two tables and the split matters:
 //
@@ -125,6 +125,80 @@ func latestGaugeBy(ctx context.Context, name, label string) (map[string]float64,
 		if v, ok := s.Labels[label]; ok && v != "" {
 			out[v] = s.Value
 		}
+	}
+	return out, nil
+}
+
+// gaugeBucket is one time bucket of a gauge, folded across every series that
+// reported inside it: the sum of their values and how many there were. For a
+// 0/1 availability gauge those two numbers are "how many were up" and "how many
+// answered at all" — the pair every fleet trend is drawn from.
+type gaugeBucket struct {
+	// StartMilli is the bucket's left edge, unix milliseconds.
+	StartMilli int64
+	// Sum is the sum of each series' NEWEST value inside the bucket.
+	Sum float64
+	// Series is how many distinct series reported inside the bucket.
+	Series int
+}
+
+// gaugeSeries answers a gauge's trend over a window, bucketed at stepSec.
+//
+// LATEST WITHIN THE BUCKET, then summed — the same choice latestGauge makes,
+// one bucket at a time, and for the same reason. A service that flapped twice
+// inside one bucket has one condition at the end of it; averaging its samples
+// would report a fractional service, which is true of nothing. So the inner
+// query reduces each series to its newest reading in the bucket and the outer
+// one folds those readings together.
+//
+// The join to event.series is NOT made here. The trend counts series, it does
+// not name them, and the fingerprint already identifies one — so paying for the
+// join would buy labels nobody reads. The instant read above is where identity
+// is needed, and that is where the join lives.
+//
+// Buckets are computed in integer milliseconds (intDiv on the stored column)
+// rather than by converting to DateTime64 first: the column IS unix
+// milliseconds, so this is arithmetic on the value as stored, with no timezone
+// or precision conversion to be wrong about.
+func gaugeSeries(ctx context.Context, name string, rangeSec, stepSec int) ([]gaugeBucket, error) {
+	if name == "" {
+		return nil, fmt.Errorf("gaugeSeries: empty metric name")
+	}
+	if rangeSec <= 0 || stepSec <= 0 {
+		return nil, fmt.Errorf("gaugeSeries %s: range and step must be positive", name)
+	}
+	ctx, cancel := context.WithTimeout(ctx, gaugeQueryTimeout)
+	defer cancel()
+
+	const sql = `
+		SELECT bucket AS bucket,
+		       sum(v) AS value_sum,
+		       count() AS series_count
+		FROM (
+			SELECT intDiv(unix_milli, ?) * ? AS bucket,
+			       fingerprint AS fingerprint,
+			       argMax(value, unix_milli) AS v
+			FROM event.metric
+			WHERE metric_name = ?
+			  AND unix_milli > toUnixTimestamp64Milli(now64(3)) - ?
+			GROUP BY bucket, fingerprint
+		)
+		GROUP BY bucket
+		ORDER BY bucket ASC`
+
+	stepMilli := int64(stepSec) * 1000
+	rangeMilli := int64(rangeSec) * 1000
+	rows, err := datastore.Query(ctx, sql, stepMilli, stepMilli, name, rangeMilli)
+	if err != nil {
+		return nil, fmt.Errorf("gaugeSeries %s: %w", name, err)
+	}
+	out := make([]gaugeBucket, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, gaugeBucket{
+			StartMilli: int64(asFloat64(r["bucket"])),
+			Sum:        asFloat64(r["value_sum"]),
+			Series:     int(asFloat64(r["series_count"])),
+		})
 	}
 	return out, nil
 }
