@@ -22,7 +22,7 @@ import (
 // This file is the hand-owned half — a Shutdown/OwnsHealth/metered Price goes
 // here if the app grows to need one.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "exec",
 		Price: cloud.Free,
 		Mount: exec.Mount,

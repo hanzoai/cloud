@@ -544,7 +544,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// read the caller asserted for itself. fiber runs middleware in registration
 	// order, so this must precede every leaf below.
 	//
-	// It has to be installed HERE, not only by cloud.Serve, because o11y runs as
+	// It has to be installed HERE, not only by cloud.Listen, because o11y runs as
 	// its OWN process (plugin/o11y/main.go builds a bare zip.App and mounts this).
 	// The host's app-wide Bridge parks the org on a context in the HOST; the
 	// request crosses to this process as headers, so without this install every

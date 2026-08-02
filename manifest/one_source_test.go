@@ -86,7 +86,7 @@ func TestEveryPluginNameIsInTheManifest(t *testing.T) {
 	}
 	// Not every plugin/ dir is a fleet app — some are one-shot CLI tools (smoke,
 	// gen-app-cmds, kmsreseal, migrate-pg-to-sqlite). Rather than hardcode which,
-	// DERIVE it: an app serves requests, so it calls cloud.Serve. A tool does not.
+	// DERIVE it: an app serves requests, so it calls cloud.Listen. A tool does not.
 	// A name list here would need editing every time a tool is added, and would
 	// eventually be wrong in the direction that hides a real app.
 	for _, f := range dirs {
@@ -101,10 +101,10 @@ func TestEveryPluginNameIsInTheManifest(t *testing.T) {
 	}
 }
 
-// callsServe reports whether the file CALLS cloud.Serve — parsed, not grepped.
+// callsServe reports whether the file CALLS cloud.Listen — parsed, not grepped.
 //
 // A substring match reads the generator as an app: plugin/gen-app-cmds contains
-// "cloud.Serve" inside the string TEMPLATE it emits for new apps. Matching text
+// "cloud.Listen" inside the string TEMPLATE it emits for new apps. Matching text
 // finds the mention; only parsing finds the call. Same distinction that makes the
 // rest of this file worth having — check the structure, not a spelling.
 func callsServe(path string) bool {

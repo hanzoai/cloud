@@ -18,7 +18,7 @@ import (
 // OwnsHealth: the app serves its own typed /v1/mq/health — the broker's
 // answer, not the generic liveness stub. Shutdown drains the broker client.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:       "mq",
 		Price:      cloud.Free,
 		Mount:      mq.Mount,

@@ -58,7 +58,7 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 
 // A typed op receives a context and its decoded input — never the request — so the
 // validated org reaches it ONLY because cloud.Bridge parked it on the context.
-// cloud.Serve installs one app-wide, but o11y runs as its OWN binary
+// cloud.Listen installs one app-wide, but o11y runs as its OWN binary
 // (plugin/o11y/main.go builds a bare zip.App and calls MountO11y), and a context
 // value does not cross the socket between host and plugin: the host's Bridge parks
 // the org in the HOST. So MountO11y installs its own on the o11y group, and this
