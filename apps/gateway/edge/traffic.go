@@ -62,7 +62,7 @@ package edge
 // it.
 //
 // PER-SCOPE CEILINGS ARE THE FAIRNESS BOUND, NOT THE MEMORY BOUND. maxCallers and
-// maxHosts cap what ONE scope may hold — about a fortieth of the budget — so the
+// maxHosts cap what ONE scope may hold — 4.0 MiB, about 3% of the budget — so the
 // anonymous lane, which is the whole internet's lane and the only scope an
 // attacker can reach without a credential, cannot consume the room the tenants
 // need. Everything else is a verified org, which cannot be minted for free.
