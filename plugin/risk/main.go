@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/risk"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the risk app.
@@ -26,10 +27,17 @@ import (
 // snapshot would return every tenant to warming — and a warming model refuses to
 // score, which reads as "clean" to anything that does not check the refusal.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
-		Name:       "risk",
-		Price:      cloud.Metered,
-		Mount:      risk.Mount,
+	if err := cloud.Listen([]cloud.Plugin{{
+		Name:  "risk",
+		Price: cloud.Metered,
+		Mount: risk.Mount,
+		// Declared, and taken from the fleet's own routing table so the two views
+		// cannot drift. This app answers on TWO prefixes — /v1/risk and the native
+		// leaves of /v1/ml — and undeclared, MountPrefixes falls back to the
+		// /v1/<name> convention, which puts every ml leaf outside the prefix this
+		// subsystem owns: the index attributes them to nobody and scope.Use cannot
+		// install this app's own middleware on them.
+		Prefixes:   manifest.PrefixesFor("risk"),
 		Shutdown:   risk.Shutdown,
 		OwnsHealth: true,
 	}}, []string{"risk"}); err != nil {
