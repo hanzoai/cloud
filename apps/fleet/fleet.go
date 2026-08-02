@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	kms "github.com/hanzoai/cloud/apps/mpc"
 	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
@@ -250,7 +251,13 @@ func openKMS(brand string) *kms.Client {
 			threshold = n
 		}
 	}
-	client, err := kms.NewClient(kms.Config{Nodes: nodes, OrgSlug: org, Threshold: threshold})
+	// cloud.OrgNamespace is the one door a string becomes a tenant name at; the
+	// MPC client takes the name so it never has to fold a slug itself.
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil
+	}
+	client, err := kms.NewClient(kms.Config{Nodes: nodes, Namespace: ns, Threshold: threshold})
 	if err != nil {
 		return nil
 	}
