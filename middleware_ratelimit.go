@@ -25,7 +25,6 @@ package cloud
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -93,10 +92,15 @@ func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
 	// billing/commerce surfaces are internal S2S plumbing; the per-IP pre-auth
 	// limiters and commerce's own gates still apply, so exempting them here removes
 	// the self-reference without loosening any user-facing ceiling.
-	if p := c.Path(); strings.HasPrefix(p, "/v1/billing/") ||
-		strings.HasPrefix(p, "/v1/commerce/") ||
-		strings.HasPrefix(p, "/_/commerce/") {
-		return c.Next()
+	// Compared against the ROUTER's path, not the raw spelling: a prefix test over
+	// c.Path() answers a question about how the client typed the URL, while the
+	// exemption is about which handler will run (see cloud.RoutePath). ONE
+	// normalization, the same one the abuse gate and the grant list use.
+	path := RoutePath(c.Path())
+	for _, p := range []string{"/v1/billing/", "/v1/commerce/", "/_/commerce/"} {
+		if underPrefix(path, p) {
+			return c.Next()
+		}
 	}
 
 	// Only an authenticated org is scope-rate-limited. Without a validated
@@ -108,7 +112,7 @@ func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
 		return c.Next()
 	}
 	project := principal.Project(c)
-	service := canonicalService(c.Path())
+	service := canonicalService(path)
 
 	key, rpm := bindingRateRule(rl.rulesFor(c.Context(), org), org, project, service)
 

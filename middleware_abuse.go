@@ -166,32 +166,29 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 		}
 	}
 
-	// The tenant is the identity boundary's OWN answer, not a header — see
-	// verifiedOrg. It is the sensor's keyspace index and the policy row this
-	// request is judged under, so a caller that could choose it could write into
-	// another tenant's state and read another tenant's posture.
-	org := verifiedOrg(c)
+	// ONE observation, built in ONE place (observation). The tenant in it is the
+	// identity boundary's OWN answer and so is the caller's identity — see
+	// verifiedOrg and observation. The org is the sensor's keyspace index and the policy
+	// row this request is judged under, so a caller that could choose it could
+	// write into another tenant's state and read another tenant's posture.
 	now := time.Now()
-	sig := edge.Signal{
-		Org:  org,
-		Cred: credentialOf(c),
-		IP:   ClientIP(c),
-		Path: routeFamily(path),
-	}
+	sig := observation(c, routeFamily(path))
+	org := sig.Org
 
 	// Sense first, once. Every request is counted and lands in its lane whatever
 	// happens next — including one refused by a held verdict, because a caller
 	// that keeps knocking after being refused is exactly the caller a report needs
-	// to show.
-	class := credentialClass(c)
+	// to show. The lane comes BACK from the sensor: it is derived from the counts
+	// this observation just produced, so it cannot be stated before they exist.
 	p := g.traffic.Observe(sig, now)
-	sig.Agency = agency(class, p)
+	lane := p.Lane
+	g.announce(c, sig, p)
 
 	// A verdict already in force short-circuits the question. The sensor holds it
 	// for at most a minute, so this is enforcement WITH a recent judgement behind
 	// it, never enforcement that outlives its reason.
 	if h, ok := g.traffic.Held(sig, now); ok {
-		return g.enforce(c, sig, RiskVerdict{Action: h.Action, ID: h.Decision, Cause: h.Reason})
+		return g.enforce(c, sig, lane, RiskVerdict{Action: h.Action, ID: h.Decision, Cause: h.Reason})
 	}
 
 	// A LAPSED hold forces the question again. Without it a hold buys a free
@@ -215,11 +212,11 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 
 	v := Decide(c.Context(), org, RiskQuery{
 		Stage:      StageUsage,
-		Subject:    RiskSubject{Kind: "session", ID: sig.Cred},
-		Agency:     sig.Agency,
+		Subject:    RiskSubject{Kind: "session", ID: subject(sig)},
+		Agency:     lane,
 		Privileged: privileged,
-		Signals: map[string]string{
-			"credential": class,
+		Signals: Facts(map[string]string{
+			"credential": sig.Class,
 			"ip":         sig.IP,
 			"path":       sig.Path,
 			"method":     c.Method(),
@@ -227,10 +224,10 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 			"failures":   strconv.Itoa(p.Failures),
 			"paths":      strconv.Itoa(p.Paths),
 			"peers":      strconv.Itoa(p.Peers),
-		},
+		}),
 	})
 	if v.Agency != "" {
-		sig.Agency = v.Agency // the scorer's lane is the authoritative one.
+		lane = v.Agency // the scorer's lane is the authoritative one.
 	}
 
 	// The screen is surfaced on BOTH rails, because they answer different
@@ -248,8 +245,15 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 	// belongs to the pricing catalog. That is exactly why the count above does not
 	// go through the ledger — an unpriced product must still be measurable.
 	// Both only in live mode: a shadow screen is not a product the org bought.
-	g.traffic.Screen(org, now)
-	g.meter.Meter(org, principal.Project(c), "screen", g.cents, c.RequestID(), sig.IP)
+	//
+	// AND ONLY A SCORED VERDICT IS BILLED. A screen the scorer never answered —
+	// absent, stuck, busy, timed out, erroring, silent — is judgement not rendered,
+	// and charging for it would put an outage of ours on a customer's invoice. The
+	// COUNT still happens either way, split into answered and unanswered, because
+	// "the judge stopped answering" is exactly the fact an operator must be able to
+	// read off the org's own report.
+	g.traffic.Screen(org, v.Refusal, now)
+	g.bill(org, principal.Project(c), c.RequestID(), sig.IP, v)
 
 	if v.Allowed() {
 		// The caller has been re-judged and is fine. Drop any lapsed hold, so it
@@ -258,17 +262,82 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 	} else {
 		g.traffic.Hold(sig, edge.Hold{Action: v.Action, Reason: v.Cause, Decision: v.ID}, holdFor, now)
 	}
-	return g.enforce(c, sig, v)
+	return g.enforce(c, sig, lane, v)
 }
 
 // screen reports whether this request's pattern is worth a question. A privileged
 // grant always is: the fail-closed branch only protects what it is asked about.
+//
+// An UNMEASURED caller is not screened on cadence, because there is no cadence.
+// Two ways a caller can be unmeasured, and both produce all-zero counts that
+// "Requests <= 1" would read as "a caller making its first request" — for every
+// request it ever makes, which is one screen each, a bill and a scorer stampede
+// rather than a defense:
+//
+//	refuse — the scope's ceiling turned this caller away.
+//	blind  — the request carried no identity at all: no credential the boundary
+//	         validated and no client address, so there is no caller to ask about.
+//	         A subject of "" is not a question.
+//
+// A privileged grant is still screened either way: that branch protects the
+// grant, not the sensor.
 func (g *abuseGate) screen(p edge.Pattern, privileged bool) bool {
-	return privileged ||
-		p.Requests <= screenFirst ||
+	if privileged {
+		return true
+	}
+	if p.Strain == edge.StrainRefuse || p.Strain == edge.StrainBlind {
+		return false
+	}
+	return p.Requests <= screenFirst ||
 		p.Failures >= screenFailures ||
 		p.Peers >= screenPeers ||
 		p.Paths >= screenPaths
+}
+
+// bill puts one screen on the org's own usage ledger, and reports whether it
+// did. ONLY a SCORED verdict is billable: a screen the scorer never answered —
+// absent, stuck, busy, timed out, erroring, silent — is judgement not rendered,
+// and charging for it would put an outage of ours on a customer's invoice.
+//
+// The rule lives in exactly one function because it is a money rule: the count
+// (Traffic.Screen) and the debit answer different questions and only one of them
+// is conditional, so the condition is stated once, here, where it can be read
+// next to the charge it guards.
+func (g *abuseGate) bill(org, project, request, ip string, v RiskVerdict) bool {
+	if !v.Scored() {
+		return false
+	}
+	g.meter.Meter(org, project, "screen", g.cents, request, ip)
+	return true
+}
+
+// announce logs a scope's sensor degradation ONCE per grade, not once per
+// request. The sensor holds no logger and a flood produces one refused
+// observation per request, so the grade change is carried back on the pattern and
+// surfaced here — the alternative being a control that goes quiet with nothing in
+// the log to say it did.
+func (g *abuseGate) announce(c *zip.Ctx, sig edge.Signal, p edge.Pattern) {
+	if p.Rise == "" || p.Rise == edge.StrainClear || g.log == nil {
+		return
+	}
+	g.log.Warn("edge sensor strained",
+		"strain", p.Rise,
+		"org", sig.Org,
+		"lane", p.Lane,
+		"request", c.RequestID(),
+	)
+}
+
+// subject names WHAT the scorer is being asked about: the validated caller when
+// there is one, and the address it came from when there is not. It is the sensor's
+// key, so the thing that is judged and the thing that is held are the same thing —
+// asking about a string the caller picked would let a refused caller be re-judged
+// as somebody else by editing one header.
+func subject(s edge.Signal) string {
+	if s.Cred != "" {
+		return s.Cred
+	}
+	return s.IP
 }
 
 // mode is the org's posture. An EMPTY org — the anonymous lane, which is where a
@@ -295,19 +364,19 @@ func (g *abuseGate) watch(c *zip.Ctx, sig edge.Signal) error {
 // enforce applies a verdict. In shadow it applies NOTHING: it records what it
 // would have done and lets the request through, which is what makes the mode
 // switch a real one rather than a label.
-func (g *abuseGate) enforce(c *zip.Ctx, sig edge.Signal, v RiskVerdict) error {
+func (g *abuseGate) enforce(c *zip.Ctx, sig edge.Signal, lane string, v RiskVerdict) error {
 	if v.Allowed() {
 		if v.Action == ActionReview {
-			g.record(c, sig, v, "review")
+			g.record(c, sig, lane, v, "review")
 		}
 		return g.watch(c, sig)
 	}
 	if g.mode(sig.Org) != edge.ModeLive {
-		g.record(c, sig, v, "shadow")
+		g.record(c, sig, lane, v, "shadow")
 		return g.watch(c, sig)
 	}
 
-	g.record(c, sig, v, "enforced")
+	g.record(c, sig, lane, v, "enforced")
 	g.traffic.Deny(sig.Org, time.Now())
 
 	// The refusal is written in the fleet's own nested error contract, the same
@@ -359,7 +428,7 @@ func (g *abuseGate) observeOutcome(c *zip.Ctx, sig edge.Signal, err error) {
 // A shadow verdict is the interesting one — it is the only evidence of what the
 // gate WOULD do, and the only way stated-versus-realised can be measured before
 // an org is armed.
-func (g *abuseGate) record(c *zip.Ctx, sig edge.Signal, v RiskVerdict, outcome string) {
+func (g *abuseGate) record(c *zip.Ctx, sig edge.Signal, lane string, v RiskVerdict, outcome string) {
 	if g.log == nil {
 		return
 	}
@@ -368,8 +437,8 @@ func (g *abuseGate) record(c *zip.Ctx, sig edge.Signal, v RiskVerdict, outcome s
 		"outcome", outcome,
 		"action", v.Action,
 		"org", sig.Org,
-		"cred", sig.Cred,
-		"agency", sig.Agency,
+		"cred", subject(sig),
+		"agency", lane,
 		"path", sig.Path,
 		"method", c.Method(),
 		"score", v.Score,

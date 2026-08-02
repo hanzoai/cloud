@@ -6312,8 +6312,10 @@ components:
           description: Action is the verdict currently held against it, if any.
           type: string
         cred:
-          description: Cred is the credential fingerprint — a per-process one-way
-            digest, not a key.
+          description: |-
+            Cred is the caller's key: a credential fingerprint (a per-process one-way
+            digest, not a key) for a validated caller, and "ip:<addr>" for one that
+            presented no credential we could validate.
           type: string
         failures:
           description: Failures is how many ended 401 or 403.
@@ -6334,14 +6336,25 @@ components:
       type: object
     TrafficView:
       properties:
+        blind:
+          description: |-
+            Blind is how many requests in the window carried no identity to attribute
+            them to — no validated credential and no client address. Non-zero on a
+            public plane means the client address is not reaching this process (a TCP
+            load balancer with no PROXY protocol in front of it, typically), so this
+            scope's callers cannot be told apart and nothing can be held against them.
+          type: integer
         callers:
           description: |-
-            Callers is the org's busiest credentials this window, by fingerprint. The
-            fingerprint is a per-process one-way digest: enough to recognise the same
-            caller across requests, never enough to reconstruct the credential.
+            Callers is the scope's busiest callers this window. A credentialed caller
+            appears as a FINGERPRINT — a per-process one-way digest: enough to recognise
+            the same caller across requests, never enough to reconstruct the credential.
           items:
             $ref: '#/components/schemas/TrafficCaller'
           type: array
+        ceiling:
+          description: Ceiling is the most callers this scope may hold at once.
+          type: integer
         denied:
           description: Denied is how many of them the gate refused.
           type: integer
@@ -6349,35 +6362,53 @@ components:
           additionalProperties:
             type: integer
           description: |-
-            Lanes is the request count per agency lane — agent, human, bot, unknown.
-            This is the split that separates a customer's automation from a scraper.
+            Lanes is the request count per lane — agent, human, bot, unknown. This is
+            the split that separates a customer's automation from a scraper.
           type: object
         mode:
           description: |-
-            Mode is the abuse gate's posture for this org: "shadow" records the scorer's
+            Mode is the abuse gate's posture for this scope: "shadow" records the scorer's
             action without enforcing it, "live" enforces it.
           type: string
         org:
           description: |-
-            Org is the tenant this view was taken for — the validated principal's own,
-            never a value the caller supplied.
+            Org is the scope this view was taken for — the validated principal's own,
+            never a value the caller supplied. Empty names the anonymous lane, the one
+            scope that has no tenant.
           type: string
-        requests:
-          description: Requests is how many requests this org made in the window.
+        refused:
+          description: Refused is how many callers this scope's ceilings turned away
+            in the window.
           type: integer
-        saturated:
-          description: |-
-            Saturated is how many of this org's own sensor keys its own ceiling has
-            reclaimed. Non-zero means this organization is presenting more distinct
-            credentials or addresses than the sensor keeps state for, so its own numbers
-            below are a sample rather than a census. It is reported rather than logged
-            because the alternative — a bound that degrades a tenant silently — is the
-            failure this design exists to rule out. No other tenant can move it.
+        requests:
+          description: Requests is how many requests this scope made in the window.
           type: integer
         screens:
           description: |-
             Screens is how many of them were put to the scorer — the billable unit of
             the risk product. Counted from the first request, whatever the SKU costs.
+          type: integer
+        strain:
+          description: |-
+            Strain is what this scope's ceilings are doing: "clear" below them, "full"
+            at them, "refuse" once a caller has been turned away inside this window —
+            which means that caller is UNMEASURED and the numbers here are a sample
+            rather than a census. It is reported rather than logged because the
+            alternative — a bound that degrades a scope silently — is the failure this
+            design exists to rule out. No other scope can move it.
+          type: string
+        tracked:
+          description: |-
+            Tracked is how many callers this scope holds state for right now, and
+            Ceiling is the most it may hold. Tracked == Ceiling is the fact a bound
+            that binds cannot hide.
+          type: integer
+        unscored:
+          description: |-
+            Unscored is how many of those screens got NO answer — the scorer was absent,
+            stuck, slow, erroring or silent. An unanswered screen allows ordinary
+            traffic, so this is the number that separates "a quiet day" from "the judge
+            stopped answering and nothing said so".
           type: integer
         window_sec:
           description: WindowSec is the span the counts cover, in seconds.
@@ -46324,7 +46355,7 @@ paths:
       description: |-
         Traffic reports who is calling this organization's API right now: the request
         count for the last minute split by AGENCY LANE — agent, human, bot, unknown —
-        and the busiest credentials behind it, each with its request count, its
+        and the busiest callers behind it, each with its request count, its
         authentication-failure count, how many distinct paths it touched, and any
         verdict currently held against it.
 
@@ -46334,12 +46365,18 @@ paths:
         from the client's self-description, so a scraper cannot move itself into the
         agent lane by editing a header.
 
-        A credential appears as a FINGERPRINT — a one-way, per-process digest. It is
-        stable enough to recognise the same caller across a minute and cannot be turned
-        back into a key, so this report is safe to read, screenshot and paste.
+        A validated caller appears as a FINGERPRINT — a one-way, per-process digest. It
+        is stable enough to recognise the same caller across a minute and cannot be
+        turned back into a key, so this report is safe to read, screenshot and paste.
+
+        It also reports what the sensor's own ceilings are doing (strain, tracked,
+        ceiling, refused) and how many screens the scorer did not answer (unscored), so
+        a control that has stopped measuring or a judge that has stopped answering is a
+        number here rather than a quiet day.
 
         Scoped to the caller's own validated organization. A SuperAdmin may inspect a
-        specific tenant with ?org=<slug>.
+        specific tenant with ?org=<slug>, or the lane that has no tenant — every caller
+        the identity boundary could not validate — with an empty ?org=.
       operationId: gatewayTraffic
       responses:
         "200":

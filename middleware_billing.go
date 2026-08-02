@@ -188,8 +188,17 @@ var serviceAliases = map[string]string{
 // through serviceAliases to the canonical provider label. It is the scope's
 // service axis — from the route, NEVER a client field, so a caller can never spoof
 // another service's cap. Empty for non-/v1 paths.
+//
+// THE ROUTE IS WHAT THE ROUTER MATCHED, not how the client spelled it. fiber
+// routes case-insensitively and ignores a trailing slash, so "/V1/AI/chat" reaches
+// exactly the same handler as "/v1/ai/chat" — and read raw, it produced the
+// service label "AI", which is a DIFFERENT scope key: a different rate bucket and
+// a different spend-cap axis, reachable by holding down the shift key. The label
+// is derived from cloud.RoutePath for the same reason the grant list is compared
+// against it: a scope key must name the route, and the route is what the router
+// says it is.
 func canonicalService(path string) string {
-	p := strings.TrimPrefix(path, "/")
+	p := strings.TrimPrefix(RoutePath(path), "/")
 	parts := strings.SplitN(p, "/", 3)
 	if len(parts) < 2 || parts[0] != "v1" {
 		return ""

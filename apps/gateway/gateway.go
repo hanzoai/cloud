@@ -139,18 +139,35 @@ func caller(ctx context.Context) (*zip.Ctx, string, error) {
 	return c, org, nil
 }
 
-// target resolves the org a call acts on: the caller's own validated org, or — for
-// a SuperAdmin only — the tenant named by ?org=<slug>. The override is read off the
+// target resolves the scope a call acts on: the caller's own validated org, or —
+// for a SuperAdmin only — the scope named by ?org=. The override is read off the
 // URL rather than modelled as an input field, because zip binds an input field from
 // the BODY too and this route has never accepted an org there.
+//
+// A PRESENT but EMPTY ?org= names the scope that has no tenant — the anonymous
+// lane, where every caller the identity boundary could not validate is counted.
+// That lane had no spelling at all, so its traffic and its saturation were
+// readable by nobody, SuperAdmin included: the only way to ask for a scope was to
+// name it, and this one has no name. The empty value IS its name — it cannot
+// collide with any tenant, and it needs no second query parameter to mean what
+// "org" already means.
 func target(c *zip.Ctx, org string) string {
-	if c.IsAdmin() {
-		if q := c.Query("org"); q != "" {
-			return q
-		}
+	if !c.IsAdmin() {
+		return org
+	}
+	if q := c.Query("org"); q != "" {
+		return q
+	}
+	if c.Fiber().Request().URI().QueryArgs().Has("org") {
+		return anonymousLane
 	}
 	return org
 }
+
+// anonymousLane is the scope with no tenant, in both the policy store and the
+// sensor: the empty org. Named here so the op that serves it and the store that
+// resolves its mode say the same thing.
+const anonymousLane = ""
 
 // Read returns the EFFECTIVE edge policy the caller is subject to: the platform CORS
 // allowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated
@@ -261,7 +278,7 @@ func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
 
 // Traffic reports who is calling this organization's API right now: the request
 // count for the last minute split by AGENCY LANE — agent, human, bot, unknown —
-// and the busiest credentials behind it, each with its request count, its
+// and the busiest callers behind it, each with its request count, its
 // authentication-failure count, how many distinct paths it touched, and any
 // verdict currently held against it.
 //
@@ -271,12 +288,18 @@ func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
 // from the client's self-description, so a scraper cannot move itself into the
 // agent lane by editing a header.
 //
-// A credential appears as a FINGERPRINT — a one-way, per-process digest. It is
-// stable enough to recognise the same caller across a minute and cannot be turned
-// back into a key, so this report is safe to read, screenshot and paste.
+// A validated caller appears as a FINGERPRINT — a one-way, per-process digest. It
+// is stable enough to recognise the same caller across a minute and cannot be
+// turned back into a key, so this report is safe to read, screenshot and paste.
+//
+// It also reports what the sensor's own ceilings are doing (strain, tracked,
+// ceiling, refused) and how many screens the scorer did not answer (unscored), so
+// a control that has stopped measuring or a judge that has stopped answering is a
+// number here rather than a quiet day.
 //
 // Scoped to the caller's own validated organization. A SuperAdmin may inspect a
-// specific tenant with ?org=<slug>.
+// specific tenant with ?org=<slug>, or the lane that has no tenant — every caller
+// the identity boundary could not validate — with an empty ?org=.
 func (o ops) traffic(ctx context.Context, _ *noArgs) (*edge.TrafficView, error) {
 	c, org, err := caller(ctx)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
@@ -296,5 +297,85 @@ func TestSuperAdmin_CannotArmWithoutAScorer(t *testing.T) {
 	}
 	if got := st.Mode("acme"); got != edge.ModeShadow {
 		t.Fatalf("acme armed with no scorer: %q", got)
+	}
+}
+
+// The lane that has no tenant is where every caller the identity boundary could
+// not validate is counted — the lane a bad bot calls from, and the one the
+// platform row exists to arm. It had no spelling on this surface at all: the
+// report could only be asked for by NAME, so its traffic and its saturation were
+// readable by nobody, SuperAdmin included. The empty ?org= is its name.
+func TestSuperAdmin_ReadsTheLaneWithNoTenant(t *testing.T) {
+	st, err := edge.New(t.TempDir(), "admin", edge.Policy{})
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	tr := edge.NewTraffic()
+	app := zip.New(zip.Config{})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st, Traffic: tr}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		tr.Observe(edge.Signal{Org: "", Presented: "junk", IP: "203.0.113.9", Path: "/v1/models", Class: edge.CredAnonymous}, now)
+	}
+	tr.Observe(edge.Signal{Org: "acme", Cred: "fp", Presented: "fp", IP: "198.51.100.1", Path: "/v1/models", Class: edge.CredSecret}, now)
+
+	code, body := call(t, app, http.MethodGet, "/v1/gateway/traffic?org=", "", superAdmin("admin"))
+	if code != 200 {
+		t.Fatalf("GET traffic?org= → %d: %s", code, body)
+	}
+	var v edge.TrafficView
+	if err := json.Unmarshal([]byte(body), &v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v.Org != "" || v.Requests != 3 {
+		t.Fatalf("the anonymous lane's own view: %+v, want org=\"\" requests=3", v)
+	}
+	if v.Strain == "" || v.Ceiling == 0 {
+		t.Fatalf("the lane must report what its ceilings are doing: %+v", v)
+	}
+	// It is a DIFFERENT scope from the admin org's own traffic, which is what a
+	// reserved-word spelling would have conflated.
+	code, body = call(t, app, http.MethodGet, "/v1/gateway/traffic?org=acme", "", superAdmin("admin"))
+	if code != 200 {
+		t.Fatalf("GET traffic?org=acme → %d: %s", code, body)
+	}
+	if err := json.Unmarshal([]byte(body), &v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v.Org != "acme" || v.Requests != 1 {
+		t.Fatalf("a named tenant's view: %+v, want org=acme requests=1", v)
+	}
+}
+
+// And only a SuperAdmin may ask for it. An org admin asking for the lane with no
+// tenant gets its OWN scope, exactly as it does for any other ?org= it is not
+// entitled to.
+func TestOrgAdmin_CannotReadTheLaneWithNoTenant(t *testing.T) {
+	st, err := edge.New(t.TempDir(), "admin", edge.Policy{})
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	tr := edge.NewTraffic()
+	app := zip.New(zip.Config{})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st, Traffic: tr}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	tr.Observe(edge.Signal{Org: "", Presented: "junk", IP: "203.0.113.9", Path: "/v1/models", Class: edge.CredAnonymous}, time.Now())
+
+	code, body := call(t, app, http.MethodGet, "/v1/gateway/traffic?org=", "", orgAdmin("acme"))
+	if code != 200 {
+		t.Fatalf("GET traffic?org= as an org admin → %d: %s", code, body)
+	}
+	var v edge.TrafficView
+	if err := json.Unmarshal([]byte(body), &v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v.Org != "acme" || v.Requests != 0 {
+		t.Fatalf("an org admin read the anonymous lane: %+v", v)
 	}
 }
