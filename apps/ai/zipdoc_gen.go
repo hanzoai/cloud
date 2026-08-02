@@ -8,17 +8,14 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/ai/mcp/tools", zip.Doc{
-		Description: "Tools reports what this binary's MCP door carries: every tool the build\npublishes, how many of them this process actually serves, and which subsystem\neach belongs to. It is the answer to \"is the door up and does it have anything\nbehind it\" — a question a status code cannot answer, since an empty door and a\nfull one are both 200.",
+		Description: "Tools reports what THIS PROCESS's MCP door carries: how many tools its own\nregistry projects, optionally their names, and which subsystems this process\ncomposed. It is the answer to \"is this door up and does it have anything behind\nit\" — a question a status code cannot answer, since an empty door and a full\none are both 200. What the FLEET's door carries is the fleet door's own answer:\nPOST /v1/mcp, tools/list, which asks every subsystem and names the ones that\ndid not reply.",
 		Fields: map[string]string{
-			"aiMCPApp.name":          "Name is the subsystem, as the manifest names it.",
-			"aiMCPApp.names":         "Names are its tool names, present only for the subsystem the query named.",
-			"aiMCPApp.served":        "Served reports that THIS process actually mounted it, so its tools are on\nthe door a client can call rather than only in the build.",
-			"aiMCPApp.tools":         "Tools is how many tools its committed catalogue publishes.",
-			"aiMCPQuery.app":         "App names one subsystem whose tool NAMES to list. Empty answers counts\nonly: nine hundred names is a page no operator reads and no model can\nafford to be handed by accident.",
-			"aiMCPSurface.apps":      "Apps is one row per subsystem the build publishes, in manifest order.",
-			"aiMCPSurface.local":     "Local is the part of Served this process registered ITSELF, rather than\ncomposing from a mounted child's catalogue.",
-			"aiMCPSurface.published": "Published is every tool this BUILD can serve — the union of every\nsubsystem's committed catalogue, which is a property of the artifact and\ntherefore the same answer in every process.",
-			"aiMCPSurface.served":    "Served is what THIS PROCESS's door actually composed. It is the number that\ncan be far smaller than Published — a host that mounted nothing serves\nnothing — and the only one that describes the door a client is talking to.",
+			"aiMCPApp.name":      "Name is the subsystem, as the manifest names it.",
+			"aiMCPApp.served":    "Served reports that THIS process mounted it, so its tools are on this\nprocess's door rather than behind a sibling this process only knows the name\nof.",
+			"aiMCPQuery.names":   "Names asks for this process's tool NAMES and not only how many there are.\nOff by default: a list of names is a page, and the question this op exists\nto answer (\"is the door up and does it have anything behind it\") is answered\nby the count.",
+			"aiMCPSurface.apps":  "Apps is one row per subsystem this deployment composes, in manifest order.",
+			"aiMCPSurface.names": "Names are this process's own tool names, present only when the query asked\nfor them.",
+			"aiMCPSurface.tools": "Tools is how many tools THIS PROCESS's door carries: its own typed-op\nregistry, projected. It is the only number a subsystem can state honestly —\nwhat the FLEET's door carries is a question only the host can ask, and it\nasks it by asking every subsystem (POST /v1/mcp, tools/list).",
 		},
 	})
 }

@@ -5,16 +5,21 @@ package cloud
 // This is the ONE producer of a per-app artifact. An app's projections are not
 // sliced out of the fleet's by prefix (that would make the fleet the source and
 // the app a derivative, exactly backwards); they are generated from the app's OWN
-// live router by the SAME openapi.FleetSpec and the SAME zip.App.MCPTools the
-// whole fleet is generated from, over an app with only that subsystem mounted.
+// live router by the SAME openapi.FleetSpec the whole fleet is generated from,
+// over an app with only that subsystem mounted.
 // Compose upward, never carve downward — see openapi/weave.go for the other half.
 //
-// TWO projections, ONE mount, one instant, one registry: openapi.json (what the
-// app's addresses are) and mcp.json (what its typed ops are as MCP tools). They
-// are written together and cannot be generated apart, so a tool cannot exist
-// without its op, and a schema cannot go stale on one surface while the other
-// moves. That is the whole honesty argument for the door: the reverse direction —
-// "every typed op is a tool" — is not tested, it is unfalsifiable by construction.
+// ONE projection, from ONE mount of ONE registry: openapi.json, what the app's
+// addresses are.
+//
+// It used to write mcp.json beside it — the same registry projected as MCP tools
+// — and argued that writing them together made them agree. They did agree, and
+// they were BOTH WRONG BY THE SAME 353 OPS: coupling two derived files to each
+// other makes neither true, because nothing in that coupling forces either back
+// to the registry. The tool catalogue is not generated any more; the host asks
+// the child for it (package fleet), so a tool list cannot be stale because there
+// is no tool list. This document survives only because the fleet weave needs the
+// app's SOURCE synopsis, which no running process can hand back.
 //
 // It lives on Serve because Serve is the single entry every app binary shares:
 // plugin/<app>/main.go is generated as one cloud.Listen call, so putting the mode
@@ -34,25 +39,21 @@ import (
 // describeArg is the argv word that switches a binary from serving to describing.
 const describeArg = "describe"
 
-// SpecFile and ToolsFile are the two artifacts a describe run writes into the
-// app's own plugin/<app> directory. Named here because the host EMBEDS ToolsFile
-// (plugin/embed.go) and the weave READS SpecFile — one name each, so a rename
-// cannot leave a reader looking for a file no writer produces.
-const (
-	SpecFile  = "openapi.json"
-	ToolsFile = "mcp.json"
-)
+// SpecFile is the artifact a describe run writes into the app's own plugin/<app>
+// directory. Named here because the host EMBEDS it (plugin/embed.go) and the
+// weave READS it — one name, so a rename cannot leave a reader looking for a file
+// no writer produces.
+const SpecFile = "openapi.json"
 
 // DescribeRequested reports whether argv asks this binary to describe itself, and
 // the DIRECTORY it named: `<binary> describe <dir>`. Read before any flag parsing
 // — the mode is a mode, not an option.
 //
-// A DIRECTORY and not stdout, and the argument is required. There are two
-// artifacts, so there is no single stream to write; and a subsystem's own
-// dependencies write to stdout anyway (hanzoai/commerce prints a sqlite-vec
-// warning and GORM debug lines at mount), which a `> file` redirect splices into
-// the front of the document and turns into 71KB of invalid JSON. A writer whose
-// output an unrelated library can corrupt is not a writer.
+// A DIRECTORY and not stdout, and the argument is required. A subsystem's own
+// dependencies write to stdout at mount (hanzoai/commerce prints a sqlite-vec
+// warning and GORM debug lines), which a `> file` redirect splices into the front
+// of the document and turns into 71KB of invalid JSON. A writer whose output an
+// unrelated library can corrupt is not a writer.
 func DescribeRequested() (string, bool) {
 	if len(os.Args) > 1 && os.Args[1] == describeArg {
 		if len(os.Args) > 2 {
@@ -87,21 +88,17 @@ func SpecConfig() (*Config, func(), error) {
 		func() { os.RemoveAll(dir) }, nil
 }
 
-// Describe writes app's TWO projections into dir: the OpenAPI document and the
-// MCP tool catalogue, from the one live router, in one pass.
+// Describe writes app's projection into dir: the OpenAPI document, from the one
+// live router.
 //
-// JSON for both, because JSON is what they ARE — the document is the same bytes
-// served at /v1/openapi.json and dropped into hanzoai/openapi, and the catalogue
-// is the same bytes the host hands zip as Plugin.Tools. Encoding to YAML would
-// put a yaml library in the graph of every app binary to write a file only the
-// weave reads. Indented so a subset reviews as a diff.
+// JSON, because JSON is what it IS — the same bytes served at /v1/openapi.json
+// and dropped into hanzoai/openapi. Encoding to YAML would put a yaml library in
+// the graph of every app binary to write a file only the weave reads. Indented so
+// a subset reviews as a diff.
 //
-// Each artifact is rendered whole before its file is touched, so a projection
-// failure leaves the previous one intact rather than truncating it into an app
-// that appears to serve nothing. mcp.json is written for EVERY app, including the
-// ones with no typed ops yet (an empty array), so the host's embed pattern is
-// always satisfiable and "this app got its first typed op" shows as a diff in a
-// file that already exists rather than as a new one nobody reviews.
+// It is rendered whole before the file is touched, so a projection failure leaves
+// the previous one intact rather than truncating it into an app that appears to
+// serve nothing.
 func Describe(dir string, app *zip.App) error {
 	if dir == "" {
 		return fmt.Errorf("usage: %s %s <dir>", filepath.Base(os.Args[0]), describeArg)
@@ -144,17 +141,7 @@ func Describe(dir string, app *zip.App) error {
 	if err != nil {
 		return err
 	}
-	// MCPTools is already sorted by name (zip mcp.go), so this artifact is a
-	// function of the op set and not of registration order — an edit that moved
-	// nothing a client can see produces no diff.
-	tools, err := json.MarshalIndent(app.MCPTools(), "", "  ")
-	if err != nil {
-		return fmt.Errorf("mcp: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, SpecFile), append(spec, '\n'), 0o644); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, ToolsFile), append(tools, '\n'), 0o644)
+	return os.WriteFile(filepath.Join(dir, SpecFile), append(spec, '\n'), 0o644)
 }
 
 // describe mounts specs into a throwaway app and writes its projections.
