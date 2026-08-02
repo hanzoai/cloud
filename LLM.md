@@ -3289,7 +3289,7 @@ containment ─┘
 | **containment** | apps/controlplane is unreachable from every real binary | stub crypto in a serve binary |
 | **image** | version derived ONCE → build → push → resolve → smoke | a tag naming an image that did not boot |
 | **rollout** | tag → universe pin → **poll `x-api-version` until it is ours** | describing a version that is not running |
-| **reach** | `openapi/reach.py` over every literal address + the MCP tool count | an address this document publishes that production does not route |
+| **reach** | `go run ./cmd/reach` over every literal address + the MCP tool count | an address this document publishes that production does not route |
 | **fanout** | `repository_dispatch: spec-update` → 9 repos, payload `(version, sha, spec_sha256)` | a projection that never heard about this release |
 | **receipt** | `release.json` on the tag's GitHub Release, `if: always()` | a hole, silently |
 

@@ -574,25 +574,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # reach.py reads openapi.yaml, so it needs PyYAML. The runner image does
-      # not ship it — the script used to "fall back" to json.load, which cannot
-      # parse YAML, so the missing package surfaced as
-      #   json.decoder.JSONDecodeError: Expecting value: line 1 column 1
-      # and read as a corrupt spec rather than an absent dependency.
-      #
-      # Installed with apt, not pip: the image is Ubuntu 24.04, where a
-      # system-wide `pip install` is refused under PEP 668 —
-      #   error: externally-managed-environment
-      #   ╰─> To install Python packages system-wide, try apt install python3-xyz
-      # which is what this does. python3-yaml IS PyYAML.
-      - name: PyYAML for the spec reader
+      # Go, not Python. cloud is a Go service with no Python in the shipped
+      # image, and this gate was the only thing that needed a Python runtime —
+      # which on Ubuntu 24.04 means a dependency the runner refuses to install
+      # (PEP 668: pip answers "externally-managed-environment"). So a check about
+      # ROUTING kept failing over package management. gopkg.in/yaml.v3 is already
+      # a direct dependency, so nothing extra is provisioned.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Same private-module contract as the containment job: github.com/hanzoai/*
+      # is private, so it must resolve direct+authenticated and skip a sumdb that
+      # cannot see it, while everything else stays on the public proxy.
+      - name: go env for private modules
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          apt-get update -qq
-          apt-get install -y -qq python3-yaml
-          python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          {
+            echo "GOPRIVATE=github.com/hanzoai/*"
+            echo "GOPROXY=https://proxy.golang.org,direct"
+          } >> "$GITHUB_ENV"
 
       - name: Every published address is routed
-        run: python3 openapi/reach.py openapi.yaml https://api.hanzo.ai openapi/unreachable.txt
+        run: go run ./cmd/reach openapi.yaml https://api.hanzo.ai openapi/unreachable.txt
 
       # THE MCP PROJECTION. The door serves exactly the tools in the committed
       # plugin/*/mcp.json, so "the MCP tool list was refreshed" is not a claim to
