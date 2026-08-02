@@ -36,8 +36,13 @@ import (
 //
 // The observable, as everywhere in this package: 503 ⇒ the event was ADMITTED and
 // reached requireDatastore (no warehouse in the harness) — i.e. it would have become a
-// row. 200 with {accepted:0,dropped:N} ⇒ the projection refused it before the write
-// core. 403 ⇒ refused at the gate. So "must not become a row" is exactly "must not 503".
+// row. 401 `ingest_key_required` (refusedAnon, door_honesty_test.go) ⇒ the projection
+// refused EVERY event before the write core. 403 ⇒ refused at the gate. So "must not
+// become a row" is exactly "must not 503".
+//
+// That middle observable used to be `200 {accepted:0,dropped:N}`, and the 200 was the
+// bug: a caller that lost everything read success. The refusal it records here is
+// unchanged — only the door's answer is honest about it now (answer, event.go).
 
 // commerceWire is the attack payload on the canonical/Segment wire: every field that
 // poisons a revenue lens or binds an event to someone else's identity, in one event.
@@ -88,14 +93,8 @@ func TestAnonCommerce_RefusedOnEveryBrandHost(t *testing.T) {
 	app := mountApp(t)
 	for _, host := range []string{"hanzo.ai", "api.hanzo.ai", "lux.network", "zoo.ngo", "pars.network", "bootno.de"} {
 		code, body := doHost(t, app, "/v1/event", "", "", host, commerceWire)
-		if code != http.StatusOK {
-			t.Errorf("anonymous commerce on brand host %q = %d (%s), want 200 all-dropped "+
-				"(a Host header must not name a tenant)", host, code, body)
-			continue
-		}
-		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-			t.Errorf("brand host %q receipt = %+v, want accepted:0 dropped:1", host, r)
-		}
+		refusedAnon(t, "anonymous commerce on brand host "+host+" (a Host header must not name a tenant)",
+			code, body)
 	}
 }
 
@@ -116,13 +115,7 @@ func TestAnonCommerce_RefusedAtSiteHostDoor(t *testing.T) {
 				"a Host header alone let a stranger write revenue/groupId/personId into the site's org", door.path)
 			continue
 		}
-		if code != http.StatusOK {
-			t.Errorf("site-host POST %s = %d (%s), want 200 with an all-dropped receipt", door.path, code, body)
-			continue
-		}
-		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-			t.Errorf("site-host POST %s receipt = %+v, want accepted:0 dropped:1", door.path, r)
-		}
+		refusedAnon(t, "site-host POST "+door.path, code, body)
 	}
 }
 
@@ -135,12 +128,7 @@ func TestAnonCommerce_RefusedOnBoundCustomDomain(t *testing.T) {
 	if code == http.StatusServiceUnavailable {
 		t.Fatalf("custom-domain beacon reached the write core at FULL capability")
 	}
-	if code != http.StatusOK {
-		t.Fatalf("custom-domain anonymous commerce = %d (%s), want 200 all-dropped", code, body)
-	}
-	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-		t.Fatalf("custom-domain receipt = %+v, want accepted:0 dropped:1", r)
-	}
+	refusedAnon(t, "custom-domain anonymous commerce", code, body)
 }
 
 // TestAnonIdentity_RefusedAtEveryDoor: `identify` and `group` are the two kinds that
@@ -154,21 +142,15 @@ func TestAnonIdentity_RefusedAtEveryDoor(t *testing.T) {
 	// bodies used to be two canonical-wire literals applied to every door, which only
 	// worked while every door spoke that wire: the team door accepts a bare ARRAY and
 	// answers an object body 400, so a shared literal measured decoder tolerance rather
-	// than the projection. 400 would satisfy this test's INTENT even more strictly than
-	// 200-all-dropped — nothing is stored either way — but "refused because the kind is
-	// not writable anonymously" and "refused because the body is the wrong shape" are
-	// different facts, and this test is about the first one.
+	// than the projection. Both refusals are 4xx now and nothing is stored either way,
+	// but "refused because the kind is not writable anonymously" (401) and "refused
+	// because the body is the wrong shape" (400) are different facts, and this test is
+	// about the first one — which is exactly what asserting the CODE pins.
 	for _, pick := range []func(*testing.T, door) string{identifyFor, groupFor} {
 		for _, d := range doors {
 			body := pick(t, d)
 			code, got := doHost(t, app, d.path, "", "", "hanzo.ai", body)
-			if code != http.StatusOK {
-				t.Errorf("anonymous %s on %s = %d (%s), want 200 all-dropped", body, d.path, code, got)
-				continue
-			}
-			if r := receipt(t, got); r.Accepted != 0 || r.Dropped != 1 {
-				t.Errorf("anonymous %s on %s receipt = %+v, want accepted:0 dropped:1", body, d.path, r)
-			}
+			refusedAnon(t, "anonymous "+body+" on "+d.path, code, got)
 		}
 	}
 }
