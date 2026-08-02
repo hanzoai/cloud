@@ -388,7 +388,7 @@ func TestHealthCarriesItsReport(t *testing.T) {
 	if err := json.Unmarshal(body, &rep); err != nil {
 		t.Fatalf("unmarshal %s: %v", body, err)
 	}
-	for _, k := range []string{"service", "status", "plane", "shelf", "surface", "resident", "evicted"} {
+	for _, k := range []string{"service", "status", "plane", "shelf", "surface", "resident", "evicted", "strained"} {
 		if _, ok := rep[k]; !ok {
 			t.Errorf("the probe's body has no %q — a probe that does not report is status theatre", k)
 		}
@@ -396,6 +396,61 @@ func TestHealthCarriesItsReport(t *testing.T) {
 	if rep["surface"] != true {
 		t.Errorf("the probe reports the surface as %v with the warehouse up", rep["surface"])
 	}
+}
+
+// TestHealth_ReportsATenantForgettingItsOwnSubjects: a bound that binds must be
+// LOUD.
+//
+// The per-tenant aggregate ceiling degrades that tenant silently by construction:
+// at it, its least-recently-active subject is forgotten and every velocity
+// feature for that subject then reads as inactive — which is indistinguishable
+// from a quiet subject, which is what the model is looking for. Nothing errors,
+// nothing 4xxs, and the control is off for that subject.
+//
+// So the state is NAMED and COUNTED on the probe. A control that switches itself
+// off has to be visible from outside the process, and "visible" means a test can
+// drive a tenant into it and read it back.
+//
+// Mutation proof: report `strained` as a constant 0 and this fails.
+func TestHealth_ReportsATenantForgettingItsOwnSubjects(t *testing.T) {
+	probe.reset(true)
+	app := mountApp(t)
+	if code, body := req(t, app, http.MethodGet, "/v1/risk/health", "", "", ""); code != http.StatusOK {
+		t.Fatalf("GET /v1/risk/health = %d %s", code, body)
+	} else if strained(t, body) != 0 {
+		t.Fatalf("the probe reports a strained tenant before anything has been taught: %s", body)
+	}
+
+	// One organisation past its OWN ceiling, which is where it starts forgetting.
+	for i := 0; i < ringKeyCeiling*2; i++ {
+		body := `{"events":[{"kind":"account","subject":"u_` + itoa(i) + `","nano":1000000}]}`
+		if code, out := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA, body); code != http.StatusOK {
+			t.Fatalf("learn %d = %d %s", i, code, out)
+		}
+	}
+
+	code, body := req(t, app, http.MethodGet, "/v1/risk/health", "", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET /v1/risk/health = %d %s", code, body)
+	}
+	if got := strained(t, body); got == 0 {
+		t.Fatalf("%d subjects went into a %d-subject ceiling and the probe reports %v strained "+
+			"tenant(s) — that organisation is forgetting its own subjects and nothing outside the "+
+			"process can tell: %s", ringKeyCeiling*2, ringKeyCeiling, got, body)
+	}
+}
+
+func strained(t *testing.T, body []byte) float64 {
+	t.Helper()
+	var rep map[string]any
+	if err := json.Unmarshal(body, &rep); err != nil {
+		t.Fatalf("unmarshal %s: %v", body, err)
+	}
+	n, ok := rep["strained"].(float64)
+	if !ok {
+		t.Fatalf("the probe carries no numeric %q: %s", "strained", body)
+	}
+	return n
 }
 
 // TestManifest_ClaimsNoPrefixOfTheServingPlane is the OTHER half of the namespace
