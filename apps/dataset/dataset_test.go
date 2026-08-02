@@ -12,6 +12,7 @@ package dataset
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/zap-proto/fiber/v3"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/tenant"
 	"github.com/zap-proto/zip"
 )
@@ -37,9 +40,48 @@ const brand = "hanzo"
 // newPlane builds a plane over a fake store. It is the constructor Mount uses
 // minus the background ensure, so a test drives the schema step explicitly and
 // nothing races it.
-func newPlane(f *fake) *plane {
+func newPlane(f *fake) *plane { return newPlaneBilled(f, nil) }
+
+// newPlaneBilled builds the same plane over a stated meter. A nil meter takes the
+// real one, which allows everything in a test process because no ledger is
+// configured — the shape every other test wants.
+func newPlaneBilled(f *fake, m meter) *plane {
 	base := cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: brand}, "dataset")
-	return &plane{store: f, brand: brand, bill: base.Bill, log: base.Log, busy: map[string]inflight{}}
+	var bill meter = base.Bill
+	if m != nil {
+		bill = m
+	}
+	return &plane{store: f, brand: brand, bill: bill, log: base.Log, busy: map[string]scan{}}
+}
+
+// ledger is a meter a test states the answers of. It records what was debited,
+// which is how a test proves an op is METERED and not merely gated.
+type ledger struct {
+	mu    sync.Mutex
+	gate  error
+	cents int64
+	debit []int64
+}
+
+func (l *ledger) Gate(_ context.Context, _, _ string, _ bool, _ string, cents int64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.cents = cents
+	return l.gate
+}
+
+func (l *ledger) Meter(_, _, _ string, cents int64, _, _ string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.debit = append(l.debit, cents)
+}
+
+func (l *ledger) Enabled() bool { return true }
+
+func (l *ledger) charged() []int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]int64(nil), l.debit...)
 }
 
 func mountHTTP(t *testing.T, p *plane) *zip.App {
@@ -55,6 +97,15 @@ func mountHTTP(t *testing.T, p *plane) *zip.App {
 // pair the identity boundary mints for a validated principal.
 func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
 	t.Helper()
+	return vouched(t, app, method, path, org, "", body)
+}
+
+// vouched drives one request whose principal a NAMED brand's IAM signed for —
+// the third header the identity boundary mints, from the token's verified `iss`.
+// An empty brand mints none, which is the shape of a principal with no issuer to
+// resolve (an hk-/sk- key) and the shape every other test here wants.
+func vouched(t *testing.T, app *zip.App, method, path, org, by string, body any) (int, []byte) {
+	t.Helper()
 	var r io.Reader
 	var raw []byte
 	if body != nil {
@@ -68,6 +119,9 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	if org != "" {
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org)
+	}
+	if by != "" {
+		rq.Header.Set(cloud.HeaderUserBrand, by)
 	}
 	resp, err := app.Fiber().Test(rq, httpCfg)
 	if err != nil {
@@ -227,8 +281,14 @@ func TestForeignOrgSeesNothing(t *testing.T) {
 	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/shared", "acme", nil); code != http.StatusOK {
 		t.Fatalf("dispose: %d (%s)", code, body)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/ml/datasets/shared", "acme", nil); code != http.StatusNotFound {
-		t.Fatalf("acme's disposed dataset still describes: %d", code)
+	// acme's BYTES are gone and its RECORD remains: the version reads `disposed`
+	// and an export of it refuses. Both halves matter — the rows are what a
+	// retention obligation destroys, and the record is what answers for it.
+	if got := describe(t, app, "acme", "shared"); got.Items[0].Status != statusDisposed {
+		t.Fatalf("acme's disposed dataset reads %q", got.Items[0].Status)
+	}
+	if code, _ := do(t, app, http.MethodGet, "/v1/ml/datasets/shared/export", "acme", nil); code != http.StatusConflict {
+		t.Fatalf("acme exported a disposed dataset: %d", code)
 	}
 	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/shared/export?limit=1000", "globex", nil)
 	if code != http.StatusOK {
@@ -845,6 +905,372 @@ func TestTheRowCapBindsAndTheVersionSaysSo(t *testing.T) {
 	}
 }
 
+// ── every source scan is admitted ────────────────────────────────────────────
+
+// TestLineageIsAdmittedLikeTheScanItIs. Lineage RE-RUNS the census a
+// materialisation is charged for — an exact distinct-count over up to 400 days of
+// one tenant's feature surface — so it is admitted through the same door: gated
+// at the meter, one per tenant, and inside the plane's ceiling.
+//
+// It shipped as a bare GET with none of the three. Any authenticated caller could
+// loop it, in parallel, for free, against the single stateful store every other
+// product on the API shares.
+func TestLineageIsAdmittedLikeTheScanItIs(t *testing.T) {
+	f := &fake{ttl: "TTL bucket + toIntervalDay(400)"}
+	twin(f, "one")
+	l := &ledger{}
+	p := newPlaneBilled(f, l)
+	app := mountHTTP(t, p)
+	built := build(t, app, "one", declared("d"))
+	if built.Status != statusReady {
+		t.Fatalf("refused: %s", built.Refusal)
+	}
+
+	// METERED. A lineage answer debits, and it debits its own price.
+	before := len(l.charged())
+	got := lineageOf(t, app, "one", "d", built.Version)
+	if !got.Reproducible {
+		t.Fatalf("the source is intact and lineage says otherwise: %s", got.Refusal)
+	}
+	after := l.charged()
+	if len(after) != before+1 {
+		t.Fatalf("a lineage answer debited %d times, want one", len(after)-before)
+	}
+	if after[len(after)-1] != lineageCost {
+		t.Fatalf("a lineage answer debited %d cents, want %d", after[len(after)-1], lineageCost)
+	}
+
+	// BOUNDED PER TENANT. With the org's one scan slot held — which is exactly the
+	// state a running materialisation leaves it in — a lineage is refused, not run.
+	if _, err := p.claim(mustKey("one"), "d", built.Version); err != nil {
+		t.Fatalf("the slot was already held: %v", err)
+	}
+	f.forget()
+	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	if code != http.StatusConflict {
+		t.Fatalf("a second concurrent scan: want 409, got %d (%s)", code, body)
+	}
+	if !strings.Contains(string(body), "one at a time") {
+		t.Fatalf("the refusal does not name the bound: %s", body)
+	}
+	for _, c := range f.seen() {
+		if strings.Contains(c.Stmt, "uniqExact") {
+			t.Fatalf("a refused lineage still scanned the source: %s", c.Stmt)
+		}
+	}
+	p.release(mustKey("one"))
+
+	// BOUNDED IN THE PROCESS. The ceiling is a fleet resource, so a tenant holding
+	// no slot of its own still cannot scan when the plane is full.
+	for i := range maxJobs {
+		if _, err := p.claim(mustKey(fmt.Sprintf("org%02d", i)), "d", 1); err != nil {
+			t.Fatalf("filling slot %d: %v", i, err)
+		}
+	}
+	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("a full plane: want 503, got %d (%s)", code, body)
+	}
+	for i := range maxJobs {
+		p.release(mustKey(fmt.Sprintf("org%02d", i)))
+	}
+
+	// GATED. A refused gate means the source is never read at all — the bound the
+	// meter enforces is worth nothing if the work runs and then the bill fails.
+	l.mu.Lock()
+	l.gate = metering.ErrInsufficientBalance
+	l.mu.Unlock()
+	f.forget()
+	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	if code != http.StatusPaymentRequired {
+		t.Fatalf("an unfunded lineage: want 402, got %d (%s)", code, body)
+	}
+	for _, c := range f.seen() {
+		if strings.Contains(c.Stmt, "uniqExact") {
+			t.Fatalf("an unfunded lineage scanned the source anyway: %s", c.Stmt)
+		}
+	}
+}
+
+// TestTheBillersOwnWordsNeverReachTheCaller. A gate that cannot be ASKED fails
+// with a foreign error carrying the peer's transport detail. Two ops call the
+// gate; neither may hand that to a caller.
+//
+// It is the same class as the store's own words — an error this package did not
+// author, rendered by zip's default handler as the body of a 500 — and it was
+// live on both priced ops.
+func TestTheBillersOwnWordsNeverReachTheCaller(t *testing.T) {
+	const leak = "gate: commerce unreachable: dial tcp 10.43.7.19:8080: connect: connection refused"
+	f := &fake{}
+	twin(f, "one")
+	l := &ledger{gate: errors.New(leak)}
+	app := mountHTTP(t, newPlaneBilled(f, l))
+
+	// Declaring is free, so the gate short-circuits and a declaration still lands —
+	// which is what lets the priced ops below be reached at all.
+	l.mu.Lock()
+	l.gate = nil
+	l.mu.Unlock()
+	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+		t.Fatalf("declare: %d (%s)", code, body)
+	}
+	l.mu.Lock()
+	l.gate = errors.New(leak)
+	l.mu.Unlock()
+
+	for _, probe := range []struct {
+		what   string
+		method string
+		path   string
+		body   any
+	}{
+		{"materialize", http.MethodPost, "/v1/ml/datasets/d/materialize", nil},
+		{"create", http.MethodPost, "/v1/ml/datasets", declared("other")},
+	} {
+		code, body := do(t, app, probe.method, probe.path, "one", probe.body)
+		if strings.Contains(string(body), "10.43.7.19") || strings.Contains(string(body), "commerce") {
+			t.Fatalf("%s handed the biller's own words to a caller: %s", probe.what, body)
+		}
+		if code == http.StatusOK || code == http.StatusAccepted {
+			continue // a free act: the gate was never asked, which is correct.
+		}
+		if code != http.StatusServiceUnavailable {
+			t.Fatalf("%s: an unaskable gate is 503 balance_unavailable, got %d (%s)", probe.what, code, body)
+		}
+		if !strings.Contains(string(body), "balance_unavailable") {
+			t.Fatalf("%s: the refusal is not the money wire's: %s", probe.what, body)
+		}
+	}
+}
+
+// TestADeclarationIsGatedTooEvenThoughItIsFree. declareCost is zero today, so the
+// gate short-circuits before it can fail. The point of routing it through the one
+// [plane.charge] anyway is that pricing declaration tomorrow cannot reintroduce
+// the leak — so this asserts the CALL, not the price.
+func TestADeclarationIsGatedTooEvenThoughItIsFree(t *testing.T) {
+	f := &fake{}
+	twin(f, "one")
+	l := &ledger{}
+	app := mountHTTP(t, newPlaneBilled(f, l))
+	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+		t.Fatalf("declare: %d (%s)", code, body)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.cents != declareCost {
+		t.Fatalf("declaring asked the gate for %d cents, want %d", l.cents, declareCost)
+	}
+}
+
+// ── a job records its own outcome ────────────────────────────────────────────
+
+// TestATimedOutJobRecordsWhyItTimedOut is the two-contexts property.
+//
+// A job that hits its wall has an outcome to record, and the write that records
+// it must not run on the deadline that just expired: the driver refuses before
+// sending anything and the version is left `materializing` with an EMPTY refusal
+// forever — telling the operator only that the attempt "did not complete", never
+// why, and never distinguishing it from a process that was killed.
+//
+// The budget is stated by the caller of [plane.run] precisely so this can be
+// tested: a budget already spent IS a job that ran out of time.
+func TestATimedOutJobRecordsWhyItTimedOut(t *testing.T) {
+	f := &fake{}
+	twin(f, "one")
+	p := newPlane(f)
+	app := mountHTTP(t, p)
+	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+		t.Fatalf("declare: %d (%s)", code, body)
+	}
+	e, ok, err := p.latest(context.Background(), mustKey("one"), "d")
+	if err != nil || !ok {
+		t.Fatalf("the declaration is not in the register: %v", err)
+	}
+
+	a, err := p.claim(mustKey("one"), e.Name, e.Version)
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	e.Status = statusMaterialize
+	if err := p.put(context.Background(), a.k, e); err != nil {
+		t.Fatalf("recording the attempt: %v", err)
+	}
+	// A budget already spent: the state of a job the fifteen-minute wall just
+	// ended. Every statement it tries now is refused by the store, exactly as the
+	// real driver refuses one on a dead context.
+	p.run(a, e, -time.Second)
+
+	got := describeVersion(t, app, "one", "d", e.Version)
+	if got.Status != statusRefused {
+		t.Fatalf("a job that ran out of time left the version %q; a timed-out job must record its own outcome", got.Status)
+	}
+	if got.Refusal == "" {
+		t.Fatal("the version is refused with no reason at all, which is the state that tells an operator nothing")
+	}
+}
+
+// ── a version number is a citation ───────────────────────────────────────────
+
+// TestAVersionNumberIsNeverReusedAcrossADisposal.
+//
+// A model cites a dataset AND a version. If disposal resets the counter, the next
+// `orders` reaches version 3 again with different bytes, the citation resolves to
+// something the model never saw, and nothing anywhere records that the first
+// version 3 existed. The number has to be monotone across the whole life of the
+// NAME, which is why disposal marks the register instead of dropping it.
+func TestAVersionNumberIsNeverReusedAcrossADisposal(t *testing.T) {
+	f := &fake{}
+	twin(f, "one")
+	app := mountHTTP(t, newPlane(f))
+
+	var first []string
+	for range 3 {
+		got := build(t, app, "one", declared("orders"))
+		if got.Status != statusReady {
+			t.Fatalf("refused: %s", got.Refusal)
+		}
+		first = append(first, got.Digest)
+	}
+	if v := describeVersion(t, app, "one", "orders", 3); v.Digest != first[2] {
+		t.Fatalf("version 3 does not carry its own digest")
+	}
+
+	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/orders", "one", nil); code != http.StatusOK {
+		t.Fatalf("dispose: %d (%s)", code, body)
+	}
+	// Every version reads disposed, and the record of each is still there — the
+	// answer to "prove you deleted it" is a record, not silence.
+	gone := describe(t, app, "one", "orders")
+	if len(gone.Items) != 3 {
+		t.Fatalf("the disposal took the record with the rows: %d versions remain", len(gone.Items))
+	}
+	for _, v := range gone.Items {
+		if v.Status != statusDisposed {
+			t.Fatalf("version %d reads %q after a disposal", v.Version, v.Status)
+		}
+	}
+	if code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/orders/export", "one", nil); code != http.StatusConflict {
+		t.Fatalf("a disposed dataset still exports: %d (%s)", code, body)
+	}
+	f.mu.Lock()
+	left := len(f.rows)
+	f.mu.Unlock()
+	if left != 0 {
+		t.Fatalf("a disposal left %d rows in the store", left)
+	}
+
+	// The next declaration CONTINUES the numbering.
+	next := build(t, app, "one", declared("orders"))
+	if next.Version != 4 {
+		t.Fatalf("after disposing three versions the next is %d; version %d of orders would now mean two things",
+			next.Version, next.Version)
+	}
+	if next.Digest == first[2] {
+		t.Fatal("the new version reproduced the old digest, so this test proves nothing")
+	}
+}
+
+// TestADisposalIsIdempotent. The two halves — dropping the bytes and marking the
+// record — can fail apart, so a repeat call must be able to finish the half that
+// did not happen. It must NOT rewrite the instant the disposal was recorded at.
+func TestADisposalIsIdempotent(t *testing.T) {
+	f := &fake{}
+	twin(f, "one")
+	app := mountHTTP(t, newPlane(f))
+	build(t, app, "one", declared("orders"))
+
+	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/orders", "one", nil); code != http.StatusOK {
+		t.Fatalf("dispose: %d (%s)", code, body)
+	}
+	when := describeVersion(t, app, "one", "orders", 1).At
+	time.Sleep(1100 * time.Millisecond) // the register's instant has one-second resolution
+	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/orders", "one", nil); code != http.StatusOK {
+		t.Fatalf("a repeat disposal: %d (%s)", code, body)
+	}
+	if again := describeVersion(t, app, "one", "orders", 1).At; again != when {
+		t.Fatalf("a repeat disposal rewrote the disposal instant: %s then %s", when, again)
+	}
+}
+
+// ── lineage is falsifiable ───────────────────────────────────────────────────
+
+// TestLineageRefusesReproducibleWhenTheSourceHasMovedAtAll.
+//
+// The source is a SummingMergeTree fed by a rollup that runs behind the events,
+// so late rows landing in buckets INSIDE a closed window is the ordinary case and
+// "the source now holds more than this version was built from" is the ordinary
+// outcome. Re-running the spec over it produces different rows and therefore a
+// different digest — so certifying it reproducible is a false claim in the one
+// place the design says a claim must be falsifiable.
+func TestLineageRefusesReproducibleWhenTheSourceHasMovedAtAll(t *testing.T) {
+	f := &fake{ttl: "TTL bucket + toIntervalDay(400)"}
+	twin(f, "one")
+	app := mountHTTP(t, newPlane(f))
+	built := build(t, app, "one", declared("d"))
+	if got := lineageOf(t, app, "one", "d", built.Version); !got.Reproducible {
+		t.Fatalf("an untouched source is not reproducible: %s", got.Refusal)
+	}
+
+	// One late row for a subject already in the window — a rollup catching up,
+	// which is the normal state of this source and not a fault.
+	f.mu.Lock()
+	f.feature = append(f.feature, featRow{
+		Org: mustKey("one").String(), Kind: kindPerson,
+		Subject: "s000", Bucket: origin0.Add(90 * time.Minute),
+		Value: map[string]float64{
+			"events": 1, "sessions": 1, "distincts": 1, "paths": 1,
+			"errors": 0, "calls": 1, "failures": 0, "tokens": 1, "spend_nano": 1, "ips": 1,
+		},
+	})
+	f.mu.Unlock()
+
+	got := lineageOf(t, app, "one", "d", built.Version)
+	if got.Holds <= got.Rows {
+		t.Fatalf("the late row did not reach the window: holds %d, built from %d", got.Holds, got.Rows)
+	}
+	if got.Reproducible {
+		t.Fatalf("the source grew to %d rows where the version was built from %d, and lineage still certifies it re-derivable",
+			got.Holds, got.Rows)
+	}
+	if got.Refusal == "" {
+		t.Fatal("lineage refuses reproducibility without saying why")
+	}
+}
+
+// ── one brand's org is not another's ─────────────────────────────────────────
+
+// TestATokenFromAnotherBrandIsNotThisBrandsTenant.
+//
+// One cloud binary serves every brand's API host and TRUSTS every brand's
+// issuer, so a validly-signed token minted by lux.id arrives at a deployment
+// whose own brand is hanzo. Minting `hanzo/<org>` for it puts two unrelated
+// businesses — `acme` on hanzo.id and `acme` on lux.id — in one key space, one
+// set of rows and one dataset. The brand half is the deployment's; WHICH BRAND
+// VOUCHED is a second, server-observed fact, and when the two disagree there is
+// no key that is honest to mint.
+func TestATokenFromAnotherBrandIsNotThisBrandsTenant(t *testing.T) {
+	f := &fake{}
+	twin(f, "one")
+	app := mountHTTP(t, newPlane(f))
+
+	// This deployment's own brand vouched: served.
+	if code, body := vouched(t, app, http.MethodGet, "/v1/ml/datasets", "one", brand, nil); code != http.StatusOK {
+		t.Fatalf("this brand's own principal was refused: %d (%s)", code, body)
+	}
+	// Another brand's IAM vouched: refused, and refused before any statement.
+	f.forget()
+	code, body := vouched(t, app, http.MethodGet, "/v1/ml/datasets", "one", "lux", nil)
+	if code != http.StatusForbidden {
+		t.Fatalf("a lux-issued principal read a hanzo tenant: %d (%s)", code, body)
+	}
+	for _, c := range f.seen() {
+		t.Fatalf("a cross-brand caller reached the store: %s", c.Stmt)
+	}
+	if code, body := vouched(t, app, http.MethodPost, "/v1/ml/datasets", "one", "lux", declared("d")); code != http.StatusForbidden {
+		t.Fatalf("a lux-issued principal declared into a hanzo tenant: %d (%s)", code, body)
+	}
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // twin writes a surface that is identical for every org that gets it: the same
@@ -891,7 +1317,8 @@ func exported(t *testing.T, app *zip.App, org, name string) []mlDatasetRow {
 	return page.Rows
 }
 
-func describeVersion(t *testing.T, app *zip.App, org, name string, version int) mlDataset {
+// describe reads a dataset's whole version history, newest first.
+func describe(t *testing.T, app *zip.App, org, name string) mlDatasetVersions {
 	t.Helper()
 	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/"+name, org, nil)
 	if code != http.StatusOK {
@@ -901,6 +1328,15 @@ func describeVersion(t *testing.T, app *zip.App, org, name string, version int) 
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatal(err)
 	}
+	if len(v.Items) == 0 {
+		t.Fatalf("describe %s: no versions", name)
+	}
+	return v
+}
+
+func describeVersion(t *testing.T, app *zip.App, org, name string, version int) mlDataset {
+	t.Helper()
+	v := describe(t, app, org, name)
 	for _, e := range v.Items {
 		if e.Version == version {
 			return e

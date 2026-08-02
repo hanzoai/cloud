@@ -33,7 +33,7 @@ package dataset
 // NEITHER OWNED TABLE HAS A TTL, deliberately. A table TTL is a fleet-wide clock
 // no tenant can hold longer and no tenant can shorten — the opposite of "only the
 // retention plane decides expiry, per tenant". Disposal is DROP PARTITION on
-// (org, name), which is per tenant by construction: the partition expression
+// (org, dataset), which is per tenant by construction: the partition expression
 // leads with the tenant, so a disposal cannot reach across one.
 
 import (
@@ -90,15 +90,21 @@ const (
 //
 // The rank IS the ReplacingMergeTree version column, which is what makes
 // immutability structural rather than merely policed: ClickHouse keeps the row
-// with the GREATEST version among duplicates, `ready` is the greatest rank, and
-// therefore no later write of any other stage can displace a published version.
-// The door refuses a second `ready` for one version; the engine refuses
-// everything else. Two layers, and the weaker one is not the only one.
+// with the GREATEST version among duplicates, so no later write of a LOWER stage
+// can displace a published version. The door refuses a second `ready` for one
+// version; the engine refuses everything below it. Two layers, and the weaker one
+// is not the only one.
+//
+// EXACTLY ONE STAGE OUTRANKS `ready`, and it is `disposed` — the tenant's own
+// retention decision. That is the one write that must be able to supersede a
+// publication, because the alternative is a plane that cannot honour a deletion.
+// A published version is never REWRITTEN; it is only ever disposed of.
 const (
 	statusDeclared    = "declared"
 	statusMaterialize = "materializing"
 	statusRefused     = "refused"
 	statusReady       = "ready"
+	statusDisposed    = "disposed"
 )
 
 func rank(status string) uint8 {
@@ -111,6 +117,8 @@ func rank(status string) uint8 {
 		return 3
 	case statusReady:
 		return 4
+	case statusDisposed:
+		return 5
 	}
 	return 0
 }
@@ -118,9 +126,14 @@ func rank(status string) uint8 {
 // manifestDDL is the version register: one row per (org, name, version), and the
 // only place a version's status, spec, digest and counts live.
 //
-// PARTITION BY (org, name) so a tenant's disposal of one dataset is a partition
-// drop that cannot name another tenant's rows. ORDER BY (org, name, version) so a
-// per-tenant read is a prefix scan. NO TTL — see the file note.
+// PARTITION BY (org, name) so the tenant leads the partition expression exactly
+// as it leads every predicate. ORDER BY (org, name, version) so a per-tenant read
+// is a prefix scan. NO TTL — see the file note.
+//
+// It is bounded by the door, not by the engine: [maxNames] partitions per tenant
+// and [maxVersions] rows in each. The register is metadata — a spec, a digest and
+// a set of counts per version — so a tenant's whole register is kilobytes, which
+// is what makes keeping a disposed dataset's record affordable.
 const manifestDDL = `
 	CREATE TABLE IF NOT EXISTS hanzo.risk_dataset (
 		org          String,
@@ -217,26 +230,39 @@ var manifestColumns = []string{
 	"judged", "productive", "unproductive", "horizon", "share", "truncated",
 }
 
-// put writes one manifest row. It is the ONLY writer of hanzo.risk_dataset.
+// put writes manifest rows. It is the ONLY writer of hanzo.risk_dataset.
 //
 // The tenant is the first bound value AND the first component of the partition
 // expression, so a row cannot be filed under a tenant other than the key that
 // wrote it.
-func (p *plane) put(ctx context.Context, k tenant.Key, e entry) error {
+//
+// It is variadic so a disposal — which marks every version of one dataset at once
+// — writes ONE statement rather than a round trip per version, without there
+// being a second writer that could bind the columns in a different order. Writing
+// nothing is a no-op, never an INSERT with no values.
+func (p *plane) put(ctx context.Context, k tenant.Key, es ...entry) error {
 	if k.Zero() {
 		return errNoTenant
+	}
+	if len(es) == 0 {
+		return nil
 	}
 	if !p.store.Ready() {
 		return errStore
 	}
-	stmt := "INSERT INTO " + manifestTable + " (" + strings.Join(manifestColumns, ", ") + ") VALUES (" +
-		strings.TrimSuffix(strings.Repeat("?, ", len(manifestColumns)), ", ") + ")"
-	return p.store.Exec(ctx, stmt,
-		k.String(), e.Name, uint32(e.Version), rank(e.Status), e.At.UTC(), e.By, e.Status, e.Refusal,
-		e.Spec.canon(), e.Source, e.Digest,
-		uint64(e.Counts.Rows), uint64(e.Counts.Train), uint64(e.Counts.Val), uint64(e.Counts.Test),
-		uint64(e.Counts.Subjects), uint64(e.Counts.Judged), uint64(e.Counts.Productive), uint64(e.Counts.Unproductive),
-		uint32(e.Horizon), uint16(e.Share), boolByte(e.Truncated))
+	group := "(" + strings.TrimSuffix(strings.Repeat("?, ", len(manifestColumns)), ", ") + ")"
+	args := make([]any, 0, len(es)*len(manifestColumns))
+	for _, e := range es {
+		args = append(args,
+			k.String(), e.Name, uint32(e.Version), rank(e.Status), e.At.UTC(), e.By, e.Status, e.Refusal,
+			e.Spec.canon(), e.Source, e.Digest,
+			uint64(e.Counts.Rows), uint64(e.Counts.Train), uint64(e.Counts.Val), uint64(e.Counts.Test),
+			uint64(e.Counts.Subjects), uint64(e.Counts.Judged), uint64(e.Counts.Productive), uint64(e.Counts.Unproductive),
+			uint32(e.Horizon), uint16(e.Share), boolByte(e.Truncated))
+	}
+	stmt := "INSERT INTO " + manifestTable + " (" + strings.Join(manifestColumns, ", ") + ") VALUES " +
+		strings.TrimSuffix(strings.Repeat(group+", ", len(es)), ", ")
+	return p.store.Exec(ctx, stmt, args...)
 }
 
 // versions reads every version of one dataset, newest first.
@@ -467,21 +493,37 @@ func splitName(s uint8) string {
 
 // ── disposal ─────────────────────────────────────────────────────────────────
 
-// dispose removes one tenant's one dataset — every version of it, register row
-// and bytes together.
+// dispose removes one tenant's one dataset: the BYTES go, and the register is
+// MARKED with what went.
 //
-// ONE mechanism, DROP PARTITION, on both tables. The partition expression is
-// (org, name) on the register and (org, dataset) on the rows, so the tenant is
-// the first component of the thing being dropped: a disposal is per tenant by
-// construction and cannot be spelled cross-tenant. That is why there is no table
-// TTL here — a TTL is a clock the tenant does not hold, and this plane's rule is
-// that only the tenant's own retention decision expires its records.
+// THE BYTES ARE DROPPED, NOT DELETED ROW BY ROW. The rows table is partitioned by
+// (org, dataset), so the tenant is the first component of the thing being
+// dropped: a disposal is per tenant by construction and cannot be spelled
+// cross-tenant. That is why there is no table TTL here — a TTL is a clock the
+// tenant does not hold, and this plane's rule is that only the tenant's own
+// retention decision expires its records.
 //
-// The two drops are ordered rows-then-register. If the second fails, the register
-// still names a version whose bytes are gone — which the next read reports as an
-// unreproducible dataset. The other order would leave bytes no register names,
-// which nothing would ever report.
-func (p *plane) dispose(ctx context.Context, k tenant.Key, name string) error {
+// THE REGISTER IS NOT DROPPED, and that is a correction of an earlier design
+// rather than a hesitation. Dropping it reset the version counter: after
+// disposing `orders`, the next declaration was version 1 again, so a model citing
+// `orders v3` could be pointed at rows the first v3 never contained, and nothing
+// anywhere recorded that the first v3 had existed. A citation that is ambiguous
+// across time is not a citation. So the register keeps ONE row per version,
+// marked `disposed` — which outranks `ready` in the engine's version column, so
+// the mark supersedes the publication rather than racing it — and the next
+// declaration continues from the number the dataset reached.
+//
+// What is kept is a RECORD, not the data: the rows carrying subjects and
+// coordinates are gone; the register holds the name, the number, the spec, the
+// digest and who disposed of it when. That is what a retention obligation asks a
+// plane to be able to answer with, and the answer to "prove you deleted it" is
+// not silence.
+//
+// ORDER: bytes first, mark second. If the mark fails, the register still names
+// versions whose bytes are gone — which every read then reports as an
+// unreproducible dataset — and a repeat disposal completes it. The other order
+// would leave bytes that no register names, which nothing would ever report.
+func (p *plane) dispose(ctx context.Context, k tenant.Key, name string, es []entry, by string) error {
 	if k.Zero() {
 		return errNoTenant
 	}
@@ -491,8 +533,23 @@ func (p *plane) dispose(ctx context.Context, k tenant.Key, name string) error {
 	if err := p.store.Exec(ctx, "ALTER TABLE "+rowTable+" DROP PARTITION (?, ?)", k.String(), name); err != nil {
 		return fmt.Errorf("%w: dispose rows: %v", errStore, err)
 	}
-	if err := p.store.Exec(ctx, "ALTER TABLE "+manifestTable+" DROP PARTITION (?, ?)", k.String(), name); err != nil {
-		return fmt.Errorf("%w: dispose the register: %v", errStore, err)
+	marks := make([]entry, 0, len(es))
+	at := time.Now().UTC()
+	for _, e := range es {
+		if e.Status == statusDisposed {
+			// Already marked. Leaving it alone keeps the disposal instant on the
+			// record the instant the disposal happened, so a repeat call — which is
+			// how a failed byte-drop is retried — cannot rewrite history.
+			continue
+		}
+		e.Status = statusDisposed
+		e.Refusal = ""
+		e.At = at
+		e.By = by
+		marks = append(marks, e)
+	}
+	if err := p.put(ctx, k, marks...); err != nil {
+		return fmt.Errorf("%w: record the disposal: %v", errStore, err)
 	}
 	return nil
 }
@@ -530,7 +587,14 @@ func sourceWhere(k tenant.Key, s spec, until time.Time) (string, []any) {
 // It counts the GROUPED cardinality rather than raw rows, because the source is a
 // SummingMergeTree whose unmerged parts hold several physical rows per key — a
 // raw count() would over-report and the share would sample harder than it needs.
-func (p *plane) census(ctx context.Context, k tenant.Key, s spec, until time.Time) (census, error) {
+//
+// It is the plane's most expensive statement — an EXACT distinct-count, not an
+// estimate, over a window that may be 400 days wide — which is why it takes a
+// [scan] and not a key: the admission is the parameter, so an op that wanted to
+// run this for free would have to obtain one, and [plane.admit] is the only
+// place one exists.
+func (p *plane) census(ctx context.Context, a scan, s spec, until time.Time) (census, error) {
+	k := a.k
 	if k.Zero() {
 		return census{}, errNoTenant
 	}
@@ -566,7 +630,8 @@ func (p *plane) census(ctx context.Context, k tenant.Key, s spec, until time.Tim
 //
 // The order is the source's own sort key, so the LIMIT truncates at a subject
 // boundary this package can find and drop ([trim]).
-func (p *plane) facts(ctx context.Context, k tenant.Key, s spec, until time.Time, share int) ([]fact, bool, error) {
+func (p *plane) facts(ctx context.Context, a scan, s spec, until time.Time, share int) ([]fact, bool, error) {
+	k := a.k
 	if k.Zero() {
 		return nil, false, errNoTenant
 	}

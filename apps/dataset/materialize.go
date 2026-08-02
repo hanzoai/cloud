@@ -34,14 +34,37 @@ import (
 )
 
 // jobBudget is the hard wall on one materialisation. It bounds the warehouse
-// work a single request can cause, which — with one job per tenant — bounds what
+// work a single request can cause, which — with one scan per tenant — bounds what
 // the whole plane can cause. A job that hits it is refused with the reason,
 // rather than left running against a store other tenants are also using.
 const jobBudget = 15 * time.Minute
 
+// recordBudget is the wall on the WRITE THAT ENDS A JOB, and it is a second
+// budget on purpose.
+//
+// Writing the outcome is not the work; it is the RECORD of the work, and giving
+// the two one deadline means the outcome of a job that ran out of time can never
+// be written. That is not a rare corner: it is precisely the case the refusal
+// exists for. The job hits [jobBudget], build fails with DeadlineExceeded, and
+// the write of `refused` then runs on the very context that just expired — the
+// driver returns before sending anything, nothing lands, and the version sits in
+// `materializing` with an EMPTY refusal forever, telling the operator only that
+// "the attempt did not complete" and never why. [plane.record] is the ONE writer
+// a job uses, and it opens its own context, so that shape cannot be written here
+// again.
+const recordBudget = 30 * time.Second
+
+// censusBudget is the wall on a source scan taken on the REQUEST path — today
+// exactly one, the lineage measurement. A materialisation answers 202 and runs
+// under [jobBudget] precisely so a client's patience is never a data plane's
+// deadline; an op that must answer in line cannot do that, so it gets a wall short
+// enough that a held store connection is bounded by the plane and not by the
+// caller's socket.
+const censusBudget = 60 * time.Second
+
 // declareCost is what declaring a version costs at the meter, in cents. Declaring
-// is a register write and is free; MATERIALISING is the priced act, because it is
-// the one that spends the warehouse.
+// is a register write and is free; READING THE SOURCE is the priced act, because
+// it is the one that spends the warehouse.
 const declareCost int64 = 0
 
 // materializeCost is the fee charged for one materialisation, in cents. It is a
@@ -49,12 +72,30 @@ const declareCost int64 = 0
 // is for the bound and not for the rows.
 const materializeCost int64 = 10
 
+// lineageCost is the fee for one lineage answer, in cents.
+//
+// Lineage RE-RUNS the census a materialisation is charged for: the same exact
+// distinct-count, over the same window of the same table, for the same tenant. It
+// is priced BELOW a materialisation because it stops there — it measures and
+// writes nothing — and above zero because a free re-run of the plane's most
+// expensive statement is a free warehouse scan with a verb in front of it.
+const lineageCost int64 = 2
+
 // declare mints the next version of a dataset from a normalised spec.
 //
 // Versions are MONOTONE and never reused: the number is one past the highest this
-// tenant holds for the name, whatever happened to the versions before it. A
-// number that could be reused would make "version 3 of orders" ambiguous across
-// time, and a citation that is ambiguous across time is not a citation.
+// tenant holds for the name, whatever happened to the versions before it —
+// INCLUDING disposal, which is why disposal marks the register rather than
+// dropping it. A number that could be reused would make "version 3 of orders"
+// ambiguous across time, and a citation that is ambiguous across time is not a
+// citation.
+//
+// A NAME, ONCE DECLARED, IS ONE OF THE ORG'S [maxNames] FOR GOOD. Disposal
+// reclaims the bytes, not the name: the register keeps the record of what was
+// disposed and the number it reached, and re-declaring that name CONTINUES its
+// numbering. The bound is unchanged either way — before, it counted the names a
+// tenant held at once and the partitions they occupied; now it counts both, which
+// are the same 64 partitions, and the tenant keeps every name it has ever used.
 func (p *plane) declare(ctx context.Context, c caller, s spec) (entry, error) {
 	if err := p.ready(ctx); err != nil {
 		return entry{}, err
@@ -103,7 +144,8 @@ func (p *plane) declare(ctx context.Context, c caller, s spec) (entry, error) {
 }
 
 // start admits one materialisation: it checks the version is admissible, takes
-// the tenant's single slot, records the attempt, and hands the work to a job.
+// the tenant's single scan slot at the priced gate, records the attempt, and
+// hands the work to a job.
 //
 // It answers as soon as the attempt is ON RECORD, never when the work is done. A
 // materialisation is a bounded warehouse scan and holding a request open for it
@@ -120,13 +162,14 @@ func (p *plane) start(ctx context.Context, c caller, name string) (entry, error)
 		return entry{}, zip.ErrNotFound("no such dataset")
 	}
 	if e.Status != statusDeclared {
-		// IMMUTABILITY, at the door. `ready` and `refused` are terminal, and a
-		// version already attempted can never be attempted again — re-running it
-		// would write a second run's rows under a number the first run's digest
+		// IMMUTABILITY, at the door. `ready`, `refused` and `disposed` are terminal,
+		// and a version already attempted can never be attempted again — re-running
+		// it would write a second run's rows under a number the first run's digest
 		// already describes.
 		return entry{}, zip.ErrConflict(refusalFor(e))
 	}
-	if _, err := p.claim(c.key, e.Name, e.Version); err != nil {
+	a, err := p.admit(ctx, c, e.Name, e.Version, materializeCost)
+	if err != nil {
 		return entry{}, err
 	}
 
@@ -137,7 +180,7 @@ func (p *plane) start(ctx context.Context, c caller, name string) (entry, error)
 		p.release(c.key)
 		return entry{}, err
 	}
-	go p.run(c.key, e)
+	go p.run(a, e, jobBudget)
 	return e, nil
 }
 
@@ -152,8 +195,23 @@ func refusalFor(e entry) string {
 		return fmt.Sprintf("version %d was refused (%s); declare a new version", e.Version, e.Refusal)
 	case statusMaterialize:
 		return fmt.Sprintf("version %d has already been attempted and did not complete; declare a new version rather than mixing two runs under one number", e.Version)
+	case statusDisposed:
+		return fmt.Sprintf("version %d was disposed of and its rows are gone; declare a new version", e.Version)
 	}
 	return fmt.Sprintf("version %d is not declared", e.Version)
+}
+
+// record writes a version's TERMINAL state, on a context of its OWN.
+//
+// It is the only writer a job uses, and that is the whole point: a job cannot
+// record its outcome on the deadline of the work it is reporting on, because the
+// commonest reason there is an outcome to report is that the deadline expired.
+// The context is fresh and its wall is [recordBudget], so a build that died at
+// fifteen minutes still gets thirty seconds to say so.
+func (p *plane) record(k tenant.Key, e entry) error {
+	ctx, cancel := context.WithTimeout(context.Background(), recordBudget)
+	defer cancel()
+	return p.put(ctx, k, e)
 }
 
 // run is the job. It owns the whole materialisation and it always ends the
@@ -161,40 +219,49 @@ func refusalFor(e entry) string {
 // computed over them, `refused` with the reason otherwise.
 //
 // It takes no request context. The caller's request is over — deliberately — so
-// the job's life is the budget below and nothing else, and a client that hung up
-// neither cancels the work nor keeps it alive.
-func (p *plane) run(k tenant.Key, e entry) {
-	defer p.release(k)
-	ctx, cancel := context.WithTimeout(context.Background(), jobBudget)
-	defer cancel()
+// the work's life is `budget` and nothing else, and a client that hung up neither
+// cancels the work nor keeps it alive. The budget is a parameter and not a
+// constant read from inside because the wall is a fact about THIS job: stated at
+// the one call site that starts one, and settable by a test that needs a job
+// which has already run out of time.
+//
+// TWO CONTEXTS, deliberately. The work's ends when the work does — `cancel` is
+// called before the outcome is written, not deferred past it — and the record of
+// the work gets its own ([plane.record]). Sharing one is the defect that makes a
+// timed-out materialisation unable to record that it timed out.
+func (p *plane) run(a scan, e entry, budget time.Duration) {
+	defer p.release(a.k)
+	work, cancel := context.WithTimeout(context.Background(), budget)
 
-	done, err := p.build(ctx, k, e)
+	done, err := p.build(work, a, e)
+	cancel() // the work is over, whichever way it went; what follows is the RECORD.
+
 	if err != nil {
 		e.Status = statusRefused
 		e.Refusal = p.reason(err)
 		e.At = time.Now().UTC()
-		if err := p.put(ctx, k, e); err != nil {
+		if err := p.record(a.k, e); err != nil {
 			// The refusal itself could not be recorded. Say so loudly: the version
 			// now reads as an attempt that did not complete, which is TRUE, but the
 			// reason only exists in this line.
 			p.log.Error("dataset: a refusal could not be recorded",
-				"tenant", k.String(), "dataset", e.Name, "version", e.Version, "err", err)
+				"tenant", a.k.String(), "dataset", e.Name, "version", e.Version, "err", err)
 		}
 		p.log.Warn("dataset: materialisation refused",
-			"tenant", k.String(), "dataset", e.Name, "version", e.Version, "reason", e.Refusal)
+			"tenant", a.k.String(), "dataset", e.Name, "version", e.Version, "reason", e.Refusal)
 		return
 	}
-	if err := p.put(ctx, k, done); err != nil {
+	if err := p.record(a.k, done); err != nil {
 		// The rows are in the store but the version was never published, so it
 		// stays `materializing` — unreadable, and a new version is the way
 		// forward. Fail secure: an unpublished version is inert, a published one
 		// whose counts were never written would be a dataset nobody can check.
 		p.log.Error("dataset: rows landed but the version was not published",
-			"tenant", k.String(), "dataset", e.Name, "version", e.Version, "err", err)
+			"tenant", a.k.String(), "dataset", e.Name, "version", e.Version, "err", err)
 		return
 	}
 	p.log.Info("dataset materialised",
-		"tenant", k.String(), "dataset", done.Name, "version", done.Version,
+		"tenant", a.k.String(), "dataset", done.Name, "version", done.Version,
 		"rows", done.Counts.Rows, "train", done.Counts.Train, "val", done.Counts.Val,
 		"test", done.Counts.Test, "digest", done.Digest)
 }
@@ -208,7 +275,7 @@ func (p *plane) run(k tenant.Key, e entry) {
 // where no test can reach it and where a second definition would eventually
 // appear. The cost is that the rows pass through memory, which is exactly what
 // the row cap bounds.
-func (p *plane) build(ctx context.Context, k tenant.Key, e entry) (entry, error) {
+func (p *plane) build(ctx context.Context, a scan, e entry) (entry, error) {
 	s, err := e.Spec.spec()
 	if err != nil {
 		return entry{}, err
@@ -227,7 +294,7 @@ func (p *plane) build(ctx context.Context, k tenant.Key, e entry) (entry, error)
 		return entry{}, zip.ErrBadRequest(fmt.Sprintf("no part of the window has aged past the %d-day maturity horizon yet", int(s.Horizon.Hours()/24)))
 	}
 
-	seen, err := p.census(ctx, k, s, until)
+	seen, err := p.census(ctx, a, s, until)
 	if err != nil {
 		return entry{}, err
 	}
@@ -236,7 +303,7 @@ func (p *plane) build(ctx context.Context, k tenant.Key, e entry) (entry, error)
 	}
 	share := share(seen.Rows, s.Rows)
 
-	facts, hitLimit, err := p.facts(ctx, k, s, until, share)
+	facts, hitLimit, err := p.facts(ctx, a, s, until, share)
 	if err != nil {
 		return entry{}, err
 	}
@@ -265,7 +332,7 @@ func (p *plane) build(ctx context.Context, k tenant.Key, e entry) (entry, error)
 		Retention: p.retention(ctx),
 	})
 
-	if err := p.insertRows(ctx, k, e.Name, e.Version, rows); err != nil {
+	if err := p.insertRows(ctx, a.k, e.Name, e.Version, rows); err != nil {
 		return entry{}, err
 	}
 	return e, nil
@@ -307,12 +374,21 @@ func readOrigin(s string) (origin, error) {
 // lineage answers where a version's rows came from AND whether that can still be
 // demonstrated — by asking the source the same question again, now.
 //
-// Reproducible is MEASURED, never asserted. When the source's retention has since
-// dropped the window's older half, the dataset still holds its own rows and this
-// says plainly that they can no longer be re-derived. A lineage claim a plane
-// cannot demonstrate is worse than an admitted gap: the gap is actionable and the
-// claim is not falsifiable.
-func (p *plane) lineage(ctx context.Context, k tenant.Key, e entry) (mlLineage, error) {
+// Reproducible is MEASURED, never asserted, and the measurement is EXACT
+// AGREEMENT. The source is a SummingMergeTree fed by a rollup that runs behind the
+// events, so a bucket inside a closed window keeps growing for as long as late
+// events keep arriving: "the source now holds MORE than this version was built
+// from" is the normal case, not an anomaly, and re-running the spec over it would
+// produce different rows and therefore a different digest. Certifying that as
+// re-derivable would put a false claim in the one place the design says a claim
+// must be falsifiable — so any difference at all, in either direction, in the
+// count, the subjects or the window's own extent, is reported as the drift it is.
+//
+// The recorded extremes are compared for EQUALITY rather than for expiry. A
+// source that now starts later has expired its older rows; one that now starts
+// EARLIER has been backfilled. Both mean the window no longer holds what this
+// version was built from, and only the first was noticed before.
+func (p *plane) lineage(ctx context.Context, a scan, e entry) (mlLineage, error) {
 	o, err := readOrigin(e.Source)
 	if err != nil {
 		return mlLineage{}, err
@@ -338,25 +414,34 @@ func (p *plane) lineage(ctx context.Context, k tenant.Key, e entry) (mlLineage, 
 	if err != nil {
 		return mlLineage{}, err
 	}
-	now, err := p.census(ctx, k, s, until)
+	now, err := p.census(ctx, a, s, until)
 	if err != nil {
 		return mlLineage{}, err
 	}
 	out.Holds = now.Rows
-	recorded, err := instant("first", o.First)
-	if err != nil {
-		return mlLineage{}, err
-	}
+	out.Refusal = drift(o, now)
+	out.Reproducible = out.Refusal == ""
+	return out, nil
+}
+
+// drift names the first way the source no longer holds what a version was built
+// from, or "" when it holds exactly that. It is a total comparison of the four
+// measurements the manifest records, so "reproducible" means all four agree and
+// nothing else.
+func drift(o origin, now census) string {
 	switch {
 	case now.Rows == 0:
-		out.Refusal = "the source no longer holds anything for this window, so these rows cannot be re-derived"
-	case now.First.After(recorded):
-		out.Refusal = fmt.Sprintf("the source now starts at %s, later than the %s this version was built from, so its older rows have expired",
-			stamp(now.First), o.First)
-	case now.Rows < o.Rows:
-		out.Refusal = fmt.Sprintf("the source now holds %d rows for this window where this version was built from %d", now.Rows, o.Rows)
-	default:
-		out.Reproducible = true
+		return "the source no longer holds anything for this window, so these rows cannot be re-derived"
+	case now.Rows != o.Rows:
+		return fmt.Sprintf("the source now holds %d rows for this window where this version was built from %d, so re-running its spec would not reproduce it",
+			now.Rows, o.Rows)
+	case now.Subjects != o.Subjects:
+		return fmt.Sprintf("the source now holds %d subjects for this window where this version was built from %d",
+			now.Subjects, o.Subjects)
+	case stamp(now.First) != o.First:
+		return fmt.Sprintf("the source now starts at %s where this version was built from %s", stamp(now.First), o.First)
+	case stamp(now.Last) != o.Last:
+		return fmt.Sprintf("the source now ends at %s where this version was built from %s", stamp(now.Last), o.Last)
 	}
-	return out, nil
+	return ""
 }
