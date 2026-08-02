@@ -2,7 +2,6 @@ package x402
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -33,10 +32,18 @@ import (
 //   - the PAYEE is unknown ⇒ not resolvable ⇒ 503. Nothing is served, nothing moves.
 //   - the LEDGER is unreachable ⇒ error ⇒ no settlement, no receipt, no dispatch.
 //
-// The single exception is cloud.ErrNoPeer, and only for the PRICE: an app the fleet
-// does not run at all is a deployment fact, not an outage, and a fleet with no
-// marketplace in it genuinely has nothing priced. That is the same answer the nil
-// table used to give — restored where it is true, and refused where it is not.
+// The PRICE has no exception, and it held one: cloud.ErrNoPeer — read as "no
+// marketplace in this fleet" — answered "nothing is priced". The plane cannot report
+// that fact. reach() calls an app absent when it cannot reach it and no ROUTER is
+// there to say otherwise (plane.go, and a killed peer leaves a socket file that
+// refuses every connection), so a marketplace that DIED read as a fleet that never
+// had one — and this process, which cannot price anything without that table, then
+// answered free for the entire catalogue.
+//
+// The exception bought nothing either: manifest/apps.go IS the fleet and it lists
+// marketplace beside x402, so a rail deployed without its table is a
+// misconfiguration, and one that refuses loudly costs less than one that quietly
+// sells the shop for nothing.
 
 const (
 	peerMarketplace = "marketplace"
@@ -73,9 +80,8 @@ func pricePeer(ctx context.Context, resource string) (Terms, bool, error) {
 	out, err := cloud.Ask[plane.PriceIn, plane.Priced](cctx, peerMarketplace, plane.MarketPrice,
 		&plane.PriceIn{Resource: resource})
 	switch {
-	case errors.Is(err, cloud.ErrNoPeer):
-		return Terms{}, false, nil // no price table in this fleet ⇒ nothing is priced
 	case err != nil:
+		// Unreached is UNKNOWN, and an unknown price is never zero.
 		return Terms{}, false, fmt.Errorf("x402: price %s: %w", resource, err)
 	case out == nil:
 		// A void reply from a price table is not "free". Nothing answered.
