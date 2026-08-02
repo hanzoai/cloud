@@ -106,6 +106,13 @@ var Apps = []App{
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models", "/v1/train/experiments", "/v1/train/health", "/v1/train/jobs"}},
+	// The reference plane is a leaf UNDER /v1/ml and disjoint from ml's own two
+	// leaves, so longest-prefix separates them and neither row moves — the same
+	// pair /v1/vector and /v1/vector/collections already are. It is a row of its
+	// own rather than a prefix on ml's because it is a different app: ml serves
+	// inference and training, this serves the lookup data a decision consults, and
+	// they share no state.
+	{Name: "reference", Prefixes: []string{"/v1/ml/reference"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},

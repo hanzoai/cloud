@@ -1090,6 +1090,23 @@ components:
         symbol:
           type: string
       type: object
+    ClearReferenceOut:
+      properties:
+        cleared:
+          description: |-
+            Cleared is false when your org held no such override — which is not an
+            error, it is the honest answer to a removal that had nothing to remove.
+          type: boolean
+        key:
+          description: Key is the entry named.
+          type: string
+        overrides:
+          description: Overrides is how many your org still holds in this set.
+          type: integer
+        set:
+          description: Set is the set cleared in.
+          type: string
+      type: object
     Cluster:
       properties:
         id:
@@ -4579,6 +4596,347 @@ components:
         seats:
           type: integer
       type: object
+    ReferenceAnswer:
+      properties:
+        age:
+          description: Age is how old that is, as a duration.
+          type: string
+        asOf:
+          description: AsOf is when the oldest contributing publisher was current,
+            RFC 3339.
+          type: string
+        from:
+          description: From is override or baseline — which plane answered.
+          type: string
+        hit:
+          description: |-
+            Hit is whether the key is a member. It is meaningful ONLY when Refusal is
+            empty: false with a refusal means the set could not be consulted, which is
+            not the same as the key being clean.
+          type: boolean
+        key:
+          description: Key is the key as asked.
+          type: string
+        matched:
+          description: |-
+            Matched is the member that covered the key, which for a domain or a network
+            is the enclosing entry rather than the key itself.
+          type: string
+        refusal:
+          description: |-
+            Refusal is why the set could not be consulted, when it could not: never
+            loaded, held elsewhere, or a source we hold no licence for. Non-empty means
+            Hit must not be read as an answer.
+          type: string
+        score:
+          description: Score is the published risk weight where the source expresses
+            one.
+          type: number
+        set:
+          description: Set is the set consulted.
+          type: string
+        stale:
+          description: |-
+            Stale is whether the set is past its freshness bound. A stale set still
+            answers — yesterday's list beats none — and this is how a decision knows it
+            leaned on one.
+          type: boolean
+        value:
+          additionalProperties:
+            type: string
+          description: |-
+            Value is what the publisher says about the member — class, operator,
+            scheme, region.
+          type: object
+        verdict:
+          description: |-
+            Verdict is the tenant's own allow or deny, present only for an override.
+            The baseline never carries one: it states facts and leaves the decision to
+            the caller's policy.
+          type: string
+        version:
+          description: |-
+            Version is the exact baseline version consulted, composed of each
+            contributing publisher and its content digest. It is what makes a decision
+            reproducible: an auditor takes this string and knows precisely what was
+            consulted.
+          type: string
+      type: object
+    ReferenceOut:
+      properties:
+        next:
+          description: Next is the key to page from, empty when this is the last page.
+          type: string
+        overrides:
+          description: |-
+            Overrides is YOUR org's entries over that baseline, in key order. They are
+            held in your organisation's own store and are not visible to any other.
+          items:
+            $ref: '#/components/schemas/ReferenceOverride'
+          type: array
+        set:
+          $ref: '#/components/schemas/ReferenceSet'
+          description: 'Set is the published set: its version, its freshness and its
+            sources.'
+      type: object
+    ReferenceOverride:
+      properties:
+        at:
+          description: At is when it was written, RFC 3339.
+          type: string
+        by:
+          description: By is who wrote it.
+          type: string
+        key:
+          description: Key is the member this organisation is speaking about.
+          type: string
+        note:
+          description: Note is why, in the operator's own words. Optional, and bounded.
+          type: string
+        verdict:
+          description: Verdict is allow or deny.
+          type: string
+      type: object
+    ReferenceOverrideIn:
+      properties:
+        key:
+          description: |-
+            Key is the member: a domain, a CIDR or address, an issuer prefix, a
+            device digest. It is matched the same way the baseline is, so a deny on
+            tempbox.example also covers mail.tempbox.example.
+          type: string
+        note:
+          description: Note is why, in your own words. Optional, bounded to 512 bytes.
+          type: string
+        verdict:
+          description: |-
+            Verdict is allow or deny, and nothing else. An override is a decision —
+            unlike a baseline entry, which states facts and leaves the decision to your
+            policy — because your organisation is the only party entitled to say "for
+            us, this one is fine".
+          type: string
+      type: object
+    ReferenceReceipt:
+      properties:
+        asOf:
+          description: |-
+            AsOf is when the load happened, RFC 3339. Absent is dated on arrival, which
+            can only make the list look older than it is.
+          type: string
+        keys:
+          description: |-
+            Keys is how many designations that load carried. Zero from a publisher who
+            designates somebody is a failed load wearing a successful one's clothes,
+            and belongs in Refusal instead.
+          type: integer
+        refusal:
+          description: Refusal is why the load failed, when it did.
+          type: string
+        source:
+          description: Source is the publisher this receipt is for.
+          type: string
+        version:
+          description: |-
+            Version is the digest of what that publisher supplied, so a refresh that
+            changed nothing can be told from a refresh that did not run.
+          type: string
+      type: object
+    ReferenceSet:
+      properties:
+        age:
+          description: Age is how long ago that was.
+          type: string
+        asOf:
+          description: |-
+            AsOf is when the OLDEST contributing publisher was current, RFC 3339. The
+            oldest and not the newest: a set is exactly as fresh as its weakest source.
+          type: string
+        keys:
+          description: Keys is how many members the baseline carries.
+          type: integer
+        kind:
+          description: |-
+            Kind is how the baseline comes to exist: fetch (downloaded from a
+            publisher), local (computed here), attest (held by the component that
+            screens against it, freshness reported), or seam (declared and NOT held,
+            because the source needs a licence we do not have).
+          type: string
+        match:
+          description: 'Match is how a key is tested: exact, domain, net, digits,
+            pattern or range.'
+          type: string
+        maxAge:
+          description: MaxAge is how old this set may be before it is stale.
+          type: string
+        overrides:
+          description: Overrides is how many entries YOUR org has laid over this baseline.
+          type: integer
+        refusal:
+          description: |-
+            Refusal names why the set cannot be relied on, when it cannot: never
+            loaded, held elsewhere, or a licence we do not hold. Non-empty means a
+            lookup against this set will not answer, rather than answering clean.
+          type: string
+        set:
+          description: Set is the name this set is addressed by.
+          type: string
+        sources:
+          description: Sources is each contributing publisher, its licence and its
+            own freshness.
+          items:
+            $ref: '#/components/schemas/ReferenceSource'
+          type: array
+        stale:
+          description: |-
+            Stale is whether it is past that bound. A stale set still answers and says
+            so, because yesterday's list beats none.
+          type: boolean
+        version:
+          description: |-
+            Version is the exact baseline consulted — every contributing publisher and
+            its content digest. A decision records this and an auditor resolves it back.
+          type: string
+        what:
+          description: What the set holds, in one sentence.
+          type: string
+      type: object
+    ReferenceSetsOut:
+      properties:
+        refused:
+          description: |-
+            Refused names the sets that cannot be consulted at all. A key checked
+            against one of these is UNKNOWN, not clean.
+          items:
+            type: string
+          type: array
+        sets:
+          description: Sets is the whole catalog, in a stable order.
+          items:
+            $ref: '#/components/schemas/ReferenceSet'
+          type: array
+        stale:
+          description: Stale names the sets past their freshness bound — the list
+            to alarm on.
+          items:
+            type: string
+          type: array
+      type: object
+    ReferenceSource:
+      properties:
+        asOf:
+          description: AsOf is when this publisher was current, RFC 3339.
+          type: string
+        keys:
+          description: Keys is how many members this publisher contributed.
+          type: integer
+        origin:
+          description: Origin is exactly where it was taken from, so it can be taken
+            again.
+          type: string
+        refusal:
+          description: |-
+            Refusal is why this publisher's last take failed, if it did. The set keeps
+            its previous version of this source and ages out visibly rather than
+            silently shrinking.
+          type: string
+        source:
+          description: Source is the publisher.
+          type: string
+        terms:
+          description: |-
+            Terms is the licence or permission this data is redistributed under. A
+            source with no stated terms is not in the catalog.
+          type: string
+        version:
+          description: |-
+            Version is the content digest of what this publisher last supplied. Two
+            refreshes that agree on it took the same data.
+          type: string
+      type: object
+    ReferenceTaken:
+      properties:
+        keys:
+          description: Keys is how many members it carries.
+          type: integer
+        refusal:
+          description: |-
+            Refusal is why this publisher contributed nothing, if it did not. The set
+            keeps its previous version of this source rather than shrinking.
+          type: string
+        resumed:
+          description: |-
+            Resumed is true when this run continued a version a previous run left
+            half-landed.
+          type: boolean
+        source:
+          description: Source is the publisher.
+          type: string
+        unchanged:
+          description: |-
+            Unchanged is true when the publisher's data was byte-for-byte the set we
+            already held.
+          type: boolean
+        version:
+          description: Version is the content digest that landed.
+          type: string
+        wrote:
+          description: |-
+            Wrote is how many rows this run actually wrote. Zero with Unchanged means
+            the publisher served the same set again.
+          type: integer
+      type: object
+    ReferenceVersion:
+      properties:
+        asOf:
+          description: AsOf is when the oldest of them was current, RFC 3339.
+          type: string
+        refusal:
+          description: Refusal is why it could not be consulted, when it could not.
+          type: string
+        set:
+          description: Set is the set.
+          type: string
+        stale:
+          description: Stale is whether it is past its freshness bound.
+          type: boolean
+        version:
+          description: Version is every contributing publisher and its content digest.
+          type: string
+      type: object
+    RefreshReferenceIn:
+      properties:
+        receipts:
+          description: |-
+            Receipts are supplied by the component that holds the membership, for a set
+            of kind attest. They are refused on any other kind, and a set of kind attest
+            is refused without them: this plane never invents a freshness it did not
+            observe.
+          items:
+            $ref: '#/components/schemas/ReferenceReceipt'
+          type: array
+        set:
+          description: Set is the set to refresh.
+          type: string
+      type: object
+    RefreshReferenceOut:
+      properties:
+        set:
+          description: Set is the set refreshed.
+          type: string
+        stale:
+          description: |-
+            Stale is whether it is STILL past its freshness bound after the refresh,
+            which is what a publisher that has stopped answering looks like.
+          type: boolean
+        took:
+          description: Took is what each publisher contributed.
+          items:
+            $ref: '#/components/schemas/ReferenceTaken'
+          type: array
+        version:
+          description: Version is the set's new composed version.
+          type: string
+      type: object
     Registration:
       properties:
         createdAt:
@@ -4657,6 +5015,55 @@ components:
           type: string
         projects:
           type: integer
+      type: object
+    ResolveReferenceIn:
+      properties:
+        keys:
+          description: |-
+            Keys are the values to look up, at most 100 per call: email addresses or
+            domains, IP addresses, card prefixes, user-agent strings, autonomous system
+            numbers, device digests.
+          items:
+            type: string
+          type: array
+        sets:
+          description: |-
+            Sets narrows which sets to consult. Empty consults every set whose matcher
+            can read the keys given.
+          items:
+            type: string
+          type: array
+      type: object
+    ResolveReferenceOut:
+      properties:
+        answers:
+          description: Answers is one entry per (set, key) consulted.
+          items:
+            $ref: '#/components/schemas/ReferenceAnswer'
+          type: array
+        consulted:
+          description: |-
+            Consulted names the version of every set that took part, so a decision can
+            record precisely what it leaned on. Record this with the decision: it is
+            what makes the decision reproducible a year later.
+          items:
+            $ref: '#/components/schemas/ReferenceVersion'
+          type: array
+        refused:
+          description: |-
+            Refused names the consulted sets that could not answer at all. A key that
+            missed in one of these is UNKNOWN, not clean.
+          items:
+            type: string
+          type: array
+        stale:
+          description: |-
+            Stale names the consulted sets past their freshness bound. Staleness is
+            itself a risk signal — a decision taken against a three-week-old list is a
+            weaker decision, and this is how it knows.
+          items:
+            type: string
+          type: array
       type: object
     Result:
       properties:
@@ -5264,6 +5671,26 @@ components:
           type: string
         waitlistMode:
           type: boolean
+      type: object
+    SetReferenceIn:
+      properties:
+        entries:
+          description: Entries are the overrides to write, up to 1000 per call.
+          items:
+            $ref: '#/components/schemas/ReferenceOverrideIn'
+          type: array
+      type: object
+    SetReferenceOut:
+      properties:
+        overrides:
+          description: Overrides is how many your org now holds in this set.
+          type: integer
+        set:
+          description: Set is the set written in.
+          type: string
+        written:
+          description: Written is how many entries this call wrote.
+          type: integer
       type: object
     SharePolicy:
       properties:
@@ -57143,6 +57570,222 @@ paths:
       tags:
       - ml
       x-app: ml
+  /v1/ml/reference:
+    get:
+      description: |-
+        Lists every set this plane publishes, with its version and how
+        fresh it is.
+
+        Read the Stale and Refused lists first: they are the two ways this plane can
+        be quietly wrong, and they are reported rather than inferred. A set in
+        Refused answers nothing — it has never loaded, it is held by another
+        component, or it names a source we hold no licence for.
+      operationId: mlReferenceSets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceSetsOut'
+          description: ok
+      summary: Lists every set this plane publishes, with its version and how fresh
+        it is.
+      tags:
+      - ml
+      x-app: reference
+  /v1/ml/reference/{set}:
+    delete:
+      description: |-
+        Removes one of your organisation's overrides.
+
+        It removes an entry your organisation wrote, never a baseline member: the
+        published set is not writable from here, so a removal can only ever restore
+        the baseline's own answer.
+      operationId: mlClearReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      - example: partner.example
+        in: query
+        name: key
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearReferenceOut'
+          description: ok
+      summary: Removes one of your organisation's overrides.
+      tags:
+      - ml
+      x-app: reference
+    get:
+      description: |-
+        Reference describes one set and lists your org's overrides in it.
+
+        The set half is public data about a published list — its version, its
+        publishers, their licences and how current each one is. The overrides half is
+        yours alone: it is read from your organisation's own store, and no other
+        organisation's entries can appear in it.
+      operationId: mlReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      - description: 'After pages the override listing: the last key of the previous
+          page.'
+        in: query
+        name: after
+        required: false
+        schema:
+          type: string
+      - description: 'Limit caps the override listing: default 200, maximum 1000.'
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceOut'
+          description: ok
+      summary: Reference describes one set and lists your org's overrides in it.
+      tags:
+      - ml
+      x-app: reference
+    put:
+      description: |-
+        Writes your organisation's own allow and deny entries over a set.
+
+        Idempotent on the key: writing the same entry twice is one entry, and writing
+        it again replaces the verdict and the note. The whole batch is one
+        transaction, so a batch that would cross the per-set bound writes nothing
+        rather than half of itself — a half-applied deny list is worse than a refused
+        one, because nobody can tell which half applied.
+
+        Your entries are held in your organisation's own store and are never visible
+        to another organisation, and they never change what any other organisation
+        sees. The shared baseline is not writable from here at all.
+      operationId: mlSetReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              entries:
+              - key: partner.example
+                note: our reseller
+                verdict: allow
+              set: domain
+            schema:
+              $ref: '#/components/schemas/SetReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetReferenceOut'
+          description: ok
+      summary: Writes your organisation's own allow and deny entries over a set.
+      tags:
+      - ml
+      x-app: reference
+  /v1/ml/reference/refresh:
+    post:
+      description: |-
+        Takes a new version of one set. SuperAdmin only.
+
+        It is platform work, not tenant work: it writes the shared baseline every
+        organisation reads, so it is gated to the platform's own identity. Nothing
+        here can write an organisation's overrides, and nothing an organisation sends
+        can reach this route.
+
+        Idempotent. A version is the content digest of what was taken, so refreshing
+        an unchanged publisher writes no rows and reports unchanged. Resumable: a run
+        that died half-way is continued from where it stopped rather than restarted.
+
+        A set whose source needs a licence we do not hold is refused with the reason,
+        rather than being quietly skipped.
+      operationId: mlRefreshReference
+      requestBody:
+        content:
+          application/json:
+            example:
+              set: domain
+            schema:
+              $ref: '#/components/schemas/RefreshReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshReferenceOut'
+          description: ok
+      summary: Takes a new version of one set.
+      tags:
+      - ml
+      x-app: reference
+  /v1/ml/reference/resolve:
+    post:
+      description: |-
+        Looks keys up against the reference plane.
+
+        Your organisation's own overrides are consulted FIRST and win outright; the
+        shared baseline answers everything they do not cover. Every answer names the
+        version that produced it, when that version was current and whether it is
+        stale, so a decision can record exactly what it consulted.
+
+        Read Refusal before reading Hit. A set that has never loaded, one held by the
+        component that screens against it, and one whose source needs a licence we do
+        not hold all answer with a refusal — and a miss on a refusing set means
+        nothing is known, not that the key is clean.
+      operationId: mlResolveReference
+      requestBody:
+        content:
+          application/json:
+            example:
+              keys:
+              - user@tempbox.example
+              - 3.5.140.1
+              sets:
+              - domain
+              - net
+            schema:
+              $ref: '#/components/schemas/ResolveReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveReferenceOut'
+          description: ok
+      summary: Looks keys up against the reference plane.
+      tags:
+      - ml
+      x-app: reference
   /v1/models:
     get:
       description: |-
