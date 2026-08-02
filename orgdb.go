@@ -2,9 +2,7 @@ package cloud
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -55,13 +53,13 @@ import (
 // this have come from caller input" is asked once — at OrgNamespace, the only
 // door — instead of again at every subsystem that opens a file.
 //
-// Path convention — see nsKey:
+// Path convention — see namespace.Key:
 //
 //	org/{slug}            →  {DataDir}/orgs/{slug}/{subsystem}.db
 //	org/{slug}/{project}  →  {DataDir}/orgs/{slug}/projects/{project}/{subsystem}.db
 //	system                →  {DataDir}/orgs/_platform/{subsystem}.db
 func OrgDB(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, error) {
-	path, err := nsPath(dataDir, ns, subsystem)
+	path, err := namespace.Path(dataDir, ns, subsystem)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +209,7 @@ func (c *OrgStore[T]) For(ns namespace.Namespace) (T, error) { return c.forNS(ns
 // An authenticated, org-scoped caller does NOT want this: its org is real by
 // construction and its store must be created on first touch.
 func (c *OrgStore[T]) Has(ns namespace.Namespace) bool {
-	path, err := nsPath(c.dataDir, ns, c.subsystem)
+	path, err := namespace.Path(c.dataDir, ns, c.subsystem)
 	if err != nil {
 		return false
 	}
@@ -225,7 +223,7 @@ func (c *OrgStore[T]) Has(ns namespace.Namespace) bool {
 // (which the at-rest cek layer does not support concurrently).
 func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 	var zero T
-	path, err := nsPath(c.dataDir, ns, c.subsystem)
+	path, err := namespace.Path(c.dataDir, ns, c.subsystem)
 	if err != nil {
 		return zero, err
 	}
@@ -325,10 +323,10 @@ func (c *OrgStore[T]) openDurable(ns namespace.Namespace, path string) (T, *org.
 	var zero T
 	// The election key is the ENTITY — the org — not the file: every one of an
 	// org's project-scoped files is owned by the same elected writer, and the
-	// shard router hashes the same id. The object key is nsKey, the SAME
+	// shard router hashes the same id. The object key is namespace.Key, the SAME
 	// rendering the local path came from, so the file and its remote slot cannot
 	// name different things.
-	dbKey, err := nsKey(ns, c.subsystem)
+	dbKey, err := namespace.Key(ns, c.subsystem)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -398,17 +396,25 @@ func (c *OrgStore[T]) Sync(ns namespace.Namespace) (acked bool, err error) {
 	return d.Sync(ctx)
 }
 
+// orgsRoot is the directory every namespace's file lives under: the first
+// segment namespace.Key renders. Each and Stored walk it directly — they
+// answer "WHICH entities have a store", which is a question about the disk
+// and not about a name, so it is the one thing here that reads the layout
+// instead of rendering it. TestOrgNamespaceNeutralisesTraversal holds the
+// two spellings together by asserting a rendered key against this root.
+const orgsRoot = "orgs"
+
 // Each folds fn over every org that has a {subsystem} store on disk under
 // {dataDir}/orgs, handing it that org's NAMESPACE and the SAME cached store
 // handle For returns (opened through forNS, keyed by the namespace — no second
 // open). It is the cross-org sweep primitive a reconciler folds over: the
 // filesystem is the source of truth for "which orgs have this store", so no derived
 // registry can drift. The reserved platform partitions ({dataDir}/orgs/_*) are
-// skipped (their '_' is a rune SanitizeOrg never emits, so no real org is dropped).
-// A per-org OPEN failure is passed to fn as its err (fn decides skip vs. record); a
-// missing orgs root (a writer with no stores yet) is not an error. Under horizontal
-// sharding each writer's PVC holds only the orgs routed to it, so Each on a given
-// writer enumerates exactly that writer's orgs.
+// skipped (their '_' is a rune namespace.Sanitize never emits, so no real org is
+// dropped). A per-org OPEN failure is passed to fn as its err (fn decides skip vs.
+// record); a missing orgs root (a writer with no stores yet) is not an error.
+// Under horizontal sharding each writer's PVC holds only the orgs routed to it,
+// so Each on a given writer enumerates exactly that writer's orgs.
 //
 // This is the one thing here that hanzoai/orm/db.Namespaces cannot do and that
 // is not an oversight. That registry's whole surface is With, Open, Close: it
@@ -480,7 +486,7 @@ func (c *OrgStore[T]) Stored() bool {
 		if err != nil {
 			continue
 		}
-		if path, err := nsPath(c.dataDir, ns, c.subsystem); err == nil && cek.Exists(path) {
+		if path, err := namespace.Path(c.dataDir, ns, c.subsystem); err == nil && cek.Exists(path) {
 			return true
 		}
 	}
@@ -519,105 +525,4 @@ func (c *OrgStore[T]) CloseAll() error {
 	c.durables = map[namespace.Namespace]*org.Durable{}
 	c.inflight = map[namespace.Namespace]*openState[T]{}
 	return first
-}
-
-// SanitizeOrg reduces a gateway org id to a lowercase [a-z0-9-] slug that is
-// INJECTIVE in the raw owner: an org bearing any whitespace/control/format rune
-// is REFUSED (→ "") at the boundary — folding it would not survive TrimSpace /
-// transport OWS-trim and would collapse "acme " onto "acme" — and every accepted
-// owner then maps to the identity on a DNS-1123 label, else a folded slug
-// disambiguated with "-" + the first 16 hex of SHA-256(raw owner). Without the
-// suffix the fold was lossy — ToLower + every non-[a-z0-9-]→"-" + a 32-char
-// truncation collapse distinct owners (`Acme`/`acme`, `team.a`/`team-a`) onto one
-// slug, and since the whole org→bucket/DB/namespace hashes THIS slug, that was
-// a cross-org collision.
-//
-// It is NOT superseded by hanzoai/namespace and must not be deleted when the
-// last database stops calling it. A namespace names a DATABASE; SanitizeOrg
-// names an org's PHYSICAL identity everywhere the fleet writes one — the k8s
-// namespace, the S3 bucket, the image ref, the KMS key path, the knowledge index
-// and the shard router's hash. Those are not databases and namespace has nothing
-// to say about them. What it does say is what a database may be named after, and
-// SanitizeOrg is the function that turns a validated org into a legal one, so it
-// is namespace's INPUT rather than its competitor.
-//
-// This is the ONE org-slug normalizer for the cloud org layer; it lives in
-// the root package beside OrgHasUnsafeRune (the identity-middleware twin) and
-// OrgNamespace (which every org DB name is built by). provisioning.SanitizeOrg
-// (shared with S3/KMS/knowledge) delegates here, so the slug is byte-identical
-// across every physical namespace an org touches.
-//
-// The identity fast-path is withheld from a clean slug that ITSELF looks like a
-// suffixed output (`<label>-<16 lowercase hex>`): such a slug is ambiguous with a
-// folded owner's disambiguation, so it too is re-suffixed — otherwise a squatted
-// org literally named "foo-<sha256(Foo)[:8]>" would alias non-slug owner "Foo".
-func SanitizeOrg(s string) string {
-	// Reject at the boundary — an empty org, or one carrying any whitespace /
-	// control / zero-width-format rune, is a NON-INJECTIVE org identifier:
-	// strings.TrimSpace (here or upstream) and fasthttp's header-value OWS trim
-	// silently collapse "acme " onto "acme", so distinct IAM orgs would fold onto
-	// one physical namespace/bucket/DB. Refusing (→ "", which every caller gates
-	// on) is fail-secure and, with the raw-byte hash below, makes the map
-	// injective end-to-end. This mirrors OrgHasUnsafeRune at the identity
-	// middleware; enforcing it HERE too covers non-header callers.
-	if s == "" || OrgHasUnsafeRune(s) {
-		return ""
-	}
-	lower := strings.ToLower(s)
-	if isDNSLabel(lower) && lower == s && len(lower) <= 32 && !looksSuffixed(lower) {
-		return lower // already a clean, unambiguous slug: identity, no suffix needed
-	}
-	var b strings.Builder
-	for _, r := range lower {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
-	}
-	folded := strings.Trim(b.String(), "-")
-	if len(folded) > 32 {
-		folded = strings.Trim(folded[:32], "-")
-	}
-	// Disambiguate with a 64-bit hash of the RAW (unsafe-rune-free, untrimmed)
-	// owner so distinct owners that fold together stay distinct. The suffix is
-	// derived from the exact input bytes — NEVER a trimmed copy — so a collision
-	// would need a SHA-256 collision on the owner bytes themselves.
-	sum := sha256.Sum256([]byte(s))
-	return folded + "-" + hex.EncodeToString(sum[:8])
-}
-
-// isDNSLabel reports whether s is a non-empty [a-z0-9-] string that is not "."
-// or "..". Such an owner needs no disambiguation (SanitizeOrg is the identity on
-// it).
-func isDNSLabel(s string) bool {
-	if s == "" || s == "." || s == ".." {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// looksSuffixed reports whether s ends in "-" + exactly 16 lowercase-hex chars —
-// the shape of SanitizeOrg's own disambiguation suffix. A clean slug of this
-// shape is denied the identity fast-path (and re-suffixed) so it can never alias
-// a folded non-slug owner's output. This is the ONLY collision class the identity
-// fast-path could otherwise admit.
-func looksSuffixed(s string) bool {
-	if len(s) < 17 || s[len(s)-17] != '-' {
-		return false
-	}
-	for _, r := range s[len(s)-16:] {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
-			return false
-		}
-	}
-	return true
 }

@@ -625,9 +625,20 @@ package under `apps/<name>` that obeys these seams — nothing more.
   when project-scoped. Isolation is PHYSICAL: a distinct `(org[, project])` is a
   distinct file. `org`/`project` MUST be the VALIDATED principal values
   (`principal.Org(c)`, `principal.Project(c)`) — never a raw body/header — and are
-  folded through `SanitizeOrg`, the ONE injective org slugger. hanzoai/sqlite is
+  folded through `namespace.Sanitize`, the ONE injective org slugger. hanzoai/sqlite is
   the SOLE driver (blank-imported once, in orgdb.go); subsystems never import a
   SQLite driver themselves. The caller owns its schema/migration and Close.
+- **Naming lives in hanzoai/namespace, not here.** A namespace, the injective
+  slug it is built from, and the key and path it renders to are ONE primitive and
+  it is `github.com/hanzoai/namespace` (v1.2.0+): `Sanitize` (the slugger),
+  `OrgProject`/`MustOrgProject` (org + project → a namespace), `Key` (→
+  `orgs/{slug}[/projects/{project}]/{sub}.db`) and `Path` (that, resolved against
+  DataDir). These strings are directory names on live volumes and keys in live
+  buckets, so a second implementation of them does not fail — it opens an empty
+  database beside a real one. cloud keeps only the DOOR: `OrgNamespace` /
+  `MustOrgNamespace` / `PlatformNamespace` in orgns.go, which is the one file
+  allowed to build a namespace (`TestOnlyOrgnsBuildsANamespace` enforces it),
+  plus `nsPrincipal`, which is a cek key derivation and not a name.
 
 ## Zero-downtime HA for per-org stores (rolling-upgrade safe)
 

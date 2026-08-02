@@ -65,7 +65,7 @@ const (
 //
 // Two things block it, and neither is about this file being wrong. The keys are
 // TenantSegment, a base32 of the raw org bytes, which shares no output with
-// SanitizeOrg for any tenant at all; every gojabase file and every dataroom
+// namespace.Sanitize for any tenant at all; every gojabase file and every dataroom
 // object key is named by it, so adopting the fleet name relocates all of them at
 // once. And orm/db.Namespaces takes its own string-typed db.Namespace rather
 // than a namespace.Namespace, so adopting it today would bring a THIRD naming
