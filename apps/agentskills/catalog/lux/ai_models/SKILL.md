@@ -10,7 +10,7 @@ Read-only Lux capability derived from the `ai` OpenAPI service. Base URL `https:
 
 ## Authentication
 
-Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authorization: Bearer <token>`. The same token authenticates every Lux service; a `hk-…` API key minted on `https://lux.id` is also accepted.
+Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authorization: Bearer <token>`. The same token authenticates every Lux service; a secret `sk-…` API key minted on `https://lux.id` is also accepted. A publishable `pk-…` key identifies an org for ingest and never authenticates a request.
 
 ## Endpoints
 

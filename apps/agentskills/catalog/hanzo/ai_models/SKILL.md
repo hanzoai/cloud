@@ -10,7 +10,7 @@ Read-only Hanzo capability derived from the `ai` OpenAPI service. Base URL `http
 
 ## Authentication
 
-Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Authorization: Bearer <token>`. The same token authenticates every Hanzo service; a `hk-…` API key minted on `https://hanzo.id` is also accepted.
+Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Authorization: Bearer <token>`. The same token authenticates every Hanzo service; a secret `sk-…` API key minted on `https://hanzo.id` is also accepted. A publishable `pk-…` key identifies an org for ingest and never authenticates a request.
 
 ## Endpoints
 
