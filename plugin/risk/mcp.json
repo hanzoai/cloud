@@ -1,0 +1,252 @@
+[
+  {
+    "description": "Features is the feature catalogue in its two honest lenses.\n\nThe MODEL lens is the governed inventory: one entry per dimension of the model\nspace, each carrying the typology it serves, the supervisor's own words for the\nindicator, and the published standard those words come from — so a coverage\nclaim is checkable rather than asserted. It is the same for every organisation.\n\nThe SURFACE lens is what THIS organisation's own event surface actually carries,\nmeasured over the window: how many of its buckets carry each dimension at all,\nand what the dimension reads where it is present. A dimension present in no\nbucket is BLIND, and saying so is the difference between no risk and no data.",
+    "inputSchema": {
+      "properties": {
+        "days": {
+          "description": "Days is how far back to measure the organisation's own coverage, 1 to 400.\nZero takes thirty.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskFeatures"
+  },
+  {
+    "description": "Learn records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them, answering the model's verdict on each.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nEvents are recorded FIRST and judged after, which is deliberate: the numbers an\nalert quotes are then the same ones an investigator sees when they look at the\nsubject, and every baseline has the event removed from it arithmetically so\nnothing is measured against itself.",
+    "inputSchema": {
+      "$defs": {
+        "riskEvent": {
+          "properties": {
+            "at": {
+              "description": "At is when it happened, RFC 3339. Empty means now. It must sit inside the\nthirty-day window the aggregates keep and no more than two minutes ahead of\nthis plane's clock; anything outside that is REFUSED rather than quietly\naccepted, because a future timestamp moves the aggregates' leading edge and\nleaves every later event for that subject reading as though it never\nhappened. History older than the window is folded in from your own event\nsurface, not through this door.",
+              "type": "string"
+            },
+            "device": {
+              "description": "Device is the device fingerprint, if any. It is the axis that surfaces\nseveral nominally unrelated subjects acting as one.",
+              "type": "string"
+            },
+            "id": {
+              "description": "ID is the caller's own stable identifier for the event. It selects the\nbelow-the-line review sample by hash, so a counter would make the sample\nsteerable — use the id the event already has.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is whose behaviour this is: person, session or account. It namespaces\nthe subject, so a person and an account that share an identifier stay two\nsubjects.",
+              "type": "string"
+            },
+            "nano": {
+              "description": "Nano is the value moved, in nano-USD. Omit it for an event that moves no\nmoney: the value features then read BLIND rather than being told the amount\nwas zero, and the difference is reported on the model state.",
+              "type": "integer"
+            },
+            "peer": {
+              "description": "Peer is the counterparty, if any. It is an aggregation axis of its own —\n\"unfamiliar\" is a fact about a relationship and not about either party.",
+              "type": "string"
+            },
+            "subject": {
+              "description": "Subject is the identifier on that kind.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "events": {
+          "description": "Events are the things that happened, oldest first. An empty batch is\nrefused: learning nothing is not an operation.",
+          "items": {
+            "$ref": "#/$defs/riskEvent"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskLearn"
+  },
+  {
+    "description": "Restore installs previously pinned state into the caller organisation's model,\nreplacing whatever it holds.\n\nA snapshot naming another organisation is REFUSED. The engine checks the shape,\nthe version and the mass invariant — an array that fails the invariant was not\nproduced by this algorithm — but it does not check whose state it is, because\nin its own deployment the caller IS the tenant. Here the caller is a request,\nso the check is made here: another organisation's learned state inside this\nmodel is that organisation's activity, disclosed.",
+    "inputSchema": {
+      "$defs": {
+        "riskSnapshotBody": {
+          "properties": {
+            "cur": {
+              "description": "Cur is the open window's masses, per tree.",
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "cut": {
+              "description": "Cut is the alert threshold that was in force.",
+              "type": "number"
+            },
+            "hist": {
+              "description": "Hist is the score distribution the threshold is cut from.",
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "learned": {
+              "description": "Learned is how many events are behind the masses, and Seen how far into the\nopen reference window they are.",
+              "type": "integer"
+            },
+            "ref": {
+              "description": "Ref is the reference window's masses, per tree; Cur is the open window's.\nA region's mass is the sum of its two halves — an array that fails that\ninvariant was not produced by this algorithm and is refused.",
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "seed": {
+              "description": "Seed is what the tree geometry is generated FROM. Carrying the seed rather\nthan the trees is what keeps the state from describing where the regions\nare.",
+              "type": "integer"
+            },
+            "seen": {
+              "description": "Seen is the position within the open window.",
+              "type": "integer"
+            },
+            "shape": {
+              "description": "Shape is the model identity this state is only meaningful against: the\nfeature inventory in order and the detector's geometry parameters.",
+              "type": "string"
+            },
+            "tenant": {
+              "description": "Tenant is the organisation the state belongs to. A restore under any other\norganisation is refused.",
+              "type": "string"
+            },
+            "version": {
+              "description": "Version is the layout of the state. State from another version is rejected\nrather than reinterpreted.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/riskSnapshotBody",
+          "description": "Body is a snapshot this organisation took. One naming another organisation\nis refused: it is that organisation's learned behaviour, and installing it\nwould put one tenant's activity inside another's model."
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskRestore"
+  },
+  {
+    "description": "Score judges one event against the caller organisation's OWN model and learns\nnothing from it. It is how a candidate is tried against real behaviour before\nanything depends on the answer, and it is the model's analogue of testing a\nrule.\n\nBecause it records nothing, the aggregates it reads do not include the event:\nthe numbers are the organisation's history as it stands. A model still warming\ndeclines with a reason rather than answering zero, because silence must never\nread as a clean result.",
+    "inputSchema": {
+      "$defs": {
+        "riskEvent": {
+          "properties": {
+            "at": {
+              "description": "At is when it happened, RFC 3339. Empty means now. It must sit inside the\nthirty-day window the aggregates keep and no more than two minutes ahead of\nthis plane's clock; anything outside that is REFUSED rather than quietly\naccepted, because a future timestamp moves the aggregates' leading edge and\nleaves every later event for that subject reading as though it never\nhappened. History older than the window is folded in from your own event\nsurface, not through this door.",
+              "type": "string"
+            },
+            "device": {
+              "description": "Device is the device fingerprint, if any. It is the axis that surfaces\nseveral nominally unrelated subjects acting as one.",
+              "type": "string"
+            },
+            "id": {
+              "description": "ID is the caller's own stable identifier for the event. It selects the\nbelow-the-line review sample by hash, so a counter would make the sample\nsteerable — use the id the event already has.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is whose behaviour this is: person, session or account. It namespaces\nthe subject, so a person and an account that share an identifier stay two\nsubjects.",
+              "type": "string"
+            },
+            "nano": {
+              "description": "Nano is the value moved, in nano-USD. Omit it for an event that moves no\nmoney: the value features then read BLIND rather than being told the amount\nwas zero, and the difference is reported on the model state.",
+              "type": "integer"
+            },
+            "peer": {
+              "description": "Peer is the counterparty, if any. It is an aggregation axis of its own —\n\"unfamiliar\" is a fact about a relationship and not about either party.",
+              "type": "string"
+            },
+            "subject": {
+              "description": "Subject is the identifier on that kind.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/riskEvent",
+          "description": "Event is the thing to judge. It is judged against the caller's OWN model\nand nothing is learned from it."
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskScore"
+  },
+  {
+    "description": "Search runs an exhaustive search for the model shape that best fits the caller\norganisation's own history, and answers 202 with the run to read back.\n\nEvery candidate is replayed over that organisation's OWN feature surface in its\nown sandbox — its own aggregates, its own model, neither of them the live one —\nso a run cannot move a live threshold and cannot see another organisation's\ndata. The result is the learning curve for each shape and the one that fit\nbest, ranked on how closely it honoured the stated appetite, whether it warmed\nat all, whether it saturated, and how much of the coordinate space it left\nblind.\n\nAn empty history is REFUSED rather than reported as zero alerts, because \"no\nalerts\" is exactly what a quiet model looks like.",
+    "inputSchema": {
+      "properties": {
+        "days": {
+          "description": "Days is how much of the organisation's own history to replay, 1 to 400.\nZero takes thirty.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSearch"
+  },
+  {
+    "description": "Reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the run, taken from the path. A run another organisation started is\nsimply not there — the same answer an unknown id gives.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSearchResult"
+  },
+  {
+    "description": "Restates how much of the stream the caller organisation's model may\nsend for examination, and whether it is live.\n\nThe appetite is the decision a model is not permitted to make for itself: its\noutput is a probability, so how likely it is to MISS something is a matter of\npolicy that has to be stated, measured and reviewed rather than absorbed into a\nconstant. The alert threshold is then derived from it as a quantile of the\nscores actually observed, which is what keeps its meaning as the distribution\ndrifts.\n\nLearned state survives the change. The model's identity covers its SHAPE — the\ninventory and the geometry — and not its appetite, so restating policy unlearns\nnothing.",
+    "inputSchema": {
+      "properties": {
+        "live": {
+          "description": "Live turns the model out of shadow. It defaults to FALSE on every call, so\ngoing live is always an explicit act and never a side effect of changing a\nnumber.",
+          "type": "boolean"
+        },
+        "review": {
+          "description": "Review is the share of the stream that may be sent for examination, in\n(0, 0.5]. The alert threshold is derived from it as a quantile of the scores\nactually observed, so the level is governed rather than tuned.",
+          "type": "number"
+        },
+        "sample": {
+          "description": "Sample is the share of below-the-line events retained for review, in\n[0, 1]. It is the instrument that measures what the model missed; there are\nno labels, so nothing else can.",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSetAppetite"
+  },
+  {
+    "description": "Snapshot pins the caller organisation's learned state so a decision taken today\ncan be reproduced tomorrow.\n\nIt carries the masses and the seed and never the geometry: geometry is a pure\nfunction of the seed, so it is regenerated on restore and cannot be supplied.\nThat removes the sharpest edge a persisted model has — state that says where\nthe regions are rather than only how full they are.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskSnapshot"
+  },
+  {
+    "description": "State reports the caller organisation's own model: what it has learned, whether\nit is live or still in shadow, the threshold in force, the appetite it stated\nbeside the share it actually realised, every refusal by reason, every feature\nthat read blind, and how much of the organisation's own event surface has been\nfolded in.\n\nIt covers ONE organisation. A caller cannot learn another's volumes, alert rate\nor behaviour from it, because the state is read out of a model that holds only\nits own.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskState"
+  }
+]
