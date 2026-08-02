@@ -17,7 +17,7 @@
 //
 // The apps themselves are unchanged and unaware: each is the same plugin/<name>
 // binary that already exists, serving the same routes through the same
-// cloud.Serve middleware it would serve standalone. Identity, billing and
+// cloud.Listen middleware it would serve standalone. Identity, billing and
 // telemetry run in the app's own process, where they already ran.
 //
 // The host is the FRONT DOOR, so it owns three things no plugin can: it serves
@@ -225,7 +225,7 @@ func run(addr, zapAddr, enable string) error {
 		_ = app.Shutdown()
 	}()
 
-	// Both transports, same router — the pair cloud.Serve listens on. A bare
+	// Both transports, same router — the pair cloud.Listen listens on. A bare
 	// address is ZAP (zip's default scheme); HTTP has to be spelled out, and
 	// omitting it is why a curl against the host answers with a frame-size error
 	// instead of JSON.

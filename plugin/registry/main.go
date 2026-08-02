@@ -18,7 +18,7 @@ import (
 // Scaffolded by plugin/gen-app-cmds from the manifest.Apps row; now hand-owned —
 // add a Shutdown/OwnsHealth/metered Price here if the app grows to need one.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "registry",
 		Price: cloud.Free,
 		Mount: registry.Mount,

@@ -249,7 +249,7 @@ func TestTheInventoryAgreesWithTheDoor(t *testing.T) {
 // ── the gate ────────────────────────────────────────────────────────────────
 
 // served is ai's own op, mounted on its own door, with the identity boundary's
-// carrier installed exactly as cloud.Serve installs it.
+// carrier installed exactly as cloud.Listen installs it.
 func served(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "ai", Logger: luxlog.New("aimcptest"), DisableStartupMessage: true})

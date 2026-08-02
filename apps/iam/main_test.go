@@ -24,6 +24,19 @@ import (
 // around the key: it is the production boot, run first. A deployment that supplies a
 // real key keeps it — Boot never overrides one — so this cannot mask a keyed CI run.
 func TestMain(m *testing.M) {
+	// credz.Boot alone is not enough on a codec-linked build: its last resort is
+	// cek.EnsureDevKey, which DECLINES there by design (a build that can really
+	// encrypt must be handed a real key, not invent one). So supply a throwaway
+	// through the same door a deployment uses, and only when nothing else did —
+	// a keyed CI run keeps its own key and this cannot mask it.
+	if os.Getenv(masterKeyEnv) == "" {
+		_ = os.Setenv(masterKeyEnv, devMasterKey)
+	}
 	credz.Boot(os.TempDir())
 	os.Exit(m.Run())
 }
+
+const (
+	masterKeyEnv = "CLOUD_KMS_MASTER_KEY_REF"
+	devMasterKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" // 32 zero bytes, dev-only
+)
