@@ -97,7 +97,7 @@ var untypedByDesign = map[string]string{
 	"GET /v1/o11y/livez":   upstreamProbeReason,
 	"GET /v1/o11y/readyz":  upstreamProbeReason,
 
-	"GET /v1/o11y/logs/livetail":  upstreamStreamReason + " — an unbounded stream of log records.",
+	"GET /v1/o11y/logs/livetail": upstreamStreamReason + " — an unbounded stream of log records.",
 	"GET /v1/o11y/query_progress": upstreamStreamReason + " — a long poll that holds the connection until " +
 		"the next tick, so a typed op would answer only after the query it reports on had finished.",
 	"POST /v1/o11y/export_raw_data": upstreamStreamReason + " — a chunked CSV/JSONL attachment with an " +

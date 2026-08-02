@@ -565,20 +565,10 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// runtime routes BEFORE the principal gate sees the path, so the existing
 	// ingest exemption stays the only exemption. No /api/ segment anywhere:
 	// /v1/ is the only prefix this platform speaks.
-	cloud.SetObsErrorIngest(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mapped, ok := eventToRuntimePath(r.Method, r.URL.Path)
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		h := runtimeHandler
-		if h == nil {
-			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
-			return
-		}
-		r.URL.Path = mapped
-		h.ServeHTTP(w, r)
-	}))
+	// Both obs claims on the ONE event door are published as PLANE OPS
+	// (obs_rpc.go): analytics owns the route, this process owns the sink and the
+	// runtime, and a package global cannot cross between two processes.
+	exposeObs()
 	// WRITE plane — order-independent (no /v1/o11y/* Fiber route): the ZAP
 	// span+log receivers and the opt-in in-process trace sink, all writing
 	// event.span / event.log (planesink.go).
