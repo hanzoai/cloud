@@ -18,33 +18,35 @@
 // fact; bus.go owns the container. Nothing here knows about NATS, and nothing here
 // knows about SQL — normalize is pure, so the tests drive it directly.
 //
-// ONE NAME FOR A THING, ACROSS TRANSPORT AND STORAGE. A signal's subject and its table
-// are the same string, derived from the same constant, so they cannot drift:
+// ONE TABLE, DISCRIMINATED BY A COLUMN. Every occurrence — a click, a crash, a log
+// line, a span, a replay clip — is one row of event.fact, and `signal` says which sort
+// it is. It was five tables with an identical envelope, which is CONSISTENT but not
+// UNIFIED: no cross-signal question could be asked without a five-way UNION ALL, and a
+// new product meant a new table name, which is how a namespace grows a `_v2`.
 //
-//	subject event.error  -> table event.error
-//	subject event.span   -> table event.span
-//	subject event.log    -> table event.log
-//	subject event.event  -> table event.event
-//	subject event.metric -> table event.metric
+// A SIGNAL IS A VALUE, NOT A PLACE. That is the whole of the change. `clip` — the
+// session-replay index — is the worked example: it costs one signal value and two
+// columns (object, bytes), reuses duration/session_id/url, and adds no name to the
+// namespace at all. Under the old shape it would have been a table, and then a
+// session-summary table, and then a partition-statistics table beside it.
 //
 // SIGNAL AND KIND ARE DIFFERENT THINGS, and conflating them is the mistake this file
-// exists to prevent. The SIGNAL picks the table (and the subject). The KIND is a COLUMN
-// on it — the discriminator WITHIN a signal:
+// exists to prevent. The SIGNAL picks the partition (and the subject, and the durable).
+// The KIND is a COLUMN — the discriminator WITHIN a signal:
 //
-//   - on event.event, kind is track | page | identify | group. Those are things a CALLER
-//     DOES (event.Track(), event.Page()), not durable types, so they are a column value
-//     and never a table. `name` carries the specific (button_clicked, page_viewed).
-//   - on event.span, kind is the OTel span kind (server | client | internal | …).
-//   - on event.error and event.log the caller owns the sub-vocabulary, so kind is
-//     whatever it stated and otherwise EMPTY. Defaulting it to the signal name would
-//     make a column that always equals its own table — information-free.
+//   - on act, kind is track | page | identify | group. Those are things a CALLER DOES
+//     (event.Track(), event.Page()), not durable types, so they are a column value and
+//     never a table. `name` carries the specific (button_clicked, page_viewed).
+//   - on span, kind is the OTel span kind (server | client | internal | …).
+//   - on error, log and clip the caller owns the sub-vocabulary, so kind is whatever it
+//     stated and otherwise EMPTY. Defaulting it to the signal name would make a column
+//     that always equals its own discriminator — information-free.
 //
-// SEPARATE TABLES, ONE ENVELOPE. Each table has its own ORDER BY because each is read
-// differently (event by (org,time) for funnels, error by (org,group,time) for issue
-// lists, log by (org,service,time), span by (org,trace_id) to assemble a trace) — the
-// sort key is the reason they are separate, not sparse columns, which the store
-// compresses away. They are held together by an IDENTICAL envelope: same names, same
-// semantics, so a cross-signal correlation is a UNION ALL and not a translation layer.
+// TWO GRAINS, TWO TABLES, AND NO MORE. An occurrence HAPPENED; a sample was MEASURED.
+// They are 326:1 in row count, they key differently (a sample has no id, no name, no
+// session) and rate()/increase() need a fingerprint-major ordering that no time-ordered
+// key can express. So `sample` lands in event.sample and everything else in event.fact
+// — see writers (warehouse.go), which is the one place that mapping is written down.
 //
 // The org is NOT on the wire. It is stamped here from the SERVER-resolved tenant, so a
 // caller can only ever write into its own partition — the one tenancy invariant, in the
@@ -63,29 +65,53 @@ import (
 // plane is the database, the subject root and — with the case NATS conventionally
 // gives a stream — the stream name. ONE word at three layers: no brand ("hanzo."), no
 // numeronym ("o11y_"), no product name ("insights"/"analytics"), no version suffix.
-// A query reads FROM error because the connection's default database is this one.
 const plane = "event"
 
-// signal names the KIND OF FACT, which is what picks a table and a subject. It is not
-// the `kind` column — see the file header. The zero value is deliberately not a valid
-// signal so an unrouted fact cannot silently become an event.
+// signal names the KIND OF FACT. It picks the subject, the durable and the partition.
+// It is not the `kind` column — see the file header. The zero value is deliberately not
+// a valid signal so an unrouted fact cannot silently become an act.
 type signal string
 
 const (
-	signalEvent  signal = "event"  // a product event: track | page | identify | group
-	signalError  signal = "error"  // a thrown/reported failure
-	signalLog    signal = "log"    // a log record
-	signalSpan   signal = "span"   // one span of a trace
-	signalMetric signal = "metric" // one metric sample
+	// signalAct is something a person or a surface DID: track | page | identify |
+	// group. It is `act` and not `event` because `event` is the NAMESPACE — a value
+	// cannot also be the set it belongs to, and `event.fact WHERE signal='event'` is
+	// exactly the stutter that reads as a schema nobody finished naming.
+	signalAct signal = "act"
+	// signalClip is one recorded slice of a session. The row is the INDEX — where the
+	// blob lives and how big it is. The blob itself never travels on the bus and never
+	// lands in a column: it is a multi-megabyte time-ordered binary, wrong for a
+	// message and wrong for a row.
+	signalClip signal = "clip"
+	// signalError is a thrown or reported failure.
+	signalError signal = "error"
+	// signalLog is a log record.
+	signalLog signal = "log"
+	// signalSpan is one span of a trace.
+	signalSpan signal = "span"
+	// signalSample is one measurement. Different grain, different table — see the
+	// header, and writers (warehouse.go) for why the door refuses it today.
+	signalSample signal = "sample"
 )
 
-// subject is the bus subject this signal travels on, and table is the warehouse table
-// it lands in. They are the SAME name by construction — one string, two layers — which
-// is the whole point of deriving both here instead of writing either down twice.
+// subject is the bus subject a signal travels on, and it is the durable name a consumer
+// binds. Derived from the signal so a new signal cannot be published to a name nothing
+// filters for.
+//
+// It is no longer also the TABLE name. It was, and that was the right shape when a
+// signal was a table; now one table holds five signals, so what the two share is the
+// discriminator VALUE rather than the identifier. The sink says where a signal lands,
+// once, in writers.
 func (s signal) subject() string { return plane + "." + string(s) }
-func (s signal) table() string   { return plane + "." + string(s) }
 
-// The `kind` vocabulary of event.event: what a caller DID. These are column values.
+// The two tables of the plane, named for their GRAIN. Everything else in the namespace
+// is a rollup of one of them or a dimension beside it.
+const (
+	factTable   = plane + ".fact"   // one row per thing that HAPPENED
+	sampleTable = plane + ".sample" // one row per thing MEASURED
+)
+
+// The `kind` vocabulary of act: what a caller DID. These are column values.
 const (
 	kindTrack    = "track"
 	kindPage     = "page"
@@ -96,8 +122,8 @@ const (
 // kindInternal is OTel's default span kind, used when a span states none.
 const kindInternal = "internal"
 
-// route is the pair a wire event resolves to: the signal that picks the table, and the
-// kind column on it. It is a comparable value so the anonymous lane's allowlist is a
+// route is the pair a wire event resolves to: the signal that picks the partition, and
+// the kind column on it. It is a comparable value so the anonymous lane's allowlist is a
 // map lookup rather than a chain of conditions (public.go).
 type route struct {
 	signal signal
@@ -110,7 +136,7 @@ type route struct {
 // spell() and the event routes identically, carrying no other caller spelling along.
 // routeSpellRoundTrips pins that inverse.
 func (r route) spell() string {
-	if r.signal != signalEvent {
+	if r.signal != signalAct {
 		return string(r.signal)
 	}
 	switch r.kind {
@@ -121,14 +147,18 @@ func (r route) spell() string {
 	case kindGroup:
 		return kindGroup
 	default:
-		return string(signalEvent)
+		return "event"
 	}
 }
 
 // routeOf maps the wire's ONE `type` field onto a route. `type` selects the ROUTE and
 // nothing else — one field, one job; a signal's own body may refine the kind afterwards
-// (a span's OTel kind, an error's level). An unknown or absent type is a tracked
-// product event, which is what every pre-existing caller meant by omitting it.
+// (a span's OTel kind). An unknown or absent type is a tracked act, which is what every
+// pre-existing caller meant by omitting it.
+//
+// The wire word `event` is still accepted and still means an act: it is what every
+// deployed client sends and it is a PUBLISHED spelling, so it maps rather than moves.
+// What changed is the name of the thing it maps ONTO.
 func routeOf(e CaptureEvent) route {
 	t := strings.ToLower(strings.TrimSpace(e.Type))
 	// AN EVENT CARRYING AN EXCEPTION IS AN ERROR, whatever it called itself — and a
@@ -140,21 +170,23 @@ func routeOf(e CaptureEvent) route {
 	}
 	switch t {
 	case "pageview", "page":
-		return route{signalEvent, kindPage}
+		return route{signalAct, kindPage}
 	case "identify":
-		return route{signalEvent, kindIdentify}
+		return route{signalAct, kindIdentify}
 	case "group":
-		return route{signalEvent, kindGroup}
+		return route{signalAct, kindGroup}
 	case "error", "exception":
 		return route{signal: signalError}
 	case "log":
 		return route{signal: signalLog}
 	case "span":
 		return route{signalSpan, kindInternal}
-	case "metric":
-		return route{signal: signalMetric}
+	case "clip", "replay":
+		return route{signal: signalClip}
+	case "metric", "sample":
+		return route{signal: signalSample}
 	default:
-		return route{signalEvent, kindTrack}
+		return route{signalAct, kindTrack}
 	}
 }
 
@@ -178,45 +210,6 @@ func (a annotation) empty() bool {
 		a.name == "" && a.component == "" && len(a.path) == 0
 }
 
-// envelope is the IDENTICAL 15-column head of every signal — same names, same
-// semantics, in the same positions. ingested_at is NOT here: the server stamps it
-// through a column DEFAULT, so nothing on the wire can influence when a row expires
-// (retention is measured from it). That is the same reason it was kept off the old
-// insert list, and it is the only column that can carry a TTL honestly.
-type envelope struct {
-	org        string
-	time       time.Time
-	id         string
-	name       string
-	kind       string
-	product    string
-	session    string
-	distinct   string
-	anonymous  string
-	person     string
-	url        string
-	path       string
-	attributes map[string]string
-	el         annotation
-}
-
-// fault is what event.error adds to the envelope: the failure's identity (class,
-// message, the grouping fingerprint) and its frames.
-type fault struct {
-	group       string // the deterministic fingerprint — see fingerprint()
-	message     string
-	class       string
-	site        string
-	handled     bool
-	level       string
-	release     string
-	environment string
-	service     string
-	trace       string
-	span        string
-	frames      []frame
-}
-
 // frame is one stack frame, stored across the parallel frames.* arrays. `own` marks
 // first-party code, which is what makes an issue list readable: a browser extension or
 // a vendor bundle at the top of a stack is noise, not the fault's location.
@@ -228,45 +221,91 @@ type frame struct {
 	own      bool
 }
 
-// record is what event.log adds: the OTel log-record fields.
-type record struct {
-	service  string
-	severity string
-	number   uint8
-	body     string
-	trace    string
-	span     string
-	resource uint64
-}
-
-// span is what event.span adds: the trace linkage and the timing.
-type span struct {
-	service  string
-	trace    string
-	id       string
-	parent   string
-	duration uint64 // nanoseconds
-	status   string
-}
-
-// sample is what event.metric carries. It is normalized and PUBLISHED like every other
-// signal, but it is deliberately NOT warehoused — see writers (warehouse.go) for why
-// and for the exact fix.
+// sample is what event.sample carries. It is normalized and PUBLISHED like every other
+// signal, but it lands in the OTHER table — see writers (warehouse.go) for what the
+// door does with it today and what makes it landable.
 type sample struct {
 	metric string
 	value  float64
 	labels map[string]string
 }
 
-// fact is one normalized signal: the shared envelope, the signal that routes it, and
-// exactly the one body that signal carries. Every lane produces these and nothing else,
-// so "what is an event" has a single answer on the wire, on the bus and in the store.
+// fact is one normalized occurrence, FLAT, because the table is flat. Its fields are
+// the column names.
+//
+// It was an envelope plus one of four optional bodies, which was the right shape when
+// each body had its own table. With one table a body is just the subset of columns a
+// signal populates, and a pointer per signal would be a second description of the same
+// thing — the one every reader would then have to hold alongside the columns.
+//
+// SPARSITY IS NOT A COST, measured rather than assumed: on the live event.log
+// (798,375 rows) an unpopulated column costs 515 bytes for the WHOLE table. Six of
+// them is ~3 KiB against 48 MiB. The instinct that a wide row wastes space is a
+// row-store instinct.
 type fact struct {
-	envelope
+	// ── spine ────────────────────────────────────────────────────────────────
+	org    string // THE tenant: the IAM org slug, stamped server-side. Never on the wire.
 	signal signal
-	fault  *fault
-	record *record
-	span   *span
+	time   time.Time
+	id     string
+
+	// ── what ─────────────────────────────────────────────────────────────────
+	name string
+	kind string
+	// message is one column because a log's BODY is an error's MESSAGE: the human
+	// text of what happened. Two names for it is how two spellings of one fact begin.
+	message string
+	// severity is the OTLP number (1..24) and the ONLY spelling of it. A row cannot
+	// carry a number and a word that disagree; the word is severityText(), read-time.
+	severity uint8
+	duration uint64 // nanoseconds — a span's, and a clip's
+
+	// ── where ────────────────────────────────────────────────────────────────
+	product string // the emitting SURFACE. A Sentry "project" is this.
+	env     string
+	service string
+	release string
+	url     string
+	path    string
+
+	// ── who ──────────────────────────────────────────────────────────────────
+	person    string
+	distinct  string
+	anonymous string
+	// groups is group-type -> group-key. A Map, not group0..group4: five positional
+	// slots are a sixth slot waiting to become a `_v2`.
+	groups map[string]string
+
+	// ── correlation ──────────────────────────────────────────────────────────
+	session  string
+	trace    string
+	span     string
+	parent   string
+	resource string // resource fingerprint; joins the *_resource dimensions
+
+	// ── open ─────────────────────────────────────────────────────────────────
+	attributes map[string]string
+	el         annotation
+
+	// ── error ────────────────────────────────────────────────────────────────
+	issue   string // the deterministic grouping fingerprint — see fingerprint()
+	class   string
+	origin  string // the place of the fault (Sentry's culprit)
+	handled bool
+	frames  []frame
+
+	// ── span ─────────────────────────────────────────────────────────────────
+	status string
+
+	// ── clip ─────────────────────────────────────────────────────────────────
+	object string // object-store address of the blob. The blob is never in the row.
+	bytes  uint64
+
+	// ── the other grain ──────────────────────────────────────────────────────
+	// sample is the ONE body that is not a subset of the occurrence columns, because
+	// a measurement is not an occurrence: it has a value and no identity. It lands in
+	// event.sample, so it is carried as a pointer rather than flattened into columns
+	// that would be empty on every occurrence row.
 	sample *sample
 }
 
@@ -284,40 +323,48 @@ func normalize(org string, now time.Time, e CaptureEvent) (fact, bool) {
 	}
 	props := scrubMap(e.Properties)
 	f := fact{
-		signal: r.signal,
-		envelope: envelope{
-			org:       org,
-			time:      clampTS(e.Timestamp, now),
-			id:        firstNonEmptyStr(strings.TrimSpace(e.MessageID), randID()),
-			name:      name,
-			kind:      firstNonEmptyStr(trim(e.Kind), r.kind),
-			product:   trim(e.Product),
-			session:   trim(e.SessionID),
-			distinct:  trim(e.DistinctID),
-			anonymous: trim(e.AnonymousID),
-			person:    trim(e.PersonID),
-			url:       trim(e.URL),
-			path:      trim(e.Path),
-			el:        annotationOf(props),
-		},
+		signal:    r.signal,
+		org:       org,
+		time:      clampTS(e.Timestamp, now),
+		id:        firstNonEmptyStr(strings.TrimSpace(e.MessageID), randID()),
+		name:      name,
+		kind:      firstNonEmptyStr(trim(e.Kind), r.kind),
+		product:   trim(e.Product),
+		session:   trim(e.SessionID),
+		distinct:  trim(e.DistinctID),
+		anonymous: trim(e.AnonymousID),
+		person:    trim(e.PersonID),
+		url:       trim(e.URL),
+		path:      trim(e.Path),
+		el:        annotationOf(props),
+
+		// The qualifiers every signal shares. They were duplicated onto the error body
+		// alone, which is what let sentry.hanzo.ai group faults by release while the
+		// same fact on the event stream had no release at all.
+		env:     trim(e.Environment),
+		service: trim(e.Service),
+		release: trim(e.Release),
+		origin:  trim(e.Site),
+		trace:   trim(e.TraceID),
+		span:    trim(e.SpanID),
+		groups:  groupsOf(e),
 	}
-	// Everything that is not an envelope column and not the annotation travels in
-	// attributes. The old wide table gave utm_*, referrer, revenue, channel and the
-	// rest their own columns; they are the same facts under the same names, in the one
-	// place a caller's own vocabulary belongs.
+	// Everything that is not a column and not the annotation travels in attributes.
+	// The old wide table gave utm_*, referrer, revenue, channel and the rest their own
+	// columns; they are the same facts under the same names, in the one place a
+	// caller's own vocabulary belongs.
 	f.attributes = attributesOf(props, e)
 
 	switch r.signal {
 	case signalError:
-		f.fault = faultOf(e)
+		applyFault(&f, e)
 	case signalLog:
-		f.record = recordOf(e)
+		applyRecord(&f, e)
 	case signalSpan:
-		f.span = spanOf(e)
-		if e.Span != nil && trim(e.Span.Kind) != "" {
-			f.kind = strings.ToLower(trim(e.Span.Kind))
-		}
-	case signalMetric:
+		applySpan(&f, e)
+	case signalClip:
+		applyClip(&f, e)
+	case signalSample:
 		f.sample = sampleOf(e)
 	}
 	return f, true
@@ -339,26 +386,26 @@ const (
 	nameGroup    = "group_identified"
 	nameLog      = "log_record"
 	nameSpan     = "span"
+	nameClip     = "clip"
 )
 
-// resolveName picks the stored event name. A tracked product event MUST name itself (an
-// unnamed one is unroutable and dropped — the pre-existing rule); every other route has
-// a server-chosen default, so a caller that names nothing cannot leave the row unnamed
+// resolveName picks the stored event name. A tracked act MUST name itself (an unnamed
+// one is unroutable and dropped — the pre-existing rule); every other route has a
+// server-chosen default, so a caller that names nothing cannot leave the row unnamed
 // and cannot choose what it is called.
 //
 // AN ERROR IS NAMED `error`, NEVER ITS EXCEPTION CLASS. This branch used to fall back to
 // e.Error.Type, and that was a caller string on a function the ANONYMOUS lane reaches:
 // `{"type":"error","error":{"type":"…"}}` with no credential wrote 60 KiB of chosen bytes
 // into `name`, fifty distinct per request, and on a published-site host into a real org's
-// partition — unbounded cardinality in the column the plane orders by, from a caller
+// partition — unbounded cardinality in the column the plane indexes, from a caller
 // nobody vouched for.
 //
 // Dropping it costs nothing, which is why the fix belongs here and not in a per-lane
-// special case. The class was never this column's fact to hold: it is stored in the
-// fault's own `class`, it is the first thing fingerprint() hashes into `group`, and the
-// error lens surfaces it from attributes['$exception']. Naming the row after it was a
-// THIRD copy of one fact under a third spelling — and it is what kept `name` from being
-// the low-cardinality column every signal here treats it as.
+// special case. The class was never this column's fact to hold: it is stored in `class`,
+// it is the first thing fingerprint() hashes into `issue`, and the error lens surfaces
+// it from attributes['$exception']. Naming the row after it was a THIRD copy of one
+// fact under a third spelling.
 func resolveName(r route, e CaptureEvent) string {
 	if n := strings.TrimSpace(e.Event); n != "" {
 		return n
@@ -370,7 +417,9 @@ func resolveName(r route, e CaptureEvent) string {
 		return nameLog
 	case signalSpan:
 		return nameSpan
-	case signalMetric:
+	case signalClip:
+		return nameClip
+	case signalSample:
 		if e.Metric != nil {
 			return trim(e.Metric.Name)
 		}
@@ -384,8 +433,74 @@ func resolveName(r route, e CaptureEvent) string {
 	case kindGroup:
 		return nameGroup
 	}
-	return "" // a tracked event with no name is unroutable
+	return "" // a tracked act with no name is unroutable
 }
+
+// ── severity, one spelling ───────────────────────────────────────────────────
+//
+// OTLP numbers severity 1..24 in bands of four: TRACE 1-4, DEBUG 5-8, INFO 9-12,
+// WARN 13-16, ERROR 17-20, FATAL 21-24. The NUMBER is what is stored, because it
+// orders, it fits a UInt8 minmax index, and it survives a client that spells the word
+// differently. The word is a function of it and is never stored beside it — a row
+// carrying both is a row that can contradict itself, which is precisely what
+// `severity_text` + `severity_number` + `level` was.
+
+const (
+	severityTrace = 1
+	severityDebug = 5
+	severityInfo  = 9
+	severityWarn  = 13
+	severityError = 17
+	severityFatal = 21
+)
+
+// severityOf resolves the ONE stored number from whatever the caller sent. An explicit
+// in-range number wins — it is the precise form. Otherwise the word is mapped by its
+// band, and an unrecognized word yields fallback rather than 0, so a signal whose
+// severity is meaningful (an error) can never be stored as "unspecified".
+func severityOf(text string, number uint8, fallback uint8) uint8 {
+	if number > 0 && number <= 24 {
+		return number
+	}
+	switch strings.ToLower(strings.TrimSpace(text)) {
+	case "trace":
+		return severityTrace
+	case "debug":
+		return severityDebug
+	case "info", "information", "notice", "log":
+		return severityInfo
+	case "warn", "warning":
+		return severityWarn
+	case "error", "err", "severe":
+		return severityError
+	case "fatal", "critical", "crit", "panic", "emergency", "alert":
+		return severityFatal
+	}
+	return fallback
+}
+
+// severityText is the read-time inverse: the band's word. It is the only place a
+// severity becomes text, so a lens and a log line cannot disagree about what 13 means.
+func severityText(n uint8) string {
+	switch {
+	case n == 0:
+		return ""
+	case n < severityDebug:
+		return "trace"
+	case n < severityInfo:
+		return "debug"
+	case n < severityWarn:
+		return "info"
+	case n < severityError:
+		return "warn"
+	case n < severityFatal:
+		return "error"
+	default:
+		return "fatal"
+	}
+}
+
+// ── per-signal bodies ────────────────────────────────────────────────────────
 
 // annotationKeys are the @hanzo/observe AST properties, lifted OUT of the property bag
 // into the `el` tuple so they are not stored twice under two spellings.
@@ -406,6 +521,22 @@ func annotationOf(props map[string]any) annotation {
 		component: asStr(props["$component"]),
 		path:      strSlice(props["$path"]),
 	}
+}
+
+// groupsOf builds the group membership map. The wire carries ONE group today
+// (`groupId`), so the map holds one entry — but it is a MAP and not a column because
+// the second group type is a data change and not a schema change. That is the whole
+// difference between this and the group0..group4 slots it replaces.
+func groupsOf(e CaptureEvent) map[string]string {
+	id := trim(e.GroupID)
+	if id == "" {
+		return nil
+	}
+	kind := trim(e.GroupType)
+	if kind == "" {
+		kind = "organization"
+	}
+	return map[string]string{kind: id}
 }
 
 // attributesOf flattens the scrubbed property bag plus the wire's own attribution
@@ -439,7 +570,6 @@ func attributesOf(props map[string]any, e CaptureEvent) map[string]string {
 	set("utm_content", trim(e.UTM.Content))
 	set("ref_code", trim(e.RefCode))
 	set("channel", trim(e.Channel))
-	set("group_id", trim(e.GroupID))
 	set("signup_week", trim(e.SignupWeek))
 	set("product_id", trim(e.ProductID))
 	set("currency", trim(e.Currency))
@@ -463,24 +593,14 @@ func isAnnotationKey(k string) bool {
 	return false
 }
 
-// faultOf builds the error body and computes its grouping fingerprint.
+// applyFault fills the error columns and computes the grouping fingerprint.
 //
-// GROUPING IS COMPUTED HERE, ISSUE LIFECYCLE IS NOT. `group` leads event.error's ORDER
-// BY after org, so a row cannot be written without it — it is a pure function of the
+// GROUPING IS COMPUTED HERE, ISSUE LIFECYCLE IS NOT. `issue` is a pure function of the
 // failure's shape, which makes it enrichment and puts it on the ingest path. What a
-// downstream consumer owns is the ISSUE: status, assignee, first_seen, count, keyed
-// (org, group). That is the one non-telemetry concept in this plane and it stays
+// downstream consumer owns is the ISSUE ROW: status, assignee, first_seen, count, keyed
+// (org, issue). That is the one non-telemetry concept in this plane and it stays
 // relational; nothing about it belongs in a columnar fact.
-func faultOf(e CaptureEvent) *fault {
-	f := &fault{
-		site:        trim(e.Site),
-		level:       strings.ToLower(trim(e.Level)),
-		release:     trim(e.Release),
-		environment: trim(e.Environment),
-		service:     trim(e.Service),
-		trace:       trim(e.TraceID),
-		span:        trim(e.SpanID),
-	}
+func applyFault(f *fact, e CaptureEvent) {
 	// ONE scrub, at the ONE point the exception enters a fact: scrubException copies
 	// and redacts the free text (a stack frame carries API URLs with query secrets and
 	// PII as readily as a message does), and everything below reads the copy — so
@@ -493,11 +613,69 @@ func faultOf(e CaptureEvent) *fault {
 		f.handled = ex.Handled != nil && *ex.Handled
 		f.frames = framesOf(ex)
 	}
-	if f.level == "" {
-		f.level = "error"
+	// An error with no stated level IS an error. That is what makes the fallback
+	// severityError rather than zero: a failure stored as "unspecified" sorts below
+	// every warning in the one list that exists to surface it.
+	f.severity = severityOf(e.Level, 0, severityError)
+	f.issue = fingerprint(f)
+}
+
+// applyRecord fills the log columns.
+func applyRecord(f *fact, e CaptureEvent) {
+	f.resource = trim(e.Resource)
+	if e.Log != nil {
+		f.message = scrubText(e.Log.Body)
+		f.severity = severityOf(firstNonEmptyStr(e.Log.Severity, e.Level), e.Log.Number, 0)
+		return
 	}
-	f.group = fingerprint(f)
-	return f
+	f.severity = severityOf(e.Level, 0, 0)
+}
+
+// applySpan fills the span columns. A span with no trace id is still stored: dropping
+// an orphan span would hide a real observation, and the fact table is ordered by time
+// rather than by trace, so it costs nothing to keep.
+func applySpan(f *fact, e CaptureEvent) {
+	f.resource = trim(e.Resource)
+	if e.Span == nil {
+		return
+	}
+	f.parent = trim(e.Span.Parent)
+	f.duration = e.Span.Duration
+	f.status = strings.ToLower(trim(e.Span.Status))
+	if k := trim(e.Span.Kind); k != "" {
+		f.kind = strings.ToLower(k)
+	}
+	if f.span == "" {
+		f.span = trim(e.Span.ID)
+	}
+	if f.trace == "" {
+		f.trace = trim(e.Span.Trace)
+	}
+}
+
+// applyClip fills the two columns a replay clip costs. THE BLOB IS NOT ONE OF THEM:
+// `object` is its address in object storage, and the bytes stay there. A multi-megabyte
+// binary is wrong for a bus message and wrong for a warehouse row, and the answer to
+// "where does the blob go then" is: the same place it already goes.
+func applyClip(f *fact, e CaptureEvent) {
+	if e.Clip == nil {
+		return
+	}
+	f.object = trim(e.Clip.Object)
+	f.bytes = e.Clip.Bytes
+	f.duration = e.Clip.Duration
+}
+
+// sampleOf builds the measurement body.
+func sampleOf(e CaptureEvent) *sample {
+	if e.Metric == nil {
+		return &sample{}
+	}
+	return &sample{
+		metric: trim(e.Metric.Name),
+		value:  e.Metric.Value,
+		labels: strMap(e.Metric.Labels),
+	}
 }
 
 // fingerprint is the deterministic grouping key: the same failure shape always yields
@@ -505,7 +683,7 @@ func faultOf(e CaptureEvent) *fault {
 // two failures thrown from the same line of our code are one issue even when the
 // message differs — and falls back to the message with its variable parts removed so
 // "user 41 not found" and "user 907 not found" do not become two issues.
-func fingerprint(f *fault) string {
+func fingerprint(f *fact) string {
 	h := sha256.New()
 	_, _ = h.Write([]byte(f.class))
 	_, _ = h.Write([]byte{0})
@@ -572,53 +750,6 @@ func shape(msg string) string {
 	}
 	flush()
 	return b.String()
-}
-
-// recordOf builds the log body.
-//
-// `resource` stays 0. It is a fingerprint into a resource dimension table, and this
-// plane has no such table — writing a hash that nothing can resolve would be a number
-// that looks like a join key and is not one. It becomes real when a resource plane
-// exists, and nothing else has to change here.
-func recordOf(e CaptureEvent) *record {
-	r := &record{service: trim(e.Service), trace: trim(e.TraceID), span: trim(e.SpanID)}
-	if e.Log != nil {
-		r.severity = strings.ToLower(trim(e.Log.Severity))
-		r.number = e.Log.Number
-		r.body = scrubText(e.Log.Body)
-	}
-	return r
-}
-
-// spanOf builds the span body. A span with no trace id is still stored: event.span is
-// ordered (org, trace_id, time, id), so it lands in the empty-trace bucket rather than
-// being refused — an orphan span is a real observation and dropping it would hide it.
-func spanOf(e CaptureEvent) *span {
-	s := &span{service: trim(e.Service), trace: trim(e.TraceID), id: trim(e.SpanID)}
-	if e.Span != nil {
-		s.parent = trim(e.Span.Parent)
-		s.duration = e.Span.Duration
-		s.status = strings.ToLower(trim(e.Span.Status))
-		if s.id == "" {
-			s.id = trim(e.Span.ID)
-		}
-		if s.trace == "" {
-			s.trace = trim(e.Span.Trace)
-		}
-	}
-	return s
-}
-
-// sampleOf builds the metric body.
-func sampleOf(e CaptureEvent) *sample {
-	if e.Metric == nil {
-		return &sample{}
-	}
-	return &sample{
-		metric: trim(e.Metric.Name),
-		value:  e.Metric.Value,
-		labels: strMap(e.Metric.Labels),
-	}
 }
 
 // ── stack frames ─────────────────────────────────────────────────────────────

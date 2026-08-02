@@ -534,30 +534,67 @@ func closeBus() { conn.close() }
 // can read the plane.
 //
 // The field names are the COLUMN names, so a reader never has to hold two vocabularies
-// at once: what you see on the subject is what you query in the table.
+// at once: what you see on the subject is what you query in the table. That promise is
+// why this is FLAT. It carried four optional sub-bodies while there were four tables to
+// carry them into; with one table a body is a subset of columns, and nesting it would
+// have been a second shape of the row that every consumer then had to translate.
+//
+// `sample` stays a pointer, alone, because a measurement is genuinely a different
+// value: it has a float and no identity, and it lands in the other table.
 type message struct {
-	Signal string `json:"signal"`
+	// ── spine ────────────────────────────────────────────────────────────────
+	Signal string    `json:"signal"`
+	Org    string    `json:"org"`
+	Time   time.Time `json:"time"`
+	ID     string    `json:"id"`
 
-	// The envelope — identical for every signal.
-	Org        string            `json:"org"`
-	Time       time.Time         `json:"time"`
-	ID         string            `json:"id"`
-	Name       string            `json:"name"`
-	Kind       string            `json:"kind,omitempty"`
-	Product    string            `json:"product,omitempty"`
-	Session    string            `json:"session_id,omitempty"`
-	Distinct   string            `json:"distinct_id,omitempty"`
-	Anonymous  string            `json:"anonymous_id,omitempty"`
-	Person     string            `json:"person_id,omitempty"`
-	URL        string            `json:"url,omitempty"`
-	Path       string            `json:"path,omitempty"`
+	// ── what ─────────────────────────────────────────────────────────────────
+	Name     string `json:"name"`
+	Kind     string `json:"kind,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Severity uint8  `json:"severity,omitempty"`
+	Duration uint64 `json:"duration,omitempty"`
+
+	// ── where ────────────────────────────────────────────────────────────────
+	Product string `json:"product,omitempty"`
+	Env     string `json:"env,omitempty"`
+	Service string `json:"service,omitempty"`
+	Release string `json:"release,omitempty"`
+	URL     string `json:"url,omitempty"`
+	Path    string `json:"path,omitempty"`
+
+	// ── who ──────────────────────────────────────────────────────────────────
+	Person    string            `json:"person_id,omitempty"`
+	Distinct  string            `json:"distinct_id,omitempty"`
+	Anonymous string            `json:"anonymous_id,omitempty"`
+	Groups    map[string]string `json:"groups,omitempty"`
+
+	// ── correlation ──────────────────────────────────────────────────────────
+	Session  string `json:"session_id,omitempty"`
+	Trace    string `json:"trace_id,omitempty"`
+	Span     string `json:"span_id,omitempty"`
+	Parent   string `json:"parent,omitempty"`
+	Resource string `json:"resource,omitempty"`
+
+	// ── open ─────────────────────────────────────────────────────────────────
 	Attributes map[string]string `json:"attributes,omitempty"`
 	El         *messageEl        `json:"el,omitempty"`
 
-	// Exactly one of these is set, chosen by Signal.
-	Fault  *messageFault  `json:"fault,omitempty"`
-	Record *messageRecord `json:"record,omitempty"`
-	Span   *messageSpan   `json:"span,omitempty"`
+	// ── error ────────────────────────────────────────────────────────────────
+	Issue   string         `json:"issue,omitempty"`
+	Class   string         `json:"class,omitempty"`
+	Origin  string         `json:"origin,omitempty"`
+	Handled bool           `json:"handled,omitempty"`
+	Frames  []messageFrame `json:"frames,omitempty"`
+
+	// ── span ─────────────────────────────────────────────────────────────────
+	Status string `json:"status,omitempty"`
+
+	// ── clip ─────────────────────────────────────────────────────────────────
+	Object string `json:"object,omitempty"`
+	Bytes  uint64 `json:"bytes,omitempty"`
+
+	// ── the other grain ──────────────────────────────────────────────────────
 	Sample *messageSample `json:"sample,omitempty"`
 }
 
@@ -576,40 +613,6 @@ type messageFrame struct {
 	Line     uint32 `json:"line,omitempty"`
 	Column   uint32 `json:"column,omitempty"`
 	Own      bool   `json:"own"`
-}
-
-type messageFault struct {
-	Group       string         `json:"group"`
-	Message     string         `json:"message,omitempty"`
-	Class       string         `json:"class,omitempty"`
-	Site        string         `json:"site,omitempty"`
-	Handled     bool           `json:"handled"`
-	Level       string         `json:"level,omitempty"`
-	Release     string         `json:"release,omitempty"`
-	Environment string         `json:"environment,omitempty"`
-	Service     string         `json:"service,omitempty"`
-	Trace       string         `json:"trace_id,omitempty"`
-	Span        string         `json:"span_id,omitempty"`
-	Frames      []messageFrame `json:"frames,omitempty"`
-}
-
-type messageRecord struct {
-	Service  string `json:"service,omitempty"`
-	Severity string `json:"severity_text,omitempty"`
-	Number   uint8  `json:"severity_number,omitempty"`
-	Body     string `json:"body,omitempty"`
-	Trace    string `json:"trace_id,omitempty"`
-	Span     string `json:"span_id,omitempty"`
-	Resource uint64 `json:"resource,omitempty"`
-}
-
-type messageSpan struct {
-	Service  string `json:"service,omitempty"`
-	Trace    string `json:"trace_id,omitempty"`
-	ID       string `json:"span_id,omitempty"`
-	Parent   string `json:"parent,omitempty"`
-	Duration uint64 `json:"duration,omitempty"`
-	Status   string `json:"status,omitempty"`
 }
 
 type messageSample struct {
@@ -645,20 +648,46 @@ func decodeMessage(data []byte) (message, error) {
 // contract, and letting one drift is a schema change rather than a rename.
 func wire(f fact) message {
 	m := message{
-		Signal:     string(f.signal),
-		Org:        f.org,
-		Time:       f.time,
-		ID:         f.id,
-		Name:       f.name,
-		Kind:       f.kind,
-		Product:    f.product,
-		Session:    f.session,
-		Distinct:   f.distinct,
-		Anonymous:  f.anonymous,
-		Person:     f.person,
-		URL:        f.url,
-		Path:       f.path,
+		Signal: string(f.signal),
+		Org:    f.org,
+		Time:   f.time,
+		ID:     f.id,
+
+		Name:     f.name,
+		Kind:     f.kind,
+		Message:  f.message,
+		Severity: f.severity,
+		Duration: f.duration,
+
+		Product: f.product,
+		Env:     f.env,
+		Service: f.service,
+		Release: f.release,
+		URL:     f.url,
+		Path:    f.path,
+
+		Person:    f.person,
+		Distinct:  f.distinct,
+		Anonymous: f.anonymous,
+		Groups:    f.groups,
+
+		Session:  f.session,
+		Trace:    f.trace,
+		Span:     f.span,
+		Parent:   f.parent,
+		Resource: f.resource,
+
 		Attributes: f.attributes,
+
+		Issue:   f.issue,
+		Class:   f.class,
+		Origin:  f.origin,
+		Handled: f.handled,
+
+		Status: f.status,
+
+		Object: f.object,
+		Bytes:  f.bytes,
 	}
 	if !f.el.empty() {
 		m.El = &messageEl{
@@ -666,32 +695,12 @@ func wire(f fact) message {
 			Name: f.el.name, Component: f.el.component, Path: f.el.path,
 		}
 	}
-	if f.fault != nil {
-		frames := make([]messageFrame, 0, len(f.fault.frames))
-		for _, fr := range f.fault.frames {
-			frames = append(frames, messageFrame{
+	if len(f.frames) > 0 {
+		m.Frames = make([]messageFrame, 0, len(f.frames))
+		for _, fr := range f.frames {
+			m.Frames = append(m.Frames, messageFrame{
 				Function: fr.function, File: fr.file, Line: fr.line, Column: fr.column, Own: fr.own,
 			})
-		}
-		m.Fault = &messageFault{
-			Group: f.fault.group, Message: f.fault.message, Class: f.fault.class,
-			Site: f.fault.site, Handled: f.fault.handled, Level: f.fault.level,
-			Release: f.fault.release, Environment: f.fault.environment,
-			Service: f.fault.service, Trace: f.fault.trace, Span: f.fault.span,
-			Frames: frames,
-		}
-	}
-	if f.record != nil {
-		m.Record = &messageRecord{
-			Service: f.record.service, Severity: f.record.severity, Number: f.record.number,
-			Body: f.record.body, Trace: f.record.trace, Span: f.record.span,
-			Resource: f.record.resource,
-		}
-	}
-	if f.span != nil {
-		m.Span = &messageSpan{
-			Service: f.span.service, Trace: f.span.trace, ID: f.span.id,
-			Parent: f.span.parent, Duration: f.span.duration, Status: f.span.status,
 		}
 	}
 	if f.sample != nil {

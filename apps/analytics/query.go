@@ -45,10 +45,9 @@ import (
 // rows, never creates tables, and answers honest-empty where the plane is absent.
 const llmTable = "hanzo.cloud_usage" // live LLM usage ledger (real data today)
 
-var (
-	eventsTable = signalEvent.table() // event.event — the product-event envelope
-	errorsTable = signalError.table() // event.error — captured failures (never on event.event)
-)
+// The plane is ONE table now, so a lens does not pick a TABLE — it picks a SIGNAL, and
+// the signal is a bound predicate like the tenant. `scope` below is where both are
+// said, once, so a read cannot name one and forget the other.
 
 // ── Tenancy predicates (the isolation boundary) ─────────────────────────────
 //
@@ -65,12 +64,26 @@ func llmWhere(org string, start, end time.Time) (string, []any) {
 		[]any{tsLiteral(start), tsLiteral(end), org}
 }
 
-// eventsWhere is the org-scoped time predicate for the event plane. Same shape as
-// llmWhere but keyed on the plane's envelope columns: `time` (DateTime64) and
+// scope is the MANDATORY leading predicate of EVERY read on the event plane: the
+// tenant first, then the signal, both BOUND. It exists because those two are one
+// decision — "whose rows, and which sort" — and a read that named a table used to
+// answer the second by accident. One table means the signal is now a predicate, and a
+// predicate you can forget is a lens that silently reads logs as product events.
+//
+// org leads because it leads the sort key: (org, time, id). signal follows because it
+// leads the PARTITION key, so the pair prunes to one tenant's slice of one signal
+// before any narrower is considered.
+func scope(org string, sig signal) (string, []any) {
+	return "org = ? AND signal = ?", []any{org, string(sig)}
+}
+
+// eventsWhere is the org-scoped, act-scoped time predicate for the behavior lenses.
+// Same shape as llmWhere but keyed on the plane's own columns: `time` (DateTime64) and
 // `org` (the IAM org slug, stamped server-side by normalize).
 func eventsWhere(org string, start, end time.Time) (string, []any) {
-	return "time >= ? AND time < ? AND org = ?",
-		[]any{tsLiteral(start), tsLiteral(end), org}
+	where, args := scope(org, signalAct)
+	return where + " AND time >= ? AND time < ?",
+		append(args, tsLiteral(start), tsLiteral(end))
 }
 
 // Behavior-lens group-key expressions. Each is a SERVER-CHOSEN constant SQL
@@ -91,7 +104,7 @@ const (
 	sourceKeyExpr   = "if(attributes['utm_source'] != '', attributes['utm_source'], '(none)')"
 )
 
-// breakdownSQL builds ONE pageview breakdown over event.event grouped by keyExpr
+// breakdownSQL builds ONE pageview breakdown over event.fact grouped by keyExpr
 // — the read core of the behavior lenses (topPages/topReferrers/topSources). Each
 // returned bucket carries its pageviews (count of kind='page' rows — the plane's
 // discriminator, which replaced the magic '$pageview' name) and visitors
@@ -111,7 +124,7 @@ func breakdownSQL(keyExpr, org string, start, end time.Time, limit int) (string,
 			"SELECT %s AS k, count() AS pageviews, uniqExact(distinct_id) AS visitors "+
 			"FROM %s WHERE %s AND kind = 'page' GROUP BY k"+
 			") ORDER BY pageviews DESC, visitors DESC LIMIT %d",
-		keyExpr, eventsTable, where, limit)
+		keyExpr, factTable, where, limit)
 	return sql, args
 }
 
@@ -157,7 +170,7 @@ type LLMOverview struct {
 	Source string `json:"source"`
 }
 
-// WebOverview is the web lens over event.event. Honest-empty (Available=false)
+// WebOverview is the web lens over event.fact. Honest-empty (Available=false)
 // until the collector emits web events.
 type WebOverview struct {
 	// Available is false when the product-event table could not be read — the lens is
@@ -175,7 +188,7 @@ type WebOverview struct {
 	Source string `json:"source"`
 }
 
-// CommerceOverview is the commerce lens over event.event. Honest-empty until
+// CommerceOverview is the commerce lens over event.fact. Honest-empty until
 // commerce emits order events.
 type CommerceOverview struct {
 	// Available is false when the product-event table could not be read — the lens is
@@ -317,7 +330,7 @@ type BreakdownRow struct {
 	Pct float64 `json:"pct"`
 }
 
-// Breakdown is a ranked behavior lens over event.event. Honest-empty
+// Breakdown is a ranked behavior lens over event.fact. Honest-empty
 // (Available=false) when the events table is absent/errored — never fabricated.
 type Breakdown struct {
 	// Available is false when the product-event table could not be read.
@@ -383,7 +396,7 @@ func buildLLMOverview(row map[string]any) LLMOverview {
 // handler passes ok=false when the events query failed (table absent) so the
 // lens is honestly reported unavailable rather than as fabricated zeros.
 func buildWebOverview(row map[string]any, ok bool) WebOverview {
-	w := WebOverview{Available: ok, Source: eventsTable}
+	w := WebOverview{Available: ok, Source: factTable}
 	if !ok {
 		w.Reason = "no web analytics events yet"
 		return w
@@ -395,7 +408,7 @@ func buildWebOverview(row map[string]any, ok bool) WebOverview {
 }
 
 func buildCommerceOverview(row map[string]any, ok bool) CommerceOverview {
-	c := CommerceOverview{Available: ok, Source: eventsTable}
+	c := CommerceOverview{Available: ok, Source: factTable}
 	if !ok {
 		c.Reason = "no commerce events yet"
 		return c
@@ -468,11 +481,11 @@ func buildTopModels(rows []map[string]any) TopModels {
 	return TopModels{Available: true, Items: items, Source: llmTable}
 }
 
-// buildTopProducts assembles the top-products table from event.event. ok=false
+// buildTopProducts assembles the top-products table from event.fact. ok=false
 // (events table absent) → honest-empty. Pure.
 func buildTopProducts(rows []map[string]any, ok bool) TopProducts {
 	if !ok {
-		return TopProducts{Available: false, Reason: "no commerce events yet", Items: []ProductRow{}, Source: eventsTable}
+		return TopProducts{Available: false, Reason: "no commerce events yet", Items: []ProductRow{}, Source: factTable}
 	}
 	items := make([]ProductRow, 0, len(rows))
 	for _, r := range rows {
@@ -483,7 +496,7 @@ func buildTopProducts(rows []map[string]any, ok bool) TopProducts {
 			Units:     aInt64(r["units"]),
 		})
 	}
-	return TopProducts{Available: true, Items: items, Source: eventsTable}
+	return TopProducts{Available: true, Items: items, Source: factTable}
 }
 
 // buildBreakdown assembles a behavior lens from breakdownSQL rows. ok=false
@@ -493,7 +506,7 @@ func buildTopProducts(rows []map[string]any, ok bool) TopProducts {
 // result yields total 0 → all pct 0. Pure — the tests drive it with mock rows.
 func buildBreakdown(rows []map[string]any, ok bool) Breakdown {
 	if !ok {
-		return Breakdown{Available: false, Reason: "no web analytics events yet", Items: []BreakdownRow{}, Source: eventsTable}
+		return Breakdown{Available: false, Reason: "no web analytics events yet", Items: []BreakdownRow{}, Source: factTable}
 	}
 	var total int64
 	if len(rows) > 0 {
@@ -510,7 +523,7 @@ func buildBreakdown(rows []map[string]any, ok bool) Breakdown {
 	for i := range items {
 		items[i].Pct = pctOf(items[i].Pageviews, total)
 	}
-	return Breakdown{Available: true, Items: items, Source: eventsTable}
+	return Breakdown{Available: true, Items: items, Source: factTable}
 }
 
 // ── Value coercion ──────────────────────────────────────────────────────────

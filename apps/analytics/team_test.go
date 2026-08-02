@@ -107,7 +107,7 @@ func TestTeamWireLands(t *testing.T) {
 	want := []struct {
 		sig  signal
 		kind string
-	}{{signalError, ""}, {signalEvent, kindPage}}
+	}{{signalError, ""}, {signalAct, kindPage}}
 	for i, ev := range admitted {
 		f, ok := normalize("acme", now, foldException(ev))
 		if !ok {
@@ -228,12 +228,9 @@ func TestTeamErrorPropertiesAreRehomed(t *testing.T) {
 	if !ok {
 		t.Fatal("did not normalize")
 	}
-	stored := fmt.Sprintf("%v", f.attributes)
-	if f.fault != nil {
-		stored += " " + f.fault.message + " " + f.fault.class
-		for _, fr := range f.fault.frames {
-			stored += " " + fr.file + " " + fr.function
-		}
+	stored := fmt.Sprintf("%v", f.attributes) + " " + f.message + " " + f.class
+	for _, fr := range f.frames {
+		stored += " " + fr.file + " " + fr.function
 	}
 	if strings.Contains(stored, "sk-live-DEADBEEF") {
 		t.Errorf("raw secret from the stack reached the stored fact: %s", stored)
