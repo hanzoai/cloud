@@ -66,16 +66,43 @@ forwards, which name the internal spelling:
   module in `query_test.go`. So the bump turns every console trace/log explorer
   into a 400. There is no cloud-only edit that avoids this: the engine the
   console speaks to no longer has a route.
-- `o11y.go`'s `isHealthPath` allowlists `/api/v{1,2}/{health,healthz,readyz,livez}`;
-  v1.5.37 moved the probes to `/v1/o11y/{healthz,readyz,livez}`. `typed_wire_test.go`
-  DOES catch this one — a bump fails the build there, which is the only reason
-  the query.go trap is reachable at all (fix the red test, ship the silent 400).
+- `o11y.go`'s `isHealthPath` allowlisted `/api/v{1,2}/{health,healthz,readyz,livez}`;
+  v1.5.37 moved the probes to `/v1/o11y/{healthz,readyz,livez}`. **This one shipped.**
+  The pin reached v1.5.46 while that list stayed, so the exemption named four
+  addresses nothing served and the gate refused EVERY public op — `/version`,
+  `/health`, the three probes, sign-in and the shared-dashboard reads all answered
+  `403 {"status":403,"error":"no validated principal"}` at api.hanzo.ai while
+  o11y.hanzo.ai served them 200. That gap is the whole reason o11y still had a door
+  of its own. FIXED by deleting the list: `gate()` asks `o11y.Anonymous(method, path)`,
+  which lives beside the routes it describes, and `anonymous_test.go` there fails on
+  any exemption that names a path Mount does not register.
 
 `o11y.go`'s other forward, `eventToRuntimePath` (`/v1/event/<p>/envelope|store`
 → `/v1/sentry/<p>/…`), is unaffected: both families survive the rename verbatim.
-`isErrorIngestPath`'s `/v1/o11y/api/<project>/envelope|store` also stays — that
-`/api/` segment is the Sentry SDK's own wire format, received as-is, not our
-spelling of a route.
+The DSN ingest wires (`/v1/o11y/api/<project>/envelope|store` and the clean
+`/v1/sentry/<project>/…`) also stay — that `/api/` segment is the Sentry SDK's own
+wire format, received as-is, not our spelling of a route — and they are now
+`o11y.IngestWire`, exported precisely because the gateway's JWT bypass must match
+it byte-for-byte.
+
+## The published document still lacks o11y's 353 typed ops
+
+`plugin/o11y/openapi.json` is the build-time subset the fleet document is woven
+from, and it is STALE: 34 operations, including a `/v1/o11y/{wildcard1}` and three
+`/api/v2` probes that v1.5.46 deleted. Regenerating it (`make -C apps/o11y describe`)
+now succeeds and yields 389 operations — but the weave then refuses, and it is
+right to:
+
+    schema "Service" means different things in "ingress" and "o11y"
+
+Six schema names collide across the fleet with DIFFERENT shapes, all six from
+o11y's internal type packages: `Account` (cloudintegrationtypes), `Channel`
+(alertmanagertypes), `Event` (spantypes/sentrytypes), `Host` (zeustypes),
+`Service` (cloudintegrationtypes) and `TLSConfig`. The fleet's schema namespace is
+flat and `openapi/weave.go` fails closed on one name with two shapes, because a
+generated SDK would bind whichever it read last. Unblocking the document means
+namespacing those six Go type names in hanzoai/o11y — the wire does not move, only
+the type names — then regenerating the subset and reweaving `openapi.yaml`.
 
 Unblocking it is a console change, not a cloud one: migrate `listQueryPayload`
 + `parseListRows` (hanzoai/console `src/lib/api/apm.ts`) to the v5 composite
