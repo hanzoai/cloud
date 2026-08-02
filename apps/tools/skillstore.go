@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 )
 
 // Org-authored skills.
@@ -50,19 +52,13 @@ type SkillStore struct {
 	db *sql.DB
 }
 
-// OpenSkillStore opens (and migrates) the authored-skill store at path.
-func OpenSkillStore(path string) (*SkillStore, error) {
-	db, err := cek.Open(cek.Global, path)
+// OpenSkillStore opens (and migrates) the authored-skill store under dir.
+func OpenSkillStore(dir string) (*SkillStore, error) {
+	db, err := cek.Open(namespace.System(), "tools-skills", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open skill store %q: %w", path, err)
+		return nil, fmt.Errorf("tools: open skill store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("tools: skill pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &SkillStore{db: db}
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS skills (

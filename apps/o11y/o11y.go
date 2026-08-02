@@ -62,19 +62,23 @@ import (
 )
 
 // The prose for the operations this package serves but does not OWN the shape of:
-// the three probes the upstream module registers ahead of its wildcard, and the two
-// wildcards themselves. A wildcard has no operation to type — that is the whole
-// reason it is a wildcard — so zipdoc has nothing to lift, and without a Describe
-// these ten publish an operationId and nothing else. Declared here because this
-// file owns what a caller actually meets on the way through: the gate, its
-// exemptions, and the runtime the request is handed to.
+// the three native service probes hanzoai/o11y registers, and the /v1/sentry
+// wildcard this file registers itself. Neither has an operation to type — a probe
+// is a bare handler and a wildcard is a wildcard — so zipdoc has nothing to lift,
+// and without a Describe they publish an operationId and nothing else. Declared
+// here because this file owns what a caller actually meets on the way through:
+// the gate, its exemptions, and the runtime the request is handed to. The probes'
+// prose cannot move into the module with the routes, because Describe lives in
+// hanzoai/cloud and the module deliberately no longer imports it.
 //
-// The path keys are the FIBER patterns (`*`), which the document renders as
-// {wildcard1}. A description whose route is not in the router never renders, so
-// this stays additive metadata on routes that exist.
+// THE PATH KEYS ARE ROUTE LITERALS AND MUST STAY EQUAL TO THEM. These three named
+// /v1/o11y/api/v2/{livez,healthz,readyz} — the internal namespace the module used
+// to rewrite onto — for as long as the exemption in gate() named the same four
+// dead paths. The rewrite is gone; the probes answer at /v1/o11y/{livez,healthz,
+// readyz} and the descriptions say so.
 func init() {
-	// --- probes: registered by the upstream module ahead of its wildcard ---
-	openapi.Describe("/v1/o11y/api/v2/livez", http.MethodGet,
+	// --- the three native service probes (hanzoai/o11y health.go) ---
+	openapi.Describe("/v1/o11y/livez", http.MethodGet,
 		"Liveness of the observability process",
 		"Answers 200 unconditionally while the process is running, and asserts NOTHING about "+
 			"the telemetry stores behind it. That is what makes it a liveness probe: a "+
@@ -84,7 +88,7 @@ func init() {
 			"carries no tenant data, and gating it would break the k8s probes and the external "+
 			"health checks without protecting anything. Use the health probe, not this one, to "+
 			"ask whether the runtime can actually serve.")
-	openapi.Describe("/v1/o11y/api/v2/healthz", http.MethodGet,
+	openapi.Describe("/v1/o11y/healthz", http.MethodGet,
 		"Health of the observability runtime's services",
 		"Reports whether every service in the runtime's registry is healthy, and names them "+
 			"grouped by state — so a failure says WHICH component is down, not merely that "+
@@ -92,7 +96,7 @@ func init() {
 			"inside, so a plain status check cannot read a sick runtime as well.\n\n"+
 			"UNAUTHENTICATED by design, like the other two probes: it carries no tenant data "+
 			"and is reached by k8s and by external checks that hold no principal.")
-	openapi.Describe("/v1/o11y/api/v2/readyz", http.MethodGet,
+	openapi.Describe("/v1/o11y/readyz", http.MethodGet,
 		"Readiness of the observability runtime to serve",
 		"Reports whether the runtime's registered services are healthy enough to take "+
 			"traffic, and answers 503 when they are not — which is what takes a booting or "+
@@ -101,63 +105,119 @@ func init() {
 			"registry the health probe reads, so the two agree by construction; readiness is "+
 			"the question a router asks and health is the question an operator asks.")
 
-	// --- /v1/o11y/* — everything no specific route above claimed ---
-	openapi.Describe("/v1/o11y/*", http.MethodGet,
-		"Read a resource from the observability runtime",
-		"Serves the observability runtime's own read surface — dashboards, alert rules, "+
-			"saved views, the service and dependency inventory, and the trace, log and metric "+
-			"explorers — in the runtime's own shapes, passed through unchanged.\n\n"+
-			"It is the FALLTHROUGH, not the front door. Every path this repo owns the shape of "+
-			"is registered ahead of it and wins the match; what reaches here is what only the "+
-			"runtime knows how to answer. The public contract is flat — one /v1/, no nested "+
-			"version — and the mapping onto the runtime's internal namespace happens at this "+
-			"one seam, so a caller never spells an engine version.\n\n"+
-			"A validated principal is required and the read is scoped to that principal's own "+
-			"org, pinned server-side from its claim; a client-supplied org header never "+
-			"survives ingress and there is no query parameter that widens the scope. Platform "+
-			"sudo passes without an org — the admin console reads before one is selected — and "+
-			"buys reach, not data: the runtime still scopes every read from the tenant it was "+
-			"given, so an org-less request answers org-less, never the fleet. Before the "+
-			"runtime is initialized, 503.")
-	openapi.Describe("/v1/o11y/*", http.MethodPost,
-		"Create a runtime object, or run a query against telemetry",
-		"Carries the runtime's own writes and query posts — creating a dashboard, an alert "+
-			"rule or a saved view, and running the query bodies the explorers submit — in the "+
-			"runtime's own shapes, passed through unchanged.\n\n"+
-			"It is the FALLTHROUGH: the builder query and the ingest routes this repo owns are "+
-			"registered ahead of it and win the match. A validated, org-scoped principal is "+
-			"required and the write lands in that principal's own tenant, pinned server-side.\n\n"+
-			"ONE EXEMPTION, and it is deliberate: a Sentry error-ingest write presents a DSN "+
-			"public key, never a Hanzo session, so those two paths bypass the principal gate "+
-			"and are authenticated by the ingest verifier instead — which derives the org from "+
-			"the DSN itself and fails closed. The exemption is matched by method plus prefix "+
-			"plus suffix, never a broad prefix, so every read under the same subtree stays "+
-			"gated. Before the runtime is initialized, 503.")
-	openapi.Describe("/v1/o11y/*", http.MethodPut,
-		"Replace a runtime object",
-		"Replaces one of the observability runtime's own objects — a dashboard, an alert "+
-			"rule, a saved view — in the runtime's own shapes, passed through unchanged. The "+
-			"fallthrough for the resources only the runtime knows.\n\n"+
-			"A validated, org-scoped principal is required, and the write is confined to that "+
-			"principal's own tenant: the org is minted from its claim at ingress, a client copy "+
-			"never survives, and nothing in the request can widen the scope. Before the runtime "+
-			"is initialized, 503.")
-	openapi.Describe("/v1/o11y/*", http.MethodPatch,
-		"Update part of a runtime object",
-		"Applies a partial update to one of the observability runtime's own objects, in the "+
-			"runtime's own shapes, passed through unchanged. The fallthrough for the resources "+
-			"only the runtime knows.\n\n"+
-			"A validated, org-scoped principal is required, and the write is confined to that "+
-			"principal's own tenant, pinned server-side from its claim. Before the runtime is "+
-			"initialized, 503.")
-	openapi.Describe("/v1/o11y/*", http.MethodDelete,
-		"Remove a runtime object",
-		"Removes one of the observability runtime's own objects — a dashboard, an alert rule, "+
-			"a saved view — passing the runtime's answer through unchanged. The fallthrough "+
-			"for the resources only the runtime knows.\n\n"+
-			"A validated, org-scoped principal is required, and the delete is confined to that "+
-			"principal's own tenant, pinned server-side from its claim, so one tenant can never "+
-			"reach another's object. Before the runtime is initialized, 503.")
+	// --- the ELEVEN escape hatches (hanzoai/o11y mountHatches) ---
+	//
+	// THE /v1/o11y/* WILDCARD IS GONE and its five method descriptions with it:
+	// hanzoai/o11y names every route now — 353 typed ops, 11 hatches, 3 probes —
+	// so there is no fallthrough left to describe, and describing an address
+	// nothing serves is the same lie a wildcard was. The 353 carry their own prose
+	// in their doc comments, where the shape is declared. These eleven cannot: a
+	// stream, a redirect and a foreign wire each break the declaration a typed op
+	// makes, which is why the module registers them by hand. Their prose lands
+	// HERE rather than beside them because Describe lives in hanzoai/cloud and the
+	// module deliberately no longer imports it — the one thing this side still
+	// owns for those routes is what a caller reads.
+	openapi.Describe("/v1/o11y/logs/livetail", http.MethodGet,
+		"Follow log records as they arrive",
+		"Streams matching log records continuously instead of answering once, so a console "+
+			"tail shows lines as they land rather than at the end of a window.\n\n"+
+			"It is a STREAM, which is why it is not a typed operation: there is no single "+
+			"complete value to name, and a generated client that waited for one would hang on "+
+			"the first tail. Read the bounded window with the log read instead when you want an "+
+			"answer rather than a feed.\n\n"+
+			"A validated, org-scoped principal is required and the feed carries that "+
+			"principal's own tenant only.")
+	openapi.Describe("/v1/o11y/query_progress", http.MethodGet,
+		"Watch one running query's progress",
+		"Reports how far a submitted query has got — rows scanned, bytes read, elapsed — and "+
+			"HOLDS the connection until the next update rather than answering immediately.\n\n"+
+			"The long poll is the whole point, and the reason this cannot be a typed "+
+			"operation: an answer that arrived only when the query finished would report "+
+			"progress on nothing. The websocket form of the same read is /ws/query_progress.\n\n"+
+			"A validated, org-scoped principal is required; a query id belonging to another "+
+			"tenant is simply not found.")
+	openapi.Describe("/ws/query_progress", http.MethodGet,
+		"Watch one running query's progress over a websocket",
+		"The same progress read as /v1/o11y/query_progress, delivered over a websocket: the "+
+			"Upgrade IS the contract, so there is no JSON response to declare and no typed "+
+			"operation to make of it.\n\n"+
+			"It sits outside /v1/o11y on purpose — the upgrade handshake is a transport "+
+			"concern, not a resource — and it was unreachable from the composed binary until "+
+			"the route table named it, because the old wildcard covered only the o11y "+
+			"prefix.\n\n"+
+			"A validated, org-scoped principal is required.")
+	openapi.Describe("/v1/o11y/export_raw_data", http.MethodPost,
+		"Export raw telemetry rows as a file",
+		"Runs a query and returns its rows as a downloadable CSV or JSONL attachment, "+
+			"chunked, with a trailer that says whether the export completed — so a truncated "+
+			"download is detectable rather than silently short.\n\n"+
+			"The answer is a file, not a value, which is why it is not a typed operation: the "+
+			"body is neither JSON nor bounded. Use the query operations when you want rows in "+
+			"a response.\n\n"+
+			"A validated, org-scoped principal is required and the export carries that "+
+			"principal's own tenant only.")
+	openapi.Describe("/v1/o11y/complete/google", http.MethodGet,
+		"Complete a Google sign-in",
+		"The callback Google redirects a user back to after they approve the sign-in. It "+
+			"exchanges the authorization code, establishes the session and answers 303 to the "+
+			"console.\n\n"+
+			"The answer is a Location header and no body, which is why it is not a typed "+
+			"operation — declaring a JSON response for a redirect would publish a shape that "+
+			"does not exist and hide the header that is the entire point.\n\n"+
+			"UNAUTHENTICATED by necessity: it is how a caller GETS a principal, so requiring "+
+			"one would be circular. It is not an open door — the code it carries is single-use "+
+			"and verified against the provider.")
+	openapi.Describe("/v1/o11y/complete/oidc", http.MethodGet,
+		"Complete a generic OIDC sign-in",
+		"The callback any configured OIDC provider redirects back to. Same shape and same "+
+			"reasoning as the Google callback: the code is exchanged, the session is "+
+			"established, and the answer is a 303 to the console rather than a body.\n\n"+
+			"UNAUTHENTICATED by necessity — this is the act of obtaining a principal, and the "+
+			"provider's own code is what authenticates it.")
+	openapi.Describe("/v1/o11y/complete/saml", http.MethodPost,
+		"Complete a SAML sign-in",
+		"The assertion consumer service: the identity provider POSTs its signed assertion "+
+			"here, and a valid one establishes the session and answers 303 to the console.\n\n"+
+			"A redirect, not a value, so it is not a typed operation. UNAUTHENTICATED by "+
+			"necessity and authenticated in fact by the assertion's signature, which is checked "+
+			"against the configured provider before any session exists.")
+	openapi.Describe("/v1/o11y/api/:project_id/envelope/", http.MethodPost,
+		"Receive a Sentry envelope on the SDK's own DSN path",
+		"Accepts an application/x-sentry-envelope frame from a Sentry SDK — the batched wire "+
+			"format carrying events, sessions and attachments — and ingests it against the "+
+			"project named in the path.\n\n"+
+			"THE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed "+
+			"/api/<project>/envelope/ suffix to whatever DSN it is given, so this address is "+
+			"the SDK's, received verbatim. We receive this shape; we do not publish it. The "+
+			"clean spelling of the same wire is /v1/sentry/{project}/envelope/.\n\n"+
+			"AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, and therefore exempt "+
+			"from the principal gate: the ingest verifier checks the key in constant time, "+
+			"fails closed, and derives the org from it. A keyless submission is a 401 from that "+
+			"verifier — not a 403 from the gate, and not a 404 — which is how you tell the hops "+
+			"apart. The exemption is matched by method plus prefix plus suffix, never a bare "+
+			"prefix, so no read is reachable through it.")
+	openapi.Describe("/v1/o11y/api/:project_id/store/", http.MethodPost,
+		"Receive a single Sentry event on the SDK's own DSN path",
+		"The legacy single-event form of the envelope ingest: one JSON event rather than a "+
+			"framed batch, kept because SDKs in the field still send it.\n\n"+
+			"Same address ownership and same authentication as the envelope route — the "+
+			"/api/ segment is the SDK's, the DSN public key is the credential, the principal "+
+			"gate does not apply, and a keyless submission is a 401 from the ingest verifier.")
+	openapi.Describe("/v1/sentry/:project/envelope/", http.MethodPost,
+		"Receive a Sentry envelope on the clean root",
+		"The same envelope ingest as the DSN path, spelled the way this platform names "+
+			"things: one /v1/, the product, the project. Point an SDK's DSN here and the wire "+
+			"is identical.\n\n"+
+			"AUTHENTICATED BY THE DSN PUBLIC KEY and exempt from the principal gate for the "+
+			"same reason — a Sentry SDK has no Hanzo session to present. The project segment is "+
+			"a UUID enforced by the route, and the exemption matches method plus prefix plus "+
+			"suffix, so every Sentry READ (issues, discover, events, logs, traces, stats) stays "+
+			"gated.")
+	openapi.Describe("/v1/sentry/:project/store/", http.MethodPost,
+		"Receive a single Sentry event on the clean root",
+		"The legacy single-event ingest on the clean /v1/sentry root — one JSON event rather "+
+			"than a framed batch. Same DSN-key authentication, same gate exemption, same "+
+			"UUID-enforced project segment as the envelope route beside it.")
 
 	// --- /v1/sentry/* — the Sentry product face over the SAME runtime ---
 	openapi.Describe("/v1/sentry/*", http.MethodGet,
@@ -226,10 +286,6 @@ func init() {
 	// something. DescribeRest covers the remainder from the generator's own set, so a
 	// method added there is covered the day it appears rather than published bare —
 	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
-	openapi.DescribeRest("/v1/o11y/*",
-		"Not served by the observability runtime",
-		"Published because this address accepts every method, but the runtime routes nothing "+
-			"here: the request reaches it as an unrouted path and no telemetry is read or written.")
 	openapi.DescribeRest("/v1/sentry/*",
 		"Not served by the Sentry face",
 		"Published because this address accepts every method, but the Sentry face routes "+
@@ -291,25 +347,29 @@ func newHandler(rawURL string) (http.Handler, error) {
 // unscoped, and a member's cross-org query keys are stripped before the runtime
 // can honour them.
 //
-// Liveness/readiness endpoints are exempt: they carry NO tenant data (the o11y
-// runtime itself serves them without identity — that is how the k8s pod probes
-// pass), so a principal gate on them would only break unauthenticated health
-// probes (admin System Health's CLOUD_O11Y_HEALTH_URL, the external o11y.* hosts,
-// k8s) without protecting anything. Data routes (/v1/o11y/api/v1/query_range, …)
-// stay gated.
+// WHICH OPS ARE EXEMPT IS THE MODULE'S ANSWER, NOT OURS (o11y.Anonymous). This
+// file used to keep its own list, and the list named /v1/o11y/api/v1/health and
+// three /api/v2 siblings — the INTERNAL namespace hanzoai/o11y used to rewrite
+// onto before it stopped rewriting paths at all. Four names, zero routes: the
+// exemption matched nothing and this gate refused EVERY public op. /version,
+// /health, the three probes and sign-in answered 403 at api.hanzo.ai while the
+// standalone o11y answered 200, which is precisely why o11y still had a door of
+// its own. A copy of a route fact, kept one repo away from the routes, drifts
+// the moment the routes move; the fact has one home now and it is beside them.
 //
-// The Sentry error-ingest wire endpoints (POST /v1/o11y/api/<project>/envelope|store/)
-// are ALSO exempt: they carry NO Hanzo principal by design — a Sentry SDK presents a
-// DSN public key, not a hanzo.id session — and the o11y ingest handler verifies that
-// key (constant-time HMAC over the platform secret, fail-closed 401/503) and derives
-// the org from the DSN project segment. This is the cloud-side counterpart to the
-// gateway's isErrorIngestPath JWT bypass (both stay tight: method+prefix+suffix, never
-// a broad /v1/o11y/api allowlist), so the DSN-authenticated ingest reaches its own auth
-// instead of being 403'd here for lacking a principal it never carries. Reads under
-// /v1/o11y/api/vN/… and the Issues list/detail remain principal-gated.
+// The exempt set is the runtime's own OpenAccess routes plus the two
+// public-dashboard reads it gates with CheckWithoutClaims, and the rule behind
+// it is this gate's own purpose read backwards: this gate exists because the
+// runtime trusts X-Org-Id as gateway-minted, so an op whose gate reads no tenant
+// from the request has nothing for a forged tenant to reach and gating it can
+// only remove an answer. Everything else — every read of a tenant's telemetry —
+// stays gated here AND at the runtime, which is one rule enforced twice, not two
+// rules. Exemption is not authorization: the DSN key, the service-account key,
+// the share's scope and the session cookie are each still the op's own
+// admission test, applied one layer in.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isHealthPath(r.URL.Path) || isErrorIngestPath(r.Method, r.URL.Path) || isSentryIngestPath(r.Method, r.URL.Path) {
+		if o11y.Anonymous(r.Method, r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -385,60 +445,21 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 // future runtime ever DOES read an org from the query, the fix is to stop it
 // reading one — not to guess the spellings here.
 
-// isSentryIngestPath reports whether r is a Hanzo Sentry error-ingest WRITE the
-// runtime authenticates with a DSN key (not a Hanzo principal): POST to
-// /v1/sentry/{project}/envelope/ or /v1/sentry/{project}/store/. Like isErrorIngestPath
-// it matches by method + prefix + suffix — NEVER a bare /v1/sentry/ prefix — so the
-// Sentry READ APIs (issues, discover, projects, logs, traces, stats) stay
-// principal-gated. The {project} segment is a UUID enforced by the runtime route; the
-// trailing slash is the Sentry wire form, the slash-less variant tolerated defensively.
-// The gateway needs a byte-identical sibling allow-rule so the tokenless ingest it lets
-// through is not then 403'd here. VERIFIED in production once the host actually mounted
-// /v1/sentry: a keyless POST to /v1/sentry/<uuid>/envelope/ answers 401 "invalid ingest
-// key" (text/plain, from the ingest verifier) — NOT 404 (unrouted), and NOT the 403
-// {"status":"error","msg":"no validated principal"} that the READ paths still return.
-// Those three responses are how you tell the hops apart if this ever regresses.
-func isSentryIngestPath(method, path string) bool {
-	if method != http.MethodPost {
-		return false
-	}
-	if !strings.HasPrefix(path, "/v1/sentry/") {
-		return false
-	}
-	return strings.HasSuffix(path, "/envelope/") || strings.HasSuffix(path, "/envelope") ||
-		strings.HasSuffix(path, "/store/") || strings.HasSuffix(path, "/store")
-}
-
-// isHealthPath reports whether p is an o11y liveness/readiness endpoint. These
-// are the exact paths the runtime special-cases (served unstripped, no identity),
-// reached either directly or under the /v1/o11y external prefix — so we match on
-// suffix rather than exact path.
-func isHealthPath(p string) bool {
-	return strings.HasSuffix(p, "/api/v1/health") ||
-		strings.HasSuffix(p, "/api/v2/healthz") ||
-		strings.HasSuffix(p, "/api/v2/readyz") ||
-		strings.HasSuffix(p, "/api/v2/livez")
-}
-
-// isErrorIngestPath reports whether r is a Sentry error-ingest WRITE that the o11y
-// handler authenticates itself with a DSN key (not a Hanzo principal): POST to
-// /v1/o11y/api/<project>/envelope/ or /v1/o11y/api/<project>/store/. The <project>
-// segment varies, so it matches by method + prefix + suffix — NEVER a bare prefix —
-// so the o11y read APIs under /v1/o11y/api/vN/… and the Issues list/detail stay
-// principal-gated. Byte-for-byte the gateway's isErrorIngestPath (auth_middleware.go):
-// the two allowlists MUST agree so the tokenless ingest that the gateway lets through
-// is not then 403'd here. The trailing slash is the Sentry protocol form; the
-// slash-less variant is tolerated defensively.
-func isErrorIngestPath(method, path string) bool {
-	if method != http.MethodPost {
-		return false
-	}
-	if !strings.HasPrefix(path, "/v1/o11y/api/") {
-		return false
-	}
-	return strings.HasSuffix(path, "/envelope/") || strings.HasSuffix(path, "/envelope") ||
-		strings.HasSuffix(path, "/store/") || strings.HasSuffix(path, "/store")
-}
+// The three predicates that used to live here — isHealthPath, isErrorIngestPath
+// and isSentryIngestPath — are gone. They were this repo's copy of hanzoai/o11y's
+// route table, and isHealthPath had already drifted into naming four paths that
+// no longer existed, which is what closed the unified door. The answer comes from
+// the module now: o11y.Anonymous covers all three families, and o11y.IngestWire
+// is the DSN-wire term the edge needs to match byte-for-byte.
+//
+// That agreement is still load-bearing. The gateway waives its JWT check on the
+// ingest wires, so a request it lets through tokenless must not then be refused
+// here for having no token; both sides read the same predicate now instead of
+// two lists that agreed only by inspection. The three answers are still how you
+// tell the hops apart if this regresses: a keyless POST to
+// /v1/sentry/<uuid>/envelope/ answers 401 "invalid ingest key" (text/plain, from
+// the ingest verifier) — NOT 404 (unrouted), and NOT the 403
+// {"status":"error","msg":"no validated principal"} the READ paths return.
 
 // runtimeHandler is the gated o11y runtime handler (the in-process runtime, or the
 // reverse-proxy fallback) — the SAME handler the hanzoai/o11y wildcard delegates to
@@ -486,7 +507,7 @@ func mountRuntime(deps cloud.Deps) error {
 // gated runtime handler (resolved PER-REQUEST, so it is in place by first request —
 // same discipline as the o11y wildcard). No path rewrite: the Sentry routes are
 // literal /v1/sentry/… in the runtime. The DSN-ingest routes are principal-gate-exempt
-// (isSentryIngestPath); the reads stay gated.
+// (o11y.IngestWire); the reads stay gated.
 func mountSentry(a cloud.Router) {
 	a.All("/v1/sentry/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := runtimeHandler
@@ -508,7 +529,7 @@ func eventToRuntimePath(method, path string) (string, bool) {
 		return "", false
 	}
 	mapped := "/v1/sentry/" + rest
-	return mapped, isSentryIngestPath(method, mapped)
+	return mapped, o11y.IngestWire(method, mapped)
 }
 
 // mountO11y is the ONE mount for the whole observability concept. It performs the
@@ -523,7 +544,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// read the caller asserted for itself. fiber runs middleware in registration
 	// order, so this must precede every leaf below.
 	//
-	// It has to be installed HERE, not only by cloud.Serve, because o11y runs as
+	// It has to be installed HERE, not only by cloud.Listen, because o11y runs as
 	// its OWN process (plugin/o11y/main.go builds a bare zip.App and mounts this).
 	// The host's app-wide Bridge parks the org on a context in the HOST; the
 	// request crosses to this process as headers, so without this install every
@@ -548,7 +569,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	}
 	// Hanzo Sentry product face /v1/sentry/* — the SIBLING of the /v1/o11y wildcard,
 	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentry
-	// routes; the DSN-ingest routes are gate-exempt via isSentryIngestPath). One
+	// routes; the DSN-ingest routes are gate-exempt via o11y.IngestWire). One
 	// runtime, two path families.
 	//
 	// Registering it here is necessary but NOT sufficient — the subtree has to be
@@ -565,20 +586,10 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// runtime routes BEFORE the principal gate sees the path, so the existing
 	// ingest exemption stays the only exemption. No /api/ segment anywhere:
 	// /v1/ is the only prefix this platform speaks.
-	cloud.SetObsErrorIngest(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mapped, ok := eventToRuntimePath(r.Method, r.URL.Path)
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		h := runtimeHandler
-		if h == nil {
-			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
-			return
-		}
-		r.URL.Path = mapped
-		h.ServeHTTP(w, r)
-	}))
+	// Both obs claims on the ONE event door are published as PLANE OPS
+	// (obs_rpc.go): analytics owns the route, this process owns the sink and the
+	// runtime, and a package global cannot cross between two processes.
+	exposeObs()
 	// WRITE plane — order-independent (no /v1/o11y/* Fiber route): the ZAP
 	// span+log receivers and the opt-in in-process trace sink, all writing
 	// event.span / event.log (planesink.go).
@@ -605,7 +616,12 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// the observability plane is ONE `o11y` subsystem. /v1/o11y/health is unaffected:
 	// it stays the generic always-ok route (the o11y Wire entry keeps OwnsHealth=false),
 	// registered before MountAll and thus ahead of this wildcard.
-	if err := o11y.Mount(a, deps); err != nil {
+	// Mount takes the router and nothing else: a route table is a value, and the
+	// router it registers into already carries this deployment's logger. It used
+	// to take Deps for that one field, which made github.com/hanzoai/o11y require
+	// github.com/hanzoai/cloud — a module cycle, and the reason o11y's own
+	// community binary could not link its own route declarations.
+	if err := o11y.Mount(a); err != nil {
 		return err
 	}
 	return nil

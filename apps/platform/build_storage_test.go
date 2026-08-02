@@ -168,3 +168,35 @@ func TestBuildPodCanReachTheObjectStore(t *testing.T) {
 		t.Errorf("job labels are %v; countActiveBuilds selects on hanzo.ai/build + hanzo.ai/org", j)
 	}
 }
+
+// The buildkitd emptyDir must be capped. It is charged to the NODE's ephemeral
+// storage, so an uncapped one lets a single runaway build fill the node rootfs
+// and trip DiskPressure — and the kubelet's answer to that is to evict every pod
+// on the node, not the build that caused it. This is not hypothetical: three of
+// eight runners sat under DiskPressure with 70 finished build Jobs still holding
+// their pods and emptyDirs, and a release was Evicted mid-flight for
+// "node was low on resource: ephemeral-storage".
+func TestBuildCacheIsCapped(t *testing.T) {
+	k := fakeK8s()
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+
+	vols, _, err := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "volumes")
+	if err != nil {
+		t.Fatalf("volumes: %v", err)
+	}
+	for _, v := range vols {
+		m, ok := v.(map[string]any)
+		if !ok || m["name"] != "buildkitd" {
+			continue
+		}
+		ed, ok := m["emptyDir"].(map[string]any)
+		if !ok {
+			t.Fatalf("buildkitd volume is not an emptyDir: %v", m)
+		}
+		if ed["sizeLimit"] != buildCacheLimit {
+			t.Fatalf("buildkitd emptyDir sizeLimit is %v, want %q — uncapped, one build evicts the whole node", ed["sizeLimit"], buildCacheLimit)
+		}
+		return
+	}
+	t.Fatal("no buildkitd volume in the build Job")
+}

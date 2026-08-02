@@ -59,3 +59,4 @@ __pycache__/
 node_modules/
 **/node_modules/
 native/flags/target/
+tools

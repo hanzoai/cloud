@@ -16,7 +16,7 @@
 //	that data is a DIFFERENT product (the console-worker's Datastore tables). So this
 //	file adds the MISSING write path — not as its own route: POST /v1/event is
 //	the ONE event door (apps/analytics owns it), and this plane installs a
-//	cloud.SetObsEventIngest claim that takes the bodies which ARE LLM-obs
+//	plane op (obs_event_claim) that takes the bodies which ARE LLM-obs
 //	ingestion batches and declines the rest. The Sentry wire is
 //	/v1/event/error — see o11y.go mountEventFamily.
 //
@@ -202,8 +202,13 @@ func blobThreshold() int {
 // flush/close it, mirroring embed.go's embeddedRuntime and planesink.go's embeddedPlaneSink.
 var eventIngestSink eventSink
 
+// eventIngestLog is the sink's logger, kept so the plane op (obs_rpc.go) can
+// build the same ingestOps the HTTP path uses.
+var eventIngestLog luxlog.Logger
+
 // mountEventIngest installs the LLM-obs claim on the ONE event door
-// (cloud.SetObsEventIngest; the door itself is analytics' POST /v1/event).
+// (published as the plane op obs_event_claim, obs_rpc.go; the door itself is
+// analytics' POST /v1/event, in another process).
 // Called by mountO11y (o11y.go) inside the one order-69 `o11y` mount. No feature flag: it mounts whenever its Datastore dependency is
 // available. Fail-soft at every branch — a missing DSN or a Datastore construction
 // error logs and returns nil, leaving the write path unmounted (the retired
@@ -223,14 +228,12 @@ func mountEventIngest(a cloud.Router, deps cloud.Deps) error {
 		return nil // fail-soft
 	}
 	eventIngestSink = sink
-
-	o := ingestOps{sink: sink, threshold: blobThreshold(), log: log}
-	cloud.SetObsEventIngest(o.claim)
+	eventIngestLog = log
 
 	if cloud.EmbeddedTasks() != nil {
 		log.Info("o11y event ingest: durable engine present; flush runs inline, durable Activity hand-off is the next reviewed step")
 	}
-	log.Info("o11y event ingest live", "door", "POST /v1/event (claimed batches)", "sink", "datastore:traces/observations/scores", "blobBytes", blobThreshold())
+	log.Info("o11y event ingest live", "door", "POST /v1/event via plane op obs_event_claim", "sink", "datastore:traces/observations/scores", "blobBytes", blobThreshold())
 	return nil
 }
 
@@ -261,7 +264,7 @@ func obsBatchOf(body []byte) ([]o11yEvent, bool) {
 	return b.Batch, true
 }
 
-// claim is the installed cloud.ObsEventIngestFunc: first refusal on every
+// claim backs the plane op obs_event_claim: first refusal on every
 // authenticated POST /v1/event body. org is the door's server-resolved tenant.
 func (o ingestOps) claim(ctx context.Context, org string, body []byte) (accepted, dropped int, claimed bool, err error) {
 	events, ok := obsBatchOf(body)
@@ -332,7 +335,16 @@ func (s *datastoreSink) Insert(ctx context.Context, table string, columns []stri
 			return fmt.Errorf("append row: %w", err)
 		}
 	}
-	return batch.Send()
+	if err := batch.Send(); err != nil {
+		return err
+	}
+	// Rows are counted HERE — the one choke point every plane row passes
+	// through (spans, logs, traces, observations, scores) — and only after Send
+	// returns, so the count is rows that LANDED, not rows that were offered.
+	// event.span going to zero here is the signal that was missing for four and
+	// a half months.
+	cloud.ObserveRows(table, len(rows))
+	return nil
 }
 
 // Close releases the native connection.

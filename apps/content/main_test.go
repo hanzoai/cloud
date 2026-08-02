@@ -1,22 +1,5 @@
 package content
 
-import (
-	"crypto/rand"
-	"os"
-	"testing"
-
-	"github.com/hanzoai/cloud/cek"
-)
-
-// TestMain seeds a random cek master key so the framework store (opened by
-// framework.Mount inside these tests) opens on an encryption-capable test build
-// (mirrors clients/compliance, integrations, flags, git, venue). On a pure-Go build
-// cek ignores it and uses the plaintext dev path.
-func TestMain(m *testing.M) {
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		panic(err)
-	}
-	cek.SetMasterKey(k)
-	os.Exit(m.Run())
-}
+// devmaster keys this test binary: cek opens nothing without a master and a test
+// process has no KMS.
+import _ "github.com/hanzoai/cloud/internal/devmaster"

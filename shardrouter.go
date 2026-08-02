@@ -51,6 +51,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/ha"
+	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
@@ -143,11 +144,11 @@ func (r *shardRouter) peerIDs() []string {
 func (r *shardRouter) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
 		// Hash on the SAME injective slug the on-disk path uses (cloud.OrgDB folds
-		// every org file through SanitizeOrg). Routing key ≡ file-shard key, so "the
+		// every org file through namespace.Sanitize). Routing key ≡ file-shard key, so "the
 		// pod that owns slug S writes exactly orgs/S/*" — the tightest binding to the
-		// invariant. An org SanitizeOrg refuses (→ "") cannot open a file at all; it
+		// invariant. An org namespace.Sanitize refuses (→ "") cannot open a file at all; it
 		// is served locally and fails closed at the store layer, never misrouted.
-		slug := SanitizeOrg(strings.TrimSpace(c.Header("X-Org-Id")))
+		slug := namespace.Sanitize(strings.TrimSpace(c.Header("X-Org-Id")))
 		if slug == "" {
 			return c.Continue()
 		}

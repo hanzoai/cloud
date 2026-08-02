@@ -23,7 +23,11 @@ func (k *fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("kms: secret not found: %s", ref)
 }
-func (k *fakeKMS) PutSecret(context.Context, string, []byte) error      { return nil }
+func (k *fakeKMS) PutSecret(context.Context, string, []byte) error { return nil }
+func (k *fakeKMS) DeleteSecret(_ context.Context, ref string) error {
+	delete(k.secrets, ref)
+	return nil
+}
 func (k *fakeKMS) Sign(context.Context, string, []byte) ([]byte, error) { return nil, nil }
 
 func TestKMSRefConvention(t *testing.T) {

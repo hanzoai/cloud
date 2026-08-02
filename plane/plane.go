@@ -62,7 +62,7 @@ const (
 	IAMMailable = "iam_mailable"
 
 	GitFiles   = "git_files"
-	GitImport = "git_import"
+	GitImport  = "git_import"
 	GitInbound = "git_inbound"
 	GitPublish = "git_publish"
 
@@ -94,6 +94,14 @@ const (
 	// cannot see integrations' in-memory `mounted` token map, so it asks the
 	// process that owns it, over the socket, exactly like a debit asks commerce.
 	IntegrationsSlackSend = "integrations_slack_send"
+
+	// The observability plane's two claims on the ONE event door. analytics owns
+	// POST /v1/event and its subtree, but the o11y PROCESS owns the LLM-obs sink
+	// and the Sentry runtime — so the door asks over the socket rather than
+	// through a package global, which a peer process reads as nil (the 503
+	// "error ingest not initialized" that this replaces).
+	ObsEventClaim = "obs_event_claim" // offer a /v1/event body to the LLM-obs sink
+	ObsErrorPost  = "obs_error_post"  // the Sentry envelope/store wire
 
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
@@ -542,6 +550,57 @@ type Payee struct {
 }
 
 // ---- finance.credit — the payee side of a settlement -----------------------
+
+// ObsClaimIn offers ONE authenticated /v1/event body to the observability sink.
+// The ORG is the door's server-resolved tenant. Claimed=false means "not mine —
+// let the product wire have it", so a nil/absent o11y must never claim.
+type ObsClaimIn struct {
+	Org  string `json:"org" validate:"required"`
+	Body []byte `json:"body"`
+}
+
+// ObsClaimed reports what the sink did with the body it was offered.
+type ObsClaimed struct {
+	Accepted int  `json:"accepted"`
+	Dropped  int  `json:"dropped"`
+	Claimed  bool `json:"claimed"`
+}
+
+// ObsErrorIn carries one Sentry-wire request across the plane. The DSN key rides
+// the headers or the query, and the runtime authenticates it itself — there is no
+// Hanzo principal on this path by design, which is why the whole request has to
+// travel rather than just a tenant.
+type ObsErrorIn struct {
+	Path    string   `json:"path" validate:"required"`
+	Query   string   `json:"query,omitempty"`
+	Headers []Header `json:"headers,omitempty"`
+	Body    []byte   `json:"body,omitempty"`
+}
+
+// Header is one request header, as a LIST element rather than a map entry.
+//
+// A map cannot cross this plane at all: zapenc carries scalars, strings, byte
+// slices, structs, pointers and slices, and refuses anything else AT ENCODE so a
+// field can never silently fail to arrive. Headers was a map[string]string, so
+// every ObsErrorPost call failed inside zip.Call before it reached the socket —
+// the Sentry envelope door answered 503 "error ingest unavailable" in dur_ms=0,
+// for 24h+, with the peer up and the op registered. Its sibling op on the same
+// socket (ObsClaimIn: two scalar fields) kept working throughout, which is
+// exactly why POST /v1/event stayed 200 and only the envelope was dead.
+//
+// A slice of structs is the shape zapenc already carries — one complete ZAP
+// message per element — so the list is not a workaround, it is the wire.
+type Header struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// ObsErrorOut is the runtime's answer, relayed verbatim so a 401 stays a 401.
+type ObsErrorOut struct {
+	Status      int    `json:"status"`
+	ContentType string `json:"contentType,omitempty"`
+	Body        []byte `json:"body,omitempty"`
+}
 
 // SlackSendIn posts one message to an org's Slack channel. The ORG is the
 // CALLER's (read from the plane context, never an argument): it selects which

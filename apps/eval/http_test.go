@@ -21,7 +21,7 @@ import (
 // (no datastore in unit tests) but uses the SAME handlers, store, and validation.
 func mountApp(t *testing.T) (*zip.App, *service) {
 	t.Helper()
-	store, err := openStore(t.TempDir() + "/evals.db")
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

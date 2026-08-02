@@ -3,7 +3,6 @@ package agents
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStoreAt(filepath.Join(t.TempDir(), "agents.db"))
+	s, err := openStoreAt(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

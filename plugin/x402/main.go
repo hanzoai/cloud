@@ -16,7 +16,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `x402 openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "x402",
 		Price:    cloud.Free,
 		Mount:    x402.Mount,

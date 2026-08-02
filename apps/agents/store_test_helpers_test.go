@@ -4,20 +4,26 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 )
 
-// openStoreAt opens an agents store at an explicit path, standing in for what
-// cloud.OrgDB does for a real per-org file: open through cek, then hand the
-// *sql.DB to openStore for migration. Only the migration tests care WHERE the
+// openStoreAt opens the agents store under an explicit dir, standing in for what
+// cloud.OrgDB does for a real per-org file: open the named database, then hand
+// the *sql.DB to openStore for migration. Only the migration tests care WHERE the
 // file is; everything else wants testStore.
-func openStoreAt(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStoreAt(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), legacySubsystem, dir)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	st, err := openStore(db)
 	if err != nil {
 		_ = db.Close()
@@ -26,25 +32,25 @@ func openStoreAt(path string) (*Store, error) {
 	return st, nil
 }
 
-// rawAt opens the file behind a store path without the agents schema, for tests
-// that plant a legacy table or read one back.
-func rawAt(t *testing.T, path string) *sql.DB {
+// rawAt opens the database behind a store dir without the agents schema, for
+// tests that plant a legacy table or read one back.
+func rawAt(t *testing.T, dir string) *sql.DB {
 	t.Helper()
-	db, err := cek.Open(cek.Global, path)
+	db, err := cek.Open(namespace.System(), legacySubsystem, dir)
 	if err != nil {
-		t.Fatalf("open raw %s: %v", path, err)
+		t.Fatalf("open raw %s: %v", dir, err)
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	return db
 }
 
 // testStores is the per-org store set Mount builds, over a throwaway data dir.
 // A test that reaches storage through it exercises the REAL resolution path
-// (org → SanitizeOrg → file → cek), not a hand-placed handle, so an isolation
+// (org → namespace → file → key), not a hand-placed handle, so an isolation
 // assertion is a statement about the shipped code.
 func testStores(t *testing.T) *cloud.OrgStore[*Store] {
 	t.Helper()
-	c := cloud.NewOrgStore[*Store](t.TempDir(), "agents", openStore)
+	c := cloud.NewOrgStore[*Store](cloud.Base{DataDir: t.TempDir()}, "agents", openStore)
 	t.Cleanup(func() { _ = c.CloseAll() })
 	return c
 }
