@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestEnsureUsageRollup_OrderAndLatch: the base ledger is ensured first, then the
@@ -66,6 +67,72 @@ func TestBackfill_BindsCutoffNotInterpolated(t *testing.T) {
 	}
 	if len(last.args) != 1 || last.args[0] != "2026-07-01 00:00:00" {
 		t.Fatalf("cutoff must be exactly one bound arg: %v", last.args)
+	}
+}
+
+// TestBackfill_SnapsCutoffToDay: the seed selects the ledger by `timestamp` and the
+// guard counts the rollup by `day`, so a mid-day bound would seed a partial day the
+// guard cannot see. Both are snapped to UTC midnight.
+func TestBackfill_SnapsCutoffToDay(t *testing.T) {
+	var last dsCall
+	oe, oet := execDatastore, ensureUsageTable
+	execDatastore = func(_ context.Context, stmt string, args ...any) error { last = dsCall{stmt, args}; return nil }
+	ensureUsageTable = func(context.Context) error { return nil }
+	rollupReady.Store(false)
+	t.Cleanup(func() { execDatastore, ensureUsageTable = oe, oet; rollupReady.Store(false) })
+
+	noon := day(2026, 7, 28).Add(12*time.Hour + 34*time.Minute)
+	if err := BackfillUsageRollup(context.Background(), noon); err != nil {
+		t.Fatal(err)
+	}
+	if last.args[0] != "2026-07-28 00:00:00" {
+		t.Fatalf("cutoff must snap to UTC midnight, got %v", last.args[0])
+	}
+}
+
+// TestBackfill_GuardIsScopedToTheSeedRange pins the defect that made the seed
+// unrunnable: EnsureUsageRollup creates the incremental view on the first read, the
+// view starts capturing immediately, and a guard that counted the WHOLE table then
+// saw rows forever — so every non-forced seed answered 409 and pre-view history was
+// never laid down (the live rollup held 2.7% of the ledger). The guard must count
+// only the days the seed would write.
+func TestBackfill_GuardIsScopedToTheSeedRange(t *testing.T) {
+	// A rollup in exactly the state the live view leaves it: rows from the day the
+	// view was created onward, nothing before.
+	const viewLiveFrom = "2026-07-28"
+	f := installFakeDS(t, func(sql string, args []any) []map[string]any {
+		if !strings.Contains(sql, "SELECT count() AS n FROM "+rollupTable) {
+			return nil
+		}
+		if len(args) == 1 && args[0].(string) <= viewLiveFrom {
+			return []map[string]any{{"n": uint64(0)}} // nothing seeded in that range yet
+		}
+		return []map[string]any{{"n": uint64(42)}} // unscoped count, or a later cutoff
+	})
+	app := mountApp(t)
+	super := withHeader(principalHeaders("admin", "root"), "X-User-IsAdmin", "true")
+
+	code, body := doJSON(t, app, "POST", "/v1/usage/rollup/backfill?before="+viewLiveFrom+"T00:00:00Z", super, nil)
+	if code != 200 {
+		t.Fatalf("seeding days the live view never captured must be allowed, got %d: %s", code, body)
+	}
+	// It asked the range question, not the whole-table one.
+	var asked bool
+	for _, c := range f.allCalls() {
+		if strings.Contains(c.sql, "SELECT count() AS n FROM "+rollupTable) {
+			asked = true
+			if !strings.Contains(c.sql, "WHERE day < toDate(?)") {
+				t.Fatalf("guard must be scoped to the seed range: %s", c.sql)
+			}
+		}
+	}
+	if !asked {
+		t.Fatal("guard never ran")
+	}
+	// Re-seeding the same range still refuses — the double-count guard is intact.
+	code, _ = doJSON(t, app, "POST", "/v1/usage/rollup/backfill?before=2026-08-01T00:00:00Z", super, nil)
+	if code != 409 {
+		t.Fatalf("re-seeding covered days must be 409, got %d", code)
 	}
 }
 
