@@ -1188,6 +1188,11 @@ func tick(s *stateService, now time.Time) {
 // connection and every decision for that tenant queues behind whatever this
 // holds.
 func watch(ctx context.Context, s *stateService, t Tenant, db *sql.DB, now time.Time) error {
+	// The registry first, because everything below reads it: a version this
+	// deployment cannot still be estimating must stop saying that it is.
+	if err := abandoned(ctx, s, t, db, now); err != nil {
+		return err
+	}
 	sched, err := getSchedule(db)
 	if err != nil {
 		return err
@@ -1231,6 +1236,72 @@ func watch(ctx context.Context, s *stateService, t Tenant, db *sql.DB, now time.
 			"tenant", t.String(), "acked", acked, "err", err)
 	}
 	return nil
+}
+
+// abandonBudget is how long a version may sit unfinished before the registry
+// stops believing in it. The bench bounds a job end to end at benchDeadline, so
+// a row older than that ceiling plus one walk is held by nobody.
+const abandonBudget = benchDeadline + lifecycleEvery
+
+// abandoned settles the versions this deployment cannot still be estimating.
+//
+// THE BENCH IS IN MEMORY AND THE REGISTRY IS ON DISK. cloud deploys Recreate at
+// one replica, so every rollout drops the queue and keeps the rows, and a row
+// left at queued or fitting then says a version is being estimated for the rest
+// of that file's life: /v1/ml/fits reports work nobody is doing, with an empty
+// refusal exactly where the reason belongs. A record that may not be wrong about
+// the past may not be wrong about the present either.
+//
+// THE RULE NEEDS NO BOOKKEEPING TO BE SAFE. A job is bounded end to end by
+// benchDeadline, so a row older than that ceiling cannot be one this process is
+// running — whatever the bench holds now is younger than it. The bench is asked
+// anyway, so a runner that is somehow still there keeps its own row rather than
+// finding it settled underneath it.
+//
+// It settles to CANCELLED and not to refused: refused is a measurement's own
+// answer — too few rows, a degenerate split — and this is the absence of an
+// answer. Two words for two different facts.
+func abandoned(ctx context.Context, s *stateService, t Tenant, db *sql.DB, now time.Time) error {
+	open, err := unfinishedFits(ctx, db)
+	if err != nil {
+		return err
+	}
+	live, _ := s.State.bench.running(t, kindFit)
+	for _, r := range open {
+		if r.ID == live || now.Sub(r.At) < abandonBudget {
+			continue
+		}
+		if err := markFit(db, r.ID, fitCancelled,
+			"the process estimating this version stopped before it finished, and nothing is estimating it now"); err != nil {
+			return err
+		}
+		s.Log.Warn("risk: a version was left unfinished by a process that is gone",
+			"tenant", t.String(), "fit", r.ID, "was", r.Status)
+	}
+	return nil
+}
+
+// unfinishedFits lists the versions the registry still calls queued or fitting.
+// There are at most a handful — one per process that stopped mid-estimation —
+// and their ages are compared in Go rather than in the statement because `at` is
+// stored as RFC3339Nano, whose trailing zeros are trimmed: comparing those as
+// strings orders .12345 after .123456789.
+func unfinishedFits(ctx context.Context, db *sql.DB) ([]fitRow, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT `+fitColumns+` FROM fit WHERE status IN (?, ?)`, fitQueued, fitFitting)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []fitRow
+	for rows.Next() {
+		r, err := scanFit(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // ── enqueue: the one path a fit is created by ───────────────────────────────
@@ -1333,12 +1404,35 @@ func checkShape(c candidate) error {
 	return nil
 }
 
+// shipBudget bounds a background writer's own ship. The object-store round trip
+// is already bounded inside cloud.OrgStore; this is the outer bound on the wait
+// for a berth, so a runner cannot be parked behind other tenants' ships for
+// longer than the walk that would have retried it anyway.
+const shipBudget = time.Minute
+
 // run is the estimation, off the request path.
 //
 // Every exit writes the row. A fit that stops without saying why is worse than
 // one that failed: the queue looks busy, the registry looks patient, and nobody
 // learns that the model stopped being re-estimated three weeks ago.
+//
+// AND EVERY EXIT SHIPS IT. What this settles — a sealed version, a refusal, the
+// enrolment that puts it on trial — is written by a goroutine no request is
+// waiting on, minutes after the walk that queued it returned. Nothing else is
+// going to ship it, and a version that is sealed only on a pod's disk comes back
+// from an ungraceful termination as one the registry still calls fitting. The
+// ship takes a context of its own because the estimation's may already be
+// cancelled, and a cancelled version's refusal is precisely the record that has
+// to survive.
 func run(ctx context.Context, s *stateService, t Tenant, db *sql.DB, r fitRow, rows int, land string) {
+	defer func() {
+		out, stop := context.WithTimeout(context.WithoutCancel(ctx), shipBudget)
+		defer stop()
+		if acked, err := s.State.shelf.ship(out, t, db); err != nil || !acked {
+			s.Log.Warn("risk: an estimation's outcome was not shipped; the next tick retries",
+				"tenant", t.String(), "fit", r.ID, "acked", acked, "err", err)
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		_ = markFit(db, r.ID, fitCancelled, "cancelled before it began")
 		return

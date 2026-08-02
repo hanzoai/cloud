@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1254,4 +1255,140 @@ func TestResidencyIsReadUnderTheLock(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestAVersionNobodyIsEstimatingIsSettled: the bench is IN MEMORY and the
+// registry is on disk, so a rollout during an estimation leaves a row that says
+// a version is being fitted by a process that no longer exists — forever, with
+// an empty refusal where the reason belongs. /v1/ml/fits then reports work
+// nobody is doing.
+//
+// Three cases in one, because the rule is only safe if all three hold: an old
+// unfinished row is settled, a young one is left alone, and the row the bench is
+// actually running is left alone whatever its age.
+func TestAVersionNobodyIsEstimatingIsSettled(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	now := time.Now()
+	put := func(id, status string, at time.Time) {
+		t.Helper()
+		if err := putFit(db, fitRow{ID: id, At: at, By: "test", Algo: algoForest,
+			Shape: quickShape, Role: roleCandidate, Status: fitQueued}); err != nil {
+			t.Fatalf("putFit %s: %v", id, err)
+		}
+		if status != fitQueued {
+			if err := markFit(db, id, status, ""); err != nil {
+				t.Fatalf("markFit %s: %v", id, err)
+			}
+		}
+	}
+	// The rollout's leftovers: one that had reached the bench and one that had
+	// not, both older than any job the bench admits.
+	put("fit-orphan-fitting", fitFitting, now.Add(-2*abandonBudget))
+	put("fit-orphan-queued", fitQueued, now.Add(-2*abandonBudget))
+	// A version queued moments ago, which IS being estimated.
+	put("fit-fresh", fitQueued, now)
+	// And an old one this process is genuinely still running — a wedged runner
+	// must not have its own row settled underneath it.
+	put("fit-held", fitFitting, now.Add(-2*abandonBudget))
+	release := make(chan struct{})
+	if err := s.State.bench.start(tn, kindFit, "fit-held", func(context.Context) { <-release }); err != nil {
+		t.Fatalf("bench.start: %v", err)
+	}
+	defer close(release)
+	waitFor(t, func() bool { id, ok := s.State.bench.running(tn, kindFit); return ok && id == "fit-held" },
+		"the bench to pick the held job up")
+
+	// Through the WALK, not through the settling function directly: the fact
+	// under test is that the registry stops lying, and a registry nothing calls
+	// is still lying.
+	if err := watch(context.Background(), s, tn, db, now); err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+	for _, want := range []struct {
+		id, status string
+	}{
+		{"fit-orphan-fitting", fitCancelled},
+		{"fit-orphan-queued", fitCancelled},
+		{"fit-fresh", fitQueued},
+		{"fit-held", fitFitting},
+	} {
+		r, err := getFit(db, want.id)
+		if err != nil {
+			t.Fatalf("getFit %s: %v", want.id, err)
+		}
+		if r.Status != want.status {
+			t.Fatalf("%s is %q, want %q — the registry is answering %q about a version %s",
+				want.id, r.Status, want.status, r.Status,
+				map[bool]string{true: "nothing is estimating", false: "that is still being estimated"}[want.status == fitCancelled])
+		}
+		if want.status == fitCancelled && r.Refusal == "" {
+			t.Fatalf("%s was settled with an empty refusal; nobody can tell it apart from a version "+
+				"that was cancelled on purpose", want.id)
+		}
+	}
+}
+
+// TestAnEstimationShipsWhatItSettled: an estimation runs minutes after the walk
+// that queued it returned, in a goroutine no request is waiting on. What it
+// writes — the sealed version, its learned state, the refusal, the enrolment
+// that puts it on trial — is therefore shipped by nobody, and comes back from an
+// ungraceful termination as a version the registry still calls fitting.
+func TestAnEstimationShipsWhatItSettled(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	ground(t, s, tn, db, time.Now().AddDate(0, 0, -300), 900, 1, 0)
+
+	// The walk's own ship first, so what is counted below is the estimation's
+	// and not the tick's.
+	if err := watch(context.Background(), s, tn, db, time.Now()); err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+	var after atomic.Int64
+	var sealed atomic.Bool
+	s.State.shelf.pier.ship = func(got Tenant) (bool, error) {
+		if got != tn {
+			t.Errorf("shipped %q, want %q", got, tn)
+		}
+		after.Add(1)
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM fit WHERE status = ?`, fitReady).Scan(&n); err != nil {
+			return false, err
+		}
+		if n > 0 {
+			sealed.Store(true)
+		}
+		return true, nil
+	}
+
+	sc := scope{tenant: tn, org: tn.org()}
+	id, err := enqueue(context.Background(), s, sc, db, "test", roleChallenger,
+		mlFitIn{Algo: algoForest, Horizon: 30, Window: 400, Rows: fitRows}, time.Now())
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	if got := settle(t, s, tn); got != id {
+		t.Fatalf("the bench settled %q, want %q", got, id)
+	}
+	r, err := getFit(db, id)
+	if err != nil {
+		t.Fatalf("getFit: %v", err)
+	}
+	if r.Status != fitReady {
+		t.Fatalf("the estimation is %s: %s", r.Status, r.Refusal)
+	}
+	waitFor(t, func() bool { return after.Load() > 0 },
+		"the estimation to ship the version it sealed")
+	if !sealed.Load() {
+		t.Fatal("the estimation shipped before it sealed anything, so what reached the durable object " +
+			"does not contain the version the registry now reports")
+	}
 }
