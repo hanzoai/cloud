@@ -7,14 +7,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	sqlitedrv "github.com/hanzoai/sqlite"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -137,23 +138,11 @@ func (g *fakeGitHub) fetchFile(_ context.Context, _, owner, repo, branch, path s
 	return g.files[owner+"/"+repo+"@"+branch+"/"+path], nil
 }
 
-// TestMain makes this store-backed suite build-tag agnostic, exactly as the root
-// package's main_test.go does: an encryption-capable build refuses to open the data
-// plane without a master key, a pure-Go build refuses a key at all. Supply a throwaway
-// dev key ONLY when the build can encrypt and the environment did not already provide
-// one, so CI's real key is never overridden.
-func TestMain(m *testing.M) {
-	if sqlitedrv.EncryptionAvailable() && os.Getenv("CLOUD_KMS_MASTER_KEY_REF") == "" {
-		_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=") // 32 zero bytes, dev-only
-	}
-	os.Exit(m.Run())
-}
-
 // mount builds an authors app backed by a fresh store + injected fakes, returning the
 // app, the service, and the fakes for assertions.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeGitHub) {
 	t.Helper()
-	store, err := openStore(t.TempDir() + "/authors.db")
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

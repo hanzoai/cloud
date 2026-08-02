@@ -12,7 +12,6 @@ import (
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/openapi"
@@ -65,11 +64,9 @@ import (
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
 
-	// Credentials, before anything opens a store. cek memoizes the resolved master
-	// on the FIRST use, and the first use is edge.New at the bottom of this
-	// function — so a key installed any later is installed after the once has
-	// already cached "no key", and every subsequent open fails while the log
-	// cheerfully reports a key was active. That was the bug. Boot is
+	// Credentials, before anything opens a store. The first open is edge.New at the
+	// bottom of this function, and an open with no master installed fails — so a key
+	// installed any later is installed after the store that needed it. Boot is
 	// sync.Once-guarded and Serve calls it earlier still; this call is what covers
 	// every caller that builds deps directly.
 	logCredz(logger, credz.Boot(DataDir()))
@@ -858,10 +855,10 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []
 	_ = members.Start(context.Background()) // initial refresh populates Members() before first request
 
 	cipher := durableCipher(cfg, log)
-	if cipher == nil && cek.Encrypting() {
-		// The master that satisfied cek must decode here too, so this is a genuine
-		// misconfig, not a dev path: never ship plaintext snapshots AND never silently
-		// drop durability — fail closed and log LOUDLY for the replica count.
+	if cipher == nil && sqlitedrv.EncryptionAvailable() {
+		// The master that keys the local file must decode here too, so this is a
+		// genuine misconfig, not a dev path: never ship plaintext snapshots AND never
+		// silently drop durability — fail closed and log LOUDLY for the replica count.
 		disabledDurability(log, multiReplica, "encryption-capable build but no durable cipher (would ship plaintext snapshots)")
 		return nil, nil
 	}

@@ -52,9 +52,9 @@ type childView struct {
 func TestMain(m *testing.M) {
 	// The PARENT is the broker, so it boots the way the live broker does: the root
 	// key in its own environment, taken by credz.Boot into cek before any store
-	// opens. Here rather than in the test body because cek memoizes on the first
-	// open and other tests in this package open stores too — TestMain is the only
-	// point that is guaranteed to be first.
+	// opens. Here rather than in the test body because other tests in this package
+	// open stores too, and a store opened before the master is installed fails —
+	// TestMain is the only point guaranteed to be first.
 	if os.Getenv(bootInEnv) == "" {
 		_ = os.Setenv(credz.RootEnv, base64.StdEncoding.EncodeToString(testMaster))
 		credz.Boot(os.TempDir())

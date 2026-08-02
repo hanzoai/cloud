@@ -2,7 +2,6 @@ package platform
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/blueprint"
@@ -24,7 +23,7 @@ type capturedDebit struct {
 
 func newMeterHarness(t *testing.T) *meterHarness {
 	t.Helper()
-	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

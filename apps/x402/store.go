@@ -14,7 +14,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -35,10 +36,10 @@ type Settlement struct {
 
 type store struct{ db *sql.DB }
 
-func openStore(path string) (*store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*store, error) {
+	db, err := basedb.Open(namespace.System(), "x402", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open x402 store: %w", err)
 	}
 	db.SetMaxOpenConns(1) // serialize writes — one file, one writer
 	for _, pragma := range []string{

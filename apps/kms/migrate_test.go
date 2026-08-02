@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 	luxlog "github.com/luxfi/log"
 	zapdb "github.com/luxfi/zapdb"

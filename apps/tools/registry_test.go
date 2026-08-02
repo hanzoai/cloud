@@ -27,7 +27,7 @@ func (f *fakeProvider) Dispatch(_ context.Context, _ Principal, name string, _ m
 func freshRegistry(t *testing.T) *Registry {
 	t.Helper()
 	r := NewRegistry()
-	act, err := OpenActivationStore(t.TempDir() + "/act.db")
+	act, err := OpenActivationStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenActivationStore: %v", err)
 	}

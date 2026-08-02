@@ -12,15 +12,20 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
+	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // mount builds a treasury app on a fresh store and installs it as the process
 // singleton (so the Reserve helper resolves it), cleaning both up.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
-	store, err := sqlstore.Open(t.TempDir() + "/treasury.db")
+	store, err := sqlstore.Open(namespace.System(), "treasury", t.TempDir())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

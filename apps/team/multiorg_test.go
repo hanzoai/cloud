@@ -417,7 +417,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 	}))
 	defer iamSrv.Close()
 
-	store, err := openAccountStore(t.TempDir() + "/account.db")
+	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +486,7 @@ func TestSendInviteRequiresAdmin(t *testing.T) {
 	}))
 	defer iamSrv.Close()
 
-	store, err := openAccountStore(t.TempDir() + "/account.db")
+	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +545,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 	}))
 	defer iamSrv.Close()
 
-	store, err := openAccountStore(t.TempDir() + "/account.db")
+	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -73,7 +73,7 @@ const (
 
 // The reserved store the platform switches evaluate from.
 //
-// This is a REAL org namespace named "platform", not cloud.PlatformNamespace().
+// This is a REAL org namespace named "platform", not namespace.System().
 // The system namespace is the right name for it and would make it unsquattable
 // by a tenant who registers that org, but it renders to a different file, and
 // moving a live store is a migration rather than a rename. Left as it is,

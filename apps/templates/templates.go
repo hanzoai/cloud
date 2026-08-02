@@ -49,8 +49,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -197,10 +195,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if _, err := catalog(); err != nil {
 		return fmt.Errorf("templates.Mount: %w", err)
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("templates.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "templates.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("templates.Mount: open store: %w", err)
 	}
