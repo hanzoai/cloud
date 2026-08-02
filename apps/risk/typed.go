@@ -1308,6 +1308,13 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 
 	digest := o.s.State.model.Digest()
 
+	// THE SHAPE IS FOLDED FROM WHAT ACTUALLY SCORED, not re-read. The rules and
+	// the suppressions above are the values decide just used, so folding them
+	// records the coordinate system this score was taken in — where a second read
+	// could pick up a concurrent write and stamp the row with a shape it was never
+	// scored under.
+	shape := shapeOf(digest, rules, sups, time.Now())
+
 	// GRADE. The calibrated probability, the principal reasons, and what this
 	// organisation's own bands ask for at that probability. It reads the tenant's
 	// own file, exactly as the rules, lists and suppressions above already do —
@@ -1318,30 +1325,32 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	// refusal rather than a number, and the bands then reach nothing. That is the
 	// training-serving skew control, and it degrades to exactly the rule-driven
 	// decision this plane made before there was a calibration.
-	shape, err := scoringShape(db, digest)
-	if err != nil {
-		return nil, err
-	}
 	v := grade(db, shape, obs.stage, out)
 	if v.refusal != "" && out.refusal == "" {
 		out.refusal = v.refusal
 	}
-	// The stronger of the two authorities wins, in one place. A deny-list rule is
-	// this organisation's explicit instruction and must not be talked down by a
-	// low probability; a high probability must not be talked down by quiet
-	// evidence. Shadow is already handled twice over — the ladder answers its own
-	// floor, and decide has already forced allow.
+	// The stronger of the two authorities wins, in one place, with the policy held
+	// to what the evidence can justify. A deny-list rule is this organisation's
+	// explicit instruction and must not be talked down by a low probability; a high
+	// probability must not be talked down by quiet evidence; and neither may reach
+	// a decline the model alone is behind, because the ladder reads a probability
+	// computed from the very score the model's ceiling already capped. Shadow is
+	// handled twice over — the ladder answers its own floor, and decide has already
+	// forced allow.
 	if !out.shadow {
-		out.action = escalate(out.action, v.action)
+		out.action = escalate(out.action, v.action, out)
 	}
 
 	// DURABLE FIRST. The decision is the record; the analytics copy comes after
 	// and is best-effort. Wired the other way, a bus hiccup loses evidence.
 	//
-	// The idempotency key is claimed IN the insert, so a concurrent retry loses
-	// the race at the index rather than after a second decision exists — and the
-	// loser reads back the winner's answer, which is what the key promised.
-	if err := putDecision(db, obs, out, digest, in.Idem); err != nil {
+	// The decision, its grading and the idempotency claim are ONE transaction. The
+	// key is claimed IN the insert, so a concurrent retry loses the race at the
+	// index rather than after a second decision exists and the loser reads back the
+	// winner's answer; and the verdict cannot land without the decision or the
+	// decision without the verdict, so no action is ever served with nothing behind
+	// it.
+	if err := putDecision(db, obs, out, digest, shape, in.Idem, v); err != nil {
 		if errors.Is(err, errIdemTaken) {
 			id, found, ferr := byIdem(db, in.Idem)
 			if ferr != nil || !found {
@@ -1349,14 +1358,6 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 			}
 			return o.decided(db, id)
 		}
-		return nil, err
-	}
-
-	// The verdict lands in the SAME file immediately after the decision it
-	// grades. A decision whose reasons arrived separately could exist without
-	// them, and a decision nobody can say the reason for is the one thing an
-	// adverse-action regime does not allow.
-	if err := putVerdict(db, obs.id, obs.at, v); err != nil {
 		return nil, err
 	}
 
@@ -1431,14 +1432,22 @@ func (o ops) decided(db *sql.DB, id string) (*riskDecision, error) {
 	// so a retry of an idempotent call could come back with different reasons for
 	// the same decision — which is exactly what an idempotency key promises will
 	// not happen.
-	v, _, err := getVerdict(db, id)
+	v, err := graded(db, id)
 	if err != nil {
 		return nil, err
+	}
+	// The decision's own refusal is the one it was recorded with. A grading that
+	// refuses when the row does not is a fact the row cannot carry — an ungraded
+	// decision — and the retry says it rather than answering as if nothing were
+	// missing.
+	refusal := view.Decision.Refusal
+	if refusal == "" {
+		refusal = v.refusal
 	}
 	return &riskDecision{
 		ID: view.Decision.ID, Action: view.Decision.Action, Score: view.Decision.Score,
 		Agency: view.Decision.Agency, Hits: view.Hits, Causes: view.Causes,
-		Shadow: view.Decision.Shadow, Refusal: view.Decision.Refusal, Model: view.Model,
+		Shadow: view.Decision.Shadow, Refusal: refusal, Model: view.Model,
 		Probability: v.probability, Reasons: wireReasons(v.reasons),
 		Policy: v.policy, Calibration: v.calibration,
 	}, nil
@@ -1469,8 +1478,10 @@ func (o ops) decisionView(db *sql.DB, id string) (*riskDecisionView, error) {
 	// The grading is READ, never recomputed. Recomputing would grade a decision
 	// taken months ago against whatever calibration and bands are in force now,
 	// so the packet would answer "why was this declined" with a reason that did
-	// not exist on the day it was declined.
-	v, _, err := getVerdict(db, id)
+	// not exist on the day it was declined. A decision with NO grading answers a
+	// stated refusal rather than a silent gap: a block with no reason and no
+	// refusal is indistinguishable from one nobody has graded yet.
+	v, err := graded(db, id)
 	if err != nil {
 		return nil, err
 	}

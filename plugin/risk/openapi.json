@@ -1559,7 +1559,7 @@
             "type": "string"
           },
           "reliability": {
-            "description": "Reliability is the fit against reality, in bins — the diagonal a console\ndraws.",
+            "description": "Reliability is the fit against reality, in bins — the diagonal a console\ndraws. ABSENT when the map refuses to answer: a reliability report is the\nmap applied to every row, so a chart beside a refusal draws what the\nrefusal just said does not exist.",
             "items": {
               "$ref": "#/components/schemas/mlBin"
             },
@@ -1572,6 +1572,14 @@
           "shape": {
             "description": "Shape is the scoring shape it was fitted under: the detector's geometry and\nfeature inventory folded with this organisation's enabled rule set.",
             "type": "string"
+          },
+          "superseded": {
+            "description": "Superseded is how many mature judged decisions were excluded because they\nwere scored under a DIFFERENT scoring shape. A fit reads one coordinate\nsystem only — stamping today's shape on yesterday's scores is exactly the\nskew the shape gate refuses — so this is the evidence a refit cannot\nhonestly use, and the number that says why a fit went thin after a governed\nchange.",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated says the bounded read cut the history: there are older mature\ndecisions under this shape that nothing here was computed from. The read\ntakes the MOST RECENT rows, so what is missing is the oldest.",
+            "type": "boolean"
           },
           "unproductive": {
             "description": "Unproductive is how many turned out fine. Both classes are reported so the\nimbalance is visible before anyone reads a probability computed over it.",
@@ -1703,6 +1711,14 @@
               "$ref": "#/components/schemas/mlLearningStep"
             },
             "type": "array"
+          },
+          "superseded": {
+            "description": "Superseded is how many mature judged decisions were scored under a\ndifferent scoring shape and therefore appear at no step.",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated says the bounded read cut the history at its oldest end.",
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -1759,6 +1775,10 @@
       },
       "mlMeasurement": {
         "properties": {
+          "calibrated": {
+            "description": "Calibrated says whether a probability was available at all. When it is\nfalse, Brier is absent and the operating point is the raw score — the\nSAME state the decide path is in, which is the point: this op must not\ndescribe a world the live plane refuses to enter.",
+            "type": "boolean"
+          },
           "curve": {
             "description": "Curve is the sweep — ROC, precision-recall and cost, three charts from one\npass because they are three projections of it.",
             "items": {
@@ -1778,9 +1798,21 @@
             "$ref": "#/components/schemas/mlMetrics",
             "description": "Metrics is the report at the operating point."
           },
+          "refusal": {
+            "description": "Refusal names why there was no probability, when there was none.",
+            "type": "string"
+          },
           "stage": {
             "description": "Stage is whose bands supplied the operating point and the prices, when one\ndid.",
             "type": "string"
+          },
+          "superseded": {
+            "description": "Superseded is how many mature judged decisions were scored under a\ndifferent scoring shape and therefore measured nowhere here.",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated says the bounded read cut the history at its oldest end.",
+            "type": "boolean"
           },
           "unacted": {
             "description": "Unacted is the share of the judged evidence that came from decisions the\nplane LET THROUGH. It is the honest limit on every number above: a blocked\ndecision has no outcome, so a judged set made entirely of decisions the\nincumbent chose to act on measures agreement with the incumbent rather than\naccuracy. Near zero means exactly that.",

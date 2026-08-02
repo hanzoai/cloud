@@ -4,13 +4,22 @@ package risk
 // score means, why a decision went the way it did, and what the organisation
 // asked for at that probability.
 //
-// FOUR RECORDS, ALL DURABLE IN THE TENANT'S OWN FILE. A policy version, a
-// calibration, the verdict attached to one decision and a replay report are each
-// something an auditor, a regulator or a declined customer can ask about, so
-// none of them lives in memory. They ride the same cek-encrypted, HA-shipped
-// per-org SQLite file the decision log already uses (cloud.OrgDB → internal/org),
-// which is also what makes them survive the Recreate-at-one-replica rollout that
-// drops every in-memory model.
+// FOUR RECORDS, ALL IN THE TENANT'S OWN FILE. A policy version, a calibration,
+// the verdict attached to one decision and a replay report are each something an
+// auditor, a regulator or a declined customer can ask about, so none of them
+// lives in memory. They ride the same cek-encrypted per-org SQLite file the
+// decision log already uses, which is what makes them survive the
+// Recreate-at-one-replica rollout that drops every in-memory model.
+//
+// THAT FILE IS OPENED WITH cloud.OrgDB AND IS THEREFORE LOCAL. OrgDB is the
+// encrypted open and nothing more; the ship-before-ack path is cloud.OrgStore
+// configured WithDurable, which this package does not use — so a write here is
+// as durable as the pod's volume and no more. Every record in this file has that
+// property, the decision log included, and it predates this plane. Named here
+// rather than claimed away: the two sibling durable planes (apps/research
+// compose.go, apps/books books.go) ship after every commit and treat an unacked
+// ship as an error, and moving the shelf onto OrgStore is the change that would
+// give these records the same guarantee.
 //
 // NOTHING IS CACHED, DELIBERATELY. The decide path already reads this tenant's
 // rules, lists and suppressions from its own file on every decision; reading the
@@ -21,12 +30,16 @@ package risk
 //
 // THE ESCALATION RULE, ONCE. The evidence (rules and the model) proposes an
 // action, and the policy proposes another from the calibrated probability. The
-// decision takes the STRONGER of the two. A deny-list rule must not be overruled
-// by a low probability — it is the tenant's explicit instruction — and a high
-// probability must not be talked down by quiet evidence. Two authorities for one
+// decision takes the STRONGER of the two, capped at what the evidence can
+// justify. A deny-list rule must not be overruled by a low probability — it is
+// the tenant's explicit instruction — and a high probability must not be talked
+// down by quiet evidence. But the probability is a pure function of the same
+// score the model's own ceiling already capped, so an uncapped ladder would void
+// that ceiling by arithmetic: see ceiling() below. Two authorities for one
 // decision would otherwise be a question with two answers.
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -153,29 +166,75 @@ var dispositions = map[string]replay.Disposition{
 // the map fitted before the change then refuses to answer rather than quietly
 // reporting probabilities for coordinates that no longer mean what they meant.
 //
-// LISTS ARE DELIBERATELY NOT IN IT. A list entry is data a rule reads, not a
-// change to what the rule computes, and lists change constantly in normal
-// operation — a plane whose calibration expired every time a stolen card was
-// added to a deny list would never have a calibration at all. The boundary is
-// stated rather than assumed: governed changes invalidate, operational data does
-// not.
+// A RULE-WIDE SUPPRESSION IS IN IT. Muting a rule is the day-to-day tuning knob
+// and retiring one is the rare act, but combine() sums only the hits that were
+// not suppressed — so a mute moves every score that rule touched EXACTLY as
+// retiring it would. A control that noticed the rare change and not the common
+// one would be a control nobody could rely on.
+//
+// LISTS AND SUBJECT-SCOPED SUPPRESSIONS ARE DELIBERATELY NOT IN IT, by the same
+// argument in both directions. A list entry is data a rule reads, and a
+// suppression naming one subject is a statement about that subject — neither
+// changes what the scorer computes for the population, and both change
+// constantly in normal operation. A plane whose calibration expired every time a
+// stolen card was added to a deny list, or every time one merchant was excused,
+// would never have a calibration at all. The boundary is stated rather than
+// assumed: what moves the DISTRIBUTION invalidates, operational data about one
+// row does not.
 func scoringShape(db *sql.DB, model string) (string, error) {
 	rules, err := loadRules(db)
 	if err != nil {
 		return "", err
 	}
-	// Sorted by id so the fingerprint is a property of the rule SET and not of
-	// the order rows happened to come back in.
+	sups, err := loadSuppressions(db)
+	if err != nil {
+		return "", err
+	}
+	return shapeOf(model, rules, sups, time.Now()), nil
+}
+
+// shapeOf folds the coordinate system from the values that produce a score.
+//
+// It takes the values rather than the store so the DECIDE path can fold the
+// exact rules and suppressions it just scored under, instead of re-reading them
+// and recording a shape a concurrent write may already have moved. scoringShape
+// is the same fold over a fresh read, for the callers that hold neither.
+func shapeOf(model string, rules []rule, sups []suppression, now time.Time) string {
+	// Sorted by id so the fingerprint is a property of the SET and not of the
+	// order rows happened to come back in.
+	rules = append([]rule(nil), rules...)
 	sort.Slice(rules, func(i, j int) bool { return rules[i].ID < rules[j].ID })
+	muted := make([]string, 0, len(sups))
+	for _, s := range sups {
+		// Expired mutes nothing — `until` in the past is the store's own expiry and
+		// the decide path already reads it that way, so a shape that still counted
+		// one would describe a scorer that no longer exists.
+		if !s.Until.IsZero() && now.After(s.Until) {
+			continue
+		}
+		// A mute that names a subject is about that subject. A mute that names a
+		// rule and no subject silences it for the whole population, which is a move
+		// of the distribution.
+		if s.Rule == "" || s.Subject != "" {
+			continue
+		}
+		muted = append(muted, s.Rule+":"+s.Kind)
+	}
+	sort.Strings(muted)
+
 	h := sha256.New()
-	fmt.Fprintf(h, "shape/v1|%s|", model)
+	fmt.Fprintf(h, "shape/v2|%s|", model)
 	for _, r := range rules {
 		if !r.Enabled {
 			continue
 		}
 		fmt.Fprintf(h, "%s:%s:%g:%s|", r.ID, r.Stage, r.Weight, r.Action)
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	fmt.Fprint(h, "muted|")
+	for _, m := range muted {
+		fmt.Fprintf(h, "%s|", m)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // grade turns an outcome into a defensible one.
@@ -198,14 +257,15 @@ func grade(db *sql.DB, shape string, stage string, out outcome) verdict {
 		v.refusal = "no calibration is fitted for this organisation, so a score is a rank and not a probability"
 		return v
 	}
-	p, err := cal.P(out.score, shape)
+	read, err := cal.Under(shape)
 	if err != nil {
-		// The commonest cause by far, and the one worth naming: the model or the
-		// rule set moved since the fit.
+		// The commonest cause by far, and the one worth naming: the model, the rule
+		// set or a rule-wide mute moved since the fit.
 		v.refusal = "the calibration on file was fitted under a different scoring shape: " + err.Error()
 		return v
 	}
-	v.probability, v.calibration = &p, cal.Digest
+	p := read.P(out.score)
+	v.probability, v.calibration = &p, read.Digest()
 
 	pol, ok, err := currentPolicy(db, stage)
 	switch {
@@ -221,12 +281,49 @@ func grade(db *sql.DB, shape string, stage string, out outcome) verdict {
 }
 
 // escalate is the ONE place two authorities become one decision: the stronger of
-// what the evidence asked for and what the policy asked for.
-func escalate(evidence, policy string) string {
+// what the evidence asked for and what the policy asked for, with the policy
+// held to what the evidence behind it can justify.
+func escalate(evidence, policy string, out outcome) string {
+	policy = atMost(policy, ceiling(out))
 	if actionRank(policy) > actionRank(evidence) {
 		return policy
 	}
 	return evidence
+}
+
+// ceiling is the strongest action the evidence behind one outcome can carry, or
+// empty when it carries no ceiling at all.
+//
+// A decision the MODEL alone moved can put a transaction in front of a person
+// and cannot decline one: an unexplainable refusal is not a decision anybody can
+// defend to the customer or to a chargeback network, which is why decide caps
+// the model's own hit at modelCeiling (decide.go, rule.go). The policy ladder is
+// not a second, independent authority for that decline — it reads the calibrated
+// probability, and the probability is a pure function of the SAME score — so
+// applying the ladder over the cap would void the cap by arithmetic and the
+// documented invariant would hold only until somebody set a band.
+//
+// A RULE the organisation wrote is different in kind. It is an explicit
+// instruction with a name, a weight and a sentence a person can read, so a
+// decline it reaches is explainable and no ceiling applies. A suppressed hit is
+// not evidence: it contributed zero weight and it is not cited as a reason, so
+// citing it here would let a mute both silence a rule and license a decline.
+func ceiling(out outcome) string {
+	for _, h := range out.hits {
+		if h.Suppressed || h.Rule == modelRuleID {
+			continue
+		}
+		return ""
+	}
+	return modelCeiling
+}
+
+// atMost caps an action at a ceiling. An empty ceiling caps nothing.
+func atMost(action, ceiling string) string {
+	if ceiling == "" || actionRank(action) <= actionRank(ceiling) {
+		return action
+	}
+	return ceiling
 }
 
 // reasonsOf ranks the principal reasons behind one outcome.
@@ -418,25 +515,6 @@ func putCalibration(db *sql.DB, m calibrate.Map, by string, horizon int) (int, t
 
 // ── the verdict record ──────────────────────────────────────────────────────
 
-// putVerdict records the grading of one decision. Called inside the decide path
-// immediately after the decision row lands, so a decision and the reasons for it
-// arrive together or not at all.
-func putVerdict(db *sql.DB, id string, at time.Time, v verdict) error {
-	body, err := json.Marshal(v.reasons)
-	if err != nil {
-		return err
-	}
-	var p any
-	if v.probability != nil {
-		p = *v.probability
-	}
-	_, err = db.Exec(
-		`INSERT OR REPLACE INTO verdict (decision, at, probability, calibration, policy, reasons, refusal)
-		 VALUES (?,?,?,?,?,?,?)`,
-		id, stamp(at), p, v.calibration, v.policy, string(body), v.refusal)
-	return err
-}
-
 // getVerdict reads one decision's grading back, so a repeat of an idempotent
 // decide returns the same reasons rather than a decision with none.
 func getVerdict(db *sql.DB, id string) (verdict, bool, error) {
@@ -460,6 +538,27 @@ func getVerdict(db *sql.DB, id string) (verdict, bool, error) {
 		return verdict{}, false, err
 	}
 	return v, true, nil
+}
+
+// graded is how every READ path asks for a decision's grading: the verdict, or a
+// verdict that SAYS there is none.
+//
+// The not-found used to be discarded with `_`, which made an ungraded decision
+// indistinguishable from a graded one with nothing to say — so a block could be
+// served on the dispute-packet surface with no probability, no principal reasons
+// and no refusal. The rows are written in one transaction now, so this should be
+// unreachable; a record plane that answered "nothing to say" for a state it
+// believes impossible would be hiding exactly the corruption worth knowing about.
+func graded(db *sql.DB, id string) (verdict, error) {
+	v, ok, err := getVerdict(db, id)
+	if err != nil {
+		return verdict{}, err
+	}
+	if !ok {
+		return verdict{refusal: "this decision has no recorded grading, so there is no probability, " +
+			"no principal reason and nothing this plane can defend it with"}, nil
+	}
+	return v, nil
 }
 
 // ── the replay record ───────────────────────────────────────────────────────
@@ -499,8 +598,26 @@ func getReplay(db *sql.DB, id string) (quality.Report, time.Time, bool, error) {
 // holding the only connection its own decisions need.
 const maxHistory = 50_000
 
-// recorded reads this tenant's decision log as measurable observations, oldest
-// first, restricted to decisions old enough for their outcome to have arrived.
+// evidence is one bounded read of the decision log: the rows a measurement was
+// computed from, and the two facts that say what the bounds left out. Both are
+// reported on every answer, because a measurement is only as good as the sample
+// it saw and a sample silently cut reads as a complete one.
+type evidence struct {
+	// history is the rows, OLDEST FIRST, ready to measure over.
+	history []quality.Recorded
+	// truncated says the bound cut the read: there are older mature decisions
+	// under this shape that no number here was computed from.
+	truncated bool
+	// superseded counts the mature judged decisions excluded because they were
+	// scored under a DIFFERENT coordinate system. It is the evidence a refit
+	// cannot honestly use, and the number that says why a fit went thin after a
+	// governed change.
+	superseded int
+}
+
+// recorded reads this tenant's decision log as measurable observations, under
+// ONE scoring shape, restricted to decisions old enough for their outcome to
+// have arrived and bounded to the most recent of them.
 //
 // THE MATURITY HORIZON IS THE WHOLE OF WHY THIS TAKES A PARAMETER. Analysts
 // judge within hours; a card network dispute lands 30 to 120 days after the
@@ -510,55 +627,102 @@ const maxHistory = 50_000
 // it sits too high. Excluding decisions younger than the horizon is what makes
 // the judged set representative rather than merely recent.
 //
+// THE SHAPE IS THE OTHER FILTER AND IT IS NOT OPTIONAL. A score is a coordinate.
+// Rows scored before a rule was written, retired, reweighted or muted are
+// coordinates in a system that no longer exists, and a fit taken over them and
+// stamped with today's shape is precisely the training–serving skew the shape
+// gate exists to refuse — arrived at from the inside, by the remedy the gate's
+// own message recommends. Filtering here means a refit after a governed change
+// finds thin evidence and SAYS SO, instead of re-blessing history it cannot read.
+//
+// THE BOUND TAKES THE MOST RECENT ROWS. Ascending plus LIMIT takes the oldest,
+// which past the bound freezes every fit, every measurement and every replay on
+// the dawn of the tenant's log forever. The read is descending and the slice is
+// reversed once, so what comes back is the LATEST maxHistory decisions in time
+// order — and truncated says when there were more.
+//
 // The ordering is on the second-truncated timestamp and then the id, which is a
 // TOTAL order: the stored form is RFC 3339 with a variable-length fraction, so a
 // plain string comparison sorts "…:00.5Z" before "…:00Z". At the day scale a
 // horizon works on that is immaterial, but a learning curve that split its
 // history on it would not be reproducible, and reproducibility is the property
 // being sold.
-func recorded(db *sql.DB, horizon int, limit int) ([]quality.Recorded, error) {
+func recorded(ctx context.Context, db *sql.DB, horizon int, shape string, limit int) (evidence, error) {
 	if limit <= 0 || limit > maxHistory {
 		limit = maxHistory
 	}
 	cutoff := time.Now().UTC().AddDate(0, 0, -horizon).Format("2006-01-02T15:04:05")
-	rows, err := db.Query(
-		`SELECT id, at, action, score, label FROM decision
-		 WHERE substr(at,1,19) <= ?
-		 ORDER BY substr(at,1,19) ASC, id ASC LIMIT ?`, cutoff, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
 
-	var out []quality.Recorded
-	for rows.Next() {
-		var id, at, action, label string
-		var score float64
-		if err := rows.Scan(&id, &at, &action, &score, &label); err != nil {
-			return nil, err
+	// The scan is its own scope, and that is load-bearing rather than tidy: the
+	// org file is opened with ONE connection, so an open *sql.Rows holds the only
+	// one there is. Reading limit+1 and stopping early leaves it open, and the
+	// count below would then wait for a connection this function is itself
+	// holding — a deadlock, not an error, bounded by nothing.
+	scan := func() ([]quality.Recorded, bool, error) {
+		// limit+1 answers "was there more" exactly, and for free — a COUNT over the
+		// same predicate is a second scan of the same rows to learn one bit.
+		rows, err := db.QueryContext(ctx,
+			`SELECT id, at, action, score, label FROM decision
+			 WHERE substr(at,1,19) <= ? AND shape = ?
+			 ORDER BY substr(at,1,19) DESC, id DESC LIMIT ?`, cutoff, shape, limit+1)
+		if err != nil {
+			return nil, false, err
 		}
-		out = append(out, quality.Recorded{
-			Observation: quality.Observation{
-				ID: id, At: unstamp(at), Score: score, Action: action,
-				Disposition: dispositions[strings.ToLower(label)],
-			},
-			// Every judgement this plane holds today came from a person reviewing
-			// a decision. The below-the-line sample arm the engine already selects
-			// is not yet wired to a label source, so the honest exploration share
-			// is zero and Replay reports it as such rather than assuming it away.
-			Source: "review",
-		})
+		defer func() { _ = rows.Close() }()
+
+		out := make([]quality.Recorded, 0, limit)
+		truncated := false
+		for rows.Next() {
+			if len(out) == limit {
+				truncated = true
+				break
+			}
+			var id, at, action, label string
+			var score float64
+			if err := rows.Scan(&id, &at, &action, &score, &label); err != nil {
+				return nil, false, err
+			}
+			out = append(out, quality.Recorded{
+				Observation: quality.Observation{
+					ID: id, At: unstamp(at), Score: score, Action: action,
+					Disposition: dispositions[strings.ToLower(label)],
+				},
+				// Every judgement this plane holds today came from a person reviewing
+				// a decision. The below-the-line sample arm the engine already selects
+				// is not yet wired to a label source, so the honest exploration share
+				// is zero and Replay reports it as such rather than assuming it away.
+				Source: "review",
+			})
+		}
+		return out, truncated, rows.Err()
 	}
-	return out, rows.Err()
+
+	out, truncated, err := scan()
+	if err != nil {
+		return evidence{}, err
+	}
+	// Back into time order: every consumer of a history is temporal — the
+	// learning curve splits it, the replay walks it, the report bounds it.
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	w := evidence{history: out, truncated: truncated}
+
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM decision WHERE label != '' AND substr(at,1,19) <= ? AND shape != ?`,
+		cutoff, shape).Scan(&w.superseded); err != nil {
+		return evidence{}, err
+	}
+	return w, nil
 }
 
 // immature counts the labelled decisions the horizon excluded. It is reported
 // beside every fit and every measurement, because a horizon that quietly drops
 // most of the evidence is the difference between a thin answer and a wrong one.
-func immature(db *sql.DB, horizon int) (int, error) {
+func immature(ctx context.Context, db *sql.DB, horizon int) (int, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -horizon).Format("2006-01-02T15:04:05")
 	var n int
-	err := db.QueryRow(
+	err := db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM decision WHERE label != '' AND substr(at,1,19) > ?`, cutoff).Scan(&n)
 	return n, err
 }

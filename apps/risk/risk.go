@@ -64,6 +64,9 @@ type state struct {
 	model *anomaly.Store
 	// shelf holds the per-tenant record planes.
 	shelf *shelf
+	// inflight is the per-tenant bound on measurement: one at a time, per tenant,
+	// so a caller that loops the measurement surface degrades only itself.
+	inflight *inflight
 
 	// bill is the shared per-org gate and meter, on the "risk" product.
 	bill *cloud.ResourceMeter
@@ -197,6 +200,7 @@ func build(deps cloud.Deps) (*stateService, error) {
 			vel:      vel,
 			model:    model,
 			shelf:    newShelf(deps.DataDir),
+			inflight: newInflight(),
 			bill:     cloud.NewResourceMeter(deps, "risk"),
 			restored: map[Tenant]bool{},
 		},

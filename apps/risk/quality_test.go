@@ -443,10 +443,11 @@ func TestTheProbabilityIsTheRecordedScoreMapped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shape: %v", err)
 	}
-	want, err := cal.P(recordedScore, shape)
+	read, err := cal.Under(shape)
 	if err != nil {
 		t.Fatalf("the map refuses the shape the decision was taken under: %v", err)
 	}
+	want := read.P(recordedScore)
 	if want != *live.Probability {
 		t.Fatalf("the recorded score %g maps to %g, and the decision reported %g — the served probability is not the recorded one",
 			recordedScore, want, *live.Probability)
@@ -694,7 +695,10 @@ func TestEscalationTakesTheStrongerAuthority(t *testing.T) {
 		{ActionReview, ActionChallenge, ActionReview},
 		{ActionAllow, "", ActionAllow},
 	} {
-		if got := escalate(c.evidence, c.policy); got != c.want {
+		// A rule fired, so the evidence is explainable and no ceiling applies —
+		// the ceiling case has its own test.
+		explained := outcome{hits: []hit{{Rule: "a-rule-the-org-wrote"}}}
+		if got := escalate(c.evidence, c.policy, explained); got != c.want {
 			t.Errorf("escalate(%q, %q) = %q, want %q", c.evidence, c.policy, got, c.want)
 		}
 	}
@@ -997,11 +1001,18 @@ var decideSeq atomic.Int64
 // model refuses to score for its whole warm period, so decisions driven through
 // the live path would all carry the same score and prove nothing about a map
 // fitted on them.
+// The seeded rows carry the CURRENT scoring shape, because that is what the
+// decide path records and what every measurement reads back. A fixture written
+// without one would be history in no coordinate system at all.
 func seedJudged(t *testing.T, s *stateService, tn Tenant, n int) {
 	t.Helper()
 	db, err := s.State.shelf.open(tn)
 	if err != nil {
 		t.Fatalf("open %s: %v", tn, err)
+	}
+	shape, err := scoringShape(db, s.State.model.Digest())
+	if err != nil {
+		t.Fatalf("shape: %v", err)
 	}
 	base := time.Now().UTC().Add(-time.Duration(n+1) * time.Hour)
 	for i := range n {
@@ -1010,9 +1021,9 @@ func seedJudged(t *testing.T, s *stateService, tn Tenant, n int) {
 		// something to measure.
 		score := float64(i) / float64(n)
 		productive := i%7 == 0 && score > 0.3
-		verdict := "legitimate"
+		judgement := "legitimate"
 		if productive {
-			verdict = "fraud"
+			judgement = "fraud"
 		}
 		o := observation{
 			id: fmt.Sprintf("dec_seed_%04d", i), at: base.Add(time.Duration(i) * time.Minute),
@@ -1025,10 +1036,10 @@ func seedJudged(t *testing.T, s *stateService, tn Tenant, n int) {
 			action = ActionReview
 		}
 		out := outcome{id: o.id, action: action, score: score, agency: o.agency}
-		if err := putDecision(db, o, out, "seed-digest", ""); err != nil {
+		if err := putDecision(db, o, out, "seed-digest", shape, "", verdict{}); err != nil {
 			t.Fatalf("seed decision %d: %v", i, err)
 		}
-		if err := label(db, o.id, verdict, "u_seed"); err != nil {
+		if err := label(db, o.id, judgement, "u_seed"); err != nil {
 			t.Fatalf("seed label %d: %v", i, err)
 		}
 	}

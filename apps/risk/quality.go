@@ -21,7 +21,9 @@ package risk
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -96,11 +98,118 @@ func mountQuality(s *stateService, app cloud.Router) {
 		zip.WithTags("ml"))
 }
 
-// qualityCents is what one measurement costs. Every op below that walks the
-// decision log is priced the same because they are the same work — a bounded
-// scan of the tenant's own file plus arithmetic over it — and pricing them
-// differently would invite a caller to reach for the cheap one.
+// qualityCents is the floor price of one measurement: the bounded scan of the
+// tenant's own file, before the arithmetic over what it returned.
+//
+// Every op below that walks the decision log is priced the same way because they
+// are the same work, and pricing them differently would invite a caller to reach
+// for the cheap one.
 const qualityCents = 2
+
+// perRows is how many rows one further cent buys.
+//
+// A flat price is a lie about a scan whose cost is linear in the rows it reads:
+// a fit over 40 judged decisions and a twenty-step learning curve over fifty
+// thousand cost the same two cents, and the second one is the one a caller
+// loops. Gate on the CEILING the request could reach and meter on what it
+// actually read, which is the standard shape — the ledger is debited before the
+// work and settled by it.
+const perRows = 5_000
+
+// measureCents prices a read of n rows.
+func measureCents(rows int) int64 {
+	if rows < 0 {
+		rows = 0
+	}
+	return qualityCents + int64(rows/perRows)
+}
+
+// inflight is the per-tenant bound on measurement.
+//
+// ONE measurement per tenant at a time, and the bound is PER TENANT by
+// construction — there is no fleet-wide number to exhaust, so a tenant that
+// hammers this surface degrades itself and nobody else. That is also the truth
+// about the resource: these ops hold the tenant's single-writer file, so a
+// second concurrent measurement for the same tenant is already queued behind the
+// first at the connection pool, silently and without a deadline. Refusing it is
+// the honest form of the same thing, and it leaves the tenant's own decide path
+// its connection.
+type inflight struct {
+	mu   sync.Mutex
+	busy map[Tenant]bool
+}
+
+func newInflight() *inflight { return &inflight{busy: map[Tenant]bool{}} }
+
+// claim takes the tenant's measurement slot, or refuses. The release is the
+// returned func and it is idempotent.
+func (f *inflight) claim(t Tenant) (func(), error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.busy[t] {
+		return nil, zip.Errorf(429, "a measurement is already running for this organisation; "+
+			"these read the same single-writer file and a second one would queue behind the first "+
+			"holding the connection its own decisions need")
+	}
+	f.busy[t] = true
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			f.mu.Lock()
+			delete(f.busy, t)
+			f.mu.Unlock()
+		})
+	}, nil
+}
+
+// measureDeadline bounds one measurement's reads.
+//
+// The arithmetic over the rows is pure and bounded by maxHistory; the READ is
+// what can hang, on a file another request holds. Every statement below runs
+// under this, so a caller that walks away, or a lock that is not released, ends
+// as a refusal rather than as a goroutine holding a connection for the life of
+// the process.
+const measureDeadline = 60 * time.Second
+
+// measuring establishes the whole preamble every measurement shares: the tenant,
+// its file, its one slot, the deadline and the current scoring shape. One
+// function, so the five ops cannot disagree about what a measurement is allowed
+// to do.
+func (o ops) measuring(ctx context.Context, kind string, days, rows int) (
+	sc scope, db *sql.DB, shape string, mctx context.Context, done func(), err error,
+) {
+	sc, db, err = tenantState(ctx, o.s)
+	if err != nil {
+		return
+	}
+	if err = horizon(days); err != nil {
+		return
+	}
+	// Gated on the CEILING this request could read, before any of it happens.
+	if err = o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, kind, measureCents(bounded(rows))); err != nil {
+		err = zip.Errorf(402, "%s", err.Error())
+		return
+	}
+	release, err := o.s.State.inflight.claim(sc.tenant)
+	if err != nil {
+		return
+	}
+	shape, err = scoringShape(db, o.s.State.model.Digest())
+	if err != nil {
+		release()
+		return
+	}
+	deadline, cancel := context.WithTimeout(ctx, measureDeadline)
+	return sc, db, shape, deadline, func() { cancel(); release() }, nil
+}
+
+// bounded resolves a caller's row request to what the read will actually take.
+func bounded(rows int) int {
+	if rows <= 0 || rows > maxHistory {
+		return maxHistory
+	}
+	return rows
+}
 
 // maxHorizon bounds the maturity horizon, in days.
 //
@@ -322,8 +431,21 @@ type mlCalibrationView struct {
 	// young. A horizon that quietly drops most of the evidence is the difference
 	// between a thin answer and a wrong one, so it is reported beside every fit.
 	Immature int `json:"immature,omitempty"`
+	// Superseded is how many mature judged decisions were excluded because they
+	// were scored under a DIFFERENT scoring shape. A fit reads one coordinate
+	// system only — stamping today's shape on yesterday's scores is exactly the
+	// skew the shape gate refuses — so this is the evidence a refit cannot
+	// honestly use, and the number that says why a fit went thin after a governed
+	// change.
+	Superseded int `json:"superseded,omitempty"`
+	// Truncated says the bounded read cut the history: there are older mature
+	// decisions under this shape that nothing here was computed from. The read
+	// takes the MOST RECENT rows, so what is missing is the oldest.
+	Truncated bool `json:"truncated,omitempty"`
 	// Reliability is the fit against reality, in bins — the diagonal a console
-	// draws.
+	// draws. ABSENT when the map refuses to answer: a reliability report is the
+	// map applied to every row, so a chart beside a refusal draws what the
+	// refusal just said does not exist.
 	Reliability []mlBin `json:"reliability,omitempty"`
 	// Refusal names why there is no fit, when there is none.
 	Refusal string `json:"refusal,omitempty"`
@@ -457,6 +579,18 @@ type mlMeasurement struct {
 	// Immature is how many labelled decisions that horizon excluded for being too
 	// young for their outcome to have arrived.
 	Immature int `json:"immature"`
+	// Superseded is how many mature judged decisions were scored under a
+	// different scoring shape and therefore measured nowhere here.
+	Superseded int `json:"superseded,omitempty"`
+	// Truncated says the bounded read cut the history at its oldest end.
+	Truncated bool `json:"truncated,omitempty"`
+	// Calibrated says whether a probability was available at all. When it is
+	// false, Brier is absent and the operating point is the raw score — the
+	// SAME state the decide path is in, which is the point: this op must not
+	// describe a world the live plane refuses to enter.
+	Calibrated bool `json:"calibrated"`
+	// Refusal names why there was no probability, when there was none.
+	Refusal string `json:"refusal,omitempty"`
 	// Unacted is the share of the judged evidence that came from decisions the
 	// plane LET THROUGH. It is the honest limit on every number above: a blocked
 	// decision has no outcome, so a judged set made entirely of decisions the
@@ -518,6 +652,11 @@ type mlLearningCurve struct {
 	Horizon int `json:"horizon"`
 	// Immature is how many labelled decisions that horizon excluded.
 	Immature int `json:"immature"`
+	// Superseded is how many mature judged decisions were scored under a
+	// different scoring shape and therefore appear at no step.
+	Superseded int `json:"superseded,omitempty"`
+	// Truncated says the bounded read cut the history at its oldest end.
+	Truncated bool `json:"truncated,omitempty"`
 	// Refusal names why the curve is empty when it is.
 	Refusal string `json:"refusal,omitempty"`
 }
@@ -734,8 +873,11 @@ func (o ops) setPolicy(ctx context.Context, in *riskPolicyBands) (*riskPolicyBan
 		rungs = append(rungs, policy.Rung{At: b.At, Action: a})
 	}
 
+	// The AUTHOR is the person, from the validated principal — the same helper the
+	// suppression and control records already use. "The org set this threshold" is
+	// not an answer to who signed a governance change.
 	saved, err := putPolicy(db, policy.Policy{
-		Stage: stage, By: sc.org, Reason: strings.TrimSpace(in.Reason),
+		Stage: stage, By: by(ctx, sc), Reason: strings.TrimSpace(in.Reason),
 		Floor: strings.ToLower(strings.TrimSpace(in.Floor)),
 		Rungs: rungs, Shadow: in.Shadow,
 		Cost: policy.Cost{Miss: in.Cost.Miss, Alarm: in.Cost.Alarm},
@@ -799,13 +941,6 @@ func (o ops) policyVersions(ctx context.Context, in *riskPolicyVersionsIn) (*ris
 // as absent — which is the training-serving skew control, and the reason it
 // cannot fail silently.
 func (o ops) calibrate(ctx context.Context, in *mlCalibrateIn) (*mlCalibrationView, error) {
-	sc, db, err := tenantState(ctx, o.s)
-	if err != nil {
-		return nil, err
-	}
-	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "calibrate", qualityCents); err != nil {
-		return nil, zip.Errorf(402, "%s", err.Error())
-	}
 	method := strings.ToLower(strings.TrimSpace(in.Method))
 	if method == "" {
 		method = calibrate.Isotonic
@@ -813,40 +948,49 @@ func (o ops) calibrate(ctx context.Context, in *mlCalibrateIn) (*mlCalibrationVi
 	if method != calibrate.Isotonic && method != calibrate.Platt {
 		return nil, zip.Errorf(400, "%q is not a calibration method", in.Method)
 	}
-	if err := horizon(in.Horizon); err != nil {
+	sc, db, shape, mctx, done, err := o.measuring(ctx, "calibrate", in.Horizon, in.Rows)
+	if err != nil {
 		return nil, err
 	}
+	defer done()
 
-	shape, err := scoringShape(db, o.s.State.model.Digest())
+	w, err := recorded(mctx, db, in.Horizon, shape, in.Rows)
 	if err != nil {
 		return nil, err
 	}
-	history, err := recorded(db, in.Horizon, in.Rows)
+	young, err := immature(mctx, db, in.Horizon)
 	if err != nil {
 		return nil, err
 	}
-	young, err := immature(db, in.Horizon)
-	if err != nil {
-		return nil, err
-	}
+	o.s.State.bill.Meter(sc.org, sc.project, "calibrate", measureCents(len(w.history)), sc.request, sc.clientIP)
 
-	m, err := calibrate.Fit(samples(history), method, shape)
+	m, err := calibrate.Fit(samples(w.history), method, shape)
 	if err != nil {
 		// A refusal is the answer, not a failure: the caller needs to know the
-		// plane cannot yet say what a score means, and why.
-		return &mlCalibrationView{
-			Horizon: in.Horizon, Immature: young, Refusal: err.Error(),
-		}, nil
+		// plane cannot yet say what a score means, and why. When the evidence is
+		// thin only because the shape moved, say THAT — it is a different fact with
+		// a different remedy, and the remedy is time rather than another POST.
+		out := &mlCalibrationView{
+			Horizon: in.Horizon, Immature: young, Superseded: w.superseded, Refusal: err.Error(),
+		}
+		if w.superseded > 0 {
+			out.Refusal += fmt.Sprintf("; %d further judged decisions were scored under a different "+
+				"scoring shape and cannot be fitted under this one — a fit over them would stamp "+
+				"today's coordinates on yesterday's scores, which is the skew this plane refuses",
+				w.superseded)
+		}
+		return out, nil
 	}
-	version, at, err := putCalibration(db, m, sc.org, in.Horizon)
+	// The AUTHOR is the person, resolved from the validated principal. A
+	// calibration is a governance record and "the org changed it" names nobody.
+	version, at, err := putCalibration(db, m, by(ctx, sc), in.Horizon)
 	if err != nil {
 		return nil, err
 	}
-	o.s.State.bill.Meter(sc.org, sc.project, "calibrate", qualityCents, sc.request, sc.clientIP)
 	emit(sc.org, "risk.calibration", map[string]any{
 		"version": version, "method": m.Method, "rows": m.Rows, "brier": m.Brier,
 	})
-	return view(m, version, at, true, in.Horizon, young, history), nil
+	return view(m, version, at, shape, in.Horizon, young, w), nil
 }
 
 // Calibration reads the map in force and how well it holds against reality.
@@ -862,20 +1006,16 @@ func (o ops) calibrate(ctx context.Context, in *mlCalibrateIn) (*mlCalibrationVi
 // its probability as absent. The remedy is a new fit, and until then the bands
 // cannot act.
 func (o ops) calibration(ctx context.Context, in *mlMeasureIn) (*mlCalibrationView, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	// It is GATED, METERED and BOUNDED like the other measurements, because it IS
+	// one: the reliability report walks the same bounded scan of the same file and
+	// does the same arithmetic over it. An op priced at nothing beside four that
+	// are priced is the one a caller loops.
+	sc, db, shape, mctx, done, err := o.measuring(ctx, "calibration", in.Horizon, in.Rows)
 	if err != nil {
 		return nil, err
 	}
-	// It is GATED and METERED like the other measurements, because it IS one: the
-	// reliability report walks the same bounded scan of the same file and does
-	// the same arithmetic over it. An op priced at nothing beside four that are
-	// priced is the one a caller loops.
-	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "calibration", qualityCents); err != nil {
-		return nil, zip.Errorf(402, "%s", err.Error())
-	}
-	if err := horizon(in.Horizon); err != nil {
-		return nil, err
-	}
+	defer done()
+
 	m, version, at, ok, err := currentCalibration(db)
 	if err != nil {
 		return nil, err
@@ -885,20 +1025,16 @@ func (o ops) calibration(ctx context.Context, in *mlMeasureIn) (*mlCalibrationVi
 			Refusal: "no calibration is fitted for this organisation, so a score is a rank and not a probability",
 		}, nil
 	}
-	shape, err := scoringShape(db, o.s.State.model.Digest())
+	w, err := recorded(mctx, db, in.Horizon, shape, in.Rows)
 	if err != nil {
 		return nil, err
 	}
-	history, err := recorded(db, in.Horizon, in.Rows)
+	young, err := immature(mctx, db, in.Horizon)
 	if err != nil {
 		return nil, err
 	}
-	young, err := immature(db, in.Horizon)
-	if err != nil {
-		return nil, err
-	}
-	o.s.State.bill.Meter(sc.org, sc.project, "calibration", qualityCents, sc.request, sc.clientIP)
-	return view(m, version, at, shape == m.Shape, in.Horizon, young, history), nil
+	o.s.State.bill.Meter(sc.org, sc.project, "calibration", measureCents(len(w.history)), sc.request, sc.clientIP)
+	return view(m, version, at, shape, in.Horizon, young, w), nil
 }
 
 // Evaluate measures the decision plane against what actually happened.
@@ -921,35 +1057,35 @@ func (o ops) calibration(ctx context.Context, in *mlMeasureIn) (*mlCalibrationVi
 // judged set drawn only from decisions the plane already acted on measures
 // agreement with the incumbent rather than accuracy.
 func (o ops) evaluate(ctx context.Context, in *mlMeasureIn) (*mlMeasurement, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, db, shape, mctx, done, err := o.measuring(ctx, "evaluate", in.Horizon, in.Rows)
 	if err != nil {
 		return nil, err
 	}
-	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "evaluate", qualityCents); err != nil {
-		return nil, zip.Errorf(402, "%s", err.Error())
-	}
-	if err := horizon(in.Horizon); err != nil {
-		return nil, err
-	}
+	defer done()
+
 	stage, pol, err := stagePolicy(db, in.Stage)
 	if err != nil {
 		return nil, err
 	}
-	history, err := recorded(db, in.Horizon, in.Rows)
+	w, err := recorded(mctx, db, in.Horizon, shape, in.Rows)
 	if err != nil {
 		return nil, err
 	}
-	young, err := immature(db, in.Horizon)
+	young, err := immature(mctx, db, in.Horizon)
 	if err != nil {
 		return nil, err
 	}
-	cal, _, _, _, err := currentCalibration(db)
-	if err != nil {
-		return nil, err
-	}
+	// The calibration is BOUND to the shape in force before a single number is
+	// computed from it. Unbound, this op measured under whatever map was on file
+	// and reported a Brier the decide path refuses to stand behind — the same
+	// coordinates, the same rows, and the opposite answer to the one the live
+	// plane gives. A bind that refuses leaves the zero Reader, and every
+	// probability-shaped number below is then absent rather than invented.
+	cal, calRefusal := reader(db, shape)
+	o.s.State.bill.Meter(sc.org, sc.project, "evaluate", measureCents(len(w.history)), sc.request, sc.clientIP)
 
-	obs := make([]quality.Observation, 0, len(history))
-	for _, h := range history {
+	obs := make([]quality.Observation, 0, len(w.history))
+	for _, h := range w.history {
 		obs = append(obs, h.Observation)
 	}
 	// The operating point is where the FIRST band starts acting; with no bands
@@ -960,11 +1096,15 @@ func (o ops) evaluate(ctx context.Context, in *mlMeasureIn) (*mlMeasurement, err
 	if len(pol.Rungs) > 0 && cal.Fitted() {
 		at = scoreFor(cal, pol.Rungs[0].At)
 	}
-	share, _ := unacted(history)
+	share, _ := unacted(w.history)
 	m := quality.Measure(obs, at, pol.Cost, cal)
 	out := &mlMeasurement{
 		Metrics: wireMetrics(m), Horizon: in.Horizon, Immature: young,
-		Unacted: share, Stage: stage,
+		Superseded: w.superseded, Truncated: w.truncated,
+		Unacted: share, Stage: stage, Calibrated: cal.Fitted(),
+	}
+	if !cal.Fitted() {
+		out.Refusal = calRefusal
 	}
 	for _, p := range quality.Curve(obs, pol.Cost) {
 		out.Curve = append(out.Curve, mlPoint{
@@ -972,7 +1112,6 @@ func (o ops) evaluate(ctx context.Context, in *mlMeasureIn) (*mlMeasurement, err
 			FalsePositive: p.FalsePositive, Precision: p.Precision, CostNano: p.CostNano,
 		})
 	}
-	o.s.State.bill.Meter(sc.org, sc.project, "evaluate", qualityCents, sc.request, sc.clientIP)
 	return out, nil
 }
 
@@ -999,16 +1138,6 @@ func (o ops) evaluate(ctx context.Context, in *mlMeasureIn) (*mlMeasurement, err
 // better as it learns; Brier moving is the CALIBRATION getting better as labels
 // accrue.
 func (o ops) learning(ctx context.Context, in *mlLearningIn) (*mlLearningCurve, error) {
-	sc, db, err := tenantState(ctx, o.s)
-	if err != nil {
-		return nil, err
-	}
-	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "learning", qualityCents); err != nil {
-		return nil, zip.Errorf(402, "%s", err.Error())
-	}
-	if err := horizon(in.Horizon); err != nil {
-		return nil, err
-	}
 	method := strings.ToLower(strings.TrimSpace(in.Method))
 	if method == "" {
 		method = calibrate.Isotonic
@@ -1023,30 +1152,36 @@ func (o ops) learning(ctx context.Context, in *mlLearningIn) (*mlLearningCurve, 
 	if steps < 2 || steps > 20 {
 		return nil, zip.ErrBadRequest("a curve has between 2 and 20 steps")
 	}
+	sc, db, shape, mctx, done, err := o.measuring(ctx, "learning", in.Horizon, in.Rows)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+
 	_, pol, err := stagePolicy(db, in.Stage)
 	if err != nil {
 		return nil, err
 	}
-	shape, err := scoringShape(db, o.s.State.model.Digest())
+	w, err := recorded(mctx, db, in.Horizon, shape, in.Rows)
 	if err != nil {
 		return nil, err
 	}
-	history, err := recorded(db, in.Horizon, in.Rows)
+	young, err := immature(mctx, db, in.Horizon)
 	if err != nil {
 		return nil, err
 	}
-	young, err := immature(db, in.Horizon)
-	if err != nil {
-		return nil, err
-	}
+	o.s.State.bill.Meter(sc.org, sc.project, "learning", measureCents(len(w.history)), sc.request, sc.clientIP)
 
-	curve := &mlLearningCurve{Horizon: in.Horizon, Immature: young}
-	if len(history) < 2 {
+	curve := &mlLearningCurve{
+		Horizon: in.Horizon, Immature: young,
+		Superseded: w.superseded, Truncated: w.truncated,
+	}
+	if len(w.history) < 2 {
 		curve.Refusal = errNoHistory.Error()
 		return curve, nil
 	}
-	obs := make([]quality.Observation, 0, len(history))
-	for _, h := range history {
+	obs := make([]quality.Observation, 0, len(w.history))
+	for _, h := range w.history {
 		obs = append(obs, h.Observation)
 	}
 	for _, s := range quality.Learning(obs, method, shape, steps, pol.Cost) {
@@ -1055,7 +1190,6 @@ func (o ops) learning(ctx context.Context, in *mlLearningIn) (*mlLearningCurve, 
 			Train: wireMetrics(s.Train), Ahead: wireMetrics(s.Ahead), Refusal: s.Refusal,
 		})
 	}
-	o.s.State.bill.Meter(sc.org, sc.project, "learning", qualityCents, sc.request, sc.clientIP)
 	return curve, nil
 }
 
@@ -1079,20 +1213,15 @@ func (o ops) learning(ctx context.Context, in *mlLearningIn) (*mlLearningCurve, 
 // change, so it is a record with an identifier and not a number that scrolled
 // past in a console.
 func (o ops) replay(ctx context.Context, in *mlReplayIn) (*mlReplayReport, error) {
-	sc, db, err := tenantState(ctx, o.s)
-	if err != nil {
-		return nil, err
-	}
-	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "replay", qualityCents); err != nil {
-		return nil, zip.Errorf(402, "%s", err.Error())
-	}
 	stage := strings.ToLower(strings.TrimSpace(in.Stage))
 	if !stages[stage] {
 		return nil, zip.Errorf(400, "%q is not a lifecycle stage", in.Stage)
 	}
-	if err := horizon(in.Horizon); err != nil {
+	sc, db, shape, mctx, done, err := o.measuring(ctx, "replay", in.Horizon, in.Rows)
+	if err != nil {
 		return nil, err
 	}
+	defer done()
 
 	current, _, err := currentPolicy(db, stage)
 	if err != nil {
@@ -1131,21 +1260,27 @@ func (o ops) replay(ctx context.Context, in *mlReplayIn) (*mlReplayReport, error
 		cand = sealed
 	}
 
-	history, err := recorded(db, in.Horizon, in.Rows)
+	w, err := recorded(mctx, db, in.Horizon, shape, in.Rows)
 	if err != nil {
 		return nil, err
 	}
-	cal, _, _, _, err := currentCalibration(db)
-	if err != nil {
-		return nil, err
-	}
-	rep := quality.Replay(history, cal, cand, actionRank)
+	// BOUND, like every other read of the map. A backtest run under a calibration
+	// the live plane refuses describes a world that cannot happen — every rung of
+	// the candidate reachable, every Would action acted on — and it is then
+	// written down as the durable justification for moving a threshold. Unbound,
+	// the zero Reader makes every row take the candidate's floor, and Replay says
+	// so in its own refusal.
+	cal, _ := reader(db, shape)
+	o.s.State.bill.Meter(sc.org, sc.project, "replay", measureCents(len(w.history)), sc.request, sc.clientIP)
+
+	rep := quality.Replay(w.history, cal, cand, actionRank)
 
 	id, at := newID("replay"), time.Now().UTC()
-	if err := putReplay(db, id, at, sc.org, rep); err != nil {
+	// The AUTHOR is the person. A replay is the evidence attached to a threshold
+	// change, and evidence whose author is "the org" names nobody.
+	if err := putReplay(db, id, at, by(ctx, sc), rep); err != nil {
 		return nil, err
 	}
-	o.s.State.bill.Meter(sc.org, sc.project, "replay", qualityCents, sc.request, sc.clientIP)
 	return wireReplay(id, at, rep), nil
 }
 
@@ -1194,24 +1329,46 @@ func stagePolicy(db *sql.DB, want string) (string, policy.Policy, error) {
 	return stage, p, err
 }
 
+// reader binds this tenant's calibration to the scoring shape in force. It is
+// the ONE door every measurement here reads a probability through, and it takes
+// the shape as an argument the CALLER computed from the live scorer rather than
+// reading it off the map — which is the whole point: a map cannot vouch for its
+// own applicability.
+//
+// It returns the zero Reader and a sentence, never an error. Every op below
+// treats "no calibration" and "the shape has moved" the same way — by not
+// stating a probability — and both are facts about the tenant rather than
+// failures of the request.
+func reader(db *sql.DB, shape string) (calibrate.Reader, string) {
+	m, _, _, ok, err := currentCalibration(db)
+	switch {
+	case err != nil:
+		return calibrate.Reader{}, "the calibration could not be read, so no probability was applied"
+	case !ok:
+		return calibrate.Reader{}, "no calibration is fitted for this organisation, so a score is a rank and not a probability"
+	}
+	r, err := m.Under(shape)
+	if err != nil {
+		return calibrate.Reader{}, "the calibration on file was fitted under a different scoring shape, " +
+			"so it refuses to answer and nothing here is stated as a probability: " + err.Error()
+	}
+	return r, ""
+}
+
 // scoreFor inverts a monotone calibration: the lowest score whose probability
 // reaches p. Binary search over the unit interval rather than over the knots, so
 // isotonic and platt take one implementation.
-func scoreFor(cal calibrate.Map, p float64) float64 {
+func scoreFor(cal calibrate.Reader, p float64) float64 {
 	if !cal.Fitted() {
 		return 0
 	}
 	lo, hi := 0.0, 1.0
-	if v, err := cal.P(hi, cal.Shape); err != nil || v < p {
+	if cal.P(hi) < p {
 		return 1.0000001
 	}
 	for range 40 {
 		mid := (lo + hi) / 2
-		v, err := cal.P(mid, cal.Shape)
-		if err != nil {
-			return 1.0000001
-		}
-		if v >= p {
+		if cal.P(mid) >= p {
 			hi = mid
 		} else {
 			lo = mid
@@ -1279,24 +1436,35 @@ func wireReplay(id string, at time.Time, r quality.Report) *mlReplayReport {
 	return out
 }
 
-// view renders a calibration and, when there is history to check it against, the
-// reliability report that says whether it holds.
-func view(m calibrate.Map, version int, at time.Time, current bool, horizon, young int, history []quality.Recorded) *mlCalibrationView {
+// view renders a calibration and, when it can still answer and there is history
+// to check it against, the reliability report that says whether it holds.
+//
+// THE CHART IS BOUND LIKE EVERY OTHER READ. A map whose shape has moved refuses
+// to state a probability, and a reliability report is that map applied to every
+// row — so drawing one beside the refusal would put on a chart exactly what the
+// prose has just said does not exist. Binding first makes that unrepresentable:
+// an unbound reader draws nothing.
+func view(m calibrate.Map, version int, at time.Time, shape string, horizon, young int, w evidence) *mlCalibrationView {
 	out := &mlCalibrationView{
 		Fitted: true, Version: version, Method: m.Method,
-		Digest: m.Digest, Shape: m.Shape, Current: current,
+		Digest: m.Digest, Shape: m.Shape,
 		Rows: m.Rows, Productive: m.Positive, Unproductive: m.Negative,
 		Prevalence: m.Prevalence, Brier: m.Brier,
 		Horizon: horizon, Immature: young,
+		Superseded: w.superseded, Truncated: w.truncated,
 	}
 	if !at.IsZero() {
 		out.At = at.UTC().Format(time.RFC3339)
 	}
-	if !current {
+	read, err := m.Under(shape)
+	out.Current = err == nil
+	if err != nil {
 		out.Refusal = "the scoring shape has moved since this fit — a feature changed, or a rule was written, " +
-			"retired or reweighted — so the map refuses to answer and every decision reports its probability as absent"
+			"retired, reweighted or muted for every subject — so the map refuses to answer and every decision " +
+			"reports its probability as absent"
+		return out
 	}
-	for _, b := range calibrate.Reliability(samples(history), m, 10) {
+	for _, b := range calibrate.Reliability(samples(w.history), read, 10) {
 		out.Reliability = append(out.Reliability, mlBin{
 			From: b.From, To: b.To, Rows: b.Rows, Predicted: b.Predicted, Observed: b.Observed,
 		})

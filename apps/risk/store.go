@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS decision (
 	causes      TEXT NOT NULL DEFAULT '[]',
 	signals     TEXT NOT NULL DEFAULT '{}',
 	digest      TEXT NOT NULL DEFAULT '',
+	shape       TEXT NOT NULL DEFAULT '',
 	label       TEXT NOT NULL DEFAULT '',
 	label_by    TEXT NOT NULL DEFAULT '',
 	label_at    TEXT NOT NULL DEFAULT ''
@@ -122,6 +124,27 @@ CREATE TABLE IF NOT EXISTS setting (
 );
 `
 
+// forward is every column added after the original schema, applied to a file
+// that already exists. CREATE TABLE IF NOT EXISTS is a no-op on such a file, so
+// without these a tenant that decided anything before the column existed would
+// never gain it. A fresh file already has them and the duplicate is the expected
+// no-op — the same idiom apps/wallets uses, for the same reason.
+var forward = []string{
+	`ALTER TABLE decision ADD COLUMN shape TEXT NOT NULL DEFAULT ''`,
+}
+
+// migrate applies the forward-adds. Any error that is not a column that is
+// already there is fatal: a half-migrated file is a file whose reads mean
+// something other than what they say.
+func migrate(db *sql.DB) error {
+	for _, stmt := range forward {
+		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("risk: %s: %w", stmt, err)
+		}
+	}
+	return nil
+}
+
 // shelf holds the lazily-opened per-tenant handles. A file is opened, migrated
 // and seeded once on first touch and cached by tenant key. Opens are serialised
 // so a concurrent first touch opens exactly once.
@@ -156,6 +179,10 @@ func (s *shelf) open(t Tenant) (*sql.DB, error) {
 		return nil, err
 	}
 	if _, err := db.Exec(schema + qualitySchema); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := migrate(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -523,8 +550,8 @@ func dropControl(db *sql.DB, id string) error {
 
 // ── decisions ───────────────────────────────────────────────────────────────
 
-// putDecision records the decision and CLAIMS its idempotency key in ONE
-// statement.
+// putDecision records the decision AND ITS GRADING, and CLAIMS the idempotency
+// key, in ONE transaction.
 //
 // Writing the row and then claiming the key in a second statement leaves a
 // window: two concurrent requests carrying the same key both find no row, both
@@ -536,20 +563,56 @@ func dropControl(db *sql.DB, id string) error {
 //
 // The unique index is PARTIAL (`WHERE idem != ''`), so decisions made without a
 // key do not collide with each other.
-func putDecision(db *sql.DB, o observation, out outcome, digest, idem string) error {
+//
+// THE VERDICT IS IN THE SAME TRANSACTION, and that is the whole reason this
+// takes one. Two independent statements can land one and not the other, and the
+// half that lands is the half that acts: a BLOCK with no probability, no
+// principal reasons and nothing saying why — which is exactly what an
+// adverse-action regime does not allow, served on the surface a disputing
+// customer's packet is built from. Either both rows exist or neither does.
+//
+// SHAPE is recorded beside the score because a score is a coordinate and a
+// coordinate means nothing without the system it was taken in. It is what lets a
+// later fit read only the rows it can honestly fit, instead of stamping today's
+// coordinates on history taken under yesterday's.
+func putDecision(db *sql.DB, o observation, out outcome, digest, shape, idem string, v verdict) error {
 	hits, _ := json.Marshal(out.hits)
 	causes, _ := json.Marshal(out.causes)
 	signals, _ := json.Marshal(o.signals)
-	_, err := db.Exec(`INSERT INTO decision
-		(id, at, stage, kind, subject, action, score, agency, shadow, refusal, amount, currency, direction, idem, hits, causes, signals, digest)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	reasons, err := json.Marshal(v.reasons)
+	if err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`INSERT INTO decision
+		(id, at, stage, kind, subject, action, score, agency, shadow, refusal, amount, currency, direction, idem, hits, causes, signals, digest, shape)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		out.id, stamp(o.at), o.stage, o.kind, o.subject, out.action, out.score, out.agency,
 		boolInt(out.shadow), out.refusal, o.amount, o.currency, o.direction,
-		idem, string(hits), string(causes), string(signals), digest)
-	if err != nil && idem != "" && isUnique(err) {
-		return errIdemTaken
+		idem, string(hits), string(causes), string(signals), digest, shape,
+	); err != nil {
+		if idem != "" && isUnique(err) {
+			return errIdemTaken
+		}
+		return err
 	}
-	return err
+	var p any
+	if v.probability != nil {
+		p = *v.probability
+	}
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO verdict (decision, at, probability, calibration, policy, reasons, refusal)
+		 VALUES (?,?,?,?,?,?,?)`,
+		out.id, stamp(o.at), p, v.calibration, v.policy, string(reasons), v.refusal,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // errIdemTaken says another request already recorded a decision under this key.
