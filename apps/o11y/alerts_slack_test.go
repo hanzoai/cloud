@@ -1,6 +1,7 @@
 package o11y
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -43,13 +44,22 @@ func TestSlackTextBoundsAStorm(t *testing.T) {
 	}
 }
 
-// TestPageWithoutChannelIsInert — no channel configured means no paging, and
-// crucially no panic and no block: the receipt path must not depend on it.
-func TestPageWithoutChannelIsInert(t *testing.T) {
+// TestDeliverWithoutAnyEgressIsAFailure — the inverse of what this test used to
+// assert. "No channel configured means no paging" was treated as an inert,
+// acceptable state; it is the state in which every alert in the fleet reaches
+// nobody, so deliver() reports it as a failure and the handler answers 503.
+func TestDeliverWithoutAnyEgressIsAFailure(t *testing.T) {
 	t.Setenv(alertsSlackChannelEnv, "")
-	page(&webhook{Receiver: "r", Status: "firing"},
+	t.Setenv(alertsWebhookEnv, "")
+	via, failures := deliver(context.Background(), &webhook{Receiver: "r", Status: "firing"},
 		[]alert{{Labels: map[string]string{"alertname": "X"}}})
-	// Also inert with a channel but no alerts.
-	t.Setenv(alertsSlackChannelEnv, "#hanzo-ops")
-	page(&webhook{Receiver: "r", Status: "firing"}, nil)
+	if via != "" {
+		t.Fatalf("nothing was configured, yet delivery claims egress %q", via)
+	}
+	if len(failures) != 1 || failures[0].egress != "none" {
+		t.Fatalf("want one 'none' failure, got %+v", failures)
+	}
+	if !strings.Contains(reason(failures), alertsSlackChannelEnv) {
+		t.Fatalf("the reason must name the missing configuration: %s", reason(failures))
+	}
 }

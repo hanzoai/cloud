@@ -63,7 +63,7 @@ func newTestService(t *testing.T) *service {
 		embed:   fakeEmbedder{dims: 64, enabled: true},
 		synth:   fakeSynth{enabled: true},
 		log:     luxlog.New("test"),
-		stores:  cloud.NewOrgStore(dataDir, "code", openStore),
+		stores:  cloud.NewOrgStore(cloud.Base{DataDir: dataDir}, "code", openStore),
 	}
 	t.Cleanup(func() { _ = s.stores.CloseAll() })
 	return s

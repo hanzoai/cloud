@@ -40,8 +40,6 @@ package leaderboard
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -80,10 +78,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // build opens the opt-in store under the shared data dir (mirrors clients/settings).
 func build(b cloud.Base) (state, error) {
-	if err := os.MkdirAll(b.DataDir, 0o755); err != nil {
-		return state{}, err
-	}
-	store, err := openOptinStore(filepath.Join(b.DataDir, "leaderboard.db"))
+	store, err := openOptinStore(b.DataDir)
 	if err != nil {
 		return state{}, err
 	}

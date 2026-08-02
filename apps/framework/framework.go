@@ -39,11 +39,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/openapi"
 	engine "github.com/hanzoai/framework"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -69,15 +70,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "framework")
 
-	// cek is CLOUD's storage policy — encrypted at rest under a KMS-held master
-	// key. The engine takes it as an opener rather than importing it, so the
-	// same engine runs unencrypted in a test or a standalone app.
-	// The engine opens the deployment's own DocType stores under deps.DataDir, not a
-	// tenant's, so they key under the platform principal. A per-org DocType store would
-	// come through OrgDB, which names its owner.
+	// Encryption at rest is CLOUD's storage policy, under a KMS-held master key. The
+	// engine takes an opener rather than importing it, so the same engine runs
+	// unencrypted in a test or a standalone app.
+	//
+	// The engine has ONE database and offers its path; cloud names it instead. These
+	// are the DEPLOYMENT's own DocType stores rather than a tenant's, so the system
+	// namespace owns them — and a name is what keys a file here, which a path handed
+	// down from a library cannot be. A per-org DocType store would come through
+	// OrgDB, which names its owner.
 	eng, err := engine.Open(engine.Config{
 		Dir:    deps.DataDir,
-		OpenDB: func(path string) (*sql.DB, error) { return cek.Open(cek.Global, path) },
+		OpenDB: func(string) (*sql.DB, error) { return cek.Open(namespace.System(), "framework", deps.DataDir) },
 		Logger: log,
 	})
 	if err != nil {

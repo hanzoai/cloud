@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both cgo and pure-Go build tags). Blank
 	// import registers the driver; importing modernc directly would double-register.
-	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -57,28 +60,18 @@ type Pipeline struct {
 	UpdatedAt int64
 }
 
-// PipelineStore is the world pipeline metastore over one SQLite file
-// ({DataDir}/world.db). Tenancy is the (org, project) key.
+// PipelineStore is the world pipeline metastore over one SQLite file — the
+// deployment's own "world" subsystem. Tenancy is the (org, project) key.
 type PipelineStore struct {
 	db *sql.DB
 }
 
-func openPipelineStore(path string) (*PipelineStore, error) {
-	db, err := cek.Open(cek.Global, path)
+func openPipelineStore(dir string) (*PipelineStore, error) {
+	db, err := cek.Open(namespace.System(), "world", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open world store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &PipelineStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

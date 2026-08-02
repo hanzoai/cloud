@@ -73,7 +73,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "sync")
 	s := &cloud.Service[state]{Base: b, State: state{
-		stores: cloud.NewOrgStore(deps.DataDir, "sync", openStore),
+		stores: cloud.NewOrgStore(b, "sync", openStore),
 	}}
 	mounted.Store(s)
 

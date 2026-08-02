@@ -514,7 +514,7 @@ func TestCallbackVerifiesOwner(t *testing.T) {
 	defer iam.Close()
 
 	drive := func(verify func(string) (cloud.VerifiedIdentity, error)) *http.Response {
-		store, err := openAccountStore(t.TempDir() + "/account.db")
+		store, err := openAccountStore(t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}

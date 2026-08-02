@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -77,7 +80,7 @@ func (f *fakeCommerce) depositCount() int {
 // commerce, returning the app and the fake for assertions.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	t.Helper()
-	store, err := openStore(t.TempDir() + "/referrals.db")
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

@@ -1,39 +1,24 @@
 package flags
 
 import (
-	"crypto/rand"
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
-
-// The cek data plane fail-closes without a master key on encryption-capable
-// builds; tests supply one process-wide (SetMasterKey is once-only).
-var cekOnce sync.Once
-
-func testMasterKey(t *testing.T) {
-	t.Helper()
-	cekOnce.Do(func() {
-		k := make([]byte, 32)
-		if _, err := rand.Read(k); err != nil {
-			t.Fatalf("rng: %v", err)
-		}
-		cek.SetMasterKey(k)
-	})
-}
 
 // newTestClient builds a Client over a temp-dir store tree and installs it as the
 // process seam, restoring the prior seam on cleanup.
 func newTestClient(t *testing.T) *Client {
 	t.Helper()
-	testMasterKey(t)
 	prev := mounted
 	c := &Client{
-		stores:     cloud.NewOrgStore[*Store](t.TempDir(), "flags", openStore),
+		stores:     cloud.NewOrgStore[*Store](cloud.Base{DataDir: t.TempDir()}, "flags", openStore),
 		distinctID: "test",
 		ttl:        time.Minute,
 	}

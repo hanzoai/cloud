@@ -1,27 +1,15 @@
 package git
 
 import (
-	"crypto/rand"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
-
-// The cek data plane fail-closes without a master key on encryption-capable
-// builds; supply one process-wide so the per-org git.db opens in local runs
-// exactly as it does in CI (mirrors clients/flags).
-func TestMain(m *testing.M) {
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		panic(err)
-	}
-	cek.SetMasterKey(k)
-	os.Exit(m.Run())
-}
 
 // TestPublicRepo_AnonymousRead proves the visibility model end to end:
 //   - a repo defaults PRIVATE: anonymous fetch advertisement is a uniform 404

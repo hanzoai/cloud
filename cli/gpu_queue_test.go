@@ -414,3 +414,39 @@ func TestRegisterRidesOutARollingControlPlane(t *testing.T) {
 		t.Fatalf("presence attempts = %d, want 3 (two 503s ridden out, then success)", presence)
 	}
 }
+
+// A credential the cloud REFUSES is not a blip, and must not be retried.
+//
+// The register retry exists so a rolling control plane (503 for a few seconds) cannot
+// kill a worker mid-render. 401/403 is the opposite kind of failure: it says this
+// node's token is not accepted, which waiting never fixes. Retried, it burned 30s per
+// boot inside a systemd restart loop and buried the one useful line under five
+// "retrying" ones.
+func TestRegisterDoesNotRetryARefusedCredential(t *testing.T) {
+	t.Setenv("HANZO_TOKEN", "t")
+	var mu sync.Mutex
+	presence := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/fleet/activities") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		mu.Lock()
+		presence++
+		mu.Unlock()
+		http.Error(w, "identity required", http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	w := testWorker(t, srv.URL)
+	err := w.register(context.Background())
+	if err == nil {
+		t.Fatal("a refused credential must be reported, not swallowed")
+	}
+	if presence != 1 {
+		t.Fatalf("presence attempts = %d, want 1 (a refusal is never retried)", presence)
+	}
+	if !strings.Contains(err.Error(), "hanzo login") {
+		t.Fatalf("the error must say what to do about it: %v", err)
+	}
+}

@@ -10,9 +10,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// The ONE Hanzo SQLite driver (see store.go). Blank-imported here too so this
 	// file's sql.Open("sqlite", …) is self-documenting about its driver dependency.
-	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -21,8 +24,8 @@ import (
 var errNoWorkspace = errors.New("team: workspace not found")
 
 // accountStore is the login/membership control plane — the raw-SQLite replacement
-// for team-go's Base `workspaces` + `members` collections. ONE SQLite file
-// ({DataDir}/team/account.db) holds every org's rows; tenant isolation is the
+// for team-go's Base `workspaces` + `members` collections. ONE SQLite file — the
+// deployment's own "account" subsystem — holds every org's rows; tenant isolation is the
 // owner_org column, enforced on EVERY query (a workspace and its members are only
 // ever read/selected scoped to the caller's VERIFIED token org). MaxOpenConns(1)
 // serializes writes against the single-writer file.
@@ -55,22 +58,12 @@ type member struct {
 	JoinedAt    int64
 }
 
-func openAccountStore(path string) (*accountStore, error) {
-	db, err := cek.Open(cek.Global, path)
+func openAccountStore(dir string) (*accountStore, error) {
+	db, err := cek.Open(namespace.System(), "account", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open account store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &accountStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

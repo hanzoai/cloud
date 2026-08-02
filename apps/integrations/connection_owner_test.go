@@ -2,7 +2,6 @@ package integrations
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 )
 
@@ -12,7 +11,7 @@ import (
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "integrations.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

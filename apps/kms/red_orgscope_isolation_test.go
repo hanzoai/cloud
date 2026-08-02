@@ -436,14 +436,14 @@ func TestRedIso_D_AudNeverWidensReach(t *testing.T) {
 // ── (e) case-fold and unsafe-rune org folding ──────────────────────────────────
 //
 // The org is folded into a store PATH and, one layer down, into a per-org FILE via
-// cloud.SanitizeOrg. Two distinct IAM owners that fold onto one namespace would be
+// namespace.Sanitize. Two distinct IAM owners that fold onto one namespace would be
 // a cross-tenant break with no forged header required, so the fold must be
 // injective end to end.
 func TestRedIso_E_OrgFoldIsInjective(t *testing.T) {
 	app, key, path := isoWorld(t)
 
 	// Case-distinct owners are DISTINCT tenants: "Maxpower" cannot reach
-	// "maxpower". (SanitizeOrg is the identity only on clean lowercase labels;
+	// "maxpower". (namespace.Sanitize is the identity only on clean lowercase labels;
 	// anything else gets a SHA-256-derived suffix, so the files never alias.)
 	for _, o := range []string{"Maxpower", "MAXPOWER", "maxPower"} {
 		isoGet(t, app, "(e) case-variant owner "+o, path, isoTok{owner: o}.mint(t, key), nil).

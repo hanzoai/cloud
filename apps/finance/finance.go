@@ -29,14 +29,10 @@
 package finance
 
 import (
-	"github.com/hanzoai/cloud/cek"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,6 +42,7 @@ import (
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
 	"github.com/hanzoai/cloud/types"
+	"github.com/hanzoai/namespace"
 )
 
 // Client is the in-process inter-subsystem seam cloud's money paths call. It IS cloud's
@@ -99,60 +96,58 @@ const (
 	acctWallet  = "wallet"           // the org pool wallet; a per-user subject is "wallet:<user>"
 )
 
-// orgPattern is the safe file-path shape for an org directory — the SAME allowlist
-// sqlstore's per-tenant opener guards with (a leading alphanumeric then [a-z0-9_-]; no
-// path separators, no dots, no traversal). An org is used verbatim as a directory name
-// only when it matches; anything else is refused, so a caller can never place a money
-// file outside <dataDir>/orgs/ or reach another tenant's file.
-var orgPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
-
 // ledgerFinance implements types.FinanceClient over one native ledger file per org.
 type ledgerFinance struct {
 	dataDir string
 
 	mu     sync.Mutex
-	stores map[string]*sqlstore.Store // key: resolved db path (encodes org + test-mode)
+	stores map[ledgerName]*sqlstore.Store
+}
+
+// ledgerName is WHICH ledger file: whose it is, and whether it is the sandbox
+// one. It is the cache key and it is also exactly what the opener takes, so a
+// hit and a miss can never resolve to different files.
+type ledgerName struct {
+	ns        namespace.Namespace
+	subsystem string
 }
 
 // compile-time proof ledgerFinance is the money seam.
 var _ types.FinanceClient = (*ledgerFinance)(nil)
 
-// New returns a finance client rooting each org's prepaid wallet file under dataDir
-// (<dataDir>/orgs/<org>/finance.db, or finance-test.db in sandbox mode). Files open
-// lazily on first use.
+// New returns a finance client rooting each org's prepaid wallet ledger under
+// dataDir, in that org's own namespace ("finance", or "finance-test" in sandbox
+// mode). Files open lazily on first use.
 func New(dataDir string) *ledgerFinance {
-	return &ledgerFinance{dataDir: dataDir, stores: make(map[string]*sqlstore.Store)}
+	return &ledgerFinance{dataDir: dataDir, stores: map[ledgerName]*sqlstore.Store{}}
 }
 
 // storeFor resolves (opening + caching on first use) the org's ledger file. test picks
-// the sandbox file so sandbox money never mixes with live. The org is validated against
-// orgPattern FIRST, so it can never traverse the path or reach another tenant's file.
+// the sandbox ledger so sandbox money never mixes with live.
+//
+// The org becomes a NAMESPACE first — the one injective slugger, which is also what
+// keys the file — so it can never traverse the path, reach another tenant's ledger,
+// or fold two distinct orgs onto one wallet.
 func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error) {
-	org = strings.TrimSpace(org)
-	if !orgPattern.MatchString(org) {
-		return nil, fmt.Errorf("finance: invalid org %q", org)
+	ns, err := namespace.OrgProject(org, "")
+	if err != nil {
+		return nil, fmt.Errorf("finance: %w", err)
 	}
-	name := "finance.db"
+	name := ledgerName{ns: ns, subsystem: "finance"}
 	if test {
-		name = "finance-test.db"
+		name.subsystem = "finance-test"
 	}
-	dir := filepath.Join(f.dataDir, "orgs", org)
-	path := filepath.Join(dir, name)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if s, ok := f.stores[path]; ok {
+	if s, ok := f.stores[name]; ok {
 		return s, nil
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("finance: create org dir %q: %w", dir, err)
-	}
-	// This ledger belongs to ONE org, and its key says so (cek-rewrap bound it).
-	s, err := sqlstore.Open(cek.Org(org), path)
+	s, err := sqlstore.Open(name.ns, name.subsystem, f.dataDir)
 	if err != nil {
-		return nil, fmt.Errorf("finance: open %q: %w", path, err)
+		return nil, fmt.Errorf("finance: open %s ledger for %s: %w", name.subsystem, name.ns, err)
 	}
-	f.stores[path] = s
+	f.stores[name] = s
 	return s, nil
 }
 

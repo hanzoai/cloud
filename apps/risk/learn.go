@@ -408,7 +408,7 @@ func newPlane(base cloud.Base) (*plane, error) {
 	ctx, stop := context.WithCancel(context.Background())
 	p := &plane{
 		res:     map[tenant]*resident{},
-		shelf:   cloud.NewOrgStore(base.DataDir, "risk", openShelf, cloud.WithDurable(base.Durable), cloud.WithStoreLogger(base.Log)),
+		shelf:   cloud.NewOrgStore(base, "risk", openShelf),
 		log:     base.Log,
 		now:     time.Now,
 		folded:  map[tenant]fold{},

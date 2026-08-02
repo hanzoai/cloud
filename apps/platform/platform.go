@@ -42,19 +42,19 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hanzoai/cloud/apps/k8s"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/k8s"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -109,10 +109,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("platform.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("platform.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "platform.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("platform.Mount: open store: %w", err)
 	}
@@ -633,10 +630,10 @@ func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 	if !principal.Validated(c) {
 		return "", false // no validated principal — refuse the forgeable Phase-1 data path
 	}
-	// ONE org normalizer, cloud-wide: the injective provisioning.SanitizeOrg, so a
+	// ONE org normalizer, cloud-wide: the injective namespace.Sanitize, so a
 	// tenant resolved here keys the SAME namespace/image boundary as everywhere
 	// else and two distinct owners never collapse onto one tenant (CRIT-2).
-	if org := provisioning.SanitizeOrg(c.Org()); org != "" {
+	if org := namespace.Sanitize(c.Org()); org != "" {
 		return org, true
 	}
 	if c.IsAdmin() {

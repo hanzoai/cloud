@@ -406,7 +406,7 @@ func TestParseTeamsActivityAndStripMentions(t *testing.T) {
 // ONLY the org that connected it, a foreign id resolves to nothing, and two orgs on
 // two ids never cross.
 func TestBridgeOrgIsolationAllProviders(t *testing.T) {
-	st, err := openStore(t.TempDir() + "/iso.db")
+	st, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

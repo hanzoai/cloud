@@ -300,7 +300,7 @@ var dedicatedEngines = map[string]engine{
 
 // tenantNamespace is the org's physical namespace — the cross-tenant isolation
 // boundary. org MUST already be the sanitized slug (tenant() returns
-// sanitizeOrg(c.Org())), so this only prepends the prefix; re-sanitizing an
+// namespace.Sanitize(c.Org())), so this only prepends the prefix; re-sanitizing an
 // already-suffixed slug would double-suffix it. Matches platform's
 // tenant-<org> convention exactly, so a DB instance and the org's apps share
 // one namespace.

@@ -6,12 +6,16 @@ import (
 	"errors"
 	"fmt"
 
+	// cek is the ONE opener: it renders this subsystem's path from the
+	// namespace and opens it under the key cek derives for that name.
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
 	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
 	// modernc directly instead would double-register "sqlite" under CGO and
 	// panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -24,30 +28,21 @@ var (
 	errBadRef   = errors.New("crm: referenced record not found in org")
 )
 
-// Store is the CRM database. ONE SQLite file ({DataDir}/crm.db) holds every
-// org's records; tenant isolation is the `org` column, enforced on EVERY query.
-// This mirrors clients/prompts and clients/eval exactly (the ONE storage
-// pattern). MaxOpenConns(1) serializes writes against the single-writer file.
+// Store is the CRM database. ONE SQLite file — the system namespace's "crm" —
+// holds every org's records; tenant isolation is the `org` column, enforced on
+// EVERY query. This mirrors clients/prompts and clients/eval exactly (the ONE
+// storage pattern). MaxOpenConns(1) serializes writes against the single-writer
+// file.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "crm", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open crm store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
