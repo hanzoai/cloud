@@ -92,6 +92,25 @@ func run() error {
 	// in the host's MountAll teardown.
 	app.OnShutdown(o11y.ShutdownO11y)
 
+	// Bind the CANONICAL plane socket before serving the edge.
+	//
+	// cloud.Serve does this for every generated app main; this one is
+	// hand-written, so nothing else in the process will — and without it the app
+	// is unreachable over the plane while looking perfectly healthy: zip binds
+	// its own listener at a temp path, /var/lib/cloud/run/o11y.sock never
+	// exists, and zip.DialApp("o11y") finds nothing. Peers then fail with no
+	// error anyone can see. That is exactly how POST /v1/event/{project}/envelope
+	// answered 503 to every Sentry SDK while o11y served /v1/sentry fine, and how
+	// the LLM-obs claim silently declined so those batches walked the product wire.
+	//
+	// Fail-SOFT: a plane that will not bind must not take the HTTP surface down
+	// with it — this process is what answers /v1/o11y and /v1/sentry.
+	if stop, err := cloud.ServePlane("o11y", deps.Logger); err != nil {
+		deps.Logger.Warn("plane: socket not served", "app", "o11y", "err", err)
+	} else {
+		defer func() { _ = stop() }()
+	}
+
 	addr := os.Getenv(listenEnv)
 	if addr == "" {
 		addr = defaultListen
