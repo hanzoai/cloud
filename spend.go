@@ -263,6 +263,7 @@ var meteredApps = []string{
 	"platform",     // builds and runs (compute).
 	"projects",     // site hosting fee.
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
+	"risk",         // per-screen fee inside each op.
 	"security",     // scan fee.
 	"storage",      // object-storage data plane.
 	"tools",        // per-tool dispatch.
@@ -308,7 +309,7 @@ func meteredPrefixes() []string {
 		}
 	}
 	for _, name := range meteredApps {
-		add("/v1/" + name)                          // the tree the app OWNS.
+		add("/v1/" + name)                             // the tree the app OWNS.
 		for _, p := range manifest.PrefixesFor(name) { // the paths the host ROUTES to it.
 			add(p)
 		}
