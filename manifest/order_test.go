@@ -23,7 +23,7 @@ var frozen = []string{
 	"dns", "domain", "prompts", "agents", "link", "wallets",
 	"x402", "deploy", "functions", "tracker", "templates", "blueprint",
 	"framework", "knowledge", "help", "content", "catalogsync", "webhooks",
-	"ml", "usage", "leaderboard", "crm", "marketing", "ads",
+	"ml", "risk", "usage", "leaderboard", "crm", "marketing", "ads",
 	"campaign", "validators", "social", "analytics", "git", "sync",
 	"visor", "venue", "captable", "code", "zt", "share",
 	"dataroom", "graph", "security", "integrations", "destinations", "cloudflare",

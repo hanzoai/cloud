@@ -73,7 +73,7 @@ func run() error {
 	// no-op provider and emitted nothing.
 	defer cloud.InstallTelemetry(context.Background(), deps.Logger, "hanzo-o11y")(context.Background())
 
-	app := newApp(deps)
+	app := newApp(cfg, deps)
 
 	if err := o11y.MountO11y(app, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
@@ -139,10 +139,34 @@ func run() error {
 //
 // Installed BEFORE the mount because fiber runs middleware in registration order:
 // one added after the routes never runs.
-func newApp(deps cloud.Deps) *zip.App {
+//
+// THE IDENTITY BOUNDARY, for the same reason and with more force. o11y scopes
+// every read by the validated tenant (apps/o11y/scope.go reads c.Org(), and its
+// admin surfaces read X-User-IsAdmin) — headers that are only trustworthy because
+// SOMETHING strips the client's copy and re-mints them from a verified token.
+// cloud.Serve installs that boundary for every scaffolded app; this main is
+// hand-written, so it has to install it itself, and until it did, this process
+// took those headers from the wire.
+//
+// It is also what the abuse gate below needs: the gate classes a caller from the
+// boundary's own attestation (principal.Minted), so without a boundary every
+// caller here is anonymous — safe, but blind to the customer automation it exists
+// to tell apart from a scraper.
+//
+// AbuseGate then, by the same argument as EdgeCORS: this process answers public
+// requests, so it carries the lifecycle defense itself, and an app that opted out
+// of the gate by being hand-written would be the one prefix family a stolen
+// credential could work against unwatched.
+//
+// Shadow per org by default, exactly as in the fused binary, so this is a sensor
+// here until an operator arms the org — not a second policy.
+func newApp(cfg *cloud.Config, deps cloud.Deps) *zip.App {
 	// cloud.ErrorHandler for the same reason cloud.Serve installs it: this main is
-	// hand-written, and without it a refusal this app propagates renders 500.
+	// hand-written, and without it a refusal this app propagates renders 500 —
+	// which is exactly what the identity boundary and the abuse gate above emit.
 	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger, ErrorHandler: cloud.ErrorHandler})
 	app.Use(cloud.EdgeCORS(deps.GatewayPolicy))
+	app.Use(cloud.IdentityMiddleware(cfg))
+	app.Use(cloud.AbuseGate(deps, deps.Traffic))
 	return app
 }
