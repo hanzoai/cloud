@@ -190,6 +190,15 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	if amt := u.Money(); amt.IsZero() || amt.IsNeg() {
 		return
 	}
+	// OWN THE STRINGS BEFORE THEY OUTLIVE THE REQUEST. Both paths below hand this
+	// value to a background goroutine, and a Usage built in a handler carries
+	// zero-copy views into the server's reused request arena (c.User(),
+	// c.RequestID(), the forwarded IP). Without the clone the debit eventually
+	// marshals the NEXT request's bytes onto this caller's row — and connections
+	// are reused across tenants, so the row it corrupts belongs to someone else.
+	// One clone here, rather than every caller of a fire-and-forget meter having
+	// to remember. See [metering.Usage.Clone].
+	u = u.Clone()
 	if !rm.Enabled() {
 		rm.meterPeer(org, kind, u)
 		return
