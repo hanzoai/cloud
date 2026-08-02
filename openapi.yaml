@@ -34124,6 +34124,20 @@ paths:
       tags:
       - billing
       x-app: billing
+  /v1/billing/credits:
+    get:
+      description: 'Returns the caller org''s credit grants — each with its original
+        amount, what remains and when it expires — so a customer can see what was
+        given and what is left before metered spend draws it down. It is a READ of
+        the caller''s own subject, pinned before the handler runs, so a grant belonging
+        to another tenant is simply absent. Granting credit is not this route and
+        never has been: minting lands on the mint-gated POST /v1/billing/credit, which
+        no browser can reach. Reading an empty balance is an empty array, not an error.'
+      operationId: get_v1_billing_credits
+      summary: List the credit grants on your org's balance
+      tags:
+      - billing
+      x-app: commerce
   /v1/billing/gpu/charge:
     post:
       description: |-
@@ -66605,7 +66619,7 @@ paths:
       tags:
       - store
       x-app: commerce
-  /v1/store/storefront-token:
+  /v1/store/token:
     post:
       description: 'Answers a freshly minted token carrying ONLY the published-read
         permission — enough for a logged-out shopper''s storefront to read your published
@@ -66616,7 +66630,7 @@ paths:
         immediately, so re-minting is how you revoke. Admin is enforced by the handler
         as well as the route, because the route''s token gate does not apply on the
         identity path and a plain member must not be able to mint their org''s key.'
-      operationId: post_v1_store_storefront-token
+      operationId: post_v1_store_token
       summary: Mint your org's least-privilege storefront read key
       tags:
       - store

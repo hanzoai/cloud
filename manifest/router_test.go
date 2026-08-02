@@ -97,7 +97,7 @@ var unreachable = []string{
 	// /v1/billing/methods is no longer here either, and it went the same
 	// way. apps/commerce registered a POST at an address manifest.Apps gives to the
 	// BILLING app — which serves both methods there, because the GET is billing's
-	// proxy to commerce's /v1/billing/portal/payment-methods and the host claims a
+	// proxy to commerce's /v1/billing/portal/methods and the host claims a
 	// prefix for every method at once. So the registration was unreachable in the
 	// fleet AND a second claim on one address, which openapi.Weave refuses rather
 	// than pick a winner between: the fleet document could not be woven at all until
