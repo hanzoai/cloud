@@ -26,7 +26,7 @@ import (
 // snapshot would return every tenant to warming — and a warming model refuses to
 // score, which reads as "clean" to anything that does not check the refusal.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:       "risk",
 		Price:      cloud.Metered,
 		Mount:      risk.Mount,

@@ -4178,3 +4178,73 @@ Ingress still points that path at `service: aml` (the amld pod holding the live
 5-year retention plane), and claiming it in cloud without deleting that rule in
 the SAME commit gives a compliance surface answering from a store that is not the
 record.
+
+### What a score MEANS, and what a record IS (`apps/risk` + `luxfi/aml` scoring)
+
+**A calibration cannot be read without naming the coordinates.** `calibrate.Map`
+has no read method. `Under(shape)` is the only way to obtain a `Reader`, and a
+`Reader` has no exported constructor — so a function taking one is a function
+whose caller went through the training–serving skew gate, and the compiler checks
+it. The gate used to be `P(score, shape)` and every internal call site passed
+`m.Shape`: the value being compared came from the value being checked, so the
+control was inert everywhere except the one place a live shape happened to be
+threaded in. `/v1/ml/evaluate`, `/v1/ml/replay` and the reliability chart all
+answered under a map the decide path refuses. **A gate a caller can satisfy is
+not a gate — bind at the boundary, not at the read.**
+
+**Ties are the only case, not an edge case.** A decision score is
+`1 - prod(1-weight)` over FIXED per-rule weights, `round4`'d — so the alphabet is
+a handful of atoms and the modal one is exactly 0. Isotonic regression that pools
+per SAMPLE rather than per DISTINCT SCORE reports every plateau holding a
+positive as certainty. `pava` builds one block per distinct score, and a rounding
+collision between two centroids POOLS rather than picking one: either endpoint
+alone states a probability the pooled evidence does not support.
+
+**A decision records the shape it was scored under** (`decision.shape`), a fit
+reads ONE coordinate system, and the refusal says how much evidence the boundary
+put out of reach (`superseded`). Without the column a refit re-blesses stale
+rows — the gate's own documented remedy walking through the gate. The bounded
+history read takes the NEWEST rows (`DESC` + `LIMIT n+1`) and reports truncation;
+ascending plus a limit freezes every measurement on the tenant's first 50k
+decisions, forever, silently.
+
+**A rule-wide mute is IN the scoring shape.** `combine()` sums only unsuppressed
+hits, so muting a rule for the whole population moves every score it touched
+exactly as retiring the rule would. A mute naming a subject is operational data
+and stays out.
+
+**The policy ladder cannot decline on the model alone.** The calibrated
+probability is a pure function of the same score `modelCeiling` already capped,
+so an uncapped escalation would void the cap by arithmetic. `escalate` caps the
+policy at what the evidence behind it can justify; a decline needs a rule the
+organisation wrote.
+
+**One cell per tenant; nothing is shared.** `bound.go` holds every number that
+costs memory and the ONLY two constructors — `aggregates()` and `forest()`, both
+unexported, both always bounded, `forest` pinning `MaxOrgs: 1` so the
+cross-tenant eviction path is unreachable rather than unlikely. Worst case is
+arithmetic: 6,048 B/key × an 8 MiB per-tenant cap (~1,386 keys) × 48 tenants
+≈ 400 MiB. At the ceiling a NEW tenant is REFUSED (503 + error log + degraded
+probe); admitting it by evicting an incumbent is the same defect wearing an
+admission badge. Memory returns from a tenant's OWN silence, floored at the
+longest window so every retired ring held zeros, and at most `retireBatch` (4)
+snapshots are written per pass because the registry lock is held while they are.
+
+**Every record ships before it is acknowledged.** `shelf.commit` writes to the
+tenant's own file and `Sync`s it, fenced at the lease round, as ONE step — so
+"written" and "durable" cannot come apart at a call site. An UNACKED ship is an
+error, never a warning: unacked means this pod is not the org's elected writer.
+The writes easiest to forget are the RETIREMENTS (rule deleted, mute lifted, hold
+released, mode returned to shadow) — an unshipped delete brings the old state
+back at the next rollout, firing or blocking, after a 204 said it was gone.
+`TestEveryMutatingRouteIsCoveredByTheDurabilityTable` reads
+`plugin/risk/openapi.json` and fails on any mutating route the table does not
+exercise, so this stops being a rule somebody has to remember.
+
+**`GET /v1/<app>/health` is unauthenticated by design across this fleet** — the
+billing gate, the tracing filter and the identity middleware each exempt it by
+suffix. So the capacity report carries a strained COUNT and never a tenant key: a
+roster there is a customer list served to an anonymous GET, along with which pod
+holds each. The organisation whose own rings are partial is told on its own
+scoped state (`GET /v1/ml/state` → `strained`), and no other organisation is told
+anything.
