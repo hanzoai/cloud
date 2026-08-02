@@ -43,6 +43,7 @@ require (
 	github.com/vulcand/oxy/v2 v2.2.0
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
+	github.com/zap-proto/http v0.3.1
 	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zip v1.18.23
 	golang.org/x/term v0.45.0
@@ -98,7 +99,6 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
-	github.com/zap-proto/http v0.3.1 // indirect
 	github.com/zap-proto/zap2pb v0.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opentelemetry.io/collector/component v1.54.0 // indirect

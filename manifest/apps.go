@@ -208,12 +208,14 @@ var Apps = []App{
 	{Name: "engine", Prefixes: []string{"/v1/engine"}},
 	{Name: "registry", Prefixes: []string{"/v1/registry"}},
 	{Name: "auto", Prefixes: []string{"/v1/auto"}},
-	// Open: the tool plane also serves the CALLER's own tools — its connectors,
-	// skills, agents, and the external MCP servers it enabled — which are rows and
-	// cannot be in a build-time catalogue. The host asks it per caller on a
-	// tools/list that names one. It is the only open app in the fleet, and zip
-	// refuses a second.
-	{Name: "tools", Open: true, Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
+	// The tool plane also serves the CALLER's own tools — its connectors, skills,
+	// agents, and the external MCP servers it enabled — which are rows and could
+	// never have been in a build-time catalogue. It used to be the fleet's single
+	// "open" app for that reason, and zip refused a second. Nothing marks it now:
+	// the host forwards the caller's OWN tools/list to EVERY subsystem, so each one
+	// answers for this caller out of its own registry and its own rows, and being
+	// asked per caller is no longer a privilege one app holds.
+	{Name: "tools", Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
 	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},

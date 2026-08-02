@@ -131,7 +131,7 @@ surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	  echo "undocumented, or documented and gone. The SDK repos pull this file, so a route"; \
 	  echo "missing here is a route no generated client can reach."; \
 	  echo ""; \
-	  echo "  fix:  make describe  # then commit openapi.yaml and plugin/*/{openapi,mcp}.json"; \
+	  echo "  fix:  make describe  # then commit openapi.yaml and plugin/*/openapi.json"; \
 	  echo ""; \
 	  exit 1; \
 	fi
