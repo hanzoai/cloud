@@ -22,17 +22,30 @@ func TestCanonicalDoorFallsThroughWhenObsPeerIsAbsent(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
 
-	// An LLM-obs-SHAPED body: with a peer it would be claimed; without one it
-	// must not be lost — it walks the product wire like anything else.
+	// An LLM-obs-SHAPED body: with a peer it is claimed; without one it falls through
+	// to the product wire, which has no writer for a trace envelope and lands NOTHING.
+	//
+	// THIS ASSERTION USED TO READ `want 200 via the product wire`, and 200 is what it
+	// got — while storing zero facts. The trace was gone and the door said fine, which
+	// is precisely how an o11y outage runs for months without anyone seeing it: the
+	// only thing that changes is a number in a receipt nobody reads. What the door owes
+	// a caller here is the truth — nothing landed, and the body is why (400) — not a
+	// green check. The peer being ABSENT is a real operational state, and it now
+	// surfaces at the door instead of being absorbed by it.
 	obsBody := `{"batch":[{"id":"a","type":"trace-create","timestamp":"t","body":{}}]}`
-	if code, _ := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", obsBody); code != http.StatusOK {
-		t.Fatalf("obs-shaped body with no peer = %d, want 200 via the product wire", code)
+	code, body := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", obsBody)
+	refused(t, "obs-shaped body with no peer", code, body, http.StatusBadRequest, "unroutable_events")
+	if len(w.facts) != 0 {
+		t.Fatalf("obs-shaped body landed %d facts on the product wire; it lands none, which is the "+
+			"whole reason the receipt has to say so", len(w.facts))
 	}
 
-	// And an ordinary product event is untouched by the claim attempt.
-	if code, _ := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme",
+	// And an ordinary product event is untouched by the claim attempt — it is decoded,
+	// WRITTEN and receipted 200 exactly as before. That is the guarantee this test
+	// exists for: a claim that does not happen must not break the product wire.
+	if code, got := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme",
 		`{"event":"$pageview","distinctId":"d"}`); code != http.StatusOK {
-		t.Fatalf("product event = %d, want 200", code)
+		t.Fatalf("product event = %d (%s), want 200", code, got)
 	}
 	if got := w.sources(t); len(got) == 0 {
 		t.Fatal("no peer must mean the product wire still WRITES; nothing reached the warehouse")
