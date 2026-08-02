@@ -132,13 +132,7 @@ func TestAnonEventName_ArbitraryRefused(t *testing.T) {
 				"names, never a caller-chosen one", name)
 			continue
 		}
-		if code != http.StatusOK {
-			t.Errorf("anonymous event %q = %d (%s), want 200 all-dropped", name, code, got)
-			continue
-		}
-		if r := receipt(t, got); r.Accepted != 0 || r.Dropped != 1 {
-			t.Errorf("anonymous event %q receipt = %+v, want accepted:0 dropped:1", name, r)
-		}
+		refusedAnon(t, "anonymous event "+name, code, got)
 	}
 }
 
@@ -157,9 +151,7 @@ func TestAnonEventName_CannotBuyAKind(t *testing.T) {
 				"admit a refused KIND", kind)
 			continue
 		}
-		if r := receipt(t, got); r.Accepted != 0 || r.Dropped != 1 {
-			t.Errorf("anonymous %s named $click receipt = %+v, want accepted:0 dropped:1", kind, r)
-		}
+		refusedAnon(t, "anonymous "+kind+" named $click", code, got)
 	}
 }
 

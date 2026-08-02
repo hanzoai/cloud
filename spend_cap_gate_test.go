@@ -12,15 +12,22 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
-// capCommerce answers the metering client's balance, spend-cap authorize, and
-// alerts (rate-rules) calls. Each verdict is fully controlled per test.
+// capCommerce answers the metering client's balance and spend-cap authorize
+// calls. Each verdict is fully controlled per test.
+//
+// It also serves GET /v1/billing/alerts, which nothing may call any more: the
+// rate rules come over the plane now (see middleware_ratelimit_plane_test.go),
+// because that HTTP fetch was the in-process self-dispatch that 502'd. alertsHits
+// stays here as the tripwire — a caller that goes back to the old wire trips it.
 type capCommerce struct {
-	balanceBody string            // GET /v1/billing/balance (default funded).
-	authorize   string            // GET /v1/billing/alerts/authorize (the cap verdict).
-	rulesFor    map[string]string // X-Org-Id -> GET /v1/billing/alerts body.
+	balanceBody string // GET /v1/billing/balance (default funded).
+	authorize   string // GET /v1/billing/alerts/authorize (the cap verdict).
+
+	alertsHits atomic.Int32
 }
 
 func (f *capCommerce) server(t *testing.T) *httptest.Server {
@@ -37,11 +44,8 @@ func (f *capCommerce) server(t *testing.T) *httptest.Server {
 		_, _ = io.WriteString(w, f.authorize)
 	})
 	mux.HandleFunc("/v1/billing/alerts", func(w http.ResponseWriter, r *http.Request) {
-		body := f.rulesFor[r.Header.Get("X-Org-Id")]
-		if body == "" {
-			body = `[]`
-		}
-		_, _ = io.WriteString(w, body)
+		f.alertsHits.Add(1)
+		_, _ = io.WriteString(w, `[]`)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -147,15 +151,23 @@ func rateReq(t *testing.T, app *zip.App, org, project string) *http.Response {
 // (iii) + (iv) Rate limit: a scope with rpm=2 admits 2 requests in the window then
 // 429s the 3rd — and the limit is per (org, project, service): a different org
 // and a different project are NOT throttled by org A / project P's rule.
+//
+// The rules arrive over the plane; the fake commerce is still up so the tripwire
+// on its retired /v1/billing/alerts route can prove nothing fetched them by HTTP.
 func TestScopeRateLimit_PerScope429AndIsolation(t *testing.T) {
-	fc := &capCommerce{rulesFor: map[string]string{
+	servePlaneRules(t, map[string][]plane.ScopeRule{
 		// org "hanzo": a 2 rpm cap scoped to project "P".
-		"hanzo": `[{"project":"P","service":"","rateLimitRpm":2}]`,
+		"hanzo": {{Project: "P", RateLimitRpm: 2}},
 		// org "other": no rules → unlimited.
-		"other": `[]`,
-	}}
+	}, nil)
+	fc := &capCommerce{}
 	srv := fc.server(t)
 	app := rateApp(t, mustClient(t, srv.URL, false))
+	t.Cleanup(func() {
+		if n := fc.alertsHits.Load(); n != 0 {
+			t.Errorf("GET /v1/billing/alerts was called %d times — the rate rules must come over the plane, not by dispatching this app back into itself", n)
+		}
+	})
 
 	// hanzo / project P: 2 pass, 3rd is 429.
 	if code := rateReq(t, app, "hanzo", "P").StatusCode; code != 200 {

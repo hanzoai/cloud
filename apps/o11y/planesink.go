@@ -42,10 +42,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	ds "github.com/hanzo-ds/go"
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -74,6 +76,23 @@ const (
 	platformOrg = "hanzo"
 )
 
+// ingested_at IS DELIBERATELY ABSENT FROM BOTH LISTS, and it is the one omission
+// that is a rule rather than a default. The plane's DDL (hanzoai/o11y owns it)
+// declares it `DateTime64(3) DEFAULT now64(3)` and then measures BOTH retention
+// and layout from it — `TTL toDateTime(ingested_at) + toIntervalDay(30)` and
+// `PARTITION BY toDate(ingested_at)` on event.span. A writer that binds it hands
+// the wire control of when its own row expires: a batch stamped 30 days back is
+// accepted, answers 200, and is TTL-eligible before the reply lands. So the
+// server stamps it, always. apps/analytics states the same rule for the four
+// warehouse writers and pins it with a test (TestRetentionIsNotARequestParameter);
+// TestPlaneWritersNeverBindIngestedAt below is that pin for these two.
+//
+// It is ALSO event.span's ReplacingMergeTree version column, which is why leaving
+// it to the DEFAULT is correct and not merely convenient: identity is
+// (org, trace_id, time, id) and every one of those is a pure function of the
+// span, so a re-sent span produces a NEW version of the SAME identity and the
+// merge collapses it. The version has to be a clock, and the server's clock is
+// the only one every writer shares.
 var (
 	planeSpanColumns = []string{"org", "time", "id", "name", "kind", "service",
 		"trace_id", "span_id", "parent", "duration", "status", "attributes"}
@@ -451,4 +470,64 @@ func attrString(v any) string {
 		}
 		return string(b)
 	}
+}
+
+// datastoreSink is this package's connection to the Hanzo Datastore, over the
+// branded github.com/hanzo-ds/go client — a thin wrapper that is the whole of
+// the client's use here. datastore-go brings the ONE ch-go transport line the
+// o11y runtime already uses (MVS-unified), so it coexists in the single binary.
+//
+// It lives beside its ONE caller. The type was written for a second writer (an
+// LLM-observability ingest path that inserted UNQUALIFIED `traces` /
+// `observations` / `scores`); that writer is deleted, because the DSN it shared
+// with this file carries no database, so those names resolved to `default` —
+// tables no migration in this platform creates. Its concept is served twice
+// over already: LLM observability is READ off gen_ai spans in event.span by the
+// o11y runtime, and the eval product owns the grounded projections
+// (hanzo.eval_traces / hanzo.eval_scores, apps/eval/telemetry.go) with DDL it
+// creates itself.
+type datastoreSink struct {
+	conn ds.Conn
+}
+
+// newDatastoreSink opens (and pings) the native Datastore connection from the DSN.
+func newDatastoreSink(ctx context.Context, dsn string) (*datastoreSink, error) {
+	opt, err := ds.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parse datastore dsn: %w", err)
+	}
+	conn, err := ds.Open(opt)
+	if err != nil {
+		return nil, fmt.Errorf("open datastore: %w", err)
+	}
+	if err := conn.Ping(ctx); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("ping datastore: %w", err)
+	}
+	return &datastoreSink{conn: conn}, nil
+}
+
+// Insert writes rows to a table as ONE prepared native batch. table is stated
+// FULLY QUALIFIED by every caller (event.span, event.log): the DSN names no
+// database, so an unqualified name would silently address `default`.
+func (s *datastoreSink) Insert(ctx context.Context, table string, columns []string, rows [][]any) error {
+	query := "INSERT INTO " + table + " (" + strings.Join(columns, ", ") + ")"
+	batch, err := s.conn.PrepareBatch(ctx, query)
+	if err != nil {
+		return fmt.Errorf("prepare batch: %w", err)
+	}
+	for _, row := range rows {
+		if err := batch.Append(row...); err != nil {
+			return fmt.Errorf("append row: %w", err)
+		}
+	}
+	return batch.Send()
+}
+
+// Close releases the native connection.
+func (s *datastoreSink) Close() error {
+	if s.conn != nil {
+		return s.conn.Close()
+	}
+	return nil
 }

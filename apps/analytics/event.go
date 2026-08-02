@@ -68,12 +68,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
-	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
+	"go.opentelemetry.io/otel"
+	// attr, not attribute: this package already has an attribute() — the function that
+	// stamps a signed identity onto a reduced principal's rows (public.go).
+	attr "go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Event is the canonical analytics event — the entire ingest contract in five
@@ -348,13 +352,49 @@ func isTeamArray(body []byte, i int) bool {
 // of one copy per door (which is exactly how the credential-less doors drifted).
 type decode func([]byte) ([]CaptureEvent, error)
 
+// refusal is what ADMISSION already refused before the write core ever saw it, and what
+// that refusal MEANS — two halves of ONE fact, kept together so the receipt can never
+// report a count with the wrong reason. Only the PROJECTED lanes produce one; the
+// full-capability lane refuses nothing and passes the zero value, which is why its
+// behavior is untouched.
+//
+// why is built ONLY when something was actually refused (publicIngest), so the accepted
+// path allocates nothing it did not allocate before.
+type refusal struct {
+	n   int
+	why *zip.HTTPError // answered ONLY when nothing else landed
+}
+
+// cannotWrite names why a PROJECTED lane refused an event. The two answers are different
+// facts about the caller, not two spellings of one, and getting it wrong sends a caller
+// after the wrong fix:
+//
+//	unsigned ⇒ 401. Nobody vouched for this request. These same events land with a key,
+//	           so the missing key is the whole of it.
+//	signed   ⇒ 403. A guest's workspace token RESOLVED — it has a credential and it is
+//	           not the problem. What it lacks is capability into an org it was invited
+//	           into for one channel. Telling it "key required" would send it to mint a
+//	           second key and hit the identical wall.
+func cannotWrite(signed bool) *zip.HTTPError {
+	if signed {
+		return &zip.HTTPError{
+			Status: http.StatusForbidden, Code: "insufficient_capability",
+			Msg: "no event could be stored: this credential may not write these events",
+		}
+	}
+	return &zip.HTTPError{
+		Status: http.StatusUnauthorized, Code: "ingest_key_required",
+		Msg: "no event could be attributed: an ingest key is required to write these events",
+	}
+}
+
 // ingestDecoded is the TAIL of the ingest pipeline, and the ONE place it lives: fold
 // type:'error' events (foldException) → the ONE write core (ingestEvents) → the honest
 // receipt. Every lane ends here, so "what happens to an admitted event" is written
-// once. org is the SERVER-resolved tenant; dropped is what admission already refused
-// upstream (0 on the vouched-for lane, so its behavior is unchanged), added to the
-// receipt so {accepted,dropped} always totals what the caller sent.
-func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped int) error {
+// once. org is the SERVER-resolved tenant; refused is what admission already refused
+// upstream (the zero value on the vouched-for lane, so its behavior is unchanged),
+// added to the receipt so {accepted,dropped} always totals what the caller sent.
+func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, refused refusal) error {
 	for i := range evs {
 		evs[i] = foldException(evs[i])
 	}
@@ -362,14 +402,116 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped i
 	if err != nil {
 		return err
 	}
-	res.Dropped += dropped
-	// The admission receipt, counted. Every lane funnels through here, and the
-	// pair is reported together on purpose: the answerable question is a RATIO.
-	// "8,000 items were dropped" needs a second series before it means anything;
-	// "88% of what was offered was dropped" is an outage on its own — and that
-	// exact loss ran unnoticed because neither number left the response body.
+	res.Dropped += refused.n
+	return answer(c, org, source, res, refused)
+}
+
+// answer is THE receipt, and the ONE place a door's ingest STATUS is decided. Every
+// lane reaches it — the anonymous projection, the reduced team principal, the full
+// credential, and the o11y plane's claim — so "what the caller is told happened" is
+// written once, beside the counts it is derived from.
+//
+// A 200 MEANT NOTHING, AND THAT IS WHAT MADE IT DANGEROUS. Every wire shape this door
+// accepts, posted with no resolvable tenant, answered 200 {"accepted":0,"dropped":1}:
+// the projection refuses a kind it cannot name (publicKinds — the anonymous lane stores
+// pageviews and errors, and a log, a span and an exception envelope are none of those),
+// and the receipt said so in a field nobody parses. A client whose key was absent,
+// revoked or mistyped therefore lost 100% of what it sent while every status check it
+// had stayed green — which is how an 88% log loss, a span outage that ran for four and a
+// half months, and a day of missing Sentry traffic all went unnoticed. The counts were
+// never wrong. The STATUS was, and the status is what clients and probes actually read.
+//
+// So the receipt now says what happened in the one field every HTTP client already
+// understands, and the rule is exactly "did anything land":
+//
+//	accepted > 0   ⇒ 200. THE ACCEPTED PATH IS UNCHANGED, including the partial batch:
+//	                 some events landing is a success with an honest drop count beside
+//	                 it, and a batch is never failed whole for its worst element.
+//	nothing sent   ⇒ 200. An empty body drops nothing, so nothing was lost.
+//	nothing landed ⇒ 4xx, naming the ONE thing the caller can do about it. Admission's
+//	                 refusal wins when there was one (cannotWrite: 401 with no
+//	                 credential, 403 for a guest that has one and lacks capability),
+//	                 because that is the caller's first wall. Otherwise the caller HAD
+//	                 capability and nothing was routable anyway — no name, or a signal
+//	                 no writer drains — so the BODY is what has to change: 400.
+//
+// The reason travels in HTTPError.Code, which is machine-readable and already on the
+// wire for every other refusal on this API — an SDK branches on `ingest_key_required`
+// without parsing prose.
+//
+// DNT IS NOT HERE, and must not move here: an opted-out request drops everything and
+// still answers 200 (publicIngest). It is the one total drop that is not a failure —
+// the client asked to be forgotten and the server obeyed, so there is nothing for the
+// caller to fix and nothing for an alert to page on.
+func answer(c *zip.Ctx, org, source string, res CaptureResult, refused refusal) error {
+	// The admission receipt, counted. Reported HERE rather than at each lane's tail
+	// for the same reason the status is decided here: every lane reaches this point,
+	// so the pair is emitted once. The pair travels TOGETHER on purpose — the
+	// answerable question is a RATIO. "8,000 items were dropped" needs a second
+	// series before it means anything; "88% of what was offered was dropped" is an
+	// outage on its own, and that exact loss ran unnoticed for months.
 	cloud.ObserveIngest(source, res.Accepted, res.Dropped)
-	return c.JSON(http.StatusOK, res)
+	if res.Dropped > 0 {
+		observeDropped(c, org, source, refused.n, res.Dropped-refused.n)
+	}
+	if res.Accepted > 0 || res.Dropped == 0 {
+		return c.JSON(http.StatusOK, res)
+	}
+	if refused.why != nil {
+		return refused.why
+	}
+	return &zip.HTTPError{
+		Status: http.StatusBadRequest, Code: "unroutable_events",
+		Msg: "no event could be stored: nothing in this body names a landable event",
+	}
+}
+
+// The ingest-drop instrument. It is resolved LAZILY for the reason metrics_http.go
+// documents: the meter provider is installed by the composition root, so binding at
+// init would attach every measurement to the no-op provider that exists before it runs
+// and discard them while the code looks perfectly instrumented — the exact failure mode
+// this counter exists to catch.
+//
+// CARDINALITY is bounded on all three labels: org is a SERVER-resolved tenant (an IAM
+// owner, a resolved key's org, or the $public constant) and never a caller-chosen
+// string; source is the door's own origin tag, from the finite doors table; reason is
+// two values. Bounded by real orgs × doors × 2 — the same envelope hanzo_http_requests_total
+// already lives in.
+var (
+	dropOnce    sync.Once
+	dropCounter metric.Int64Counter
+)
+
+// observeDropped makes a nonzero drop VISIBLE — the whole defect was that it was not.
+// It emits per REASON rather than one total, because the two are different incidents:
+// `unattributable` is a fleet of clients writing with no usable credential, and
+// `unroutable` is one client sending bodies nothing can store. An alert that cannot
+// tell them apart pages the wrong team.
+//
+// Both a counter and a log line, deliberately: the counter is what an alert rule reads
+// (it reaches VictoriaMetrics by scrape, via the registry apps/o11y publishes), and the
+// log line is what names the tenant and door to whoever the alert wakes.
+func observeDropped(c *zip.Ctx, org, source string, unattributable, unroutable int) {
+	dropOnce.Do(func() {
+		dropCounter, _ = otel.Meter("github.com/hanzoai/cloud/apps/analytics").Int64Counter("hanzo_ingest_dropped_total",
+			metric.WithDescription("Events an ingest door received and did not land, by tenant, door origin and reason."))
+	})
+	for _, d := range []struct {
+		n      int
+		reason string
+	}{{unattributable, "unattributable"}, {unroutable, "unroutable"}} {
+		if d.n == 0 {
+			continue
+		}
+		if dropCounter != nil {
+			dropCounter.Add(context.Background(), int64(d.n), metric.WithAttributes(
+				attr.String("org", org),
+				attr.String("source", source),
+				attr.String("reason", d.reason),
+			))
+		}
+		c.Log().Warn("ingest dropped events", "org", org, "source", source, "reason", d.reason, "count", d.n)
+	}
 }
 
 // presented reports whether the request PRESENTED an IDENTIFIABLE credential at all,
@@ -468,32 +610,32 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 			// principal does not name the person; its token does.
 			return publicIngest(c, dec, a.org, source, a.subject)
 		}
-		// ONE door, every event kind: the observability plane gets first refusal
-		// on the canonical door's authenticated bodies. It lives in ANOTHER
-		// PROCESS (a plugin is a process), so the offer goes over the plane
-		// socket — a package global was written in o11y and read here as nil,
-		// which silently sent every LLM-obs batch down the product wire. Only
-		// the FULL lane offers: obs events are tenant data, so the anonymous and
-		// reduced projections never reach that plane.
+		// THE DOOR RUNS ITS OWN WIRE, and there is no longer anything in front of
+		// it. Every authenticated body used to be offered to the observability
+		// plane first (plane op obs_event_claim) so an LLM-observability batch
+		// could be filed in its own store instead of the product warehouse. That
+		// sink is deleted: it inserted UNQUALIFIED `traces`/`observations`/
+		// `scores` over a DSN naming no database, so the names resolved to
+		// `default` — where no migration in this platform has ever created them,
+		// and where the datastore's query log records no such INSERT, ever. The
+		// concept it claimed is served twice over already: LLM observability is
+		// READ off gen_ai spans in event.span by the o11y runtime, and the eval
+		// product owns the grounded projections (apps/eval/telemetry.go).
 		//
-		// FAIL-SOFT AND UNCLAIMED: any plane error (o11y absent, asleep past the
-		// wake budget, mid-restart) falls through to the product wire rather
-		// than failing the caller's ingest. A dropped claim costs one event in
-		// the obs store; a failed door costs every event.
-		if source == sourceEvent {
-			cctx, cancel := context.WithTimeout(cloud.For(c.Context(), a.org), obsClaimTimeout)
-			out, err := cloud.Ask[planeops.ObsClaimIn, planeops.ObsClaimed](cctx, peerO11y, planeops.ObsEventClaim,
-				&planeops.ObsClaimIn{Org: a.org, Body: c.Body()})
-			cancel()
-			if err == nil && out != nil && out.Claimed {
-				return c.JSON(http.StatusOK, CaptureResult{Accepted: out.Accepted, Dropped: out.Dropped})
-			}
-		}
+		// So the claim could only ever decline, at the cost of a synchronous
+		// cross-process round-trip per event on the fleet's busiest door.
+		//
+		// IT IS ALSO ONE FEWER LANE REACHING `answer`, and the receipt is the
+		// same either way. An LLM-obs-shaped body names no event kind, so the
+		// canonical decode yields nothing routable, and a caller holding a full
+		// credential that stored nothing is told 400 — which is exactly what the
+		// claim's own branch was made to answer. The lane that used to be
+		// exempt from the honest receipt is now the ordinary path through it.
 		evs, err := dec(c.Body())
 		if err != nil {
 			return zip.ErrBadRequest("malformed event payload")
 		}
-		return ingestDecoded(c, a.org, source, evs, 0)
+		return ingestDecoded(c, a.org, source, evs, refusal{})
 	}
 	if presented(c) {
 		return zip.ErrForbidden("valid bearer or a resolvable ingest key required")
@@ -541,12 +683,10 @@ type door struct {
 //
 //   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
 //     {batch:[…]} | the team SPA's bare snake_case array, dispatched by shape —
-//     isTeamArray), which every current Hanzo client emits. The SAME door also
-//     carries LLM-observability ingestion batches: handle offers each
-//     authenticated body to the o11y plane's claim first (the plane op
-//     obs_event_claim, asked over the socket),
-//     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — consumers
-//     and shapes behind ONE door, not more doors.
+//     isTeamArray), which every current Hanzo client emits. Nothing gets first
+//     refusal on it: the o11y plane's claim on this door (obs_event_claim) is
+//     retired with the sink behind it, so the wire the shape selects is the wire
+//     that runs — consumers and shapes behind ONE door, not more doors.
 //
 //   - the PostHog wire has NO door of its own: decodeIngest dispatches it by
 //     shape (isInsightsWire), so PostHog SDKs land on /v1/event like everything
@@ -643,13 +783,11 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 	return decodeIngest(body)
 }
 
-// The observability peer and how long the door will wait on it. The budget is
-// short on purpose: the claim is an OFFER on the hot ingest path, and a slow
-// peer must degrade to the product wire rather than hold the caller.
-const (
-	peerO11y        = "o11y"
-	obsClaimTimeout = 3 * time.Second
-)
+// peerO11y is the observability peer this package asks over the plane socket.
+// The ONE thing it is asked for is the Sentry relay (obs_error_post, whose
+// budget is obsErrorTimeout in analytics.go): the Sentry wire's project segment
+// is variable, so analytics has to own the route while o11y owns the runtime.
+const peerO11y = "o11y"
 
 var doors = []door{
 	{
@@ -658,6 +796,14 @@ var doors = []door{
 		description: "Stores pageviews, browser errors, identifies and custom commerce events as rows " +
 			"in the caller's own tenant, and answers a receipt {accepted, dropped} that always totals " +
 			"what was sent — a beacon is never silently discarded.\n\n" +
+			"THE STATUS SAYS WHETHER ANYTHING LANDED, so a green check can never mean an empty " +
+			"warehouse. 200 means at least one event was stored (or that nothing was sent), and a " +
+			"nonzero `dropped` beside a nonzero `accepted` is a PARTIAL batch, never a failed one — a " +
+			"batch is not refused whole for its worst element. If NOTHING was stored the request is an " +
+			"error, and it names the one thing that fixes it: 401 `ingest_key_required` when every " +
+			"event was refused for want of a credential (the same events land with a key), and 400 " +
+			"`unroutable_events` when the caller HAD capability and the body still named nothing " +
+			"storable.\n\n" +
 			"ONE door for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and " +
 			"never by a second path: a bare event object, a bare array of them, the {batch:[…]} / " +
 			"{events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled " +
