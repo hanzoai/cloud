@@ -602,10 +602,11 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	if err := mountProbes(deps); err != nil { // fleet health probes -> hanzo_service_up
 		return err
 	}
-	// The way that gauge leaves this process. After mountProbes because it
-	// publishes what they record, and before mountSummary because that read has no
-	// answer until a collector has been able to take one. See exposition.go.
-	startExposition(deps.Logger.New("subsystem", "o11y-exposition"))
+	// The gauge leaves this process by being PUSHED to the telemetry store
+	// (metricspush.go, started with the runtime above), not by being collected.
+	// There was a Prometheus exposition on :9464 here until Prometheus was
+	// retired; a listener whose only caller was a scraper that no longer exists
+	// is not a way out, it is an open port.
 	// PUBLIC status face GET /v1/summary — the outward projection of the gauge the
 	// probes above record. After mountProbes because it reads what they write, and
 	// before the terminal wildcard like every other specific route. Unauthenticated
@@ -637,7 +638,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 // Idempotent and nil-safe.
 func ShutdownO11y(ctx context.Context) error {
 	stopProbes()
-	stopExposition(ctx)
+	stopNativeMetricsPush()
 	var firstErr error
 	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {
 		firstErr = err
