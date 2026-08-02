@@ -48,9 +48,9 @@ func TestBaseline_HasNoTenantColumn(t *testing.T) {
 	for _, col := range ddlColumns(t, baselineDDL) {
 		check(t, baselineTable+"."+col, col)
 	}
-	// ...and the shape really is the aggregate it claims: four quantiles and the
+	// ...and the shape really is the aggregate it claims: three quantiles and the
 	// two counts that prove the bucket is anonymous, keyed by day, kind and dim.
-	want := []string{"bucket", "subject_kind", "dim", "q10", "q50", "q90", "q99", "orgs", "n"}
+	want := []string{"bucket", "subject_kind", "dim", "q10", "q50", "q90", "orgs", "n"}
 	if got := ddlColumns(t, baselineDDL); !reflect.DeepEqual(got, want) {
 		t.Fatalf("baseline columns are %v, want exactly %v", got, want)
 	}
@@ -200,10 +200,10 @@ func TestBaseline_RefusesBelowKAnon(t *testing.T) {
 	probe.reset(true)
 	rows := []map[string]any{
 		{"bucket": time.Now().UTC(), "subject_kind": kindAccount, "dim": "events",
-			"q10": 1.0, "q50": 2.0, "q90": 3.0, "q99": 4.0,
+			"q10": 1.0, "q50": 2.0, "q90": 3.0,
 			"orgs": uint32(kAnonOrgs - 1), "n": uint64(kAnonRows)},
 		{"bucket": time.Now().UTC(), "subject_kind": kindAccount, "dim": "events",
-			"q10": 1.0, "q50": 2.0, "q90": 3.0, "q99": 4.0,
+			"q10": 1.0, "q50": 2.0, "q90": 3.0,
 			"orgs": uint32(kAnonOrgs), "n": uint64(kAnonRows)},
 	}
 	// The baseline read binds the window first, so the recorder files under it.
@@ -321,8 +321,24 @@ func TestBaseline_TheStatementVotesPerOrganisation(t *testing.T) {
 				"the subject stage and the quantile:\n%s", d.Name, stmt)
 		}
 		// The quantile reads the per-organisation value, never the per-subject one.
-		if !strings.Contains(stmt, "quantileExact(0.50)(x)") || !strings.Contains(stmt, "quantileExact(0.50)(sx) AS x") {
+		if !strings.Contains(stmt, "quantile(0.50)(x)") || !strings.Contains(stmt, "quantileExact(0.50)(sx) AS x") {
 			t.Fatalf("populate(%q) does not take the published quantile over one value per organisation:\n%s", d.Name, stmt)
+		}
+		// AND THE PUBLISHED QUANTILE IS NOT AN ELEMENT. quantileExact over the org
+		// votes selects one of them, so at the k-anonymity floor every published
+		// figure IS one contributing organisation's own daily median. The outer
+		// estimator must interpolate; the inner one, inside a single organisation,
+		// has nothing to disclose and stays exact.
+		if strings.Contains(stmt, "quantileExact(0.10)(x)") ||
+			strings.Contains(stmt, "quantileExact(0.50)(x)") ||
+			strings.Contains(stmt, "quantileExact(0.90)(x)") {
+			t.Fatalf("populate(%q) publishes an ELEMENT-EXACT quantile over organisation votes — at the %d-org "+
+				"floor that is one organisation's own median, published verbatim:\n%s", d.Name, kAnonOrgs, stmt)
+		}
+		// And no extreme level, which is the maximum however it is estimated.
+		if strings.Contains(stmt, "0.99") {
+			t.Fatalf("populate(%q) publishes a 99th percentile over %d votes, which is the largest "+
+				"contributor's own value:\n%s", d.Name, kAnonOrgs, stmt)
 		}
 	}
 }
@@ -373,13 +389,13 @@ var sqlWord = map[string]bool{
 	"insert": true, "into": true, "select": true, "from": true, "where": true,
 	"group": true, "by": true, "having": true, "order": true, "limit": true, "and": true,
 	"as": true, "sum": true, "count": true, "uniqexact": true, "todate": true,
-	"quantileexact": true, "b": true, "x": true, "bucket": true, "subject": true,
+	"quantileexact": true, "quantile": true, "b": true, "x": true, "bucket": true, "subject": true,
 	// The aliases of the three-stage reduction: `sx` is one subject's day, `x` the
 	// organisation's single vote over its subjects, `subjects` how many went into
 	// it. They are code in the same way `b` and `x` are.
 	"sx": true, "subjects": true,
 	"subject_kind": true, "org": true, "dim": true, "q10": true, "q50": true,
-	"q90": true, "q99": true, "n": true, "hanzo": true, "risk_baseline": true,
+	"q90": true, "n": true, "hanzo": true, "risk_baseline": true,
 	"risk_feature": true, "tostartoffiveminute": true, "time": true,
 }
 

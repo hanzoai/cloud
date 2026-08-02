@@ -17,11 +17,13 @@ package risk
 // EVERY SCHEMA NAME IS PREFIXED. A typed op's Go type name IS its schema name and
 // the fleet's schema namespace is FLAT — the weave refuses one name with two
 // shapes across apps, because a generated SDK binds whichever it read last. So
-// there is no `ref`, no `state`, no `report` here; there is `mlRunRef`,
-// `mlModelState`, `mlSearchReport`.
+// there is no `ref`, no `state`, no `report` here; there is `riskRunRef`,
+// `riskModelState`, `riskSearchReport`.
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"os"
 	"strconv"
@@ -67,13 +69,39 @@ func (o ops) tenantFor(ctx context.Context) (tenant, error) {
 	return tenantOf(ctx, o.s.Brand)
 }
 
+// admit is the ONE door into the plane: it resolves the model plane, the caller's
+// own tenant, and takes one of that tenant's in-flight slots. Pair it with the
+// release it returns.
+//
+// EVERY op opens with it, and that is enforced rather than asked for:
+// [TestOps_EveryOpIsAdmittedAndPriced] walks this file's syntax tree and fails on
+// an op that reaches the plane without it. Half the surface used to — state,
+// features, appetite, snapshot, restore and the search read were plane work,
+// shelf work and, in features' case, up to 120 warehouse statements, with no slot
+// and no price. A bound applied to the two ops a reviewer looks at is not a
+// bound; the ops an abuser calls are the cheap ones nobody thought to gate.
+func (o ops) admit(ctx context.Context) (*plane, tenant, func(), error) {
+	p, err := o.plane()
+	if err != nil {
+		return nil, "", nil, err
+	}
+	t, err := o.tenantFor(ctx)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if err := p.enter(t); err != nil {
+		return nil, "", nil, err
+	}
+	return p, t, func() { p.leave(t) }, nil
+}
+
 // ── the shapes ───────────────────────────────────────────────────────────────
 
-// mlEvent is one thing that happened, as a caller states it.
+// riskEvent is one thing that happened, as a caller states it.
 //
 // It names a SUBJECT and never an organisation: whose model this lands in is
 // decided by the caller's verified identity, not by anything in this body.
-type mlEvent struct {
+type riskEvent struct {
 	// ID is the caller's own stable identifier for the event. It selects the
 	// below-the-line review sample by hash, so a counter would make the sample
 	// steerable — use the id the event already has.
@@ -108,15 +136,7 @@ type mlEvent struct {
 // shape the model cannot place. Nano-USD on the wire becomes USD in the model:
 // the wire carries integers because money is not a float, and the model carries
 // a ratio because every feature is dimensionless.
-func (e mlEvent) observation(now time.Time) (observation, error) {
-	kind := strings.TrimSpace(e.Kind)
-	subject := strings.TrimSpace(e.Subject)
-	switch {
-	case !known(kind):
-		return observation{}, zip.ErrBadRequest("'kind' must be one of " + strings.Join(kinds, ", "))
-	case subject == "":
-		return observation{}, zip.ErrBadRequest("'subject' is required — an event that names nobody has nobody to be unusual for")
-	}
+func (e riskEvent) observation(now time.Time) (observation, error) {
 	at := now
 	if e.At != "" {
 		parsed, err := time.Parse(time.RFC3339, e.At)
@@ -132,33 +152,51 @@ func (e mlEvent) observation(now time.Time) (observation, error) {
 		}
 		at = parsed
 	}
-	// One-second resolution, because that is the resolution the aggregates are
-	// durable at (ring.go) and the finest ring bucket is a minute. Truncating HERE
-	// is what makes a rebuild from the record identical to the live rings rather
-	// than merely close to them.
-	at = at.UTC().Truncate(time.Second)
 	id := strings.TrimSpace(e.ID)
 	if id == "" {
-		id = kind + ":" + subject + "@" + at.Format(time.RFC3339Nano)
+		id = eventID()
 	}
-	return observation{
-		ID: id, Kind: kind, Subject: subject,
-		USD:    float64(e.Nano) / 1e9,
-		Peer:   strings.TrimSpace(e.Peer),
-		Device: strings.TrimSpace(e.Device),
-		At:     at,
-	}, nil
+	return observe(id, actor{
+		Kind:    strings.TrimSpace(e.Kind),
+		Subject: strings.TrimSpace(e.Subject),
+		Peer:    strings.TrimSpace(e.Peer),
+		Device:  strings.TrimSpace(e.Device),
+	}, float64(e.Nano)/1e9, at)
 }
 
-// mlScoreIn is one event to judge.
-type mlScoreIn struct {
+// eventID names an event whose caller did not.
+//
+// IT IS RANDOM, and that is the correction: it used to be minted from the kind,
+// the subject and the stamp — and the stamp is truncated to the second, so forty
+// events for one subject inside one second were forty events with ONE id. The
+// record deduplicates on (tenant, id), so thirty-nine of them were silently
+// dropped from the very record the rings are a projection of; that subject read
+// as having acted once, on every rollout, for any caller not sending its own ids.
+// Ordinary traffic, quietly disarmed.
+//
+// A caller that needs a retry to converge sends its OWN id, which is what the
+// field is for and what the doc says. Without one there is nothing to converge
+// on: two identical bodies a second apart are two events, and pretending
+// otherwise is the defect above.
+func eventID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// A minted id must be UNIQUE above all else. Time at nanosecond resolution
+		// is the only other source here that cannot repeat within a process.
+		return "evt_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return "evt_" + hex.EncodeToString(b[:])
+}
+
+// riskScoreIn is one event to judge.
+type riskScoreIn struct {
 	// Event is the thing to judge. It is judged against the caller's OWN model
 	// and nothing is learned from it.
-	Event mlEvent `json:"event"`
+	Event riskEvent `json:"event"`
 }
 
-// mlScoreOut is the model's verdict on one event.
-type mlScoreOut struct {
+// riskScoreOut is the model's verdict on one event.
+type riskScoreOut struct {
 	// Scored is false when the model declined, and Refusal says which refusal it
 	// was: warming, unusable or unidentified. None of them is a clean bill of
 	// health, which is why the refusal is stated rather than rendered as a score
@@ -183,20 +221,20 @@ type mlScoreOut struct {
 	// COUNTERFACTUAL on the model that produced the score — the coordinate moved
 	// to its neutral value and the event rescored — so the explanation is the
 	// same arithmetic the score came from.
-	Causes []mlCause `json:"causes,omitempty"`
+	Causes []riskCause `json:"causes,omitempty"`
 	// Values is every coordinate, including the ones that contributed nothing, so
 	// a reviewer sees what the model read and not only what it concluded.
-	Values []mlValue `json:"values,omitempty"`
+	Values []riskValue `json:"values,omitempty"`
 }
 
-// mlCause is one feature's contribution to a score, and it is the whole
+// riskCause is one feature's contribution to a score, and it is the whole
 // defensibility of a model decision.
 //
 // It is a COUNTERFACTUAL on the model that produced the score, not a second
 // story told about it: the coordinate is moved to its neutral value, the event is
 // rescored, and the drop IS the contribution. There is no separate explainer
 // model to disagree with the scorer.
-type mlCause struct {
+type riskCause struct {
 	// Feature is the dimension that contributed.
 	Feature string `json:"feature"`
 	// Typology is the laundering or abuse pattern this dimension detects.
@@ -226,8 +264,8 @@ type mlCause struct {
 	Share float64 `json:"share"`
 }
 
-// mlValue is one coordinate as the model read it.
-type mlValue struct {
+// riskValue is one coordinate as the model read it.
+type riskValue struct {
 	// Feature is the dimension.
 	Feature string `json:"feature"`
 	// X is the coordinate in the model space, always dimensionless.
@@ -246,30 +284,30 @@ type mlValue struct {
 	Blind bool `json:"blind"`
 }
 
-// mlLearnIn is a batch of events the model should learn from.
-type mlLearnIn struct {
+// riskLearnIn is a batch of events the model should learn from.
+type riskLearnIn struct {
 	// Events are the things that happened, oldest first. An empty batch is
 	// refused: learning nothing is not an operation.
-	Events []mlEvent `json:"events"`
+	Events []riskEvent `json:"events"`
 }
 
-// mlLearnOut is what the batch did.
-type mlLearnOut struct {
+// riskLearnOut is what the batch did.
+type riskLearnOut struct {
 	// Learned is how many events the model learned from, which is the batch, and
 	// is also what the call is metered at: one screen per event.
 	Learned int `json:"learned"`
 	// Verdicts is the model's verdict on each event, in the order given, so a
 	// caller that is both teaching and deciding needs one round trip.
-	Verdicts []mlScoreOut `json:"verdicts"`
+	Verdicts []riskScoreOut `json:"verdicts"`
 }
 
-// mlStateIn takes nothing off the wire. The whole input is the caller's validated
+// riskStateIn takes nothing off the wire. The whole input is the caller's validated
 // principal, which is what decides whose model is reported.
-type mlStateIn struct{}
+type riskStateIn struct{}
 
-// mlModelState is the governance report: everything a review of one tenant's
+// riskModelState is the governance report: everything a review of one tenant's
 // model reads, and nothing about any other tenant.
-type mlModelState struct {
+type riskModelState struct {
 	// Tenant is the qualified key the model is held under — the brand whose
 	// issuer vouched for the caller and the organisation it acts for. It is
 	// echoed so a reader can see the answer is its own and not a parameter it
@@ -312,12 +350,39 @@ type mlModelState struct {
 	// inventory claims for it.
 	Blind map[string]int64 `json:"blind"`
 	// Surface reports what of the tenant's OWN event surface has been folded in.
-	Surface mlSurface `json:"surface"`
+	Surface riskSurface `json:"surface"`
+	// Aggregates reports the pressure on this organisation's own sliding
+	// aggregates, and whether they have started forgetting subjects to stay inside
+	// their bound.
+	Aggregates riskAggregates `json:"aggregates"`
 }
 
-// mlSurface is how much of the organisation's own first-party data the model has
+// riskAggregates is how full this organisation's own sliding aggregates are, and
+// what it has cost.
+//
+// IT IS REPORTED BECAUSE THE ALTERNATIVE IS SILENCE. The aggregates are bounded
+// per organisation, and at the bound the least-recently-active subject is
+// forgotten — after which that subject reads as having done nothing, scores as
+// unremarkable, and nothing anywhere says so. A control that switches itself off
+// quietly is worse than no control, so the bound, the fill and the count of
+// forgotten subjects are all on the organisation's own state.
+type riskAggregates struct {
+	// Subjects is how many of this organisation's subjects the aggregates hold.
+	Subjects int `json:"subjects"`
+	// Bound is the most they can hold. It is a per-organisation bound: at it, this
+	// organisation degrades and no other one notices.
+	Bound int `json:"bound"`
+	// Forgotten is how many of its own subjects have been dropped to stay inside
+	// that bound. Each one reads as inactive until it is active again.
+	Forgotten int64 `json:"forgotten"`
+	// Saturated is whether the bound is binding right now. The two counts are its
+	// evidence; this is the state to act on.
+	Saturated bool `json:"saturated"`
+}
+
+// riskSurface is how much of the organisation's own first-party data the model has
 // actually seen — the moat, measured.
-type mlSurface struct {
+type riskSurface struct {
 	// Folded is how many buckets of the tenant's own feature surface were folded
 	// into the model when it became resident.
 	Folded int `json:"folded"`
@@ -326,6 +391,10 @@ type mlSurface struct {
 	// its feature surface before that fold. Zero with no gap means the surface was
 	// already current, which is a different fact from the rollup never running.
 	Rolled int `json:"rolled"`
+	// Refused is how many buckets of this organisation's own surface the fold
+	// could not fold, because a subject on them is longer than this plane's own
+	// field bound. It is history the model does not have, said out loud.
+	Refused int `json:"refused,omitempty"`
 	// Replayed is how many of this organisation's own recorded observations
 	// rebuilt its sliding aggregates when the model became resident. It is what
 	// says a rollout was a rebuild rather than a blindness: the aggregates are a
@@ -340,9 +409,9 @@ type mlSurface struct {
 	Gap string `json:"gap,omitempty"`
 }
 
-// mlAppetiteIn restates the risk appetite, which is the decision the model is not
+// riskAppetiteIn restates the risk appetite, which is the decision the model is not
 // permitted to make for itself.
-type mlAppetiteIn struct {
+type riskAppetiteIn struct {
 	// Review is the share of the stream that may be sent for examination, in
 	// (0, 0.5]. The alert threshold is derived from it as a quantile of the scores
 	// actually observed, so the level is governed rather than tuned.
@@ -357,11 +426,11 @@ type mlAppetiteIn struct {
 	Live bool `json:"live"`
 }
 
-// mlSnapshotIn takes nothing off the wire.
-type mlSnapshotIn struct{}
+// riskSnapshotIn takes nothing off the wire.
+type riskSnapshotIn struct{}
 
-// mlSnapshotOut is a pinned copy of the tenant's learned state.
-type mlSnapshotOut struct {
+// riskSnapshotOut is a pinned copy of the tenant's learned state.
+type riskSnapshotOut struct {
 	// Tenant is whose state this is. A snapshot naming another organisation is
 	// refused on restore.
 	Tenant string `json:"tenant"`
@@ -373,17 +442,17 @@ type mlSnapshotOut struct {
 	// Geometry is a pure function of the seed, so it is regenerated on restore and
 	// cannot be supplied — which removes the sharpest edge a persisted model has,
 	// state that describes WHERE the regions are rather than only how full.
-	Body mlSnapshotBody `json:"body"`
+	Body riskSnapshotBody `json:"body"`
 }
 
-// mlSnapshotBody is one organisation's learned state on the wire.
+// riskSnapshotBody is one organisation's learned state on the wire.
 //
 // It is DECLARED HERE rather than published straight off the engine's own type,
 // for two reasons that are both about the contract. A dependency's struct tags
 // are not our API, and letting them be means an upstream rename silently changes
 // what every generated SDK sends. And the fleet's schema namespace is flat, so a
 // type called `Snapshot` is a name another app will reach for next.
-type mlSnapshotBody struct {
+type riskSnapshotBody struct {
 	// Version is the layout of the state. State from another version is rejected
 	// rather than reinterpreted.
 	Version int `json:"version"`
@@ -416,15 +485,15 @@ type mlSnapshotBody struct {
 
 // snapshotBody and modelSnapshot are the two halves of one conversion, written
 // beside each other so neither can drift from the other.
-func snapshotBody(s anomaly.Snapshot) mlSnapshotBody {
-	return mlSnapshotBody{
+func snapshotBody(s anomaly.Snapshot) riskSnapshotBody {
+	return riskSnapshotBody{
 		Version: s.Version, Shape: s.Digest, Tenant: s.OrgID, Seed: s.Seed,
 		Learned: s.Learned, Seen: s.Seen, Cut: s.Cut,
 		Ref: s.Ref, Cur: s.Cur, Hist: s.Hist,
 	}
 }
 
-func modelSnapshot(b mlSnapshotBody) anomaly.Snapshot {
+func modelSnapshot(b riskSnapshotBody) anomaly.Snapshot {
 	return anomaly.Snapshot{
 		Version: b.Version, Digest: b.Shape, OrgID: b.Tenant, Seed: b.Seed,
 		Learned: b.Learned, Seen: b.Seen, Cut: b.Cut,
@@ -432,43 +501,43 @@ func modelSnapshot(b mlSnapshotBody) anomaly.Snapshot {
 	}
 }
 
-// mlRestoreIn installs previously pinned state.
-type mlRestoreIn struct {
+// riskRestoreIn installs previously pinned state.
+type riskRestoreIn struct {
 	// Body is a snapshot this organisation took. One naming another organisation
 	// is refused: it is that organisation's learned behaviour, and installing it
 	// would put one tenant's activity inside another's model.
-	Body mlSnapshotBody `json:"body"`
+	Body riskSnapshotBody `json:"body"`
 }
 
-// mlCatalogIn narrows the feature catalogue to a window of the caller's own
+// riskCatalogIn narrows the feature catalogue to a window of the caller's own
 // surface.
-type mlCatalogIn struct {
+type riskCatalogIn struct {
 	// Days is how far back to measure the organisation's own coverage, 1 to 400.
 	// Zero takes thirty.
 	Days int `json:"days,omitempty"`
 }
 
-// mlCatalog is the feature catalogue in its two honest lenses: what the MODEL
+// riskCatalog is the feature catalogue in its two honest lenses: what the MODEL
 // reads, and what THIS organisation's surface actually carries.
-type mlCatalog struct {
+type riskCatalog struct {
 	// Tenant is whose surface was measured.
 	Tenant string `json:"tenant"`
 	// Model is the governed inventory: one entry per dimension of the model
 	// space, each carrying the typology it serves and the published standard that
 	// asks for it. It is the same for every organisation, because it is the
 	// model's shape.
-	Model []mlModelFeature `json:"model"`
+	Model []riskModelFeature `json:"model"`
 	// Surface is what this organisation's own event surface carries, per
 	// dimension, measured over the window. A dimension present in no bucket is
 	// blind here — the model reads its neutral value and a reviewer has to be able
 	// to see that.
-	Surface []mlOrgFeature `json:"surface"`
+	Surface []riskOrgFeature `json:"surface"`
 	// Gap says why the surface could not be measured, when that is the case.
 	Gap string `json:"gap,omitempty"`
 }
 
-// mlModelFeature is one dimension of the model space and the obligation it serves.
-type mlModelFeature struct {
+// riskModelFeature is one dimension of the model space and the obligation it serves.
+type riskModelFeature struct {
 	// Name is the dimension.
 	Name string `json:"name"`
 	// Window is the sliding aggregate it reads.
@@ -492,8 +561,8 @@ type mlModelFeature struct {
 	Blind int64 `json:"blind"`
 }
 
-// mlOrgFeature is one column of the organisation's own feature surface, measured.
-type mlOrgFeature struct {
+// riskOrgFeature is one column of the organisation's own feature surface, measured.
+type riskOrgFeature struct {
 	// Name is the dimension as this API publishes it.
 	Name string `json:"name"`
 	// Source names the plane it is rolled up from, so a dimension that reads zero
@@ -517,16 +586,16 @@ type mlOrgFeature struct {
 	Blind bool `json:"blind"`
 }
 
-// mlSearchIn starts an exhaustive search for the model shape that best fits this
+// riskSearchIn starts an exhaustive search for the model shape that best fits this
 // organisation's own history.
-type mlSearchIn struct {
+type riskSearchIn struct {
 	// Days is how much of the organisation's own history to replay, 1 to 400.
 	// Zero takes thirty.
 	Days int `json:"days,omitempty"`
 }
 
-// mlSearchRun is the accepted run.
-type mlSearchRun struct {
+// riskSearchRun is the accepted run.
+type riskSearchRun struct {
 	// ID addresses the run. Read the result back with it.
 	ID string `json:"id"`
 	// Events is how much of the organisation's own history the run will replay.
@@ -535,15 +604,15 @@ type mlSearchRun struct {
 	Candidates int `json:"candidates"`
 }
 
-// mlRunRef addresses one search run by id.
-type mlRunRef struct {
+// riskRunRef addresses one search run by id.
+type riskRunRef struct {
 	// ID is the run, taken from the path. A run another organisation started is
 	// simply not there — the same answer an unknown id gives.
 	ID string `json:"id"`
 }
 
-// mlSearchReport is what a completed search found.
-type mlSearchReport struct {
+// riskSearchReport is what a completed search found.
+type riskSearchReport struct {
 	// ID is the run.
 	ID string `json:"id"`
 	// Done is false while the run is still going; the trials below are then the
@@ -556,9 +625,9 @@ type mlSearchReport struct {
 	// Events is how much of this organisation's history was replayed.
 	Events int `json:"events"`
 	// Trials is every shape tried, best first.
-	Trials []mlTrial `json:"trials"`
+	Trials []riskTrial `json:"trials"`
 	// Winner is the best-fitting shape, absent when nothing fit.
-	Winner *mlTrial `json:"winner,omitempty"`
+	Winner *riskTrial `json:"winner,omitempty"`
 	// Refusal says why the run proves nothing, when it does. An empty history is
 	// REFUSED rather than reported as zero alerts: "no alerts" is exactly what a
 	// quiet model looks like, and choosing a shape on the strength of an empty
@@ -566,8 +635,8 @@ type mlSearchReport struct {
 	Refusal string `json:"refusal,omitempty"`
 }
 
-// mlTopology is one candidate shape of the detector.
-type mlTopology struct {
+// riskTopology is one candidate shape of the detector.
+type riskTopology struct {
 	// Trees is how many half-space trees the ensemble holds.
 	Trees int `json:"trees"`
 	// Depth is how deep each tree is. With Trees it sets how finely the space is
@@ -582,10 +651,10 @@ type mlTopology struct {
 	Review float64 `json:"review"`
 }
 
-// mlTrial is what one shape did over this organisation's own history.
-type mlTrial struct {
+// riskTrial is what one shape did over this organisation's own history.
+type riskTrial struct {
 	// Topology is the shape.
-	Topology mlTopology `json:"topology"`
+	Topology riskTopology `json:"topology"`
 	// Learned is how many events the shape learned from during the replay.
 	Learned int64 `json:"learned"`
 	// Scored is how many it was able to score.
@@ -625,15 +694,7 @@ type mlTrial struct {
 // read as a clean result.
 //
 // Example: {"event":{"id":"tx_9","kind":"account","subject":"u_412","nano":420000000}}
-func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
-	p, err := o.plane()
-	if err != nil {
-		return nil, err
-	}
-	t, err := o.tenantFor(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (o ops) score(ctx context.Context, in *riskScoreIn) (*riskScoreOut, error) {
 	obs, err := in.Event.observation(time.Now())
 	if err != nil {
 		return nil, err
@@ -642,10 +703,11 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := p.enter(t); err != nil {
+	p, t, leave, err := o.admit(ctx)
+	if err != nil {
 		return nil, err
 	}
-	defer p.leave(t)
+	defer leave()
 	a, err := p.score(t, obs)
 	if err != nil {
 		return nil, wrap(err)
@@ -669,15 +731,7 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 // nothing is measured against itself.
 //
 // Example: {"events":[{"id":"tx_9","kind":"account","subject":"u_412","nano":420000000}]}
-func (o ops) learn(ctx context.Context, in *mlLearnIn) (*mlLearnOut, error) {
-	p, err := o.plane()
-	if err != nil {
-		return nil, err
-	}
-	t, err := o.tenantFor(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (o ops) learn(ctx context.Context, in *riskLearnIn) (*riskLearnOut, error) {
 	if len(in.Events) == 0 {
 		return nil, zip.ErrBadRequest("'events' is required — learning nothing is not an operation")
 	}
@@ -700,16 +754,17 @@ func (o ops) learn(ctx context.Context, in *mlLearnIn) (*mlLearnOut, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := p.enter(t); err != nil {
+	p, t, leave, err := o.admit(ctx)
+	if err != nil {
 		return nil, err
 	}
-	defer p.leave(t)
+	defer leave()
 	verdicts, err := p.learn(t, obs...)
 	if err != nil {
 		return nil, wrap(err)
 	}
 	pay(len(verdicts))
-	out := mlLearnOut{Learned: len(verdicts), Verdicts: make([]mlScoreOut, 0, len(verdicts))}
+	out := riskLearnOut{Learned: len(verdicts), Verdicts: make([]riskScoreOut, 0, len(verdicts))}
 	for _, a := range verdicts {
 		out.Verdicts = append(out.Verdicts, verdict(a))
 	}
@@ -725,20 +780,22 @@ func (o ops) learn(ctx context.Context, in *mlLearnIn) (*mlLearnOut, error) {
 // It covers ONE organisation. A caller cannot learn another's volumes, alert rate
 // or behaviour from it, because the state is read out of a model that holds only
 // its own.
-func (o ops) state(ctx context.Context, _ *mlStateIn) (*mlModelState, error) {
-	p, err := o.plane()
+func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error) {
+	pay, err := o.gate(ctx, "state", 1)
 	if err != nil {
 		return nil, err
 	}
-	t, err := o.tenantFor(ctx)
+	p, t, leave, err := o.admit(ctx)
 	if err != nil {
 		return nil, err
 	}
-	st, err := p.state(t)
+	defer leave()
+	st, agg, err := p.state(t)
 	if err != nil {
 		return nil, wrap(err)
 	}
-	out := modelState(t, st, p.surface(t))
+	pay(1)
+	out := modelState(t, st, p.surface(t), agg)
 	return &out, nil
 }
 
@@ -757,26 +814,28 @@ func (o ops) state(ctx context.Context, _ *mlStateIn) (*mlModelState, error) {
 // nothing.
 //
 // Example: {"review":0.01,"sample":0.001,"live":false}
-func (o ops) appetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, error) {
-	p, err := o.plane()
-	if err != nil {
-		return nil, err
-	}
-	t, err := o.tenantFor(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (o ops) appetite(ctx context.Context, in *riskAppetiteIn) (*riskModelState, error) {
 	switch {
 	case in.Review <= 0 || in.Review > 0.5:
 		return nil, zip.ErrBadRequest("'review' must be in (0, 0.5] — a share of the stream, not a count")
 	case in.Sample < 0 || in.Sample > 1:
 		return nil, zip.ErrBadRequest("'sample' must be in [0, 1]")
 	}
-	st, err := p.appetite(t, in.Review, in.Sample, in.Live)
+	pay, err := o.gate(ctx, "appetite", 1)
+	if err != nil {
+		return nil, err
+	}
+	p, t, leave, err := o.admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
+	st, agg, err := p.appetite(t, in.Review, in.Sample, in.Live)
 	if err != nil {
 		return nil, wrap(err)
 	}
-	out := modelState(t, st, p.surface(t))
+	pay(1)
+	out := modelState(t, st, p.surface(t), agg)
 	return &out, nil
 }
 
@@ -787,15 +846,16 @@ func (o ops) appetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, err
 // function of the seed, so it is regenerated on restore and cannot be supplied.
 // That removes the sharpest edge a persisted model has — state that says where
 // the regions are rather than only how full they are.
-func (o ops) snapshot(ctx context.Context, _ *mlSnapshotIn) (*mlSnapshotOut, error) {
-	p, err := o.plane()
+func (o ops) snapshot(ctx context.Context, _ *riskSnapshotIn) (*riskSnapshotOut, error) {
+	pay, err := o.gate(ctx, "snapshot", 1)
 	if err != nil {
 		return nil, err
 	}
-	t, err := o.tenantFor(ctx)
+	p, t, leave, err := o.admit(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defer leave()
 	snap, ok, err := p.pin(t)
 	if err != nil {
 		return nil, wrap(err)
@@ -803,7 +863,8 @@ func (o ops) snapshot(ctx context.Context, _ *mlSnapshotIn) (*mlSnapshotOut, err
 	if !ok {
 		return nil, zip.ErrNotFound("this organisation's model has learned nothing yet, so there is no state to pin")
 	}
-	return &mlSnapshotOut{Tenant: string(t), Shape: snap.Digest, Learned: snap.Learned, Body: snapshotBody(snap)}, nil
+	pay(1)
+	return &riskSnapshotOut{Tenant: string(t), Shape: snap.Digest, Learned: snap.Learned, Body: snapshotBody(snap)}, nil
 }
 
 // Restore installs previously pinned state into the caller organisation's model,
@@ -815,20 +876,22 @@ func (o ops) snapshot(ctx context.Context, _ *mlSnapshotIn) (*mlSnapshotOut, err
 // in its own deployment the caller IS the tenant. Here the caller is a request,
 // so the check is made here: another organisation's learned state inside this
 // model is that organisation's activity, disclosed.
-func (o ops) restore(ctx context.Context, in *mlRestoreIn) (*mlModelState, error) {
-	p, err := o.plane()
+func (o ops) restore(ctx context.Context, in *riskRestoreIn) (*riskModelState, error) {
+	pay, err := o.gate(ctx, "restore", 1)
 	if err != nil {
 		return nil, err
 	}
-	t, err := o.tenantFor(ctx)
+	p, t, leave, err := o.admit(ctx)
 	if err != nil {
 		return nil, err
 	}
-	st, err := p.adopt(t, modelSnapshot(in.Body))
+	defer leave()
+	st, agg, err := p.adopt(t, modelSnapshot(in.Body))
 	if err != nil {
 		return nil, wrap(err)
 	}
-	out := modelState(t, st, p.surface(t))
+	pay(1)
+	out := modelState(t, st, p.surface(t), agg)
 	return &out, nil
 }
 
@@ -845,26 +908,31 @@ func (o ops) restore(ctx context.Context, in *mlRestoreIn) (*mlModelState, error
 // bucket is BLIND, and saying so is the difference between no risk and no data.
 //
 // Example: {"days":30}
-func (o ops) features(ctx context.Context, in *mlCatalogIn) (*mlCatalog, error) {
-	p, err := o.plane()
-	if err != nil {
-		return nil, err
-	}
-	t, err := o.tenantFor(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (o ops) features(ctx context.Context, in *riskCatalogIn) (*riskCatalog, error) {
 	days, err := window(in.Days)
 	if err != nil {
 		return nil, err
 	}
-	st, err := p.state(t)
+	// PRICED FROM THE WINDOW, because that is what it costs. This op rolls up to
+	// four source planes into the tenant's own surface — up to 120 bounded
+	// INSERT..SELECT statements against the single warehouse pod — and then reads
+	// the window back. It was free, and it is the most expensive read here.
+	pay, err := o.gate(ctx, "features", int(days/(24*time.Hour)))
+	if err != nil {
+		return nil, err
+	}
+	p, t, leave, err := o.admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
+	st, _, err := p.state(t)
 	if err != nil {
 		return nil, wrap(err)
 	}
-	out := mlCatalog{Tenant: string(t)}
+	out := riskCatalog{Tenant: string(t)}
 	for _, f := range anomaly.Inventory() {
-		out.Model = append(out.Model, mlModelFeature{
+		out.Model = append(out.Model, riskModelFeature{
 			Name: f.Name, Window: f.Window, Typology: f.Typology, Indicator: f.Indicator,
 			Citation: f.Citation, Severity: f.Severity, Unit: f.Unit, Neutral: f.Neutral,
 			Blind: st.Blind[f.Name],
@@ -881,16 +949,21 @@ func (o ops) features(ctx context.Context, in *mlCatalogIn) (*mlCatalog, error) 
 	}
 	cov, err := dictionary(ctx, t, end.Add(-days), end)
 	if err != nil {
+		// METERED ANYWAY. The roll above already ran against the warehouse, and the
+		// meter's contract is what was DONE — a read that reached the surface and
+		// then could not be summarised still cost the window it rolled.
+		pay(int(days / (24 * time.Hour)))
 		out.Gap = err.Error()
-		out.Surface = []mlOrgFeature{}
+		out.Surface = []riskOrgFeature{}
 		return &out, nil
 	}
 	for _, c := range cov {
-		out.Surface = append(out.Surface, mlOrgFeature{
+		out.Surface = append(out.Surface, riskOrgFeature{
 			Name: c.Dim.Name, Source: c.Dim.Source, Unit: c.Dim.Unit,
 			Buckets: c.Buckets, Present: c.Present, Mean: c.Mean, Max: c.Max, Blind: c.Blind(),
 		})
 	}
+	pay(int(days / (24 * time.Hour)))
 	return &out, nil
 }
 
@@ -909,19 +982,16 @@ func (o ops) features(ctx context.Context, in *mlCatalogIn) (*mlCatalog, error) 
 // alerts" is exactly what a quiet model looks like.
 //
 // Example: {"days":30}
-func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
-	p, err := o.plane()
-	if err != nil {
-		return nil, err
-	}
-	t, err := o.tenantFor(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (o ops) search(ctx context.Context, in *riskSearchIn) (*riskSearchRun, error) {
 	days, err := window(in.Days)
 	if err != nil {
 		return nil, err
 	}
+	p, t, leave, err := o.admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
 	// A search is real compute over real history, so it is GATED before any of it
 	// runs, on the caller's OWN ledger, and it fails closed: a commerce that
 	// cannot be reached refuses rather than admits. It is priced as the screens it
@@ -932,20 +1002,29 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 	// first and admits the run second, so the balance check is against the work
 	// actually about to happen rather than against a flat fee that is wrong in both
 	// directions.
-	pay := func(int) {}
+	//
+	// AND THE METER RUNS IN THE RUN, not here. This op answers 202 and the grid
+	// runs behind it; metering at accept would charge for every candidate over
+	// every event the moment the run was ADMITTED, and a rollout — which this
+	// binary does at one replica, stopping the old pod first — cancels the run
+	// partway with the debit already taken. What is charged is what the run
+	// actually replayed, booked by [plane.begin] when the grid ends, however it
+	// ends. The gate still runs on the upper bound, which is the contract this file
+	// states: gate on what MIGHT happen, meter on what DID.
+	var pay func(int)
 	run, err := p.begin(ctx, t, days, func(events int) error {
 		var err error
 		pay, err = o.gate(ctx, "search", events*len(candidates()))
-		if err != nil {
-			pay = func(int) {}
-		}
 		return err
+	}, func(screens int) {
+		if pay != nil {
+			pay(screens)
+		}
 	})
 	if err != nil {
 		return nil, wrap(err)
 	}
-	pay(run.Events * len(candidates()))
-	return &mlSearchRun{ID: run.ID, Events: run.Events, Candidates: len(candidates())}, nil
+	return &riskSearchRun{ID: run.ID, Events: run.Events, Candidates: len(candidates())}, nil
 }
 
 // SearchResult reads back one search run: every shape tried over this
@@ -955,15 +1034,17 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 // unknown id gives, so the read is not a probe oracle.
 //
 // Example: {"id":"srch_2f6a1c"}
-func (o ops) result(ctx context.Context, in *mlRunRef) (*mlSearchReport, error) {
-	p, err := o.plane()
+func (o ops) result(ctx context.Context, in *riskRunRef) (*riskSearchReport, error) {
+	pay, err := o.gate(ctx, "searchResult", 1)
 	if err != nil {
 		return nil, err
 	}
-	t, err := o.tenantFor(ctx)
+	p, t, leave, err := o.admit(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defer leave()
+	pay(1)
 	id := strings.TrimSpace(in.ID)
 	rep, err := p.run(t, id)
 	if err != nil {
@@ -1043,6 +1124,12 @@ func screenMicros(n int) int64 {
 // from this surface reads exactly like a 402 from every other one. Off the HTTP
 // path (an in-process CLI or MCP invocation) there is no ledger to charge and the
 // pair is a no-op, which is the same rule the rest of the fleet applies.
+// THE DEBIT HOLDS VALUES, NEVER THE REQUEST. Everything the meter needs is read
+// off the request HERE, while it is live, and copied into the closure. The search
+// meters from a background goroutine — the run outlives the 202 — and a request
+// context is recycled the moment its handler returns, so a closure that kept `c`
+// and read c.User() later reads a freed arena or another tenant's request on the
+// same connection. Same defect as retaining a zero-copy header view, one level up.
 func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), error) {
 	c, onHTTP := cloud.Request(ctx)
 	if !onHTTP {
@@ -1053,12 +1140,15 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	if err := o.s.Bill.Gate(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(n))); err != nil {
 		return nil, cloud.Denied(err)
 	}
+	who := metering.Usage{
+		Model: kind, Project: project, Actor: c.User(),
+		RequestID: c.RequestID(), ClientIP: cloud.ClientIP(c),
+	}
+	bill := o.s.Bill
 	return func(done int) {
-		o.s.Bill.MeterUsage(ledger, kind, metering.Usage{
-			Model: kind, Project: project, Actor: c.User(),
-			AmountMicros: screenMicros(done),
-			RequestID:    c.RequestID(), ClientIP: cloud.ClientIP(c),
-		})
+		use := who
+		use.AmountMicros = screenMicros(done)
+		bill.MeterUsage(ledger, kind, use)
 	}, nil
 }
 
@@ -1088,20 +1178,20 @@ func wrap(err error) error {
 	return zip.Errorf(500, "%v", err)
 }
 
-func verdict(a anomaly.Assessment) mlScoreOut {
-	out := mlScoreOut{
+func verdict(a anomaly.Assessment) riskScoreOut {
+	out := riskScoreOut{
 		Scored: a.Scored, Refusal: a.Reason, Score: a.Score,
 		Cut: a.Cut, Alert: a.Alert, Shadow: a.Shadow,
 	}
 	for _, c := range a.Causes {
-		out.Causes = append(out.Causes, mlCause{
+		out.Causes = append(out.Causes, riskCause{
 			Feature: c.Feature, Typology: c.Typology, Indicator: c.Indicator,
 			Citation: c.Citation, Severity: c.Severity, Unit: c.Unit,
 			Observed: c.Observed, Baseline: c.Baseline, Without: c.Without, Share: c.Share,
 		})
 	}
 	for _, v := range a.Values {
-		out.Values = append(out.Values, mlValue{
+		out.Values = append(out.Values, riskValue{
 			Feature: v.Feature, X: v.X, Observed: v.Observed,
 			Baseline: v.Baseline, Unit: v.Unit, Blind: v.Blind,
 		})
@@ -1109,24 +1199,27 @@ func verdict(a anomaly.Assessment) mlScoreOut {
 	return out
 }
 
-func modelState(t tenant, st anomaly.State, f fold) mlModelState {
-	return mlModelState{
+func modelState(t tenant, st anomaly.State, f fold, s strain) riskModelState {
+	return riskModelState{
 		Tenant: string(t), Shape: st.Digest, Live: !st.Config.Shadow,
 		Learned: st.Learned, Warm: st.Warm,
 		Stated: st.Config.Appetite.Review, Realised: st.Realised, Sample: st.Config.Appetite.Sample,
 		Cut: st.Cut, Saturated: st.Saturated,
 		Refused: st.Refused, Blind: st.Blind,
-		Surface: mlSurface{
-			Folded: f.Folded, Rolled: f.Rolled, Replayed: f.Replayed,
+		Surface: riskSurface{
+			Folded: f.Folded, Rolled: f.Rolled, Replayed: f.Replayed, Refused: f.Refused,
 			Window: f.Window.String(), Gap: f.Gap,
+		},
+		Aggregates: riskAggregates{
+			Subjects: s.Subjects, Bound: s.Bound, Forgotten: s.Forgotten, Saturated: s.Saturated,
 		},
 	}
 }
 
-func searchReport(r report, done bool) mlSearchReport {
-	out := mlSearchReport{
+func searchReport(r report, done bool) riskSearchReport {
+	out := riskSearchReport{
 		ID: r.ID, Done: done, Started: r.Started.Format(time.RFC3339),
-		Events: r.Events, Refusal: r.Refusal, Trials: make([]mlTrial, 0, len(r.Trials)),
+		Events: r.Events, Refusal: r.Refusal, Trials: make([]riskTrial, 0, len(r.Trials)),
 	}
 	if !r.Ended.IsZero() {
 		out.Ended = r.Ended.Format(time.RFC3339)
@@ -1141,9 +1234,9 @@ func searchReport(r report, done bool) mlSearchReport {
 	return out
 }
 
-func wireTrial(t trial) mlTrial {
-	return mlTrial{
-		Topology: mlTopology{Trees: t.Topology.Trees, Depth: t.Topology.Depth,
+func wireTrial(t trial) riskTrial {
+	return riskTrial{
+		Topology: riskTopology{Trees: t.Topology.Trees, Depth: t.Topology.Depth,
 			Window: t.Topology.Window, Blend: t.Topology.Blend, Review: t.Topology.Review},
 		Learned: t.Learned, Scored: t.Scored, Alerted: t.Alerted,
 		Stated: t.Stated, Realised: t.Realised, Warm: t.Warm,
