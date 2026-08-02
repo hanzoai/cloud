@@ -223,11 +223,12 @@ var (
 // "Splitting apps into their own binaries turned every priced create free without
 // changing a line of billing code."
 //
-// The TOOL path answers the opposite way on purpose (see Settle): it offers EVERY
-// dispatch to the seam, so an absent table there means "nothing is priced" and free
-// tools keep working. A middleware is applied only to what is FOR SALE; the tool seam
-// is applied to everything. Different questions, so the safe answers differ, and both
-// are stated rather than inherited from one shared default.
+// The TOOL path asks a different question — it offers EVERY dispatch to the seam,
+// free ones included, so it must be able to answer "this costs nothing" — but it
+// reaches the same safe answer by asking the process that OWNS the table (peer.go)
+// rather than by reading its own absence as free. A middleware is applied only to
+// what is FOR SALE and can refuse on sight; the tool seam is applied to everything
+// and has to look. Neither ever renders "I cannot tell" as "free".
 func Enforce() zip.Handler {
 	return func(c *zip.Ctx) error {
 		s := mounted
@@ -311,9 +312,9 @@ func Settle(ctx context.Context, resource string) error {
 // TWO TRANSPORTS, ONE TABLE. The published Registry is a process-global installed
 // by marketplace.Mount, and the fleet runs one process per app — so in the x402
 // binary it is nil, and reading that as "nothing is priced" was the fail-OPEN half
-// of this defect. Nil now means "the table is not HERE", and the process that owns
-// it is asked. Only ErrNoPeer — a fleet with no marketplace in it at all — restores
-// the old answer, because then there really is no table to disagree with.
+// of this defect. Nil means "the table is not HERE", and the process that owns it is
+// asked. A table that cannot be asked leaves the price UNKNOWN, which is an error
+// and never a zero (peer.go).
 func priceOf(ctx context.Context, resource string) (Terms, bool, error) {
 	r := currentRegistry()
 	if r == nil {
