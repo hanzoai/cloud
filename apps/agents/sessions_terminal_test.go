@@ -96,3 +96,33 @@ func TestTerminalSurvivesUpdate(t *testing.T) {
 		t.Fatalf("terminal = %q after update, want %q", got.Terminal, x.Terminal)
 	}
 }
+
+// A linked shell MOVES. `cwd` was write-once — set at register, absent from both
+// the patch input and UpdateSession — so the console showed the directory `hanzo
+// link` happened to start in and kept showing it after the shell had walked away.
+// The field answered "which work is this" with an answer that was true once.
+//
+// Same shape as the terminal column above, and the same reason it is worth its own
+// test: a field the patch accepts but the UPDATE forgets returns 200 with the new
+// value in the body and persists nothing.
+func TestCwdSurvivesUpdate(t *testing.T) {
+	s := testSessionStore(t)
+	ctx := context.Background()
+
+	x := mkSession("hanzo", "sess_cwd", "", "sess_cwd")
+	x.Cwd = "/Users/z"
+	if err := s.CreateSession(ctx, x); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	x.Cwd = "/Users/z/work/hanzo/cli"
+	if err := s.UpdateSession(ctx, x); err != nil {
+		t.Fatalf("UpdateSession: %v", err)
+	}
+	got, err := s.GetSession(ctx, "hanzo", "sess_cwd")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if got.Cwd != x.Cwd {
+		t.Fatalf("cwd = %q after update, want %q", got.Cwd, x.Cwd)
+	}
+}
