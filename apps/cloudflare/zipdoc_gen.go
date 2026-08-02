@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/cloudflare/d1/databases/:database", zip.Doc{
-		Description: "D1DatabaseDelete deletes a D1 database and everything stored in it. Requires\norg admin.",
+		Description: "Deletes a D1 database and everything stored in it. Requires\norg admin.",
 		Fields: map[string]string{
 			"databaseRef.database": "Database is the Cloudflare D1 database id or name.",
 		},
@@ -32,14 +32,14 @@ func init() {
 		Example: json.RawMessage(`{"namespace":"0123456789abcdef0123456789abcdef","key":"session/abc"}`),
 	})
 	zip.Describe("DELETE /v1/cloudflare/pages/projects/:project", zip.Doc{
-		Description: "PagesDelete deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
+		Description: "Deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
 		Fields: map[string]string{
 			"projectRef.project": "Project is the Pages project name.",
 		},
 		Example: json.RawMessage(`{"project":"marketing-site"}`),
 	})
 	zip.Describe("DELETE /v1/cloudflare/pages/projects/:project/domains/:domain", zip.Doc{
-		Description: "PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
+		Description: "Detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
 		Fields: map[string]string{
 			"domainRef.domain":  "Domain is the attached custom domain to detach.",
 			"domainRef.project": "Project is the Pages project name.",
@@ -47,21 +47,21 @@ func init() {
 		Example: json.RawMessage(`{"project":"marketing-site","domain":"www.acme.com"}`),
 	})
 	zip.Describe("DELETE /v1/cloudflare/r2/buckets/:bucket", zip.Doc{
-		Description: "R2BucketDelete deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
+		Description: "Deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
 		Fields: map[string]string{
 			"bucketRef.bucket": "Bucket is the R2 bucket name.",
 		},
 		Example: json.RawMessage(`{"bucket":"assets"}`),
 	})
 	zip.Describe("DELETE /v1/cloudflare/workers/scripts/:script", zip.Doc{
-		Description: "WorkersScriptDelete removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
+		Description: "Removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
 		Fields: map[string]string{
 			"scriptRef.script": "Script is the Worker script name.",
 		},
 		Example: json.RawMessage(`{"script":"edge-router"}`),
 	})
 	zip.Describe("DELETE /v1/cloudflare/workers/zones/:zone/routes/:route", zip.Doc{
-		Description: "WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
+		Description: "Unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
 		Fields: map[string]string{
 			"routeRef.route": "Route is the 32-hex Cloudflare route id.",
 			"routeRef.zone":  "Zone is the 32-hex Cloudflare zone id.",
@@ -69,7 +69,7 @@ func init() {
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","route":"fedcba9876543210fedcba9876543210"}`),
 	})
 	zip.Describe("GET /v1/cloudflare/d1/databases", zip.Doc{
-		Description: "D1DatabaseList lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
+		Description: "Lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
 		Fields: map[string]string{
 			"databasesIn.name":     "Name filters to the database with this name.",
 			"databasesIn.page":     "Page is the 1-based page of databases to return.",
@@ -84,18 +84,21 @@ func init() {
 			"namespacesIn.per_page": "PerPage is how many namespaces one page holds.",
 		},
 	})
+	zip.Describe("GET /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
+		Description: "Relays a namespace key's raw value (getRaw — a stored value is bytes,\nnot the CF envelope), with its content type. A missing key is Cloudflare's own 404.\n\nNOT a typed op: a KV value is opaque bytes under whatever content type it was\nwritten with, and a typed op answers JSON. Typing it would re-encode a stored\nvalue into a JSON document.",
+	})
 	zip.Describe("GET /v1/cloudflare/pages/projects", zip.Doc{
-		Description: "PagesList lists the org's Cloudflare Pages projects. Any org member may read.",
+		Description: "Lists the org's Cloudflare Pages projects. Any org member may read.",
 	})
 	zip.Describe("GET /v1/cloudflare/pages/projects/:project", zip.Doc{
-		Description: "PagesGet reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
+		Description: "Reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
 		Fields: map[string]string{
 			"projectRef.project": "Project is the Pages project name.",
 		},
 		Example: json.RawMessage(`{"project":"marketing-site"}`),
 	})
 	zip.Describe("GET /v1/cloudflare/r2/buckets", zip.Doc{
-		Description: "R2BucketList lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
+		Description: "Lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
 		Fields: map[string]string{
 			"bucketsIn.cursor":        "Cursor continues from the position a previous page returned.",
 			"bucketsIn.name_contains": "NameContains filters to buckets whose name contains this substring.",
@@ -104,20 +107,20 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/cloudflare/workers/scripts", zip.Doc{
-		Description: "WorkersScriptList lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
+		Description: "Lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
 	})
 	zip.Describe("GET /v1/cloudflare/workers/subdomain", zip.Doc{
-		Description: "WorkersSubdomainGet reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
+		Description: "Reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
 	})
 	zip.Describe("GET /v1/cloudflare/workers/zones/:zone/routes", zip.Doc{
-		Description: "WorkersRouteList lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
+		Description: "Lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
 		Fields: map[string]string{
 			"zoneRef.zone": "Zone is the 32-hex Cloudflare zone id.",
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef"}`),
 	})
 	zip.Describe("GET /v1/cloudflare/zones", zip.Doc{
-		Description: "ZonesList lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
+		Description: "Lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
 		Fields: map[string]string{
 			"zonesIn.name":     "Name filters to the zone with this domain name.",
 			"zonesIn.order":    "Order names the field to sort by, and Direction sorts asc or desc.",
@@ -127,14 +130,14 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/cloudflare/zones/:zone", zip.Doc{
-		Description: "ZoneGet reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
+		Description: "Reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
 		Fields: map[string]string{
 			"zoneRef.zone": "Zone is the 32-hex Cloudflare zone id.",
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef"}`),
 	})
 	zip.Describe("GET /v1/cloudflare/zones/:zone/analytics", zip.Doc{
-		Description: "ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
+		Description: "Reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
 		Fields: map[string]string{
 			"analyticsIn.continuous": "Continuous asks Cloudflare for only fully-aggregated buckets.",
 			"analyticsIn.since":      "Since and Until bound the window, in the form Cloudflare accepts — an RFC 3339\ntime or a negative number of minutes from now (\"-1440\" is the last day).",
@@ -142,12 +145,18 @@ func init() {
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","since":"-1440","until":"0"}`),
 	})
+	zip.Describe("POST /v1/cloudflare/ai/run/*", zip.Doc{
+		Description: "Runs a Workers AI model and relays the result, metering the BYO fee + emitting\na gen_ai span. See the file header for the usage/o11y/payer contract.\n\nNOT a typed op, for two independent reasons: the request body is whatever the\nchosen model takes (a prompt, chat messages, a base64 audio clip) and is forwarded\nverbatim, and the response is frequently NOT JSON — an image or audio model\nanswers bytes under Cloudflare's own content type, which a typed op cannot emit.",
+	})
 	zip.Describe("POST /v1/cloudflare/d1/databases", zip.Doc{
-		Description: "D1DatabaseCreate creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
+		Description: "Creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
 		Fields: map[string]string{
 			"databaseCreateIn.name": "Name is the database name to create.",
 		},
 		Example: json.RawMessage(`{"name":"orders"}`),
+	})
+	zip.Describe("POST /v1/cloudflare/d1/databases/:database/query", zip.Doc{
+		Description: "Runs a SQL statement against a database. The body ({sql, params}) is\nvalidated for a non-empty sql then forwarded VERBATIM (preserving params and any\nbatch fields), so the full CF query shape reaches D1 without field loss.\n\nNOT a typed op: that verbatim forward is the point. A typed In decodes the body\ninto a Go struct and re-encodes it, which drops every field the struct does not\nmodel — starting with params, which is where the query's bound values live.",
 	})
 	zip.Describe("POST /v1/cloudflare/kv/namespaces", zip.Doc{
 		Description: "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount. Requires org admin. Cloudflare mints the namespace id the value routes\naddress.",
@@ -157,11 +166,14 @@ func init() {
 		Example: json.RawMessage(`{"title":"sessions"}`),
 	})
 	zip.Describe("POST /v1/cloudflare/pages/projects", zip.Doc{
-		Description: "PagesCreate creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
+		Description: "Creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
 		Example:     json.RawMessage(`{"name":"marketing-site","production_branch":"main"}`),
 	})
+	zip.Describe("POST /v1/cloudflare/pages/projects/:project/deployments", zip.Doc{
+		Description: "Triggers a new Pages deployment. Requires org admin.\n\nNOT a typed op: a body this handler cannot parse is IGNORED — the deployment\nfalls back to the project's production branch — where a typed In answers 400.\nThose are different contracts, and typing it would change what the route accepts.",
+	})
 	zip.Describe("POST /v1/cloudflare/pages/projects/:project/domains", zip.Doc{
-		Description: "PagesDomainAdd attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
+		Description: "Attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
 		Fields: map[string]string{
 			"domainAddIn.name":    "Name is the custom domain to attach, e.g. \"www.acme.com\".",
 			"domainAddIn.project": "Project is the Pages project name, from the path.",
@@ -169,14 +181,14 @@ func init() {
 		Example: json.RawMessage(`{"project":"marketing-site","name":"www.acme.com"}`),
 	})
 	zip.Describe("POST /v1/cloudflare/r2/buckets", zip.Doc{
-		Description: "R2BucketCreate creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
+		Description: "Creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
 		Fields: map[string]string{
 			"bucketCreateIn.name": "Name is the bucket name to create.",
 		},
 		Example: json.RawMessage(`{"name":"assets"}`),
 	})
 	zip.Describe("POST /v1/cloudflare/workers/scripts/:script/subdomain", zip.Doc{
-		Description: "WorkersScriptSubdomainSet publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
+		Description: "Publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
 		Fields: map[string]string{
 			"subdomainSetIn.enabled": "Enabled publishes the script on <script>.<subdomain>.workers.dev when true,\nand withdraws it when false.",
 			"subdomainSetIn.script":  "Script is the Worker script name, from the path.",
@@ -184,7 +196,7 @@ func init() {
 		Example: json.RawMessage(`{"script":"edge-router","enabled":true}`),
 	})
 	zip.Describe("POST /v1/cloudflare/workers/zones/:zone/routes", zip.Doc{
-		Description: "WorkersRouteCreate binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
+		Description: "Binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
 		Fields: map[string]string{
 			"routeCreateIn.pattern": "Pattern is the URL pattern to bind, e.g. \"acme.com/api/*\".",
 			"routeCreateIn.script":  "Script is the Worker script to dispatch to. Omit it to leave the pattern\nbound to no script, which is how Cloudflare expresses \"bypass the Worker here\".",
@@ -193,12 +205,18 @@ func init() {
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","pattern":"acme.com/api/*","script":"edge-router"}`),
 	})
 	zip.Describe("POST /v1/cloudflare/zones/:zone/purge", zip.Doc{
-		Description: "ZonePurge drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
+		Description: "Drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
 		Fields: map[string]string{
 			"purgeIn.files":            "Files purges exactly the listed URLs — at most 30, Cloudflare's per-request cap.",
 			"purgeIn.purge_everything": "Everything drops the zone's entire edge cache.",
 			"purgeIn.zone":             "Zone is the 32-hex Cloudflare zone id, from the path.",
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","purge_everything":true}`),
+	})
+	zip.Describe("PUT /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
+		Description: "Writes a key's value: the request body IS the value (any content type),\nforwarded verbatim; optional expiration params ride the query. Mutation → org admin.\n\nNOT a typed op: the request body IS the stored value, under the caller's own\ncontent type. A typed In would parse it as JSON and refuse everything else.",
+	})
+	zip.Describe("PUT /v1/cloudflare/workers/scripts/:script", zip.Doc{
+		Description: "Uploads (or replaces) a module Worker script. Requires org admin.\n\nNOT a typed op: the path names the script (`:script`) and the body field `script`\ncarries the module SOURCE. zip's URL binder matches a path param to the In field\nof the same name and gives the URL the last word, so a typed In would overwrite\nthe source with the script name. Renaming either side would move the wire.",
 	})
 }

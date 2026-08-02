@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/guide/curriculum", zip.Doc{
-		Description: "DeleteCurriculum clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
+		Description: "Clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
 		Fields: map[string]string{
 			"JourneyStep.deps":          "Dependencies are step ids that must be done/skipped before this step is\navailable. The wire key is `deps` (the blueprint contract); the Go field keeps\nits descriptive name.",
 			"JourneyStep.detail":        "the prose/juncture — what the Guide asks/explains here",
@@ -40,7 +40,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/guide/actions", zip.Doc{
-		Description: "ListActions returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
+		Description: "Returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
 		Fields: map[string]string{
 			"actionsView.data": "Data is the most-recent actions first, capped at listActionsLimit.",
 		},
@@ -53,7 +53,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/guide/blueprint", zip.Doc{
-		Description: "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
+		Description: "Returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
 		Fields: map[string]string{
 			"Blueprint.principles":    "the 64-principle spine (Zen of Hanzo archetypes)",
 			"JourneyStep.deps":        "Dependencies are step ids that must be done/skipped before this step is\navailable. The wire key is `deps` (the blueprint contract); the Go field keeps\nits descriptive name.",
@@ -81,14 +81,14 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/guide/blueprint/versions", zip.Doc{
-		Description: "ListBlueprintVersions returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
+		Description: "Returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
 		Fields: map[string]string{
 			"blueprintVersionsView.brand":    "Brand is the blueprint key the history belongs to — this deployment's brand,\nor \"\" (the base blueprint) when the brand has no row of its own.",
 			"blueprintVersionsView.versions": "Versions are the stored versions, newest first: metadata only, never the\ndocuments.",
 		},
 	})
 	zip.Describe("GET /v1/guide/curriculum", zip.Doc{
-		Description: "GetCurriculum returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
+		Description: "Returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
 		Fields: map[string]string{
 			"JourneyStep.deps":          "Dependencies are step ids that must be done/skipped before this step is\navailable. The wire key is `deps` (the blueprint contract); the Go field keeps\nits descriptive name.",
 			"JourneyStep.detail":        "the prose/juncture — what the Guide asks/explains here",
@@ -126,6 +126,9 @@ func init() {
 			"suggestion.unlocks":              "Unlocks is how many downstream steps completing this one immediately makes\navailable (its leverage) — the primary ranking key.",
 		},
 	})
+	zip.Describe("PATCH /v1/guide/blueprint/:collection/:id", zip.Doc{
+		Description: "Wraps an UNTYPED handler so it runs ONLY for a platform SuperAdmin.\nThe typed ops on this plane apply the same predicate at the top of the op\n(superAdminOK), because a typed op receives only a context; both read the same\nvalidated header, so the gate is one fact in one predicate either way.",
+	})
 	zip.Describe("POST /v1/guide/chat", zip.Doc{
 		Description: "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one. READ-ONLY — it advises and never runs a step, so it\ncannot be talked into performing an action; the only executing path is POST\n/v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own\npayer.",
 		Fields: map[string]string{
@@ -137,8 +140,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"message":"what should I do next to get my first customers?"}`),
 	})
+	zip.Describe("POST /v1/guide/steps/:id/do", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/guide/steps/:id/done", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("POST /v1/guide/steps/:id/reset", zip.Doc{
-		Description: "ResetStep returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
+		Description: "Returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
 		Fields: map[string]string{
 			"stepRef.id":           "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
 			"stepView.automatable": "Automatable is true when the Business AI can run this step (it names a tool).",
@@ -156,7 +165,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/guide/steps/:id/skip", zip.Doc{
-		Description: "SkipStep marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
+		Description: "Marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
 		Fields: map[string]string{
 			"stepRef.id":           "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
 			"stepView.automatable": "Automatable is true when the Business AI can run this step (it names a tool).",
@@ -172,5 +181,14 @@ func init() {
 			"stepView.state":       "State is the step's per-org lifecycle state: todo|in_progress|done|skipped.",
 			"stepView.tool":        "Tool is the MCP tool the Business AI runs for \"do it for me\"; Args are its\ndefault arguments, Draft an optional AI prompt whose output fills the\nDraftInto arg (default \"brief\").",
 		},
+	})
+	zip.Describe("POST /v1/guide/steps/:id/start", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("PUT /v1/guide/blueprint", zip.Doc{
+		Description: "Wraps an UNTYPED handler so it runs ONLY for a platform SuperAdmin.\nThe typed ops on this plane apply the same predicate at the top of the op\n(superAdminOK), because a typed op receives only a context; both read the same\nvalidated header, so the gate is one fact in one predicate either way.",
+	})
+	zip.Describe("PUT /v1/guide/curriculum", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 }

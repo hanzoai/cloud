@@ -10,19 +10,19 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/plans", zip.Doc{
-		Description: "ListCloudPlans returns the Hanzo cloud plan catalog: every cloud tier with its\nprice, included capacity, limits and feature list, scoped to the caller's\ncatalog. A reseller org sees its own overrides in place of the canonical\nrecords it has replaced, and the canonical record for every tier it has not.",
+		Description: "Returns the Hanzo cloud plan catalog: every cloud tier with its\nprice, included capacity, limits and feature list, scoped to the caller's\ncatalog. A reseller org sees its own overrides in place of the canonical\nrecords it has replaced, and the canonical record for every tier it has not.",
 		Fields: map[string]string{
 			"planList.plans": "Plans are the plans in this section, each an opaque object exactly as the\n@hanzo/plans catalog emits it — typically id, name, description,\npriceMonthly, category, a feature list, a limits block and a price_ref.",
 		},
 	})
 	zip.Describe("GET /v1/plans/blockchain", zip.Doc{
-		Description: "ListBlockchainPlans returns the blockchain RPC plan catalog: the tiers metered\nin monthly compute units, with their prices, limits and overage terms. It is\nthe canonical catalog for every caller — these plans carry no reseller\noverrides.",
+		Description: "Returns the blockchain RPC plan catalog: the tiers metered\nin monthly compute units, with their prices, limits and overage terms. It is\nthe canonical catalog for every caller — these plans carry no reseller\noverrides.",
 		Fields: map[string]string{
 			"planList.plans": "Plans are the plans in this section, each an opaque object exactly as the\n@hanzo/plans catalog emits it — typically id, name, description,\npriceMonthly, category, a feature list, a limits block and a price_ref.",
 		},
 	})
 	zip.Describe("GET /v1/plans/cloud", zip.Doc{
-		Description: "ListCloudCapacityPlans returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
+		Description: "Returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
 		Fields: map[string]string{
 			"planList.plans": "Plans are the plans in this section, each an opaque object exactly as the\n@hanzo/plans catalog emits it — typically id, name, description,\npriceMonthly, category, a feature list, a limits block and a price_ref.",
 		},
@@ -34,7 +34,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/plans/entitlements/:id", zip.Doc{
-		Description: "GetPlanEntitlements returns what one plan GRANTS and not what it costs: the\ncanonical namespaced entitlement block and the flat license-feature list\nderived from it. It is the entitlement half of ResolvePlan, over the same\ncatalog and the same 404 for an id no catalog holds — the read a licensing or\nquota gate makes.",
+		Description: "Returns what one plan GRANTS and not what it costs: the\ncanonical namespaced entitlement block and the flat license-feature list\nderived from it. It is the entitlement half of ResolvePlan, over the same\ncatalog and the same 404 for an id no catalog holds — the read a licensing or\nquota gate makes.",
 		Fields: map[string]string{
 			"planEntitlements.entitlements":     "Entitlements is the canonical namespaced entitlement block derived from the\nplan's limits and addons, where -1 means unlimited.",
 			"planEntitlements.id":               "ID is the plan id or slug that was resolved, as it was requested.",
@@ -58,16 +58,16 @@ func init() {
 		Response: json.RawMessage(`{"service":"plans","status":"ok"}`),
 	})
 	zip.Describe("GET /v1/plans/policy", zip.Doc{
-		Description: "GetPricingPolicy returns the published pricing policy: whether pricing is\ntransparent, the revenue-sharing terms (idle compute resale and the open-source\nshare) and the principles the catalog is priced by.",
+		Description: "Returns the published pricing policy: whether pricing is\ntransparent, the revenue-sharing terms (idle compute resale and the open-source\nshare) and the principles the catalog is priced by.",
 	})
 	zip.Describe("GET /v1/plans/regions", zip.Doc{
-		Description: "ListRegions returns the regions cloud capacity is offered in, each with its\ndisplay name and physical location.",
+		Description: "Returns the regions cloud capacity is offered in, each with its\ndisplay name and physical location.",
 		Fields: map[string]string{
 			"planRegionList.regions": "Regions are the regions cloud capacity is offered in, each an opaque object\nexactly as the catalog emits it — typically id, name, location and flag.",
 		},
 	})
 	zip.Describe("GET /v1/plans/resolve/:id", zip.Doc{
-		Description: "ResolvePlan resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nmay be the plan's id or its slug, and it is resolved against the caller's\ncatalog, so a reseller's override wins over the canonical record. An id no\ncatalog holds answers 404.",
+		Description: "Resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nmay be the plan's id or its slug, and it is resolved against the caller's\ncatalog, so a reseller's override wins over the canonical record. An id no\ncatalog holds answers 404.",
 		Fields: map[string]string{
 			"planRef.id":                      "ID is the plan's catalog id or slug — \"pro\", \"team\", \"world-enterprise\",\n\"rpc-growth\". Both are matched, so a slug resolves the plan it names.",
 			"planResolution.entitlements":     "Entitlements is the canonical namespaced entitlement block derived from the\nplan's limits and addons — keys like \"ai.tokens_per_min\" and\n\"world.api_rate_limit\", where -1 means unlimited.",
@@ -79,29 +79,29 @@ func init() {
 		Example: json.RawMessage(`{"id":"pro"}`),
 	})
 	zip.Describe("GET /v1/plans/schema", zip.Doc{
-		Description: "GetPlanSchemas returns the two JSON Schema documents this surface speaks:\nentitlements.schema.json, which declares every entitlement key with its type,\nunit and enum, and plan.schema.json, which a catalog plan record conforms to.",
+		Description: "Returns the two JSON Schema documents this surface speaks:\nentitlements.schema.json, which declares every entitlement key with its type,\nunit and enum, and plan.schema.json, which a catalog plan record conforms to.",
 		Fields: map[string]string{
 			"planSchemas.entitlements": "Entitlements is entitlements.schema.json — the JSON Schema every\nentitlement key is declared in, including its type, unit and enum.",
 			"planSchemas.plan":         "Plan is plan.schema.json — the JSON Schema a catalog plan record conforms\nto.",
 		},
 	})
 	zip.Describe("GET /v1/plans/storage", zip.Doc{
-		Description: "GetStoragePricing returns the block-storage price block: the price per GB per\nmonth and the volume size bounds a cloud plan may attach.",
+		Description: "Returns the block-storage price block: the price per GB per\nmonth and the volume size bounds a cloud plan may attach.",
 	})
 	zip.Describe("GET /v1/plans/subscriptions", zip.Doc{
-		Description: "ListSubscriptionPlans returns the subscription ladder — the personal and team\ntiers a customer buys to use the cloud, each with its monthly and annual price,\nseat rules, limits and billing reference. Scoped to the caller's catalog.",
+		Description: "Returns the subscription ladder — the personal and team\ntiers a customer buys to use the cloud, each with its monthly and annual price,\nseat rules, limits and billing reference. Scoped to the caller's catalog.",
 		Fields: map[string]string{
 			"planList.plans": "Plans are the plans in this section, each an opaque object exactly as the\n@hanzo/plans catalog emits it — typically id, name, description,\npriceMonthly, category, a feature list, a limits block and a price_ref.",
 		},
 	})
 	zip.Describe("GET /v1/plans/tools", zip.Doc{
-		Description: "ListToolPrices returns the per-use price of every metered tool — web search,\ncode interpreter, image generation, speech — each with the unit it is billed\nin.",
+		Description: "Returns the per-use price of every metered tool — web search,\ncode interpreter, image generation, speech — each with the unit it is billed\nin.",
 		Fields: map[string]string{
 			"planToolList.tools": "Tools are the metered tools, each an opaque object exactly as the catalog\nemits it — typically name, billing unit and price.",
 		},
 	})
 	zip.Describe("GET /v1/plans/vocab", zip.Doc{
-		Description: "GetEntitlementVocabulary returns the entitlement key vocabulary: every key with\nits namespace, JSON type, nullability, unit, enum and title, the list of\nnamespaces, and the engine features a license can grant. It is derived from\nentitlements.schema.json on every call, so it cannot fall behind the schema.",
+		Description: "Returns the entitlement key vocabulary: every key with\nits namespace, JSON type, nullability, unit, enum and title, the list of\nnamespaces, and the engine features a license can grant. It is derived from\nentitlements.schema.json on every call, so it cannot fall behind the schema.",
 		Fields: map[string]string{
 			"planVocab.engine_features": "EngineFeatures are the inference-engine capabilities a license can grant:\ninference, embeddings, rerank, training, vision, audio, tools.",
 			"planVocab.keys":            "Keys maps every entitlement key to its descriptor — key, namespace, JSON\ntype(s), nullability, unit, enum and title, as the schema declares them.",
