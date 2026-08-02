@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // catModel builds one catalog entry. id "" means a Hanzo-style model whose
@@ -221,7 +225,7 @@ func TestVisibleProviders(t *testing.T) {
 // Store: idempotent open, empty=clean, upsert/get/update round-trip, and the
 // end-to-end gate through the store.
 func TestCatalogStore_RoundTrip(t *testing.T) {
-	c, err := openCatalog(":memory:")
+	c, err := openCatalog(t.TempDir())
 	if err != nil {
 		t.Fatalf("openCatalog: %v", err)
 	}

@@ -139,7 +139,7 @@ const stub = "package main\n\n" +
 	"// Scaffolded by plugin/gen-app-cmds from the manifest.Apps row; now hand-owned —\n" +
 	"// add a Shutdown/OwnsHealth/metered Price here if the app grows to need one.\n" +
 	"func main() {\n" +
-	"\tif err := cloud.Serve([]cloud.Plugin{{\n" +
+	"\tif err := cloud.Listen([]cloud.Plugin{{\n" +
 	"\t\tName:  %q,\n" +
 	"\t\tPrice: cloud.Free,\n" +
 	"\t\tMount: %s.Mount,\n" +

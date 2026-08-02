@@ -20,6 +20,10 @@ import (
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // ── harness ──────────────────────────────────────────────────────────────────
@@ -28,7 +32,7 @@ import (
 // installs it as the process singleton, and mounts the routes on a fresh app.
 func newService(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Service[state], *zip.App) {
 	t.Helper()
-	st, err := openStore(filepath.Join(t.TempDir(), "wallets.db"))
+	st, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

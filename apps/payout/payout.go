@@ -5,7 +5,7 @@
 // org's metered spend (the qualify / accrual base) and grant a promo credit to its
 // wallet (a payout made in credits, landing in commerce's Credit/trial bucket). It
 // was three byte-identical commerce.go copies (their own doc-comments said so);
-// extracted here so the S2S commerce binding — the HTTP deposit + usage-rollup path
+// extracted here so the S2S commerce binding — the HTTP deposit + usage/rollup path
 // — lives exactly ONCE.
 //
 // Every payout lands via the SAME COMMERCE_SERVICE_TOKEN S2S path, the same

@@ -2,11 +2,11 @@ package agents
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/namespace"
 )
 
 // TestLifecycleFieldsRoundTrip: the four bot-lifecycle columns persist and read
@@ -100,17 +100,16 @@ func TestListLongRunning(t *testing.T) {
 // (no new columns) is migrated forward on open, existing rows survive with the
 // column defaults, and re-opening (re-running migrate) is a clean no-op.
 func TestMigrationIdempotentOnLegacyDB(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "legacy.db")
+	dir := t.TempDir()
 
 	// Hand-build the legacy schema + a legacy row, exactly as the pre-lifecycle
 	// migrate() would have, then close.
 	//
-	// Fabricated through cek, like every real store: what is under test is THIS
-	// package's migrate() over a legacy schema, not cek's storage format. Writing
-	// the fixture with a bare sql.Open would leave a plaintext file, and converting
-	// one is a production operation that requires the live libsqlcipher codec — so
-	// the fixture, not the code under test, would fail the build the suite runs on.
-	legacy, err := cek.Open(cek.Global, path)
+	// Fabricated in the SAME database openStoreAt then opens, and opened the same
+	// way every real store is: what is under test is THIS package's migrate() over
+	// a legacy schema, not the storage format. A bare sql.Open would leave a
+	// plaintext file the keyed opener cannot read at all.
+	legacy, err := cek.Open(namespace.System(), legacySubsystem, dir)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}
@@ -134,7 +133,7 @@ CREATE TABLE agents (
 	// Open through the real store TWICE — the first migrates, the second proves
 	// idempotency (no error re-adding existing columns).
 	for i := 0; i < 2; i++ {
-		st, err := openStoreAt(path)
+		st, err := openStoreAt(dir)
 		if err != nil {
 			t.Fatalf("open #%d migrate failed: %v", i, err)
 		}

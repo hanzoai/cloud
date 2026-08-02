@@ -82,7 +82,7 @@ func TestOrgsGetDistinctFiles(t *testing.T) {
 // therefore go through storeForPublic, which refuses to materialise anything.
 func TestPublicBuildNeverMintsAStore(t *testing.T) {
 	dir := t.TempDir()
-	st := &state{stores: cloud.NewOrgStore[*Store](dir, "agents", openStore)}
+	st := &state{stores: cloud.NewOrgStore[*Store](cloud.Base{DataDir: dir}, "agents", openStore)}
 	t.Cleanup(func() { _ = st.stores.CloseAll() })
 
 	if _, ok := st.storeForPublic("a-stranger-invented-this"); ok {

@@ -21,14 +21,13 @@ package org
 //
 // # Snapshot is a raw file copy, not VACUUM/logical export
 //
-// The local file is opened through cek, which on an encryption-capable build stores
-// it as ciphertext under a per-database key wrapped in a <db>.dek sidecar. A snapshot
+// The local file is opened through cek, which stores it as ciphertext under a key
+// DERIVED from this deployment's master and the namespace that owns it. A snapshot
 // therefore copies the ACTUAL local bytes (checkpoint the WAL, read the file) and
-// ships them together with the sidecar, framed in one payload. A successor writes
-// both back and opens through cek exactly as the origin did — no logical export, no
-// SQLCipher-specific SQL, so the same code path is correct whether the file is
-// encrypted (production) or plaintext (pure-Go dev/tests), and an existing on-disk
-// store needs no migration. When cek is not encrypting there is simply no sidecar.
+// ships those, entire. A successor writes them back and opens through cek exactly as
+// the origin did — the derivation gives it the same key from the same name, so there
+// is no key material in the payload to lose. No logical export, no SQLCipher-specific
+// SQL, and an existing on-disk store needs no migration.
 //
 // # The wire-the-gate contract a store follows
 //

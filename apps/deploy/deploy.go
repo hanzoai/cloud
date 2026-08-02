@@ -23,7 +23,7 @@
 //
 // SECURITY — the projection READS are TENANT-SCOPED and the WRITES stay SuperAdmin-
 // only, all fail-closed on the SAME identity boundary the rest of cloud trusts
-// (resolveScope, scope.go — validated principal + injective provisioning.SanitizeOrg
+// (resolveScope, scope.go — validated principal + injective namespace.Sanitize
 // + the c.IsAdmin() SuperAdmin predicate): a SuperAdmin sees/mutates the whole fleet,
 // a validated org member sees ONLY its own org's apps (hanzo.ai/org label), and the
 // reconcile writes (sync/rollback) remain SuperAdmin-only. Secret objects are never

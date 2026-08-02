@@ -12,13 +12,17 @@ import (
 
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // mountSettings builds the settings surface with a temp SQLite store and an
 // optional KMS (nil ⇒ secret writes must fail closed, never plaintext).
 func mountSettings(t *testing.T, kms cloudKMS) (*zip.App, *service) {
 	t.Helper()
-	store, err := openSettingsStore(t.TempDir() + "/settings.db")
+	store, err := openSettingsStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openSettingsStore: %v", err)
 	}
@@ -36,6 +40,7 @@ func mountSettings(t *testing.T, kms cloudKMS) (*zip.App, *service) {
 type cloudKMS interface {
 	GetSecret(ctx context.Context, ref string) ([]byte, error)
 	PutSecret(ctx context.Context, ref string, value []byte) error
+	DeleteSecret(ctx context.Context, ref string) error
 	Sign(ctx context.Context, keyRef string, payload []byte) ([]byte, error)
 }
 
@@ -54,6 +59,10 @@ func (k *fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 }
 func (k *fakeKMS) PutSecret(_ context.Context, ref string, value []byte) error {
 	k.m[ref] = append([]byte(nil), value...)
+	return nil
+}
+func (k *fakeKMS) DeleteSecret(_ context.Context, ref string) error {
+	delete(k.m, ref)
 	return nil
 }
 func (k *fakeKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) { return nil, nil }
@@ -90,7 +99,7 @@ func authReq(method, path, org string, body any) *http.Request {
 // ── settings store: tenant isolation on the persisted CRUD ─────────────────────
 
 func TestSettingsStoreIsolation(t *testing.T) {
-	store, err := openSettingsStore(t.TempDir() + "/settings.db")
+	store, err := openSettingsStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

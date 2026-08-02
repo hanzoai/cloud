@@ -14,7 +14,7 @@ func TestLiveRegistry(t *testing.T) {
 	if os.Getenv("CLOUD_TOOLS_LIVE") != "1" {
 		t.Skip("set CLOUD_TOOLS_LIVE=1 to sync the real registry")
 	}
-	c, err := OpenCatalogStore(t.TempDir() + "/catalog.db")
+	c, err := OpenCatalogStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenCatalogStore: %v", err)
 	}

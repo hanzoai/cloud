@@ -12,6 +12,9 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/tools"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
@@ -35,7 +38,7 @@ func (f *fakeProvider) Dispatch(context.Context, tools.Principal, string, map[st
 // registry and mounts the marketplace (which installs its Pricer).
 func setup(t *testing.T, offered ...string) *zip.App {
 	t.Helper()
-	act, err := tools.OpenActivationStore(t.TempDir() + "/act.db")
+	act, err := tools.OpenActivationStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenActivationStore: %v", err)
 	}

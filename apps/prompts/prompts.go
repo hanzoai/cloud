@@ -25,8 +25,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -149,10 +147,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("prompts.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("prompts.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "prompts.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("prompts.Mount: open store: %w", err)
 	}

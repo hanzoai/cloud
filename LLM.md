@@ -180,8 +180,7 @@ tidy` is stable. Do NOT commit a `go.work` here — it would flip the Dockerfile
 its `-mod=readonly` download step.
 
 Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
-tests (`cek`, `CLOUD_KMS_MASTER_KEY_REF` set) REQUIRE `CGO_ENABLED=1` +
-libsqlcipher (`cek/cek.go` refuses to encrypt in pure-Go); those run only in the
+tests REQUIRE `CGO_ENABLED=1` + libsqlcipher; those run only in the
 Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
 by design (kms, flags, x402, plugin/kmsreseal, finance). Bundle-embed
 tests (apps/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
@@ -210,8 +209,7 @@ STILL DIVERGENT, and a decision for the owner rather than a patch: `go-unit`
 declares no `CLOUD_KMS_MASTER_KEY_REF`, while `make test` injects a dev key
 (`TEST_ENV`) precisely so the suite has one dev posture instead of a copy per
 package — and `hanzoai/ci` exports only GIT_TOKEN / S3 / registry creds into the
-step, never that key. So every cek-backed package still fails there for want of
-it (measured: `apps/code`, 6 tests, "cek: CLOUD_KMS_MASTER_KEY_REF is required").
+step, never that key.
 The fix is one of two shapes and both are policy: give CI the dev key, or route
 the step through the Makefile so the posture is declared once. Copying the key
 into `hanzo.yml` would make it two declarations, which is the drift above again.
@@ -243,7 +241,7 @@ entry, not a process. The apps that own a listener or a background loop
 (`manifest.App.Eager`) start WITH the host instead.
 
 Each subsystem is its OWN binary at `plugin/<app>`, linking only that app's graph
-through `cloud.Serve` — never the fleet. `ls cmd/` shows exactly `cloud/`; `ls
+through `cloud.Listen` — never the fleet. `ls cmd/` shows exactly `cloud/`; `ls
 plugin/` shows the ~116 per-app + tool dirs. A dedicated plugin binary is ~40 MB
 of which ~35 MB is the core every plugin also links; that duplication is the
 deliberate price of never linking the fleet union into one mega binary again.
@@ -286,7 +284,7 @@ An app the walk cannot reduce to prefixes gets no row and says why on stderr —
 `make generate` names them. The fix for an under-reported app is one line in its
 Wire entry: `Prefixes:` outranks the walk.
 
-`cloud.Serve` honours the plugin side of the contract in ONE place, `listenOn`:
+`cloud.Listen` honours the plugin side of the contract in ONE place, `listenOn`:
 with `ZIP_ADDR` set the process serves that socket and binds no ops port, so
 every generated `plugin/<app>` is a valid plugin with no code of its own. Without
 that, each child binds cfg's fixed `:8080/:9653/:9090`, the host never sees it
@@ -461,7 +459,7 @@ for the credentials of the app it is.**
   *service* credentials. The pod is the data-plane boundary; the app is the
   credential boundary.
 
-Ordering is load-bearing: `cek` memoizes the master key on first use, so
+Ordering is load-bearing: a store opened before the master is installed fails, so
 `credz.Boot` runs before the first store opens (top of `Serve`, and again at the
 top of `BuildDeps` for callers that skip `Serve` — it is `sync.Once`). Installing
 a key any later loses to the cached "no key" while the log claims success, which
@@ -625,9 +623,22 @@ package under `apps/<name>` that obeys these seams — nothing more.
   when project-scoped. Isolation is PHYSICAL: a distinct `(org[, project])` is a
   distinct file. `org`/`project` MUST be the VALIDATED principal values
   (`principal.Org(c)`, `principal.Project(c)`) — never a raw body/header — and are
-  folded through `SanitizeOrg`, the ONE injective org slugger. hanzoai/sqlite is
+  folded through `namespace.Sanitize`, the ONE injective org slugger. hanzoai/sqlite is
   the SOLE driver (blank-imported once, in orgdb.go); subsystems never import a
   SQLite driver themselves. The caller owns its schema/migration and Close.
+- **Naming lives in hanzoai/namespace, not here.** A namespace, the injective
+  slug it is built from, and the key and path it renders to are ONE primitive and
+  it is `github.com/hanzoai/namespace` (v1.2.0+): `Sanitize` (the slugger),
+  `OrgProject`/`MustOrgProject` (org + project → a namespace), `Key` (→
+  `orgs/{slug}[/projects/{project}]/{sub}.db`) and `Path` (that, resolved against
+  DataDir). These strings are directory names on live volumes and keys in live
+  buckets, so a second implementation of them does not fail — it opens an empty
+  database beside a real one. cloud keeps only the DOOR: `OrgNamespace` /
+  `MustOrgNamespace` in orgns.go, the one file allowed to fold a value into an
+  ENTITY's name (`TestOnlyOrgnsBuildsANamespace` enforces it). `namespace.System()`
+  is outside that argument rather than an exception to it — it takes no input, so
+  nothing can be folded into it, and a platform store says so where it opens. The
+  key derivation is cek's, from that same name.
 
 ## Zero-downtime HA for per-org stores (rolling-upgrade safe)
 
@@ -3006,7 +3017,7 @@ create a single table in the shipped image. `terms` is keyed
 in every build lane. Verify any SQLite module against the production lane
 (`-tags "libsqlite3 sqlite_fts5"` + `-lsqlcipher`) before designing on it.
 
-The store is `{DataDir}/index.db`, and a rename must carry the WHOLE family: cek
+The store is the `index` subsystem, and a rename must carry the WHOLE family: cek
 keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
 strands the key and every document becomes undecryptable — data loss that presents
 as an empty index.
@@ -3278,7 +3289,7 @@ containment ─┘
 | **containment** | apps/controlplane is unreachable from every real binary | stub crypto in a serve binary |
 | **image** | version derived ONCE → build → push → resolve → smoke | a tag naming an image that did not boot |
 | **rollout** | tag → universe pin → **poll `x-api-version` until it is ours** | describing a version that is not running |
-| **reach** | `openapi/reach.py` over every literal address + the MCP tool count | an address this document publishes that production does not route |
+| **reach** | `go run ./cmd/reach` over every literal address + the MCP tool count | an address this document publishes that production does not route |
 | **fanout** | `repository_dispatch: spec-update` → 9 repos, payload `(version, sha, spec_sha256)` | a projection that never heard about this release |
 | **receipt** | `release.json` on the tag's GitHub Release, `if: always()` | a hole, silently |
 
@@ -3761,7 +3772,7 @@ address.
 stores open a concurrent read pool AND a serialized write pool on the same file, which
 needs the LIVE libsqlcipher codec — the pure-Go codec envelope is single-writer and
 cannot serve that shape. So `commerceMasterKey` gates on `sqlitedrv.CodecLinked()`, the
-same predicate `cek.EnsureDevKey` uses:
+the same predicate:
 
 - codec linked (the image: `CGO_ENABLED=1 -tags "libsqlite3 sqlite_fts5"`) ⇒ inject
   cloud's master key; commerce encrypts, and its own `resolveMasterKey` still fails
@@ -3801,49 +3812,46 @@ another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
 preference, but because they all move the same balance and the suite is otherwise
 `fullyParallel`.
 
-## Encryption at rest: cek is the gate, and it binds the owner
+## Encryption at rest: one key per database, derived
 
-`cek.Open(principal, path)` is the ONE encryption-at-rest gate. The principal comes
-first because it is a question the caller must answer, not one it can forget:
-`cek.Global` for a platform store, `cek.Org(slug)` for a tenant's. `cek.User(id)` exists
-for the per-user partition, which has no store yet.
+`github.com/hanzoai/cek` is the whole of it, and cloud owns none of it:
 
-If you add a store, open it through cek. A store inside the envelope has a `.dek`
-sidecar beside it; one outside does not, and this is the check worth running on any data
-dir — note it looks for the SIDECAR, because on a pure-Go build the codec envelope keys
-the file out of band and the database may not exist at that path at all:
+    cek.SetMaster(k)                        // once, at boot, from KMS (credz does this)
+    cek.Open(ns, subsystem, dir)            // everywhere else
 
-    find $DATA_DIR -name '*.db' -printf '%P\n' | while read -r r; do
-      printf '%-40s dek=%s\n' "$r" "$([ -f "$DATA_DIR/$r.dek" ] && echo yes || echo NO)"; done
+The key is DERIVED — `HKDF(master, "hanzo/cek/v1/" + ns + "/" + subsystem)` — so it
+is not generated, not wrapped, not stored and not rotated in place. There is no
+unwrap step, no rewrap step, no per-file key material to lose, no sidecar beside the
+database and no migration path to maintain. A database is born encrypted or it does
+not exist. Losing the master loses the data, which is the property you want from
+encryption at rest and the reason the master lives in KMS.
 
-**The derivation.** The KEK binds (owner, file) and never the path, so a store survives a
-move but not a change of owner:
+`namespace` decides WHERE, from the same two values: `{dir}/orgs/{slug}/{sub}.db`
+for an org, `{dir}/orgs/_platform/{sub}.db` for the deployment's own. A caller
+therefore passes a DIRECTORY and a NAME, never a path — the file and its key cannot
+name different things.
 
-    tenant:   KEK = HKDF(master, lp("org") || lp(slug || "/" || hex(fileID)))
-    platform: KEK = HKDF(master, lp("global") || lp(hex(fileID)))
+**Open through `cek.Open`, then `sqlpool.Single`.** cek creates the parent directory
+itself (it chose the path), so cloud no longer wraps it — the `basedb` package that
+existed only to `MkdirAll` is gone. `sqlpool.Single` pins the pool to one connection,
+which is the single-writer discipline every store depends on and, for a two-statement
+read-modify-write, relies on for atomicity.
 
-The platform form is byte-identical to what every store on disk was written under, which
-`TestGlobalDerivationIsUnchanged` asserts against an independently written reference — so
-the platform fleet cannot be silently orphaned. Only tenant stores gained an owner.
+**Do not set connection PRAGMAs.** `busy_timeout`, `journal_mode=WAL`,
+`foreign_keys=ON` and `synchronous=NORMAL` are already applied by
+`github.com/hanzoai/sqlite`, per CONNECTION — which a one-shot `db.Exec` was not, since
+it lands on whichever connection serves it and is lost when that connection is recycled.
+Roughly fifty stores each restated those by hand; they now say nothing, and
+`sqlpool_test.go` asserts the driver still delivers them so the deletion cannot rot.
+`cloud.OrgDB` is `cek.Open` plus `sqlpool.Single`, nothing more.
 
-**Migration is an operation, not a fallback.** `cek.Rebind(from, to, path)` rewraps one
-sidecar; `cek.RebindOrgs(dataDir, platformSlug)` is the walk over `{DataDir}/orgs`. It
-rewrites no database page and never opens the file, so it is safe on a store too large to
-copy and a failure cannot corrupt data. Already-bound reports `ErrNotBound` and counts as
-skipped, so the walk converges rather than pretending to be a transaction; a sidecar that
-unwraps under NEITHER principal is a real error, because an operator must not read
-corruption as success.
+**A test binary keys itself.** cek reads no environment; a process with no KMS mints
+its own master. `import _ "github.com/hanzoai/cloud/internal/devmaster"` in one
+_test.go of the package says so, once, instead of a TestMain per package.
 
-There is deliberately no legacy path inside `Open`. A second derivation tried on failure
-would mean every open silently accepts two answers forever — which is exactly what made
-the old binding unenforceable.
-
-⚠️ **Deploy order.** A volume written before the binding must be rebound before its
-tenants can open their stores. Run `RebindOrgs` against the data dir, then start.
-
-**IAM's store is `iam/global.db`** and opens through cek like everything else. It is named
-for its principal partition, not for a version — it previously opened through
-`iamserver.OpenSQLite`, which has no key to give it, and sat in plaintext.
+**A store that is open has no file yet** on the pure-Go codec, so "does this org
+have a store" is the union of the open set and the disk — `OrgStore.Has`, which
+`Each` and `Stored` both go through.
 
 **Still outside the envelope:** `tasks/<org>/<namespace>.db`. `hanzoai/tasks`'s
 `EmbedConfig` has no key field, so that is an upstream change.
@@ -3935,7 +3943,7 @@ free-port allocation that seven of eight children used to lose.
 ## After the split: a store has one owner, and everyone else asks
 
 `cmd/cloud` is a light plugin HOST. Each app is its own binary (`plugin/<app>/main.go`
-→ `cloud.Serve`), started lazily on the first request to its prefix, and a child's
+→ `cloud.Listen`), started lazily on the first request to its prefix, and a child's
 `--enable` contains ONLY its own name. So `cfg.Enabled("commerce")` is false in every
 process but commerce, `finance.Current()` is nil in every process but commerce, and
 `iamclient.DB()` is nil in every process but iam.

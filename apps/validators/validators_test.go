@@ -5,21 +5,17 @@ import (
 	"encoding/hex"
 	"math/big"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/luxfi/crypto"
 	"github.com/luxfi/geth/common"
-)
 
-// TestMain sets a throwaway KMS master key so cek opens the store encrypted on an
-// encryption-capable build (resolved once per process; env-independent order).
-func TestMain(m *testing.M) {
-	_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-	os.Exit(m.Run())
-}
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+)
 
 // ── the ownership-verify test (the required one) ─────────────────────────────
 
@@ -149,7 +145,7 @@ func TestOwnerOfABIPacking(t *testing.T) {
 
 func tempStore(t *testing.T) *Store {
 	t.Helper()
-	st, err := openStore(filepath.Join(t.TempDir(), "validators.db"))
+	st, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -264,6 +260,13 @@ func (f *fakeKMS) PutSecret(_ context.Context, ref string, v []byte) error {
 		f.store = map[string][]byte{}
 	}
 	f.store[ref] = append([]byte(nil), v...)
+	return nil
+}
+func (f *fakeKMS) DeleteSecret(_ context.Context, ref string) error {
+	if f.fail {
+		return errChallenge // any error
+	}
+	delete(f.store, ref)
 	return nil
 }
 func (f *fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) { return f.store[ref], nil }

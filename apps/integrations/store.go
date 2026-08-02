@@ -8,11 +8,16 @@ import (
 	"strings"
 	"time"
 
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
-	// "sqlite" database/sql name under both build tags: cgo → mattn+SQLCipher;
-	// !cgo → pure-Go modernc). Importing modernc directly would double-register and
-	// panic at init. Blank import registers the driver — same as clients/agents.
-	"github.com/hanzoai/cloud/cek"
+	// "sqlite" database/sql name under both build tags). Importing modernc
+	// directly would double-register and panic at init. Blank import registers
+	// the driver — same as clients/agents.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -56,29 +61,19 @@ type Grant struct {
 	CreatedAt, ExpiresAt           int64 // unix seconds
 }
 
-// Store is the integrations database. ONE SQLite file
-// ({DataDir}/integrations.db) holds every org's connections + in-flight OAuth
-// nonces; tenancy is the org column (PK includes it).
+// Store is the integrations database. ONE SQLite file — the deployment's own
+// "integrations" — holds every org's connections + in-flight OAuth nonces;
+// tenancy is the org column (PK includes it).
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "integrations", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open integrations store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
@@ -153,14 +148,14 @@ CREATE TABLE IF NOT EXISTS connectors (
 
 -- grants are in-flight device authorizations (poll-until-done, TTL <= 15 min).
 -- code is the provider device handle (secret-adjacent): it lives HERE, not in
--- KMS, because this store is cek-encrypted at rest (SQLCipher DEK wrapped
--- under the same master key as KMS; cek.Open fail-secure) and the row needs
--- non-destructive polling reads, read-time TTL, poll cadence, and GC — a
--- lifecycle KMS does not model. Pure-Go dev builds share the existing at-rest
--- posture of oauth_nonces (same class of short-lived material; production is
--- SQLCipher). NOTE: github-copilot's code is exchange-complete on its own
+-- KMS, because this store is encrypted at rest (its key is derived from the
+-- process master and this database's name; a store with no master does not
+-- open) and the row needs non-destructive polling reads, read-time TTL, poll
+-- cadence, and GC — a lifecycle KMS does not model. It shares the at-rest
+-- posture of oauth_nonces (same class of short-lived material).
+-- NOTE: github-copilot's code is exchange-complete on its own
 -- (openai's is not — the server-side code_verifier is never stored), so the
--- SQLCipher posture is load-bearing for copilot specifically; the tight TTL
+-- at-rest posture is load-bearing for copilot specifically; the tight TTL
 -- bounds the exposure. last_poll_at drives the server-side poll throttle
 -- (RFC-8628: never hit the provider faster than interval — the client_ids are
 -- shared across all tenants). Terminal outcomes DELETE the row; pending is

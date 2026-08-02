@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,12 +18,15 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/kms"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -36,18 +38,6 @@ import (
 const fleetAllowPrivateHostsEnv = "FLEET_ALLOW_PRIVATE_HOSTS"
 
 // ── harness ─────────────────────────────────────────────────────────────────
-
-// The per-org KMS store rides the cek data plane, which fail-closes without a
-// master key on encryption-capable builds; supply one process-wide (mirrors
-// clients/integrations, clients/git).
-func TestMain(m *testing.M) {
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		panic(err)
-	}
-	cek.SetMasterKey(k)
-	os.Exit(m.Run())
-}
 
 func newKMS(t *testing.T) *kms.Client {
 	t.Helper()

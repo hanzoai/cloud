@@ -19,6 +19,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/vfs/replica"
 )
 
@@ -59,7 +60,7 @@ func openBoundDB(t *testing.T, d *Durable) *sql.DB {
 	if err != nil {
 		t.Fatalf("open %s: %v", d.dbPath, err)
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	if err := db.Ping(); err != nil {
 		t.Fatalf("ping %s: %v", d.dbPath, err)
 	}

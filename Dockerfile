@@ -86,7 +86,7 @@ ENV GOTOOLCHAIN=auto
 # compat pin is infeasible (mattn keys via URI before any pragma), so the format
 # is frozen by pinning sqlcipher-dev to an EXACT version. A repo bump then fails
 # the build LOUDLY (never a silent prod brick); on such a failure, bump the pin
-# AND confirm cek's frozen-fixture test still opens (format unchanged)
+# AND confirm hanzoai/sqlite's TestUnwrapGoldenFixture still opens (format unchanged)
 # before shipping. A MAJOR bump (4.x → 5.x) changes the default format and would
 # orphan existing encrypted stores — migrate/rewrap them first.
 RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev=4.6.1-r1 pkgconfig binutils
@@ -188,14 +188,6 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" \
       -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
       github.com/hanzoai/sqlite
-# RED gate — cek FROZEN-FORMAT guard, run INSIDE the image under the pinned Alpine
-# libsqlcipher: opens the committed encrypted fixture and reads its canary row. A
-# sqlcipher-dev pin/base bump that changes the on-disk format fails the IMAGE build
-# HERE (not only Go CI) → a silent prod brick of existing stores becomes a red build.
-RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -run TestFrozenFixtureOpens \
-      -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" ./cek
 # Go drops comments at compile time, so this pass is the ONLY way a typed handler's
 # prose reaches the document: zipdoc lifts it into zipdoc_gen.go, which registers it
 # with zip.Describe at init. It must run BEFORE every build below, because the
@@ -218,8 +210,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build \
-      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /cek-rewrap ./cmd/cek-rewrap
+      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud
 # The functional smoke prober (plugin/smoke) — a stdlib-only static binary shipped
 # alongside the host so the release gate can `docker exec` it against the freshly-
 # built image (and any deployment can be smoked via `docker run --entrypoint /smoke`).
@@ -312,7 +303,6 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
-COPY --from=build /cek-rewrap /cek-rewrap
 COPY --from=build /smoke /smoke
 # The per-app plugin binaries, landing beside /cloud because that is where the host
 # looks: manifest.App.Plugin resolves dir(os.Executable())+"/<name>". Copying the

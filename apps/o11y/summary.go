@@ -21,7 +21,7 @@ package o11y
 // data — every field is a fact about OUR OWN services, identical for every
 // caller — so there is nothing to scope. The mechanism is the one this binary
 // already uses for /v1/health (serve.go), /v1/platform/health ("liveness must be
-// probe-able without a JWT") and isHealthPath's exemption in gate(): the identity
+// probe-able without a JWT") and o11y.Anonymous's exemption in gate(): the identity
 // middleware never rejects, it only strips and re-mints, and a route is public by
 // simply not calling a principal gate. No bypass is invented here and none is
 // needed — this handler just does not ask who is calling. Reads are never

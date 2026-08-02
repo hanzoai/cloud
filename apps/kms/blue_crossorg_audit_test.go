@@ -31,7 +31,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -58,7 +57,7 @@ func auditedWorld(t *testing.T) (*zip.App, *audit.Recorder, *rsa.PrivateKey, str
 	}
 	cfg := e2eCfg(t, e2eJWKS(t, &key.PublicKey).URL)
 
-	rec, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}

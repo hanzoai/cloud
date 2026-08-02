@@ -1,12 +1,8 @@
 package analytics
 
 import (
-	"context"
 	"net/http"
-	"strings"
 	"testing"
-
-	"github.com/hanzoai/cloud"
 )
 
 // TestObsPlaneGetsFirstRefusalOnTheCanonicalDoor pins the unified event door:
@@ -15,70 +11,34 @@ import (
 // the SERVER-resolved org and never reaches the product warehouse; a body the
 // claim declines walks the product wire exactly as before; and only the
 // canonical door's FULL lane offers — the other doors and the anonymous lane
-// never consult the claim (obs events are tenant data).
-func TestObsPlaneGetsFirstRefusalOnTheCanonicalDoor(t *testing.T) {
-	type call struct{ org, body string }
-	var calls []call
-	prev := cloud.ObsEventIngest()
-	cloud.SetObsEventIngest(func(_ context.Context, org string, body []byte) (int, int, bool, error) {
-		calls = append(calls, call{org: org, body: string(body)})
-		if strings.Contains(string(body), `"type":"trace-create"`) {
-			return 1, 0, true, nil
-		}
-		return 0, 0, false, nil
-	})
-	t.Cleanup(func() { cloud.SetObsEventIngest(prev) })
-
-	obsBody := `{"batch":[{"id":"a","type":"trace-create","timestamp":"t","body":{}}]}`
-
-	// Claimed: the obs receipt answers, the warehouse sees nothing.
+// The obs claim now crosses a PROCESS boundary over the plane socket, so it
+// cannot be driven by swapping a package global in-process. What this package
+// must still guarantee — and what a wrong answer would silently break — is that
+// a claim which does NOT happen leaves the product wire fully intact: with no
+// o11y peer reachable in a unit test, every body must still be decoded, written
+// and receipted by analytics itself. The claim's own tenancy and shape rules are
+// pinned next to the op, in apps/o11y.
+func TestCanonicalDoorFallsThroughWhenObsPeerIsAbsent(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
-	code, body := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", obsBody)
-	if code != http.StatusOK || !strings.Contains(string(body), `"accepted":1`) {
-		t.Fatalf("claimed obs batch = %d (%s), want 200 with the claim's receipt", code, body)
-	}
-	if len(calls) != 1 || calls[0].org != "acme" {
-		t.Fatalf("claim calls = %+v, want exactly one with the server-resolved org", calls)
-	}
-	if got := w.sources(t); len(got) != 0 {
-		t.Fatalf("claimed batch leaked into the product warehouse: %v", got)
+
+	// An LLM-obs-SHAPED body: with a peer it would be claimed; without one it
+	// must not be lost — it walks the product wire like anything else.
+	obsBody := `{"batch":[{"id":"a","type":"trace-create","timestamp":"t","body":{}}]}`
+	if code, _ := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", obsBody); code != http.StatusOK {
+		t.Fatalf("obs-shaped body with no peer = %d, want 200 via the product wire", code)
 	}
 
-	// Declined: the product wire proceeds untouched.
-	calls = nil
+	// And an ordinary product event is untouched by the claim attempt.
 	if code, _ := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme",
 		`{"event":"$pageview","distinctId":"d"}`); code != http.StatusOK {
-		t.Fatalf("declined product event = %d, want 200 via the product wire", code)
+		t.Fatalf("product event = %d, want 200", code)
 	}
-	if len(calls) != 1 {
-		t.Fatalf("the claim must be OFFERED the declined body exactly once, got %d", len(calls))
-	}
-	if got := w.sources(t); len(got) != 1 || got[0] != sourceEvent {
-		t.Fatalf("product wire wrote $source %v, want [%s]", got, sourceEvent)
-	}
-
-	// There is no "other door" negative left to write: /v1/insights/e was folded into
-	// /v1/event (decodeEvent sniffs the wire), so the canonical door is the ONLY door.
-	// The offer is still gated on the door's SOURCE rather than on the body — the
-	// anonymous-lane case below is now what proves it, since it reaches the same door
-	// with the same obs body and must still never consult the claim.
-
-	// The anonymous lane never offers — obs events are tenant data.
-	calls = nil
-	tightenPublicRate(t, 1_000_000, 1_000_000)
-	if code, _ := doBody(t, app, http.MethodPost, "/v1/event", "", "", obsBody); code != http.StatusOK {
-		t.Fatal("anonymous canonical-door post must still answer via the public projection")
-	}
-	if len(calls) != 0 {
-		t.Fatalf("anonymous lane consulted the claim %d times, want 0", len(calls))
+	if got := w.sources(t); len(got) == 0 {
+		t.Fatal("no peer must mean the product wire still WRITES; nothing reached the warehouse")
 	}
 }
 
-// TestTeamWireRidesTheCanonicalDoor pins the team-wire fold: the
-// team SPA's bare snake_case array, POSTed to the CANONICAL door, decodes via
-// the team mapping (kind named, events survive admission) — and the canonical
-// array wire still decodes as itself (positive-signal dispatch only).
 func TestTeamWireRidesTheCanonicalDoor(t *testing.T) {
 	team := `[{"event":"navigation","properties":{"path":"/x"},"timestamp":1753900000000,"distinct_id":"acct-1"}]`
 	evs, err := decodeIngest([]byte(team))
@@ -93,5 +53,37 @@ func TestTeamWireRidesTheCanonicalDoor(t *testing.T) {
 	evs, err = decodeIngest([]byte(canonical))
 	if err != nil || len(evs) != 1 || evs[0].DistinctID != "d" {
 		t.Fatalf("canonical array must still decode canonically, got %+v (%v)", evs, err)
+	}
+}
+
+// TestPostHogWireRidesTheCanonicalDoor pins the other half of retiring
+// /v1/insights/e: the door was removed, but until the canonical decode learned
+// this wire's shape, a PostHog body landing on /v1/event decoded with an EMPTY
+// person and an unnamed kind — which admitPublic drops whole, so the SDK saw a
+// 200 that stored nothing. insights.hanzo.ai's /e, /batch and /capture all
+// rewrite onto /v1/event, so this is the live path for every PostHog SDK.
+func TestPostHogWireRidesTheCanonicalDoor(t *testing.T) {
+	// A bare PostHog event: snake_case person, string timestamp.
+	evs, err := decodeIngest([]byte(`{"event":"$pageview","distinct_id":"ph-1","timestamp":"2026-01-01T00:00:00Z","properties":{"$current_url":"/x"}}`))
+	if err != nil || len(evs) != 1 {
+		t.Fatalf("decodeIngest(posthog) = %d events, %v; want 1, nil", len(evs), err)
+	}
+	if evs[0].DistinctID != "ph-1" {
+		t.Errorf("the PostHog person (distinct_id) must survive, got %q", evs[0].DistinctID)
+	}
+	if evs[0].Type == "" {
+		t.Error("the kind must be named — an unnamed kind is dropped whole by admitPublic")
+	}
+
+	// The PostHog batch envelope.
+	evs, err = decodeIngest([]byte(`{"batch":[{"event":"$pageview","distinct_id":"ph-2","timestamp":"2026-01-01T00:00:00Z"}]}`))
+	if err != nil || len(evs) != 1 || evs[0].DistinctID != "ph-2" {
+		t.Fatalf("posthog batch: got %+v (%v)", evs, err)
+	}
+
+	// And the canonical wire is untouched by the new probe.
+	evs, err = decodeIngest([]byte(`{"event":"$pageview","distinctId":"canon","time":"2026-01-01T00:00:00Z"}`))
+	if err != nil || len(evs) != 1 || evs[0].DistinctID != "canon" {
+		t.Fatalf("canonical wire must still decode canonically: %+v (%v)", evs, err)
 	}
 }

@@ -191,8 +191,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("functions.Mount: empty DataDir")
 	}
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "functions"), State: state{
-		stores: cloud.NewOrgStore(deps.DataDir, "functions", openStore),
+	b := cloud.NewBase(deps, "functions")
+	s := &cloud.Service[state]{Base: b, State: state{
+		stores: cloud.NewOrgStore(b, "functions", openStore),
 		exec:   newExecClient(),
 	}}
 	mounted = s

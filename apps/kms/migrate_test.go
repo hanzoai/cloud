@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 	luxlog "github.com/luxfi/log"
 	zapdb "github.com/luxfi/zapdb"
@@ -21,7 +22,7 @@ func TestMigrateLegacyZapDB(t *testing.T) {
 
 	seedLegacyZapDB(t, dir, key, path, name, env, plaintext)
 
-	dst := newSecretStore(dir, false)
+	dst := newSecretStore(cloud.Base{DataDir: dir}, false)
 	if err := migrateLegacyZapDB(dir, key, dst, luxlog.NewNoOpLogger()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestMigrateLegacyZapDB(t *testing.T) {
 // silent no-op (never creates the archive marker on nothing).
 func TestMigrateLegacyZapDB_NoLegacyStore(t *testing.T) {
 	dir := t.TempDir()
-	dst := newSecretStore(dir, false)
+	dst := newSecretStore(cloud.Base{DataDir: dir}, false)
 	if err := migrateLegacyZapDB(dir, testKey(), dst, luxlog.NewNoOpLogger()); err != nil {
 		t.Fatalf("migrate over empty dir must be a no-op, got: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestMigrateLegacyZapDB_CrossOrgRelocationStillDefended(t *testing.T) {
 	const path, name, env, plaintext = "/orgs/acme/ci", "TOKEN", "main", "acme-only"
 	seedLegacyZapDB(t, dir, key, path, name, env, plaintext)
 
-	dst := newSecretStore(dir, false)
+	dst := newSecretStore(cloud.Base{DataDir: dir}, false)
 	if err := migrateLegacyZapDB(dir, key, dst, luxlog.NewNoOpLogger()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

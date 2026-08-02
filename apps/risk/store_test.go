@@ -17,6 +17,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	// The data plane has no plaintext-at-rest mode and a test binary has no boot to
+	// resolve a key through, so it keys itself. Stated once for the fleet rather
+	// than as a posture each package decides for itself.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -247,12 +251,6 @@ func (w *warehouse) all() []stmt {
 }
 
 func TestMain(m *testing.M) {
-	// The data plane has no plaintext-at-rest mode, and a test run has no boot to
-	// decide a posture, so the suite states a dev key when the environment has not
-	// already supplied a real one.
-	if os.Getenv("CLOUD_KMS_MASTER_KEY_REF") == "" {
-		_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-	}
 	storeReady = probe.ready
 	storeQuery = func(_ context.Context, sql string, args ...any) ([]map[string]any, error) {
 		return probe.query(sql, args)

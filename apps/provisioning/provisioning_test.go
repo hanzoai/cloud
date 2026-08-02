@@ -6,11 +6,14 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -18,7 +21,7 @@ import (
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "provisioning.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -174,12 +177,12 @@ func TestNameValidation(t *testing.T) {
 	}
 }
 
-// TestSanitizeOrg: a clean DNS-1123-label owner maps to itself (identity, no
+// TestSanitize: a clean DNS-1123-label owner maps to itself (identity, no
 // suffix); a non-slug owner folds to [a-z0-9-] AND carries a 16-hex SHA-256
 // disambiguation suffix. The exported IAM owner claim is already a clean slug,
 // so the common path is the identity — the suffix exists only to keep distinct
 // non-slug owners distinct.
-func TestSanitizeOrg(t *testing.T) {
+func TestSanitize(t *testing.T) {
 	// Clean slugs (already [a-z0-9-]): identity, no suffix. Whitespace-bearing
 	// owners are NO LONGER folded to a clean slug — they are refused (see the
 	// rejection block below), because trimming them is non-injective.
@@ -188,8 +191,8 @@ func TestSanitizeOrg(t *testing.T) {
 		"a-b-c-d": "a-b-c-d", "--weird--": "--weird--",
 	}
 	for in, want := range identity {
-		if got := sanitizeOrg(in); got != want {
-			t.Errorf("sanitizeOrg(%q) = %q, want identity %q", in, got, want)
+		if got := namespace.Sanitize(in); got != want {
+			t.Errorf("namespace.Sanitize(%q) = %q, want identity %q", in, got, want)
 		}
 	}
 	// Whitespace / control / zero-width-format owners are REFUSED (→ ""), never
@@ -197,8 +200,8 @@ func TestSanitizeOrg(t *testing.T) {
 	// would collapse distinct IAM orgs onto one tenant namespace (RED CRIT-2
 	// residual). "\u00a0" is NBSP, "\u200b" is a zero-width space, "\t" a control.
 	for _, in := range []string{" hanzo ", "hanzo ", " hanzo", "ha nzo", "hanzo\t", "hanzo\u00a0", "hanzo\u200b", "  ", "\n"} {
-		if got := sanitizeOrg(in); got != "" {
-			t.Errorf("sanitizeOrg(%q) = %q, want \"\" (refused: non-injective identifier)", in, got)
+		if got := namespace.Sanitize(in); got != "" {
+			t.Errorf("namespace.Sanitize(%q) = %q, want \"\" (refused: non-injective identifier)", in, got)
 		}
 	}
 	// Owners with VISIBLE chars OUTSIDE [a-z0-9-] (uppercase, '.', '@') fold + get
@@ -206,23 +209,23 @@ func TestSanitizeOrg(t *testing.T) {
 	// collision target) and stays a DNS-safe slug. (Whitespace is not here — it is
 	// refused above, not folded.)
 	for _, in := range []string{"AcmeCorp", "a@b.c", "team.a", "Widgets"} {
-		got := sanitizeOrg(in)
+		got := namespace.Sanitize(in)
 		if len(got) < 17 || got[len(got)-17] != '-' {
-			t.Errorf("sanitizeOrg(%q) = %q, want a folded slug + '-'+16hex suffix", in, got)
+			t.Errorf("namespace.Sanitize(%q) = %q, want a folded slug + '-'+16hex suffix", in, got)
 		}
 		for _, r := range got {
 			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
-				t.Errorf("sanitizeOrg(%q) = %q has unsafe char %q", in, got, r)
+				t.Errorf("namespace.Sanitize(%q) = %q has unsafe char %q", in, got, r)
 			}
 		}
 	}
 }
 
-// TestSanitizeOrgInjective is the RED cross-tenant regression: distinct raw
+// TestSanitizeInjective is the RED cross-tenant regression: distinct raw
 // owners that USED to fold to the same slug (and thus shared one physical
 // bucket/DB namespace) must now map to DIFFERENT slugs. Proven for the exact
 // collisions RED found: Acme/acme (case) and team.a/team-a (separator).
-func TestSanitizeOrgInjective(t *testing.T) {
+func TestSanitizeInjective(t *testing.T) {
 	collisionPairs := [][2]string{
 		{"Acme", "acme"},
 		{"team.a", "team-a"},
@@ -231,9 +234,9 @@ func TestSanitizeOrgInjective(t *testing.T) {
 		{"WIDGETS", "widgets"},
 	}
 	for _, p := range collisionPairs {
-		x, y := sanitizeOrg(p[0]), sanitizeOrg(p[1])
+		x, y := namespace.Sanitize(p[0]), namespace.Sanitize(p[1])
 		if x == y {
-			t.Errorf("sanitizeOrg fold collision: %q and %q both → %q (cross-tenant namespace share!)", p[0], p[1], x)
+			t.Errorf("namespace.Sanitize fold collision: %q and %q both → %q (cross-tenant namespace share!)", p[0], p[1], x)
 		}
 		// And the derived physical namespace (what actually keys buckets/DBs) is
 		// distinct too — the property that matters for isolation.
@@ -242,7 +245,7 @@ func TestSanitizeOrgInjective(t *testing.T) {
 		}
 	}
 	// A clean lowercase slug is unaffected (no false-splitting of legit owners).
-	if sanitizeOrg("acme") != "acme" {
+	if namespace.Sanitize("acme") != "acme" {
 		t.Error("a clean slug must remain identity")
 	}
 
@@ -252,27 +255,27 @@ func TestSanitizeOrgInjective(t *testing.T) {
 	// identity and re-suffixed, so a squatted "foo-<sha256(Foo)[:8]>" can never
 	// collide with "Foo".
 	nonSlug := "Foo"
-	foldedOut := sanitizeOrg(nonSlug) // "foo-<hash(Foo)[:8]>"
-	if sanitizeOrg(foldedOut) == foldedOut {
+	foldedOut := namespace.Sanitize(nonSlug) // "foo-<hash(Foo)[:8]>"
+	if namespace.Sanitize(foldedOut) == foldedOut {
 		t.Errorf("suffix-looking slug %q kept identity — aliases the non-slug output of %q", foldedOut, nonSlug)
 	}
-	if sanitizeOrg(foldedOut) == sanitizeOrg(nonSlug) {
+	if namespace.Sanitize(foldedOut) == namespace.Sanitize(nonSlug) {
 		t.Errorf("alias collision: squatted %q and non-slug %q map to the same slug", foldedOut, nonSlug)
 	}
 	// A normal slug that does NOT look suffixed keeps identity.
-	if sanitizeOrg("my-team-42") != "my-team-42" {
+	if namespace.Sanitize("my-team-42") != "my-team-42" {
 		t.Error("a normal slug must keep identity (not over-suffixed)")
 	}
 }
 
-// TestSanitizeOrgWhitespaceInjective is the RED CRIT-2 residual regression: an
+// TestSanitizeWhitespaceInjective is the RED CRIT-2 residual regression: an
 // org identifier that differs from another ONLY by edge/internal/unicode
 // whitespace (or a control/zero-width rune) must never collapse onto the same
 // tenant slug. The prior code TrimSpace'd the org before hashing, so "acme",
 // "acme ", "ac me" and an NBSP variant all folded to one namespace. Now each
 // such variant is REFUSED (→ ""), so the set is "distinct-or-rejected, never
 // colliding": the only accepted member is the clean "acme".
-func TestSanitizeOrgWhitespaceInjective(t *testing.T) {
+func TestSanitizeWhitespaceInjective(t *testing.T) {
 	// The exact family RED called out, plus unicode-space + control variants.
 	orgs := []string{
 		"acme",       // clean — the ONLY accepted member
@@ -286,7 +289,7 @@ func TestSanitizeOrgWhitespaceInjective(t *testing.T) {
 	}
 	out := map[string]string{}
 	for _, o := range orgs {
-		got := sanitizeOrg(o)
+		got := namespace.Sanitize(o)
 		if o == "acme" {
 			if got != "acme" {
 				t.Fatalf("clean org %q must map to itself, got %q", o, got)
@@ -302,7 +305,7 @@ func TestSanitizeOrgWhitespaceInjective(t *testing.T) {
 	// invariant. Rejected members ("") are refused at tenant() (403) and never
 	// key a namespace, so they are excluded from the collision check.
 	for _, o := range orgs {
-		if s := sanitizeOrg(o); s != "" {
+		if s := namespace.Sanitize(o); s != "" {
 			if prev, ok := out[s]; ok && prev != o {
 				t.Fatalf("collision: %q and %q both → %q (cross-tenant namespace share!)", prev, o, s)
 			}
@@ -314,7 +317,7 @@ func TestSanitizeOrgWhitespaceInjective(t *testing.T) {
 // TestOrgHasUnsafeRuneMatchesSanitize proves the middleware-level predicate
 // (cloud.OrgHasUnsafeRune, the trust boundary that gates claims.Owner before any
 // header is set) and the slug normalizer agree: exactly the runes the middleware
-// refuses are the ones sanitizeOrg refuses, so the two layers cannot drift and
+// refuses are the ones namespace.Sanitize refuses, so the two layers cannot drift and
 // leave a fold path open.
 func TestOrgHasUnsafeRuneMatchesSanitize(t *testing.T) {
 	unsafe := []string{"acme ", " acme", "ac me", "acme\t", "acme ", "acme\u200b", "acme\ufeff", "\n"}
@@ -322,8 +325,8 @@ func TestOrgHasUnsafeRuneMatchesSanitize(t *testing.T) {
 		if !cloud.OrgHasUnsafeRune(s) {
 			t.Errorf("cloud.OrgHasUnsafeRune(%q) = false, want true", s)
 		}
-		if sanitizeOrg(s) != "" {
-			t.Errorf("sanitizeOrg(%q) accepted an unsafe-rune org", s)
+		if namespace.Sanitize(s) != "" {
+			t.Errorf("namespace.Sanitize(%q) accepted an unsafe-rune org", s)
 		}
 	}
 	safe := []string{"acme", "Acme", "team.a", "a-b-c", "org123", "café", "emoji😀"}
@@ -331,8 +334,8 @@ func TestOrgHasUnsafeRuneMatchesSanitize(t *testing.T) {
 		if cloud.OrgHasUnsafeRune(s) {
 			t.Errorf("cloud.OrgHasUnsafeRune(%q) = true, want false (visible identifier)", s)
 		}
-		if sanitizeOrg(s) == "" {
-			t.Errorf("sanitizeOrg(%q) refused a safe org", s)
+		if namespace.Sanitize(s) == "" {
+			t.Errorf("namespace.Sanitize(%q) refused a safe org", s)
 		}
 	}
 }

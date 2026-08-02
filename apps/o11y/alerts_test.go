@@ -15,6 +15,7 @@
 package o11y
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -31,9 +32,21 @@ import (
 func alertsApp(t *testing.T) *zip.App {
 	t.Helper()
 	recent = alertRing{}
+	// A deterministic egress that always accepts. Without one the receiver now
+	// answers 503 — which is the entire change, and is pinned by its own tests
+	// below. Restored on cleanup so no test leaks a chain into the next.
+	swapEgress(t, egress{name: "test", send: func(context.Context, string) error { return nil }})
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	mountAlerts(app)
 	return app
+}
+
+// swapEgress installs a fixed chain for one test.
+func swapEgress(t *testing.T, chain ...egress) {
+	t.Helper()
+	prev := egressChain
+	egressChain = func() []egress { return chain }
+	t.Cleanup(func() { egressChain = prev })
 }
 
 // post/get wrap the package's shared `do` helper (scope_test.go) so there is
@@ -72,7 +85,7 @@ func TestReceiptLineMatchesTheReplacedReceiver(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := receipt("/v1/o11y/alerts/page", &p, p.Alerts[0])
-	want := "PAGE-DELIVERED path=/v1/o11y/alerts/page receiver=lux-pager status=firing " +
+	want := "ALERT-RECEIVED path=/v1/o11y/alerts/page receiver=lux-pager status=firing " +
 		"alert=LuxNetworkDown severity=critical page=true network=mainnet instance=luxd-0 " +
 		":: mainnet C-Chain has no reachable validator"
 	if got != want {
@@ -85,7 +98,7 @@ func TestReceiptLineMatchesTheReplacedReceiver(t *testing.T) {
 func TestReceiptDefaultsForAnEmptyPayload(t *testing.T) {
 	var p webhook
 	got := receipt("/v1/o11y/alerts/default", &p, alerts(&p)[0])
-	want := "PAGE-DELIVERED path=/v1/o11y/alerts/default receiver=? status=? alert=? " +
+	want := "ALERT-RECEIVED path=/v1/o11y/alerts/default receiver=? status=? alert=? " +
 		"severity=? page=- network=- instance=- :: "
 	if got != want {
 		t.Fatalf("defaults mismatch\n got: %q\nwant: %q", got, want)
@@ -134,12 +147,17 @@ func TestPostAlwaysAnswersOKAndReplayShowsIt(t *testing.T) {
 		t.Fatalf("replay: got %d", code)
 	}
 	lines := strings.Split(body, "\n")
-	if len(lines) != 4 {
-		t.Fatalf("want 4 receipts, got %d:\n%s", len(lines), body)
+	// Two lines per delivery: the ARRIVAL receipt and the DELIVERY outcome.
+	// Both, always — the pair is the record, and half of it was the bug.
+	if len(lines) != 8 {
+		t.Fatalf("want 8 lines (4 receipts + 4 outcomes), got %d:\n%s", len(lines), body)
 	}
 	for i, r := range []string{"default", "watchdog", "page", "slack"} {
-		if !strings.HasPrefix(lines[i], "PAGE-DELIVERED path=/v1/o11y/alerts/"+r+" ") {
-			t.Fatalf("line %d is not the %s receipt: %s", i, r, lines[i])
+		if !strings.HasPrefix(lines[i*2], "ALERT-RECEIVED path=/v1/o11y/alerts/"+r+" ") {
+			t.Fatalf("line %d is not the %s receipt: %s", i*2, r, lines[i*2])
+		}
+		if !strings.HasPrefix(lines[i*2+1], "ALERT-DELIVERED via=test ") {
+			t.Fatalf("line %d is not the %s outcome: %s", i*2+1, r, lines[i*2+1])
 		}
 	}
 }
@@ -154,7 +172,7 @@ func TestUnparseableBodyIsStillARecordedDelivery(t *testing.T) {
 		t.Fatalf("got %d %q, want 200 %q", code, body, "ok")
 	}
 	_, replayed := get(t, a, "/v1/o11y/alerts/last")
-	if !strings.HasPrefix(replayed, "PAGE-DELIVERED path=/v1/o11y/alerts/page receiver=? status=?") {
+	if !strings.HasPrefix(replayed, "ALERT-RECEIVED path=/v1/o11y/alerts/page receiver=? status=?") {
 		t.Fatalf("unparseable delivery not recorded: %q", replayed)
 	}
 }
@@ -172,10 +190,17 @@ func TestRingIsBoundedAndKeepsTheNewest(t *testing.T) {
 	if len(lines) != recentMax {
 		t.Fatalf("ring unbounded: %d lines, want %d", len(lines), recentMax)
 	}
-	if !strings.Contains(lines[0], "alert=A50") {
-		t.Fatalf("oldest survivor should be A50, got: %s", lines[0])
+	// 250 posts × 2 lines each = 500; the ring keeps the last 200, so the oldest
+	// survivor is line 300 — post 150's arrival receipt.
+	if !strings.Contains(lines[0], "alert=A150") {
+		t.Fatalf("oldest survivor should be A150, got: %s", lines[0])
 	}
-	if !strings.Contains(lines[len(lines)-1], fmt.Sprintf("alert=A%d", recentMax+49)) {
+	// The newest line is the last post's DELIVERY outcome — the pair ends with
+	// the fact about egress, which is the one an operator is reading for.
+	if !strings.Contains(lines[len(lines)-1], fmt.Sprintf("receiver=r%d", recentMax+49)) {
 		t.Fatalf("newest lost: %s", lines[len(lines)-1])
+	}
+	if !strings.Contains(lines[len(lines)-2], fmt.Sprintf("alert=A%d", recentMax+49)) {
+		t.Fatalf("newest arrival lost: %s", lines[len(lines)-2])
 	}
 }

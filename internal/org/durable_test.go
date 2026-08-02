@@ -11,19 +11,18 @@ package org
 // "store unavailable"), no split-brain, and no acknowledged write lost across a
 // rolling handoff. It exercises the SAME hazards as handoff_test.go, but through the
 // reusable Durable a per-org store actually wires, over a plaintext local file (nil
-// cipher → the no-sidecar frame path).
+// cipher).
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/vfs/replica"
 )
 
@@ -59,7 +58,7 @@ func (p *durablePod) open(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s open: %v", p.id, err)
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	if err := db.Ping(); err != nil {
 		t.Fatalf("%s ping: %v", p.id, err)
 	}
@@ -94,20 +93,16 @@ func hasKV(t *testing.T, db *sql.DB, k string) bool {
 
 // durableValue restores the durable object into a scratch DB and reads kv[k]; ok is
 // false when the row is absent. It reads through a fresh FencedStore over the same
-// object store, unframes the (sidecar,db) payload, and opens the database bytes — the
-// exact path a successor takes, so it proves what a successor would actually see.
+// object store and opens the database bytes it holds — the exact path a successor
+// takes, so it proves what a successor would actually see.
 func durableValue(t *testing.T, ctx context.Context, cs replica.ConditionalStore, dbKey, k string) (string, bool) {
 	t.Helper()
 	payload, _, err := replica.NewFencedStore(cs).Get(ctx, dbKey)
 	if err != nil {
 		t.Fatalf("read durable object: %v", err)
 	}
-	_, main, err := unframe(payload)
-	if err != nil {
-		t.Fatalf("unframe durable payload: %v", err)
-	}
 	scratch := filepath.Join(t.TempDir(), "scratch.db")
-	if err := replica.RestoreFile(scratch, main); err != nil {
+	if err := replica.RestoreFile(scratch, payload); err != nil {
 		t.Fatalf("restore scratch: %v", err)
 	}
 	sd, err := replica.OpenSQLite(scratch)
@@ -256,12 +251,13 @@ func TestDurableTakeoverHydratesNoLostWriteFencesDeposed(t *testing.T) {
 	}
 }
 
-// TestDurableShipsAndRestoresSidecar covers the cek-encrypting build's path: the
-// database's <db>.dek key sidecar must travel WITH the database bytes so a successor
-// can open the encrypted file. A fake sidecar stands in for cek's real one (no cek /
-// no fsync needed) — what is under test is that Durable frames it on ship and writes
-// it back on hydrate.
-func TestDurableShipsAndRestoresSidecar(t *testing.T) {
+// TestDurableShipsTheDatabaseAlone covers what a successor needs to read an
+// encrypted store: the database bytes, and nothing else. A database's key is DERIVED
+// from the deployment's master and the namespace that owns it, so there is no key
+// material to travel with the file — the payload is the file. This used to frame a
+// wrapped-key sidecar ahead of the bytes, and a successor that received the database
+// without it had an unreadable store.
+func TestDurableShipsTheDatabaseAlone(t *testing.T) {
 	ctx := context.Background()
 	cs := newFakeCondStore()
 	const orgID = "acme"
@@ -273,53 +269,36 @@ func TestDurableShipsAndRestoresSidecar(t *testing.T) {
 	}
 	old.open(t)
 	putKV(t, old.db, "k1", "v1")
-	sidecar := []byte("fake-dek: fileID(16) || wrapped-DEK")
-	if err := os.WriteFile(old.d.dbPath+dekSuffix, sidecar, 0o600); err != nil {
-		t.Fatalf("write sidecar: %v", err)
-	}
 	if acked, err := old.d.Sync(ctx); err != nil || !acked {
 		t.Fatalf("old sync: acked=%v err=%v", acked, err)
 	}
 
-	// A fresh successor hydrates: it must receive BOTH the database (k1) AND the
-	// sidecar written beside its own file.
+	// A fresh successor hydrates and has the row.
 	next := newDurablePod(t, cs, "pod-new", []Member{{ID: "pod-new"}}, orgID, dbKey)
 	if err := next.d.Hydrate(ctx); err != nil {
 		t.Fatalf("successor hydrate: %v", err)
 	}
-	got, err := os.ReadFile(next.d.dbPath + dekSuffix)
-	if err != nil {
-		t.Fatalf("successor sidecar not restored: %v", err)
-	}
-	if !bytes.Equal(got, sidecar) {
-		t.Fatalf("successor sidecar = %q, want %q", got, sidecar)
-	}
 	next.open(t)
 	if !hasKV(t, next.db, "k1") {
-		t.Fatal("successor lost k1 across the sidecar ship")
+		t.Fatal("successor lost k1 across the ship")
 	}
 }
 
 // TestDurableRestoreIntoFreshNestedDir: a successor's orgs/<slug>/ directory does not
-// exist yet, so restore must create the parent (RestoreFile) BEFORE writing the .dek
-// sidecar into it — otherwise the sidecar write fails and hydrate silently degrades to
-// an empty store. (The flat-tempdir sidecar test above cannot catch this.)
+// exist yet, so restore must create the parent — otherwise the write fails and hydrate
+// silently degrades to an empty store. (The flat-tempdir test above cannot catch this.)
 func TestDurableRestoreIntoFreshNestedDir(t *testing.T) {
 	ctx := context.Background()
 	cs := newFakeCondStore()
 	const orgID = "acme"
 	dbKey := replica.DBPath(orgID, "", "research")
 
-	// Owner ships a db + a (fake) key sidecar.
 	old := newDurablePod(t, cs, "pod-old", []Member{{ID: "pod-old"}}, orgID, dbKey)
 	if err := old.d.Hydrate(ctx); err != nil {
 		t.Fatalf("old hydrate: %v", err)
 	}
 	old.open(t)
 	putKV(t, old.db, "k1", "v1")
-	if err := os.WriteFile(old.d.dbPath+dekSuffix, []byte("fake-dek"), 0o600); err != nil {
-		t.Fatalf("write sidecar: %v", err)
-	}
 	if acked, err := old.d.Sync(ctx); err != nil || !acked {
 		t.Fatalf("old sync: acked=%v err=%v", acked, err)
 	}
@@ -328,51 +307,10 @@ func TestDurableRestoreIntoFreshNestedDir(t *testing.T) {
 	succPath := filepath.Join(t.TempDir(), "orgs", orgID, "research.db")
 	succ := NewDurability(cs, stubView{id: "pod-new", set: []Member{{ID: "pod-new"}}}, nil).For(orgID, dbKey, succPath)
 	if err := succ.Hydrate(ctx); err != nil {
-		t.Fatalf("hydrate into a fresh nested dir must succeed (restore mkdirs before the sidecar): %v", err)
+		t.Fatalf("hydrate into a fresh nested dir must succeed (restore mkdirs): %v", err)
 	}
 	if _, err := os.Stat(succPath); err != nil {
 		t.Fatalf("database not restored into the fresh dir: %v", err)
-	}
-	if _, err := os.Stat(succPath + dekSuffix); err != nil {
-		t.Fatalf("sidecar not written into the fresh dir: %v", err)
-	}
-}
-
-// TestFrameRoundTrip pins the (sidecar,db) framing: empty and non-empty sidecars both
-// split back exactly, so the encrypting (sidecar) and plaintext (no-sidecar) builds
-// share one wire format.
-func TestFrameRoundTrip(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		sidecar []byte
-		db      []byte
-	}{
-		{"no-sidecar", nil, []byte("plaintext-db-bytes")},
-		{"with-sidecar", []byte("wrapped-dek"), []byte("encrypted-db-bytes")},
-		{"empty-both", nil, nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			sc, db, err := unframe(frame(tc.sidecar, tc.db))
-			if err != nil {
-				t.Fatalf("unframe: %v", err)
-			}
-			if len(sc) != len(tc.sidecar) || (len(sc) > 0 && !bytes.Equal(sc, tc.sidecar)) {
-				t.Fatalf("sidecar = %q, want %q", sc, tc.sidecar)
-			}
-			if len(db) != len(tc.db) || (len(db) > 0 && !bytes.Equal(db, tc.db)) {
-				t.Fatalf("db = %q, want %q", db, tc.db)
-			}
-		})
-	}
-	if _, _, err := unframe([]byte{0xff}); err == nil {
-		t.Fatal("unframe of a truncated frame must error, not restore arbitrary bytes")
-	}
-	// A max-uint64 sidecar length must fail closed, not overflow past the guard and
-	// panic the slice (L1).
-	var huge [binary.MaxVarintLen64 + 4]byte
-	n := binary.PutUvarint(huge[:], ^uint64(0))
-	if _, _, err := unframe(huge[:n+4]); err == nil {
-		t.Fatal("unframe of an oversized-length frame must fail closed (errCorruptFrame), not panic")
 	}
 }
 

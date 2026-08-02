@@ -7,7 +7,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cloud/cek"
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -16,29 +20,19 @@ import (
 var errNotFound = errors.New("legal: not found")
 
 // Store persists legal templates (org overrides), generated documents, and filings.
-// ONE cek-encrypted SQLite file ({DataDir}/legal.db) — a rendered contract carries
-// names and terms, so the document body is sealed at rest. `org` scopes every table
+// ONE encrypted SQLite file — the deployment's own "legal" — because a rendered
+// contract carries names and terms, so the body is sealed at rest. `org` scopes every table
 // and every query. MaxOpenConns(1) serializes writes.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "legal", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open legal store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
