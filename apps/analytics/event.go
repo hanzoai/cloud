@@ -64,12 +64,15 @@
 package analytics
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
+	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -425,18 +428,24 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 			return publicIngest(c, dec, a.org, source, a.subject)
 		}
 		// ONE door, every event kind: the observability plane gets first refusal
-		// on the canonical door's authenticated bodies (cloud.ObsEventIngest —
-		// the o11y subsystem claims LLM-obs ingestion batches and declines all
-		// else). Only the FULL lane offers: obs events are tenant data, so the
-		// anonymous and reduced projections never reach that plane.
+		// on the canonical door's authenticated bodies. It lives in ANOTHER
+		// PROCESS (a plugin is a process), so the offer goes over the plane
+		// socket — a package global was written in o11y and read here as nil,
+		// which silently sent every LLM-obs batch down the product wire. Only
+		// the FULL lane offers: obs events are tenant data, so the anonymous and
+		// reduced projections never reach that plane.
+		//
+		// FAIL-SOFT AND UNCLAIMED: any plane error (o11y absent, asleep past the
+		// wake budget, mid-restart) falls through to the product wire rather
+		// than failing the caller's ingest. A dropped claim costs one event in
+		// the obs store; a failed door costs every event.
 		if source == sourceEvent {
-			if obs := cloud.ObsEventIngest(); obs != nil {
-				if accepted, dropped, claimed, err := obs(c.Context(), a.org, c.Body()); claimed {
-					if err != nil {
-						return zip.ErrInternal("event ingest failed")
-					}
-					return c.JSON(http.StatusOK, CaptureResult{Accepted: accepted, Dropped: dropped})
-				}
+			cctx, cancel := context.WithTimeout(cloud.For(c.Context(), a.org), obsClaimTimeout)
+			out, err := cloud.Ask[planeops.ObsClaimIn, planeops.ObsClaimed](cctx, peerO11y, planeops.ObsEventClaim,
+				&planeops.ObsClaimIn{Org: a.org, Body: c.Body()})
+			cancel()
+			if err == nil && out != nil && out.Claimed {
+				return c.JSON(http.StatusOK, CaptureResult{Accepted: out.Accepted, Dropped: out.Dropped})
 			}
 		}
 		evs, err := dec(c.Body())
@@ -493,7 +502,8 @@ type door struct {
 //     {batch:[…]} | the team SPA's bare snake_case array, dispatched by shape —
 //     isTeamArray), which every current Hanzo client emits. The SAME door also
 //     carries LLM-observability ingestion batches: handle offers each
-//     authenticated body to the o11y plane's claim first (cloud.ObsEventIngest),
+//     authenticated body to the o11y plane's claim first (the plane op
+//     obs_event_claim, asked over the socket),
 //     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — consumers
 //     and shapes behind ONE door, not more doors.
 //
@@ -589,6 +599,14 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 	}
 	return decodeIngest(body)
 }
+
+// The observability peer and how long the door will wait on it. The budget is
+// short on purpose: the claim is an OFFER on the hot ingest path, and a slow
+// peer must degrade to the product wire rather than hold the caller.
+const (
+	peerO11y        = "o11y"
+	obsClaimTimeout = 3 * time.Second
+)
 
 var doors = []door{
 	{
@@ -709,7 +727,7 @@ func init() {
 	// /v1/event door). Its body is an opaque envelope stream the o11y consumer reads
 	// itself, so openapi.Binary is the whole truth — no struct describes it, exactly
 	// as none describes an upload. Its RESPONSE is deliberately undeclared: the
-	// handler relays cloud.ObsErrorIngest verbatim, so this package does not know
+	// handler relays the o11y plane op obs_error_post verbatim, so this package does not know
 	// what comes back and publishing a shape would be inventing one.
 	//
 	// The prose is PER ROW, not one blurb over both: these are two different Sentry
