@@ -382,6 +382,16 @@ func Listen(plugins []Plugin, enable []string) error {
 	// BOTH sources are absent.
 	app.Use(ScopeRateLimit(deps.Metering, deps.GatewayPolicy))
 
+	// Lifecycle defense (middleware_abuse.go). Runs AFTER ScopeRateLimit so plain
+	// over-rate traffic is already 429'd and never reaches the scorer, INSIDE
+	// AuditTrail so a refusal lands in the tamper-evident trail without a second
+	// write, and BEFORE the two funding gates so an abusive request cannot consume
+	// a balance. It keys on the CREDENTIAL, which neither limiter above can see —
+	// a stolen key inside its org's normal ceiling is invisible to both. SHADOW per
+	// org by default: it senses and reports, and enforces nothing until an operator
+	// arms that org at PUT /v1/gateway/config.
+	app.Use(AbuseGate(deps, deps.Traffic))
+
 	// Starter credit — the funding path the two gates below are sequenced behind.
 	// It needs the gateway-asserted principal to resolve a
 	// wallet; an unvalidated caller is skipped) and BEFORE both gates, so a brand-new
