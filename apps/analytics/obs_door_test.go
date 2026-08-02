@@ -55,3 +55,35 @@ func TestTeamWireRidesTheCanonicalDoor(t *testing.T) {
 		t.Fatalf("canonical array must still decode canonically, got %+v (%v)", evs, err)
 	}
 }
+
+// TestPostHogWireRidesTheCanonicalDoor pins the other half of retiring
+// /v1/insights/e: the door was removed, but until the canonical decode learned
+// this wire's shape, a PostHog body landing on /v1/event decoded with an EMPTY
+// person and an unnamed kind — which admitPublic drops whole, so the SDK saw a
+// 200 that stored nothing. insights.hanzo.ai's /e, /batch and /capture all
+// rewrite onto /v1/event, so this is the live path for every PostHog SDK.
+func TestPostHogWireRidesTheCanonicalDoor(t *testing.T) {
+	// A bare PostHog event: snake_case person, string timestamp.
+	evs, err := decodeIngest([]byte(`{"event":"$pageview","distinct_id":"ph-1","timestamp":"2026-01-01T00:00:00Z","properties":{"$current_url":"/x"}}`))
+	if err != nil || len(evs) != 1 {
+		t.Fatalf("decodeIngest(posthog) = %d events, %v; want 1, nil", len(evs), err)
+	}
+	if evs[0].DistinctID != "ph-1" {
+		t.Errorf("the PostHog person (distinct_id) must survive, got %q", evs[0].DistinctID)
+	}
+	if evs[0].Type == "" {
+		t.Error("the kind must be named — an unnamed kind is dropped whole by admitPublic")
+	}
+
+	// The PostHog batch envelope.
+	evs, err = decodeIngest([]byte(`{"batch":[{"event":"$pageview","distinct_id":"ph-2","timestamp":"2026-01-01T00:00:00Z"}]}`))
+	if err != nil || len(evs) != 1 || evs[0].DistinctID != "ph-2" {
+		t.Fatalf("posthog batch: got %+v (%v)", evs, err)
+	}
+
+	// And the canonical wire is untouched by the new probe.
+	evs, err = decodeIngest([]byte(`{"event":"$pageview","distinctId":"canon","time":"2026-01-01T00:00:00Z"}`))
+	if err != nil || len(evs) != 1 || evs[0].DistinctID != "canon" {
+		t.Fatalf("canonical wire must still decode canonically: %+v (%v)", evs, err)
+	}
+}
