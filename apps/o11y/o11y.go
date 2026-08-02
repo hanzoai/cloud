@@ -595,7 +595,12 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// the observability plane is ONE `o11y` subsystem. /v1/o11y/health is unaffected:
 	// it stays the generic always-ok route (the o11y Wire entry keeps OwnsHealth=false),
 	// registered before MountAll and thus ahead of this wildcard.
-	if err := o11y.Mount(a, deps); err != nil {
+	// Mount takes the router and nothing else: a route table is a value, and the
+	// router it registers into already carries this deployment's logger. It used
+	// to take Deps for that one field, which made github.com/hanzoai/o11y require
+	// github.com/hanzoai/cloud — a module cycle, and the reason o11y's own
+	// community binary could not link its own route declarations.
+	if err := o11y.Mount(a); err != nil {
 		return err
 	}
 	return nil
