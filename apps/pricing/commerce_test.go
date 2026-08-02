@@ -123,6 +123,48 @@ func TestUnpublishedModelsNeverReachTheCatalog(t *testing.T) {
 	}
 }
 
+// End to end over the two halves that ship separately: commerce's seed writes
+// the Enso family at the price enso bills, and this overlay publishes it. The
+// number a customer is quoted has to survive BOTH, and each half passing its own
+// tests would not prove that.
+func TestTheSeededEnsoFamilyReachesThePriceList(t *testing.T) {
+	c := ae.NewContext()
+	defer c.Close()
+	if _, err := catalogentry.SeedEnsoModels(catalogentry.SystemDB(context.Background())); err != nil {
+		t.Fatalf("SeedEnsoModels: %v", err)
+	}
+
+	doc := snapshot(map[string]any{"name": "zen4", "pricing": map[string]any{"input": 1.5, "output": 4.5}})
+	if _, _, _, err := applyCommerceRates(context.Background(), doc); err != nil {
+		t.Fatalf("applyCommerceRates: %v", err)
+	}
+	got := modelsByName(t, doc)
+
+	// What production bills, per MTok.
+	for slug, want := range map[string][2]float64{
+		"enso":       {4, 20},
+		"enso-flash": {2, 4},
+		"enso-ultra": {5, 25},
+	} {
+		m, listed := got[slug]
+		if !listed {
+			t.Errorf("%s never reached the price list", slug)
+			continue
+		}
+		p := m["pricing"].(map[string]any)
+		if p["input"] != want[0] || p["output"] != want[1] {
+			t.Errorf("%s published at %v/%v, want the billed %v/%v",
+				slug, p["input"], p["output"], want[0], want[1])
+		}
+	}
+	// The internal vision engines are priced but must not be listed.
+	for _, slug := range []string{"enso-vl", "enso-vl-pro"} {
+		if _, listed := got[slug]; listed {
+			t.Errorf("%s is an internal vision engine and must never be published", slug)
+		}
+	}
+}
+
 // An empty commerce catalog must leave the document exactly as it was, so the
 // overlay can never blank a public price list.
 func TestEmptyCommerceLeavesTheSnapshotIntact(t *testing.T) {
