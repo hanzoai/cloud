@@ -182,17 +182,16 @@ func TestSourceStampedIntoAttributes(t *testing.T) {
 // So "not 403" ⇒ the tenant gate admitted the request.
 
 // TestEvent_NoPrincipalNoKeyIsAnonymous: a caller with NO principal and NO key is not
-// refused — it takes the anonymous lane (public.go), attributed to the reserved public
-// tenant. The canonical-Event wire carries no `type`, so canonicalType folds it to
-// "event", which is not on the anonymous allowlist: the request is answered 200 with an
-// honest all-dropped receipt. What IS refused is a presented credential that does not
-// resolve (TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost).
+// refused AT THE GATE — it takes the anonymous lane (public.go), attributed to the
+// reserved public tenant. The canonical-Event wire carries no `type`, so canonicalType
+// folds it to "event", which is not on the anonymous allowlist: nothing is stored, and
+// the door answers 401 ingest_key_required rather than pretending otherwise. What is
+// refused at the GATE is a presented credential that does not resolve — 403
+// (TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost).
 func TestEvent_NoPrincipalNoKeyIsAnonymous(t *testing.T) {
 	app := mountApp(t)
 	code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"event":"e","distinctId":"d"}`)
-	if code != http.StatusOK {
-		t.Fatalf("no-principal no-key /v1/event want 200 (anonymous lane, kind dropped), got %d (%s)", code, body)
-	}
+	refusedAnon(t, "no-principal no-key /v1/event", code, body)
 	// A pageview on the same credential-less request IS stored — it reaches the
 	// warehouse (503 here, no datastore in the harness).
 	if code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
@@ -254,11 +253,6 @@ func TestEvent_NoBrandHostFallback(t *testing.T) {
 				path, host, code, body)
 		}
 		code, body := doHost(t, app, path, "", "", host, commerce)
-		if code != http.StatusOK {
-			t.Fatalf("anonymous commerce %s on host %q want 200 all-dropped, got %d (%s)", path, host, code, body)
-		}
-		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-			t.Fatalf("anonymous commerce %s on host %q receipt = %+v, want accepted:0 dropped:1", path, host, r)
-		}
+		refusedAnon(t, "anonymous commerce "+path+" on host "+host, code, body)
 	}
 }
