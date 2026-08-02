@@ -61,6 +61,9 @@ func init() {
 			"pipelineView.updatedAt": "UpdatedAt is when it was last written, RFC3339 UTC. Absent on the default.",
 		},
 	})
+	zip.Describe("GET /v1/world/stream", zip.Doc{
+		Description: "Is GET /v1/world/stream — a Server-Sent Events feed of live news\nrefreshes for the caller's (org, project). Org-scoped (fail-closed): the bus\nfilters on org and the loop drops any update whose Project differs, so a\nsubscriber only ever receives its own tenant+project. It streams over both the\nplain HTTP listener and the ZAP machine transport with no transport-specific\ncode (zip SendStreamWriter is transport-agnostic). org/project are captured\n(both cloned by scope) BEFORE SendStreamWriter so the loop never touches the\nrequest Ctx after the handler returns — client-gone is a flush error, bounded\nby a 25s heartbeat.",
+	})
 	zip.Describe("PUT /v1/world/pipeline", zip.Doc{
 		Description: "Replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
 		Fields: map[string]string{

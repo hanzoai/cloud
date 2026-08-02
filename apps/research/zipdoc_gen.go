@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/research/artifacts", zip.Doc{
-		Description: "ListResearchArtifacts returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
+		Description: "Returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
 		Fields: map[string]string{
 			"Artifact.content":    "base64 bytes on write; the server hashes + stores them (never returned)",
 			"Artifact.ref":        "server-derived content address (sha256:<hash>)",
@@ -22,8 +22,11 @@ func init() {
 			"artifactsOut.total":  "Total is len(data).",
 		},
 	})
+	zip.Describe("GET /v1/research/artifacts/:sha256", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("GET /v1/research/experiments", zip.Doc{
-		Description: "ListExperiments returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
+		Description: "Returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
 		Fields: map[string]string{
 			"Experiment.revision":  "original | corrected | retracted",
 			"Experiment.status":    "planning | running | complete | faulted",
@@ -34,7 +37,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/research/projects", zip.Doc{
-		Description: "ListResearchProjects returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
+		Description: "Returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
 		Fields: map[string]string{
 			"ProjectSummary.attempts":    "canonical",
 			"ProjectSummary.experiments": "canonical",
@@ -43,7 +46,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/research/totals", zip.Doc{
-		Description: "GetResearchTotals returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
+		Description: "Returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
 		Fields: map[string]string{
 			"ResearchTotals.attempts":    "canonical",
 			"ResearchTotals.experiments": "canonical",
@@ -51,7 +54,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/research/artifacts", zip.Doc{
-		Description: "RecordResearchArtifact records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
+		Description: "Records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
 		Fields: map[string]string{
 			"Artifact.content":      "base64 bytes on write; the server hashes + stores them (never returned)",
 			"Artifact.ref":          "server-derived content address (sha256:<hash>)",
@@ -64,7 +67,7 @@ func init() {
 		Example: json.RawMessage(`{"kind":"snapshot","content":"iVBORw0KGgo=","run_id":"benchmark:zen-1:mmlu"}`),
 	})
 	zip.Describe("POST /v1/research/experiments", zip.Doc{
-		Description: "IngestExperiments appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
+		Description: "Appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
 		Fields: map[string]string{
 			"Experiment.revision":             "original | corrected | retracted",
 			"Experiment.status":               "planning | running | complete | faulted",
@@ -80,7 +83,7 @@ func init() {
 		Example: json.RawMessage(`{"experiments":[{"id":"benchmark:zen-1:mmlu","kind":"benchmark","subject":"zen-1","metric":"accuracy","value":0.81,"ts":1750000000}],"attempts":[]}`),
 	})
 	zip.Describe("POST /v1/research/grants", zip.Doc{
-		Description: "GrantResearchVisibility records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
+		Description: "Records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
 		Fields: map[string]string{
 			"GrantRequest.id":     "an experiment (run) stable id",
 			"GrantRequest.sha256": "OR an artifact content hash",
