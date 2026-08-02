@@ -75,7 +75,7 @@ func campaignWhere(org, campaignID, variant string, start, end time.Time) (strin
 // channels. A genuine query failure against a connected warehouse returns the
 // error (the caller logs it and shows honest-empty) — never a fabricated funnel.
 func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start, end time.Time) (CampaignEvents, error) {
-	out := CampaignEvents{Available: false, Source: eventsTable}
+	out := CampaignEvents{Available: false, Source: factTable}
 	if org == "" || campaignID == "" {
 		return out, nil
 	}
@@ -96,7 +96,7 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 		"countIf(name = 'order_completed' OR name = 'signup_completed' OR name = 'conversion') AS conversions, " +
 		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue, " +
 		"uniqExact(distinct_id) AS visitors " +
-		"FROM " + eventsTable + " WHERE " + where
+		"FROM " + factTable + " WHERE " + where
 	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		// Connected warehouse rejected/failed the query (or the events table is
@@ -111,6 +111,6 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 		Conversions: aInt64(row["conversions"]),
 		Revenue:     aFloat64(row["revenue"]),
 		Visitors:    aInt64(row["visitors"]),
-		Source:      eventsTable,
+		Source:      factTable,
 	}, nil
 }

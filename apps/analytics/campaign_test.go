@@ -57,7 +57,7 @@ func TestCampaignMetrics_HonestEmptyWhenDatastoreDisabled(t *testing.T) {
 	if ev.Available {
 		t.Fatalf("no warehouse connected ⇒ Available must be false, got %+v", ev)
 	}
-	if ev.Source != eventsTable {
+	if ev.Source != factTable {
 		t.Fatalf("source should name the events table even when empty, got %q", ev.Source)
 	}
 }
