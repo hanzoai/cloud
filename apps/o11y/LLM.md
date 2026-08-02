@@ -43,9 +43,117 @@ impl detail resolved inside the handlers, never leaked into a route:
 - `/v1/o11y/{services,dependency_graph,dashboards,rules,…}` — resolved by the
   upstream module's version-less alias (highest engine version wins).
 
-## The o11y pin is BLOCKED at v1.5.34 — do not bump it alone
+## The unified door: it was shut TWICE, and the locks were different
 
-`go.mod` pins `github.com/hanzoai/o11y v1.5.34`. v1.5.37 renamed the module's
+`api.hanzo.ai/v1/o11y/version` answered `403 {"status":403,"error":"no validated
+principal"}` while `o11y.hanzo.ai` answered it 200. Fixing the obvious cause
+turned the 403 into a 404. Two independent defects sat at one seam, and the
+second was invisible for as long as the first refused the request ahead of it.
+Both are fixed; this section exists so the next 4xx here is diagnosed by SHAPE
+instead of re-guessed.
+
+**1. The gate exempted routes nobody served.** `gate()` kept its own list of the
+paths needing no principal, and it named `/v1/o11y/api/v1/health` plus three
+`/api/v2` siblings — the INTERNAL namespace the module stopped rewriting onto at
+v1.5.37. Four names, zero routes: the exemption matched nothing, so every public
+op was refused. The list is gone (with `isHealthPath`, `isErrorIngestPath` and
+`isSentryIngestPath`); the answer is `o11y.Anonymous(method, path)`, which lives
+beside the routes it describes. A copy of a route fact kept one repo away drifts
+the moment the routes move.
+
+**2. relay handed the runtime a request with no request-target.** `relay` builds
+its call with `http.NewRequestWithContext` — a CLIENT request, whose
+`RequestURI` is empty by design — and passes it straight to an `http.Handler`.
+The EMBEDDED runtime is `adaptor.FiberApp`, which copies `RequestURI` into
+fasthttp verbatim, so the path was erased, fasthttp normalized it to `/`, no API
+route matched, and the request fell through to the console web provider's
+`http.NotFound`. Fixed in o11y **v1.5.49** (`req.RequestURI = target`). The
+out-of-process backing never showed it — a reverse proxy re-derives the target
+from `URL` — so this only ever bit the embed, which is what production runs.
+
+**READ THE SHAPE, NOT THE STATUS.** Three different bodies mean three different
+hops, and they are how this gets diagnosed next time:
+
+| body | who wrote it |
+|---|---|
+| `{"status":"error","msg":"…"}` | `gate()` itself — a route that FALLS THROUGH to the runtime handler (`livez`, `healthz`, `readyz`) |
+| `{"status":403,"error":"…"}` | a TYPED op: `relay` re-wrapped the gate's refusal as a `zip.HTTPError` |
+| `{"status":404,"error":"404 page not found"}` | the runtime's web provider — the request reached it with no path |
+
+The three probes are the control: `mountHealth` dispatches them itself and never
+calls `relay`, so "probes 200 but everything else 404" means a lost path, never
+an auth problem.
+
+**What is exempt, and why each needs no principal.** The set is
+`o11y.Anonymous` — the runtime's own `OpenAccess` routes plus the two
+public-dashboard reads it gates with `CheckWithoutClaims`. The rule is this
+gate's purpose read backwards: it exists only because the runtime trusts
+`X-Org-Id` as gateway-minted, so an op whose own gate reads NO tenant from the
+request has nothing for a forged tenant to reach, and gating it can only remove
+an answer.
+
+- `GET /v1/o11y/{livez,healthz,readyz,version,health}` — the process describing
+  itself. A kubelet probe and an external status check hold no principal, and a
+  gate that hides whether the process is up makes an incident invisible.
+- `GET /v1/o11y/global/config` — branding, ingest URL, which sign-in methods
+  exist. Read to RENDER the sign-in page, so requiring a session is circular.
+  Deployment-global; no tenant.
+- the sign-in family (`register`, `sessions/email_password`, `sessions/context`,
+  `sessions/rotate`, `DELETE sessions`, `complete/{google,oidc,saml}`,
+  `reset_password_tokens/verify`, `resetPassword`, `factor_password/forgot`) —
+  the path to HAVING a principal. Each still presents its own credential.
+- the self-addressed reads/writes (`user/me`, `users/me`,
+  `users/me/factor_password`, `service_accounts/me`) — the subject is the
+  caller's own credential, resolved from the runtime's claims and never from a
+  header, so there is no tenant to forge. No claims ⇒ the runtime's own 401.
+- `GET /v1/o11y/public/dashboards/{id}` and `…/widgets/{idx}/query_range` — the
+  tenant comes from the SHARE's scope, not from a header.
+- the DSN ingest wires (`POST …/{envelope,store}` under `/v1/o11y/api/` and
+  `/v1/sentry/`) — the DSN key is the credential and the org comes from the
+  project segment. The gateway waives its JWT check on exactly these, so a
+  request it lets through tokenless must not be refused here for having no token.
+
+Exemption is not authorization: every one of these still faces its own admission
+test one layer in. Everything else — every read of a tenant's telemetry — stays
+gated HERE and at the runtime, which is one rule enforced twice.
+
+**`/v1/o11y` is the API, and only the API.** There is no SPA under it and there
+must not be one: the module names all 367 routes precisely so an unconverted
+route 404s instead of falling through a wildcard, so `/v1/o11y/` is a 404 and
+every answer on the prefix is JSON. The console is `o11y-site` at
+`o11y.hanzo.ai` / `obs.hanzo.ai` behind `admin-guard`, which 302s a browser to
+hanzo.id PKCE and 401s a machine. One door per concern.
+
+**The tests.** `red_forge_test.go` calls `gate()` directly against a backend that
+answers 200 to anything — it proves the predicate and CANNOT see the chain, which
+is why it passed throughout the outage. `door_test.go` drives the real
+`MountO11y` route table against a runtime that routes: the tenant-free reads must
+return the RUNTIME's bytes anonymously, tenant reads must still be refused with
+the DOOR's own reason (the runtime's 401 would mean the request got through), and
+the four dead `/api/v1|v2` names must NOT be exempt. A fake more forgiving than
+production is not a test of production.
+
+## The o11y pin is at v1.5.49 (was BLOCKED at v1.5.34 — that blocker is gone)
+
+> ⚠️ **THE BUMP HAPPENED; THE THREE FORWARDS BELOW WERE NOT UPDATED WITH IT.**
+> `go.mod` now pins **v1.5.49**, well past the v1.5.37 this section was written to
+> hold the line against — so the warning below is no longer a plan, it is a
+> description of live code. Verified against the pinned module: `"/api/sessions"`
+> is registered NOWHERE (the list is `/v1/o11y/llm/sessions`), and `"/api/v3"`
+> survives only inside `parser_test.go`, never as a registration. So
+> `sessions.go` (which sets `r.URL.Path = "/api/sessions"`) and `query.go` (which
+> forwards to `/api/v3/<resource>`) both name routes the runtime no longer
+> serves. Both are ORG-GATED, so neither can be probed anonymously and neither
+> showed up in the door work above — they need their own pass, and the fix is to
+> forward to the current spellings rather than to re-pin.
+>
+> A second reason they cannot be trusted as written: rewriting `r.URL.Path`
+> alone does not redirect anything at the EMBEDDED runtime. That backing is
+> `adaptor.FiberApp`, which routes on `RequestURI` — see the door section above —
+> so a handler that edits `URL.Path` and leaves `RequestURI` pointing at the
+> original public path will be routed by the ORIGINAL path.
+
+`go.mod` USED TO PIN `github.com/hanzoai/o11y v1.5.34`. v1.5.37 renamed the module's
 INTERNAL route literals (`/api/vN/<rest>` → `/v1/o11y/<rest>`) and deleted
 `mount.go`'s `rewriteExternalPath`. The PUBLIC contract did not move — the seam
 existed precisely so `/v1/o11y/<resource>` stayed fixed while the internals
