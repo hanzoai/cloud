@@ -749,6 +749,16 @@ type patchSessionIn struct {
 	// "absent" and "cleared" are different requests.
 	Project   *string `json:"project"`
 	Published *bool   `json:"published"`
+	// Cwd is where the session is working NOW.
+	//
+	// It was write-once — captured at register and never again — which is right
+	// for a run that starts in a directory and stays there, and wrong for a linked
+	// shell, which is a place a person moves around in. The console showed the
+	// directory `hanzo link` happened to be run from and kept showing it after the
+	// shell had walked away, so the field answered "which work is this" with an
+	// answer that was true once. A pointer, so an unchanged path is an omitted
+	// field rather than a repeated write.
+	Cwd *string `json:"cwd"`
 }
 
 // PatchSession updates a session's surface-owned truth: its status, its title,
@@ -831,6 +841,15 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 			return nil, terr
 		}
 		x.Terminal = nt // "" withdraws
+	}
+	if body.Cwd != nil {
+		nc := strings.TrimSpace(*body.Cwd)
+		// The SAME bound register applies (sessionContext) — one rule for one
+		// field, whichever door the value arrives through.
+		if len(nc) > maxCwd {
+			return nil, zip.ErrBadRequest("cwd too long")
+		}
+		x.Cwd = nc
 	}
 	x.UpdatedAt = time.Now().Unix()
 	if err := sto.UpdateSession(ctx, x); err != nil {
