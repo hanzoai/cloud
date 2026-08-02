@@ -72,8 +72,8 @@ func planeObsError(ctx context.Context, in *plane.ObsErrorIn) (*plane.ObsErrorOu
 	}
 	req := httptest.NewRequest(http.MethodPost, u.String(), strings.NewReader(string(in.Body)))
 	req = req.WithContext(ctx)
-	for k, v := range in.Headers {
-		req.Header.Set(k, v)
+	for _, hd := range in.Headers {
+		req.Header.Set(hd.Name, hd.Value)
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

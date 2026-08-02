@@ -616,10 +616,28 @@ type ObsClaimed struct {
 // Hanzo principal on this path by design, which is why the whole request has to
 // travel rather than just a tenant.
 type ObsErrorIn struct {
-	Path    string            `json:"path" validate:"required"`
-	Query   string            `json:"query,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    []byte            `json:"body,omitempty"`
+	Path    string   `json:"path" validate:"required"`
+	Query   string   `json:"query,omitempty"`
+	Headers []Header `json:"headers,omitempty"`
+	Body    []byte   `json:"body,omitempty"`
+}
+
+// Header is one request header, as a LIST element rather than a map entry.
+//
+// A map cannot cross this plane at all: zapenc carries scalars, strings, byte
+// slices, structs, pointers and slices, and refuses anything else AT ENCODE so a
+// field can never silently fail to arrive. Headers was a map[string]string, so
+// every ObsErrorPost call failed inside zip.Call before it reached the socket —
+// the Sentry envelope door answered 503 "error ingest unavailable" in dur_ms=0,
+// for 24h+, with the peer up and the op registered. Its sibling op on the same
+// socket (ObsClaimIn: two scalar fields) kept working throughout, which is
+// exactly why POST /v1/event stayed 200 and only the envelope was dead.
+//
+// A slice of structs is the shape zapenc already carries — one complete ZAP
+// message per element — so the list is not a workaround, it is the wire.
+type Header struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // ObsErrorOut is the runtime's answer, relayed verbatim so a 401 stays a 401.
