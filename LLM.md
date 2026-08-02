@@ -3831,11 +3831,19 @@ for an org, `{dir}/orgs/_platform/{sub}.db` for the deployment's own. A caller
 therefore passes a DIRECTORY and a NAME, never a path — the file and its key cannot
 name different things.
 
-**Open through `basedb.Open`, not `cek.Open`.** It is cek plus the one thing a file
-needs that a key does not: the directory it lives in. On the pure-Go codec the
-database is written back at CLOSE, so a missing parent does not fail the open — it
-loses the data at the end. `cloud.OrgDB` is `basedb.Open` plus the single-writer +
-WAL pragmas every per-org store shares.
+**Open through `cek.Open`, then `sqlpool.Single`.** cek creates the parent directory
+itself (it chose the path), so cloud no longer wraps it — the `basedb` package that
+existed only to `MkdirAll` is gone. `sqlpool.Single` pins the pool to one connection,
+which is the single-writer discipline every store depends on and, for a two-statement
+read-modify-write, relies on for atomicity.
+
+**Do not set connection PRAGMAs.** `busy_timeout`, `journal_mode=WAL`,
+`foreign_keys=ON` and `synchronous=NORMAL` are already applied by
+`github.com/hanzoai/sqlite`, per CONNECTION — which a one-shot `db.Exec` was not, since
+it lands on whichever connection serves it and is lost when that connection is recycled.
+Roughly fifty stores each restated those by hand; they now say nothing, and
+`sqlpool_test.go` asserts the driver still delivers them so the deletion cannot rot.
+`cloud.OrgDB` is `cek.Open` plus `sqlpool.Single`, nothing more.
 
 **A test binary keys itself.** cek reads no environment; a process with no KMS mints
 its own master. `import _ "github.com/hanzoai/cloud/internal/devmaster"` in one

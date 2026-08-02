@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
@@ -37,21 +38,11 @@ func projectKey(project string) string {
 
 // OpenActivationStore opens (and migrates) the activation store under dir.
 func OpenActivationStore(dir string) (*ActivationStore, error) {
-	db, err := basedb.Open(namespace.System(), "tools-activation", dir)
+	db, err := cek.Open(namespace.System(), "tools-activation", dir)
 	if err != nil {
 		return nil, fmt.Errorf("tools: open activation store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("tools: activation pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &ActivationStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

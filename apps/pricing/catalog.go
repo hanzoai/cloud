@@ -24,10 +24,12 @@ import (
 	"sync"
 	"time"
 
-	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags. Importing modernc
 	// directly instead would double-register "sqlite" under CGO and panic at
@@ -383,20 +385,11 @@ type catalog struct {
 // openCatalog opens (creating if needed) the overlay DB under dir and migrates
 // it. MaxOpenConns(1) serializes writes against the file lock without retry.
 func openCatalog(dir string) (*catalog, error) {
-	db, err := basedb.Open(namespace.System(), "catalog", dir)
+	db, err := cek.Open(namespace.System(), "catalog", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open catalog store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	c := &catalog{db: db}
 	if err := c.migrate(); err != nil {
 		_ = db.Close()

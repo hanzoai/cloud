@@ -39,9 +39,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/basedb"
 	"github.com/hanzoai/cloud/openapi"
 	engine "github.com/hanzoai/framework"
 	"github.com/hanzoai/namespace"
@@ -81,7 +81,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// OrgDB, which names its owner.
 	eng, err := engine.Open(engine.Config{
 		Dir:    deps.DataDir,
-		OpenDB: func(string) (*sql.DB, error) { return basedb.Open(namespace.System(), "framework", deps.DataDir) },
+		OpenDB: func(string) (*sql.DB, error) { return cek.Open(namespace.System(), "framework", deps.DataDir) },
 		Logger: log,
 	})
 	if err != nil {

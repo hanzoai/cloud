@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
@@ -60,7 +60,7 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 	// RW handle that only ever reads — it still proves the reader sees the live
 	// writer's committed records, which is the claim, but it does not by itself
 	// prove the reader takes no write lock.
-	ro, err := basedb.Open(namespace.System(), "audit", dir)
+	ro, err := cek.Open(namespace.System(), "audit", dir)
 	if err != nil {
 		t.Fatalf("reader Open: %v", err)
 	}

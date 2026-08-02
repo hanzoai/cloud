@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (see the same
@@ -35,17 +36,11 @@ var errConflict = errors.New("templates: slug taken")
 type Store struct{ db *sql.DB }
 
 func openStore(dir string) (*Store, error) {
-	db, err := basedb.Open(namespace.System(), "templates", dir)
+	db, err := cek.Open(namespace.System(), "templates", dir)
 	if err != nil {
 		return nil, fmt.Errorf("templates: open store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("templates: pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS org_templates (
   org        TEXT NOT NULL,

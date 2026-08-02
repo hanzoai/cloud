@@ -1,6 +1,6 @@
 // The opt-in preference store: the durable, OPT-IN-BY-DEFAULT-PRIVATE half of the
 // leaderboard. Two tiny tenant-keyed tables in one Hanzo Base/SQLite file — the same
-// eval/settings discipline (basedb.Open, MaxOpenConns(1) to serialize writes against
+// eval/settings discipline (cek.Open, MaxOpenConns(1) to serialize writes against
 // the file lock, a mandatory key predicate on every statement).
 //
 //   - user_optin  (user_id PK, org, handle, listed): a user opts THEMSELVES into
@@ -22,9 +22,10 @@ import (
 	"errors"
 	"fmt"
 
-	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite" // registers the "sqlite" database/sql driver
 )
@@ -57,21 +58,11 @@ type optinStore struct {
 }
 
 func openOptinStore(dir string) (*optinStore, error) {
-	db, err := basedb.Open(namespace.System(), "leaderboard", dir)
+	db, err := cek.Open(namespace.System(), "leaderboard", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open leaderboard store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &optinStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

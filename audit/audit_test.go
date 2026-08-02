@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 	"github.com/hanzoai/namespace"
 )
@@ -622,7 +622,7 @@ func tamperOutOfBand(t *testing.T, dir, stmt string) {
 	// a bare sql.Open cannot read it. The modelled adversary is one with database
 	// access AND the key (an insider, or a compromised process) — file access alone
 	// no longer suffices, which is the point of encrypting it.
-	db, err := basedb.Open(namespace.System(), "audit", dir)
+	db, err := cek.Open(namespace.System(), "audit", dir)
 	if err != nil {
 		t.Fatalf("tamper open: %v", err)
 	}

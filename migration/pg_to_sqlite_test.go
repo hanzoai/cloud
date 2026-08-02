@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 	"github.com/hanzoai/namespace"
 
@@ -368,5 +368,5 @@ func openDst(t *testing.T, root, org, user string) (*sql.DB, error) {
 	if err != nil {
 		t.Fatalf("destinationNamespace(%q, %q): %v", org, user, err)
 	}
-	return basedb.Open(ns, dstSubsystem, root)
+	return cek.Open(ns, dstSubsystem, root)
 }

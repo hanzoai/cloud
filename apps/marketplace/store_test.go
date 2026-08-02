@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -21,7 +21,7 @@ func TestLegacyCentsStoreOpens(t *testing.T) {
 	// Seeded at the SAME (namespace, subsystem, dir) Open uses, so this IS the file
 	// Open reads back.
 	dir := t.TempDir()
-	db, err := basedb.Open(namespace.System(), "marketplace", dir)
+	db, err := cek.Open(namespace.System(), "marketplace", dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
