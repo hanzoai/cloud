@@ -574,6 +574,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # reach.py reads openapi.yaml, so it needs PyYAML. The runner image does
+      # not ship it — the script used to "fall back" to json.load, which cannot
+      # parse YAML, so the missing package surfaced as
+      #   json.decoder.JSONDecodeError: Expecting value: line 1 column 1
+      # and read as a corrupt spec rather than an absent dependency.
+      - name: PyYAML for the spec reader
+        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+
       - name: Every published address is routed
         run: python3 openapi/reach.py openapi.yaml https://api.hanzo.ai openapi/unreachable.txt
 
