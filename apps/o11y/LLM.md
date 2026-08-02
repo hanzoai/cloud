@@ -27,8 +27,16 @@ The public contract is FLAT — the upstream engine version is an internal
 impl detail resolved inside the handlers, never leaked into a route:
 
 - `/v1/o11y/{logs,metrics,status}` — tenant-scoped reads (`scope.go`).
-- `/v1/o11y/vm/{query,query_range}` — SuperAdmin VictoriaMetrics proxy
-  (`vmproxy.go`); the upstream `api/v1/*` VM path stays INSIDE the handler.
+- `/v1/o11y/availability` — platform-sudo fleet availability (`availability.go`):
+  the current per-service inventory plus an up/reporting trend, read from
+  `event.metric` (`hanzo_service_up`, written by `probes.go` and carried in by
+  `metricspush.go`). It REPLACES the SuperAdmin VictoriaMetrics proxy that stood
+  at `/v1/o11y/vm/{query,query_range}` — VM is gone, so a route named for it and
+  speaking its envelope went with it. Of that proxy's 19 allowlisted PromQL
+  strings only `up`/`sum(up)`/`count(up)` are still MEASURED; the other 16 lost
+  their producer (node-exporter, kube-state-metrics, cAdvisor, the lux exporter's
+  federation, vmalert's `ALERTS` remote-write) and `availability.go`'s header is
+  the ledger of what each one would have to measure to come back.
 - `/v1/o11y/{query,query_range}` — the flat builder query (`query.go`); resolves
   to the v3 engine route INTERNALLY (the version-less alias would resolve to v5,
   which 400s the v3 composite payload the console speaks), delegating to the same
@@ -297,10 +305,6 @@ CLAIM — the `text/plain` receipt, the 200 over a body that is not JSON, and th
 `text/plain` replay — so the refusals are evidence, not assertion. Prose cannot go
 red; that is why this list was a promise until the gate existed.
 
-- `GET /v1/o11y/vm/{query,query_range}` — return VictoriaMetrics' own status code
-  and its Prometheus envelope VERBATIM (`c.Bytes(status, body)`). A typed op
-  answers its declared status and marshals a Go value, so a VM 4xx would become a
-  200 and the envelope would be re-shaped.
 - `POST /v1/o11y/{query,query_range}` and `GET /v1/o11y/sessions` — reverse
   proxies: request body, query string, upstream status, headers and body all ride
   through untouched. There is no Go type for "whatever the runtime answered".

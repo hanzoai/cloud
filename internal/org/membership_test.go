@@ -106,3 +106,8 @@ func TestMembershipEmptyNoOwner(t *testing.T) {
 		t.Fatal("AmOwner must be false with no members")
 	}
 }
+
+// errString is a trivial error for the failing-source fixture above.
+type errString string
+
+func (e errString) Error() string { return string(e) }
