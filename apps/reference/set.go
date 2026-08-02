@@ -95,16 +95,71 @@ type Set struct {
 	Refusal string
 }
 
-// Source is one publisher of one set: where it is, what it costs us in terms,
-// and how its bytes become entries.
+// Grant is the BASIS on which a source's data may reach a tenant through this
+// plane. It is a closed vocabulary rather than free text, and that is the whole
+// point of the type.
+//
+// Terms used to be the only field, and it carried both kinds of sentence at
+// once: "CC0-1.0" (a licence) and "operator-published range list" (a description
+// of where a file came from). The gate over it could only ask whether the string
+// was non-empty, so an unlicensed source wearing a licence field passed — the
+// mirror image of the seam argument this plane is built on, where an unlicensed
+// set REFUSES precisely because an absent one and an unlicensed one look
+// identical from the outside.
+//
+// Splitting the kind from the citation makes the position machine-checkable and
+// puts it on the wire, so which sources rest on a licence and which rest on an
+// operator's own publication is an audit anyone can run rather than a judgement
+// buried in a string.
+type Grant string
+
+const (
+	// GrantLicence — the publisher states an explicit licence that permits
+	// redistribution. Terms names it: CC0-1.0, MIT, CC BY 3.0 US.
+	GrantLicence Grant = "licence"
+	// GrantRegistry — the registry of record publishes the data for anyone to
+	// consult, which is what a registry is for. Terms names the registry.
+	GrantRegistry Grant = "registry"
+	// GrantOperator — an operator's machine-readable statement about its OWN
+	// network, published so third parties can filter and route by it. It is NOT a
+	// licence and this value does not claim one: it says the data is a list of
+	// factual prefixes the operator publishes for exactly this use, and Terms names
+	// the publication. Stating that plainly is what lets someone review it.
+	GrantOperator Grant = "operator"
+	// GrantOwn — computed here, from a published standard or from fleet aggregates
+	// that clear the k-anonymity floor. Nothing of anyone else's is redistributed.
+	GrantOwn Grant = "own"
+	// GrantNone — nothing reaches a tenant through this source at all: the
+	// membership is held by the component that screens against it and this plane
+	// carries only its freshness. The only honest basis for a set of kind attest.
+	GrantNone Grant = "none"
+)
+
+// grants is the vocabulary as a set, so the gate has ONE definition to check
+// against and a new value cannot be introduced by spelling it.
+var grants = map[Grant]bool{GrantLicence: true, GrantRegistry: true, GrantOperator: true, GrantOwn: true, GrantNone: true}
+
+// Redistributes reports whether this basis lets a publisher's bytes reach a
+// tenant. It is the predicate a fetched source must satisfy.
+func (g Grant) Redistributes() bool {
+	return g == GrantLicence || g == GrantRegistry || g == GrantOperator
+}
+
+// Source is one publisher of one set: where it is, on what basis we may pass it
+// on, and how its bytes become entries.
 type Source struct {
 	// Name is the publisher, stable across versions — it is the key freshness is
 	// tracked per.
 	Name string
 	// Origin is the exact URL fetched, so an auditor can take the same bytes.
 	Origin string
-	// Terms is the licence or permission we redistribute this data under. It is a
-	// required field: a source with no stated terms does not go in the catalog.
+	// Basis is the KIND of permission this data reaches a tenant under, from a
+	// closed vocabulary. Required: the zero value is not a basis, and the catalog
+	// gate refuses it.
+	Basis Grant
+	// Terms is the CITATION the basis points at — the licence identifier, the
+	// registry, or the operator publication. Required: a basis with nothing behind
+	// it is an assertion.
 	Terms string
 	// parse turns the fetched bytes into entries. Nil for a local source, whose
 	// entries come from produce.
@@ -164,8 +219,9 @@ func Catalog() []Set {
 			Sources: []Source{{
 				Name:   "disposable",
 				Origin: "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/main/disposable_email_blocklist.conf",
+				Basis:  GrantLicence,
 				Terms:  "CC0-1.0",
-				parse:  parseLines("disposable", map[string]string{"class": "disposable"}),
+				parse:  parseDisposable,
 			}},
 		},
 		{
@@ -175,17 +231,17 @@ func Catalog() []Set {
 			Match:  MatchNet,
 			MaxAge: weekly,
 			Sources: []Source{
-				{Name: "aws", Origin: "https://ip-ranges.amazonaws.com/ip-ranges.json", Terms: "operator-published range list", parse: parseAWS},
-				{Name: "gcp", Origin: "https://www.gstatic.com/ipranges/cloud.json", Terms: "operator-published range list", parse: parseGCP},
-				{Name: "oracle", Origin: "https://docs.oracle.com/iaas/tools/public_ip_ranges.json", Terms: "operator-published range list", parse: parseOracle},
-				{Name: "fastly", Origin: "https://api.fastly.com/public-ip-list", Terms: "operator-published range list", parse: parseFastly},
-				{Name: "cloudflare4", Origin: "https://www.cloudflare.com/ips-v4", Terms: "operator-published range list", parse: parseCIDRs("cloudflare", "hosting", "cloudflare")},
-				{Name: "cloudflare6", Origin: "https://www.cloudflare.com/ips-v6", Terms: "operator-published range list", parse: parseCIDRs("cloudflare", "hosting", "cloudflare")},
-				{Name: "linode", Origin: "https://geoip.linode.com/", Terms: "operator-published range list", parse: parseLinode},
-				{Name: "digitalocean", Origin: "https://digitalocean.com/geo/google.csv", Terms: "operator-published range list", parse: parseDigitalOcean},
-				{Name: "tor", Origin: "https://check.torproject.org/torbulkexitlist", Terms: "Tor Project bulk exit list, published for operator use (CC BY 3.0 US)", parse: parseTor},
-				{Name: "reserved4", Origin: "https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry-1.csv", Terms: "IANA public registry", parse: parseSpecial},
-				{Name: "reserved6", Origin: "https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry-1.csv", Terms: "IANA public registry", parse: parseSpecial},
+				{Name: "aws", Origin: "https://ip-ranges.amazonaws.com/ip-ranges.json", Basis: GrantOperator, Terms: "Amazon's own ip-ranges.json, published machine-readable so third parties can filter and route by it; no separate licence is stated and none is claimed here", parse: parseAWS},
+				{Name: "gcp", Origin: "https://www.gstatic.com/ipranges/cloud.json", Basis: GrantOperator, Terms: "Google's own cloud.json, published machine-readable so third parties can filter and route by it; no separate licence is stated and none is claimed here", parse: parseGCP},
+				{Name: "oracle", Origin: "https://docs.oracle.com/iaas/tools/public_ip_ranges.json", Basis: GrantOperator, Terms: "Oracle's own public_ip_ranges.json, published machine-readable so third parties can filter and route by it; no separate licence is stated and none is claimed here", parse: parseOracle},
+				{Name: "fastly", Origin: "https://api.fastly.com/public-ip-list", Basis: GrantOperator, Terms: "Fastly's own public IP list API, published so third parties can filter and route by it; no separate licence is stated and none is claimed here", parse: parseFastly},
+				{Name: "cloudflare4", Origin: "https://www.cloudflare.com/ips-v4", Basis: GrantOperator, Terms: "Cloudflare's own published IPv4 range list, served for third parties to allow traffic by; no separate licence is stated and none is claimed here", parse: parseCIDRs("cloudflare", "hosting", "cloudflare")},
+				{Name: "cloudflare6", Origin: "https://www.cloudflare.com/ips-v6", Basis: GrantOperator, Terms: "Cloudflare's own published IPv6 range list, served for third parties to allow traffic by; no separate licence is stated and none is claimed here", parse: parseCIDRs("cloudflare", "hosting", "cloudflare")},
+				{Name: "linode", Origin: "https://geoip.linode.com/", Basis: GrantOperator, Terms: "RFC 8805 geofeed self-published by the operator, which exists so third parties can read it; no separate licence is stated and none is claimed here", parse: parseLinode},
+				{Name: "digitalocean", Origin: "https://digitalocean.com/geo/google.csv", Basis: GrantOperator, Terms: "RFC 8805 geofeed self-published by the operator, which exists so third parties can read it; no separate licence is stated and none is claimed here", parse: parseDigitalOcean},
+				{Name: "tor", Origin: "https://check.torproject.org/torbulkexitlist", Basis: GrantLicence, Terms: "CC BY 3.0 US — the Tor Project publishes the bulk exit list for operator use under its site licence", parse: parseTor},
+				{Name: "reserved4", Origin: "https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry-1.csv", Basis: GrantRegistry, Terms: "IANA IPv4 Special-Purpose Address Registry, the registry of record", parse: parseSpecial},
+				{Name: "reserved6", Origin: "https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry-1.csv", Basis: GrantRegistry, Terms: "IANA IPv6 Special-Purpose Address Registry, the registry of record", parse: parseSpecial},
 			},
 		},
 		{
@@ -197,6 +253,7 @@ func Catalog() []Set {
 			Sources: []Source{{
 				Name:   "patterns",
 				Origin: "https://raw.githubusercontent.com/monperrus/crawler-user-agents/master/crawler-user-agents.json",
+				Basis:  GrantLicence,
 				Terms:  "MIT",
 				parse:  parseCrawlers,
 			}},
@@ -210,7 +267,8 @@ func Catalog() []Set {
 			Sources: []Source{{
 				Name:   "iana",
 				Origin: "https://www.iana.org/assignments/as-numbers/as-numbers-1.csv",
-				Terms:  "IANA public registry",
+				Basis:  GrantRegistry,
+				Terms:  "IANA Autonomous System Number Registry, the registry of record",
 				parse:  parseASN,
 			}},
 		},
@@ -223,7 +281,8 @@ func Catalog() []Set {
 			Sources: []Source{{
 				Name:    "structure",
 				Origin:  "ISO/IEC 7812 major industry identifier and the schemes' own published prefix ranges",
-				Terms:   "structural facts, no database licensed",
+				Basis:   GrantOwn,
+				Terms:   "computed here from structural facts; no issuer database is licensed or held",
 				produce: produceBIN,
 			}},
 		},
@@ -236,6 +295,7 @@ func Catalog() []Set {
 			Sources: []Source{{
 				Name:    "fleet",
 				Origin:  "aggregate over the shared event plane",
+				Basis:   GrantOwn,
 				Terms:   "our own aggregate, published only above the k-anonymity floor",
 				produce: produceDevice,
 			}},
@@ -247,10 +307,10 @@ func Catalog() []Set {
 			Match:  MatchExact,
 			MaxAge: daily,
 			Sources: []Source{
-				{Name: "OFAC", Origin: "luxfi/aml pkg/screen", Terms: "receipt only; the designations stay with the engine that screens"},
-				{Name: "UN", Origin: "luxfi/aml pkg/screen", Terms: "receipt only; the designations stay with the engine that screens"},
-				{Name: "EU", Origin: "luxfi/aml pkg/screen", Terms: "receipt only; the designations stay with the engine that screens"},
-				{Name: "OFSI", Origin: "luxfi/aml pkg/screen", Terms: "receipt only; the designations stay with the engine that screens"},
+				{Name: "OFAC", Origin: "luxfi/aml pkg/screen", Basis: GrantNone, Terms: "receipt only; the designations stay with the engine that screens"},
+				{Name: "UN", Origin: "luxfi/aml pkg/screen", Basis: GrantNone, Terms: "receipt only; the designations stay with the engine that screens"},
+				{Name: "EU", Origin: "luxfi/aml pkg/screen", Basis: GrantNone, Terms: "receipt only; the designations stay with the engine that screens"},
+				{Name: "OFSI", Origin: "luxfi/aml pkg/screen", Basis: GrantNone, Terms: "receipt only; the designations stay with the engine that screens"},
 			},
 		},
 		{
@@ -260,7 +320,7 @@ func Catalog() []Set {
 			Match:  MatchExact,
 			MaxAge: monthly,
 			Sources: []Source{
-				{Name: "listing", Origin: "luxfi/aml pkg/reference", Terms: "receipt only; the listing stays with the engine that evaluates it"},
+				{Name: "listing", Origin: "luxfi/aml pkg/reference", Basis: GrantNone, Terms: "receipt only; the listing stays with the engine that evaluates it"},
 			},
 		},
 		{

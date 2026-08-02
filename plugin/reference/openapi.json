@@ -521,6 +521,10 @@
             "description": "AsOf is when this publisher was current, RFC 3339.",
             "type": "string"
           },
+          "basis": {
+            "description": "Basis is the KIND of permission this publisher's data reaches you under:\nlicence (an explicit grant), registry (the registry of record publishing for\nanyone to consult), operator (an operator's own machine-readable statement\nabout its own network, published for third parties to filter by — not a\nlicence, and not claimed as one), own (computed here), or none (nothing\nreaches you: the membership is held by the component that screens against\nit). It is on the wire so the licence position is an audit you can run.",
+            "type": "string"
+          },
           "keys": {
             "description": "Keys is how many members this publisher contributed.",
             "type": "integer"
@@ -538,7 +542,7 @@
             "type": "string"
           },
           "terms": {
-            "description": "Terms is the licence or permission this data is redistributed under. A\nsource with no stated terms is not in the catalog.",
+            "description": "Terms is the CITATION that basis points at — the licence identifier, the\nregistry, or the operator publication. A source with no stated terms is not\nin the catalog.",
             "type": "string"
           },
           "version": {
@@ -608,6 +612,10 @@
       },
       "RefreshReferenceIn": {
         "properties": {
+          "force": {
+            "description": "Force accepts a take whose size moved past the change bound. A publisher\nserving a tenth or ten times its previous list is refused by default and the\nprevious version is left standing; this is the operator saying the change is\nreal. It cannot make an empty, truncated or unparseable take land — those are\nerrors, not magnitudes.",
+            "type": "boolean"
+          },
           "receipts": {
             "description": "Receipts are supplied by the component that holds the membership, for a set\nof kind attest. They are refused on any other kind, and a set of kind attest\nis refused without them: this plane never invents a freshness it did not\nobserve.",
             "items": {

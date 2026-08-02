@@ -86,13 +86,33 @@ const deviceStatement = `
 	)
 	WHERE orgs >= ? AND n >= ?
 	ORDER BY orgs DESC, id
-	LIMIT ` + deviceCap
+	LIMIT ` + deviceCap + deviceBudget
 
 // deviceCap bounds the result so a warehouse that suddenly matches everything
 // costs a truncated set rather than the process. It is a string constant spliced
 // into the statement because a LIMIT cannot bind, and it is not reachable from
 // any caller.
 const deviceCap = "50000"
+
+// deviceBudget bounds what the aggregation may SPEND, which the LIMIT does not.
+//
+// The LIMIT applies to the outer select — the rows that survive the floor — and
+// says nothing about the inner GROUP BY, which visits every distinct browser
+// identity the whole fleet saw in [deviceWindow] before a single row is filtered.
+// On a busy event plane that is a grouping over hundreds of millions of keys, and
+// it runs against the one warehouse analytics, insights, sentry, commerce and
+// gateway usage all share, roughly daily and unattended. Housekeeping for one
+// reference set must not be able to stall the store every other plane reads from.
+//
+// So the statement states its own budget: it spills to disk rather than growing,
+// it stops rather than spilling forever, and it gives up rather than running past
+// the window it is allowed. Exceeding a budget fails THIS take, which is already
+// a case this plane handles — the previous version stands and ages out visibly.
+const deviceBudget = `
+	SETTINGS max_execution_time = 300,
+	         max_memory_usage = 4000000000,
+	         max_bytes_before_external_group_by = 2000000000,
+	         max_bytes_before_external_sort = 2000000000`
 
 // publicTenant is the reserved org the event door files credential-less writes
 // under (apps/analytics/event.go). It is not a customer and it never

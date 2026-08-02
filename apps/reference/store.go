@@ -60,9 +60,15 @@ const (
 // Statuses a version passes through. `ready` is the only one a snapshot builds
 // from: a half-landed version must never answer, because a set that is missing
 // its tail answers "not listed" for everything in it.
+// `refused` is the third: a take that produced no answerable version, recorded so
+// the failure is durable and the source's row shows why. Because only `ready` is
+// read back (currentStatement), recording a refusal leaves the previous ready
+// version current — which is the correct outcome for a publisher that stopped
+// answering, and the one that ages out visibly instead of silently emptying a set.
 const (
-	statusIngest = "ingesting"
-	statusReady  = "ready"
+	statusIngest  = "ingesting"
+	statusReady   = "ready"
+	statusRefused = "refused"
 )
 
 const createDatabase = `CREATE DATABASE IF NOT EXISTS hanzo`
@@ -104,6 +110,18 @@ const createEntry = `CREATE TABLE IF NOT EXISTS hanzo.reference_entry (
 ) ENGINE = ReplacingMergeTree(at)
 ORDER BY (set, source, version, key)`
 
+// The warehouse as VALUES, on the same terms as apps/analytics/warehouse.go:
+// production is always the ONE datastore client, and a test substitutes them to
+// drive the durable half — the version manifest, the resume cursor, the prune —
+// without standing up a store. They are the only door this package reaches the
+// warehouse through, so there is one place to substitute and no second path that
+// could stay real while these are faked.
+var (
+	storeReady = datastore.Ready
+	storeQuery = datastore.Query
+	storeExec  = datastore.Exec
+)
+
 // tableMu guards the lazy bootstrap. Only SUCCESS is latched: a failed DDL
 // leaves the flag false so the next call retries. sync.Once is wrong here — it
 // would cache the failure forever, and the warehouse connects asynchronously so
@@ -120,11 +138,11 @@ func ensure(ctx context.Context) error {
 	if tableReady {
 		return nil
 	}
-	if !datastore.Ready() {
+	if !storeReady() {
 		return fmt.Errorf("reference: the warehouse is not connected")
 	}
 	for _, stmt := range []string{createDatabase, createSource, createEntry} {
-		if err := datastore.Exec(ctx, stmt); err != nil {
+		if err := storeExec(ctx, stmt); err != nil {
 			return fmt.Errorf("reference: bootstrap: %w", err)
 		}
 	}
@@ -165,7 +183,7 @@ func current(ctx context.Context) ([]version, error) {
 	if err := ensure(ctx); err != nil {
 		return nil, err
 	}
-	rows, err := datastore.Query(ctx, currentStatement, statusReady)
+	rows, err := storeQuery(ctx, currentStatement, statusReady)
 	if err != nil {
 		return nil, fmt.Errorf("reference: read versions: %w", err)
 	}
@@ -183,7 +201,7 @@ FROM ` + sourceTable + ` FINAL
 WHERE set = ? AND source = ? AND version = ?`
 
 func taken(ctx context.Context, set, source, ver string) (version, bool, error) {
-	rows, err := datastore.Query(ctx, takenStatement, set, source, ver)
+	rows, err := storeQuery(ctx, takenStatement, set, source, ver)
 	if err != nil {
 		return version{}, false, fmt.Errorf("reference: read version: %w", err)
 	}
@@ -217,7 +235,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 // version) means the newest write of one version wins, so a status change is an
 // insert rather than an update — the plane has one way to write a row.
 func mark(ctx context.Context, v version, at time.Time) error {
-	return datastore.Exec(ctx, markStatement,
+	return storeExec(ctx, markStatement,
 		v.Set, v.Source, v.Version, v.Origin, v.Terms,
 		v.AsOf.UTC(), v.Fetched.UTC(), v.Keys, v.Landed, v.Status, v.Refusal, at.UTC())
 }
@@ -326,7 +344,7 @@ func land(ctx context.Context, set, source, ver string, entries []Entry, at time
 	if stmt == "" {
 		return nil
 	}
-	if err := datastore.Exec(ctx, stmt, args...); err != nil {
+	if err := storeExec(ctx, stmt, args...); err != nil {
 		return fmt.Errorf("reference: land %s/%s: %w", set, source, err)
 	}
 	return nil
@@ -344,7 +362,7 @@ const maxReadLiteral = "200000"
 
 // read materialises one version's entries.
 func read(ctx context.Context, set, source, ver string) ([]Entry, error) {
-	rows, err := datastore.Query(ctx, readStatement, set, source, ver)
+	rows, err := storeQuery(ctx, readStatement, set, source, ver)
 	if err != nil {
 		return nil, fmt.Errorf("reference: read %s/%s: %w", set, source, err)
 	}
@@ -364,20 +382,87 @@ func read(ctx context.Context, set, source, ver string) ([]Entry, error) {
 const pruneStatement = `ALTER TABLE ` + entryTable +
 	` DELETE WHERE set = ? AND source = ? AND version != ? AND version != ?`
 
-// prune drops the membership of every version but the current one and the one
-// before it.
-//
-// The previous version is kept deliberately: a decision taken a moment before a
-// refresh names the version it consulted, and an auditor asking what that
-// version contained deserves an answer rather than a manifest row pointing at
-// nothing. Two is enough — older provenance survives as the manifest row, which
-// is never pruned.
+// prune drops the membership of every version but the two named.
 //
 // Non-fatal by construction. A failed prune leaves history, which costs storage
 // and nothing else; treating it as an ingest failure would turn a housekeeping
 // problem into a freshness one.
 func prune(ctx context.Context, set, source, keep, alsoKeep string) error {
-	return datastore.Exec(ctx, pruneStatement, set, source, keep, alsoKeep)
+	return storeExec(ctx, pruneStatement, set, source, keep, alsoKeep)
+}
+
+// dropper is prune as a value, so what a take supersedes can be decided and
+// tested without a warehouse to delete from.
+type dropper func(ctx context.Context, set, source, keep, alsoKeep string) error
+
+// sweepOld drops the membership of every version of every source but the CURRENT
+// one and the one it REPLACED.
+//
+// The previous version is kept deliberately, and `was` is why this function
+// exists rather than a loop at the call site: the current snapshot knows what is
+// current now and cannot know what was current a moment ago, so the pair has to
+// be carried in. A call site that passed the current version for both spared
+// exactly one version — the statement's two placeholders bound to the same
+// string — and quietly deleted the rows behind every citation taken in the
+// window before a refresh, which is the audit answer this whole plane is sold on.
+//
+// A source taken for the first time has no previous version; `was` carries no
+// entry for it, `alsoKeep` is the empty string, and a version that is not the
+// empty string spares nothing extra — which is correct, there is nothing extra.
+func sweepOld(ctx context.Context, drop dropper, set string, was map[string]held, now []version) error {
+	var first error
+	for _, v := range now {
+		if err := drop(ctx, set, v.Source, v.Version, was[v.Source].Version); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// held is what this plane holds for one source at one instant: the version and
+// how many members it carries. It is captured BEFORE a take so the take can be
+// compared with what it replaces — the previous version is what prune spares
+// (sweepOld) and the previous size is what the swing gate measures against
+// (swung).
+type held struct {
+	Version string
+	Keys    uint64
+}
+
+// holding reads what a snapshot currently holds, per source.
+func holding(s *snap) map[string]held {
+	out := map[string]held{}
+	if s == nil {
+		return out
+	}
+	for _, v := range s.took {
+		out[v.Source] = held{Version: v.Version, Keys: v.Keys}
+	}
+	return out
+}
+
+// swing is how far a source's size may move in ONE take before the take is
+// refused and the previous version is left standing.
+//
+// The empty case was already an error and the truncation case already an error,
+// and between them sat the dangerous one: a publisher serving a valid, parseable
+// list at a tenth or ten times its previous size. Both directions are refused
+// because both are silent. A list that shrank answers "not listed" for everything
+// it lost and reads exactly like a clean world; a list that exploded puts members
+// nobody vetted into the baseline every organisation's decisions read.
+//
+// Four rather than two: published lists do move, and a bound that fires on
+// ordinary growth is a bound an operator learns to force through.
+const swing = 4
+
+// swung reports whether a take moved a source's size past [swing], in either
+// direction. A source taken for the first time has nothing to compare against and
+// is never refused.
+func swung(was, now uint64) bool {
+	if was == 0 {
+		return false
+	}
+	return now*swing < was || now > was*swing
 }
 
 // order sorts entries by key. It is the canonical order the digest is taken over

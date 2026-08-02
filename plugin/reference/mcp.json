@@ -63,6 +63,10 @@
         }
       },
       "properties": {
+        "force": {
+          "description": "Force accepts a take whose size moved past the change bound. A publisher\nserving a tenth or ten times its previous list is refused by default and the\nprevious version is left standing; this is the operator saying the change is\nreal. It cannot make an empty, truncated or unparseable take land — those are\nerrors, not magnitudes.",
+          "type": "boolean"
+        },
         "receipts": {
           "description": "Receipts are supplied by the component that holds the membership, for a set\nof kind attest. They are refused on any other kind, and a set of kind attest\nis refused without them: this plane never invents a freshness it did not\nobserve.",
           "items": {

@@ -4826,6 +4826,16 @@ components:
         asOf:
           description: AsOf is when this publisher was current, RFC 3339.
           type: string
+        basis:
+          description: |-
+            Basis is the KIND of permission this publisher's data reaches you under:
+            licence (an explicit grant), registry (the registry of record publishing for
+            anyone to consult), operator (an operator's own machine-readable statement
+            about its own network, published for third parties to filter by — not a
+            licence, and not claimed as one), own (computed here), or none (nothing
+            reaches you: the membership is held by the component that screens against
+            it). It is on the wire so the licence position is an audit you can run.
+          type: string
         keys:
           description: Keys is how many members this publisher contributed.
           type: integer
@@ -4844,8 +4854,9 @@ components:
           type: string
         terms:
           description: |-
-            Terms is the licence or permission this data is redistributed under. A
-            source with no stated terms is not in the catalog.
+            Terms is the CITATION that basis points at — the licence identifier, the
+            registry, or the operator publication. A source with no stated terms is not
+            in the catalog.
           type: string
         version:
           description: |-
@@ -4905,6 +4916,14 @@ components:
       type: object
     RefreshReferenceIn:
       properties:
+        force:
+          description: |-
+            Force accepts a take whose size moved past the change bound. A publisher
+            serving a tenth or ten times its previous list is refused by default and the
+            previous version is left standing; this is the operator saying the change is
+            real. It cannot make an empty, truncated or unparseable take land — those are
+            errors, not magnitudes.
+          type: boolean
         receipts:
           description: |-
             Receipts are supplied by the component that holds the membership, for a set
