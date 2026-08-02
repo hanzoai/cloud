@@ -136,6 +136,35 @@ func principalOf(ctx context.Context) (Principal, error) {
 	return p, nil
 }
 
+// gate refuses a dispatch the payer's ledger cannot cover, BEFORE the tool runs. It
+// is meter's other half, and it was the missing one: every dispatch debited
+// meterUnit's fee on the way out and nothing ever asked whether the payer could
+// afford it, so an org at $0 ran the plane unbounded and the ledger simply went
+// negative. Every other metered surface in the binary gates then meters —
+// functions/invoke.go, storage/s3.go, ml/ml.go, provisioning — and this one only
+// metered.
+//
+// It gates the SAME fee meterUnit debits, read from the SAME knob, so the amount
+// authorized and the amount charged cannot drift; a deployment that prices dispatch
+// at 0 is un-gated exactly as it is un-billed (ResourceMeter.Gate's own
+// costCents<=0 short-circuit). Off the HTTP path there is no payer, hence nothing to
+// gate — the same silence meter keeps, for the same reason.
+//
+// The refusal is cloud.Denied, not DenyResource: a typed op cannot write a response
+// body, so it carries the money wire's status and sentence as an error.
+func (o toolOps) gate(ctx context.Context) error {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil
+	}
+	project, validated := principal.ValidatedProject(c)
+	fee := cloud.ResourceFeeCents(feeEnvPrefix, meterKind)
+	if err := o.s.Bill.Gate(c.Context(), principal.Ledger(c), project, validated, meterKind, fee); err != nil {
+		return cloud.Denied(err)
+	}
+	return nil
+}
+
 // meter records the one orchestration unit a tool call bills — meterUnit with the
 // request resolved off the context. Off the HTTP path there is nothing to bill.
 func (o toolOps) meter(ctx context.Context) {
