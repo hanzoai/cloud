@@ -1,6 +1,7 @@
 package o11y
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -233,10 +234,21 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 		return resp
 	}
 
-	t.Run("the receipt answers 200 text/plain over a body that is not JSON", func(t *testing.T) {
+	t.Run("the receipt answers text/plain over a body that is not JSON, and never 4xx", func(t *testing.T) {
+		// An egress that accepts, because the status code now reports DELIVERY
+		// rather than arrival: without one this answers 503, which is the point
+		// of that change and is pinned in alerts_egress_test.go.
+		swapEgress(t, egress{name: "test", send: func(context.Context, string) error { return nil }})
+
 		resp := send(t, http.MethodPost, "/v1/o11y/alerts/page-critical", "{not json at all")
 		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("unparseable receipt = %d, want 200 — any other status makes Alertmanager retry forever", resp.StatusCode)
+			t.Fatalf("unparseable receipt = %d, want 200", resp.StatusCode)
+		}
+		// The wire fact this test exists for: a malformed payload is RECORDED,
+		// never REFUSED. A 4xx would make Alertmanager retry it forever, and the
+		// delivery still happened — which is the fact being recorded.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			t.Fatalf("unparseable body was refused with %d — Alertmanager retries a 4xx forever", resp.StatusCode)
 		}
 		if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
 			t.Errorf("Content-Type = %q, want text/plain — a typed op would answer JSON", ct)
