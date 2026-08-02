@@ -210,6 +210,10 @@ func Serve(plugins []Plugin, enable []string) error {
 		ReadBufferSize: cfg.ReadBufferSize,
 		BodyLimit:      cfg.BodyLimit,
 		MCP:            zip.MCPConfig{Source: source},
+		// Cloud's refusal renderer, in place of zip's default — which reads only a
+		// *zip.HTTPError and answers 500 for everything else, so a propagated 402
+		// or 403 reached the console as a dead card. See errmap.go.
+		ErrorHandler: ErrorHandler,
 		// Static Server fallback for responses the ProductionHeaders middleware
 		// cannot reach — the transport's own pre-routing errors (431/400) and any
 		// fiber path that bypasses the chain. Set to this deployment's brand so
