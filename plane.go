@@ -139,6 +139,11 @@ func ServePlane(name string, log luxlog.Logger) (func() error, error) {
 	if err := awaitSocket(path, errs, planeBindWait); err != nil {
 		return nil, fmt.Errorf("plane %s: %w", name, err)
 	}
+	// This process was asked to serve this plane, so from here on its socket
+	// going quiet is a FAULT rather than an absence. Recording it at the moment
+	// of binding is what lets hanzo_plane_peer_bound tell those two apart —
+	// the distinction o11y's own disappearance turned on.
+	planeServed(name)
 	if log != nil {
 		log.Info("plane listening", "app", name, "sock", path)
 	}
