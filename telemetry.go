@@ -319,6 +319,17 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// Two signals, two destinations, two decisions.
 	mp, stopMeter := installMeter(log, res)
 
+	// Seed the data-plane instruments the moment the provider exists.
+	//
+	// This call is the difference between a rule that can say "ingest stopped"
+	// and one that can say nothing. A counter first touched by its first event
+	// has no series until that event happens, so an ingest path that never runs
+	// is indistinguishable in the store from one that was never built — which is
+	// exactly how span ingest stayed dead for four and a half months without a
+	// single rule being able to notice. Seeding at boot means zero is on the
+	// wire from the first scrape, and silence becomes a measurement.
+	planeInstruments()
+
 	// TRACES. Enabled when a ZAP endpoint is set OR (legacy) any OTLP endpoint is
 	// set OR a co-resident sink is expected (spans route in-process, no wire
 	// endpoint needed). Keep the clean no-op-when-unset posture so this is safe
