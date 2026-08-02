@@ -447,7 +447,7 @@ const maxClass = 256
 //
 // On the error kind, Type is bounded and Message and Stack are deliberately left alone:
 // Type is not free text — it lands in the fault's `class` column and is the first thing
-// fingerprint() hashes into `group`, which leads event.error's ORDER BY — while Message
+// fingerprint() hashes into `issue`, which an issue list groups by — while Message
 // and Stack ARE free text, a real stack is legitimately long, they are redacted by
 // scrubException, and maxPublicBytes is the right bound for text nobody keys on.
 //
