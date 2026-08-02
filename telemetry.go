@@ -221,20 +221,20 @@ func MetricGatherer() prometheus.Gatherer { return metricRegistry }
 // discarded while the code looks perfectly instrumented, which is exactly what
 // cloud's request counters (metrics_http.go) did before this existed.
 //
-// ONE reader, and it is a PULL: the provider collects into this process's
-// registry (metricRegistry) and something scrapes the exposition apps/o11y
-// serves. Metrics used to leave over the ZAP wire instead, to match traces and
-// logs — one transport for all three signals, which reads well and did not
-// survive contact with where metrics are actually kept. That wire ends at o11y's
-// receiver, which writes the datastore; but the store every metric READER in
-// this codebase queries is VictoriaMetrics — vmquery.go, the SuperAdmin VM
-// proxy, status.go's up-inventory and /v1/summary — and VM is filled by
-// scraping. A push into a store nothing reads is not a second transport, it is a
-// missing one: the wire endpoint is empty in every deployment we run, which
-// luxfi/metric silently resolved to 127.0.0.1:4317 — the OTLP trace receiver,
-// not the metric one — so the fleet availability gauge was recorded 21 times a
-// minute into a provider with no way out. Exposing the registry puts the
-// measurements where the readers already look.
+// ONE reader, and NOBODY PULLS IT: the provider collects into this process's
+// registry (metricRegistry), and apps/o11y's metricspush.go gathers that
+// registry on a timer and writes it straight to the telemetry store in-process.
+// The registry is a buffer, not a published surface — no port is bound for it
+// and there is no exposition to scrape.
+//
+// It was a pull once, and briefly for a good reason: the store every metric
+// READER queried was VictoriaMetrics, VM was filled by scraping, and a push into
+// a store nothing reads is not a second transport but a missing one. That
+// premise is retired with VM. Every metric reader in this codebase now queries
+// the datastore — /v1/summary, status.go's up-inventory and
+// /v1/o11y/availability all go through apps/o11y/metricsgauge.go — so metrics
+// travel the same in-process road as traces and logs, to the same place, and the
+// measurements are once again where the readers look.
 func installMeter(log luxlog.Logger, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context)) {
 	exp, err := otelprom.New(
 		otelprom.WithRegisterer(metricRegistry),
