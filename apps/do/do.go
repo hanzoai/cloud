@@ -48,6 +48,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/provisioning"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -612,7 +613,7 @@ func tenant(c *zip.Ctx) (string, bool) {
 	if !principal.Validated(c) {
 		return "", false
 	}
-	if org := provisioning.SanitizeOrg(c.Org()); org != "" {
+	if org := namespace.Sanitize(c.Org()); org != "" {
 		return org, true
 	}
 	if c.IsAdmin() {

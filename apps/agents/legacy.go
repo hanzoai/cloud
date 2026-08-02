@@ -75,7 +75,7 @@ func fanOutLegacy(ctx context.Context, dataDir string, st *state) error {
 	for _, org := range orgs {
 		dst, err := st.storeFor(org)
 		if err != nil {
-			// SanitizeOrg refused this org, or its file would not open. Either way
+			// namespace.Sanitize refused this org, or its file would not open. Either way
 			// the rows exist and we cannot place them: halt and name the org rather
 			// than drop a tenant's history on the floor.
 			return fmt.Errorf("legacy fan-out: org %q: %w", org, err)

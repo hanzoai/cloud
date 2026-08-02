@@ -104,8 +104,8 @@ const (
 //
 // The pattern is character-for-character namespace's own segment rule, which is
 // the best evidence the primitive is right. But cloud.OrgNamespace folds the org
-// through SanitizeOrg first, and the two disagree on every org that is not a
-// short clean label: "acme_corp" is accepted verbatim here and becomes
+// through namespace.Sanitize first, and the two disagree on every org that is
+// not a short clean label: "acme_corp" is accepted verbatim here and becomes
 // "acme-corp-cca8c7942f8c15a2" there, and a 40-character legal org is kept whole
 // here and truncated-plus-hashed there. Both write under <dataDir>/orgs/, so
 // switching the encoder would point the wallet at a different, empty file while
