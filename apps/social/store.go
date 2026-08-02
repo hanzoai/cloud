@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 
 	// The ONE Hanzo "sqlite" driver; blank import registers it.
@@ -32,21 +33,11 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := basedb.Open(namespace.System(), "social", dir)
+	db, err := cek.Open(namespace.System(), "social", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open social store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

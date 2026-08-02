@@ -10,7 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 
 	// The ONE Hanzo SQLite driver (see store.go). Blank-imported here too so this
@@ -58,21 +59,11 @@ type member struct {
 }
 
 func openAccountStore(dir string) (*accountStore, error) {
-	db, err := basedb.Open(namespace.System(), "account", dir)
+	db, err := cek.Open(namespace.System(), "account", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open account store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &accountStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

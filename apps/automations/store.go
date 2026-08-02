@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"time"
 
-	// basedb is the ONE opener: it renders this subsystem's path from the
+	// cek is the ONE opener: it renders this subsystem's path from the
 	// namespace and opens it under the key cek derives for that name.
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver; the blank import
 	// registers the "sqlite" database/sql name. Mirrors clients/crm exactly — the
 	// ONE storage pattern.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
@@ -35,21 +36,11 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := basedb.Open(namespace.System(), "automations", dir)
+	db, err := cek.Open(namespace.System(), "automations", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open automations store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

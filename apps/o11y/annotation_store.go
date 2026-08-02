@@ -9,9 +9,10 @@ import (
 	"math"
 	"strings"
 
-	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
@@ -74,21 +75,11 @@ type annStore struct {
 }
 
 func openAnnStore(dir string) (*annStore, error) {
-	db, err := basedb.Open(namespace.System(), "o11y_annotations", dir)
+	db, err := cek.Open(namespace.System(), "o11y_annotations", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open o11y_annotations store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &annStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

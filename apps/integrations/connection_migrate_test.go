@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -31,7 +31,7 @@ CREATE TABLE connections (
 func seedOldStore(t *testing.T, rows [][]any) string {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := basedb.Open(namespace.System(), "integrations", dir)
+	db, err := cek.Open(namespace.System(), "integrations", dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

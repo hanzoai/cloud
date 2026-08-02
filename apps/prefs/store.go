@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both cgo and pure-Go build tags). Blank
 	// import registers the driver; importing modernc directly would double-register.
@@ -44,21 +46,11 @@ type Prefs struct {
 var errNotFound = errors.New("prefs: not found")
 
 func openStore(dir string) (*Store, error) {
-	db, err := basedb.Open(namespace.System(), "prefs", dir)
+	db, err := cek.Open(namespace.System(), "prefs", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open prefs store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

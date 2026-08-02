@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/basedb"
+
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 )
 
@@ -17,11 +19,11 @@ import (
 // the *sql.DB to openStore for migration. Only the migration tests care WHERE the
 // file is; everything else wants testStore.
 func openStoreAt(dir string) (*Store, error) {
-	db, err := basedb.Open(namespace.System(), legacySubsystem, dir)
+	db, err := cek.Open(namespace.System(), legacySubsystem, dir)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	st, err := openStore(db)
 	if err != nil {
 		_ = db.Close()
@@ -34,11 +36,11 @@ func openStoreAt(dir string) (*Store, error) {
 // tests that plant a legacy table or read one back.
 func rawAt(t *testing.T, dir string) *sql.DB {
 	t.Helper()
-	db, err := basedb.Open(namespace.System(), legacySubsystem, dir)
+	db, err := cek.Open(namespace.System(), legacySubsystem, dir)
 	if err != nil {
 		t.Fatalf("open raw %s: %v", dir, err)
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	return db
 }
 

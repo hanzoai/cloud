@@ -15,10 +15,12 @@ import (
 	// cloud.OrgNamespace is the ONE door a tenant string passes through to become
 	// the name of a database.
 	"github.com/hanzoai/cloud"
-	// basedb is the ONE opener: each tenant's database is born encrypted under the
+	// cek is the ONE opener: each tenant's database is born encrypted under the
 	// key cek derives from the process master and that tenant's namespace.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
+
 	// The ONE "sqlite" driver.
 	_ "github.com/hanzoai/sqlite"
 )
@@ -174,24 +176,14 @@ func (s *stores) releaser(e *entry) func() {
 // takes the namespace (which names the file) AND the raw tenant (which the OnOpen
 // seed is written in terms of).
 func (s *stores) openLocked(ctx context.Context, ns namespace.Namespace, tenant string) (*sql.DB, error) {
-	db, err := basedb.Open(ns, s.name, s.dataDir)
+	db, err := cek.Open(ns, s.name, s.dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("gojabase[%s]: open %s: %w", s.name, ns, err)
 	}
 	// MaxOpenConns(1) serializes writes against the single-writer file; the
 	// per-request transaction (see Dispatch) then holds that one connection for
 	// the whole dispatch, so a request is atomic.
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.ExecContext(ctx, pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("gojabase[%s]: pragma %q: %w", s.name, pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	if strings.TrimSpace(s.schema) != "" {
 		if _, err := db.ExecContext(ctx, s.schema); err != nil {
 			_ = db.Close()
