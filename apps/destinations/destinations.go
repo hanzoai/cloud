@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -99,10 +98,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("destinations.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("destinations.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "destinations.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("destinations.Mount: open store: %w", err)
 	}
@@ -157,7 +153,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// The bridge FIRST, bounded to destinations' own subtree: a typed op receives
 	// only a context, so the validated org has to be parked there, and fiber runs
 	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Serve installs one app-wide too; nesting is harmless (the
+	// never run. cloud.Listen installs one app-wide too; nesting is harmless (the
 	// inner one is what the handler sees), and having it here is what makes this
 	// package's own tests — which mount on a bare zip.App — exercise the same
 	// tenancy the binary does.

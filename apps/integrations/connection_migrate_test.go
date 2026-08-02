@@ -3,10 +3,10 @@ package integrations
 import (
 	"context"
 	"database/sql"
-	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/namespace"
 )
 
 // oldSchema is the connections table exactly as it was before the owner joined
@@ -25,10 +25,13 @@ CREATE TABLE connections (
   PRIMARY KEY (org, provider)
 );`
 
+// seedOldStore writes a pre-migration database through the SAME opener openStore
+// uses, and returns the DIRECTORY it lives in — so the reopen below lands on
+// exactly this file.
 func seedOldStore(t *testing.T, rows [][]any) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "integrations.db")
-	db, err := cek.Open(cek.Global, path)
+	dir := t.TempDir()
+	db, err := cek.Open(namespace.System(), "integrations", dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -45,18 +48,18 @@ func seedOldStore(t *testing.T, rows [][]any) string {
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	return path
+	return dir
 }
 
 // The owner is RECOVERED from account_label, which already held the GitHub org
 // login. Defaulting it to "" instead would leave the row unaddressable the moment
 // a second account connected.
 func TestMigrationRecoversTheGithubOwner(t *testing.T) {
-	path := seedOldStore(t, [][]any{
+	dir := seedOldStore(t, [][]any{
 		{"hanzo", "github", "62000701", "hanzoai", "", "", 100, 100},
 		{"acme", "slack", "T123", "Acme Inc", "U1", "chat:write", 200, 200},
 	})
-	s, err := openStore(path) // migrate() runs here
+	s, err := openStore(dir) // migrate() runs here
 	if err != nil {
 		t.Fatalf("open migrated: %v", err)
 	}
@@ -84,10 +87,10 @@ func TestMigrationRecoversTheGithubOwner(t *testing.T) {
 // connected_at is "connected since" and must survive a schema change; a
 // migration that reset it would silently rewrite history.
 func TestMigrationPreservesEveryColumn(t *testing.T) {
-	path := seedOldStore(t, [][]any{
+	dir := seedOldStore(t, [][]any{
 		{"hanzo", "github", "62000701", "hanzoai", "B1", "repo,read:org", 1234, 5678},
 	})
-	s, err := openStore(path)
+	s, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("open migrated: %v", err)
 	}
@@ -111,11 +114,11 @@ func TestMigrationPreservesEveryColumn(t *testing.T) {
 // migrate() runs on every open, so the rebuild must be a no-op once done —
 // otherwise the second boot would drop a table it had already replaced.
 func TestMigrationIsIdempotent(t *testing.T) {
-	path := seedOldStore(t, [][]any{
+	dir := seedOldStore(t, [][]any{
 		{"hanzo", "github", "62000701", "hanzoai", "", "", 100, 100},
 	})
 	for i := range 3 {
-		s, err := openStore(path)
+		s, err := openStore(dir)
 		if err != nil {
 			t.Fatalf("open %d: %v", i, err)
 		}
@@ -134,10 +137,10 @@ func TestMigrationIsIdempotent(t *testing.T) {
 
 // After migrating, the org can connect a SECOND GitHub account — the whole point.
 func TestMigratedStoreAcceptsASecondAccount(t *testing.T) {
-	path := seedOldStore(t, [][]any{
+	dir := seedOldStore(t, [][]any{
 		{"hanzo", "github", "62000701", "hanzoai", "", "", 100, 100},
 	})
-	s, err := openStore(path)
+	s, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("open migrated: %v", err)
 	}

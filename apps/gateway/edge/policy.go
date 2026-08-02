@@ -34,14 +34,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/cek" // opens gateway.db encrypted at rest; a leaf pkg, no import cycle.
-	_ "github.com/hanzoai/sqlite"  // the ONE "sqlite" driver, for cek's no-key plaintext fallback.
+	"github.com/hanzoai/cek" // opens the policy DB encrypted at rest; a leaf pkg, no import cycle.
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+	_ "github.com/hanzoai/sqlite" // the ONE "sqlite" driver.
 )
 
 // Policy is the edge policy for one scope. Zero-valued fields mean "inherit"
@@ -190,31 +190,22 @@ type cacheEntry struct {
 	expiry time.Time
 }
 
-// New opens (or creates) {dataDir}/gateway.db and returns a Store layered over the
-// static boot defaults. On any open/migrate error it logs nothing here (the caller
-// owns logging) and returns a static-only Store plus the error, so the caller can
-// wire the edge middleware with a working fallback regardless.
+// New opens (or creates) the deployment's gateway policy database under dataDir and
+// returns a Store layered over the static boot defaults. On any open/migrate error it
+// logs nothing here (the caller owns logging) and returns a static-only Store plus the
+// error, so the caller can wire the edge middleware with a working fallback regardless.
 func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 	s := &Store{adminOrg: adminOrg, static: static, cache: map[string]cacheEntry{}}
 	if dataDir == "" {
 		return s, fmt.Errorf("edge: empty dataDir; running static-only")
 	}
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return s, fmt.Errorf("edge: mkdir %s: %w", dataDir, err)
-	}
-	db, err := cek.Open(cek.Global, filepath.Join(dataDir, "gateway.db"))
+	// The policy table is the DEPLOYMENT's, keyed by org rather than split per org,
+	// so it lives in the system namespace.
+	db, err := cek.Open(namespace.System(), "gateway", dataDir)
 	if err != nil {
 		return s, fmt.Errorf("edge: open: %w", err)
 	}
-	db.SetMaxOpenConns(1) // one writer; the file lock serializes.
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return s, fmt.Errorf("edge: pragma: %w", err)
-		}
-	}
+	sqlpool.Single(db)
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS policy (
 		org        TEXT PRIMARY KEY,
 		doc        TEXT NOT NULL DEFAULT '{}',

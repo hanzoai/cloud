@@ -45,16 +45,16 @@ type childView struct {
 }
 
 // TestMain gives this package the plugin-child half. The child runs the REAL
-// boot path — credz.Boot, exactly as cloud.Serve calls it — rather than a
+// boot path — credz.Boot, exactly as cloud.Listen calls it — rather than a
 // test-only accessor, so what this proves is what production does. A child is
 // identified by the token its LAUNCHER stamped on it, which is why it has to be
 // a real process this test really started (see bootAs).
 func TestMain(m *testing.M) {
 	// The PARENT is the broker, so it boots the way the live broker does: the root
 	// key in its own environment, taken by credz.Boot into cek before any store
-	// opens. Here rather than in the test body because cek memoizes on the first
-	// open and other tests in this package open stores too — TestMain is the only
-	// point that is guaranteed to be first.
+	// opens. Here rather than in the test body because other tests in this package
+	// open stores too, and a store opened before the master is installed fails —
+	// TestMain is the only point guaranteed to be first.
 	if os.Getenv(bootInEnv) == "" {
 		_ = os.Setenv(credz.RootEnv, base64.StdEncoding.EncodeToString(testMaster))
 		credz.Boot(os.TempDir())

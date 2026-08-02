@@ -1104,9 +1104,16 @@ func (w *worker) register(ctx context.Context) error {
 	//
 	// A blip is not an outage. Retry with backoff and only then report; a genuinely
 	// missing namespace or a real rejection still surfaces, just later.
+	//
+	// But only a blip. A REFUSAL is not one: 401/403 says this node's credential is
+	// not accepted, and no amount of waiting changes that. Retrying it burned 30s per
+	// boot inside a systemd restart loop — seen at restart counter 10 on a node whose
+	// token had expired — and buried the one line that said what was wrong under five
+	// that said "retrying". Fail fast, and say what to do about it.
 	var err error
 	for attempt := 0; attempt < registerAttempts; attempt++ {
-		if _, err = w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
+		var code int
+		if code, err = w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
 			"activityId":       w.identity,
 			"runId":            w.identity,
 			"activityType":     map[string]any{"name": "fleet.worker"},
@@ -1118,6 +1125,9 @@ func (w *worker) register(ctx context.Context) error {
 		}
 		if ctx.Err() != nil {
 			return err
+		}
+		if code == http.StatusUnauthorized || code == http.StatusForbidden {
+			return fmt.Errorf("%w — this node's credential was refused; run `hanzo login` on it", err)
 		}
 		if attempt < registerAttempts-1 {
 			fmt.Fprintf(os.Stderr, "register (attempt %d/%d, retrying in %s): %v\n",

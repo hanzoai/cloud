@@ -8,12 +8,16 @@ import (
 	"fmt"
 	"strings"
 
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cloud/cek"
+	// the "sqlite" database/sql name under both build tags. Importing modernc
+	// directly instead would double-register "sqlite" under CGO and panic at
+	// init. Blank import registers the driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -109,29 +113,20 @@ type DatasetRun struct {
 	UpdatedAt  int64
 }
 
-// Store is the eval metastore over one SQLite file ({DataDir}/evals.db). Tenancy
+// Store is the eval metastore over one SQLite file — the deployment's own "evals".
+// Tenancy
 // is the org column; MaxOpenConns(1) serializes writes against the file lock
 // (same discipline as prompts/projects).
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "evals", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open evals store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

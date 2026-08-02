@@ -14,6 +14,7 @@ func testSession() *session {
 		server:    &transServer{hub: newHub()},
 		store:     newStore(dir),
 		hier:      buildHierarchy(modelJSON),
+		org:       "test-org", // the token's extra.org claim; a session never has none
 		account:   "2d4d67ab-30f1-474e-b81f-f60461852259",
 		workspace: "e48f81fd-12be-4bcd-aecb-3eaa9a9b5b18",
 	}

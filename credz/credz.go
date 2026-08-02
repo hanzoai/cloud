@@ -68,6 +68,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/credz/launch"
 )
 
@@ -207,8 +208,7 @@ func resolve(dataDir string) Posture {
 
 	// 1. My own environment. This process is the root of the credential tree.
 	if k, ok := decode(os.Getenv(RootEnv)); ok {
-		root = k
-		cek.SetMasterKey(k)
+		bootErr = adopt(k)
 		// Scrub. zip spawns children with os.Environ(), so leaving the root key
 		// here hands it to all 108 of them — the exact sprawl this package exists
 		// to end. Everything in-process that needs it now reads Key().
@@ -232,8 +232,7 @@ func resolve(dataDir string) Posture {
 	}
 	if err == nil {
 		if k, ok := decode(b.Key); ok {
-			root = k
-			cek.SetMasterKey(k)
+			bootErr = adopt(k)
 		} else {
 			// A bundle with no data-plane key still installs the service credentials,
 			// but the first store open will fail closed — and the reason lives HERE,
@@ -247,10 +246,10 @@ func resolve(dataDir string) Posture {
 	}
 	bootErr = err
 
-	// 3. Nothing configured. On a build that cannot be production, run the
-	// production code path against a well-known key so a developer needs no
-	// configuration at all; on a production build, hold nothing and let the first
-	// store open refuse to write plaintext.
+	// 3. Nothing configured. There is no KMS to resolve a key from, so this process
+	// mints its own — a random one, which dies with it. Nothing it writes outlives
+	// the run, which is the honest shape of a keyless deployment and the reason a
+	// developer needs no configuration at all.
 	// A child the host launched may NOT fall back. It has a token, so a broker was
 	// promised; if one never came, the honest outcome is to hold nothing and let
 	// the first store open refuse — one deployment, one key, or no key at all.
@@ -260,15 +259,78 @@ func resolve(dataDir string) Posture {
 		return Unkeyed
 	}
 
-	if cek.EnsureDevKey() {
-		// Hold the dev key like any other: a keyless dev deployment still has ONE
-		// data-plane key, and its broker has to be able to hand that same key to a
-		// child rather than let each child derive its own.
-		root = cek.Master()
-		bootFrom = "dev key"
-		return Dev
+	// A random master is honest only over an EMPTY data directory. Over existing
+	// databases it is the same mistake the token branch above refuses, and worse
+	// for the same reason — it SUCCEEDS: every file was encrypted under a key this
+	// process is about to replace, so each one opens as "file is not a database"
+	// and the deployment serves 500s while its data sits intact and unreadable.
+	//
+	// "Nothing it writes outlives the run" is only true when nothing preceded it.
+	// This asks the one question that distinguishes a laptop from a deployment
+	// that has lost its KMS, and it is a question about the disk — no notion of
+	// "production" required.
+	if had, herr := hasDatabases(dataDir); herr != nil || had {
+		if herr != nil {
+			bootErr = fmt.Errorf("credz: no key configured, and %s could not be read to tell whether one is needed: %w", dataDir, herr)
+		} else {
+			bootErr = fmt.Errorf("credz: no key configured, but %s already holds databases — minting a new master would make every one of them unreadable; restore the key this deployment was given", dataDir)
+		}
+		return Unkeyed
 	}
-	return Unkeyed
+
+	k, devErr := cek.SetDevMaster()
+	if devErr != nil {
+		bootErr = devErr
+		return Unkeyed
+	}
+	// Hold the dev key like any other: a keyless dev deployment still has ONE
+	// data-plane key, and its broker has to be able to hand that same key to a
+	// child rather than let each child derive its own.
+	root = k
+	bootFrom = "dev key"
+	return Dev
+}
+
+// hasDatabases reports whether dataDir already holds at least one database.
+//
+// Cheap and shallow-ish by design: the first `.db` under the tree answers it, so
+// a large data directory costs a partial walk and an empty one costs a stat. A
+// missing directory is not an error — it is the clearest possible "nothing
+// preceded this process".
+func hasDatabases(dataDir string) (bool, error) {
+	if dataDir == "" {
+		return false, nil
+	}
+	found := false
+	err := filepath.WalkDir(dataDir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// An unreadable subtree is not proof of absence, so it is reported
+			// rather than skipped: the whole point here is to refuse when we
+			// cannot be sure the directory is empty.
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".db") {
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return found, err
+}
+
+// adopt makes k this process's root key: the key credz reports to a child and
+// the key every database of this process is derived from. ONE function, because
+// a process that answered Key() with a key cek does not hold would hand its
+// children a key its own files were not written under.
+func adopt(k []byte) error {
+	if err := cek.SetMaster(k); err != nil {
+		return fmt.Errorf("credz: %w", err)
+	}
+	root = k
+	return nil
 }
 
 // brokerWait bounds how long a launched child waits for the broker to answer. The

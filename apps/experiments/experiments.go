@@ -125,7 +125,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "experiments")
 	mounted = &state{
-		stores: cloud.NewOrgStore[*store](deps.DataDir, "experiments", openStore),
+		stores: cloud.NewOrgStore[*store](b, "experiments", openStore),
 		metric: analyticsSource{},
 		log:    b.Log,
 	}

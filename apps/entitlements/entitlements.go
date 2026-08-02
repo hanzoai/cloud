@@ -12,7 +12,8 @@
 //
 // TWO AUTHORITIES, NEVER BRAIDED.
 //   - ENABLEMENT (this store): which products the org has toggled on. The org's
-//     intent. Durable per-org SQLite ({DataDir}/entitlements.db), (org,product) key.
+//     intent. Durable SQLite — the deployment's own "entitlements" — keyed
+//     (org, product).
 //   - ENTITLEMENT (commerce): which products the org's plan/subscription grants.
 //     The billing truth. Read via deps.Commerce.CheckEntitlement at WRITE time.
 //
@@ -34,8 +35,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -94,10 +93,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("entitlements.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("entitlements.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "entitlements.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("entitlements.Mount: open store: %w", err)
 	}

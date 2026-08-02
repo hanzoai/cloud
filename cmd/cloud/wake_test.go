@@ -36,7 +36,7 @@ const wakeChildEnv = "CLOUD_WAKE_CHILD"
 
 // TestMain lets this binary act as the lazy plugin the host starts.
 //
-// The child binds TWO sockets, exactly as cloud.Serve does and in the same order:
+// The child binds TWO sockets, exactly as cloud.Listen does and in the same order:
 // its plane socket first, then the private one the host handed it on ZIP_ADDR. That
 // order is the whole reason a woken peer is reachable the instant Start returns —
 // the host waits on the second, so the first is already accepting.

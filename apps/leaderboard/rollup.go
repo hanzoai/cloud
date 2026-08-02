@@ -113,10 +113,32 @@ func EnsureUsageRollup(ctx context.Context) error {
 	return nil
 }
 
-// rollupRowCount returns the number of rows currently in the rollup — the guard the
-// backfill uses to refuse an accidental double-run.
-func rollupRowCount(ctx context.Context) (int64, error) {
-	rows, err := queryDatastore(ctx, "SELECT count() AS n FROM "+rollupTable)
+// rollupCutoff normalizes a seed bound to the rollup's own grain: UTC midnight.
+// The seed selects LEDGER rows by `timestamp`, the guard counts ROLLUP rows by
+// `day`, and only a day-aligned bound makes those two the same set of days. A
+// mid-day bound writes a PARTIAL row for that day which the live view may also
+// hold, and once both are in a SummingMergeTree no count can separate them.
+func rollupCutoff(t time.Time) time.Time { return t.UTC().Truncate(24 * time.Hour) }
+
+// rollupRowsSeeded counts the rollup rows the seed would ADD TO — the days strictly
+// before the cutoff. It is the guard against double-counting, and it must be scoped
+// to the seed's own range rather than to the whole table.
+//
+// Scoping it to the whole table is what made the seed unrunnable. EnsureUsageRollup
+// creates the incremental view on the FIRST leaderboard read, the view starts
+// capturing on the next ledger insert, and the guard then sees a non-empty rollup
+// forever — so every non-forced seed answered 409 and pre-view history was never
+// laid down. Forcing was the only way through and the code itself says forcing
+// doubles. Live cost: the rollup held 530 of the ledger's 19,792 requests (2.7%),
+// and every leaderboard and activity read served from it under-reported by 97%.
+//
+// The bound is one-sided by design: this seeds "everything before the view existed",
+// once. Widening the cutoff afterwards is a genuine re-seed of days already covered,
+// and it is refused — ?force=true is the deliberate override.
+func rollupRowsSeeded(ctx context.Context, before time.Time) (int64, error) {
+	rows, err := queryDatastore(ctx,
+		"SELECT count() AS n FROM "+rollupTable+" WHERE day < toDate(?)",
+		rollupCutoff(before).Format("2006-01-02"))
 	if err != nil {
 		return 0, err
 	}
@@ -126,14 +148,14 @@ func rollupRowCount(ctx context.Context) (int64, error) {
 	return aInt64(rows[0]["n"]), nil
 }
 
-// BackfillUsageRollup seeds the rollup from ledger history with timestamp < before.
-// It is the DEPLOY-GATED, run-ONCE step: because SummingMergeTree accumulates, a
-// second unguarded run would double a day, so the handler guards on an empty rollup
-// (or an explicit force). `before` should be the MV-creation instant (or now) so the
-// seed and the live MV do not overlap.
+// BackfillUsageRollup seeds the rollup from ledger history before the cutoff. It is
+// the DEPLOY-GATED, run-ONCE step: because SummingMergeTree accumulates, re-seeding
+// a day it already holds would double that day, so the handler guards on the seed's
+// own range (rollupRowsSeeded) or an explicit force. `before` is snapped to UTC
+// midnight so the seed's day-range and the guard's are identical.
 func BackfillUsageRollup(ctx context.Context, before time.Time) error {
 	if err := EnsureUsageRollup(ctx); err != nil {
 		return err
 	}
-	return execDatastore(ctx, backfillDDL, before.UTC().Format("2006-01-02 15:04:05"))
+	return execDatastore(ctx, backfillDDL, rollupCutoff(before).Format("2006-01-02 15:04:05"))
 }
