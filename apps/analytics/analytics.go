@@ -311,9 +311,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 			http.Error(w, "read body", http.StatusBadRequest)
 			return
 		}
-		hdr := make(map[string]string, len(r.Header))
+		hdr := make([]planeops.Header, 0, len(r.Header))
 		for k := range r.Header {
-			hdr[k] = r.Header.Get(k)
+			hdr = append(hdr, planeops.Header{Name: k, Value: r.Header.Get(k)})
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), obsErrorTimeout)
 		defer cancel()
