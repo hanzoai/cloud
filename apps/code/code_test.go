@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/namespace"
 
-	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/zap-proto/zip"
 )
 
@@ -216,7 +216,7 @@ func TestPerOrgIsolationHTTP(t *testing.T) {
 		}
 	}
 	for _, org := range []string{"orgA", "orgB"} {
-		p := filepath.Join(s.dataDir, "orgs", provisioning.SanitizeOrg(org), "code.db")
+		p := filepath.Join(s.dataDir, "orgs", namespace.Sanitize(org), "code.db")
 		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
 		// database file on the pure-Go codec — only its sidecar is on disk.
 		if !cek.Exists(p) {

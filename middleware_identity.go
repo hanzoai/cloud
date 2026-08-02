@@ -42,35 +42,36 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/hanzoai/authz"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
 // OrgHasUnsafeRune reports whether s carries any whitespace, control, or
 // zero-width/format rune — the class that defeats the injectivity of the
-// org→org map. strings.TrimSpace (and fasthttp's own header-value OWS
+// org→namespace map. strings.TrimSpace (and fasthttp's own header-value OWS
 // trimming) silently drop such runes at the edges, so two DISTINCT IAM org
 // names ("acme" vs "acme ", or an NBSP/ZWSP variant) would collapse onto ONE
-// org-<slug> namespace / image ref — a cross-org fold. The identity trust
-// boundary REFUSES to grant org-scoping from an org bearing one of these (fail
-// secure) instead of folding it, so distinct raw names never collide and no
-// namespace is ever derived from an invisible-character identifier.
+// namespace / image ref — a cross-org fold. The identity trust boundary
+// REFUSES to grant org-scoping from an org bearing one of these (fail secure)
+// instead of folding it, so distinct raw names never collide and no namespace
+// is ever derived from an invisible-character identifier.
 //
 // Case / '-' / '.' / other visible punctuation are deliberately NOT unsafe:
-// those fold INJECTIVELY through the org-slug hash (provisioning.SanitizeOrg).
-// Only the invisible / edge-trimmable class — which no injective fold can
-// survive once transport strips it — is rejected here. A legitimate IAM org
-// slug never contains such a rune, so no real caller is affected.
-func OrgHasUnsafeRune(s string) bool {
-	for _, r := range s {
-		if unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
-			return true
-		}
-	}
-	return false
-}
+// those fold INJECTIVELY through the slugger's hash. Only the invisible /
+// edge-trimmable class — which no injective fold can survive once transport
+// strips it — is rejected. A legitimate IAM org slug never contains such a
+// rune, so no real caller is affected.
+//
+// It is DERIVED from namespace.Sanitize rather than re-deciding the rune class,
+// because the identity boundary and the slugger have to refuse exactly the same
+// names: this predicate is the reason a request gets no org-scoping, and
+// Sanitize's "" is the reason that org could not have named a database anyway.
+// Two spellings of one rule is a rule that eventually disagrees with itself.
+// The empty org is not "unsafe" — it names nothing, which callers already
+// handle — so it is excluded, exactly as it was when the loop lived here.
+func OrgHasUnsafeRune(s string) bool { return s != "" && namespace.Sanitize(s) == "" }
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access
 // token (mirrors edge.Cookie). hanzo_iam_token is the cookie the ai

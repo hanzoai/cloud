@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/ha"
+	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/valyala/fasthttp"
 	fiber "github.com/zap-proto/fiber/v3"
@@ -50,7 +51,7 @@ func findOrgOwnedBy(t *testing.T, peers []ha.Member, id string) string {
 	t.Helper()
 	for i := 0; i < 100000; i++ {
 		org := fmt.Sprintf("org-%d", i)
-		if o, ok := ha.Owner(SanitizeOrg(org), peers); ok && o.ID == id {
+		if o, ok := ha.Owner(namespace.Sanitize(org), peers); ok && o.ID == id {
 			return org
 		}
 	}
@@ -66,7 +67,7 @@ func TestShardOwnership_ExactlyOneOwnerPerOrg(t *testing.T) {
 	dist := map[string]int{}
 	for i := 0; i < 20000; i++ {
 		org := fmt.Sprintf("tenant-%d", i)
-		slug := SanitizeOrg(org)
+		slug := namespace.Sanitize(org)
 		if slug == "" {
 			t.Fatalf("clean org %q sanitized to empty", org)
 		}
@@ -110,7 +111,7 @@ func TestShardOwnership_AllPodsAgree(t *testing.T) {
 	peers := threePeers("a:8000", "b:8000", "c:8000")
 	for i := 0; i < 5000; i++ {
 		org := fmt.Sprintf("acct-%d", i)
-		slug := SanitizeOrg(org)
+		slug := namespace.Sanitize(org)
 		want, _ := ha.Owner(slug, peers)
 		// Each pod (self = cloud-0/1/2) decides "do I own it?"; exactly the owner says yes.
 		yes := 0
