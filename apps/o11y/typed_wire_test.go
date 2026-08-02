@@ -79,16 +79,8 @@ var untypedByDesign = map[string]string{
 		"body — it is a delivery receipt, so a body that will not parse still proves delivery and a 400 " +
 		"would make Alertmanager retry forever. zip decodes a typed In before the handler runs, so " +
 		"typing it would turn that 200 into a 400.",
-	// The two catch-alls and the upstream module's probes. A wildcard has no
-	// operation to type, and these three probe paths are not registered by this
-	// package at all.
-	"GET /v1/o11y/{wildcard1}":       wildcardReason,
-	"POST /v1/o11y/{wildcard1}":      wildcardReason,
-	"PUT /v1/o11y/{wildcard1}":       wildcardReason,
-	"PATCH /v1/o11y/{wildcard1}":     wildcardReason,
-	"DELETE /v1/o11y/{wildcard1}":    wildcardReason,
-	"OPTIONS /v1/o11y/{wildcard1}":   wildcardReason,
-	"TRACE /v1/o11y/{wildcard1}":     wildcardReason,
+	// The /v1/sentry catch-all this package registers (mountSentry). A wildcard has
+	// no operation to type.
 	"GET /v1/sentry/{wildcard1}":     sentryReason,
 	"POST /v1/sentry/{wildcard1}":    sentryReason,
 	"PUT /v1/sentry/{wildcard1}":     sentryReason,
@@ -96,18 +88,44 @@ var untypedByDesign = map[string]string{
 	"DELETE /v1/sentry/{wildcard1}":  sentryReason,
 	"OPTIONS /v1/sentry/{wildcard1}": sentryReason,
 	"TRACE /v1/sentry/{wildcard1}":   sentryReason,
-	"GET /v1/o11y/api/v2/healthz":    upstreamProbeReason,
-	"GET /v1/o11y/api/v2/livez":      upstreamProbeReason,
-	"GET /v1/o11y/api/v2/readyz":     upstreamProbeReason,
+
+	// The upstream module's own hatches. hanzoai/o11y no longer registers a
+	// /v1/o11y/* catch-all — every route it serves is named — so the routes a
+	// wildcard used to hide are visible here, each with the wire fact that keeps
+	// it un-typed (hanzoai/o11y mount.go mountHatches, health.go mountHealth).
+	"GET /v1/o11y/healthz": upstreamProbeReason,
+	"GET /v1/o11y/livez":   upstreamProbeReason,
+	"GET /v1/o11y/readyz":  upstreamProbeReason,
+
+	"GET /v1/o11y/logs/livetail":  upstreamStreamReason + " — an unbounded stream of log records.",
+	"GET /v1/o11y/query_progress": upstreamStreamReason + " — a long poll that holds the connection until " +
+		"the next tick, so a typed op would answer only after the query it reports on had finished.",
+	"POST /v1/o11y/export_raw_data": upstreamStreamReason + " — a chunked CSV/JSONL attachment with an " +
+		"X-Response-Complete trailer.",
+
+	"GET /v1/o11y/complete/google": upstreamRedirectReason,
+	"GET /v1/o11y/complete/oidc":   upstreamRedirectReason,
+	"POST /v1/o11y/complete/saml":  upstreamRedirectReason,
+
+	"POST /v1/o11y/api/{project_id}/envelope/": upstreamIngestReason,
+	"POST /v1/o11y/api/{project_id}/store/":    upstreamIngestReason,
+	"POST /v1/sentry/{project}/envelope/":      upstreamIngestReason,
+	"POST /v1/sentry/{project}/store/":         upstreamIngestReason,
 }
 
 const (
-	wildcardReason = "the hanzoai/o11y module's terminal All(\"/v1/o11y/*\") — one route standing for the " +
-		"runtime's whole route surface, resolved per-request. A wildcard has no operation to type."
 	sentryReason = "the /v1/sentry/* wildcard (mountSentry) forwarding to the same gated runtime handler. " +
 		"A wildcard has no operation to type."
 	upstreamProbeReason = "registered by the upstream hanzoai/o11y module, not by this package — a " +
 		"liveness/readiness path the runtime serves without identity so k8s probes pass."
+	upstreamStreamReason = "an upstream hanzoai/o11y hatch that never produces one complete JSON value; " +
+		"zip buffers a whole answer before decoding it, so typing it would hang the stream"
+	upstreamRedirectReason = "an upstream hanzoai/o11y sign-in callback that answers 303 with a Location " +
+		"header and no payload. A typed op declares a 2xx JSON contract, which would publish a schema for " +
+		"a response that does not exist and hide the header that is the entire point of the call."
+	upstreamIngestReason = "Sentry-compatible ingest received by upstream hanzoai/o11y: the body is an " +
+		"application/x-sentry-envelope frame, not JSON, and the caller authenticates with a DSN public key " +
+		"rather than a Hanzo principal. We RECEIVE this shape; we do not publish it."
 )
 
 // o11yOps reads BOTH projections of the live router at their one shared address
