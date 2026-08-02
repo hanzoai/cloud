@@ -21,8 +21,8 @@ import (
 // while answering 200.
 //
 // Same observable as anon_capability_test.go: 503 ⇒ ADMITTED (reached the write core,
-// no warehouse in the harness); 200 {accepted:0,dropped:N} ⇒ the projection refused it;
-// 403 ⇒ refused at the gate.
+// no warehouse in the harness); 401 ingest_key_required ⇒ the projection refused every
+// event; 403 ⇒ refused at the gate.
 
 // ── 1. the canonical wire could not say what kind it was ─────────────────────
 
@@ -72,13 +72,7 @@ func TestAnonCanonicalWireStillCannotWidenItsKind(t *testing.T) {
 				"the wire may now NAME a kind; it may not ADMIT one", kind)
 			continue
 		}
-		if code != http.StatusOK {
-			t.Errorf("anonymous kind %q = %d (%s), want 200 all-dropped", kind, code, got)
-			continue
-		}
-		if r := receipt(t, got); r.Accepted != 0 || r.Dropped != 1 {
-			t.Errorf("anonymous kind %q receipt = %+v, want accepted:0 dropped:1", kind, r)
-		}
+		refusedAnon(t, "anonymous kind "+kind, code, got)
 	}
 }
 
