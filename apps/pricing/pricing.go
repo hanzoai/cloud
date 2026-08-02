@@ -40,6 +40,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	hpricing "github.com/hanzoai/pricing"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -50,6 +51,9 @@ var (
 	// catalog read path. nil only before Mount; the read handlers fall back to
 	// the raw bundle output when it is nil.
 	cat *catalog
+	// plog is the subsystem logger, kept so the document assembly in RunSync can
+	// report where it sourced first-party prices. Set by Mount.
+	plog luxlog.Logger
 )
 
 // Mount registers the pricing surface on app per HIP-0106.
@@ -71,6 +75,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: load pricing.json: %w", err)
 	}
+	// The embedded snapshot ships the document's shape and the resold section;
+	// commerce owns the retail number on the models we make. See commerce.go.
+	plog = logger
+	pricingData = overlay(context.Background(), pricingData, logger)
 	plansExtra, err := hpricing.PlansExtra()
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: load plans-extra: %w", err)
@@ -559,9 +567,13 @@ func RunSync(ctx context.Context) (string, error) {
 		if v, ok := shaped["freeModels"]; ok {
 			m["freeModels"] = v
 		}
+		// hpricing.Pricing() re-reads the EMBEDDED snapshot, so a sync would
+		// otherwise discard the commerce overlay and quietly restore the
+		// snapshot's first-party prices. The document is assembled the same way
+		// in both places, which is the only way the two cannot disagree.
 		ts := time.Now().UTC().Format(time.RFC3339)
 		m["updated"] = ts
-		host.SetGlobal("__PRICING_DATA__", m)
+		host.SetGlobal("__PRICING_DATA__", overlay(ctx, m, plog))
 		return ts, nil
 	}
 	return time.Now().UTC().Format(time.RFC3339), nil
