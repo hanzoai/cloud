@@ -1,6 +1,6 @@
 {
-  "paths": 1397,
-  "operations": 1966,
+  "paths": 1399,
+  "operations": 1968,
   "products": {
     "admin": 87,
     "ads": 7,
@@ -126,7 +126,7 @@
     "platform": 41,
     "plugins": 4,
     "prefs": 2,
-    "pricing": 24,
+    "pricing": 25,
     "process-speech-to-text": 1,
     "projects": 15,
     "prompts": 6,

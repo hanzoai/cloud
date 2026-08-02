@@ -57889,7 +57889,7 @@ paths:
       tags:
       - o11y
       x-app: o11y
-  /v1/o11y/healthz:
+  /v1/o11y/api/v2/healthz:
     get:
       description: |-
         Reports whether every service in the runtime's registry is healthy, and names them grouped by state — so a failure says WHICH component is down, not merely that something is. An unhealthy registry answers 503, not a 200 with a false flag inside, so a plain status check cannot read a sick runtime as well.
@@ -57900,7 +57900,7 @@ paths:
       tags:
       - o11y
       x-app: o11y
-  /v1/o11y/livez:
+  /v1/o11y/api/v2/livez:
     get:
       description: |-
         Answers 200 unconditionally while the process is running, and asserts NOTHING about the telemetry stores behind it. That is what makes it a liveness probe: a container that answers this is worth leaving alive, and restarting on a store outage would only remove the thing reporting the outage.
@@ -57911,7 +57911,7 @@ paths:
       tags:
       - o11y
       x-app: o11y
-  /v1/o11y/readyz:
+  /v1/o11y/api/v2/readyz:
     get:
       description: |-
         Reports whether the runtime's registered services are healthy enough to take traffic, and answers 503 when they are not — which is what takes a booting or degraded replica out of the load balancer instead of letting it serve errors.
@@ -61158,6 +61158,31 @@ paths:
           description: ok
       summary: Returns the model providers the catalog knows, each with its info object,
         filtered to what the caller's org may see.
+      tags:
+      - pricing
+      x-app: pricing
+  /v1/pricing/services:
+    get:
+      description: |-
+        Returns the managed-service rate cards — Search, Crawl,
+        Vector, Console and Managed Services — each with its own tiers, and some with
+        usage rates or a comparison table. It is the section as authored, un-gated.
+
+        These are DISPLAY rate cards: what a product costs, not what a plan grants. No
+        entitlement or limit fields ride here, so nothing can bill off them.
+      operationId: get_v1_pricing_services
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: Returns the managed-service rate cards — Search, Crawl, Vector, Console
+        and Managed Services — each with its own tiers, and some with usage rates
+        or a comparison table.
       tags:
       - pricing
       x-app: pricing
