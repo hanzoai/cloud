@@ -18,7 +18,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"annq_1"}`),
 	})
 	zip.Describe("GET /v1/o11y/alerts/last", zip.Doc{
-		Description: "Serves the ring as plain text, newest last, so `curl … | tail` reads\nin the order the pages arrived.",
+		Description: "Serves the ring as plain text, newest last, so `curl … | tail` reads\nin the order the records were made.",
 	})
 	zip.Describe("GET /v1/o11y/logs", zip.Doc{
 		Description: "Returns a page of one product's logs for the caller's org. A\nnormal caller sees its OWN request stream, derived from org-tagged spans; a\nvalidated platform SuperAdmin sees the product's raw infra stdout stream\ninstead. Poll for a live tail by passing the previous response's nextCursor\nback as sinceNs. A well-formed product with no backing workload answers an\nempty page rather than an error; a malformed slug is a 400.",
@@ -186,11 +186,8 @@ func init() {
 	zip.Describe("POST /obs/error/post", zip.Doc{
 		Description: "Relays one Sentry-wire request to the runtime and returns its\nanswer VERBATIM — a 401 \"invalid ingest key\" must reach the SDK as a 401, not\nbe reshaped into a plane error. The request is rebuilt here rather than\nforwarded as bytes because the runtime is an http.Handler.",
 	})
-	zip.Describe("POST /obs/event/claim", zip.Doc{
-		Description: "Offers a body to the LLM-obs sink. Claimed=false is the normal\nanswer for a product event and MUST leave the body untouched — the door then\nruns its own wire, so a wrong claim here silently reroutes a tenant's data.",
-	})
 	zip.Describe("POST /v1/o11y/alerts/:receiver", zip.Doc{
-		Description: "Records one Alertmanager notification and pages Slack. Always 200\nwith body \"ok\": Alertmanager retries on any other status, and a receipt that\npushes back is a receipt that changes the thing it is measuring.",
+		Description: "Records one Alertmanager notification, carries it to a human, and\nanswers with the result of the CARRYING — not of the recording.\n\nDelivery is SYNCHRONOUS. The previous version sent in a detached goroutine,\nwhich made 200 structurally incapable of meaning anything: the response was\nwritten before the send was tried. A bounded wait is what makes the status\ncode a fact rather than a hope.",
 	})
 	zip.Describe("POST /v1/o11y/reviews", zip.Doc{
 		Description: "Creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
