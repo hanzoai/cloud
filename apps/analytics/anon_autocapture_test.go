@@ -341,13 +341,13 @@ func TestAnonError_ClassStillGroupsTheIssue(t *testing.T) {
 	// Same failure twice, then the SAME message under a different class — which isolates
 	// the class as the grouping input, since the message is held constant.
 	a, b, c := fact("TypeError", "cannot read x"), fact("TypeError", "cannot read x"), fact("RangeError", "cannot read x")
-	if a.fault == nil || a.fault.class != "TypeError" {
-		t.Fatalf("class did not survive into the fault body: %+v — grouping is built on it", a.fault)
+	if a.class != "TypeError" {
+		t.Fatalf("class did not survive onto the fact: %+v — grouping is built on it", a)
 	}
-	if a.fault.group != b.fault.group {
+	if a.issue != b.issue {
 		t.Error("the same failure got two groups — grouping is not deterministic")
 	}
-	if a.fault.group == c.fault.group {
+	if a.issue == c.issue {
 		t.Error("two classes share a group — the fingerprint stopped reading the class, which is " +
 			"the fact `name` no longer carries")
 	}
@@ -369,10 +369,10 @@ func TestAnonError_OversizeClassIsDropped(t *testing.T) {
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if f.fault.class != "" {
-		t.Fatalf("stored class len %d — over %d must be dropped, never clipped", len(f.fault.class), maxClass)
+	if f.class != "" {
+		t.Fatalf("stored class len %d — over %d must be dropped, never clipped", len(f.class), maxClass)
 	}
-	if f.fault.group == "" {
+	if f.issue == "" {
 		t.Error("dropping the class must not cost the row its group — the message-shape fallback exists for this")
 	}
 	// A class at exactly the bound is a real class and must survive.
@@ -576,8 +576,8 @@ func TestAnonAutocapture_CarriesNoException(t *testing.T) {
 			t.Errorf("%s/%s: %d caller bytes reached attributes['$exception'] — an interaction is not a fault",
 				tc.kind, tc.event, len(v))
 		}
-		if f.fault != nil {
-			t.Errorf("%s/%s: a non-error row grew a fault body", tc.kind, tc.event)
+		if faulted(f) {
+			t.Errorf("%s/%s: a non-error row grew error columns", tc.kind, tc.event)
 		}
 	}
 }
@@ -607,10 +607,10 @@ func TestAnonError_StillCarriesItsException(t *testing.T) {
 	if f.name != nameError {
 		t.Fatalf("stored name = %q, want the server's %q", f.name, nameError)
 	}
-	if f.fault == nil || f.fault.class != "TypeError" {
-		t.Fatalf("the class did not reach the fault body: %+v", f.fault)
+	if f.signal != signalError || f.class != "TypeError" {
+		t.Fatalf("the class did not reach the error columns: %+v", f)
 	}
-	if f.fault.group == "" {
+	if f.issue == "" {
 		t.Error("an anonymous error must still group into an issue")
 	}
 	if f.attributes["$exception"] == "" {
@@ -653,8 +653,8 @@ func TestAnonAutocapture_NoExceptionReachesARealOrg(t *testing.T) {
 	if v, ok := f.attributes["$exception"]; ok {
 		t.Fatalf("%d caller bytes reached a REAL org's attributes dictionary on an interaction row", len(v))
 	}
-	if f.fault != nil {
-		t.Error("an autocapture row grew a fault body in a real org")
+	if faulted(f) {
+		t.Error("an autocapture row grew error columns in a real org")
 	}
 	// The interaction itself must survive — the point of the lane is the heatmap.
 	if f.el.label != "nav/button[cta]" {
@@ -750,4 +750,12 @@ func TestAnonAutocapture_IsNotTheAdLensClick(t *testing.T) {
 			t.Errorf("publicNames admits %q — that is a lens name, not an interaction", n)
 		}
 	}
+}
+
+// faulted reports whether a fact carries any of the ERROR columns. With one table the
+// old question — "did this row grow a fault body?" — is answered by the columns rather
+// than by a pointer, which is strictly the stronger assertion: a body could be present
+// and empty, a column cannot.
+func faulted(f fact) bool {
+	return f.signal == signalError || f.class != "" || f.issue != "" || len(f.frames) > 0
 }
