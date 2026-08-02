@@ -57251,18 +57251,24 @@ paths:
   /v1/ml/datasets/{name}:
     delete:
       description: |-
-        Disposes of one dataset and every version of it — the register
-        rows and the bytes together.
+        Disposes of one dataset and every version of it: the rows are
+        dropped and the register is marked with what went.
 
         This is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:
         a table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is
         the opposite of a retention decision belonging to the tenant whose records they
-        are. Disposal is a partition drop on (org, name), so the tenant is the first
+        are. The drop is a partition drop on (org, dataset), so the tenant is the first
         component of the thing being dropped and a disposal cannot be spelled across one.
 
-        It is not reversible and there is no soft state in between. A dataset a model
-        cited is gone once this returns, which is exactly what a retention obligation
-        asks for and exactly why the answer says what went.
+        The BYTES are what goes. The register keeps one `disposed` row per version — the
+        name, the number, the spec, the digest and who disposed of it when — for two
+        reasons: a retention obligation is answered by a record of the deletion, not by
+        silence; and version numbers must stay monotone, so that after `orders` is
+        disposed of and declared again the next version is 4 and not 1. A number that
+        could be reused would make every citation of `orders v3` ambiguous forever.
+
+        It is not reversible and there is no soft state in between. A version a model
+        cited has no rows once this returns, and every read of it says so.
       operationId: mlDeleteDataset
       parameters:
       - description: Name is the dataset, from the path.
@@ -57380,9 +57386,17 @@ paths:
 
         The answer is MEASURED, not recalled: the plane asks the source the same
         bounded question again and compares it to the fingerprint taken when the
-        version was built. When the source has since expired the window, the dataset
-        still holds its own rows and this says plainly that they can no longer be
-        re-derived — an admitted gap is actionable, an unfalsifiable claim is not.
+        version was built. Anything but exact agreement is reported as drift — the
+        source is fed by a rollup that runs behind the events, so "it holds more now"
+        is the ordinary case and it means re-running the spec would not reproduce this
+        version. An admitted gap is actionable; an unfalsifiable claim is not.
+
+        IT IS A PRICED, BOUNDED READ, because it is the same statement a
+        materialisation is charged for: an exact distinct-count over up to 400 days of
+        this org's feature surface. It takes the org's ONE source-scan slot, so a
+        tenant looping it spends one scan and not a thousand; it counts against the
+        plane's ceiling, so the fleet's warehouse is bounded too; and it runs under
+        this plane's own deadline rather than the caller's patience.
       operationId: mlDatasetLineage
       parameters:
       - description: Name is the dataset, from the path.

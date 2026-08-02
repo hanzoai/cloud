@@ -302,7 +302,7 @@ func (o ops) create(ctx context.Context, in *mlDatasetSpec) (*mlDataset, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := o.p.bill.Gate(ctx, c.ledger, c.project, c.validated, "dataset", declareCost); err != nil {
+	if err := o.p.charge(ctx, c, declareCost); err != nil {
 		return nil, err
 	}
 	e, err := o.p.declare(ctx, c, s)
@@ -392,9 +392,9 @@ func (o ops) materialize(ctx context.Context, in *mlMaterializeIn) (*mlDataset, 
 	if err != nil {
 		return nil, err
 	}
-	if err := o.p.bill.Gate(ctx, c.ledger, c.project, c.validated, "dataset", materializeCost); err != nil {
-		return nil, err
-	}
+	// The gate, the tenant's slot and the plane's ceiling are all inside start —
+	// it takes them through the same [plane.admit] a lineage does, because both
+	// spend the same statement over the same source.
 	e, err := o.p.start(ctx, c, in.Name)
 	if err != nil {
 		return nil, o.p.gap(err)
@@ -408,9 +408,17 @@ func (o ops) materialize(ctx context.Context, in *mlMaterializeIn) (*mlDataset, 
 //
 // The answer is MEASURED, not recalled: the plane asks the source the same
 // bounded question again and compares it to the fingerprint taken when the
-// version was built. When the source has since expired the window, the dataset
-// still holds its own rows and this says plainly that they can no longer be
-// re-derived — an admitted gap is actionable, an unfalsifiable claim is not.
+// version was built. Anything but exact agreement is reported as drift — the
+// source is fed by a rollup that runs behind the events, so "it holds more now"
+// is the ordinary case and it means re-running the spec would not reproduce this
+// version. An admitted gap is actionable; an unfalsifiable claim is not.
+//
+// IT IS A PRICED, BOUNDED READ, because it is the same statement a
+// materialisation is charged for: an exact distinct-count over up to 400 days of
+// this org's feature surface. It takes the org's ONE source-scan slot, so a
+// tenant looping it spends one scan and not a thousand; it counts against the
+// plane's ceiling, so the fleet's warehouse is bounded too; and it runs under
+// this plane's own deadline rather than the caller's patience.
 //
 // Example: {"name": "signups", "version": 1}
 func (o ops) lineage(ctx context.Context, in *mlLineageIn) (*mlLineage, error) {
@@ -425,10 +433,22 @@ func (o ops) lineage(ctx context.Context, in *mlLineageIn) (*mlLineage, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := o.p.lineage(ctx, c.key, e)
+	a, err := o.p.admit(ctx, c, e.Name, e.Version, lineageCost)
+	if err != nil {
+		return nil, err
+	}
+	defer o.p.release(c.key)
+
+	// The plane's wall, not the client's: an op that answers in line still must
+	// not hold a store connection for as long as a caller is willing to wait.
+	ctx, cancel := context.WithTimeout(ctx, censusBudget)
+	defer cancel()
+
+	out, err := o.p.lineage(ctx, a, e)
 	if err != nil {
 		return nil, o.p.gap(err)
 	}
+	o.p.bill.Meter(c.ledger, c.project, "dataset", lineageCost, c.request, c.ip)
 	return &out, nil
 }
 
@@ -497,18 +517,24 @@ func (o ops) export(ctx context.Context, in *mlExportIn) (*mlDatasetRows, error)
 // other tenant is using, so the page size is the plane's to set.
 const page = 5_000
 
-// DeleteDataset disposes of one dataset and every version of it — the register
-// rows and the bytes together.
+// DeleteDataset disposes of one dataset and every version of it: the rows are
+// dropped and the register is marked with what went.
 //
 // This is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:
 // a table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is
 // the opposite of a retention decision belonging to the tenant whose records they
-// are. Disposal is a partition drop on (org, name), so the tenant is the first
+// are. The drop is a partition drop on (org, dataset), so the tenant is the first
 // component of the thing being dropped and a disposal cannot be spelled across one.
 //
-// It is not reversible and there is no soft state in between. A dataset a model
-// cited is gone once this returns, which is exactly what a retention obligation
-// asks for and exactly why the answer says what went.
+// The BYTES are what goes. The register keeps one `disposed` row per version — the
+// name, the number, the spec, the digest and who disposed of it when — for two
+// reasons: a retention obligation is answered by a record of the deletion, not by
+// silence; and version numbers must stay monotone, so that after `orders` is
+// disposed of and declared again the next version is 4 and not 1. A number that
+// could be reused would make every citation of `orders v3` ambiguous forever.
+//
+// It is not reversible and there is no soft state in between. A version a model
+// cited has no rows once this returns, and every read of it says so.
 //
 // Example: {"name": "signups"}
 func (o ops) dispose(ctx context.Context, in *mlDisposeIn) (*mlDisposal, error) {
@@ -526,17 +552,21 @@ func (o ops) dispose(ctx context.Context, in *mlDisposeIn) (*mlDisposal, error) 
 	if len(es) == 0 {
 		return nil, zip.ErrNotFound("no such dataset")
 	}
-	if held, running := o.p.running(c.key); running && held.Name == es[0].Name {
+	if held, running := o.p.running(c.key); running && held.name == es[0].Name {
 		// Refuse rather than race the job: dropping the partition under a running
-		// materialisation would leave rows written after the drop under a register
-		// row that no longer exists.
+		// materialisation would leave rows written after the drop under a version
+		// the register has already marked disposed.
 		return nil, zip.ErrConflict("a materialisation of this dataset is running; it must finish before the dataset can be disposed of")
 	}
 	out := &mlDisposal{Dataset: es[0].Name, Versions: len(es)}
 	for _, e := range es {
 		out.Rows += e.Counts.Rows
 	}
-	if err := o.p.dispose(ctx, c.key, es[0].Name); err != nil {
+	// A repeat disposal is ADMITTED, not refused. The two steps can fail apart —
+	// the bytes drop and then the mark — and a caller told "already disposed"
+	// would have no way to finish the half that did not happen. Both steps are
+	// idempotent, and the mark keeps the instant it first recorded.
+	if err := o.p.dispose(ctx, c.key, es[0].Name, es, c.by); err != nil {
 		return nil, o.p.gap(err)
 	}
 	o.p.log.Info("dataset disposed",
@@ -570,13 +600,18 @@ func (o ops) published(ctx context.Context, c caller, name string, version int) 
 	if err != nil {
 		return entry{}, o.p.gap(err)
 	}
+	if len(es) == 0 {
+		return entry{}, zip.ErrNotFound("no such dataset")
+	}
+	if es[0].Status == statusDisposed {
+		// A disposed dataset is not one that has no published version YET. Saying so
+		// would send an operator looking for a materialisation that is never coming.
+		return entry{}, zip.ErrConflict("this dataset was disposed of; its rows are gone and only the record of them remains")
+	}
 	for _, e := range es {
 		if e.Status == statusReady {
 			return e, nil
 		}
-	}
-	if len(es) == 0 {
-		return entry{}, zip.ErrNotFound("no such dataset")
 	}
 	return entry{}, zip.ErrConflict("this dataset has no published version yet")
 }
@@ -592,7 +627,7 @@ func (o ops) view(c caller, e entry) *mlDataset {
 		At:      stamp(e.At),
 		By:      e.By,
 		Status:  e.Status,
-		Running: running && held.Name == e.Name && held.Version == e.Version,
+		Running: running && held.name == e.Name && held.version == e.Version,
 		Refusal: e.Refusal,
 		Digest:  e.Digest,
 		Spec: mlDatasetSpec{
