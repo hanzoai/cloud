@@ -14,8 +14,12 @@ package cloud_test
 // left the caller.
 //
 // Nothing already in the suite could see it. The op's own tests call the handler
-// directly (no encode), and the sibling op on the SAME socket — ObsClaimIn, two
-// scalar fields — kept working, so POST /v1/event stayed 200 the whole time.
+// directly (no encode), and the sibling op that shared the SAME socket — the
+// obs_event_claim wire, two scalar fields — kept working, so POST /v1/event stayed
+// 200 the whole time and pointed every investigation at routing. That op has since
+// been retired with the dead LLM-obs write path it fed, so it is no longer walked
+// below; the property it demonstrated is the reason this test walks KINDS and not a
+// list of types, and it outlives any individual op.
 
 import (
 	"context"
@@ -80,7 +84,6 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 	types := []any{
 		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{}, plane.StarterIn{},
 		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
-		plane.ObsClaimIn{}, plane.ObsClaimed{},
 		plane.ObsErrorIn{}, plane.ObsErrorOut{}, plane.Header{},
 		plane.SlackSendIn{},
 		plane.StartIn{}, plane.Started{},
