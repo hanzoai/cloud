@@ -19,7 +19,7 @@
 // marker says which answered — a partial deploy never fabricates spend or usage):
 //
 //   - Spend (the genuinely-missing categorized cost roll-up): the commerce ledger —
-//     usage-rollup (authoritative month-to-date consumed + prepaid wallet) plus the
+//     usage/rollup (authoritative month-to-date consumed + prepaid wallet) plus the
 //     raw transaction ledger, rolled up server-side into spend-by-category over
 //     time. Every metered resource (GPU, machine-hours, LLM tokens, datastore
 //     footprint) debits this ONE ledger with a category tag, so it is already the
@@ -529,7 +529,7 @@ func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05"
 // ── commerce reader ──────────────────────────────────────────────────────────
 
 // commerceReader is a thin service-to-service reader for the two commerce billing
-// endpoints the cost roll-up needs (usage-rollup + transactions). It authenticates
+// endpoints the cost roll-up needs (usage/rollup + transactions). It authenticates
 // with the admin-scoped COMMERCE_SERVICE_TOKEN (a KMS-sourced secret already on the
 // cloud env — never hard-coded) and scopes every read to ONE org via the trusted
 // X-Org-Id S2S selector, which commerce's EdgeAuth honors only after it verifies

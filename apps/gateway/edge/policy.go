@@ -38,7 +38,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/basedb" // opens the policy DB encrypted at rest; a leaf pkg, no import cycle.
+	"github.com/hanzoai/cek" // opens the policy DB encrypted at rest; a leaf pkg, no import cycle.
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite" // the ONE "sqlite" driver.
 )
@@ -200,19 +201,11 @@ func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 	}
 	// The policy table is the DEPLOYMENT's, keyed by org rather than split per org,
 	// so it lives in the system namespace.
-	db, err := basedb.Open(namespace.System(), "gateway", dataDir)
+	db, err := cek.Open(namespace.System(), "gateway", dataDir)
 	if err != nil {
 		return s, fmt.Errorf("edge: open: %w", err)
 	}
-	db.SetMaxOpenConns(1) // one writer; the file lock serializes.
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return s, fmt.Errorf("edge: pragma: %w", err)
-		}
-	}
+	sqlpool.Single(db)
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS policy (
 		org        TEXT PRIMARY KEY,
 		doc        TEXT NOT NULL DEFAULT '{}',

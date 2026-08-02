@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/vfs/replica"
 )
 
@@ -57,7 +58,7 @@ func (p *durablePod) open(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s open: %v", p.id, err)
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	if err := db.Ping(); err != nil {
 		t.Fatalf("%s ping: %v", p.id, err)
 	}

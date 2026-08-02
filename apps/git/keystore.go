@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	_ "github.com/hanzoai/sqlite" // registers the "sqlite" driver
 )
 
 // keystore.go is the SSH public-key registry: the ONE place a presented SSH key
-// is resolved to an (org, user). It is a SINGLE global SQLite file
-// ({DataDir}/git/ssh_keys.db) keyed by the key fingerprint, NOT a per-org file
+// is resolved to an (org, user). It is a SINGLE global SQLite file (the system
+// namespace's "ssh_keys" under {DataDir}/git) keyed by the fingerprint, NOT a per-org file
 // like the repo store — because the SSH PublicKeyCallback runs BEFORE any org is
 // known: the ONLY thing the server has is the presented key. Auth is therefore a
 // single fingerprint lookup, and the row carries the org the key belongs to.
@@ -53,24 +57,19 @@ type keyStore struct {
 	db *sql.DB
 }
 
-// openKeyStore opens (creating if absent) the global SSH-key registry and runs
-// its migration.
-func openKeyStore(path string) (*keyStore, error) {
-	db, err := sql.Open("sqlite", path)
+// openKeyStore opens (creating if absent) the global SSH-key registry under dir
+// and runs its migration.
+//
+// It opens through cek like every other cloud database. It used to be the one
+// exception — a bare sql.Open on a hand-joined path — which bought it two things
+// nobody wanted: a file outside the namespace tree, and the only store in the
+// binary written to disk unencrypted.
+func openKeyStore(dir string) (*keyStore, error) {
+	db, err := cek.Open(namespace.System(), "ssh_keys", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open ssh key db: %w", err)
 	}
-	db.SetMaxOpenConns(1) // serialize writes against the file lock (same discipline as OrgDB)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("ssh key db pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	ks := &keyStore{db: db}
 	if err := ks.migrate(); err != nil {
 		_ = db.Close()

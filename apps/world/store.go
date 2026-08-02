@@ -7,7 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
@@ -66,21 +67,11 @@ type PipelineStore struct {
 }
 
 func openPipelineStore(dir string) (*PipelineStore, error) {
-	db, err := basedb.Open(namespace.System(), "world", dir)
+	db, err := cek.Open(namespace.System(), "world", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open world store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &PipelineStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

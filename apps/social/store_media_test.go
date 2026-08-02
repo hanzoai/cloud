@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -25,9 +25,9 @@ func TestMigrateAddsMediaColumnToOldPosts(t *testing.T) {
 	// WITHOUT media, plus an existing row — exactly what a pre-media prod deployment
 	// holds. Seeded into the SAME database openStore opens: same namespace, same
 	// subsystem, same directory.
-	raw, err := basedb.Open(namespace.System(), "social", dir)
+	raw, err := cek.Open(namespace.System(), "social", dir)
 	if err != nil {
-		t.Fatalf("basedb.Open (seed old db): %v", err)
+		t.Fatalf("cek.Open (seed old db): %v", err)
 	}
 	if _, err := raw.Exec(`CREATE TABLE social_posts (
   id           TEXT PRIMARY KEY,

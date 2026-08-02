@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
@@ -75,11 +76,11 @@ func (s *docStore) db(org, workspace string) (*sql.DB, error) {
 		return db, nil
 	}
 	journal := env("SQLITE_JOURNAL_MODE", "WAL") // DELETE/TRUNCATE on FUSE/S3 mounts
-	db, err := basedb.Open(ns, "docs", s.dir)
+	db, err := cek.Open(ns, "docs", s.dir)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	for _, pragma := range []string{
 		"PRAGMA busy_timeout=5000",
 		"PRAGMA journal_mode=" + journal,

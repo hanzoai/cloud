@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -109,7 +109,7 @@ func TestMigrationIdempotentOnLegacyDB(t *testing.T) {
 	// way every real store is: what is under test is THIS package's migrate() over
 	// a legacy schema, not the storage format. A bare sql.Open would leave a
 	// plaintext file the keyed opener cannot read at all.
-	legacy, err := basedb.Open(namespace.System(), legacySubsystem, dir)
+	legacy, err := cek.Open(namespace.System(), legacySubsystem, dir)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}

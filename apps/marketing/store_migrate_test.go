@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -23,9 +23,9 @@ func TestMigrateUpgradesOldCampaignsTable(t *testing.T) {
 	// Seed a prod-shaped OLD DB: marketing_campaigns WITHOUT scheduled_at, plus an
 	// existing row — exactly what a pre-scheduling prod deployment holds. Opened at
 	// the SAME (namespace, subsystem, dir) openStore uses, so this IS that file.
-	raw, err := basedb.Open(namespace.System(), "marketing", dir)
+	raw, err := cek.Open(namespace.System(), "marketing", dir)
 	if err != nil {
-		t.Fatalf("basedb.Open (seed old db): %v", err)
+		t.Fatalf("cek.Open (seed old db): %v", err)
 	}
 	if _, err := raw.Exec(`CREATE TABLE marketing_campaigns (
   id         TEXT PRIMARY KEY,

@@ -5,7 +5,7 @@ package affiliates
 import (
 	"testing"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -18,7 +18,7 @@ func TestMigrateFromPreReferrerOrgSchema(t *testing.T) {
 	// 1) Stand up the OLD schema in the SAME database openStore opens, so step 2
 	// migrates this file: affiliate_referrals WITHOUT referrer_org, and an
 	// affiliates row so the backfill has something to resolve.
-	db, err := basedb.Open(namespace.System(), "affiliates", dir)
+	db, err := cek.Open(namespace.System(), "affiliates", dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
