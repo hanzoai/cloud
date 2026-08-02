@@ -347,6 +347,15 @@ var allowedRequestUses = map[string]string{
 		"principal.OrgFrom and never through the request. Off the HTTP path it answers " +
 		"principal.DefaultProject — the whole-org view, which is the honest answer where there is no " +
 		"request rather than a refusal.",
+	"apps/label/label.go": "actor — WHO asserted, on a record that can be the input to an adverse " +
+		"action. It is the pair <home org>/<user>: principal.Owner (X-User-Owner, the identity anchor) " +
+		"and c.User() (X-User-Id), NEITHER of which principal.OrgFrom carries — it carries the " +
+		"EFFECTIVE org, and for a platform SuperAdmin acting inside a customer's tenant the home and " +
+		"the effective org differ, which is exactly the case an adverse-action audit most needs to see. " +
+		"Neither may be an In field: an attributable record whose attribution the caller chose is not " +
+		"attributable. ONE function, asked from the one tenantOf every op goes through, which resolves " +
+		"the TENANT with principal.OrgFrom and never through the request. Fails closed off the HTTP " +
+		"path: no request, no attested asserter, no write.",
 	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
 		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +

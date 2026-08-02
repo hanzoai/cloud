@@ -105,6 +105,19 @@ var Apps = []App{
 	{Name: "content", Prefixes: []string{"/v1/content"}},
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
+	// label is the GROUND-TRUTH plane under /v1/ml — what turned out to be fraud,
+	// who said so, and when they could first have said it. It precedes ml because
+	// the more specific address must be registered first; the two are disjoint
+	// today (/v1/ml/labels against /v1/ml/{health,models}) and this ordering keeps
+	// them disjoint if ml ever widens.
+	//
+	// It is its own subsystem rather than a leaf of the model plane because its
+	// WRITERS are mostly not the model plane — commerce adjudicates the dispute,
+	// the compliance face closes the case, an analyst files the review — and its
+	// record is a compliance record with a retention clock of its own. A separate
+	// row also means a separate per-tenant file, so no second process ever opens
+	// the decision plane's single-writer store.
+	{Name: "label", Prefixes: []string{"/v1/ml/labels"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models", "/v1/train/experiments", "/v1/train/health", "/v1/train/jobs"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
