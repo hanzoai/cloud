@@ -54,6 +54,17 @@ const (
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
 
+	// FinanceScopeRules reads the org's per-scope request-rate ceilings — the
+	// rate-limited subset of its spend-alert rows. It is on the plane for the
+	// same reason the balance is, plus one of its own: the READER is a cloud
+	// EDGE middleware. Asking commerce for it over HTTP re-dispatched the whole
+	// shared app back into this process, which re-ran that same middleware,
+	// which asked again — an unbounded self-call the commerce transport's depth
+	// guard turns into a 502 (and, before that guard, into a stack overflow).
+	// A socket to the process that owns the rows has no edge chain on it at all,
+	// so the recursion is not bounded here but structurally absent.
+	FinanceScopeRules = "finance_scope_rules"
+
 	KMSGet  = "kms_get"
 	KMSPut  = "kms_put"
 	KMSSign = "kms_sign"
@@ -283,6 +294,24 @@ type Txn struct {
 // Txns is a page of ledger entries.
 type Txns struct {
 	Rows []Txn `json:"rows"`
+}
+
+// ScopeRule is one scope's request-rate ceiling: the axes it covers and the
+// requests/minute it allows. "" on an axis is the wildcard, so an org-wide row
+// carries neither — the SAME covering rule the cap verdict reads, because both
+// derive from one spend-alert row and a second spelling would let a rate limit
+// and a spend cap disagree about which requests they bind.
+type ScopeRule struct {
+	Project      string `json:"project,omitempty"`
+	Service      string `json:"service,omitempty"`
+	RateLimitRpm int    `json:"rateLimitRpm"`
+}
+
+// ScopeRules is the org's whole rate-limit config in one reply. Only rows that
+// SET a ceiling travel: a row with none is not a rule, and shipping it would
+// make "no limit" and "a limit of zero" the same value on the wire.
+type ScopeRules struct {
+	Rules []ScopeRule `json:"rules"`
 }
 
 // ---- kms -------------------------------------------------------------------
