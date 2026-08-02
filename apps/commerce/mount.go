@@ -358,6 +358,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		{"/v1/billing/alerts", commercebilling.ListSpendAlerts},
 		{"/v1/billing/payouts", commercebilling.ListPayouts},
 		{"/v1/billing/settings", commercebilling.GetPaymentConfig},
+		// The Credits tab's read. It sat in the same hole as its siblings: the
+		// handler exists in the vendored module and no app in the fleet registered
+		// it, so the address reached nobody and billing.hanzo.ai's client swallowed
+		// the 404 into an empty list — a customer with grants saw none. Read-only
+		// and subject-scoped like the rest; MINTING credit stays where it is, on
+		// the mint-gated POST /v1/billing/credit.
+		{"/v1/billing/credits", commercebilling.ListCreditGrants},
 	}
 	for _, r := range billingRead {
 		app.Get(r.path,
@@ -517,7 +524,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// payment-methods is NOT one of them, and must not be added back. That address belongs
 	// to the BILLING app: manifest.Apps names "/v1/billing/methods" on the billing
 	// row and withholds it from this one, because billing serves the GET (a proxy to
-	// commerce's /v1/billing/portal/payment-methods) — and the host claims a prefix for ONE
+	// commerce's /v1/billing/portal/methods) — and the host claims a prefix for ONE
 	// app across every method, so the POST has to sit on the same router as the read or it
 	// misses on METHOD (apps/billing/billing.go says exactly that, and the console's
 	// save-card call is what died proving it). A registration here is unreachable in the
