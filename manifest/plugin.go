@@ -85,6 +85,37 @@ type App struct {
 	// sibling. CrashLoopBackOff is the state in which a process cannot tell you
 	// why it is unhappy.
 	Required bool
+
+	// Vital means the host is not fit to RECEIVE TRAFFIC without this app: its
+	// absence is reported on /readyz as a 503, so Kubernetes takes the pod out of
+	// the Service and a rollout that breaks it stalls against the old pods instead
+	// of replacing them.
+	//
+	// It is the other half of Required, and the two are deliberately separate
+	// because they answer different questions. Required asks "may this process
+	// run at all", and the answer is argued above: aborting destroys the console,
+	// the health surface, the log stream and every healthy sibling, so nothing
+	// sets it. Vital asks "should this process be sent requests", and the pod that
+	// answers no is still up, still serving its siblings, and still able to say
+	// why. Required's own doc names "a pod that never goes Ready" as the one thing
+	// aborting buys; Vital buys exactly that and nothing else.
+	//
+	// The bar is NOT "serving without it is unsafe" — that is Required's bar. It
+	// is "serving without it is pointless": traffic that arrives will not be
+	// answered, so routing it here helps nobody. That is a strictly narrower claim
+	// and it is why `ai` qualifies where the credz broker does not.
+	//
+	// Written against 2026-08-01, ~30 minutes of api.hanzo.ai/v1/models and
+	// /v1/chat/completions answering 503 {"error":"mount /v1: no instance
+	// running"} while the pod stayed Ready with 0 restarts. o11y v1.5.41 seized
+	// :4317-:4319 from the `ai` child, the child's listen failed, and mount()
+	// correctly degraded it to absent — but absence went into a map that only
+	// /healthz reported, in a FIELD, and the probe reads the STATUS CODE. Every
+	// specifically-mounted prefix (/v1/sentry, /v1/o11y, /v1/commerce/tenant,
+	// /v1/admin/*) kept answering from its own subsystem, so only a path falling
+	// THROUGH to `ai` showed it. A health check that returns 200 while the entire
+	// product API is absent is not a health check.
+	Vital bool
 }
 
 // Names is every app, in mount order — which is the fleet's routing order and
