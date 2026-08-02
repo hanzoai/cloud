@@ -16,9 +16,10 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
+	"github.com/luxfi/aml/pkg/anomaly"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -255,8 +256,8 @@ func TestModelGeometryIsPerTenant(t *testing.T) {
 	feed(t, s, a, 40)
 	feed(t, s, b, 40)
 
-	sa, _ := s.State.model.Snapshot(a.String())
-	sb, _ := s.State.model.Snapshot(b.String())
+	sa, _ := mustShipped(t, s, a).Snapshot(a.String())
+	sb, _ := mustShipped(t, s, b).Snapshot(b.String())
 	if sa.Seed == 0 || sb.Seed == 0 {
 		t.Fatal("a tenant model was planted with no seed")
 	}
@@ -267,7 +268,7 @@ func TestModelGeometryIsPerTenant(t *testing.T) {
 	// A restore of A's snapshot under B's key is refused: state the model would
 	// treat as its own memory has to have come from this tenant.
 	sa.OrgID = b.String()
-	if err := s.State.model.Restore(sa); err == nil {
+	if err := mustShipped(t, s, b).Restore(sa); err == nil {
 		// The engine accepts a well-formed snapshot bearing B's id; the CLOUD
 		// side is what refuses it, by comparing the snapshot's tenant against the
 		// tenant that asked. loadModel is that check.
@@ -289,8 +290,21 @@ func feed(t *testing.T, s *stateService, tn Tenant, n int) {
 		}
 		record(s.State.vel, tn, o)
 		tx, ent := txOf(tn, o)
-		_, _ = s.State.model.Assess(tx, ent)
+		_, _ = mustShipped(t, s, tn).Assess(tx, ent)
 	}
+}
+
+// mustShipped is the tenant's own model at the geometry this process ships —
+// the store every one of these tests used to reach as a single process-wide
+// s.State.model. There is no such store any more: a store shared across tenants
+// evicts across them, so every model in this package is one tenant's.
+func mustShipped(t *testing.T, s *stateService, tn Tenant) *anomaly.Store {
+	t.Helper()
+	store, err := shipped(s, tn)
+	if err != nil {
+		t.Fatalf("shipped: %v", err)
+	}
+	return store
 }
 
 // wireApp mounts the surface over a real temp data directory. Routes register

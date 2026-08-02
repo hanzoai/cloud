@@ -44,6 +44,7 @@ package risk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -86,26 +87,35 @@ func saveModel(s *shelf, model *anomaly.Store, t Tenant) error {
 // A snapshot whose shape does not match the running inventory is REFUSED by the
 // engine, not coerced: state the model would treat as its own memory has to have
 // come from this algorithm over this feature set.
-func loadModel(s *shelf, model *anomaly.Store, t Tenant) error {
+//
+// It reports whether the answer is SETTLED — whether asking the file again could
+// produce a different one. Absent, corrupt, foreign or shape-mismatched state is
+// an answer and the caller may stop asking; a file that could not be READ is
+// not, and a caller that stopped asking on it would leave this tenant warming
+// for the life of the process over one busy moment.
+func loadModel(s *shelf, model *anomaly.Store, t Tenant) (bool, error) {
 	db, err := s.open(t)
 	if err != nil {
-		return err
+		return false, err
 	}
 	body, err := getModel(db, snapshotKey)
+	if errors.Is(err, errNoState) {
+		return true, nil // no snapshot is the normal first-run state, not a failure
+	}
 	if err != nil {
-		return nil // no snapshot is the normal first-run state, not a failure
+		return false, err
 	}
 	var snap anomaly.Snapshot
 	if err := json.Unmarshal(body, &snap); err != nil {
-		return err
+		return true, err
 	}
 	// The snapshot's tenant must be the tenant asking for it. The engine checks
 	// this too; checking here as well means a restore of A's file into B's
 	// request is refused at the boundary that knows who asked.
 	if snap.OrgID != t.String() {
-		return fmt.Errorf("risk: snapshot belongs to another tenant")
+		return true, fmt.Errorf("risk: snapshot belongs to another tenant")
 	}
-	return model.Restore(snap)
+	return true, model.Restore(snap)
 }
 
 // ── exhaustive search ───────────────────────────────────────────────────────

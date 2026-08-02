@@ -33,6 +33,8 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/zap-proto/zip"
 )
 
 // The population-stability index bands, as they are conventionally read. They
@@ -68,6 +70,13 @@ const driftFloor = 200
 // behind it. Thirty seconds is two orders of magnitude above the measured cost
 // of replaying the thousand-row window this reads.
 const driftDeadline = 30 * time.Second
+
+// driftCents is what one reading costs. It is the fit's own price divided by
+// the work: a reading replays the recent window where an estimation replays the
+// whole admitted history, so it is priced like a screen rather than like a fit —
+// but it IS priced, because free CPU on a single replica is a denial of service
+// somebody else pays for.
+const driftCents = 1
 
 // ── the index ───────────────────────────────────────────────────────────────
 
@@ -247,7 +256,7 @@ func examine(ctx context.Context, s *stateService, t Tenant, db *sql.DB, r fitRo
 	// — because that is the number the appetite was a promise about. The sandbox
 	// above answers what this fit's shape would do; only the live store answers
 	// what it did.
-	if store, _ := champion(s, t, db); store != nil {
+	if store, _ := champion(s, t); store != nil {
 		st := store.State(t.String())
 		if st.Scored >= driftFloor {
 			realised := round4(st.Realised)
@@ -287,12 +296,15 @@ func examine(ctx context.Context, s *stateService, t Tenant, db *sql.DB, r fitRo
 // It is deduplicated on the measure: a model that has been drifting for a month
 // writes one row per measure per fit, not one row per tick. A drift alarm that
 // repeats every five minutes is an alarm somebody mutes.
-func alarm(s *stateService, t Tenant, db *sql.DB, now time.Time) error {
+func alarm(parent context.Context, s *stateService, t Tenant, db *sql.DB, now time.Time) error {
 	r, ok, err := fitInRole(db, roleChampion)
 	if err != nil || !ok || r.Status != fitReady {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), driftDeadline)
+	// Nested inside the walk's budget rather than started from Background: an
+	// examination that outlives the walk that asked for it is an unbounded loop
+	// with a deadline written on it.
+	ctx, cancel := context.WithTimeout(parent, driftDeadline)
 	defer cancel()
 	d, err := examine(ctx, s, t, db, r, 0, now)
 	if err != nil || !d.Drifted {
@@ -475,6 +487,14 @@ type mlDriftAlarm struct {
 // Every reference is the version's OWN, stored when it was estimated. A report
 // that recomputed its baseline from recent data would be comparing the present
 // to the present, which is a number that is always small and always reassuring.
+//
+// IT IS THE ESTIMATION'S WORK AT A SMALLER SIZE, SO IT CARRIES THE ESTIMATION'S
+// BOUNDS. A reading replays up to fitRows rows through a fresh forest —
+// measured at 54 ms of one core at the cap — on the single replica that is also
+// answering authorisations. Unpriced and unbounded that is a free way to spend
+// the pod: gated and metered on the caller's own ledger, one reading in flight
+// per tenant, two across the deployment, and a deadline of its own so a caller
+// that walked away is not still holding a core.
 func (o ops) drift(ctx context.Context, in *mlDriftIn) (*mlDriftOut, error) {
 	sc, db, err := tenantState(ctx, o.s)
 	if err != nil {
@@ -497,10 +517,22 @@ func (o ops) drift(ctx context.Context, in *mlDriftIn) (*mlDriftOut, error) {
 		}
 		r = champ
 	}
+	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "drift", driftCents); err != nil {
+		return nil, zip.Errorf(402, "%s", err.Error())
+	}
+	ctx, cancel := context.WithTimeout(ctx, driftDeadline)
+	defer cancel()
+	release, err := o.s.State.bench.probe(ctx, sc.tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	d, err := examine(ctx, o.s, sc.tenant, db, r, in.Limit, time.Now())
 	if err != nil {
 		return nil, err
 	}
+	o.s.State.bill.Meter(sc.org, sc.project, "drift", driftCents, sc.request, sc.clientIP)
 	out := &mlDriftOut{
 		Fit: d.Fit, Rows: d.Rows, Scored: d.Scored, Score: d.Score,
 		Stated: d.Stated, Realised: d.Realised, Rate: d.Rate, Was: d.Was,

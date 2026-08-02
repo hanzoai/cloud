@@ -45,7 +45,21 @@ import (
 // ── the stable ──────────────────────────────────────────────────────────────
 
 // stable holds the forests this process is serving, ONE STORE PER (TENANT,
-// GEOMETRY) PAIR, over the one velocity store every tenant's rings live in.
+// VERSION) PAIR, over the one velocity store every tenant's rings live in.
+//
+// THE KEY IS THE VERSION, NOT THE GEOMETRY. A version's learned state is its
+// own: it was estimated on its own rows, it is kept under its own row in the
+// tenant's file, and while it serves it learns from the stream on its own. Two
+// versions that happen to share a geometry are still two models, so keying on
+// the geometry makes them ONE — the champion and the challenger then advance the
+// same counters, the trial compares a model against itself, and promoting a
+// version that already shares the incumbent's shape changes nothing while
+// reporting that it did. Keyed on the version that cannot be expressed.
+//
+// The empty version names the SHIPPED model: the geometry this process ships,
+// which is what a tenant runs before it has promoted anything, what /v1/ml/train
+// teaches and what /v1/ml/snapshot pins. It is a seat like any other, so there
+// is no store in this package that is not one tenant's.
 //
 // ONE TENANT PER STORE, AND THAT IS THE WHOLE POINT. anomaly.Store evicts the
 // least recently used TENANT when it fills (anomaly.evict), so a store shared by
@@ -54,20 +68,14 @@ import (
 // reading exactly like a quiet week. A store built with MaxOrgs 1 and keyed by
 // the tenant cannot express that — the only key it will ever hold is the tenant
 // it was made for, so a tenant can only ever displace itself.
-//
-// The base store is the process default and is not owned here: it is the shape a
-// tenant runs before it has ever promoted anything, and the one the decide path
-// has always used. Asking the stable for the base shape hands it back, so there
-// is one store for one geometry however it was named. (It is shared across
-// tenants and evicts across them — that is risk-core's store and its bound; what
-// makes that survivable is that hydrate() reloads on demand, below.)
 type stable struct {
-	base *anomaly.Store
-	vel  *velocity.Store
+	// shape is the geometry this process ships — the one an unpromoted tenant
+	// runs and the one a fit inherits when the caller names none.
+	shape candidate
+	vel   *velocity.Store
 
 	mu   sync.Mutex
-	held map[seat]*anomaly.Store
-	used map[seat]int64
+	held map[seat]*resident
 	// roles is what this process last read as a tenant's serving pair. It is a
 	// CACHE of two rows and it exists because the alternative is two SQL reads
 	// on a one-connection file on every decision. It is invalidated in process,
@@ -75,18 +83,32 @@ type stable struct {
 	// no second process to tell, and the manifest says why training and scoring
 	// may not be split into two.
 	roles map[Tenant]serving
-	// blank is the set of tenants this process looked for kept state for and
-	// found none. It is exact rather than a guess: this process is the only
-	// writer of those files, so "there was nothing" stays true until it writes
-	// something, and every write clears it.
-	blank map[Tenant]bool
 	clock int64
 }
 
-// seat is one resident model: a tenant and the geometry it is held under.
+// seat is one resident model: a tenant and the version whose state it holds.
+// The empty version is the shipped model.
 type seat struct {
 	tenant Tenant
-	shape  string
+	fit    string
+}
+
+// resident is one seat's store plus the two facts the serving path needs about
+// it without going back to the file.
+type resident struct {
+	store *anomaly.Store
+	// shape is the geometry the store was built at. A sealed version's geometry
+	// is immutable, so a mismatch is a bug rather than a state — and the answer
+	// to it is to rebuild rather than to serve a version's state at a shape it
+	// was not estimated under.
+	shape string
+	// read records that this process has already resolved this seat against the
+	// tenant's file. It is EXACT rather than a guess: the seat's store is the
+	// only place that state lives in this process and this process is the file's
+	// only writer, so "there was nothing" stays true until the seat is dropped.
+	// It is what makes hydrate() a map read instead of a snapshot per request.
+	read bool
+	used int64
 }
 
 // serving is the pair of versions a tenant currently runs, as this process last
@@ -111,30 +133,28 @@ func (v serving) each(f func(ref)) {
 	}
 }
 
-// seatsPerTenant is how many geometries one tenant may hold resident. Two,
-// because two roles serve: a champion and the challenger on trial beside it. A
-// third is a geometry nothing is deciding with, so the tenant's own least
-// recently used goes — a tenant degrading only itself.
-const seatsPerTenant = 2
+// seatsPerTenant is how many models one tenant may hold resident. Three,
+// because three serve: the shipped model, the champion it promoted, and the
+// challenger on trial beside it. A fourth is a model nothing is deciding with —
+// a version passing through a role change — so the tenant's own least recently
+// used goes, which is a tenant degrading only itself and costs one file read.
+const seatsPerTenant = 3
 
 // stableSeats is the fleet-wide safety valve: how many resident models this
 // process will hold across every tenant. At the measured 336 KB per tenant model
-// that is about 172 MB, which is the budget this cost about before it was made
-// per-tenant.
+// that is about 172 MB.
 //
 // Overflow evicts the least recently used seat, and that is SAFE here in a way it
 // is not anywhere else in this fleet: hydrate() below reloads a tenant's state
-// whenever the store has forgotten it, so an eviction costs one file read on that
+// whenever the seat has been dropped, so an eviction costs one file read on that
 // tenant's next request instead of leaving a control permanently quiet.
 const stableSeats = 512
 
-func newStable(base *anomaly.Store, vel *velocity.Store) *stable {
+func newStable(shape candidate, vel *velocity.Store) *stable {
 	return &stable{
-		base: base, vel: vel,
-		held:  map[seat]*anomaly.Store{},
-		used:  map[seat]int64{},
+		shape: shape, vel: vel,
+		held:  map[seat]*resident{},
 		roles: map[Tenant]serving{},
-		blank: map[Tenant]bool{},
 	}
 }
 
@@ -152,30 +172,83 @@ func shapeKey(c candidate) string {
 	return fmt.Sprintf("%d/%d/%d/%g/%g", c.Trees, c.Depth, c.Window, c.Blend, c.Review)
 }
 
-// at returns the store holding one tenant's model at one geometry, building it
-// on first ask. It never refuses for capacity: a caller asking has a version to
-// serve, and refusing to house it would mean declining to score with a model the
-// tenant promoted.
-func (st *stable) at(t Tenant, c candidate) (*anomaly.Store, error) {
-	if st.base != nil && shapeKey(shapeOf(st.base.Config())) == shapeKey(c) {
-		return st.base, nil
-	}
-	k := seat{tenant: t, shape: shapeKey(c)}
+// at returns the store holding one tenant's model for one version, building it
+// at that version's geometry on first ask. It never refuses for capacity: a
+// caller asking has a version to serve, and refusing to house it would mean
+// declining to score with a model the tenant promoted.
+func (st *stable) at(t Tenant, fit string, c candidate) (*anomaly.Store, error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	r, err := st.hold(t, fit, c)
+	if err != nil {
+		return nil, err
+	}
+	return r.store, nil
+}
+
+// owed returns one version's store and whether this process still owes a read of
+// the tenant's file for it. It is the whole of hydrate's steady-state cost: one
+// map lookup, no snapshot, no allocation.
+func (st *stable) owed(t Tenant, fit string, c candidate) (*anomaly.Store, bool, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	r, err := st.hold(t, fit, c)
+	if err != nil {
+		return nil, false, err
+	}
+	return r.store, !r.read, nil
+}
+
+// read marks a seat resolved: this process has looked in the tenant's file for
+// it and owes no further look until the seat is dropped. It is marked whatever
+// the look FOUND — a version with no kept state is a fact, and re-reading the
+// file per request to rediscover it is the cost hydrate exists to avoid.
+func (st *stable) read(t Tenant, fit string) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if r, ok := st.held[seat{tenant: t, fit: fit}]; ok {
+		r.read = true
+	}
+}
+
+// resident returns a version's store only if one is ALREADY held. Keeping state
+// out of a store that never held it would write one version's counters under
+// another version's name, so the snapshot path asks this and not at().
+func (st *stable) resident(t Tenant, fit string) (*anomaly.Store, bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	r, ok := st.held[seat{tenant: t, fit: fit}]
+	if !ok {
+		return nil, false
+	}
 	st.clock++
-	if s, ok := st.held[k]; ok {
-		st.used[k] = st.clock
-		return s, nil
+	r.used = st.clock
+	return r.store, true
+}
+
+// hold is the one place a seat is resolved or built. Caller holds st.mu.
+func (st *stable) hold(t Tenant, fit string, c candidate) (*resident, error) {
+	k := seat{tenant: t, fit: fit}
+	key := shapeKey(c)
+	st.clock++
+	if r, ok := st.held[k]; ok {
+		if r.shape == key {
+			r.used = st.clock
+			return r, nil
+		}
+		// A sealed version's geometry cannot move, so this is a defect and not a
+		// state. Rebuilding is the fail-secure answer: state estimated under one
+		// geometry restored into another is refused by the engine anyway, and
+		// serving it under the wrong shape would not be.
+		delete(st.held, k)
 	}
 	s, err := anomaly.New(anomaly.Config{
 		Trees: c.Trees, Depth: c.Depth, Window: c.Window, Blend: c.Blend,
 		Appetite: anomaly.Appetite{Review: c.Review, Sample: 0.001},
-		// SHADOW AT THE ENGINE, ALWAYS. A non-base store is reached only through
-		// a fit, and what a fit's action would have been is decided by this
-		// package's own action ladder, never by the engine's. Two gates in
-		// series: the engine cannot alert on its own and the tenant's live/shadow
-		// switch still governs the outcome.
+		// SHADOW AT THE ENGINE, ALWAYS. What a model's action would have been is
+		// decided by this package's own action ladder, never by the engine's. Two
+		// gates in series: the engine cannot alert on its own and the tenant's
+		// live/shadow switch still governs the outcome.
 		Shadow: true,
 		// ONE. The store is this tenant's, so the only key it can ever be asked
 		// for is this tenant's, and there is no arrangement of other tenants'
@@ -185,10 +258,10 @@ func (st *stable) at(t Tenant, c candidate) (*anomaly.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	st.held[k] = s
-	st.used[k] = st.clock
+	r := &resident{store: s, shape: key, used: st.clock}
+	st.held[k] = r
 	st.trim(t)
-	return s, nil
+	return r, nil
 }
 
 // trim enforces both bounds: the tenant's own, then the deployment's. Caller
@@ -198,31 +271,29 @@ func (st *stable) trim(t Tenant) {
 		var oldest seat
 		var at int64
 		n := 0
-		for k := range st.held {
+		for k, r := range st.held {
 			if k.tenant != t {
 				continue
 			}
 			n++
-			if at == 0 || st.used[k] < at {
-				oldest, at = k, st.used[k]
+			if at == 0 || r.used < at {
+				oldest, at = k, r.used
 			}
 		}
 		if n <= seatsPerTenant {
 			break
 		}
 		delete(st.held, oldest)
-		delete(st.used, oldest)
 	}
 	for len(st.held) > stableSeats {
 		var oldest seat
 		var at int64
-		for k := range st.held {
-			if at == 0 || st.used[k] < at {
-				oldest, at = k, st.used[k]
+		for k, r := range st.held {
+			if at == 0 || r.used < at {
+				oldest, at = k, r.used
 			}
 		}
 		delete(st.held, oldest)
-		delete(st.used, oldest)
 	}
 }
 
@@ -243,27 +314,15 @@ func (st *stable) setServing(t Tenant, v serving) {
 // forget drops a tenant's cached role pair. Called by the ONE function that
 // moves a role, so the next request reads the file rather than this process's
 // memory of it.
+//
+// It does NOT drop the seats. A seat holds one version's state and a role change
+// moves which version serves, not what any version has learned — so dropping
+// them would throw away the retired champion's counters, which is exactly what
+// makes a rollback instant rather than a re-warm.
 func (st *stable) forget(t Tenant) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	delete(st.roles, t)
-	delete(st.blank, t)
-}
-
-func (st *stable) isBlank(t Tenant) bool {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return st.blank[t]
-}
-
-func (st *stable) markBlank(t Tenant, blank bool) {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if blank {
-		st.blank[t] = true
-		return
-	}
-	delete(st.blank, t)
 }
 
 // ── the bench: bounded, queued, cancellable estimation ──────────────────────
@@ -281,47 +340,86 @@ type bench struct {
 	// slots is the fleet-wide concurrency bound. Acquiring it IS the queue: a
 	// worker blocks here until a slot frees or its context is cancelled.
 	slots chan struct{}
+	// probes is the same bound for measurement that runs IN a request — a drift
+	// reading replays up to fitRows rows through a fresh forest, which is the
+	// estimation's work at a smaller size. It is a separate pool because the two
+	// wait differently: an estimation may queue for minutes and a request may
+	// not, so a reading must never sit behind a training job.
+	probes chan struct{}
 
 	mu   sync.Mutex
 	live map[Tenant]benchJob
+	// probing is the tenant holding an in-request measurement. ONE PER TENANT is
+	// what makes the fleet-wide pool safe: a tenant can occupy at most one of
+	// probeSlots, so no arrangement of one tenant's traffic can close the door on
+	// another's — the pool bounds the pod's CPU and the per-tenant rule bounds
+	// who can spend it.
+	probing map[Tenant]bool
 }
 
+// benchJob is the one piece of heavy work a tenant has on the bench. It carries
+// the KIND as well as the identifier because two kinds queue here — an
+// estimation and an exhaustive search — and a caller asking "is a version being
+// estimated" must not be answered with a search.
+//
+// The kind is the BILLED unit's own word ("fit", "search"), so the queue and the
+// ledger name the same thing.
 type benchJob struct {
-	fit    string
+	kind   string
+	id     string
 	cancel context.CancelFunc
 }
+
+// The two kinds of work the bench carries. They are the BILLED units' own words,
+// so the queue, the ledger and the op all name one thing.
+const (
+	kindFit    = "fit"
+	kindSearch = "search"
+)
 
 // benchSlots is how many estimations may run at once across every tenant. Two:
 // the pod also serves the decision path, and a decision that waits behind a
 // training job is an authorisation that timed out.
 const benchSlots = 2
 
+// probeSlots is how many in-request measurements may run at once across every
+// tenant. Two, for the same reason and against the same single replica; with one
+// per tenant it takes two distinct tenants to fill it.
+const probeSlots = 2
+
 // benchDeadline bounds one estimation end to end, queue wait included. Ten
 // minutes is the same ceiling the exhaustive search takes, for the same work.
 const benchDeadline = 10 * time.Minute
 
 func newBench() *bench {
-	return &bench{slots: make(chan struct{}, benchSlots), live: map[Tenant]benchJob{}}
+	return &bench{
+		slots:   make(chan struct{}, benchSlots),
+		probes:  make(chan struct{}, probeSlots),
+		live:    map[Tenant]benchJob{},
+		probing: map[Tenant]bool{},
+	}
 }
 
-// start queues an estimation for a tenant. A second one for the same tenant is
-// REFUSED rather than queued: a tenant looping the op would otherwise hold an
-// unbounded queue of work nobody will read the result of.
-func (b *bench) start(t Tenant, fit string, run func(context.Context)) error {
+// start queues one job for a tenant. A second one for the same tenant is
+// REFUSED rather than queued, whatever its kind: a tenant looping either op
+// would otherwise hold an unbounded queue of work nobody will read the result
+// of, and one tenant's own two kinds competing for the deployment's two slots is
+// the same denial with extra steps.
+func (b *bench) start(t Tenant, kind, id string, run func(context.Context)) error {
 	b.mu.Lock()
 	if j, ok := b.live[t]; ok {
 		b.mu.Unlock()
-		return zip.Errorf(409, "fit %s is already being estimated for this tenant", j.fit)
+		return zip.Errorf(409, "this tenant already has %s %s on the bench", j.kind, j.id)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), benchDeadline)
-	b.live[t] = benchJob{fit: fit, cancel: cancel}
+	b.live[t] = benchJob{kind: kind, id: id, cancel: cancel}
 	b.mu.Unlock()
 
 	go func() {
 		defer func() {
 			cancel()
 			b.mu.Lock()
-			if j, ok := b.live[t]; ok && j.fit == fit {
+			if j, ok := b.live[t]; ok && j.id == id {
 				delete(b.live, t)
 			}
 			b.mu.Unlock()
@@ -338,46 +436,117 @@ func (b *bench) start(t Tenant, fit string, run func(context.Context)) error {
 	return nil
 }
 
-// stop cancels a tenant's in-flight estimation. It names the fit so a cancel
+// stop cancels a tenant's in-flight job. It names the identifier so a cancel
 // racing a completion cannot take down the next one.
-func (b *bench) stop(t Tenant, fit string) bool {
+func (b *bench) stop(t Tenant, id string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	j, ok := b.live[t]
-	if !ok || j.fit != fit {
+	if !ok || j.id != id {
 		return false
 	}
 	j.cancel()
 	return true
 }
 
-func (b *bench) running(t Tenant) (string, bool) {
+// running names a tenant's in-flight job OF ONE KIND. Asked for a kind rather
+// than for whatever is there, because "which version is being estimated" and
+// "is a search running" are two questions and one answer to both would report a
+// search as a version.
+func (b *bench) running(t Tenant, kind string) (string, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	j, ok := b.live[t]
-	return j.fit, ok
+	if !ok || j.kind != kind {
+		return "", false
+	}
+	return j.id, true
+}
+
+// probe admits one in-request measurement and returns the release. A second one
+// for the same tenant is REFUSED rather than queued, and the fleet-wide slot is
+// WAITED for on the caller's own context — so a tenant looping the op spends
+// only its own one slot and only its own deadline, and a caller that gave up is
+// not still holding a core.
+func (b *bench) probe(ctx context.Context, t Tenant) (func(), error) {
+	b.mu.Lock()
+	if b.probing[t] {
+		b.mu.Unlock()
+		return nil, zip.Errorf(409, "a measurement is already running for this tenant")
+	}
+	b.probing[t] = true
+	b.mu.Unlock()
+
+	release := func() {
+		b.mu.Lock()
+		delete(b.probing, t)
+		b.mu.Unlock()
+	}
+	select {
+	case b.probes <- struct{}{}:
+		return func() { <-b.probes; release() }, nil
+	case <-ctx.Done():
+		release()
+		return nil, zip.Errorf(503, "the measurement queue did not clear inside this request's deadline")
+	}
 }
 
 // ── serving: which store decides, and which one is on trial ─────────────────
 
+// shipped is the tenant's OWN model at the geometry this process ships: the one
+// it runs before it has promoted a version, the one /v1/ml/train teaches and
+// /v1/ml/snapshot pins, and the fallback the rules still read a score from.
+//
+// It loads that tenant's kept state the first time this process asks, and never
+// again until the seat is dropped — so an op that reaches for it never reads a
+// model with no memory, and reaching for it costs one map lookup.
+func shipped(s *stateService, t Tenant) (*anomaly.Store, error) {
+	store, owed, err := s.State.stable.owed(t, "", s.State.shape)
+	if err != nil {
+		return nil, err
+	}
+	if !owed {
+		return store, nil
+	}
+	settled, err := loadModel(s.State.shelf, store, t)
+	if err != nil {
+		s.Log.Warn("risk: a tenant's learned state could not be restored; it starts warming",
+			"tenant", t.String(), "err", err)
+	}
+	// Marked only when the answer is final. A tenant with no kept state must not
+	// read its file per request to rediscover that — this process is the file's
+	// only writer — but a file that could not be read this once must be asked
+	// again, or one busy moment silences the control until the next rollout.
+	if settled {
+		s.State.stable.read(t, "")
+	}
+	return store, nil
+}
+
 // champion returns the store whose score decides for a tenant, and the fit id
 // that names it.
 //
-// A tenant with no promoted fit runs the base store, which is the shape the
-// process ships. That is not a fallback to something weaker — it is the same
-// model the decision plane has always run, named.
+// A tenant with no promoted fit runs its shipped model. That is not a fallback
+// to something weaker — it is the same model the decision plane has always run,
+// named.
 //
 // It reads the role pair hydrate() cached and not the file. Two SQL reads on a
 // one-connection store, per decision, to answer a question that changes when a
 // person promotes something, is a cost paid for nothing.
-func champion(s *stateService, t Tenant, db *sql.DB) (*anomaly.Store, string) {
+func champion(s *stateService, t Tenant) (*anomaly.Store, string) {
 	v, ok := s.State.stable.serving(t)
 	if !ok || v.champion.id == "" {
-		return s.State.model, ""
+		store, err := shipped(s, t)
+		if err != nil {
+			s.Log.Error("risk: the shipped geometry cannot be housed; this tenant is not scoring",
+				"tenant", t.String(), "err", err)
+			return nil, ""
+		}
+		return store, ""
 	}
-	store, err := s.State.stable.at(t, v.champion.shape)
+	store, err := s.State.stable.at(t, v.champion.id, v.champion.shape)
 	if err != nil {
-		// The geometry cannot be housed. Falling back to the base store here
+		// The geometry cannot be housed. Falling back to the shipped model here
 		// would silently score with a model the tenant did not promote, so the
 		// honest answer is the promoted shape's own absence — which the caller
 		// sees as warming, and which the log says out loud once.
@@ -403,7 +572,7 @@ func challenge(s *stateService, sc scope, db *sql.DB, o observation, out outcome
 	if !ok || v.challenger.id == "" {
 		return
 	}
-	store, err := s.State.stable.at(sc.tenant, v.challenger.shape)
+	store, err := s.State.stable.at(sc.tenant, v.challenger.id, v.challenger.shape)
 	if err != nil {
 		s.Log.Warn("risk: the challenger's geometry cannot be housed; the trial is not running",
 			"tenant", sc.tenant.String(), "fit", v.challenger.id, "err", err)
@@ -463,17 +632,86 @@ func putChallenge(db *sql.DB, r challengeRow) error {
 // one worth accepting when the reader is already bounded.
 const trialDepth = 5000
 
+// pruneChunk is how many rows one DELETE removes. The statement holds the
+// tenant's ONE connection for its whole run (cloud.OrgDB sets MaxOpenConns(1)),
+// so a prune that is not chunked is a decision path that is not answering.
+const pruneChunk = 2000
+
+// pruneBudget is how many rows one tenant's prune may remove per tick. At the
+// tick's five minutes it clears several times the arrival rate of the busiest
+// tenant this plane has measured, so a backlog drains over a few ticks instead
+// of in one that blocks the tenant for the length of the backlog.
+const pruneBudget = 20000
+
 // pruneTrials drops each trial's rows past trialDepth, oldest first.
 //
 // It runs on the tick and not on the insert: a DELETE per decision is a write on
 // the authorisation path, paid a million times to remove rows a bounded reader
 // was never going to see.
-func pruneTrials(db *sql.DB) error {
-	_, err := db.Exec(`DELETE FROM challenge WHERE decision IN (
-		SELECT decision FROM challenge AS c WHERE (
-			SELECT COUNT(*) FROM challenge AS n WHERE n.fit = c.fit AND n.at > c.at
-		) >= ?)`, trialDepth)
-	return err
+//
+// IT IS LINEAR IN WHAT IT DELETES AND IT NEVER HOLDS THE CONNECTION LONG. The
+// obvious statement — delete every row with trialDepth newer siblings — is a
+// correlated count per row, which is quadratic: measured at 4.4 s over 20k rows
+// and 21.3 s over 80k, on the single connection every decision for that tenant
+// is queued behind. Here the cut is found ONCE per trial as the timestamp of the
+// trialDepth-th newest row, straight off the (fit, at DESC) index, and the rows
+// below it are removed in bounded chunks under the caller's deadline. Ties on
+// the cut are kept rather than half-deleted, so the bound is trialDepth plus
+// however many rows share one instant.
+func pruneTrials(ctx context.Context, db *sql.DB) error {
+	fits, err := trialFits(ctx, db)
+	if err != nil {
+		return err
+	}
+	for _, fit := range fits {
+		var cut string
+		err := db.QueryRowContext(ctx,
+			`SELECT at FROM challenge WHERE fit = ? ORDER BY at DESC LIMIT 1 OFFSET ?`,
+			fit, trialDepth-1).Scan(&cut)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue // this trial is inside the bound
+		}
+		if err != nil {
+			return err
+		}
+		for removed := 0; removed < pruneBudget; {
+			res, err := db.ExecContext(ctx, `DELETE FROM challenge WHERE decision IN (
+				SELECT decision FROM challenge WHERE fit = ? AND at < ? ORDER BY at ASC LIMIT ?)`,
+				fit, cut, pruneChunk)
+			if err != nil {
+				return err
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				break
+			}
+			removed += int(n)
+		}
+	}
+	return nil
+}
+
+// trialFits lists the trials with rows in this tenant's file. There are at most
+// a handful — one per version that has ever been on trial — and the alternative
+// is a statement that has to reason about every row to find them.
+func trialFits(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT fit FROM challenge`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var fit string
+		if err := rows.Scan(&fit); err != nil {
+			return nil, err
+		}
+		out = append(out, fit)
+	}
+	return out, rows.Err()
 }
 
 // tally is the comparison read back: how the two sides answered the same
@@ -560,19 +798,23 @@ func keepFit(db *sql.DB, store *anomaly.Store, t Tenant, id string) error {
 // The snapshot's tenant must be the tenant asking. The engine checks it too;
 // checking here as well means a restore of one tenant's file into another's
 // request is refused at the boundary that knows who asked, which is this one.
-func takeFit(db *sql.DB, store *anomaly.Store, t Tenant, id string) error {
+//
+// It reports SETTLED on the same rule loadModel does: absent, corrupt, foreign
+// or shape-mismatched state is an answer, and a file that could not be read is a
+// retry.
+func takeFit(db *sql.DB, store *anomaly.Store, t Tenant, id string) (bool, error) {
 	body, err := getModel(db, fitKey(id))
 	if err != nil {
-		return err
+		return errors.Is(err, errNoState), err
 	}
 	var snap anomaly.Snapshot
 	if err := json.Unmarshal(body, &snap); err != nil {
-		return err
+		return true, err
 	}
 	if snap.OrgID != t.String() {
-		return fmt.Errorf("risk: snapshot belongs to another tenant")
+		return true, fmt.Errorf("risk: snapshot belongs to another tenant")
 	}
-	return store.Restore(snap)
+	return true, store.Restore(snap)
 }
 
 // hydrate makes this process's memory of a tenant match what that tenant's own
@@ -581,15 +823,19 @@ func takeFit(db *sql.DB, store *anomaly.Store, t Tenant, id string) error {
 //
 // IT RUNS ON EVERY REQUEST, NOT ONLY THE FIRST. A once-per-process restore is
 // correct exactly until something drops the state — and something does: the
-// engine evicts the least recently used tenant when a store fills. Restored
-// once, an evicted tenant never reloads, so its champion comes back empty and
-// scores from nothing for the rest of the process's life, which reads as a clean
-// world and is indistinguishable from one. Reloading on demand makes an eviction
-// cost one file read instead of a control that went quiet.
+// stable evicts the least recently used seat when it fills. Restored once, an
+// evicted tenant never reloads, so its champion comes back empty and scores from
+// nothing for the rest of the process's life, which reads as a clean world and is
+// indistinguishable from one. Reloading on demand makes an eviction cost one file
+// read instead of a control that went quiet.
 //
-// It costs nothing when there is nothing to do: a map read for the cached role
-// pair, and a map read per role to see whether the store already holds this
-// tenant. The file is touched only when a version is genuinely absent.
+// AND RUNNING PER REQUEST MEANS IT MUST COST A MAP READ. Asking a store whether
+// it holds a tenant by taking a snapshot of it costs a deep copy of the whole
+// forest and the model's write lock — measured at 209 KB and 51.6 µs per call,
+// serialised against the very Assess the request is about. So residency is a
+// fact THIS package owns: a seat records that its file has been read, the record
+// is exact because this process is that file's only writer, and it dies with the
+// seat. Steady state is one map lookup per serving version and nothing else.
 //
 // A champion that will not restore is left UNRESTORED and said out loud. The
 // store then holds nothing for this tenant, the engine reports warming, and the
@@ -597,41 +843,40 @@ func takeFit(db *sql.DB, store *anomaly.Store, t Tenant, id string) error {
 // eviction. Matching that behaviour is deliberate: two policies for "the model
 // has no memory" would eventually disagree.
 func hydrate(s *stateService, t Tenant, db *sql.DB) {
-	// The base store first: it is the champion for every tenant that has not
-	// promoted anything, and the fallback the rules still read a score from.
-	if _, held := s.State.model.Snapshot(t.String()); !held && !s.State.stable.isBlank(t) {
-		if err := loadModel(s.State.shelf, s.State.model, t); err != nil {
-			s.Log.Warn("risk: a tenant's learned state could not be restored; it starts warming",
-				"tenant", t.String(), "err", err)
-		}
-		if _, held := s.State.model.Snapshot(t.String()); !held {
-			// There was nothing to load. Remembering that is what stops a tenant
-			// with no kept state from reading its file on every request; the write
-			// path clears it, and this process is that file's only writer.
-			s.State.stable.markBlank(t, true)
-		}
-	}
-
 	v, known := s.State.stable.serving(t)
 	if !known {
 		v = readServing(s, db)
 		s.State.stable.setServing(t, v)
 	}
 	v.each(func(r ref) {
-		store, err := s.State.stable.at(t, r.shape)
+		store, owed, err := s.State.stable.owed(t, r.id, r.shape)
 		if err != nil {
 			s.Log.Error("risk: a promoted fit's geometry cannot be housed",
 				"tenant", t.String(), "fit", r.id, "err", err)
 			return
 		}
-		if _, held := store.Snapshot(t.String()); held {
+		if !owed {
 			return
 		}
-		if err := takeFit(db, store, t, r.id); err != nil {
+		settled, err := takeFit(db, store, t, r.id)
+		if err != nil {
 			s.Log.Error("risk: a promoted fit's learned state could not be loaded; this tenant is warming",
 				"tenant", t.String(), "fit", r.id, "err", err)
 		}
+		if settled {
+			s.State.stable.read(t, r.id)
+		}
 	})
+	// The shipped model, only when it is the one that decides. A tenant running a
+	// promoted champion reaches its shipped model through the ops that own it,
+	// and standing a second forest up per request for a model nothing is asking
+	// about is 336 KB and a file read spent on nobody's question.
+	if v.champion.id == "" {
+		if _, err := shipped(s, t); err != nil {
+			s.Log.Error("risk: the shipped geometry cannot be housed",
+				"tenant", t.String(), "err", err)
+		}
+	}
 }
 
 // readServing reads which versions a tenant runs, from the tenant's own file.
@@ -657,27 +902,33 @@ func readServing(s *stateService, db *sql.DB) serving {
 	return v
 }
 
-// keepAll snapshots every resident geometry's state for one tenant, plus the
-// base. Called on shutdown, and on every role change that stands a fit down —
-// so a retired champion keeps the memory that makes rolling back to it instant.
+// keepAll snapshots every RESIDENT model this tenant has, the shipped one
+// included. Called on shutdown, and on every role change that stands a fit down
+// — so a retired champion keeps the memory that makes rolling back to it
+// instant.
 //
 // It reads the ROLES from the file rather than from the cache, because it is
 // called at the moments the cache is about to be or has just been invalidated,
 // and because a retired version must be kept too — that is what makes a rollback
 // instant rather than a re-warm, and retired is not a role the serving cache
 // carries.
+//
+// A version with no seat is SKIPPED and not built. Building one would keep an
+// empty forest under that version's name, overwriting whatever the file held for
+// it — the state a rollback is going to want.
 func keepAll(s *stateService, t Tenant, db *sql.DB) error {
-	if err := saveModel(s.State.shelf, s.State.model, t); err != nil {
-		return err
+	if store, held := s.State.stable.resident(t, ""); held {
+		if err := saveModel(s.State.shelf, store, t); err != nil {
+			return err
+		}
 	}
-	s.State.stable.markBlank(t, false)
 	for _, role := range []string{roleChampion, roleChallenger, roleRetired} {
 		r, ok, err := fitInRole(db, role)
 		if err != nil || !ok || r.Status != fitReady {
 			continue
 		}
-		store, err := s.State.stable.at(t, r.Shape)
-		if err != nil {
+		store, held := s.State.stable.resident(t, r.ID)
+		if !held {
 			continue
 		}
 		if err := keepFit(db, store, t, r.ID); err != nil {
@@ -827,6 +1078,18 @@ func lastFit(db *sql.DB) (time.Time, string, error) {
 // decision path.
 const lifecycleEvery = 5 * time.Minute
 
+// tickBudget bounds ONE walk of the resident tenants, end to end. It is under
+// lifecycleEvery so two walks can never overlap, and it is the outer bound the
+// per-tenant one nests inside: without it a walk is as long as the sum of its
+// tenants, which on a busy deployment is longer than the interval that starts
+// the next one.
+const tickBudget = 4 * time.Minute
+
+// tenantBudget bounds one tenant's examination inside the walk. It is what stops
+// one tenant's backlog from consuming the walk and leaving every tenant after it
+// in the map unexamined — a tenant may only ever degrade itself.
+const tenantBudget = 45 * time.Second
+
 // lifecycle is the app's second background loop. It walks the tenants THIS
 // PROCESS currently holds open, which is exactly the set with recent traffic —
 // a tenant with none has no new matured judgement to trigger on and nothing to
@@ -840,20 +1103,32 @@ func lifecycle(s *stateService) {
 }
 
 func tick(s *stateService, now time.Time) {
+	walk, stop := context.WithTimeout(context.Background(), tickBudget)
+	defer stop()
 	for _, t := range s.State.shelf.tenants() {
+		if walk.Err() != nil {
+			s.Log.Warn("risk: the model walk ran out of budget; the remaining tenants are examined on the next tick")
+			return
+		}
 		db, err := s.State.shelf.open(t)
 		if err != nil {
 			continue
 		}
-		if err := watch(s, t, db, now); err != nil {
+		ctx, done := context.WithTimeout(walk, tenantBudget)
+		err = watch(ctx, s, t, db, now)
+		done()
+		if err != nil {
 			s.Log.Warn("risk: a tenant's model could not be examined", "tenant", t.String(), "err", err)
 		}
 	}
 }
 
 // watch is one tenant's examination: is a re-estimation owed, and has the
-// champion drifted.
-func watch(s *stateService, t Tenant, db *sql.DB, now time.Time) error {
+// champion drifted. Every statement it runs takes the caller's context, so the
+// walk's budget is a real bound and not a comment — the tenant's file has ONE
+// connection and every decision for that tenant queues behind whatever this
+// holds.
+func watch(ctx context.Context, s *stateService, t Tenant, db *sql.DB, now time.Time) error {
 	sched, err := getSchedule(db)
 	if err != nil {
 		return err
@@ -866,12 +1141,18 @@ func watch(s *stateService, t Tenant, db *sql.DB, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if err := pruneTrials(db); err != nil {
+	if err := pruneTrials(ctx, db); err != nil {
 		s.Log.Warn("risk: a tenant's trial rows were not pruned", "tenant", t.String(), "err", err)
 	}
 	if ok, why := due(sched, last, n, now); ok {
-		if _, running := s.State.bench.running(t); !running {
-			if _, err := enqueue(s, t, db, "schedule", sched.Role, mlFitIn{
+		if _, running := s.State.bench.running(t, kindFit); !running {
+			// The scheduler's scope: the tenant's own org, no project and no
+			// validated project claim — a background path has no principal to bind
+			// one to, so only the org- and service-scoped caps enforce. It still
+			// pays: enqueue gates and meters whoever asks, and a timer asking is
+			// still this tenant asking.
+			sc := scope{tenant: t, org: t.org()}
+			if _, err := enqueue(ctx, s, sc, db, "schedule", sched.Role, mlFitIn{
 				Algo: algoForest, Horizon: sched.Horizon, Window: sched.Window, Rows: sched.Rows,
 				Note: why,
 			}, now); err != nil {
@@ -879,7 +1160,7 @@ func watch(s *stateService, t Tenant, db *sql.DB, now time.Time) error {
 			}
 		}
 	}
-	return alarm(s, t, db, now)
+	return alarm(ctx, s, t, db, now)
 }
 
 // ── enqueue: the one path a fit is created by ───────────────────────────────
@@ -889,13 +1170,18 @@ func watch(s *stateService, t Tenant, db *sql.DB, now time.Time) error {
 // It is the ONE path — the typed op and the scheduler both come through here —
 // because the two differ in exactly one thing (who asked) and everything else
 // about creating a fit is the same act. Two paths would be two places for the
-// bounds to be applied, and one of them would eventually be the weaker.
+// bounds to be applied, and one of them would eventually be the weaker. That
+// included MONEY until this: the op gated and metered and the scheduler did
+// not, so a tenant that set an hourly schedule bought unlimited estimations
+// competing for the same two fleet-wide slots as the ones somebody paid for.
+// The fifth bound now lives here with the other four.
 //
 // It RETURNS the identifier it minted. Reading it back off the bench instead
 // would be a race the caller cannot win: an estimation that finishes — or is
 // refused, or is cancelled — before the op looks leaves the bench empty, and the
 // op would then answer 404 for a fit it had just created successfully.
-func enqueue(s *stateService, t Tenant, db *sql.DB, by, land string, in mlFitIn, now time.Time) (string, error) {
+func enqueue(ctx context.Context, s *stateService, sc scope, db *sql.DB, by, land string, in mlFitIn, now time.Time) (string, error) {
+	t := sc.tenant
 	algo := strings.TrimSpace(in.Algo)
 	if algo == "" {
 		algo = algoForest
@@ -904,12 +1190,17 @@ func enqueue(s *stateService, t Tenant, db *sql.DB, by, land string, in mlFitIn,
 		return "", zip.Errorf(422,
 			"%q is not an estimator this plane can run; the one it can is %q", algo, algoForest)
 	}
-	shape := shapeOf(s.State.model.Config())
+	shape := s.State.shape
 	if in.Shape != nil {
 		shape = candidate(*in.Shape)
 	}
 	if err := checkShape(shape); err != nil {
 		return "", err
+	}
+	// The ledger, before anything is written or queued. Whoever asked — a person
+	// or this tenant's own schedule — pays for the CPU on their own org.
+	if err := s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "fit", fitCents); err != nil {
+		return "", zip.Errorf(402, "%s", err.Error())
 	}
 
 	horizon := in.Horizon
@@ -939,12 +1230,16 @@ func enqueue(s *stateService, t Tenant, db *sql.DB, by, land string, in mlFitIn,
 	if err := putFit(db, r); err != nil {
 		return "", err
 	}
-	if err := s.State.bench.start(t, id, func(ctx context.Context) {
+	if err := s.State.bench.start(t, kindFit, id, func(ctx context.Context) {
 		run(ctx, s, t, db, r, rows, land)
 	}); err != nil {
 		_ = markFit(db, id, fitRefused, err.Error())
 		return "", err
 	}
+	// Metered on the same ledger the gate above checked, after the work is
+	// admitted rather than after it finishes: what was bought is a slot on the
+	// bench, and a caller who cancels has still spent one.
+	s.State.bill.Meter(sc.org, sc.project, "fit", fitCents, sc.request, sc.clientIP)
 	return id, nil
 }
 
@@ -1008,14 +1303,14 @@ func run(ctx context.Context, s *stateService, t Tenant, db *sql.DB, r fitRow, r
 		return
 	}
 
-	inv := s.State.model.State(t.String()).Inventory
+	inv := anomaly.Inventory()
 	dims := make([]string, 0, len(inv))
 	for i := range inv {
 		dims = append(dims, inv[i].Name)
 	}
 	src := r.Source
 	src.Cut, src.Rows, src.Train, src.Test = cut, len(admitted), len(train), len(test)
-	src.Dims, src.Inventory = dims, s.State.model.Digest()
+	src.Dims, src.Inventory = dims, s.State.digest
 	for _, row := range test {
 		switch disposition(row.label) {
 		case "productive":
@@ -1028,7 +1323,12 @@ func run(ctx context.Context, s *stateService, t Tenant, db *sql.DB, r fitRow, r
 	}
 	src.Digest = sourceDigest(train, test, dims)
 
-	snap, metrics, profile, err := estimate(ctx, t, r.Shape, seedOf(r.ID), train, test)
+	seed, err := newSeed()
+	if err != nil {
+		_ = markFit(db, r.ID, fitRefused, err.Error())
+		return
+	}
+	snap, metrics, profile, err := estimate(ctx, t, r.Shape, seed, train, test)
 	if err != nil {
 		status := fitRefused
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -1241,7 +1541,7 @@ func (o ops) scheduleOut(sc scope, db *sql.DB, now time.Time) (*mlScheduleOut, e
 				(time.Duration(s.Every)*time.Hour - now.Sub(last)).Round(time.Minute))
 		}
 	}
-	if id, running := o.s.State.bench.running(sc.tenant); running {
+	if id, running := o.s.State.bench.running(sc.tenant, kindFit); running {
 		out.Estimating = id
 	}
 	return out, nil

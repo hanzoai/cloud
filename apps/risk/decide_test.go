@@ -31,7 +31,7 @@ func TestRecordHappensBeforeScoring(t *testing.T) {
 	rules := []rule{{
 		ID: "r1", Name: "counted", Stage: StagePayment, Action: ActionReview,
 		Weight: 0.5, Enabled: true,
-		All:    []term{{Field: "velocity.ip.1h.count", Op: OpGte, Number: 1}},
+		All: []term{{Field: "velocity.ip.1h.count", Op: OpGte, Number: 1}},
 	}}
 	o := observation{
 		id: "d1", at: time.Now(), stage: StagePayment, kind: "transaction", subject: "tx1",
@@ -68,7 +68,7 @@ func TestShadowActsOnNothing(t *testing.T) {
 	rules := []rule{{
 		ID: "block-all", Name: "would block", Stage: StagePayment, Action: ActionBlock,
 		Weight: 1, Enabled: true,
-		All:    []term{{Field: "subject.kind", Op: OpEq, Value: "transaction"}},
+		All: []term{{Field: "subject.kind", Op: OpEq, Value: "transaction"}},
 	}}
 	o := observation{
 		id: "d1", at: time.Now(), stage: StagePayment, kind: "transaction", subject: "tx1",
@@ -406,14 +406,116 @@ func TestTrainIsOnlineAndPerTenant(t *testing.T) {
 	if out.Learned != 20 {
 		t.Fatalf("learned %d of 20", out.Learned)
 	}
-	if s.State.model.State("hanzo/acme").Learned == 0 {
+	if mustShipped(t, s, Tenant("hanzo/acme")).State("hanzo/acme").Learned == 0 {
 		t.Fatal("the caller's model learned nothing")
 	}
-	if s.State.model.State("hanzo/beta").Learned != 0 {
+	if mustShipped(t, s, Tenant("hanzo/beta")).State("hanzo/beta").Learned != 0 {
 		t.Fatal("another tenant's model learned from this tenant's data")
 	}
-	// And the tenant key really is qualified, not bare.
-	if s.State.model.State("acme").Learned != 0 {
+	// And the tenant key really is qualified, not bare. A bare org is not even a
+	// key this stable can be asked for, so the assertion is made against the
+	// caller's OWN store: the only one its traffic can have reached.
+	if mustShipped(t, s, Tenant("hanzo/acme")).State("acme").Learned != 0 {
 		t.Fatal("the model is indexed on the BARE org — two brands' same-named orgs would share it")
+	}
+}
+
+// TestADecisionNamesTheModelVersionThatMadeIt is the compliance bar this plane
+// was scoped against, and the record could not meet it.
+//
+// A decline is an adverse action. The question an auditor asks about one is
+// "which model version declined this customer" — and the decision carried only a
+// DIGEST, which names a geometry that any number of versions can share, and it
+// was the SHIPPED model's digest even when a promoted champion of another
+// geometry had decided. The champion was computed on the line above and passed
+// only into the trial table.
+func TestADecisionNamesTheModelVersionThatMadeIt(t *testing.T) {
+	dir := t.TempDir()
+	app, s := wireAt(t, dir)
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	champ := seedFit(t, s, tn, db, roleChampion, otherShape)
+
+	code, body := req(t, app, http.MethodPost, "/v1/risk/decide", "acme", "u_acme",
+		`{"stage":"payment","subject":{"kind":"account","id":"acct-1"},
+		  "amount":{"nano":5000000000,"currency":"USD","direction":"in"},
+		  "signals":{"ip":"203.0.113.9","device":"dev-a"}}`)
+	if code != http.StatusOK {
+		t.Fatalf("decide = %d %s", code, body)
+	}
+	var d riskDecision
+	if err := json.Unmarshal(body, &d); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if d.Fit != champ {
+		t.Fatalf("the decision names version %q, want %q — an auditor cannot answer which model declined "+
+			"this customer", d.Fit, champ)
+	}
+	// And the digest is the DECIDING model's, not the shipped one's. Two versions
+	// of one shape share a digest, which is why the version is the answer and the
+	// digest is only corroboration — but a digest naming a model that did not
+	// decide is worse than none.
+	want := mustStore(t, s, tn, champ, otherShape).Digest()
+	if d.Model != want {
+		t.Fatalf("the decision records digest %q, want the champion's %q", d.Model, want)
+	}
+	if d.Model == s.State.digest {
+		t.Fatal("the decision records the SHIPPED model's digest while a promoted champion decided")
+	}
+
+	// It is on the RECORD and not merely in the reply: the row, the detail view
+	// and the log page all carry it, because the dispute packet is read months
+	// later from the file.
+	var stored string
+	if err := db.QueryRow(`SELECT fit FROM decision WHERE id = ?`, d.ID).Scan(&stored); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if stored != champ {
+		t.Fatalf("the stored decision names version %q, want %q", stored, champ)
+	}
+	code, body = req(t, app, http.MethodGet, "/v1/risk/decisions/"+d.ID, "acme", "u_acme", "")
+	if code != http.StatusOK {
+		t.Fatalf("decision detail = %d %s", code, body)
+	}
+	var view riskDecisionView
+	if err := json.Unmarshal(body, &view); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if view.Decision.Fit != champ || view.Model != want {
+		t.Fatalf("the dispute packet says version %q digest %q, want %q / %q",
+			view.Decision.Fit, view.Model, champ, want)
+	}
+
+	// A tenant running the shipped model records an EMPTY version, which is
+	// itself the answer, and the shipped digest beside it.
+	other, _ := qualify("hanzo", "beta")
+	odb, err := s.State.shelf.open(other)
+	if err != nil {
+		t.Fatalf("open beta: %v", err)
+	}
+	code, body = req(t, app, http.MethodPost, "/v1/risk/decide", "beta", "u_beta",
+		`{"stage":"payment","subject":{"kind":"account","id":"acct-1"},
+		  "amount":{"nano":5000000000,"currency":"USD","direction":"in"}}`)
+	if code != http.StatusOK {
+		t.Fatalf("decide (beta) = %d %s", code, body)
+	}
+	var plain riskDecision
+	if err := json.Unmarshal(body, &plain); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if plain.Fit != "" {
+		t.Fatalf("a tenant with no promoted version recorded %q", plain.Fit)
+	}
+	if plain.Model != s.State.digest {
+		t.Fatalf("the shipped model's decision records digest %q, want %q", plain.Model, s.State.digest)
+	}
+	if err := odb.QueryRow(`SELECT fit FROM decision WHERE id = ?`, plain.ID).Scan(&stored); err != nil {
+		t.Fatalf("read back beta: %v", err)
+	}
+	if stored != "" {
+		t.Fatalf("beta's decision names version %q", stored)
 	}
 }

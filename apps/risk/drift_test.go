@@ -133,7 +133,7 @@ func TestADriftAlarmIsDurableAndRaisedOnce(t *testing.T) {
 	s, tn, db, id := driftBed(t, movedWorld)
 	now := time.Now()
 
-	if err := alarm(s, tn, db, now); err != nil {
+	if err := alarm(context.Background(), s, tn, db, now); err != nil {
 		t.Fatalf("alarm: %v", err)
 	}
 	first, err := openDrift(db, id)
@@ -145,7 +145,7 @@ func TestADriftAlarmIsDurableAndRaisedOnce(t *testing.T) {
 	}
 
 	// A second tick over the same finding writes nothing new.
-	if err := alarm(s, tn, db, now.Add(5*time.Minute)); err != nil {
+	if err := alarm(context.Background(), s, tn, db, now.Add(5*time.Minute)); err != nil {
 		t.Fatalf("alarm again: %v", err)
 	}
 	again, err := openDrift(db, id)
@@ -228,10 +228,12 @@ func driftBed(t *testing.T, w world) (*stateService, Tenant, *sql.DB, string) {
 	train := ground(t, s, tn, db, base, 1100, 1, 0)
 	cutAt := train[len(train)-1].at
 
-	// The identifier is minted FIRST: the sandbox's geometry is derived from it,
-	// and a drift reading replays under the same one. Sealing a profile produced
-	// under some other seed would make every later score index geometry noise.
+	// The geometry is drawn ONCE and the profile carries it, because a drift
+	// reading replays under the same one. Reading it back off the profile is the
+	// only way to get it — it is never derivable from the identifier, which is
+	// published.
 	id := newID("fit")
+	seed := testSeed(t)
 
 	// Estimate the reference profile over the first window with the real
 	// estimator, then seal it onto a champion.
@@ -240,7 +242,7 @@ func driftBed(t *testing.T, w world) (*stateService, Tenant, *sql.DB, string) {
 		t.Fatalf("replayHistory: %v", err)
 	}
 	trainRows, testRows, _ := split(rows, trainShare)
-	_, metrics, profile, err := estimate(context.Background(), tn, quickShape, seedOf(id), trainRows, testRows)
+	_, metrics, profile, err := estimate(context.Background(), tn, quickShape, seed, trainRows, testRows)
 	if err != nil {
 		t.Fatalf("estimate: %v", err)
 	}
@@ -248,7 +250,7 @@ func driftBed(t *testing.T, w world) (*stateService, Tenant, *sql.DB, string) {
 	src := fitSource{
 		Name: sourceHistory, Version: 1, From: base.Add(-time.Hour), To: cutAt,
 		Horizon: 0, Rows: len(rows), Train: len(trainRows), Test: len(testRows),
-		Inventory: s.State.model.Digest(), Digest: "rows-" + id,
+		Inventory: s.State.digest, Digest: "rows-" + id,
 	}
 	if err := putFit(db, fitRow{
 		ID: id, At: time.Now(), By: "test", Algo: algoForest, Shape: quickShape,
@@ -262,7 +264,7 @@ func driftBed(t *testing.T, w world) (*stateService, Tenant, *sql.DB, string) {
 	if err := sealFit(db, id, src, metrics, profile, fitDigest(algoForest, quickShape, src)); err != nil {
 		t.Fatalf("sealFit: %v", err)
 	}
-	store, err := s.State.stable.at(tn, quickShape)
+	store, err := s.State.stable.at(tn, id, quickShape)
 	if err != nil {
 		t.Fatalf("stable.at: %v", err)
 	}
@@ -309,7 +311,7 @@ func ground(t *testing.T, s *stateService, tn Tenant, db *sql.DB, from time.Time
 			signals: map[string]string{"ip": "203.0.113." + strconv.Itoa(i%200), "device": "d-" + strconv.Itoa(i%50)},
 		}
 		record(s.State.vel, tn, o)
-		if err := putDecision(db, o, outcome{id: o.id, action: ActionAllow}, "test", ""); err != nil {
+		if err := putDecision(db, o, outcome{id: o.id, action: ActionAllow}, "test", "", ""); err != nil {
 			t.Fatalf("putDecision: %v", err)
 		}
 		out = append(out, o)
@@ -350,16 +352,20 @@ func TestOneProjectionServesBothSides(t *testing.T) {
 		t.Fatalf("replayHistory: %v", err)
 	}
 
+	// ONE geometry across both sides, which is the whole point of the comparison:
+	// two sandboxes at different seeds hold different trees and every index
+	// between them is geometry noise.
+	seed := testSeed(t)
 	// The estimation side, over the whole set as its training split.
 	_, fromFit, err := func() (any, fitProfile, error) {
-		_, _, prof, err := estimate(context.Background(), tn, quickShape, seedOf("skew"), rows, nil)
+		_, _, prof, err := estimate(context.Background(), tn, quickShape, seed, rows, nil)
 		return nil, prof, err
 	}()
 	if err != nil {
 		t.Fatalf("estimate: %v", err)
 	}
 	// The drift side, over the same rows.
-	fromDrift, _, _, err := measure(context.Background(), tn, quickShape, seedOf("skew"), rows)
+	fromDrift, _, _, err := measure(context.Background(), tn, quickShape, seed, rows)
 	if err != nil {
 		t.Fatalf("measure: %v", err)
 	}
@@ -383,5 +389,110 @@ func TestOneProjectionServesBothSides(t *testing.T) {
 	}
 	if index, ok := psi(fromFit.Score, fromDrift.Score); !ok || index != 0 {
 		t.Fatalf("the score distributions differ between the two projections (index %v)", index)
+	}
+}
+
+// testSeed draws a version's geometry the way run() does. A test that wants two
+// sandboxes to agree pins ONE draw and passes it to both — which is exactly the
+// contract: the seed is a value the tenant's own file carries, never a function
+// of anything published.
+func testSeed(t *testing.T) uint64 {
+	t.Helper()
+	seed, err := newSeed()
+	if err != nil {
+		t.Fatalf("newSeed: %v", err)
+	}
+	return seed
+}
+
+// TestAReadingIsBoundedPerTenantAndAcrossTheFleet is the free-CPU hole.
+//
+// GET /v1/ml/drift did the metered estimator's work in the request: a fresh
+// forest over up to fitRows replayed rows, measured at 54 ms of one core at the
+// cap, with no gate, no meter, no slot and no deadline of its own — on the
+// single replica that also answers authorisations for every product on
+// api.hanzo.ai. `fit` does comparable work behind two fleet-wide slots, a
+// ten-minute ceiling and a price.
+//
+// The bound is per tenant FIRST and fleet-wide second, and that order is the
+// property: a tenant holds at most one of the fleet's slots, so no arrangement
+// of one tenant's traffic can close the door on another's.
+func TestAReadingIsBoundedPerTenantAndAcrossTheFleet(t *testing.T) {
+	app, s := wireAt(t, t.TempDir())
+	a, _ := qualify("hanzo", "acme")
+	b, _ := qualify("hanzo", "beta")
+	adb, err := s.State.shelf.open(a)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// A champion, so the op reaches the work rather than refusing for want of an
+	// estimated version — otherwise the assertions below would pass on a route
+	// that never measures anything.
+	seedFit(t, s, a, adb, roleChampion, quickShape)
+
+	// One per tenant. The second ask is refused, not queued.
+	first, err := s.State.bench.probe(context.Background(), a)
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if _, err := s.State.bench.probe(context.Background(), a); err == nil {
+		t.Fatal("one tenant holds two in-request measurements at once")
+	}
+
+	// And the OP is behind that same bound, so a tenant looping it spends one
+	// slot rather than one per request.
+	code, body := req(t, app, http.MethodGet, "/v1/ml/drift", "acme", "u_acme", "")
+	if code != http.StatusConflict {
+		t.Fatalf("a drift reading while one is already running = %d %s, want 409", code, body)
+	}
+
+	// A NEIGHBOUR is unaffected: the per-tenant rule is what makes the fleet-wide
+	// pair safe, because acme can never be holding both of them.
+	second, err := s.State.bench.probe(context.Background(), b)
+	if err != nil {
+		t.Fatalf("a neighbour was refused a slot acme could not have been holding: %v", err)
+	}
+
+	// Both fleet slots are now held by two DISTINCT tenants, so a third waits on
+	// its OWN deadline and gives up rather than running unbounded work.
+	third, _ := qualify("hanzo", "gamma")
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := s.State.bench.probe(ctx, third); err == nil {
+		t.Fatal("a third tenant ran while both fleet slots were held — the pool is not a bound")
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Fatalf("the refusal took %s; the wait is not the caller's own deadline", took)
+	}
+
+	first()
+	second()
+	// Released, the next ask succeeds — a bound that never reopens is an outage.
+	again, err := s.State.bench.probe(context.Background(), a)
+	if err != nil {
+		t.Fatalf("the slot did not reopen: %v", err)
+	}
+	again()
+}
+
+// TestAReadingIsPricedLikeTheWorkItDoes pins the other half: the reading is
+// gated on the caller's own ledger before it runs, and charged after.
+func TestAReadingIsPricedLikeTheWorkItDoes(t *testing.T) {
+	book := &book{deny: true}
+	app, s := wireBilled(t, t.TempDir(), book)
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	seedFit(t, s, tn, db, roleChampion, quickShape)
+
+	code, body := req(t, app, http.MethodGet, "/v1/ml/drift", "acme", "u_acme", "")
+	if code != http.StatusPaymentRequired {
+		t.Fatalf("a reading by an unfunded org = %d %s, want 402 — the work is free", code, body)
+	}
+	if book.asked("acme") == 0 {
+		t.Fatal("the reading never asked the ledger")
 	}
 }

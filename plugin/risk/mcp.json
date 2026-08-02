@@ -13,7 +13,7 @@
     "name": "mlCancelFit"
   },
   {
-    "description": "Drift measures whether the deciding model still fits the world it was\nestimated on: the distribution of every feature it reads, the distribution of\nthe scores it produces, the alert share against the appetite it states, and\nthe judgement rate against the one it measured.\n\nEvery reference is the version's OWN, stored when it was estimated. A report\nthat recomputed its baseline from recent data would be comparing the present\nto the present, which is a number that is always small and always reassuring.",
+    "description": "Drift measures whether the deciding model still fits the world it was\nestimated on: the distribution of every feature it reads, the distribution of\nthe scores it produces, the alert share against the appetite it states, and\nthe judgement rate against the one it measured.\n\nEvery reference is the version's OWN, stored when it was estimated. A report\nthat recomputed its baseline from recent data would be comparing the present\nto the present, which is a number that is always small and always reassuring.\n\nIT IS THE ESTIMATION'S WORK AT A SMALLER SIZE, SO IT CARRIES THE ESTIMATION'S\nBOUNDS. A reading replays up to fitRows rows through a fresh forest —\nmeasured at 54 ms of one core at the cap — on the single replica that is also\nanswering authorisations. Unpriced and unbounded that is a free way to spend\nthe pod: gated and metered on the caller's own ledger, one reading in flight\nper tenant, two across the deployment, and a deadline of its own so a caller\nthat walked away is not still holding a core.",
     "inputSchema": {
       "properties": {
         "fit": {

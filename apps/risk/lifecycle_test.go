@@ -10,8 +10,10 @@ package risk
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -64,7 +66,7 @@ func TestAPromotedModelSurvivesARollout(t *testing.T) {
 	}
 	id := seedFit(t, first, tn, db, roleChampion, quickShape)
 
-	store, err := first.State.stable.at(tn, quickShape)
+	store, err := first.State.stable.at(tn, id, quickShape)
 	if err != nil {
 		t.Fatalf("stable.at: %v", err)
 	}
@@ -82,7 +84,7 @@ func TestAPromotedModelSurvivesARollout(t *testing.T) {
 
 	// ── the second process, over the same files ──
 	_, second := wireAt(t, dir)
-	if s := mustStore(t, second, tn, quickShape).State(tn.String()); s.Learned != 0 {
+	if s := mustStore(t, second, tn, id, quickShape).State(tn.String()); s.Learned != 0 {
 		t.Fatalf("the new process started with %d learned observations before touching the tenant — "+
 			"state is leaking across processes some other way", s.Learned)
 	}
@@ -96,7 +98,7 @@ func TestAPromotedModelSurvivesARollout(t *testing.T) {
 	}
 	hydrate(second, tn, db2)
 
-	after := mustStore(t, second, tn, quickShape).State(tn.String())
+	after := mustStore(t, second, tn, id, quickShape).State(tn.String())
 	if after.Learned != before.Learned {
 		t.Fatalf("learned %d after the rollout, %d before — the model came back with a different memory",
 			after.Learned, before.Learned)
@@ -147,7 +149,7 @@ func TestAChampionThatCannotBeRestoredRefusesToScore(t *testing.T) {
 	}
 	hydrate(second, tn, db2)
 
-	st := mustStore(t, second, tn, quickShape).State(tn.String())
+	st := mustStore(t, second, tn, id, quickShape).State(tn.String())
 	if st.Warm {
 		t.Fatal("a champion with no restorable state came back WARM — it is scoring from memory it does not have")
 	}
@@ -160,14 +162,14 @@ func TestAChampionThatCannotBeRestoredRefusesToScore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getFit: %v", err)
 	}
-	if err := servable(second, tn, db2, r); err == nil {
+	if err := servable(second, db2, r); err == nil {
 		t.Fatal("a version with no learned state reports itself servable")
 	}
 }
 
-func mustStore(t *testing.T, s *stateService, tn Tenant, shape candidate) *anomaly.Store {
+func mustStore(t *testing.T, s *stateService, tn Tenant, fit string, shape candidate) *anomaly.Store {
 	t.Helper()
-	store, err := s.State.stable.at(tn, shape)
+	store, err := s.State.stable.at(tn, fit, shape)
 	if err != nil {
 		t.Fatalf("stable.at: %v", err)
 	}
@@ -215,9 +217,20 @@ func TestPromoteIsEarnedAndRollbackIsInstant(t *testing.T) {
 		t.Fatalf("a role change with no reason = %d %s, want 422", code, body)
 	}
 
-	// 4. B becomes the challenger, then champion. A is stood down to retired and
-	//    KEEPS its learned state — which is the whole mechanism behind step 5.
+	// 4. B becomes the challenger. Enrolling it is NOT the trial: the gate asks
+	//    what the trial MEASURED, so a version standing in the role with nothing
+	//    recorded beside it is still refused.
 	role(t, app, b, `{"role":"challenger","reason":"trial"}`, http.StatusOK)
+	code, body = req(t, app, http.MethodPut, "/v1/ml/fits/"+b+"/role", "acme", "u_acme",
+		`{"role":"champion","reason":"it is the challenger now"}`)
+	if code != http.StatusConflict {
+		t.Fatalf("a challenger with an empty tally promoted to champion = %d %s, want 409", code, body)
+	}
+
+	// 5. The trial actually runs. Only now — with the comparison recorded — may B
+	//    take the decision path, and A is stood down to retired and KEEPS its
+	//    learned state, which is the whole mechanism behind step 6.
+	beside(t, app, db, b, trialFloor)
 	rec = role(t, app, b, `{"role":"champion","reason":"beat the incumbent over the trial"}`, http.StatusOK)
 	if rec.Role != roleChampion {
 		t.Fatalf("B after promotion: role %q", rec.Role)
@@ -233,20 +246,20 @@ func TestPromoteIsEarnedAndRollbackIsInstant(t *testing.T) {
 		t.Fatalf("the retired champion's learned state is gone (%v) — a rollback would be a re-warm", err)
 	}
 
-	// 5. ROLLBACK. A has served, so it goes back instantly with no trial and no
+	// 6. ROLLBACK. A has served, so it goes back instantly with no trial and no
 	//    ceremony, and it comes back WARM because its state was kept.
 	rec = role(t, app, a, `{"role":"champion","reason":"rollback: B is declining good customers"}`, http.StatusOK)
 	if rec.Role != roleChampion {
 		t.Fatalf("rollback to A: role %q, want champion", rec.Role)
 	}
-	if st := mustStore(t, s, tn, quickShape).State(tn.String()); !st.Warm {
+	if st := mustStore(t, s, tn, a, quickShape).State(tn.String()); !st.Warm {
 		t.Fatal("the rolled-back champion is warming — the rollback is a blind window, not a rollback")
 	}
-	if store, id := champion(s, tn, db); id != a || store == nil {
+	if store, id := champion(s, tn); id != a || store == nil {
 		t.Fatalf("the deciding model is %q, want %q", id, a)
 	}
 
-	// 6. Every transition is on the record, with who and why. A control that
+	// 7. Every transition is on the record, with who and why. A control that
 	//    changed hands and cannot say who changed it is one nobody owns.
 	moves, err := fitMoves(db, a)
 	if err != nil {
@@ -263,10 +276,38 @@ func TestPromoteIsEarnedAndRollbackIsInstant(t *testing.T) {
 		t.Fatalf("the rollback was recorded against %q, want the validated caller u_acme", last.By)
 	}
 
-	// 7. And there is still exactly one champion.
+	// 8. And there is still exactly one champion.
 	champ, ok, err := fitInRole(db, roleChampion)
 	if err != nil || !ok || champ.ID != a {
 		t.Fatalf("champion = %q (%v), want %q", champ.ID, ok, a)
+	}
+}
+
+// beside runs a real side-by-side trial: n decisions over the live path, each of
+// which the enrolled challenger scores beside the champion. It asserts the trial
+// actually MEASURED something, because a promotion test whose trial recorded
+// nothing would pass the gate for the wrong reason.
+//
+// (`trial` is learn.go's word for one point of the exhaustive search's grid. One
+// word, one meaning.)
+func beside(t *testing.T, app *zip.App, db *sql.DB, fit string, want int) {
+	t.Helper()
+	for i := 0; i < want; i++ {
+		code, body := req(t, app, http.MethodPost, "/v1/risk/decide", "acme", "u_acme",
+			`{"stage":"payment","subject":{"kind":"account","id":"acct-`+strconv.Itoa(i%7)+`"},
+			  "amount":{"nano":`+strconv.Itoa(i%50+1)+`000000000,"currency":"USD","direction":"in"},
+			  "signals":{"ip":"203.0.113.5","device":"d-1"}}`)
+		if code != http.StatusOK {
+			t.Fatalf("decide = %d %s", code, body)
+		}
+	}
+	got, err := readTally(db, fit, trialDepth)
+	if err != nil {
+		t.Fatalf("tally: %v", err)
+	}
+	if got.Scored < want {
+		t.Fatalf("the trial recorded %d scored comparisons of %d decisions, want at least %d — the trial did "+
+			"not run, so a promotion after it would be measuring nothing", got.Scored, got.Rows, want)
 	}
 }
 
@@ -366,7 +407,7 @@ func TestTheStableIsBoundedPerTenant(t *testing.T) {
 
 	// The quiet tenant takes one seat and learns something in it, so the claim is
 	// about a model with memory and not about an empty map entry.
-	held, err := s.State.stable.at(quiet, shape(0))
+	held, err := s.State.stable.at(quiet, "fit-quiet", shape(0))
 	if err != nil {
 		t.Fatalf("stable.at: %v", err)
 	}
@@ -377,7 +418,7 @@ func TestTheStableIsBoundedPerTenant(t *testing.T) {
 
 	// The loud one asks for far more geometries than it may hold.
 	for i := 0; i < seatsPerTenant+8; i++ {
-		if _, err := s.State.stable.at(loud, shape(i)); err != nil {
+		if _, err := s.State.stable.at(loud, "fit-"+strconv.Itoa(i), shape(i)); err != nil {
 			t.Fatalf("stable.at refused a geometry for its own tenant: %v", err)
 		}
 	}
@@ -406,9 +447,11 @@ func TestTheStableIsBoundedPerTenant(t *testing.T) {
 		t.Fatal("the quiet tenant's learned state was evicted by a neighbour's activity")
 	}
 
-	// The SHIPPED shape is always reachable, however busy the stable is: it is
-	// the base store and is not one of the bounded set.
-	if _, err := s.State.stable.at(loud, shapeOf(s.State.model.Config())); err != nil {
+	// The SHIPPED model is always reachable, however busy the stable is. It is a
+	// seat like any other now — the bound applies to it too — but at() never
+	// refuses, so a tenant that has spent its seats on geometries gets this one
+	// back and loses its own least recently used, which costs one file read.
+	if _, err := s.State.stable.at(loud, "", s.State.shape); err != nil {
 		t.Fatalf("the shipped geometry became unreachable: %v", err)
 	}
 }
@@ -434,7 +477,7 @@ func TestATrialDoesNotGrowWithoutBound(t *testing.T) {
 			t.Fatalf("putChallenge: %v", err)
 		}
 	}
-	if err := pruneTrials(db); err != nil {
+	if err := pruneTrials(context.Background(), db); err != nil {
 		t.Fatalf("pruneTrials: %v", err)
 	}
 	var kept int
@@ -478,16 +521,16 @@ func TestOneTenantsLearnedStateCannotEnterAnother(t *testing.T) {
 
 	// B's own store, at the same geometry. A shared store would make this the
 	// same object; a per-tenant one makes them two, which is the point.
-	theirs, err := s.State.stable.at(b, quickShape)
+	theirs, err := s.State.stable.at(b, mine, quickShape)
 	if err != nil {
 		t.Fatalf("stable.at: %v", err)
 	}
-	if same, _ := s.State.stable.at(a, quickShape); same == theirs {
+	if same, _ := s.State.stable.at(a, mine, quickShape); same == theirs {
 		t.Fatal("two tenants at one geometry share a store — one can evict the other's model")
 	}
 
 	// The direct attempt: A's kept state, B's store, B's key.
-	if err := takeFit(adb, theirs, b, mine); err == nil {
+	if _, err := takeFit(adb, theirs, b, mine); err == nil {
 		t.Fatal("A's learned state was loaded into B's model")
 	}
 	if st := theirs.State(b.String()); st.Learned != 0 {
@@ -530,7 +573,7 @@ func TestAnEvictedModelIsReloadedNotLostForever(t *testing.T) {
 	if code, body := req(t, app, http.MethodGet, "/v1/ml/fits", "acme", "u_acme", ""); code != http.StatusOK {
 		t.Fatalf("fits = %d %s", code, body)
 	}
-	before := mustStore(t, s, tn, quickShape).State(tn.String())
+	before := mustStore(t, s, tn, id, quickShape).State(tn.String())
 	if before.Learned == 0 {
 		t.Fatal("the champion holds nothing before the eviction; the test cannot tell a reload from a fresh model")
 	}
@@ -540,10 +583,9 @@ func TestAnEvictedModelIsReloadedNotLostForever(t *testing.T) {
 	s.State.stable.mu.Lock()
 	for k := range s.State.stable.held {
 		delete(s.State.stable.held, k)
-		delete(s.State.stable.used, k)
 	}
 	s.State.stable.mu.Unlock()
-	if st := mustStore(t, s, tn, quickShape).State(tn.String()); st.Learned != 0 {
+	if st := mustStore(t, s, tn, id, quickShape).State(tn.String()); st.Learned != 0 {
 		t.Fatal("the eviction did not actually drop the model")
 	}
 
@@ -551,7 +593,7 @@ func TestAnEvictedModelIsReloadedNotLostForever(t *testing.T) {
 	if code, body := req(t, app, http.MethodGet, "/v1/ml/fits", "acme", "u_acme", ""); code != http.StatusOK {
 		t.Fatalf("fits = %d %s", code, body)
 	}
-	after := mustStore(t, s, tn, quickShape).State(tn.String())
+	after := mustStore(t, s, tn, id, quickShape).State(tn.String())
 	if after.Learned != before.Learned {
 		t.Fatalf("the evicted champion came back with %d learned, want %d — an eviction permanently silenced "+
 			"a control (fit %s)", after.Learned, before.Learned, id)
@@ -582,7 +624,7 @@ func TestAScheduledEstimationRunsSealsAndEnrols(t *testing.T) {
 		Rows: fitRows}.withDefaults()); err != nil {
 		t.Fatalf("putSchedule: %v", err)
 	}
-	if err := watch(s, tn, db, time.Now()); err != nil {
+	if err := watch(context.Background(), s, tn, db, time.Now()); err != nil {
 		t.Fatalf("watch: %v", err)
 	}
 	id := settle(t, s, tn)
@@ -632,7 +674,7 @@ func TestAScheduledEstimationRunsSealsAndEnrols(t *testing.T) {
 
 	// And a second tick over unchanged data does NOT re-estimate: the same rows
 	// would mint a new identifier for the same artefact and reset nothing.
-	if err := watch(s, tn, db, time.Now()); err != nil {
+	if err := watch(context.Background(), s, tn, db, time.Now()); err != nil {
 		t.Fatalf("watch again: %v", err)
 	}
 	rows, err := listFits(db, 50)
@@ -661,7 +703,7 @@ func TestACancelledEstimationSaysSo(t *testing.T) {
 	}
 	parked := make(chan struct{})
 	done := make(chan struct{})
-	if err := s.State.bench.start(tn, id, func(ctx context.Context) {
+	if err := s.State.bench.start(tn, kindFit, id, func(ctx context.Context) {
 		close(parked)
 		<-ctx.Done()
 		close(done)
@@ -696,12 +738,12 @@ func TestACancelledEstimationSaysSo(t *testing.T) {
 // settle waits for the tenant's queued estimation to finish and returns its id.
 func settle(t *testing.T, s *stateService, tn Tenant) string {
 	t.Helper()
-	id, running := s.State.bench.running(tn)
+	id, running := s.State.bench.running(tn, kindFit)
 	deadline := time.Now().Add(60 * time.Second)
 	for running && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 		var again string
-		again, running = s.State.bench.running(tn)
+		again, running = s.State.bench.running(tn, kindFit)
 		if again != "" {
 			id = again
 		}
@@ -710,4 +752,339 @@ func settle(t *testing.T, s *stateService, tn Tenant) string {
 		t.Fatal("an estimation did not finish inside its deadline")
 	}
 	return id
+}
+
+// ── the defects red found, each pinned by the test that catches it ──────────
+
+// TestTwoVersionsOfOneShapeAreTwoModels is the ship-blocker this layer's key was
+// wrong about.
+//
+// A fit created with no shape inherits the geometry the process ships, which is
+// what production gets — and while the stable was keyed on the GEOMETRY, asking
+// it for that shape handed back the ONE process-wide store. Three consequences,
+// all asserted below: the champion and the challenger were the same object, so
+// the trial compared a model against itself and both roles advanced one set of
+// counters; the champion's own estimated state was never loaded, because the
+// store already held the tenant; and promoting such a version changed nothing
+// while the transition record said it had.
+//
+// The key is the VERSION. Two versions of one shape cannot be one store, because
+// the key cannot express it.
+func TestTwoVersionsOfOneShapeAreTwoModels(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// BOTH at the geometry this process ships — the default, and the one no test
+	// exercised before.
+	champ := seedFit(t, s, tn, db, roleChampion, s.State.shape)
+	chall := seedFit(t, s, tn, db, roleChallenger, s.State.shape)
+
+	champStore := mustStore(t, s, tn, champ, s.State.shape)
+	challStore := mustStore(t, s, tn, chall, s.State.shape)
+	if champStore == challStore {
+		t.Fatal("the champion and the challenger of one shape are the SAME store — the trial is a model " +
+			"compared against itself and both roles move one set of counters")
+	}
+	shipStore := mustShipped(t, s, tn)
+	if shipStore == champStore || shipStore == challStore {
+		t.Fatal("a promoted version shares the shipped model's store — promotion is a no-op and the live " +
+			"model learns twice per decision")
+	}
+
+	// seedFit drove exactly 300 observations into each. Anything else means two
+	// roles landed in one store.
+	for name, store := range map[string]*anomaly.Store{"champion": champStore, "challenger": challStore} {
+		if got := store.State(tn.String()).Learned; got != 300 {
+			t.Fatalf("the %s holds %d learned observations, want 300 — two versions are sharing counters", name, got)
+		}
+	}
+
+	// And the champion the decision path resolves is the champion's OWN store,
+	// carrying the state the promotion was supposed to install. (seedFit moves the
+	// roles in the file directly, so this process learns them the way a fresh one
+	// does: on first touch.)
+	hydrate(s, tn, db)
+	store, id := champion(s, tn)
+	if id != champ {
+		t.Fatalf("the deciding version is %q, want %q", id, champ)
+	}
+	if store != champStore {
+		t.Fatal("the decision path resolves a different store than the champion's own")
+	}
+
+	// hydrate in a SECOND process must load each version's own snapshot into its
+	// own seat, which a shared store made impossible: the store already held the
+	// tenant, so takeFit was skipped and the champion served whatever was there.
+	if err := keepAll(s, tn, db); err != nil {
+		t.Fatalf("keepAll: %v", err)
+	}
+}
+
+// TestHydrateCostsAMapRead is the other half of "it runs on every request".
+//
+// Residency was asked of the ENGINE by taking a snapshot, which deep-copies the
+// whole forest and takes the model's write lock — 209 KB and 51.6 µs per call,
+// serialised against the very Assess the request is about, on every op for every
+// tenant. Residency is a fact this package owns, so the steady-state cost is a
+// map lookup and nothing else.
+func TestHydrateCostsAMapRead(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// The champion at the SHIPPED geometry, which is what production runs and
+	// what the measurement is about: 25 trees at depth 8 is 2 * 25 * 511 * 8 B of
+	// masses, and a snapshot copies all of it.
+	champ := seedFit(t, s, tn, db, roleChampion, s.State.shape)
+	chall := seedFit(t, s, tn, db, roleChallenger, otherShape)
+	hydrate(s, tn, db) // reach steady state: every serving seat resolved
+
+	// The seats really are loaded, or the measurement below is of the empty path.
+	for id, shape := range map[string]candidate{champ: s.State.shape, chall: otherShape} {
+		if _, owed, err := s.State.stable.owed(tn, id, shape); err == nil && owed {
+			t.Fatalf("version %s still owes a file read after hydrate; the measurement would be of nothing", id)
+		}
+	}
+
+	var before, after runtime.MemStats
+	const runs = 2000
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for i := 0; i < runs; i++ {
+		hydrate(s, tn, db)
+	}
+	runtime.ReadMemStats(&after)
+	perCall := (after.TotalAlloc - before.TotalAlloc) / runs
+
+	// A snapshot of ONE forest at the shipped geometry is 2 * 25 * 511 * 8 B =
+	// 204 KB before the histogram; red measured 209 KB per hydrate with one role
+	// cached and ~630 KB with two. The bound here is three orders of magnitude
+	// under that and still ample for the closure the role walk allocates.
+	const bound = 4096
+	if perCall > bound {
+		t.Fatalf("hydrate allocates %d B per call, bound is %d — it is copying forests on the request path, "+
+			"which is %d B/s of garbage at a thousand decisions a second", perCall, bound, perCall*1000)
+	}
+}
+
+// TestPruningATrialIsLinearAndBounded is the third ship-blocker: a per-tick
+// DELETE that was quadratic AND unbounded, on the ONE connection every decision
+// for that tenant is queued behind.
+//
+// The old statement counted each row's newer siblings with a correlated
+// subquery: 4.4 s over 20k rows, 6.9 s over 40k, 21.3 s over 80k, extrapolating
+// to the better part of an hour on the million-rows-a-day tenant this plane was
+// sized for — with that tenant's decide path frozen for the whole run.
+//
+// Two properties, both structural rather than timed: the prune removes at most
+// its budget per tick, and it stops when the caller's deadline is gone.
+func TestPruningATrialIsLinearAndBounded(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// A backlog three chunks past the budget, which is what the first tick after
+	// a Recreate rollout meets.
+	const over = 12000
+	total := trialDepth + pruneBudget + over
+	fill(t, db, "chall", total)
+
+	// A dead context deletes NOTHING. The old statement took no context at all,
+	// so a walk that had run out of budget still held the connection for as long
+	// as the delete took.
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := pruneTrials(dead, db); err == nil {
+		t.Fatal("a prune with no budget left ran anyway — the walk's deadline is a comment, not a bound")
+	}
+	if got := count(t, db); got != total {
+		t.Fatalf("a cancelled prune removed %d rows", total-got)
+	}
+
+	// One tick removes its budget and no more.
+	start := time.Now()
+	if err := pruneTrials(context.Background(), db); err != nil {
+		t.Fatalf("pruneTrials: %v", err)
+	}
+	took := time.Since(start)
+	if got, want := count(t, db), total-pruneBudget; got != want {
+		t.Fatalf("one prune left %d rows, want %d — it is unbounded, so a day's backlog is one statement "+
+			"holding this tenant's only connection", got, want)
+	}
+	// The quadratic form needed 4.4 s to clear 20k. Ten seconds is generous for a
+	// loaded runner and still two orders of magnitude off the shape being refused.
+	if took > 10*time.Second {
+		t.Fatalf("pruning %d rows took %s", pruneBudget, took)
+	}
+
+	// Ticks converge on the bound, and the MOST RECENT rows are the ones kept.
+	for i := 0; i < 3 && count(t, db) > trialDepth; i++ {
+		if err := pruneTrials(context.Background(), db); err != nil {
+			t.Fatalf("pruneTrials: %v", err)
+		}
+	}
+	if got := count(t, db); got != trialDepth {
+		t.Fatalf("the trial settled at %d rows, bound is %d", got, trialDepth)
+	}
+	var oldest string
+	if err := db.QueryRow(`SELECT decision FROM challenge ORDER BY at ASC LIMIT 1`).Scan(&oldest); err != nil {
+		t.Fatalf("oldest: %v", err)
+	}
+	if want := "dec-" + strconv.Itoa(total-trialDepth); oldest != want {
+		t.Fatalf("the oldest kept comparison is %q, want %q — the prune dropped the wrong end", oldest, want)
+	}
+}
+
+// fill writes n comparisons for one trial in ONE transaction. Row by row on a
+// single-connection file this is a minute of the test's life.
+func fill(t *testing.T, db *sql.DB, fit string, n int) {
+	t.Helper()
+	at := time.Now().Add(-time.Duration(n) * time.Second)
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare(`INSERT INTO challenge (decision, at, champion, incumbent, fit, score, cut, alert, scored)
+		VALUES (?, ?, 'champ', 0, ?, 0.5, 0.4, 0, 1)`)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for i := 0; i < n; i++ {
+		if _, err := stmt.Exec("dec-"+strconv.Itoa(i), stamp(at.Add(time.Duration(i)*time.Second)), fit); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+func count(t *testing.T, db *sql.DB) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM challenge`).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	return n
+}
+
+// TestAChallengerMustHaveBeenMeasured is red's exact two-call promotion, refused.
+//
+// The gate read the ROLE, and a role is one PUT away: challenger, then champion,
+// and an unmeasured version was in front of customers with a tally of zero rows.
+// The docstring's claim — a version reaches the decision path only after it has
+// scored the live stream alongside the one it replaces — is now the question
+// asked, and it is answered from the comparisons actually recorded.
+func TestAChallengerMustHaveBeenMeasured(t *testing.T) {
+	dir := t.TempDir()
+	app, s := wireAt(t, dir)
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	incumbent := seedFit(t, s, tn, db, roleChampion, quickShape)
+	upstart := seedFit(t, s, tn, db, roleCandidate, otherShape)
+
+	role(t, app, upstart, `{"role":"challenger","reason":"trial"}`, http.StatusOK)
+	code, body := req(t, app, http.MethodPut, "/v1/ml/fits/"+upstart+"/role", "acme", "u_acme",
+		`{"role":"champion","reason":"two calls and it is live"}`)
+	if code != http.StatusConflict {
+		t.Fatalf("challenger-then-champion with an empty tally = %d %s, want 409", code, body)
+	}
+	if got, err := readTally(db, upstart, trialDepth); err != nil || got.Rows != 0 {
+		t.Fatalf("the refused version had a tally of %d rows (%v) — the test is not asserting what it claims",
+			got.Rows, err)
+	}
+	champ, ok, err := fitInRole(db, roleChampion)
+	if err != nil || !ok || champ.ID != incumbent {
+		t.Fatalf("the incumbent was displaced by an unmeasured version: champion is %q (%v)", champ.ID, ok)
+	}
+
+	// A partial trial is still refused: the floor is on SCORED comparisons, not on
+	// the role, and not on having any row at all.
+	beside(t, app, db, upstart, trialFloor/4)
+	code, body = req(t, app, http.MethodPut, "/v1/ml/fits/"+upstart+"/role", "acme", "u_acme",
+		`{"role":"champion","reason":"it has some rows now"}`)
+	if code != http.StatusConflict {
+		t.Fatalf("a quarter-run trial promoted = %d %s, want 409", code, body)
+	}
+
+	// Run the trial out and it is earned.
+	beside(t, app, db, upstart, trialFloor)
+	role(t, app, upstart, `{"role":"champion","reason":"beat the incumbent over the trial"}`, http.StatusOK)
+}
+
+// TestAFileThatCouldNotBeReadIsAskedAgain is the other edge of making residency
+// a fact this process owns.
+//
+// Remembering "there was nothing" is what turns hydrate into a map read. But a
+// file that could not be READ is not the same answer as a file with nothing in
+// it, and a seat that recorded the first as the second would leave that tenant's
+// champion warming — declining to score, which reads as a clean world — for the
+// life of the process, over one busy moment.
+func TestAFileThatCouldNotBeReadIsAskedAgain(t *testing.T) {
+	dir := t.TempDir()
+	tn, _ := qualify("hanzo", "acme")
+
+	_, first := wireAt(t, dir)
+	db, err := first.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	id := seedFit(t, first, tn, db, roleChampion, quickShape)
+	if err := teardown(first); err != nil {
+		t.Fatalf("teardown: %v", err)
+	}
+
+	_, second := wireAt(t, dir)
+	db2, err := second.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// The state plane is unreadable — a lock, a broken page, a migration mid-flight.
+	kept := map[string]string{}
+	rows, err := db2.Query(`SELECT id, body FROM model`)
+	if err != nil {
+		t.Fatalf("read model: %v", err)
+	}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		kept[k] = v
+	}
+	_ = rows.Close()
+	if _, err := db2.Exec(`DROP TABLE model`); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+
+	hydrate(second, tn, db2)
+	if st := mustStore(t, second, tn, id, quickShape).State(tn.String()); st.Learned != 0 {
+		t.Fatal("the champion restored from a table that does not exist")
+	}
+
+	// The fault clears. The very next request must reload — not the next rollout.
+	if _, err := db2.Exec(`CREATE TABLE model (id TEXT PRIMARY KEY, body TEXT NOT NULL, at TEXT NOT NULL)`); err != nil {
+		t.Fatalf("recreate: %v", err)
+	}
+	for k, v := range kept {
+		if err := putModel(db2, k, []byte(v)); err != nil {
+			t.Fatalf("restore row: %v", err)
+		}
+	}
+	hydrate(second, tn, db2)
+	if st := mustStore(t, second, tn, id, quickShape).State(tn.String()); !st.Warm {
+		t.Fatal("the champion is still warming after the fault cleared — one unreadable moment silenced a " +
+			"control for the life of the process")
+	}
 }

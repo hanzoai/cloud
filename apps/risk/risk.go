@@ -60,13 +60,20 @@ type state struct {
 	// vel holds the in-memory sliding aggregates every decision reads. Constant
 	// time, fixed memory per key, bounded cardinality with LRU eviction.
 	vel *velocity.Store
-	// model holds one half-space-tree forest per tenant, geometry included. It is
-	// the SHIPPED shape — the one a tenant runs before it has promoted a fit of
-	// its own — and the stable below holds the rest.
-	model *anomaly.Store
-	// stable holds one store per promoted GEOMETRY. anomaly.Store carries a
-	// single geometry for every tenant in it, so a champion and a challenger of
-	// different shapes cannot share one; see lifecycle.go.
+	// shape is the geometry this process ships: what a tenant runs before it has
+	// promoted a version of its own, and what a fit inherits when the caller
+	// names no shape. It is anomaly's own default, read back once at build so
+	// there is one definition of it and it is the engine's.
+	shape candidate
+	// digest fingerprints that geometry together with the feature inventory in
+	// force. It is what a version is pinned against and what an auditor compares:
+	// learned state estimated under one inventory cannot be restored into
+	// another, and the digest is what Restore checks.
+	digest string
+	// stable holds one store per (tenant, version). There is no store in this
+	// package that is not one tenant's — a store shared across tenants evicts
+	// across them, and a shared store keyed on the GEOMETRY also makes two
+	// versions of one shape into one model. See lifecycle.go.
 	stable *stable
 	// bench is the bounded, cancellable estimation queue. An estimation replays
 	// thousands of rows through a fresh forest on the pod that is also serving
@@ -131,7 +138,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mount(s, app)
 	s.Log.Info("risk surface mounted",
 		"brand", deps.Brand, "env", deps.Env,
-		"billing", s.State.bill.Enabled(), "model", s.State.model.Digest())
+		"billing", s.State.bill.Enabled(), "model", s.State.digest)
 
 	// Shutdown is registered by the plugin (plugin/risk/main.go) and calls back
 	// here; holding the service in a package var would be a second owner of the
@@ -192,16 +199,22 @@ func build(deps cloud.Deps) (*stateService, error) {
 	}
 
 	vel := velocity.New(velocity.Config{})
-	model, err := anomaly.New(anomaly.Config{
-		// SHADOW IS THE DEFAULT AT THE ENGINE TOO, and the per-tenant switch in
-		// the record plane is what turns a tenant live. Two gates in series
-		// rather than one: a deployment-wide flag flipped by mistake still
-		// cannot make a tenant act.
-		Shadow: true,
-	}, vel)
+	// The shipped geometry and the digest that names it, read back from a store
+	// built with anomaly's own defaults and then let go. Derived rather than
+	// restated: the default has ONE definition and it is the engine's, and the
+	// digest a tenant's own store will report is a pure function of that
+	// geometry plus the inventory — which risk_test asserts, because a shipped
+	// snapshot that will not restore is a control that comes back warming.
+	//
+	// SHADOW IS THE DEFAULT AT THE ENGINE TOO, and the per-tenant switch in the
+	// record plane is what turns a tenant live. Two gates in series rather than
+	// one: a deployment-wide flag flipped by mistake still cannot make a tenant
+	// act.
+	tpl, err := anomaly.New(anomaly.Config{Shadow: true}, vel)
 	if err != nil {
 		return nil, fmt.Errorf("risk.Mount: %w", err)
 	}
+	shape, digest := shapeOf(tpl.Config()), tpl.Digest()
 
 	return &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "risk"),
@@ -209,8 +222,9 @@ func build(deps cloud.Deps) (*stateService, error) {
 			brand:   deps.Brand,
 			dataDir: deps.DataDir,
 			vel:     vel,
-			model:   model,
-			stable:  newStable(model, vel),
+			shape:   shape,
+			digest:  digest,
+			stable:  newStable(shape, vel),
 			bench:   newBench(),
 			shelf:   newShelf(deps.DataDir),
 			bill:    cloud.NewResourceMeter(deps, "risk"),
@@ -315,7 +329,7 @@ func health(s *stateService) func(*zip.Ctx) error {
 
 		report := map[string]any{
 			"status":    "ok",
-			"model":     s.State.model.Digest(),
+			"model":     s.State.digest,
 			"tenants":   len(s.State.shelf.tenants()),
 			"warehouse": warehouse || datastore.Ready(),
 			"billing":   s.State.bill.Enabled(),
@@ -324,7 +338,7 @@ func health(s *stateService) func(*zip.Ctx) error {
 		// warehouse: rings are in memory, rules and lists are the tenant's own
 		// file, the model is in process. The probe is degraded only when
 		// something the hot path actually needs is missing.
-		if s.State.model == nil || s.State.vel == nil || s.State.dataDir == "" {
+		if s.State.stable == nil || s.State.vel == nil || s.State.dataDir == "" {
 			report["status"] = "degraded"
 			report["error"] = "the decision plane is not constructed"
 			return c.JSON(http.StatusServiceUnavailable, report)

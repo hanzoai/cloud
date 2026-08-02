@@ -8,7 +8,9 @@ package risk
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -267,7 +269,7 @@ func TestAnUnmeasuredRateIsAbsentAndNotZero(t *testing.T) {
 		}}) // no label anywhere
 	}
 	train, test, _ := split(rows, trainShare)
-	_, m, prof, err := estimate(context.Background(), tn, quickShape, seedOf("test"), train, test)
+	_, m, prof, err := estimate(context.Background(), tn, quickShape, testSeed(t), train, test)
 	if err != nil {
 		t.Fatalf("estimate: %v", err)
 	}
@@ -469,7 +471,7 @@ func TestAnEstimationIsNeverRunInTheRequest(t *testing.T) {
 	if err := putFit(db, fitRow{ID: held, At: time.Now(), Algo: algoForest, Role: roleCandidate, Status: fitQueued}); err != nil {
 		t.Fatalf("putFit: %v", err)
 	}
-	if err := s.State.bench.start(tn, held, func(context.Context) { <-release }); err != nil {
+	if err := s.State.bench.start(tn, kindFit, held, func(context.Context) { <-release }); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	t.Cleanup(func() { close(release) })
@@ -574,7 +576,7 @@ func seedFit(t *testing.T, s *stateService, tn Tenant, db *sql.DB, role string, 
 	src := fitSource{
 		Name: sourceHistory, Version: 1, From: time.Now().AddDate(0, 0, -365), To: time.Now().Add(-time.Hour),
 		Horizon: defaultHorizon, Rows: 400, Train: 280, Test: 120,
-		Inventory: s.State.model.Digest(), Digest: "rows-" + id,
+		Inventory: s.State.digest, Digest: "rows-" + id,
 	}
 	if err := putFit(db, fitRow{
 		ID: id, At: time.Now(), By: "test", Algo: algoForest, Shape: shape,
@@ -589,8 +591,11 @@ func seedFit(t *testing.T, s *stateService, tn Tenant, db *sql.DB, role string, 
 		fitDigest(algoForest, shape, src)); err != nil {
 		t.Fatalf("sealFit: %v", err)
 	}
-	// Learned state, so the version is servable rather than merely recorded.
-	store, err := s.State.stable.at(tn, shape)
+	// Learned state, so the version is servable rather than merely recorded. The
+	// seat is the VERSION's, not the geometry's: two versions of one shape are
+	// two models, and a helper that conflated them would make every promote test
+	// pass against a store the promotion never moved.
+	store, err := s.State.stable.at(tn, id, shape)
 	if err != nil {
 		t.Fatalf("stable.at: %v", err)
 	}
@@ -632,3 +637,111 @@ func drive(t *testing.T, s *stateService, store *anomaly.Store, tn Tenant, n int
 // otherShape is a second, distinct geometry, so a promote/rollback test moves
 // between two real stores rather than twice around one.
 var otherShape = candidate{Trees: 7, Depth: 5, Window: 32, Blend: 0.25, Review: 0.05}
+
+// TestTheLiveGeometryIsNotDerivableFromThePublishedVersion is the ship-blocker
+// that made the detector's own trees public.
+//
+// The seed was sha256("risk/fit/" + id) — and the id is on every /v1/ml/fits
+// response, with the shape beside it. anomaly plants a tenant's trees at
+// mix(seed, orgID), the snapshot carries the planted value, and takeFit replants
+// the LIVE forest from it. So anyone holding a key for their own org could run
+// the same public sandbox for the same tenant and stand up a byte-exact replica
+// of the model deciding their traffic — which is a map of where every region
+// lies, and therefore of which region to hide activity in. anomaly's own Config
+// says it: a fixed seed makes the geometry guessable from the seed.
+//
+// The method below is the attack, and it is checked BOTH ways: the derived guess
+// must miss, and the value the tenant's own file carries must hit. Without the
+// second half a broken replica would pass this test for the wrong reason.
+func TestTheLiveGeometryIsNotDerivableFromThePublishedVersion(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	ground(t, s, tn, db, time.Now().AddDate(0, 0, -300), 900, 1, 0)
+	if err := putSchedule(db, schedule{Every: 1, Role: roleChallenger, Horizon: 30, Window: 400,
+		Rows: fitRows}.withDefaults()); err != nil {
+		t.Fatalf("putSchedule: %v", err)
+	}
+	if err := watch(context.Background(), s, tn, db, time.Now()); err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+	id := settle(t, s, tn)
+	r, err := getFit(db, id)
+	if err != nil {
+		t.Fatalf("getFit: %v", err)
+	}
+	if r.Status != fitReady {
+		t.Fatalf("the fit is %s: %s", r.Status, r.Refusal)
+	}
+	if r.Profile.Seed == 0 {
+		t.Fatal("the sealed version carries no geometry, so drift cannot measure a score index at all")
+	}
+
+	// What the whole world can compute from the published record.
+	sum := sha256.Sum256([]byte("risk/fit/" + id))
+	guess := binary.BigEndian.Uint64(sum[:8])
+	if guess == r.Profile.Seed {
+		t.Fatal("the live geometry IS sha256 of the published identifier — an attacker replicates the forest " +
+			"deciding its own traffic and searches it for a region to hide in")
+	}
+
+	// The attack in full, so the assertion above is not merely arithmetic: plant
+	// the replica at the guess and compare what it grew against what the tenant's
+	// file actually holds.
+	planted := func(seed uint64) uint64 {
+		t.Helper()
+		model, vel, err := sandbox(r.Shape, seed)
+		if err != nil {
+			t.Fatalf("sandbox: %v", err)
+		}
+		o := observation{
+			id: newID("obs"), at: time.Now(), stage: StagePayment, kind: "account",
+			subject: "acct-0", amount: 1_000_000_000, currency: "USD", direction: "in",
+		}
+		record(vel, tn, o)
+		tx, ent := txOf(tn, o)
+		_, _ = model.Assess(tx, ent)
+		snap, ok := model.Snapshot(tn.String())
+		if !ok {
+			t.Fatal("the replica planted nothing")
+		}
+		return snap.Seed
+	}
+	live := planted(r.Profile.Seed)
+	if planted(guess) == live {
+		t.Fatal("a replica planted from the published identifier grew the SAME trees as the live model")
+	}
+
+	// And nothing on the wire carries the value. The profile is the tenant's own
+	// file and no record projects it.
+	wire, err := json.Marshal(wireFit(r))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, form := range []string{
+		strconv.FormatUint(r.Profile.Seed, 10),
+		strconv.FormatUint(r.Profile.Seed, 16),
+	} {
+		if strings.Contains(string(wire), form) {
+			t.Fatalf("the published record carries the geometry (%s): %s", form, wire)
+		}
+	}
+
+	// Two versions never share one. A seed that repeated would make the first
+	// version's geometry a map of the second's.
+	if err := watch(context.Background(), s, tn, db, time.Now().Add(48*time.Hour)); err != nil {
+		t.Fatalf("watch again: %v", err)
+	}
+	if again := settle(t, s, tn); again != "" && again != id {
+		second, err := getFit(db, again)
+		if err != nil {
+			t.Fatalf("getFit: %v", err)
+		}
+		if second.Status == fitReady && second.Profile.Seed == r.Profile.Seed {
+			t.Fatal("two versions were planted at one geometry")
+		}
+	}
+}

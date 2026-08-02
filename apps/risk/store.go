@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS decision (
 	causes      TEXT NOT NULL DEFAULT '[]',
 	signals     TEXT NOT NULL DEFAULT '{}',
 	digest      TEXT NOT NULL DEFAULT '',
+	-- The model VERSION that decided, empty when the shipped model did. The
+	-- digest beside it names a GEOMETRY, and two versions of one shape share
+	-- one — so the digest alone cannot answer "which model version declined
+	-- this customer", which is the question an adverse action has to answer.
+	fit         TEXT NOT NULL DEFAULT '',
 	label       TEXT NOT NULL DEFAULT '',
 	label_by    TEXT NOT NULL DEFAULT '',
 	label_at    TEXT NOT NULL DEFAULT ''
@@ -225,6 +230,10 @@ func (s *shelf) open(t Tenant) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := widen(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := seed(db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -253,6 +262,34 @@ func (s *shelf) tenants() []Tenant {
 		out = append(out, t)
 	}
 	return out
+}
+
+// widen adds the columns a file created by an earlier shape of this schema does
+// not have. `CREATE TABLE IF NOT EXISTS` converges a MISSING table and says
+// nothing about a table that exists with fewer columns, so this is the other
+// half of "a fresh file and an existing one converge".
+//
+// Idempotent by outcome rather than by dialect: SQLite has no ADD COLUMN IF NOT
+// EXISTS, so the one error it can return for a column already present is read
+// and treated as the success it is. Anything else is a file this process must
+// not serve from.
+func widen(db *sql.DB) error {
+	for _, stmt := range []string{
+		`ALTER TABLE decision ADD COLUMN fit TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := db.Exec(stmt); err != nil && !hasColumn(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// hasColumn reports the one error ADD COLUMN returns for a column that is
+// already there. Read off the message rather than a driver code, for the same
+// reason isUnique is: this package must not become the one place that knows
+// which SQLite driver is linked.
+func hasColumn(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
 }
 
 // seed installs the starter rule set and the two lists the starter rules name,
@@ -600,18 +637,18 @@ func dropControl(db *sql.DB, id string) error {
 // exists, and the caller reads the winner's answer back. Which is what an
 // idempotency key promises: one decision, one set of counters moved.
 //
-// The unique index is PARTIAL (`WHERE idem != ''`), so decisions made without a
+// The unique index is PARTIAL (`WHERE idem != ”`), so decisions made without a
 // key do not collide with each other.
-func putDecision(db *sql.DB, o observation, out outcome, digest, idem string) error {
+func putDecision(db *sql.DB, o observation, out outcome, digest, fit, idem string) error {
 	hits, _ := json.Marshal(out.hits)
 	causes, _ := json.Marshal(out.causes)
 	signals, _ := json.Marshal(o.signals)
 	_, err := db.Exec(`INSERT INTO decision
-		(id, at, stage, kind, subject, action, score, agency, shadow, refusal, amount, currency, direction, idem, hits, causes, signals, digest)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, at, stage, kind, subject, action, score, agency, shadow, refusal, amount, currency, direction, idem, hits, causes, signals, digest, fit)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		out.id, stamp(o.at), o.stage, o.kind, o.subject, out.action, out.score, out.agency,
 		boolInt(out.shadow), out.refusal, o.amount, o.currency, o.direction,
-		idem, string(hits), string(causes), string(signals), digest)
+		idem, string(hits), string(causes), string(signals), digest, fit)
 	if err != nil && idem != "" && isUnique(err) {
 		return errIdemTaken
 	}
@@ -663,7 +700,7 @@ func decisionsPage(db *sql.DB, kind, subject, action, stage string, limit int) (
 			args = append(args, f.val)
 		}
 	}
-	q := `SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label FROM decision`
+	q := `SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label, fit FROM decision`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -680,7 +717,7 @@ func decisionsPage(db *sql.DB, kind, subject, action, stage string, limit int) (
 		var d decisionRow
 		var shadow int
 		if err := rows.Scan(&d.ID, &d.At, &d.Stage, &d.Kind, &d.Subject, &d.Action, &d.Score,
-			&d.Agency, &shadow, &d.Refusal, &d.Label); err != nil {
+			&d.Agency, &shadow, &d.Refusal, &d.Label, &d.Fit); err != nil {
 			return nil, err
 		}
 		d.Shadow = shadow != 0
@@ -691,8 +728,10 @@ func decisionsPage(db *sql.DB, kind, subject, action, stage string, limit int) (
 
 type decisionRow struct {
 	ID, At, Stage, Kind, Subject, Action, Agency, Refusal, Label string
-	Score                                                        float64
-	Shadow                                                       bool
+	// Fit is the model version that decided, empty when the shipped model did.
+	Fit    string
+	Score  float64
+	Shadow bool
 }
 
 // replayed is one recorded decision, reconstituted enough to re-evaluate a
@@ -835,10 +874,10 @@ func decisionDetail(db *sql.DB, id string) (decisionRow, []hit, []byte, string, 
 	var d decisionRow
 	var shadow int
 	var hitsJSON, causesJSON, digest string
-	err := db.QueryRow(`SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label, hits, causes, digest
+	err := db.QueryRow(`SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label, hits, causes, digest, fit
 		FROM decision WHERE id = ?`, id).
 		Scan(&d.ID, &d.At, &d.Stage, &d.Kind, &d.Subject, &d.Action, &d.Score, &d.Agency,
-			&shadow, &d.Refusal, &d.Label, &hitsJSON, &causesJSON, &digest)
+			&shadow, &d.Refusal, &d.Label, &hitsJSON, &causesJSON, &digest, &d.Fit)
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, nil, nil, "", zip.ErrNotFound("no such decision")
 	}
@@ -878,11 +917,18 @@ func putModel(db *sql.DB, id string, body []byte) error {
 	return err
 }
 
+// errNoState is "this tenant's file holds no learned state under that key". It
+// is a NAMED value rather than a fresh error per call so a caller can tell it
+// apart from a file it could not read — one is an answer and the other is a
+// retry, and conflating them either silences a control for the life of the
+// process or reads the file on every request forever.
+var errNoState = zip.ErrNotFound("no snapshot")
+
 func getModel(db *sql.DB, id string) ([]byte, error) {
 	var body string
 	err := db.QueryRow(`SELECT body FROM model WHERE id = ?`, id).Scan(&body)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, zip.ErrNotFound("no snapshot")
+		return nil, errNoState
 	}
 	return []byte(body), err
 }

@@ -38,6 +38,7 @@ package risk
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
@@ -246,7 +247,10 @@ type fitProfile struct {
 	Scored int `json:"scored,omitempty"`
 	// Seed is the tree geometry these distributions were produced under. Drift
 	// replays under the SAME one or the score index is geometry noise; see
-	// seedOf. It stays in the tenant's own encrypted file and is never published.
+	// newSeed. It is drawn from the system CSPRNG, it stays in the tenant's own
+	// encrypted file, no wire record carries it, and nothing published determines
+	// it — a geometry anyone can reproduce is a geometry anyone can search for a
+	// region to hide in.
 	Seed uint64 `json:"seed,omitempty"`
 }
 
@@ -634,23 +638,34 @@ func fitDigest(algo string, shape candidate, src fitSource) string {
 
 // ── the estimation ──────────────────────────────────────────────────────────
 
-// seedOf derives a sandbox's tree geometry from a fit's own identifier.
+// newSeed mints a version's tree geometry.
 //
-// IT HAS TO BE DETERMINISTIC OR SCORE DRIFT CANNOT BE MEASURED AT ALL. Left at
-// zero, anomaly draws the seed from the system CSPRNG at construction, so two
-// sandboxes hold DIFFERENT TREES and produce different scores on identical rows.
-// The index between their score distributions is then geometry noise — measured
-// at 0.11 on byte-identical data before this was pinned, which sits inside the
-// reporting band and is therefore worse than a large error, because it reads as
-// a small finding.
+// IT MUST BE FIXED, AND IT MUST NOT BE DERIVABLE. Two requirements that pull
+// opposite ways, and the earlier answer got the second one wrong.
 //
-// This is not a weakening of the engine's warning that a fixed seed makes the
-// geometry guessable from the seed. The value is derived from a 128-bit
-// identifier minted per fit, it never leaves the tenant's own encrypted file,
-// and the very same number is already carried in the snapshot sitting beside it.
-func seedOf(id string) uint64 {
-	sum := sha256.Sum256([]byte("risk/fit/" + id))
-	return binary.BigEndian.Uint64(sum[:8])
+// Fixed, because otherwise score drift cannot be measured at all: left at zero
+// anomaly draws the seed from the system CSPRNG at construction, so a fit's
+// sandbox and the drift reading's sandbox hold DIFFERENT TREES and produce
+// different scores on identical rows. The index between their distributions is
+// then geometry noise — measured at 0.11 on byte-identical data before the seed
+// was pinned, which sits inside the reporting band and is therefore worse than a
+// large error, because it reads as a small finding.
+//
+// Not derivable, because the geometry IS the secret. anomaly's own warning says
+// it: a predictable geometry can be probed for a region to hide activity in.
+// Deriving it from the version's identifier made it public — the identifier is
+// on every /v1/ml/fits response, the shape beside it, so anyone holding a key
+// for their OWN org could stand up an exact replica of the forest deciding their
+// traffic and search it for a quiet region. A version's seed is drawn here from
+// the system CSPRNG, kept in the tenant's own encrypted file (the profile the
+// wire record does not carry, and the snapshot beside it), and read back from
+// there by drift. Nothing published determines it.
+func newSeed() (uint64, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0, fmt.Errorf("risk: a version's geometry could not be drawn: %w", err)
+	}
+	return binary.BigEndian.Uint64(b[:]), nil
 }
 
 // sandbox is a fresh model over fresh rings at one geometry. Nothing outside it
@@ -1326,19 +1341,19 @@ func (o ops) fit(ctx context.Context, in *mlFitIn) (*mlFitRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "fit", fitCents); err != nil {
-		return nil, zip.Errorf(402, "%s", err.Error())
-	}
 	by := strings.TrimSpace(in.Note)
 	if by == "" {
 		by = "requested"
 	}
 	now := time.Now()
-	id, err := enqueue(o.s, sc.tenant, db, by, roleCandidate, *in, now)
+	// Gated and metered inside enqueue, which is the ONE path a fit is created
+	// by. Doing it here as well would be a second place for the price to live,
+	// and the scheduler — which does not come through this op — would still not
+	// pay it.
+	id, err := enqueue(ctx, o.s, sc, db, by, roleCandidate, *in, now)
 	if err != nil {
 		return nil, err
 	}
-	o.s.State.bill.Meter(sc.org, sc.project, "fit", fitCents, sc.request, sc.clientIP)
 
 	r, err := getFit(db, id)
 	if err != nil {
@@ -1368,7 +1383,7 @@ func (o ops) fits(ctx context.Context, in *mlFitsIn) (*mlFitPage, error) {
 	if r, ok, err := fitInRole(db, roleChallenger); err == nil && ok {
 		out.Challenger = r.ID
 	}
-	if id, ok := o.s.State.bench.running(sc.tenant); ok {
+	if id, ok := o.s.State.bench.running(sc.tenant, kindFit); ok {
 		out.Estimating = id
 	}
 	return out, nil
@@ -1380,7 +1395,7 @@ func (o ops) fits(ctx context.Context, in *mlFitsIn) (*mlFitPage, error) {
 // would distinguish "exists and is not yours" from "does not exist" and let a
 // neighbour enumerate.
 func (o ops) fitDetail(ctx context.Context, in *mlRef) (*mlFitDetailOut, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	_, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1405,7 +1420,7 @@ func (o ops) fitDetail(ctx context.Context, in *mlRef) (*mlFitDetailOut, error) 
 	for _, a := range alarms {
 		out.Drift = append(out.Drift, mlDriftAlarm{At: stamp(a.At), Says: a.Says, Rows: a.Rows, Scored: a.Scored})
 	}
-	if err := servable(o.s, sc.tenant, db, r); err != nil {
+	if err := servable(o.s, db, r); err != nil {
 		out.Refusal = err.Error()
 	} else {
 		out.Servable = true
@@ -1480,7 +1495,7 @@ func (o ops) setFitRole(ctx context.Context, in *mlFitRoleIn) (*mlFitRecord, err
 		return wireFit(r), nil
 	}
 	if want == roleChampion || want == roleChallenger {
-		if err := servable(o.s, sc.tenant, db, r); err != nil {
+		if err := servable(o.s, db, r); err != nil {
 			return nil, zip.Errorf(409, "%s", err.Error())
 		}
 	}
@@ -1568,15 +1583,17 @@ func (o ops) fitTally(ctx context.Context, in *mlTallyIn) (*mlTallyOut, error) {
 // leave the tenant with a champion whose store holds nothing — warming, and
 // therefore declining to score, for as long as nobody noticed. Catching it at
 // the promotion is catching it while somebody is still watching.
-func servable(s *stateService, t Tenant, db *sql.DB, r fitRow) error {
+func servable(s *stateService, db *sql.DB, r fitRow) error {
 	if r.Status != fitReady {
 		return fmt.Errorf("this version is %s, so there is nothing to serve", r.Status)
 	}
-	if r.Source.Inventory != "" && r.Source.Inventory != s.State.model.Digest() {
+	if r.Source.Inventory != "" && r.Source.Inventory != s.State.digest {
 		return errors.New("this version was estimated against a different feature inventory, and state estimated " +
 			"under one inventory cannot be restored into another")
 	}
-	if _, err := s.State.stable.at(t, r.Shape); err != nil {
+	// The geometry, checked rather than housed. Housing it here would mint a seat
+	// for a version nobody is serving, and evict one that is.
+	if err := checkShape(r.Shape); err != nil {
 		return err
 	}
 	if _, err := getModel(db, fitKey(r.ID)); err != nil {
@@ -1586,12 +1603,30 @@ func servable(s *stateService, t Tenant, db *sql.DB, r fitRow) error {
 	return nil
 }
 
+// trialFloor is how many decisions a challenger must have SCORED beside the
+// incumbent before it may take the decision path. It is driftFloor's number for
+// driftFloor's reason: below a couple of hundred scored rows the two shares the
+// tally reports are noise with a decimal point, and a promotion justified by
+// noise is an unmeasured model in front of customers wearing a measurement's
+// clothes.
+const trialFloor = driftFloor
+
 // earned holds a promotion to the precondition that makes champion-challenger
 // mean something.
+//
+// IT IS THE TALLY THAT EARNS IT, NOT THE ROLE. Reading the role alone made the
+// gate two writes wide: PUT role=challenger then PUT role=champion promoted an
+// unmeasured version over the incumbent with a tally of zero rows, which is the
+// exact sequence the gate exists to refuse. So the question asked is the one the
+// docstring always claimed — has this version scored the live stream beside the
+// one it replaces — and it is answered from the comparisons actually recorded.
+//
+// The two exemptions stay, and they are the ones worth having: a version that
+// has already DECIDED real traffic goes back instantly (that is a rollback, and
+// a rollback refused by the promotion gate is the worst failure this plane has),
+// and a first version with nothing to displace has no incumbent to be measured
+// against.
 func earned(db *sql.DB, r fitRow) error {
-	if r.Role == roleChallenger {
-		return nil
-	}
 	if r.Served != "" {
 		return nil // a rollback: this version has already decided real traffic
 	}
@@ -1600,9 +1635,22 @@ func earned(db *sql.DB, r fitRow) error {
 	} else if !ok {
 		return nil // nothing to displace
 	}
-	return zip.Errorf(409,
-		"this version has never scored beside the incumbent; put it on trial as the challenger first, "+
-			"or roll back to a version that has already decided")
+	if r.Role != roleChallenger {
+		return zip.Errorf(409,
+			"this version has never scored beside the incumbent; put it on trial as the challenger first, "+
+				"or roll back to a version that has already decided")
+	}
+	t, err := readTally(db, r.ID, trialDepth)
+	if err != nil {
+		return err
+	}
+	if t.Scored < trialFloor {
+		return zip.Errorf(409,
+			"this version has scored %d of the %d decisions it rode along with, and a comparison needs %d before "+
+				"it says anything; leave it on trial, or roll back to a version that has already decided",
+			t.Scored, t.Rows, trialFloor)
+	}
+	return nil
 }
 
 // ── conversions ─────────────────────────────────────────────────────────────

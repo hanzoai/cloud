@@ -384,6 +384,11 @@ type riskDecision struct {
 	// Model is the digest of the model that produced this, so an auditor can pin
 	// the exact geometry that raised an alert.
 	Model string `json:"model"`
+	// Fit is the model VERSION that decided, empty when the tenant runs the
+	// shipped model. The digest names a geometry and two versions of one shape
+	// share it, so it is Fit and not Model that answers the question an adverse
+	// action has to answer: which model version declined this customer.
+	Fit string `json:"fit,omitempty"`
 }
 
 // riskDecisionsIn filters the decision log. Every filter is an equality on a
@@ -426,6 +431,9 @@ type riskDecisionBrief struct {
 	Refusal string `json:"refusal,omitempty"`
 	// Label is what a human later concluded, when anyone has.
 	Label string `json:"label,omitempty"`
+	// Fit is the model VERSION that decided, empty when the tenant was running
+	// the shipped model.
+	Fit string `json:"fit,omitempty"`
 }
 
 // riskDecisionPage is a page of the decision log.
@@ -1233,7 +1241,7 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	// this tenant promotes a fit of its own. A champion whose geometry cannot be
 	// housed yields no store, and the decision is then made on rules alone with
 	// the model refusing — never silently on a shape nobody promoted.
-	store, championFit := champion(o.s, sc.tenant, db)
+	store, championFit := champion(o.s, sc.tenant)
 
 	out := decide(ctx, o.s.State.vel, store, sc.tenant, obs, rules,
 		func(name, value string) bool { return lists[name][strings.ToLower(value)] },
@@ -1247,7 +1255,17 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 			return false
 		}, shadow)
 
-	digest := o.s.State.model.Digest()
+	// WHICH MODEL, ON THE RECORD. Both halves: the digest of the model that
+	// actually decided — the champion's own geometry, not the shipped one — and
+	// the VERSION that names it. A decline is an adverse action and the question
+	// an auditor asks about one is "which model version did this"; a digest alone
+	// answers "which shape", and two versions of one shape share a digest. The
+	// version is empty exactly when the tenant is running the shipped model,
+	// which is itself the answer.
+	digest := o.s.State.digest
+	if store != nil {
+		digest = store.Digest()
+	}
 	// DURABLE FIRST. The decision is the record; the analytics copy comes after
 	// and is best-effort. Wired the other way, a bus hiccup loses evidence.
 	//
@@ -1258,7 +1276,7 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	// The idempotency key is claimed IN the insert, so a concurrent retry loses
 	// the race at the index rather than after a second decision exists — and the
 	// loser reads back the winner's answer, which is what the key promised.
-	if err := putDecision(db, obs, out, digest, in.Idem); err != nil {
+	if err := putDecision(db, obs, out, digest, championFit, in.Idem); err != nil {
 		if errors.Is(err, errIdemTaken) {
 			id, found, ferr := byIdem(db, in.Idem)
 			if ferr != nil || !found {
@@ -1283,7 +1301,7 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	return &riskDecision{
 		ID: out.id, Action: out.action, Score: out.score, Agency: out.agency,
 		Hits: wireHits(out.hits), Causes: wireCauses(out.causes),
-		Shadow: out.shadow, Refusal: out.refusal, Model: digest,
+		Shadow: out.shadow, Refusal: out.refusal, Model: digest, Fit: championFit,
 	}, nil
 }
 
@@ -1339,6 +1357,7 @@ func (o ops) decided(db *sql.DB, id string) (*riskDecision, error) {
 		ID: view.Decision.ID, Action: view.Decision.Action, Score: view.Decision.Score,
 		Agency: view.Decision.Agency, Hits: view.Hits, Causes: view.Causes,
 		Shadow: view.Decision.Shadow, Refusal: view.Decision.Refusal, Model: view.Model,
+		Fit: view.Decision.Fit,
 	}, nil
 }
 
@@ -1971,12 +1990,16 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 	if err != nil {
 		return nil, err
 	}
+	store, err := shipped(o.s, sc.tenant)
+	if err != nil {
+		return nil, err
+	}
 	tx, ent := txOf(sc.tenant, obs)
-	a := o.s.State.model.Inspect(tx, ent)
+	a := store.Inspect(tx, ent)
 	return &mlScoreOut{
 		Scored: a.Scored, Refusal: a.Reason, Score: round4(a.Score), Cut: round4(a.Cut),
 		Alert: a.Alert, Shadow: a.Shadow, Causes: wireCauses(a.Causes),
-		Values: wireValues(a.Values), Model: o.s.State.model.Digest(),
+		Values: wireValues(a.Values), Model: store.Digest(),
 	}, nil
 }
 
@@ -2011,6 +2034,10 @@ func (o ops) train(ctx context.Context, in *mlTrainIn) (*mlTrainOut, error) {
 		return nil, zip.Errorf(402, "%s", err.Error())
 	}
 
+	store, err := shipped(o.s, sc.tenant)
+	if err != nil {
+		return nil, err
+	}
 	out := &mlTrainOut{Refused: map[string]int{}}
 	for _, w := range in.Observations {
 		obs, err := fromWireObservation(w)
@@ -2020,16 +2047,16 @@ func (o ops) train(ctx context.Context, in *mlTrainIn) (*mlTrainOut, error) {
 		}
 		record(o.s.State.vel, sc.tenant, obs)
 		tx, ent := txOf(sc.tenant, obs)
-		a := o.s.State.model.Inspect(tx, ent)
+		a := store.Inspect(tx, ent)
 		if !a.Scored && a.Reason != "" && a.Reason != RefusalWarming {
 			out.Refused[a.Reason]++
 		}
 		// Assess is the LEARNING path; in shadow it contributes no hit and the
 		// counters still move, which is exactly training.
-		_, _ = o.s.State.model.Assess(tx, ent)
+		_, _ = store.Assess(tx, ent)
 		out.Learned++
 	}
-	st := o.s.State.model.State(sc.tenant.String())
+	st := store.State(sc.tenant.String())
 	out.Warm, out.Model = st.Warm, st.Digest
 	o.s.State.bill.Meter(sc.org, sc.project, "train", trainCents, sc.request, sc.clientIP)
 	return out, nil
@@ -2050,8 +2077,11 @@ func (o ops) modelState(ctx context.Context, _ *mlNoInput) (*mlModelState, error
 	if err != nil {
 		return nil, err
 	}
-	st := o.s.State.model.State(sc.tenant.String())
-	return wireState(st), nil
+	store, err := shipped(o.s, sc.tenant)
+	if err != nil {
+		return nil, err
+	}
+	return wireState(store.State(sc.tenant.String())), nil
 }
 
 // SetAppetite sets how much of the stream the model may examine.
@@ -2080,8 +2110,11 @@ func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, 
 	// so is better than pretending a per-tenant lever exists that does not: the
 	// stored value is what a search optimises against and what the next
 	// deployment-level change is measured from.
-	st := o.s.State.model.State(sc.tenant.String())
-	out := wireState(st)
+	store, err := shipped(o.s, sc.tenant)
+	if err != nil {
+		return nil, err
+	}
+	out := wireState(store.State(sc.tenant.String()))
 	out.Appetite = mlAppetite{Review: in.Review, Sample: in.Sample, Warm: out.Appetite.Warm}
 	return out, nil
 }
@@ -2098,7 +2131,7 @@ func (o ops) features(ctx context.Context, _ *mlNoInput) (*mlFeatureInventory, e
 		return nil, err
 	}
 	inv := anomaly.Inventory()
-	out := &mlFeatureInventory{Digest: o.s.State.model.Digest()}
+	out := &mlFeatureInventory{Digest: o.s.State.digest}
 	for _, f := range inv {
 		out.Items = append(out.Items, mlFeature{
 			Name: f.Name, Window: f.Window, Typology: f.Typology, Indicator: f.Indicator,
@@ -2116,6 +2149,13 @@ func (o ops) features(ctx context.Context, _ *mlNoInput) (*mlFeatureInventory, e
 // anyone with a key. Each candidate runs in a sandbox over fresh counters, so a
 // search can never move the live model, and no candidate can see another
 // tenant's history because the replay reads this tenant's own file.
+//
+// A CLOSED GRID IS NOT A BOUND ON CONCURRENCY. 243 candidates over a thousand
+// replayed rows is one bounded search; a caller looping the op is as many of
+// them at once as it cares to start, on a single replica that is also answering
+// authorisations for every other product on this host. So it queues on THE bench
+// — the same one estimation uses, with the same four bounds: one in flight per
+// tenant, two across the deployment, a wall-clock ceiling, and the row cap.
 //
 // It answers 202 with a run identifier; read the report back at
 // GET /v1/ml/search/{id}.
@@ -2156,9 +2196,7 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 	}
 
 	tenant := sc.tenant
-	go func() {
-		bg, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
+	if err := o.s.State.bench.start(tenant, kindSearch, id, func(bg context.Context) {
 		rep, err := searchRun(bg, tenant, obs)
 		status := "done"
 		if err != nil {
@@ -2169,7 +2207,15 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 		if err := putSearch(db, id, status, b); err != nil {
 			o.s.Log.Error("risk: a search report could not be kept", "search", id, "err", err)
 		}
-	}()
+	}); err != nil {
+		// The bench refused: this tenant already has work on it. The row says so
+		// rather than vanishing, for the same reason a cancelled estimation does.
+		body, _ := json.Marshal(searchReport{Events: len(obs), Refusal: err.Error()})
+		if perr := putSearch(db, id, "refused", body); perr != nil {
+			return nil, perr
+		}
+		return nil, err
+	}
 	o.s.State.bill.Meter(sc.org, sc.project, "search", searchCents, sc.request, sc.clientIP)
 	return run, nil
 }
@@ -2221,10 +2267,14 @@ func (o ops) snapshot(ctx context.Context, _ *mlNoInput) (*mlSnapshotOut, error)
 	if err != nil {
 		return nil, err
 	}
-	if err := saveModel(o.s.State.shelf, o.s.State.model, sc.tenant); err != nil {
+	store, err := shipped(o.s, sc.tenant)
+	if err != nil {
 		return nil, err
 	}
-	st := o.s.State.model.State(sc.tenant.String())
+	if err := saveModel(o.s.State.shelf, store, sc.tenant); err != nil {
+		return nil, err
+	}
+	st := store.State(sc.tenant.String())
 	return &mlSnapshotOut{Digest: st.Digest, Learned: st.Learned, At: stamp(time.Now())}, nil
 }
 
@@ -2240,11 +2290,14 @@ func (o ops) restore(ctx context.Context, _ *mlNoInput) (*mlModelState, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := loadModel(o.s.State.shelf, o.s.State.model, sc.tenant); err != nil {
+	store, err := shipped(o.s, sc.tenant)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := loadModel(o.s.State.shelf, store, sc.tenant); err != nil {
 		return nil, zip.Errorf(409, "%s", err.Error())
 	}
-	st := o.s.State.model.State(sc.tenant.String())
-	return wireState(st), nil
+	return wireState(store.State(sc.tenant.String())), nil
 }
 
 // ── conversions ─────────────────────────────────────────────────────────────
@@ -2253,7 +2306,7 @@ func brief(r decisionRow) riskDecisionBrief {
 	return riskDecisionBrief{
 		ID: r.ID, At: r.At, Stage: r.Stage, Kind: r.Kind, Subject: r.Subject,
 		Action: r.Action, Score: r.Score, Agency: r.Agency, Shadow: r.Shadow,
-		Refusal: r.Refusal, Label: r.Label,
+		Refusal: r.Refusal, Label: r.Label, Fit: r.Fit,
 	}
 }
 

@@ -35,7 +35,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/ml/drift", zip.Doc{
-		Description: "Drift measures whether the deciding model still fits the world it was\nestimated on: the distribution of every feature it reads, the distribution of\nthe scores it produces, the alert share against the appetite it states, and\nthe judgement rate against the one it measured.\n\nEvery reference is the version's OWN, stored when it was estimated. A report\nthat recomputed its baseline from recent data would be comparing the present\nto the present, which is a number that is always small and always reassuring.",
+		Description: "Drift measures whether the deciding model still fits the world it was\nestimated on: the distribution of every feature it reads, the distribution of\nthe scores it produces, the alert share against the appetite it states, and\nthe judgement rate against the one it measured.\n\nEvery reference is the version's OWN, stored when it was estimated. A report\nthat recomputed its baseline from recent data would be comparing the present\nto the present, which is a number that is always small and always reassuring.\n\nIT IS THE ESTIMATION'S WORK AT A SMALLER SIZE, SO IT CARRIES THE ESTIMATION'S\nBOUNDS. A reading replays up to fitRows rows through a fresh forest —\nmeasured at 54 ms of one core at the cap — on the single replica that is also\nanswering authorisations. Unpriced and unbounded that is a free way to spend\nthe pod: gated and metered on the caller's own ledger, one reading in flight\nper tenant, two across the deployment, and a deadline of its own so a caller\nthat walked away is not still holding a core.",
 		Fields: map[string]string{
 			"mlDimDrift.dim":      "Dim is the feature.",
 			"mlDimDrift.index":    "Index is the population-stability index against this version's own\nreference distribution. Below 0.1 is stable, 0.1 to 0.25 has moved, above\n0.25 is a different world.",
@@ -319,6 +319,7 @@ func init() {
 			"riskDecisionBrief.action":  "Action is what was decided.",
 			"riskDecisionBrief.agency":  "Agency is the actor class.",
 			"riskDecisionBrief.at":      "At is when it was made, RFC 3339 in UTC.",
+			"riskDecisionBrief.fit":     "Fit is the model VERSION that decided, empty when the tenant was running\nthe shipped model.",
 			"riskDecisionBrief.id":      "ID identifies the decision.",
 			"riskDecisionBrief.kind":    "Kind is the subject kind.",
 			"riskDecisionBrief.label":   "Label is what a human later concluded, when anyone has.",
@@ -350,6 +351,7 @@ func init() {
 			"riskDecisionBrief.action":  "Action is what was decided.",
 			"riskDecisionBrief.agency":  "Agency is the actor class.",
 			"riskDecisionBrief.at":      "At is when it was made, RFC 3339 in UTC.",
+			"riskDecisionBrief.fit":     "Fit is the model VERSION that decided, empty when the tenant was running\nthe shipped model.",
 			"riskDecisionBrief.id":      "ID identifies the decision.",
 			"riskDecisionBrief.kind":    "Kind is the subject kind.",
 			"riskDecisionBrief.label":   "Label is what a human later concluded, when anyone has.",
@@ -448,6 +450,7 @@ func init() {
 			"riskDecisionBrief.action":  "Action is what was decided.",
 			"riskDecisionBrief.agency":  "Agency is the actor class.",
 			"riskDecisionBrief.at":      "At is when it was made, RFC 3339 in UTC.",
+			"riskDecisionBrief.fit":     "Fit is the model VERSION that decided, empty when the tenant was running\nthe shipped model.",
 			"riskDecisionBrief.id":      "ID identifies the decision.",
 			"riskDecisionBrief.kind":    "Kind is the subject kind.",
 			"riskDecisionBrief.label":   "Label is what a human later concluded, when anyone has.",
@@ -766,6 +769,7 @@ func init() {
 			"riskDecision.action":  "Action is what to do: allow, challenge, review, restrict or block.",
 			"riskDecision.agency":  "Agency is what kind of actor this was: agent, human, bot or unknown.\nDerived server-side from the credential class, this org's agent registry,\nthe live agent session and the account's metered shape — never from a\nuser-agent string, which is a claim rather than a fact.",
 			"riskDecision.causes":  "Causes is the model's per-feature attribution, when the model contributed.",
+			"riskDecision.fit":     "Fit is the model VERSION that decided, empty when the tenant runs the\nshipped model. The digest names a geometry and two versions of one shape\nshare it, so it is Fit and not Model that answers the question an adverse\naction has to answer: which model version declined this customer.",
 			"riskDecision.hits":    "Hits is the evidence, strongest first.",
 			"riskDecision.id":      "ID identifies this decision for the whole of its life: the label, the\nevidence read and the dispute packet all key on it.",
 			"riskDecision.model":   "Model is the digest of the model that produced this, so an auditor can pin\nthe exact geometry that raised an alert.",
@@ -797,6 +801,7 @@ func init() {
 			"riskDecisionBrief.action":  "Action is what was decided.",
 			"riskDecisionBrief.agency":  "Agency is the actor class.",
 			"riskDecisionBrief.at":      "At is when it was made, RFC 3339 in UTC.",
+			"riskDecisionBrief.fit":     "Fit is the model VERSION that decided, empty when the tenant was running\nthe shipped model.",
 			"riskDecisionBrief.id":      "ID identifies the decision.",
 			"riskDecisionBrief.kind":    "Kind is the subject kind.",
 			"riskDecisionBrief.label":   "Label is what a human later concluded, when anyone has.",

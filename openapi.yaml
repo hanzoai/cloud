@@ -22136,6 +22136,13 @@ components:
           items:
             $ref: '#/components/schemas/riskCause'
           type: array
+        fit:
+          description: |-
+            Fit is the model VERSION that decided, empty when the tenant runs the
+            shipped model. The digest names a geometry and two versions of one shape
+            share it, so it is Fit and not Model that answers the question an adverse
+            action has to answer: which model version declined this customer.
+          type: string
         hits:
           description: Hits is the evidence, strongest first.
           items:
@@ -22176,6 +22183,11 @@ components:
           type: string
         at:
           description: At is when it was made, RFC 3339 in UTC.
+          type: string
+        fit:
+          description: |-
+            Fit is the model VERSION that decided, empty when the tenant was running
+            the shipped model.
           type: string
         id:
           description: ID identifies the decision.
@@ -58722,6 +58734,14 @@ paths:
         Every reference is the version's OWN, stored when it was estimated. A report
         that recomputed its baseline from recent data would be comparing the present
         to the present, which is a number that is always small and always reassuring.
+
+        IT IS THE ESTIMATION'S WORK AT A SMALLER SIZE, SO IT CARRIES THE ESTIMATION'S
+        BOUNDS. A reading replays up to fitRows rows through a fresh forest —
+        measured at 54 ms of one core at the cap — on the single replica that is also
+        answering authorisations. Unpriced and unbounded that is a free way to spend
+        the pod: gated and metered on the caller's own ledger, one reading in flight
+        per tenant, two across the deployment, and a deadline of its own so a caller
+        that walked away is not still holding a core.
       operationId: mlDrift
       parameters:
       - description: |-
