@@ -80,9 +80,41 @@ import (
 // remotely) is set but no explicit ZAP endpoint is.
 const defaultZapEndpoint = "otel-collector.hanzo.svc:4319"
 
+// localPlaneEndpoint is the plane ingest's ZAP span wire on the POD's loopback —
+// the address apps/o11y/planesink.go binds (planeSpanListen, 0.0.0.0:4317). Cloud
+// runs its subsystems as sibling plugin PROCESSES in one pod; the sink lives in
+// exactly one of them, so loopback is what "co-resident" means to the other
+// nineteen. Same pod, same lifecycle, no Service, no collector.
+const localPlaneEndpoint = "127.0.0.1:4317"
+
 // traceDest is the destination cloud's OWN spans route to. One name for the
 // aspect "somewhere that stores traces"; who serves it is the router's business.
 const traceDest zap.Destination = "hanzo.o11y.traces"
+
+// wireEndpointFor resolves the ZAP wire fallback — where spans go when THIS
+// process has no co-resident sink. An explicit endpoint wins; a legacy OTLP
+// endpoint means "ship remotely" and picks the fleet collector; otherwise, if a
+// plane sink exists in this DEPLOYMENT, it is in a sibling plugin process in this
+// pod, so loopback reaches it. Empty means Cost-0 in-process only.
+//
+// The last case is the one that was missing, and it was a silent total loss:
+// cloud runs its subsystems as sibling PROCESSES, the sink registers in exactly
+// one of them, and the other nineteen had neither a route nor an endpoint — so
+// every request span they produced returned ErrNoRoute and event.span stayed
+// empty while five migrated read paths queried it. The process that HOLDS the
+// sink never reaches this fallback (its Send is routed), so it cannot self-dial.
+func wireEndpointFor(zapEndpoint, legacyOTLP string, inprocSinkExpected bool) string {
+	switch {
+	case zapEndpoint != "":
+		return zapEndpoint
+	case legacyOTLP != "":
+		return defaultZapEndpoint
+	case inprocSinkExpected:
+		return localPlaneEndpoint
+	default:
+		return ""
+	}
+}
 
 // traceInproc is the Cost-0 interface a co-resident sink registers on, and
 // traceRouter is the table the exporter Sends through. Both private: the ONLY
@@ -299,14 +331,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		return stopMeter
 	}
 
-	// Resolve the wire fallback: an explicit ZAP endpoint, else (legacy OTLP
-	// intent) the default collector, else none — Cost-0 in-process only. The wire
-	// is used exactly when no co-resident sink is registered, which is precisely
-	// the o11y-as-a-plugin case.
-	wireEndpoint := zapEndpoint
-	if wireEndpoint == "" && legacy != "" {
-		wireEndpoint = defaultZapEndpoint
-	}
+	wireEndpoint := wireEndpointFor(zapEndpoint, legacy, TraceInprocEnabled())
 	var wire sdktrace.SpanExporter
 	wireDesc := "none (co-resident sink only)"
 	if wireEndpoint != "" {
