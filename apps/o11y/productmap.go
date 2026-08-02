@@ -5,7 +5,8 @@ import "strings"
 // productmap is the ONE server-side table that resolves a client-supplied
 // `product` query param into the concrete infra identities the scoped o11y
 // handlers query: the datastore log `resources_string['app']` value, the
-// VictoriaMetrics `up{service=…}` selector, and the in-cluster health host.
+// `service` label the fleet prober records against, and the in-cluster health
+// host.
 //
 // SECURITY (this is a tenant-isolation + injection boundary, so it lives in ONE
 // place):
@@ -70,7 +71,8 @@ type service struct {
 	ID string
 	// App is the datastore `resources_string['app']` value for this product's logs.
 	App string
-	// PromService is the VictoriaMetrics `service` label value (up{service=…}).
+	// PromService is the `service` label the fleet prober records this product's
+	// hanzo_service_up under (probes.go's target name).
 	PromService string
 	// HealthHost is the in-cluster host the status prober hits (<workload>.hanzo.svc…).
 	HealthHost string

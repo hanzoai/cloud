@@ -55,13 +55,11 @@ func surfaceApp(t *testing.T) *zip.App {
 // task. Addresses are written the way the DOCUMENT writes them, which is the
 // identity every projection keys on.
 var untypedByDesign = map[string]string{
-	"GET /v1/o11y/vm/query": "returns VictoriaMetrics' own status code and its Prometheus envelope " +
-		"VERBATIM (vmProxy: c.Bytes(status, body)). A typed op answers its ONE declared status and " +
-		"marshals a Go value, so a VM 4xx would become a 200 and the envelope would be re-shaped.",
-	"GET /v1/o11y/vm/query_range": "same verbatim status+envelope passthrough as /vm/query, over the " +
-		"range form. Its `values` entries are [unixSeconds, \"sample\"] pairs — a heterogeneous JSON " +
-		"array no Go struct field can hold without becoming []any, which publishes a schema the wire " +
-		"does not have.",
+	// The two /v1/o11y/vm/* entries that stood here are GONE, and their absence is
+	// the point: they were untyped because they answered VictoriaMetrics' status
+	// code and its Prometheus envelope verbatim, and a wire fact about a store we
+	// no longer run cannot keep a route out of the registry. What is still
+	// measured is served typed, at /v1/o11y/availability (availability.go).
 	"POST /v1/o11y/query": "a reverse proxy into the o11y runtime's v3 engine route (builderQueryHandler: " +
 		"zip.AdaptNetHTTP, r.URL.Path rewritten to /api/v3/query). Request body, query string, upstream " +
 		"status, headers and body all ride through untouched; there is no Go type for \"whatever the " +
@@ -213,7 +211,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
-// TestUntypedRoutesKeepTheirWire measures the four wire facts the reasons above
+// TestUntypedRoutesKeepTheirWire measures the wire facts the reasons above
 // CLAIM, on the real router, so the refusals are evidence rather than assertion.
 // Each is a fact a typed op could not answer: a text/plain body, a 200 over a
 // body that is not JSON, and a non-JSON content type on the replay read.
@@ -265,11 +263,4 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 		}
 	})
 
-	t.Run("the VM proxy stays SuperAdmin-only and allowlisted", func(t *testing.T) {
-		// Not the passthrough itself (that needs a live VM), but the two refusals
-		// that prove this handler — not a typed binder — owns the boundary.
-		if resp := send(t, http.MethodGet, "/v1/o11y/vm/query?query=up", ""); resp.StatusCode != http.StatusForbidden {
-			t.Errorf("non-admin /vm/query = %d, want 403", resp.StatusCode)
-		}
-	})
 }

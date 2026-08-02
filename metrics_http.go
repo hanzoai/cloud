@@ -11,16 +11,16 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Per-request instruments, collected by scrape.
+// Per-request instruments, pushed to the telemetry store in-process.
 //
-// These were once pushed over ZAP, to match traces and logs — one transport for
-// all three signals. The transport was the wrong thing to unify on: the ZAP
-// metric wire ends at o11y's receiver, which writes the datastore, and the store
-// every metric READER in this codebase queries is VictoriaMetrics, which is
-// filled by scraping. Signals travel to where they are kept, and metrics are
-// kept somewhere else than traces and logs. The instruments below are unchanged;
-// only their way out is (telemetry.go installs the reader, apps/o11y publishes
-// the exposition).
+// Their way out has moved twice and landed back where it started, which is worth
+// recording so it does not move a third time. They were pushed over ZAP to match
+// traces and logs; that was reverted to a scrape because the store every metric
+// READER queried was VictoriaMetrics, and signals travel to where they are kept.
+// VictoriaMetrics is gone and the datastore is the only store left, so the
+// instruments below are collected into a registry and written to it directly
+// (telemetry.go installs the reader, apps/o11y/metricspush.go drains it). The
+// instruments themselves have never changed.
 //
 // This is the emit side of the per-org observability story: cloud tags every /v1
 // request with the product (route group) and the validated org, so a per-org

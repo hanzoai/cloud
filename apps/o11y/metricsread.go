@@ -12,8 +12,9 @@ import (
 // latency) for a product, plus the org's LLM usage. The RED series come from the
 // tenant's request spans in event.span (org, the plane's first sort-key column —
 // stamped from the hanzo.org attribute cloud's TracingMiddleware writes) — so this
-// is genuine per-tenant data, not VictoriaMetrics infra metrics (those carry no org
-// label). Usage comes from the hanzo.cloud_usage ledger (organization=<org>).
+// is genuine per-tenant data, not the fleet's infra gauges (those carry no org
+// label; availability.go reads those). Usage comes from the hanzo.cloud_usage
+// ledger (organization=<org>).
 //
 // TENANT ISOLATION: org is the validated tenant, bound as a positional datastore
 // parameter (never interpolated), the FIRST predicate on every query. A tenant can

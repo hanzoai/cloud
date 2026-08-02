@@ -20,6 +20,23 @@ func init() {
 	zip.Describe("GET /v1/o11y/alerts/last", zip.Doc{
 		Description: "Serves the ring as plain text, newest last, so `curl … | tail` reads\nin the order the records were made.",
 	})
+	zip.Describe("GET /v1/o11y/availability", zip.Doc{
+		Description: "Reports how much of the Hanzo fleet is up — the current\nper-service inventory plus an up-versus-reporting trend across the window.\nBoth come from the fleet prober's own measurements: every service is asked its\nhealth URL every 30 seconds, so a service is listed as down because it did not\nanswer, never because something failed to collect it. PLATFORM SUDO ONLY —\nthis is the whole fleet's inventory, not tenant data, so every customer is\n403. An unreachable telemetry store answers 503 rather than an empty trend,\nbecause a board of zeroes and a fleet that is down look identical.",
+		Fields: map[string]string{
+			"availabilityIn.range":          "Range is the trend window in seconds. Default 3600, capped at 604800 (7d).",
+			"availabilityIn.stepSec":        "StepSec is the bucket width in seconds, clamped to [30, 3600]. Absent\npicks ~60 buckets across the range.",
+			"availabilityPoint.t":           "T is the bucket start, RFC3339 in UTC.",
+			"availabilityPoint.total":       "Total is how many services reported at all inside the bucket. It can be\nlower than the current total: a target added last week reported nothing\nthe week before, and saying so is the point.",
+			"availabilityPoint.up":          "Up is how many services were up at the end of the bucket.",
+			"availabilityResponse.series":   "Series is the trend, oldest bucket first.",
+			"availabilityResponse.services": "Services is the current inventory, sorted by name so two reads of an\nunchanged fleet are byte-identical.",
+			"availabilityResponse.total":    "Total is how many services the prober currently watches.",
+			"availabilityResponse.up":       "Up is how many services are up right now.",
+			"serviceUp.name":                "Name is the service as the fleet prober knows it (probes.go's target name,\nwhich is the `service` label on hanzo_service_up).",
+			"serviceUp.up":                  "Up is true when the service answered its own health URL on the last cycle.",
+		},
+		Example: json.RawMessage(`{"range":3600}`),
+	})
 	zip.Describe("GET /v1/o11y/logs", zip.Doc{
 		Description: "Returns a page of one product's logs for the caller's org. A\nnormal caller sees its OWN request stream, derived from org-tagged spans; a\nvalidated platform SuperAdmin sees the product's raw infra stdout stream\ninstead. Poll for a live tail by passing the previous response's nextCursor\nback as sinceNs. A well-formed product with no backing workload answers an\nempty page rather than an error; a malformed slug is a 400.",
 		Fields: map[string]string{

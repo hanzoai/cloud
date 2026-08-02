@@ -2,9 +2,9 @@ package manifest
 
 // The gates under the fleet's ONE agent door.
 //
-// POST /v1/mcp is the host's, served by zip from the composed plugin catalogues
-// (cmd/cloud/main.go, plugin/embed.go). Three things can silently take it away,
-// and each one is pinned here:
+// POST /v1/mcp is the host's, composed by ASKING every subsystem what it serves
+// (cmd/cloud/main.go, package fleet). Two things can silently take it away, and
+// each one is pinned here:
 //
 //  1. an App row claiming /v1/mcp — a Load registers All(prefix) + All(prefix/*),
 //     and fiber MERGES byte-identical patterns into one route with both handlers
@@ -12,7 +12,6 @@ package manifest
 //     run. Silent shadowing, not a panic.
 //  2. a plugin growing a SECOND hand-rolled door — this fleet had three MCP tool
 //     registries for one concept, and the way back is one route registration.
-//  3. a catalogue naming a tool no op answers, or two plugins naming one tool.
 
 import (
 	"encoding/json"
@@ -50,7 +49,7 @@ func TestNoAppClaimsTheDoor(t *testing.T) {
 // This is the structural reason a fourth registry cannot grow back. A hand-rolled
 // JSON-RPC door can only exist as a route; every route an app serves is
 // regenerated into its own subset by the drift gate (mk/fleet.mk surface-check);
-// and the one true door is a zip CONTROL route, which is in no subset at all. So
+// and the one true door is the host's own route, which is in no subset at all. So
 // the next hand-rolled envelope turns this red and the message names the door it
 // should have used instead.
 //
@@ -62,8 +61,8 @@ func TestNoSecondMCPDoor(t *testing.T) {
 		for _, p := range served(t, a.Name) {
 			if strings.HasSuffix(p, "/mcp") {
 				t.Errorf("app %q serves %q. The fleet has ONE MCP door: POST /v1/mcp on the host, "+
-					"composed from every plugin's build-time catalogue. A typed op is already a "+
-					"tool there — register one instead of a second JSON-RPC envelope.", a.Name, p)
+					"composed by asking every subsystem. A typed op is already a tool there — "+
+					"register one instead of a second JSON-RPC envelope.", a.Name, p)
 			}
 		}
 	}
@@ -129,8 +128,8 @@ func TestNoSecondMCPDoorInSource(t *testing.T) {
 					continue
 				}
 				t.Errorf("%s:%d serves an MCP path: %s\n"+
-					"The fleet has ONE MCP door — POST /v1/mcp on the host, composed from every "+
-					"plugin's build-time catalogue. A typed op is ALREADY a tool there. If this is a "+
+					"The fleet has ONE MCP door — POST /v1/mcp on the host, composed by asking "+
+					"every subsystem. A typed op is ALREADY a tool there. If this is a "+
 					"foreign engine's own surface rather than a projection of our ops, name it in "+
 					"foreignDoors with the reason.", rel, i+1, trimmed)
 			}
@@ -139,77 +138,21 @@ func TestNoSecondMCPDoorInSource(t *testing.T) {
 	}
 }
 
-// TestEveryCatalogueToolIsAnOpOfItsOwnApp: soundness of the composed door.
+// THE CATALOGUE GATE IS GONE, WITH THE CATALOGUE.
 //
-// mcp.json and openapi.json are two projections of ONE registry taken in one
-// process at one instant (`<app> describe`), so this cannot fail while both are
-// regenerated together — which is precisely why it is worth asserting: it is the
-// cheap, no-build check that a HAND-EDITED catalogue, or one left behind by a
-// half-run generator, does not publish a tool the owning app cannot answer.
+// TestEveryCatalogueToolIsAnOpOfItsOwnApp read plugin/<app>/mcp.json and checked
+// each name against that app's openapi.json — two artifacts generated in one
+// process at one instant, so it could only ever catch a hand edit or a half-run
+// generator. It could not catch the failure that mattered: BOTH files stale by
+// the same 353 ops, which is exactly how o11y shipped. Two derived things agreeing
+// with each other is not evidence about the thing they derive from.
 //
-// It also refuses two apps claiming one tool name. A name is dispatch, so a
-// duplicate is unroutable; zip refuses it at Load (App.installTools), which is a
-// boot failure. Catching it here makes it a red build instead.
-func TestEveryCatalogueToolIsAnOpOfItsOwnApp(t *testing.T) {
-	owner := map[string]string{}
-	tools := 0
-	for _, a := range Apps {
-		ops := operationIDs(t, a.Name)
-		for _, name := range catalogue(t, a.Name) {
-			tools++
-			if _, ok := ops[name]; !ok {
-				t.Errorf("%s/mcp.json names tool %q, which is not an operationId in "+
-					"%s/openapi.json. The catalogue is a projection of the same typed-op "+
-					"registry the document is — regenerate: make -f mk/fleet.mk describe-apps",
-					a.Name, name, a.Name)
-			}
-			if held, dup := owner[name]; dup {
-				t.Errorf("tool %q is claimed by both %q and %q. A tool name is dispatch, so two "+
-					"owners make it unroutable and zip refuses the composition at boot — rename "+
-					"one op's operationId.", name, held, a.Name)
-			}
-			owner[name] = a.Name
-		}
-	}
-	if tools == 0 {
-		t.Fatal("the fleet's composed MCP door would carry ZERO tools — no plugin/<app>/mcp.json holds any")
-	}
-	t.Logf("%d MCP tools across %d apps on the one door", tools, len(Apps))
-}
-
-// catalogue is the tool names in an app's committed MCP catalogue.
-func catalogue(t *testing.T, app string) []string {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "plugin", app, "mcp.json"))
-	if err != nil {
-		t.Fatalf("%s: %v\n\nEvery app publishes its own MCP catalogue beside its subset. "+
-			"Run `make -f mk/fleet.mk describe-apps`.", app, err)
-	}
-	var tools []struct {
-		Name        string          `json:"name"`
-		Description string          `json:"description"`
-		InputSchema json.RawMessage `json:"inputSchema"`
-	}
-	if err := json.Unmarshal(raw, &tools); err != nil {
-		t.Fatalf("%s/mcp.json: %v", app, err)
-	}
-	out := make([]string, 0, len(tools))
-	for _, tl := range tools {
-		// An op present with an EMPTY description is a SILENT failure: the model
-		// pays context for a nameless tool it cannot choose. That exact bug shipped
-		// once here (zipdoc blind to group prefixes), so it is a gate, not a hope.
-		if strings.TrimSpace(tl.Description) == "" {
-			t.Errorf("%s tool %q has an EMPTY description — the prose zipdoc lifts IS what a "+
-				"model reads to pick it. Write the doc comment and run: go generate -run zipdoc "+
-				"./apps/%s/...", app, tl.Name, app)
-		}
-		if len(tl.InputSchema) == 0 {
-			t.Errorf("%s tool %q has no inputSchema", app, tl.Name)
-		}
-		out = append(out, tl.Name)
-	}
-	return out
-}
+// The question it asked — "is every tool on the door an op of its owning app?" —
+// is now unaskable, and that is the point: the door IS the apps' own registries,
+// asked at the moment of asking, so a tool that is not an op of its app cannot be
+// on it. What replaces the gate is a test of the live mechanism, against running
+// subsystems, which goes red when a subsystem's tools go missing or when two apps
+// claim one name: fleet/mcp_test.go.
 
 // operationIDs is every operationId an app's own subset publishes.
 func operationIDs(t *testing.T, app string) map[string]bool {
