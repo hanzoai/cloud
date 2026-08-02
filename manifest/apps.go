@@ -114,25 +114,28 @@ var Apps = []App{
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
 	{Name: "validators", Prefixes: []string{"/v1/validators"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
-	// The INGESTION doors are load-bearing, not decorative: apps/analytics/event.go's
-	// `doors` table serves /v1/event and /v1/insights/e, and every beacon the products
-	// emit lands on one of the two. Listing only the read endpoints (as this row did)
-	// sent every write to commerce's bare "/v1" catch-all, which does not serve them —
-	// 405, silently, for every event in the fleet. The row was harmless while each app
-	// called its own routes(); it became the router when the mega-build died, so a
-	// missing prefix is now an outage.
+	// The INGESTION door is load-bearing, not decorative: apps/analytics/event.go's
+	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
+	// Listing only the read endpoints (as this row did) sent every write to commerce's
+	// bare "/v1" catch-all, which does not serve them — 405, silently, for every event
+	// in the fleet. The row was harmless while each app called its own routes(); it
+	// became the router when the mega-build died, so a missing prefix is now an outage.
 	//
-	// "/v1/event" is the ONE canonical ingest door — the product, team, PostHog,
-	// LLM-obs and Sentry-envelope wires ALL arrive on it, dispatched by SHAPE. The
-	// PostHog wire's own path is gone; insights.hanzo.ai's /e, /batch and /capture
-	// rewrite onto /v1/event, so no caller moved. "/v1/insights/e" stays listed only
-	// so the fleet router still delivers a stale beacon here to be answered, rather
-	// than handing it to whichever app owns the next-shortest prefix. The other four prefixes are READ ONLY: bare "/v1/analytics" now
+	// "/v1/event" is the ONE canonical ingest door — the product, team, PostHog and
+	// Sentry-envelope wires ALL arrive on it, dispatched by SHAPE. The PostHog wire's
+	// own path is gone: insights.hanzo.ai's /e, /batch and /capture rewrite onto
+	// /v1/event, so no caller moved. "/v1/insights/e" is gone from this row with it.
+	// A prefix here is a claim that this app ANSWERS the path, and analytics does not
+	// — the door is retired (retiredDoors, apps/analytics/doors_test.go), which that
+	// package defines as absent from EVERY surface. Listing it bought a stale beacon
+	// nothing it can use: the path 404s either way, and the row's only other effect
+	// was to keep the retirement invisible in the one table that states what the
+	// fleet serves. The other four prefixes are READ ONLY: bare "/v1/analytics" now
 	// carries only the four lenses (overview, timeseries, top, health) — the ingest
 	// aliases under it are retired — and /v1/errors, /v1/insights/events and
 	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:
 	// the tracker product owns that name (its row is above, and it wins the prefix).
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/e", "/v1/insights/events", "/v1/insights/health"}},
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
