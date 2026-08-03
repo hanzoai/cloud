@@ -64,9 +64,18 @@ func TestPlanDoesNotRederiveFromPrice(t *testing.T) {
 	}
 }
 
-// Only active/trialing count; a canceled subscription contributes nothing and
-// does not make the subject look subscribed.
-func TestPlanIgnoresInactiveSubscriptions(t *testing.T) {
+// Revenue and entitlement part ways here, and both answers are pinned.
+//
+// This asserted MRR 1500 from the trialing row, because the surface counted
+// "active" and "trialing" alike. commerce's rollup never did, so the money
+// board and the SaaS board reported different revenue for the same account.
+// subscription.Status.CountsTowardMRR settles it: a trial is not revenue —
+// nobody has been charged — so the expected total is 0, not a weakened
+// assertion.
+//
+// The trial still names the plan and still marks the subject subscribed. It IS
+// a live plan; it just is not money yet.
+func TestPlanCountsNoRevenueForTrialOrCanceled(t *testing.T) {
 	c := planClient(t, `{"subscriptions":[
 		{"status":"canceled","mrrCents":50000,"plan":{"name":"enterprise"}},
 		{"status":"trialing","mrrCents":1500,"plan":{"name":"pro"}}
@@ -76,11 +85,31 @@ func TestPlanIgnoresInactiveSubscriptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
-	if got.MRR != 1500 {
-		t.Errorf("MRR = %d, want 1500 (canceled excluded)", got.MRR)
+	if got.MRR != 0 {
+		t.Errorf("MRR = %d, want 0 (a trial is not revenue; canceled is over)", got.MRR)
+	}
+	if !got.Active {
+		t.Error("Active = false, want true — a trialing subject is subscribed")
 	}
 	if got.Name != "pro" {
 		t.Errorf("Name = %q, want pro", got.Name)
+	}
+}
+
+// An active subscription alongside a trial contributes exactly its own MRR, so
+// the trial neither adds to nor suppresses real revenue.
+func TestPlanCountsActiveAlongsideTrial(t *testing.T) {
+	c := planClient(t, `{"subscriptions":[
+		{"status":"active","mrrCents":9900,"plan":{"name":"pro"}},
+		{"status":"trialing","mrrCents":1500,"plan":{"name":"enterprise"}}
+	]}`)
+
+	got, err := c.Plan(context.Background(), "org-1")
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if got.MRR != 9900 {
+		t.Errorf("MRR = %d, want 9900 (the trial adds nothing)", got.MRR)
 	}
 }
 
