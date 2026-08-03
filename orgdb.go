@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -105,7 +106,21 @@ type OrgStore[T io.Closer] struct {
 	byNS     map[namespace.Namespace]T
 	durables map[namespace.Namespace]*org.Durable  // parallel to byNS, populated only when dur != nil
 	inflight map[namespace.Namespace]*openState[T] // durable opens in progress, deduped by namespace (M1)
+	// closed is set by CloseAll and never cleared, which is what makes closing
+	// TERMINAL rather than a reset. Every caller of CloseAll is a Shutdown path,
+	// and a request still in flight during a rollout reaches For() after it: with
+	// the maps merely emptied, that request opened the file again — on a durable
+	// deployment re-hydrating it and re-claiming the fence lease the SUCCESSOR pod
+	// is claiming at that moment, which is two live writers for one org arriving
+	// through a handle nobody thought was reachable. Held by mu.
+	closed bool
 }
+
+// ErrStoreClosed is what every door that opens an org file answers after
+// CloseAll. It is an ERROR and not a silent no-op because a caller that arrives
+// after shutdown is a fact worth surfacing: the request fails, the operator sees
+// why, and nothing resurrects.
+var ErrStoreClosed = errors.New("cloud: org store is closed")
 
 // durableOpTimeout bounds every object-store round-trip a durable OrgStore makes
 // (hydrate on open, ship on Sync, final ship on close). It exists so a slow or hung
@@ -205,6 +220,10 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 		return zero, err
 	}
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return zero, fmt.Errorf("%w: %s/%s", ErrStoreClosed, ns, c.subsystem)
+	}
 	if st, ok := c.byNS[ns]; ok {
 		// Cache hit. If this durable store opened DEGRADED (read-only) and this replica
 		// has since become the org's elected owner — a rolling-upgrade membership change
@@ -404,6 +423,12 @@ const orgsRoot = "orgs"
 // stays here rather than being pushed upstream as a convenience.
 func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) error {
 	var zero T
+	c.mu.Lock()
+	shut := c.closed
+	c.mu.Unlock()
+	if shut {
+		return fmt.Errorf("%w: %s sweep", ErrStoreClosed, c.subsystem)
+	}
 	root := filepath.Join(c.dataDir, orgsRoot)
 	ents, err := os.ReadDir(root)
 	if err != nil {
@@ -497,6 +522,11 @@ func (c *OrgStore[T]) CloseAll() error {
 			first = err
 		}
 	}
+	// TERMINAL, and set before the maps are cleared so there is no window in which
+	// the store is empty and still openable. Clearing alone was the defect: it made
+	// "closed" indistinguishable from "nothing opened yet", which is precisely the
+	// state a post-shutdown For() reads as an invitation.
+	c.closed = true
 	c.byNS = map[namespace.Namespace]T{}
 	c.durables = map[namespace.Namespace]*org.Durable{}
 	c.inflight = map[namespace.Namespace]*openState[T]{}
