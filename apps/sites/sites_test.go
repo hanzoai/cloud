@@ -652,3 +652,52 @@ func TestMiddlewareForwardedHostNeverOverridesARealHost(t *testing.T) {
 		t.Fatalf("resolver called with %v, want exactly [victim] — the header must not override a real host", got)
 	}
 }
+
+// The edge must resolve a site when projects is in ANOTHER process.
+//
+// This is the production shape and it is the defect this fallback exists for:
+// the pod boots ~25 single-app processes, so the in-process registry is nil at
+// the edge. A nil resolver is a clean miss, so every published site fell through
+// to the API pipeline and <slug>.hanzo.app served the console SPA — with no
+// error logged anywhere, because nothing had failed.
+func TestFallbackResolverServesWhenProjectsIsElsewhere(t *testing.T) {
+	SetResolver(nil) // projects is NOT in this process — the production case.
+	fb := &fakeResolver{found: false}
+	SetFallbackResolver(fb)
+	defer SetFallbackResolver(nil)
+	app := newTestApp(testServer())
+
+	req := httptest.NewRequest("GET", "http://quest.hanzo.app/index.html", nil)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if resp.Header.Get("X-Sentinel") == "hit" {
+		t.Fatal("fell through to the API pipeline — this is the console-instead-of-site defect")
+	}
+	if got := fb.slugs(); len(got) != 1 || got[0] != "quest" {
+		t.Fatalf("fallback called with %v, want exactly [quest]", got)
+	}
+}
+
+// A co-resident store still answers WITHOUT the hop: the in-process resolver
+// wins whenever it is set, so sharing a process costs nothing.
+func TestInProcessResolverWinsOverTheFallback(t *testing.T) {
+	inproc := &fakeResolver{found: false}
+	fb := &fakeResolver{found: false}
+	SetResolver(inproc)
+	SetFallbackResolver(fb)
+	defer func() { SetResolver(nil); SetFallbackResolver(nil) }()
+	app := newTestApp(testServer())
+
+	req := httptest.NewRequest("GET", "http://quest.hanzo.app/index.html", nil)
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if len(inproc.slugs()) != 1 {
+		t.Errorf("in-process resolver was not used: %v", inproc.slugs())
+	}
+	if n := len(fb.slugs()); n != 0 {
+		t.Errorf("fallback was consulted %d times; the in-process store must win", n)
+	}
+}

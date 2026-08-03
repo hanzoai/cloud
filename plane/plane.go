@@ -47,6 +47,20 @@ import (
 // The token is the op's operationId, which is also its OpenAPI operation, its
 // MCP tool name and its CLI command — one identity across every projection.
 const (
+	// SitesResolve / SitesResolveOrg answer "which published site is this host?"
+	// for the site EDGE, which is the same reason FinanceScopeRules is here: the
+	// reader is a cloud edge middleware and the owner of the fact is another app.
+	//
+	// It is on the plane because it HAS to be. The edge middleware and projects
+	// (which owns the project store, and called sites.SetResolver at its Mount)
+	// run in DIFFERENT processes — the pod boots ~25 single-app processes — so a
+	// package-level registry is nil wherever it is consulted. Every published
+	// site therefore resolved as not-found and fell through to the API pipeline,
+	// and <slug>.hanzo.app served the console SPA. Measured at the pod, ingress
+	// bypassed, 2026-08-03.
+	SitesResolve    = "sites_resolve"
+	SitesResolveOrg = "sites_resolve_org"
+
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
@@ -704,4 +718,28 @@ func BindRuntimeDir() string {
 	}
 	_ = os.Setenv("ZIP_RUNTIME_DIR", dir)
 	return dir
+}
+
+// SiteIn names a published site to resolve: the host label for the multi-tenant
+// product URL, or a bound custom domain. Org is set ONLY by the first-party
+// path (ResolveOrg), which pins the lookup to one org so an internal host is
+// never served by a customer's same-named project.
+type SiteIn struct {
+	Slug string `json:"slug"`
+	Org  string `json:"org,omitempty"`
+}
+
+// Site is a published site's serving facts. Found is explicit: a site that does
+// not exist is a clean answer, not an error, and the edge must be able to tell
+// "no such site" (honest 404) from "the owner could not be reached" (503) —
+// collapsing them is how a transient failure would start serving 404s for real
+// customers' live sites.
+type Site struct {
+	Found                bool   `json:"found"`
+	Org                  string `json:"org"`
+	Slug                 string `json:"slug"`
+	Bucket               string `json:"bucket"`
+	Prefix               string `json:"prefix"`
+	Status               string `json:"status"`
+	CrossOriginIsolation bool   `json:"crossOriginIsolation"`
 }

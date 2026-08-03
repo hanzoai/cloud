@@ -84,22 +84,49 @@ type Resolver interface {
 var (
 	resolverMu sync.RWMutex
 	resolver   Resolver
+	fallback   Resolver
 )
 
 // SetResolver installs the slug→Site resolver. projects.Mount calls this once
-// with its store. Until it is set, every site request is an honest 404 (the
-// projects subsystem is not mounted), never a crash.
+// with its store — the no-hop answer when the edge and projects share a process.
 func SetResolver(r Resolver) {
 	resolverMu.Lock()
 	resolver = r
 	resolverMu.Unlock()
 }
 
+// SetFallbackResolver installs the resolver used when projects is NOT in this
+// process. cloud's composition root sets it to a plane-backed client.
+//
+// It exists because in production they are never in the same process: the pod
+// boots ~25 single-app processes, so the registry above was written inside
+// `projects` and read inside whichever process fronts :8000, where it is nil. A
+// nil registry is a clean miss, not a fault — so every published site resolved
+// as not-found with no error anywhere, fell through to the API pipeline, and
+// <slug>.hanzo.app served the console SPA with the whole cloud API answering on
+// the customer's own hostname. Measured at the pod, ingress bypassed.
+//
+// The old comment here read "until it is set, every site request is an honest
+// 404 (the projects subsystem is not mounted)". That premise was the bug:
+// projects IS mounted, just somewhere else, and 404 is not honest when the site
+// exists.
+func SetFallbackResolver(r Resolver) {
+	resolverMu.Lock()
+	fallback = r
+	resolverMu.Unlock()
+}
+
+// currentResolver prefers the in-process store and falls back to the plane. A
+// process that owns the store never pays for a hop; one that does not can still
+// answer, instead of silently serving the API for every customer's site.
 func currentResolver() Resolver {
 	resolverMu.RLock()
-	r := resolver
+	r, fb := resolver, fallback
 	resolverMu.RUnlock()
-	return r
+	if r != nil {
+		return r
+	}
+	return fb
 }
 
 // Config configures the site host-router. Apex is the zone whose subdomains are
