@@ -32,6 +32,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/commerce/models/subscription"
+
 	"github.com/hanzoai/cloud/apps/admin/money"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 )
@@ -137,8 +139,9 @@ type subscriptionsWire struct {
 
 // Plan reads a subject's subscription tier + MRR in ONE decode (GET
 // /v1/billing/subscriptions), so the customer + revenue surfaces share a single
-// upstream read. Only "active"/"trialing" subscriptions count. Honest
-// zero/"pay-as-you-go" (not an error) when commerce is unwired.
+// upstream read. MRR counts what commerce says counts; "active"/"trialing" both
+// mark the subject subscribed. Honest zero/"pay-as-you-go" (not an error) when
+// commerce is unwired.
 func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 	out := Plan{Name: "pay-as-you-go"}
 	if !c.Ready() {
@@ -153,9 +156,20 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 		return out, fmt.Errorf("commerce plan decode: %w", err)
 	}
 	for _, s := range w.Subscriptions {
+		// Revenue and entitlement are two questions, and this loop answers
+		// both. commerce owns the revenue one — Status.CountsTowardMRR — so
+		// this surface and commerce's own rollup can no longer report a
+		// different MRR for the same account. They did: this counted trials as
+		// revenue and the rollup did not, so the money board and the SaaS board
+		// disagreed by the whole trial cohort.
+		//
+		// A trial is not revenue, but it IS a live plan, so it still names the
+		// plan and marks the subject subscribed.
+		if subscription.Status(s.Status).CountsTowardMRR() {
+			out.MRR += s.MRRCents
+		}
 		switch strings.ToLower(strings.TrimSpace(s.Status)) {
 		case "active", "trialing":
-			out.MRR += s.MRRCents
 			out.Active = true
 			if name := strings.TrimSpace(s.Plan.Name); name != "" && out.Name == "pay-as-you-go" {
 				out.Name = name
