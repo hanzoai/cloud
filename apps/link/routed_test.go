@@ -2,13 +2,12 @@ package link
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 )
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "link.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

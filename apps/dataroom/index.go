@@ -10,29 +10,25 @@ package dataroom
 import (
 	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
 type linkIndex struct{ db *sql.DB }
 
 func openLinkIndex(dataDir string) (*linkIndex, error) {
-	// Its OWN dir, distinct from NewBase's per-tenant tree ({dataDir}/dataroom/):
-	// this global routing table must never collide with a tenant's DB file.
-	dir := filepath.Join(dataDir, "dataroom_index")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("dataroom: mkdir %s: %w", dir, err)
-	}
-	db, err := cek.Open(cek.Global, filepath.Join(dir, "link_index.db"))
+	// The SYSTEM namespace, distinct from NewBase's per-tenant tree
+	// ({dataDir}/dataroom/): this global routing table belongs to no org, and the
+	// platform partition is one no tenant name can render.
+	db, err := cek.Open(namespace.System(), "link_index", dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("dataroom: open link index: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;
-CREATE TABLE IF NOT EXISTS link_index (link_id TEXT PRIMARY KEY, org TEXT NOT NULL);`); err != nil {
+	sqlpool.Single(db)
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS link_index (link_id TEXT PRIMARY KEY, org TEXT NOT NULL);`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("dataroom: init link index: %w", err)
 	}

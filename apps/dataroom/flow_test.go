@@ -12,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )

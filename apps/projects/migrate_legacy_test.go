@@ -34,8 +34,8 @@ func TestMigrateOverLegacyProjects(t *testing.T) {
 	migratetest.Case{
 		Name:      "projects",
 		LegacyDDL: legacyProjectsDDL,
-		Open: func(path string) (io.Closer, error) {
-			st, err := openStore(path)
+		Open: func(dir string) (io.Closer, error) {
+			st, err := openStore(dir)
 			if err != nil {
 				return nil, err
 			}

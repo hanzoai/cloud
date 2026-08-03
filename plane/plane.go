@@ -54,19 +54,23 @@ const (
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
 
+	// FinanceScopeRules reads the org's per-scope request-rate ceilings — the
+	// rate-limited subset of its spend-alert rows. It is on the plane for the
+	// same reason the balance is, plus one of its own: the READER is a cloud
+	// EDGE middleware. Asking commerce for it over HTTP re-dispatched the whole
+	// shared app back into this process, which re-ran that same middleware,
+	// which asked again — an unbounded self-call the commerce transport's depth
+	// guard turns into a 502 (and, before that guard, into a stack overflow).
+	// A socket to the process that owns the rows has no edge chain on it at all,
+	// so the recursion is not bounded here but structurally absent.
+	FinanceScopeRules = "finance_scope_rules"
+
 	KMSGet  = "kms_get"
 	KMSPut  = "kms_put"
 	KMSSign = "kms_sign"
 	KMSDel  = "kms_delete"
 
 	IAMMailable = "iam_mailable"
-
-	// The two key doors. They stay two ops because they answer different
-	// questions and the answers must not be interchangeable: a SECRET key names a
-	// principal, a PUBLISHABLE key names only an org. One op with a mode flag
-	// would make "resolve this pk- to a user" expressible, and it must not be.
-	IAMResolveKey = "iam_resolve_key" // secret key (hk-/sk-) → the principal it authenticates
-	IAMResolveOrg = "iam_resolve_org" // publishable key (pk-) → the org that holds it, and nothing else
 
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
@@ -102,13 +106,13 @@ const (
 	// process that owns it, over the socket, exactly like a debit asks commerce.
 	IntegrationsSlackSend = "integrations_slack_send"
 
-	// The observability plane's two claims on the ONE event door. analytics owns
-	// POST /v1/event and its subtree, but the o11y PROCESS owns the LLM-obs sink
-	// and the Sentry runtime — so the door asks over the socket rather than
-	// through a package global, which a peer process reads as nil (the 503
-	// "error ingest not initialized" that this replaces).
-	ObsEventClaim = "obs_event_claim" // offer a /v1/event body to the LLM-obs sink
-	ObsErrorPost  = "obs_error_post"  // the Sentry envelope/store wire
+	// The observability plane's claim on the ONE event door. analytics owns POST
+	// /v1/event and its subtree, but the o11y PROCESS owns the Sentry runtime —
+	// so the door asks over the socket rather than through a package global,
+	// which a peer process reads as nil (the 503 "error ingest not initialized"
+	// that this replaces). A second op (obs_event_claim) offered every body to an
+	// LLM-obs sink first; it retired with that sink.
+	ObsErrorPost = "obs_error_post" // the Sentry envelope/store wire
 
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
@@ -285,6 +289,24 @@ type Txns struct {
 	Rows []Txn `json:"rows"`
 }
 
+// ScopeRule is one scope's request-rate ceiling: the axes it covers and the
+// requests/minute it allows. "" on an axis is the wildcard, so an org-wide row
+// carries neither — the SAME covering rule the cap verdict reads, because both
+// derive from one spend-alert row and a second spelling would let a rate limit
+// and a spend cap disagree about which requests they bind.
+type ScopeRule struct {
+	Project      string `json:"project,omitempty"`
+	Service      string `json:"service,omitempty"`
+	RateLimitRpm int    `json:"rateLimitRpm"`
+}
+
+// ScopeRules is the org's whole rate-limit config in one reply. Only rows that
+// SET a ceiling travel: a row with none is not a rule, and shipping it would
+// make "no limit" and "a limit of zero" the same value on the wire.
+type ScopeRules struct {
+	Rules []ScopeRule `json:"rules"`
+}
+
 // ---- kms -------------------------------------------------------------------
 
 // SecretIn names one secret, and carries its value on a write or the payload to
@@ -315,44 +337,6 @@ type Recipient struct {
 // Roster is who an org may mail.
 type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
-}
-
-// ---- iam.resolve-key / iam.resolve-org -------------------------------------
-
-// KeyRef is an opaque API key presented for resolution.
-//
-// This is the ONE call that carries a credential in its arguments, and it is
-// sound only because the plane is a unix socket inside one pod's own runtime
-// dir: the key is already in this process, and the process that can answer is
-// the neighbour that owns the identity store.
-//
-// It also runs BEFORE any principal exists — it IS the authentication — so
-// unlike every other op here it cannot take its subject from the caller. That is
-// why the key rides the argument and the ANSWER carries the org.
-type KeyRef struct {
-	Key string `json:"key"`
-}
-
-// KeyPrincipal is what a SECRET key resolves to: the same four facts a JWT for
-// that user carries, so one minting path serves a key and a session identically.
-//
-// An unresolved key is Owner == "" — never an error, because "this credential is
-// not one of ours" is an ANSWER, and the caller's response to it (stay anonymous)
-// is the same as its response to a valid key belonging to nobody. Refusal says
-// WHY, for the surface that has to explain it to a person; it changes no decision.
-type KeyPrincipal struct {
-	Owner   string `json:"owner"`             // the tenant the key speaks for; empty means unresolved
-	Name    string `json:"name,omitempty"`    // the user's name within that org
-	Email   string `json:"email,omitempty"`   // the user's address
-	IsAdmin bool   `json:"isAdmin,omitempty"` // the user's own admin bit, carried unchanged
-	Refusal string `json:"refusal,omitempty"` // why it did not resolve; empty for a real store fault, which is not a bad credential
-}
-
-// KeyOrg is what a PUBLISHABLE key resolves to, and deliberately all it resolves
-// to. There is no user field to fill in, which is what keeps a key shipped in a
-// browser bundle from ever becoming a read grant.
-type KeyOrg struct {
-	Owner string `json:"owner"` // the org that holds the key; empty means unresolved
 }
 
 // ---- git -------------------------------------------------------------------
@@ -596,30 +580,33 @@ type Payee struct {
 
 // ---- finance.credit — the payee side of a settlement -----------------------
 
-// ObsClaimIn offers ONE authenticated /v1/event body to the observability sink.
-// The ORG is the door's server-resolved tenant. Claimed=false means "not mine —
-// let the product wire have it", so a nil/absent o11y must never claim.
-type ObsClaimIn struct {
-	Org  string `json:"org" validate:"required"`
-	Body []byte `json:"body"`
-}
-
-// ObsClaimed reports what the sink did with the body it was offered.
-type ObsClaimed struct {
-	Accepted int  `json:"accepted"`
-	Dropped  int  `json:"dropped"`
-	Claimed  bool `json:"claimed"`
-}
-
 // ObsErrorIn carries one Sentry-wire request across the plane. The DSN key rides
 // the headers or the query, and the runtime authenticates it itself — there is no
 // Hanzo principal on this path by design, which is why the whole request has to
 // travel rather than just a tenant.
 type ObsErrorIn struct {
-	Path    string            `json:"path" validate:"required"`
-	Query   string            `json:"query,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    []byte            `json:"body,omitempty"`
+	Path    string   `json:"path" validate:"required"`
+	Query   string   `json:"query,omitempty"`
+	Headers []Header `json:"headers,omitempty"`
+	Body    []byte   `json:"body,omitempty"`
+}
+
+// Header is one request header, as a LIST element rather than a map entry.
+//
+// A map cannot cross this plane at all: zapenc carries scalars, strings, byte
+// slices, structs, pointers and slices, and refuses anything else AT ENCODE so a
+// field can never silently fail to arrive. Headers was a map[string]string, so
+// every ObsErrorPost call failed inside zip.Call before it reached the socket —
+// the Sentry envelope door answered 503 "error ingest unavailable" in dur_ms=0,
+// for 24h+, with the peer up and the op registered. Its sibling op on the same
+// socket (ObsClaimIn: two scalar fields) kept working throughout, which is
+// exactly why POST /v1/event stayed 200 and only the envelope was dead.
+//
+// A slice of structs is the shape zapenc already carries — one complete ZAP
+// message per element — so the list is not a workaround, it is the wire.
+type Header struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // ObsErrorOut is the runtime's answer, relayed verbatim so a 401 stays a 401.

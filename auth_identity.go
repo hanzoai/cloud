@@ -45,7 +45,7 @@ type idClaims struct {
 	// subjectOrg is the org resolved from the token SUBJECT rather than from any
 	// claim — set ONLY by the API-key resolver (iamKeys.lookup), from the IAM user
 	// row the accessKey belongs to. It is the machine-credential answer to "whose
-	// org is this?", and it exists because an hk-/sk- key is not a member of
+	// org is this?", and it exists because an sk- key is not a member of
 	// anything: IAM mints no `orgs` claim for one, so the membership set homeOrg
 	// reads for a human is legitimately empty here.
 	//
@@ -231,7 +231,7 @@ func KMSMachineClientID(org string) string { return kmsMachineAudience(org) }
 // TWO PRINCIPAL KINDS, TWO SOURCES — they are different questions, so they are two
 // branches rather than one fallback chain:
 //
-//   - A MACHINE credential (hk-/sk- API key) is a member of nothing, so IAM mints it
+//   - A MACHINE credential (sk- API key) is a member of nothing, so IAM mints it
 //     no `orgs` claim at all. Its org comes from the token SUBJECT: iamKeys.lookup
 //     resolves the accessKey to its IAM user row and records that row's owner in
 //     subjectOrg. Reading it here is not a fallback to `owner` — it never passed
@@ -391,7 +391,7 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 // APIKeyPrefixes is every opaque-key spelling cloud recognizes at the door.
 // This is the ONE authority. Admission mirrors it rather than importing it (it
 // stays free of cloud-internal imports); if this list changes, that copy must too.
-var APIKeyPrefixes = []string{"pk-", "sk-", "hk-"}
+var APIKeyPrefixes = []string{"pk-", "sk-"}
 
 // PublishablePrefix is the ONE publishable spelling: pk- is the key you may ship
 // in a browser bundle, sk- is the one you may not. Stripe's split, same reason.

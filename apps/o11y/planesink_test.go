@@ -330,10 +330,83 @@ func TestPlaneService(t *testing.T) {
 		t.Errorf("AppName is second: got %q", got)
 	}
 	if got := planeService(map[string]string{"app": "b"}, ""); got != "b" {
-		t.Errorf("app label is last: got %q", got)
+		t.Errorf("app label is third: got %q", got)
 	}
 	if got := planeService(nil, ""); got != "" {
 		t.Errorf("nothing -> empty: got %q", got)
+	}
+}
+
+// The k8s derivation, in OTel's precedence order. A more-specific workload
+// alongside a less-specific one resolves to the owner the spec names first.
+func TestPlaneService_K8sWorkloadPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		resource map[string]string
+		want     string
+	}{
+		{"deployment beats container", map[string]string{
+			"k8s.deployment.name": "ingress", "k8s.container.name": "ingress-sidecar"}, "ingress"},
+		{"deployment beats replicaset", map[string]string{
+			"k8s.deployment.name": "cloud", "k8s.replicaset.name": "cloud-5685c4d7b5"}, "cloud"},
+		{"statefulset", map[string]string{
+			"k8s.statefulset.name": "hanzod-mv", "k8s.container.name": "hanzod"}, "hanzod-mv"},
+		{"daemonset", map[string]string{
+			"k8s.daemonset.name": "csi-do-node", "k8s.container.name": "csi-do-plugin"}, "csi-do-node"},
+		{"cronjob beats job", map[string]string{
+			"k8s.cronjob.name": "reindex", "k8s.job.name": "reindex-29..."}, "reindex"},
+		{"container is the floor", map[string]string{"k8s.container.name": "mpc-node"}, "mpc-node"},
+		{"pod name is NOT a service", map[string]string{
+			"k8s.pod.name": "ingress-b7854888d-gb8xw"}, ""},
+		{"app label beats the k8s derivation", map[string]string{
+			"app": "gateway", "k8s.deployment.name": "gateway-canary"}, "gateway"},
+	} {
+		if got := planeService(tc.resource, ""); got != tc.want {
+			t.Errorf("%s: planeService(%v) = %q, want %q", tc.name, tc.resource, got, tc.want)
+		}
+	}
+}
+
+// The production regression this derivation closes, end to end on the builder: the
+// otel-agent's filelog receiver states k8s.* and NOTHING else, and the infra log
+// lens filters `service = <workload>`. An empty service column is that lens dark.
+func TestLogRowsOf_FilelogResourceResolvesWorkload(t *testing.T) {
+	rows := logRowsOf(&zaplogreceiver.LogBatch{
+		Resource: map[string]string{
+			"k8s.namespace.name":  "hanzo",
+			"k8s.pod.name":        "ingress-b7854888d-gb8xw",
+			"k8s.container.name":  "ingress",
+			"k8s.deployment.name": "ingress",
+			"host.name":           "otel-agent-4gppg",
+			"log.iostream":        "stdout",
+		},
+		Records: []zaplogreceiver.LogRecord{{TimeUnixNs: 1, Body: "GET /v2/sessions"}},
+	})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if got := logCol(t, rows[0], "service"); got != "ingress" {
+		t.Errorf("service = %q, want ingress — an empty service is the infra log lens dark", got)
+	}
+}
+
+// The in-process span path shares the resolver, so a resource with no service.name
+// resolves its workload identically instead of writing an empty service.
+func TestSdkSpanRowsOf_DerivesWorkloadService(t *testing.T) {
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(sr),
+		sdktrace.WithResource(resource.NewSchemaless(attribute.String("k8s.deployment.name", "cloud"))),
+	)
+	_, span := tp.Tracer("planesink-test").Start(context.Background(), "job")
+	span.End()
+
+	rows := sdkSpanRowsOf(sr.Ended())
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if got := spanCol(t, rows[0], "service"); got != "cloud" {
+		t.Errorf("service = %q, want cloud (derived from k8s.deployment.name)", got)
 	}
 }
 
@@ -392,5 +465,55 @@ func TestSdkSpanRowsOf_RecordedSpan(t *testing.T) {
 	attrs, ok := spanCol(t, row, "attributes").(map[string]string)
 	if !ok || attrs["status.message"] != "boom" || attrs["service.name"] != "evalsvc" || !strings.Contains(attrs["hanzo.org"], "acme") {
 		t.Errorf("attributes = %v", spanCol(t, row, "attributes"))
+	}
+}
+
+// TestPlaneWritersNeverBindIngestedAt is the RETENTION pin, and it is the twin of
+// apps/analytics' TestRetentionIsNotARequestParameter — restated here because the
+// rule is a property of the INSERT list, and these two lists live in this package.
+//
+// event.span's DDL measures both retention and layout from ingested_at
+// (TTL toDateTime(ingested_at) + toIntervalDay(30), PARTITION BY toDate(ingested_at))
+// and defaults it to now64(3). A writer that names the column takes that clock from
+// the server and gives it to the wire, so a caller could post a batch that is
+// TTL-eligible before its own 200 arrives. It is also the ReplacingMergeTree version
+// column, so two writers disagreeing about who stamps it is a dedup that resolves by
+// whichever clock ran fast.
+//
+// The guard is on the COLUMN LIST rather than the emitted SQL because the list is
+// what Insert interpolates: a column cannot be bound without appearing here first.
+func TestPlaneWritersNeverBindIngestedAt(t *testing.T) {
+	for _, w := range []struct {
+		table   string
+		columns []string
+	}{
+		{planeSpanTable, planeSpanColumns},
+		{planeLogTable, planeLogColumns},
+	} {
+		for _, c := range w.columns {
+			if strings.Contains(c, "ingested_at") {
+				t.Errorf("%s writer binds %q — the wire can then set the column "+
+					"retention, partitioning and Replacing versioning are measured from", w.table, c)
+			}
+		}
+	}
+}
+
+// TestPlaneTablesAreQualified pins the other half of the same INSERT: the DSN this
+// package connects with (O11Y_DATASTORE_DSN) names NO database, so an unqualified
+// table silently addresses `default` — an empty database on the live datastore.
+// That is not hypothetical: it is exactly how the deleted LLM-obs ingest path came
+// to write `traces`/`observations`/`scores` that no migration ever created and no
+// INSERT ever reached. Every table this sink names states its database.
+func TestPlaneTablesAreQualified(t *testing.T) {
+	for _, table := range []string{planeSpanTable, planeLogTable} {
+		db, _, ok := strings.Cut(table, ".")
+		if !ok || db == "" {
+			t.Errorf("plane table %q is unqualified — it would resolve to `default`", table)
+			continue
+		}
+		if db != "event" {
+			t.Errorf("plane table %q names database %q, want the canonical `event`", table, db)
+		}
 	}
 }

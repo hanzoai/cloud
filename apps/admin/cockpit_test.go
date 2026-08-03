@@ -86,8 +86,8 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		admin                   bool
 	}
 	users := map[string][]u{
-		"acme":   {{"acme", "anna", "anna@acme.test", "hk-anna-secret", true}, {"acme", "bob", "bob@acme.test", "", false}},
-		"globex": {{"globex", "gwen", "gwen@globex.test", "hk-gwen-secret", true}},
+		"acme":   {{"acme", "anna", "anna@acme.test", "sk-anna-secret", true}, {"acme", "bob", "bob@acme.test", "", false}},
+		"globex": {{"globex", "gwen", "gwen@globex.test", "sk-gwen-secret", true}},
 	}
 
 	f.iam = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,13 +180,13 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 			f.mu.Unlock()
 			w.WriteHeader(201)
 			fmt.Fprintf(w, `{"transactionId":"dep-%d","user":%q,"amount":%d,"currency":%q,"type":"deposit"}`, req.Amount, req.User, req.Amount, req.Currency)
-		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
+		case strings.HasSuffix(r.URL.Path, "/usage/rollup"):
 			fmt.Fprintf(w, `{"consumedCents":%d,"overageCents":0,"balance":{"balanceCents":%d,"availableCents":%d}}`, sp, bal, bal)
 		case strings.HasSuffix(r.URL.Path, "/balance"):
 			fmt.Fprintf(w, `{"user":%q,"currency":"usd","available":%d,"balance":%d}`, user, bal, bal)
 		case strings.HasSuffix(r.URL.Path, "/subscriptions"):
 			if org == "acme" && user == "acme" {
-				io.WriteString(w, `{"subscriptions":[{"status":"active","plan":{"name":"Pro","price":5000,"currency":"usd","interval":"month"}}]}`)
+				io.WriteString(w, `{"subscriptions":[{"status":"active","mrrCents":5000,"plan":{"name":"Pro","price":5000,"currency":"usd","interval":"month"}}]}`)
 			} else {
 				io.WriteString(w, `{"subscriptions":[]}`)
 			}
@@ -261,14 +261,14 @@ func TestCustomers_ListRealFleet(t *testing.T) {
 }
 
 // TestCustomerDetail_RealAndNoSecretLeak proves the detail is real AND that the
-// hk- access key VALUE never appears in the response (presence only).
+// sk- access key VALUE never appears in the response (presence only).
 func TestCustomerDetail_RealAndNoSecretLeak(t *testing.T) {
 	f := newCockpitFakes(t)
 	resp, body := f.do("GET", "/v1/admin/customers/acme", adminHdr(), "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("detail: %d (%s)", resp.StatusCode, body)
 	}
-	if strings.Contains(string(body), "hk-anna-secret") {
+	if strings.Contains(string(body), "sk-anna-secret") {
 		t.Fatalf("SECRET LEAK: the access key value appears in the customer detail response")
 	}
 	var env struct {
@@ -308,7 +308,7 @@ func TestCustomerDetail_RealAndNoSecretLeak(t *testing.T) {
 // tamper-evident audit trail with a before/after.
 func TestGrantCredit_DepositLandsAndAudited(t *testing.T) {
 	f := newCockpitFakes(t)
-	rec, err := audit.Open(":memory:", nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit open: %v", err)
 	}
@@ -426,7 +426,7 @@ func TestGrantCredit_NilAuditStoreFailsClosed(t *testing.T) {
 // nonce forwards no key (the additive default).
 func TestGrantCredit_IdempotencyKeyForwarded(t *testing.T) {
 	f := newCockpitFakes(t)
-	rec, err := audit.Open(":memory:", nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit open: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestGrantCredit_IdempotencyKeyForwarded(t *testing.T) {
 // it — the customer's status reflects the change on a re-list.
 func TestSuspendReactivate_ForbidsUsersAndAudits(t *testing.T) {
 	f := newCockpitFakes(t)
-	rec, _ := audit.Open(":memory:", nil)
+	rec, _ := audit.Open(t.TempDir(), "audit", nil)
 	defer rec.Close()
 	f.service.State.AuditStore = rec
 

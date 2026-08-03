@@ -23,7 +23,7 @@
 # force-cache-busted every build) used to dominate the ~20-min build; it is now
 # a registry pull.
 #   console-embed (hanzoai/console Dockerfile.embed)  → /dist    → webui/dist               (go:embed)
-#   agent-skills  (hanzoai/openapi Dockerfile.skills) → /catalog → apps/agentskills/catalog (go:embed)
+#   agent-skills  (hanzoai/openapi Dockerfile.skills) → /catalog → apps/skills/catalog (go:embed)
 # Pinned to ghcr.io so BOTH buildx lanes (release.yml + platform arcbuild) pull
 # it directly; the SAME tags are mirrored to registry.hanzo.ai (S3-backed) for
 # GET-flow consumers (docker/kaniko/crane). Override any pin with
@@ -86,7 +86,7 @@ ENV GOTOOLCHAIN=auto
 # compat pin is infeasible (mattn keys via URI before any pragma), so the format
 # is frozen by pinning sqlcipher-dev to an EXACT version. A repo bump then fails
 # the build LOUDLY (never a silent prod brick); on such a failure, bump the pin
-# AND confirm cek's frozen-fixture test still opens (format unchanged)
+# AND confirm hanzoai/sqlite's TestUnwrapGoldenFixture still opens (format unchanged)
 # before shipping. A MAJOR bump (4.x → 5.x) changes the default format and would
 # orphan existing encrypted stores — migrate/rewrap them first.
 RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev=4.6.1-r1 pkgconfig binutils
@@ -144,14 +144,14 @@ COPY --from=console /dist/ /src/webui/dist/
 # Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
 # bakes the complete set (all services × brands), not the committed `ai` fallback.
 #
-# The path is apps/agentskills/catalog because that is where the embed is
-# (apps/agentskills/agentskills.go). It read clients/agentskills/catalog until
+# The path is apps/skills/catalog because that is where the embed is
+# (apps/skills/skills.go). It read apps/skills/catalog until
 # now — the pre-f873d1a1 home of every subsystem — and COPY CREATES a missing
 # destination, so the overlay landed in a directory no package embeds and nothing
 # anywhere disagreed. Every image since that move has shipped the tracked fallback
 # instead: one skill (ai_models) per brand, served as the whole of
 # /.well-known/agent-skills/index.json. The RUN below is the gate that was missing.
-COPY --from=skills /catalog/ /src/apps/agentskills/catalog/
+COPY --from=skills /catalog/ /src/apps/skills/catalog/
 # RED gate — the overlays landed WHERE THE EMBED READS. Both COPYs above write
 # into a tracked fallback that exists precisely so a bare `go build` works, and
 # `COPY` creates a missing destination rather than failing — so a stale path is
@@ -162,8 +162,8 @@ COPY --from=skills /catalog/ /src/apps/agentskills/catalog/
 # skill per brand, and the console fallback is a hand-written index.html with no
 # script at all — a static SPA export carrying zero JavaScript is not a build.
 RUN set -eu; \
-    n="$(sed -n 's/.*"skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/agentskills/catalog/hanzo/index.json)"; \
-    [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/agentskills/catalog holds the ${n:-0}-skill fallback — the overlay missed the //go:embed path"; exit 1; }; \
+    n="$(sed -n 's/.*"skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/skills/catalog/hanzo/index.json)"; \
+    [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/skills/catalog holds the ${n:-0}-skill fallback — the overlay missed the //go:embed path"; exit 1; }; \
     j="$(find /src/webui/dist -type f -name '*.js' | wc -l)"; \
     [ "$j" -gt 0 ] || { echo "CONSOLE-GATE FAIL: webui/dist carries no JavaScript — the overlay missed the //go:embed path and the image would ship the fallback shell"; exit 1; }; \
     echo ">> overlays landed: $n skills/brand, $j console scripts"
@@ -188,14 +188,6 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" \
       -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
       github.com/hanzoai/sqlite
-# RED gate — cek FROZEN-FORMAT guard, run INSIDE the image under the pinned Alpine
-# libsqlcipher: opens the committed encrypted fixture and reads its canary row. A
-# sqlcipher-dev pin/base bump that changes the on-disk format fails the IMAGE build
-# HERE (not only Go CI) → a silent prod brick of existing stores becomes a red build.
-RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -run TestFrozenFixtureOpens \
-      -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" ./cek
 # Go drops comments at compile time, so this pass is the ONLY way a typed handler's
 # prose reaches the document: zipdoc lifts it into zipdoc_gen.go, which registers it
 # with zip.Describe at init. It must run BEFORE every build below, because the
@@ -218,8 +210,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build \
-      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /cek-rewrap ./cmd/cek-rewrap
+      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud
 # The functional smoke prober (plugin/smoke) — a stdlib-only static binary shipped
 # alongside the host so the release gate can `docker exec` it against the freshly-
 # built image (and any deployment can be smoked via `docker run --entrypoint /smoke`).
@@ -312,7 +303,6 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
-COPY --from=build /cek-rewrap /cek-rewrap
 COPY --from=build /smoke /smoke
 # The per-app plugin binaries, landing beside /cloud because that is where the host
 # looks: manifest.App.Plugin resolves dir(os.Executable())+"/<name>". Copying the

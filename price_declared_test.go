@@ -44,7 +44,7 @@ func TestPriceDeclared(t *testing.T) {
 			t.Fatalf("parse %s: %v", root, err)
 		}
 
-		// The roots are written cloud.Serve([]cloud.Plugin{{Name: …}}), so the
+		// The roots are written cloud.Listen([]cloud.Plugin{{Name: …}}), so the
 		// element carrying Price is an IMPLICIT literal with a nil Type — only the
 		// enclosing slice names cloud.Plugin. Match the slice, then walk into it.
 		ast.Inspect(file, func(n ast.Node) bool {

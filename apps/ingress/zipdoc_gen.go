@@ -10,28 +10,28 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/ingress/middlewares/:id", zip.Doc{
-		Description: "DeleteMiddleware removes one of the caller org's edge transforms and hot-applies\nthe change. Routes still naming it stop being served (they compile as skipped)\nuntil they name a transform that exists. Answers 204; an id this org does not\nhold is 404.",
+		Description: "Removes one of the caller org's edge transforms and hot-applies\nthe change. Routes still naming it stop being served (they compile as skipped)\nuntil they name a transform that exists. Answers 204; an id this org does not\nhold is 404.",
 		Fields: map[string]string{
 			"objRef.id": "ID is the object to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"strip-api"}`),
 	})
 	zip.Describe("DELETE /v1/ingress/routes/:id", zip.Doc{
-		Description: "DeleteRoute removes one of the caller org's routing rules and hot-applies the\nshrunken table, freeing its host for another claim. Answers 204; an id this org\ndoes not hold is 404.",
+		Description: "Removes one of the caller org's routing rules and hot-applies the\nshrunken table, freeing its host for another claim. Answers 204; an id this org\ndoes not hold is 404.",
 		Fields: map[string]string{
 			"objRef.id": "ID is the object to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"web"}`),
 	})
 	zip.Describe("DELETE /v1/ingress/services/:id", zip.Doc{
-		Description: "DeleteService removes one of the caller org's backend pools and hot-applies the\nchange. Routes still pointing at it stop being served (they compile as skipped)\nuntil they name a pool that exists. Answers 204; an id this org does not hold\nis 404.",
+		Description: "Removes one of the caller org's backend pools and hot-applies the\nchange. Routes still pointing at it stop being served (they compile as skipped)\nuntil they name a pool that exists. Answers 204; an id this org does not hold\nis 404.",
 		Fields: map[string]string{
 			"objRef.id": "ID is the object to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"app-pool"}`),
 	})
 	zip.Describe("GET /v1/ingress/middlewares", zip.Doc{
-		Description: "ListMiddlewares returns every edge transform the caller's org has configured,\nordered by id. A route names the ones it wants, in order.",
+		Description: "Returns every edge transform the caller's org has configured,\nordered by id. A route names the ones it wants, in order.",
 		Fields: map[string]string{
 			"Middleware.config":              "Config is the transform's parameters: redirectScheme takes scheme (default\nhttps) and permanent (\"true\" ⇒ 301, else 302); stripPrefix REQUIRES\nprefixes (comma-separated, first match wins); addPrefix REQUIRES prefix;\nheaders is a header→value map set on the response.",
 			"Middleware.id":                  "ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128\nchars. A create that omits it gets a generated one. Routes reference it by\nthis id.",
@@ -40,7 +40,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/ingress/middlewares/:id", zip.Doc{
-		Description: "GetMiddleware returns one of the caller org's edge transforms by id.",
+		Description: "Returns one of the caller org's edge transforms by id.",
 		Fields: map[string]string{
 			"Middleware.config": "Config is the transform's parameters: redirectScheme takes scheme (default\nhttps) and permanent (\"true\" ⇒ 301, else 302); stripPrefix REQUIRES\nprefixes (comma-separated, first match wins); addPrefix REQUIRES prefix;\nheaders is a header→value map set on the response.",
 			"Middleware.id":     "ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128\nchars. A create that omits it gets a generated one. Routes reference it by\nthis id.",
@@ -50,7 +50,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"strip-api"}`),
 	})
 	zip.Describe("GET /v1/ingress/routes", zip.Doc{
-		Description: "ListRoutes returns every routing rule the caller's org has configured, ordered\nby id. A route maps an exact Host (and optional path prefix) to a service.",
+		Description: "Returns every routing rule the caller's org has configured, ordered\nby id. A route maps an exact Host (and optional path prefix) to a service.",
 		Fields: map[string]string{
 			"Route.host":           "Host is the exact hostname this route matches, lowercased with any trailing\ndot stripped. It is a GLOBALLY unique claim — one route across the whole\nedge may hold a host, so no tenant can hijack another's.",
 			"Route.id":             "ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one.",
@@ -63,7 +63,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/ingress/routes/:id", zip.Doc{
-		Description: "GetRoute returns one of the caller org's routing rules by id.",
+		Description: "Returns one of the caller org's routing rules by id.",
 		Fields: map[string]string{
 			"Route.host":        "Host is the exact hostname this route matches, lowercased with any trailing\ndot stripped. It is a GLOBALLY unique claim — one route across the whole\nedge may hold a host, so no tenant can hijack another's.",
 			"Route.id":          "ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one.",
@@ -77,7 +77,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"a1b2c3d4e5f60718"}`),
 	})
 	zip.Describe("GET /v1/ingress/services", zip.Doc{
-		Description: "ListServices returns every backend pool the caller's org has configured,\nordered by id. A service is the weighted round-robin target a route dispatches\nto.",
+		Description: "Returns every backend pool the caller's org has configured,\nordered by id. A service is the weighted round-robin target a route dispatches\nto.",
 		Fields: map[string]string{
 			"Backend.url":              "URL is the upstream server, http(s)://host[:port].",
 			"Backend.weight":           "Weight is this member's share of the round-robin; must be >= 0.",
@@ -88,7 +88,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/ingress/services/:id", zip.Doc{
-		Description: "GetService returns one of the caller org's backend pools by id.",
+		Description: "Returns one of the caller org's backend pools by id.",
 		Fields: map[string]string{
 			"Backend.url":            "URL is the upstream server, http(s)://host[:port].",
 			"Backend.weight":         "Weight is this member's share of the round-robin; must be >= 0.",
@@ -129,7 +129,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/ingress/middlewares", zip.Doc{
-		Description: "PutMiddleware creates or replaces one edge transform and hot-applies it. POST\nmints an id when the body omits one; PUT takes the id from the URL, which wins\nover any id in the body. type must be one of redirectScheme, stripPrefix,\naddPrefix or headers, and stripPrefix/addPrefix each require their config key.",
+		Description: "Creates or replaces one edge transform and hot-applies it. POST\nmints an id when the body omits one; PUT takes the id from the URL, which wins\nover any id in the body. type must be one of redirectScheme, stripPrefix,\naddPrefix or headers, and stripPrefix/addPrefix each require their config key.",
 		Fields: map[string]string{
 			"Middleware.config": "Config is the transform's parameters: redirectScheme takes scheme (default\nhttps) and permanent (\"true\" ⇒ 301, else 302); stripPrefix REQUIRES\nprefixes (comma-separated, first match wins); addPrefix REQUIRES prefix;\nheaders is a header→value map set on the response.",
 			"Middleware.id":     "ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128\nchars. A create that omits it gets a generated one. Routes reference it by\nthis id.",
@@ -138,7 +138,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"strip-api","type":"stripPrefix","config":{"prefixes":"/api"}}`),
 	})
 	zip.Describe("POST /v1/ingress/routes", zip.Doc{
-		Description: "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
+		Description: "Creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
 		Fields: map[string]string{
 			"Route.host":        "Host is the exact hostname this route matches, lowercased with any trailing\ndot stripped. It is a GLOBALLY unique claim — one route across the whole\nedge may hold a host, so no tenant can hijack another's.",
 			"Route.id":          "ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one.",
@@ -151,7 +151,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"web","host":"app.example.com","service":"app-pool","tls":true}`),
 	})
 	zip.Describe("POST /v1/ingress/services", zip.Doc{
-		Description: "PutService creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
+		Description: "Creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
 		Fields: map[string]string{
 			"Backend.url":            "URL is the upstream server, http(s)://host[:port].",
 			"Backend.weight":         "Weight is this member's share of the round-robin; must be >= 0.",
@@ -162,7 +162,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"app-pool","backends":[{"url":"http://10.0.0.7:8000","weight":1}]}`),
 	})
 	zip.Describe("PUT /v1/ingress/middlewares/:id", zip.Doc{
-		Description: "PutMiddleware creates or replaces one edge transform and hot-applies it. POST\nmints an id when the body omits one; PUT takes the id from the URL, which wins\nover any id in the body. type must be one of redirectScheme, stripPrefix,\naddPrefix or headers, and stripPrefix/addPrefix each require their config key.",
+		Description: "Creates or replaces one edge transform and hot-applies it. POST\nmints an id when the body omits one; PUT takes the id from the URL, which wins\nover any id in the body. type must be one of redirectScheme, stripPrefix,\naddPrefix or headers, and stripPrefix/addPrefix each require their config key.",
 		Fields: map[string]string{
 			"Middleware.config": "Config is the transform's parameters: redirectScheme takes scheme (default\nhttps) and permanent (\"true\" ⇒ 301, else 302); stripPrefix REQUIRES\nprefixes (comma-separated, first match wins); addPrefix REQUIRES prefix;\nheaders is a header→value map set on the response.",
 			"Middleware.id":     "ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128\nchars. A create that omits it gets a generated one. Routes reference it by\nthis id.",
@@ -171,7 +171,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"strip-api","type":"stripPrefix","config":{"prefixes":"/api"}}`),
 	})
 	zip.Describe("PUT /v1/ingress/routes/:id", zip.Doc{
-		Description: "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
+		Description: "Creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
 		Fields: map[string]string{
 			"Route.host":        "Host is the exact hostname this route matches, lowercased with any trailing\ndot stripped. It is a GLOBALLY unique claim — one route across the whole\nedge may hold a host, so no tenant can hijack another's.",
 			"Route.id":          "ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one.",
@@ -184,7 +184,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"web","host":"app.example.com","service":"app-pool","tls":true}`),
 	})
 	zip.Describe("PUT /v1/ingress/services/:id", zip.Doc{
-		Description: "PutService creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
+		Description: "Creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
 		Fields: map[string]string{
 			"Backend.url":            "URL is the upstream server, http(s)://host[:port].",
 			"Backend.weight":         "Weight is this member's share of the round-robin; must be >= 0.",

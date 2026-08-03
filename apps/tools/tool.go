@@ -46,7 +46,7 @@ const (
 	SourceZAPService Source = "zap-service"
 	// SourceAgent is an org agent from clients/agents, callable as a tool.
 	SourceAgent Source = "agent"
-	// SourceSkill is an agent skill (clients/agentskills): discovery + activation
+	// SourceSkill is an agent skill (apps/skills): discovery + activation
 	// metadata, attached to agents rather than called directly.
 	SourceSkill Source = "skill"
 	// SourceMCP is a tool on an org's own registered EXTERNAL MCP server.

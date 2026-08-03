@@ -1,0 +1,200 @@
+package cloud
+
+// The caller's address, and the ONE rule cloud derives it by.
+//
+// An address is not a header. X-Forwarded-For is a list a client may write the
+// first entries of and each hop appends to, so the LEFT-MOST entry is whatever
+// the client typed — it is the one value in the chain that is always attacker
+// controlled. Reading it as "the client" is how a request from one host becomes
+// a million distinct clients: it defeats every per-IP limit keyed on it, it puts
+// a chosen address into an audit row and a velocity counter, and it fills any
+// table keyed on it without bound.
+//
+// THE RULE, in one function:
+//
+//	the socket peer is the truth. If the peer is not one of OUR proxies, it IS
+//	the client — a TCP source address cannot be forged inside an established
+//	connection, so nothing it says about itself is needed.
+//
+//	only a trusted peer's chain is readable. When the peer IS one of ours, walk
+//	X-Forwarded-For from the RIGHT — the end each hop appends to — and take the
+//	first entry that is not itself one of our proxies. Everything to its left was
+//	written before our infrastructure saw the request and is therefore hearsay.
+//
+//	our own traffic has no client. A chain that is entirely our own addresses is
+//	an in-cluster caller (a sibling service, the console BFF); it never transited
+//	the public edge, so it has no client address and gets "". That is the same
+//	answer this function has always given for a request with no chain at all, and
+//	it is what keeps in-cluster callers out of the public edge's rate limiter.
+//
+// WHY A CIDR SET AND NOT A HOP COUNT. A hop count is a promise about topology
+// that nothing enforces; the day an extra proxy appears, a count silently reads
+// one entry too far to the left — back into attacker-written territory. A set of
+// addresses is checkable against the deployment and fails in the safe direction:
+// an unlisted proxy is treated as a client, which over-attributes traffic to our
+// own edge rather than under-attributing an attacker's.
+
+import (
+	"net/netip"
+	"os"
+	"strings"
+	"sync"
+
+	"github.com/zap-proto/zip"
+)
+
+// TrustedProxiesEnv names the operator knob: a comma-separated list of CIDRs
+// and bare addresses that are OUR OWN forwarding hops. Set it when a deployment
+// is fronted by a proxy on a PUBLIC address (a CDN edge, a cloud load balancer
+// with public egress); the default below covers only private space, which is
+// every hop inside a cluster.
+const TrustedProxiesEnv = "CLOUD_TRUSTED_PROXIES"
+
+// defaultTrustedProxies is the address space our own hops live in when nobody
+// says otherwise: loopback, the unspecified address (never a real peer — it is
+// what an in-memory test connection reports), RFC1918 private space, the
+// carrier-grade NAT range a managed load balancer forwards from, link-local, and
+// IPv6 unique-local. A public address is NEVER trusted by default: trusting one
+// by accident is what turns every customer into one shared bucket.
+var defaultTrustedProxies = []string{
+	"127.0.0.0/8", "::1/128",
+	"0.0.0.0/32", "::/128",
+	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+	"100.64.0.0/10",
+	"169.254.0.0/16", "fe80::/10",
+	"fc00::/7",
+}
+
+// maxForwardedHops bounds how much of a chain is read. A real chain is three
+// entries; a request carrying thousands is an attempt to spend CPU in the parse
+// itself. Read from the right, so the bound only ever discards the OLDEST
+// (left-most, least trustworthy) entries.
+const maxForwardedHops = 32
+
+// trustedProxies is resolved once per process. The environment is read at first
+// use rather than at init so a test can set it before the first request without
+// depending on package initialization order.
+var trustedProxies = sync.OnceValue(func() proxySet {
+	if s := parseProxySet(os.Getenv(TrustedProxiesEnv)); len(s.nets) > 0 {
+		return s
+	}
+	// An unset — or entirely unparseable — knob falls back to the defaults rather
+	// than to an EMPTY set. Trusting nothing sounds safer and is not: it would
+	// make the ingress itself the "client", collapsing every caller into one
+	// bucket and one audit address. The safe failure here is the private-space
+	// default, which is correct for every in-cluster deployment we run.
+	return parseProxySet(strings.Join(defaultTrustedProxies, ","))
+})
+
+// proxySet is the set of addresses that are our own forwarding hops.
+type proxySet struct{ nets []netip.Prefix }
+
+func parseProxySet(spec string) proxySet {
+	var s proxySet
+	for _, raw := range strings.Split(spec, ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if p, err := netip.ParsePrefix(raw); err == nil {
+			s.nets = append(s.nets, p.Masked())
+			continue
+		}
+		// A bare address is the single-host prefix it denotes.
+		if a, err := netip.ParseAddr(raw); err == nil {
+			s.nets = append(s.nets, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+		}
+	}
+	return s
+}
+
+func (s proxySet) has(a netip.Addr) bool {
+	for _, n := range s.nets {
+		if n.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// TrustedProxy reports whether addr is one of our own forwarding hops — for a
+// health report or a test, never as a gate. The gate is ClientIP, which applies
+// the whole rule.
+func TrustedProxy(addr string) bool {
+	a, ok := parseClientAddr(addr)
+	return ok && trustedProxies().has(a)
+}
+
+// ClientIP is the caller's own address: the socket peer for a direct caller, the
+// right-most non-proxy entry of the forwarded chain for a proxied one, and "" for
+// an in-cluster caller that never transited the edge.
+//
+// It is the ONE client-address read in this repo — the edge rate limiter, the
+// abuse sensor, the audit trail and every metered resource share it, so a
+// forgeable address cannot enter one of them by a side door.
+// It reads EVERY X-Forwarded-For header line, not just the first. fasthttp keeps
+// repeated headers as separate lines, and a client that sends its own line before
+// the proxy appends to a second one would otherwise hide the real address behind
+// a value it chose.
+func ClientIP(c *zip.Ctx) string {
+	return clientAddr(c.Fiber().IP(), c.Fiber().Request().Header.PeekAll("X-Forwarded-For"), trustedProxies())
+}
+
+// clientAddr IS the rule, as a pure function of the three facts it turns on: the
+// socket peer, the forwarded chain, and which addresses are ours. Everything
+// interesting about ClientIP is here, where it can be read and tested without a
+// server — the exported wrapper only supplies the arguments.
+//
+// The chain is walked last-to-first, across lines and within a line, for the same
+// reason in both cases: later is nearer to us, and nearer to us is truer.
+func clientAddr(peerAddr string, forwarded [][]byte, tp proxySet) string {
+	peer, ok := parseClientAddr(peerAddr)
+	if !ok {
+		return ""
+	}
+	if !tp.has(peer) {
+		// A direct caller. The peer is the connection's own source address, so it
+		// is the one fact about the client that cannot be written by the client,
+		// and no header it sent is consulted at all.
+		return peer.String()
+	}
+	seen := 0
+	for i := len(forwarded) - 1; i >= 0; i-- {
+		hops := strings.Split(string(forwarded[i]), ",")
+		for j := len(hops) - 1; j >= 0; j-- {
+			if seen++; seen > maxForwardedHops {
+				return ""
+			}
+			a, ok := parseClientAddr(hops[j])
+			if !ok {
+				// Not an address at all. It cannot be a hop and it must never become
+				// a key, so it is skipped rather than passed through — an unparseable
+				// entry is exactly how an unbounded keyspace gets fed.
+				continue
+			}
+			if tp.has(a) {
+				continue
+			}
+			return a.String()
+		}
+	}
+	return ""
+}
+
+// parseClientAddr parses one chain entry or peer address into a canonical
+// address. It accepts a bare address and an address:port pair, and it UNMAPS
+// IPv4-in-IPv6 so "::ffff:1.2.3.4" and "1.2.3.4" are one key rather than two.
+// The canonical String() is what every counter, record and report keys on.
+func parseClientAddr(s string) (netip.Addr, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return netip.Addr{}, false
+	}
+	if a, err := netip.ParseAddr(s); err == nil {
+		return a.Unmap(), true
+	}
+	if ap, err := netip.ParseAddrPort(s); err == nil {
+		return ap.Addr().Unmap(), true
+	}
+	return netip.Addr{}, false
+}

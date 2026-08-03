@@ -306,7 +306,7 @@ type Config struct {
 	// here. On the Hanzo deployment it is a read-only PUBLISHABLE (pk-) key: it feeds
 	// deps.Embed (read-only, valid) and is REFUSED for deps.AI completions, which the
 	// gateway would 403 ("Publishable keys can only access read-only endpoints"). A
-	// completions-capable secret key (sk-/hk-) set here would instead drive both.
+	// completions-capable secret key (sk-) set here would instead drive both.
 	//
 	// AIDefaultModel is the served model an agent with no explicit model falls
 	// back to (CLOUD_AI_DEFAULT_MODEL, default DefaultModel — the bare "enso"

@@ -24,6 +24,10 @@ import (
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // ── harness ───────────────────────────────────────────────────────────────────
@@ -91,12 +95,6 @@ func (h *harness) tie(want money.Amount, when string) {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	// The cek data plane (wallets.db + x402.db) is encryption-capable here; supply a
-	// process master key so the stores open.
-	raw := make([]byte, 32)
-	_, _ = rand.Read(raw)
-	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", base64.StdEncoding.EncodeToString(raw))
-
 	// A settlement is a ledger entry on BOTH sides, so every test gets a real
 	// co-resident ledger — there is no "settled" to assert without one.
 	fin := finance.New(t.TempDir())

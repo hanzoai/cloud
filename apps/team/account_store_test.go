@@ -3,16 +3,19 @@ package team
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/team/token"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 func newAccountStore(t *testing.T) *accountStore {
 	t.Helper()
-	s, err := openAccountStore(filepath.Join(t.TempDir(), "account.db"))
+	s, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open account store: %v", err)
 	}

@@ -61,8 +61,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -120,10 +118,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("campaign.Mount: router is not a zip app, so the typed ops have no registry")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("campaign.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "campaign.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("campaign.Mount: open store: %w", err)
 	}

@@ -7,16 +7,21 @@ import (
 	"fmt"
 	"sync"
 
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
-	// "sqlite" name under both build tags: cgo→mattn+SQLCipher, !cgo→modernc).
-	"github.com/hanzoai/cloud/cek"
+	// "sqlite" name under both build tags).
 	_ "github.com/hanzoai/sqlite"
 )
 
 var errNotFound = errors.New("link: not found")
 
-// Store is the login-manager database. ONE SQLite file ({DataDir}/link.db) holds
-// every org's Links; tenancy is the (org, subject) pair. It holds NO metering
+// Store is the login-manager database. ONE SQLite file — the deployment's own
+// "link" — holds every org's Links; tenancy is the (org, subject) pair. It holds NO metering
 // client — it is structurally incapable of charging commerce.
 //
 // It also owns the account-usage SERIES in the datastore (datastore.go): the Link
@@ -32,22 +37,12 @@ type Store struct {
 	dsReady bool
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "link", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open link store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

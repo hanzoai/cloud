@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -46,7 +45,7 @@ func (f *fakeDNS) LookupCNAME(_ context.Context, name string) (string, error) { 
 // never touches a real cluster or real DNS.
 func mountDomains(t *testing.T) (*zip.App, *fakeDNS) {
 	t.Helper()
-	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

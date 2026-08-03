@@ -217,7 +217,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	// The SSH public-key registry: ONE global file (the PublicKeyCallback runs
 	// before any org is known, so auth is a single fingerprint lookup).
-	keys, err := openKeyStore(filepath.Join(gitRoot, "ssh_keys.db"))
+	keys, err := openKeyStore(gitRoot)
 	if err != nil {
 		return fmt.Errorf("git.Mount: open ssh key store: %w", err)
 	}

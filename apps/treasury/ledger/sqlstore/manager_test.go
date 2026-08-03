@@ -4,18 +4,28 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
-
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
+	"github.com/hanzoai/namespace"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
-// safeSlug is the invariant every derived slug MUST satisfy: no path separators, no
-// dot segments, no traversal — a single flat file stem.
-var safeSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+// storePath renders where a manager's store for ns lands, through the SAME
+// namespace.Path the manager opens by — so an assertion here can never be about
+// a different file than the one the code wrote.
+func storePath(t *testing.T, dir string, ns namespace.Namespace, subsystem string) string {
+	t.Helper()
+	p, err := namespace.Path(dir, ns, subsystem)
+	if err != nil {
+		t.Fatalf("namespace.Path(%s, %s): %v", ns, subsystem, err)
+	}
+	return p
+}
 
 // TestManager_PerTenantIsolation is the core guarantee: a write in one tenant's
 // ledger NEVER appears in another tenant's read, because each resolves to its OWN
@@ -30,11 +40,14 @@ func TestManager_PerTenantIsolation(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
 
-	sa, err := m.Get("orga")
+	nsA := namespace.MustOrgProject("orga", "")
+	nsB := namespace.MustOrgProject("orgb", "")
+
+	sa, err := m.Get(nsA)
 	if err != nil {
 		t.Fatalf("Get(orga): %v", err)
 	}
-	sb, err := m.Get("orgb")
+	sb, err := m.Get(nsB)
 	if err != nil {
 		t.Fatalf("Get(orgb): %v", err)
 	}
@@ -64,78 +77,119 @@ func TestManager_PerTenantIsolation(t *testing.T) {
 		t.Fatalf("org A reserve after house write = %d, want 5000 (house leaked into a tenant)", bal)
 	}
 
-	// Distinct files on disk: orga.db, orgb.db (in finance/) and treasury.db (house).
-	for _, name := range []string{"finance/orga.db", "finance/orgb.db", "treasury.db"} {
-		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
-		// database file on the pure-Go codec — only its sidecar is on disk.
-		if !cek.Exists(filepath.Join(dir, name)) {
-			t.Fatalf("expected store %s", name)
-		}
+	// Cache identity: re-Get returns the SAME handle (one open connection per tenant).
+	if again, _ := m.Get(nsA); again != sa {
+		t.Fatal("Get(orga) must return the cached store handle")
 	}
 
-	// Cache identity: re-Get returns the SAME handle (one open connection per tenant).
-	if again, _ := m.Get("orga"); again != sa {
-		t.Fatal("Get(orga) must return the cached store handle")
+	// Three distinct files on disk — CLOSED first, because the pure-Go codec seals
+	// a database back to its path only when the handle closes.
+	if err := m.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	for _, want := range []string{
+		storePath(t, dir, nsA, tenantSubsystem),
+		storePath(t, dir, nsB, tenantSubsystem),
+		storePath(t, dir, namespace.System(), houseSubsystem),
+	} {
+		if _, err := os.Stat(want); err != nil {
+			t.Fatalf("expected store %s: %v", want, err)
+		}
 	}
 }
 
-// TestTenantSlug_InjectiveAndSafe proves the slug mapping is (1) injective — it never
-// folds distinct tenants (case matters), (2) path-safe — traversal/separators can
-// never escape the finance dir, and (3) reserved — no customer tenant can resolve to
-// the house file.
-func TestTenantSlug_InjectiveAndSafe(t *testing.T) {
-	// A DNS-ish org keeps a readable, verbatim stem.
-	if slug, err := tenantSlug("acme"); err != nil || slug != "acme" {
-		t.Fatalf("tenantSlug(acme) = %q, %v; want acme,nil", slug, err)
-	}
+// hostileTenants are the tenant strings the fold has to survive on the way to a
+// name: traversal, separators, dot segments, the house's own rendering, a case
+// variant, over-length. The Manager is handed the NAME, so this is the door one
+// step up — but it is the same question, and it is answered here because this is
+// where the file it decides lives.
+var hostileTenants = []string{
+	"../../etc/passwd", "a/b", "..", ".", "a.b.c", "UPPER", "sp ace",
+	"_platform", "platform", "house", "treasury", "orgs", strings.Repeat("x", 100),
+}
 
-	// Case is NEVER folded: "acme" and "ACME" are distinct tenants → distinct files.
-	lower, _ := tenantSlug("acme")
-	upper, err := tenantSlug("ACME")
+// tenantNS folds one tenant string into the name its ledger lives under. ok is
+// false when the deployment refuses the name outright, which names no file at all.
+func tenantNS(tenant string) (ns namespace.Namespace, ok bool) {
+	ns, err := namespace.OrgProject(tenant, "")
+	return ns, err == nil
+}
+
+// TestManager_HouseUnreachableByTenantName is the property that used to need a
+// reserved slug and needs none now: the house fund lives in the SYSTEM namespace,
+// which is a different KIND from every org namespace, so no tenant string resolves
+// to it however it is spelled.
+func TestManager_HouseUnreachableByTenantName(t *testing.T) {
+	dir := t.TempDir()
+	m, err := NewManager(dir)
 	if err != nil {
-		t.Fatalf("tenantSlug(ACME): %v", err)
+		t.Fatalf("NewManager: %v", err)
 	}
-	if upper == lower {
-		t.Fatal("tenantSlug folded ACME into acme — a cross-tenant break")
-	}
-	if !strings.HasPrefix(upper, hashMarker) {
-		t.Fatalf("tenantSlug(ACME) = %q, want hashed (%s…)", upper, hashMarker)
-	}
+	t.Cleanup(func() { _ = m.Close() })
 
-	// Every hostile / non-DNS input maps to a SAFE flat slug (no separators, no dots,
-	// no traversal), and distinct inputs never collide.
-	hostile := []string{"../../etc/passwd", "a/b", "..", ".", "a.b.c", "UPPER", "sp ace", "house", "h-collide", strings.Repeat("x", 100)}
-	seen := map[string]string{}
-	for _, in := range hostile {
-		slug, err := tenantSlug(in)
+	house, err := m.House()
+	if err != nil {
+		t.Fatalf("House: %v", err)
+	}
+	housePath := storePath(t, dir, namespace.System(), houseSubsystem)
+
+	for _, tenant := range hostileTenants {
+		ns, ok := tenantNS(tenant)
+		if !ok {
+			continue
+		}
+		if got := storePath(t, dir, ns, tenantSubsystem); got == housePath {
+			t.Fatalf("tenant %q resolves to the house file %s", tenant, housePath)
+		}
+		s, err := m.Get(ns)
 		if err != nil {
-			t.Fatalf("tenantSlug(%q): unexpected error %v", in, err)
+			t.Fatalf("Get(%q → %s): %v", tenant, ns, err)
 		}
-		if !safeSlug.MatchString(slug) || strings.ContainsAny(slug, "/.\\") {
-			t.Fatalf("tenantSlug(%q) = %q is not a safe flat slug", in, slug)
+		if s == house {
+			t.Fatalf("tenant %q reached the house ledger", tenant)
 		}
-		if prev, ok := seen[slug]; ok {
-			t.Fatalf("tenantSlug collision: %q and %q both → %q", prev, in, slug)
-		}
-		seen[slug] = in
 	}
+}
 
-	// Reserved: a literal "house" tenant must NOT resolve to the house file's slug.
-	if slug, _ := tenantSlug(HouseSlug); slug == HouseSlug {
-		t.Fatal("a customer tenant named \"house\" resolved to the reserved house slug")
+// TestManager_DistinctTenantsDistinctFiles proves the tenant→file mapping never
+// folds: two distinct tenants — case variants and punctuation variants included —
+// always land on two files, because one file for two tenants IS the cross-tenant
+// break this layer exists to prevent.
+func TestManager_DistinctTenantsDistinctFiles(t *testing.T) {
+	dir := t.TempDir()
+	m, err := NewManager(dir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
 	}
+	t.Cleanup(func() { _ = m.Close() })
 
-	// Empty / over-length tenants are refused (defense-in-depth over principal.Org).
-	if _, err := tenantSlug(""); err == nil {
-		t.Fatal("tenantSlug(\"\") must error")
-	}
-	if _, err := tenantSlug(strings.Repeat("a", maxTenantLen+1)); err == nil {
-		t.Fatal("tenantSlug(over-length) must error")
+	byPath := map[string]string{}
+	byStore := map[*Store]string{}
+	for _, tenant := range append([]string{"acme", "ACME", "acme-corp", "acme.corp", "a"}, hostileTenants...) {
+		ns, ok := tenantNS(tenant)
+		if !ok {
+			continue
+		}
+		p := storePath(t, dir, ns, tenantSubsystem)
+		if prev, dup := byPath[p]; dup {
+			t.Fatalf("tenants %q and %q share one file %s", prev, tenant, p)
+		}
+		byPath[p] = tenant
+
+		s, err := m.Get(ns)
+		if err != nil {
+			t.Fatalf("Get(%q → %s): %v", tenant, ns, err)
+		}
+		if prev, dup := byStore[s]; dup {
+			t.Fatalf("tenants %q and %q share one store handle", prev, tenant)
+		}
+		byStore[s] = tenant
 	}
 }
 
 // TestManager_TraversalStaysInDir proves a path-traversal tenant key lands a real
-// file INSIDE the finance dir and never writes outside it.
+// file INSIDE the data directory and never writes outside it. namespace SANITISES
+// rather than rejects, so the property is "cannot escape", not "errors".
 func TestManager_TraversalStaysInDir(t *testing.T) {
 	dir := t.TempDir()
 	m, err := NewManager(dir)
@@ -144,16 +198,31 @@ func TestManager_TraversalStaysInDir(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = m.Close() })
 
-	if _, err := m.Get("../../../../etc/passwd"); err != nil {
-		t.Fatalf("Get(traversal): %v", err)
+	orgsRoot := filepath.Join(dir, "orgs") + string(os.PathSeparator)
+	for _, tenant := range hostileTenants {
+		ns, ok := tenantNS(tenant)
+		if !ok {
+			continue
+		}
+		if p := storePath(t, dir, ns, tenantSubsystem); !strings.HasPrefix(p, orgsRoot) {
+			t.Fatalf("tenant %q escaped: %s is outside %s", tenant, p, orgsRoot)
+		}
+		if _, err := m.Get(ns); err != nil {
+			t.Fatalf("Get(%q → %s): %v", tenant, ns, err)
+		}
 	}
-	// The only .db files anywhere under dir must be within the finance/ subdir.
+
+	// And on disk: closing seals every store to its path, and every one of them is
+	// under orgs/.
+	if err := m.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".db") {
 			return nil
 		}
-		if !strings.HasPrefix(p, filepath.Join(dir, "finance")+string(os.PathSeparator)) {
-			t.Fatalf("traversal escaped: %s is outside the finance dir", p)
+		if !strings.HasPrefix(p, orgsRoot) {
+			t.Fatalf("traversal escaped: %s is outside %s", p, orgsRoot)
 		}
 		return nil
 	})

@@ -15,7 +15,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `metrics openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "metrics",
 		Price: cloud.Free,
 		App:   cloud.MountMetrics,

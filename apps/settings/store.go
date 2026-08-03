@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both cgo and pure-Go build tags). Blank
 	// import registers the driver; importing modernc directly would double-register.
-	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -43,28 +46,18 @@ type Settings struct {
 	UpdatedAt  int64
 }
 
-// SettingsStore is the settings metastore over one SQLite file
-// ({DataDir}/settings.db). Tenancy is the (org, product) key.
+// SettingsStore is the settings metastore over one SQLite file — the
+// deployment's own "settings" subsystem. Tenancy is the (org, product) key.
 type SettingsStore struct {
 	db *sql.DB
 }
 
-func openSettingsStore(path string) (*SettingsStore, error) {
-	db, err := cek.Open(cek.Global, path)
+func openSettingsStore(dir string) (*SettingsStore, error) {
+	db, err := cek.Open(namespace.System(), "settings", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open settings store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &SettingsStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

@@ -101,7 +101,7 @@ type Config struct {
 	PlatformURL string `json:"platform_url,omitempty"`
 	CloudURL    string `json:"cloud_url,omitempty"`
 	ClientID    string `json:"client_id,omitempty"`
-	APIKey      string `json:"apiKey,omitempty"` // hk-… key, shared with the rest of the toolchain
+	APIKey      string `json:"apiKey,omitempty"` // sk-… key, shared with the rest of the toolchain
 }
 
 // Credentials holds secret material, ~/.hanzo/credentials.json, mode 0600.
@@ -457,7 +457,7 @@ func (e *Env) accessToken() string {
 // freshAccessToken returns the IAM user token only while it is not yet expired.
 // accessToken() stays expiry-agnostic so `hanzo whoami` can report a dead token
 // rather than masking it as logged-out; freshAccessToken is the code-agent path,
-// where an expired token would 401 a session a still-valid hk- key could serve.
+// where an expired token would 401 a session a still-valid sk- key could serve.
 // No expiry recorded (a raw HANZO_TOKEN with no claims) ⟹ trust it as-is.
 func (e *Env) freshAccessToken() string {
 	tok := e.accessToken()

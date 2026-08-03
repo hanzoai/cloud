@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,8 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,25 +18,15 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/idv"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/cek"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
 const testTimeout = 30 * time.Second
-
-// TestMain seeds a random cek master key so the encrypted-at-rest store opens on an
-// encryption-capable test build (mirrors clients/integrations, flags, git, venue). On
-// a pure-Go build cek ignores it and uses the plaintext dev path.
-func TestMain(m *testing.M) {
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		panic(err)
-	}
-	cek.SetMasterKey(k)
-	os.Exit(m.Run())
-}
 
 // fakeProvider is an injectable idv.Provider whose Start/Check statuses are fixed by
 // the test — so we can drive the seam, including a HOSTILE provider that tries to
@@ -59,13 +46,12 @@ func (f fakeProvider) Check(context.Context, string, string) (idv.Result, error)
 	return idv.Result{Ref: "ref_" + f.name, Status: f.checkStatus}, nil
 }
 
-// mount brings compliance up on a bare app with a real in-memory audit recorder, and
+// mount brings compliance up on a bare app with a real audit recorder, and
 // returns the app + the recorder for assertions. The provider defaults to Manual.
 func mount(t *testing.T) (*zip.App, *audit.Recorder) {
 	t.Helper()
-	// A unique per-test path (not ":memory:") so each test's cek sidecar is written and
-	// read under this process's key — concurrent test binaries never share a sidecar.
-	rec, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), nil)
+	// A dir of its own per test, so concurrent tests never share a database.
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}
@@ -175,6 +161,7 @@ func (k fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 	return nil, fmt.Errorf("no such secret %q", ref)
 }
 func (k fakeKMS) PutSecret(context.Context, string, []byte) error      { return nil }
+func (k fakeKMS) DeleteSecret(context.Context, string) error           { return nil }
 func (k fakeKMS) Sign(context.Context, string, []byte) ([]byte, error) { return nil, nil }
 
 // mountWithWebhook mounts compliance with a signature-authenticated webhook configured:
@@ -182,7 +169,7 @@ func (k fakeKMS) Sign(context.Context, string, []byte) ([]byte, error) { return 
 func mountWithWebhook(t *testing.T, secret string) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_IDV_WEBHOOK_KEY_REF", "kms://idv-webhook")
-	rec, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}

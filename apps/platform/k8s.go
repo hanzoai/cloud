@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/namespace"
 
-	"github.com/hanzoai/cloud/apps/provisioning"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -221,13 +221,13 @@ func (k *k8sClient) ready() error {
 // tenantNamespace derives the physical namespace for an org. This is the
 // cross-tenant isolation boundary: the org is the VALIDATED tenant (c.Org()),
 // so the namespace is not attacker-controlled. The slug is produced by the ONE
-// hardened, INJECTIVE org normalizer (provisioning.SanitizeOrg — identity on a
+// hardened, INJECTIVE org normalizer (namespace.Sanitize — identity on a
 // clean DNS label, else fold + a SHA-256 suffix of the raw owner), so two
 // distinct owners can NEVER collapse onto the same namespace (CRIT-2). Reusing
 // that single function keeps cloud's whole tenant→namespace/bucket/DB boundary
 // consistent, rather than forking a third, lossy slug rule.
 func tenantNamespace(org string) string {
-	org = provisioning.SanitizeOrg(org)
+	org = namespace.Sanitize(org)
 	if org == "" {
 		org = "unknown"
 	}
@@ -241,7 +241,7 @@ func tenantNamespace(org string) string {
 
 // buildImageRef is the deterministic per-tenant output image for a git build:
 // <prefix>/tenant-<org>/<app>:<tag>. org and app live in SEPARATE path
-// components, joined by '/', which neither an org slug (provisioning.SanitizeOrg
+// components, joined by '/', which neither an org slug (namespace.Sanitize
 // output) nor an app slug (slugRE) can contain — so the (org,app) pair is
 // UNIQUELY recoverable from the ref and the mapping is INJECTIVE (CRIT-2). The
 // previous single-component "tenant-<org>-<app>" join was ambiguous: (org=a-b,
@@ -256,7 +256,7 @@ func (k *k8sClient) buildImageRef(org, app, tag string) string {
 	if tag == "" {
 		tag = "latest"
 	}
-	return fmt.Sprintf("%s/tenant-%s/%s:%s", strings.TrimRight(prefix, "/"), provisioning.SanitizeOrg(org), app, tag)
+	return fmt.Sprintf("%s/tenant-%s/%s:%s", strings.TrimRight(prefix, "/"), namespace.Sanitize(org), app, tag)
 }
 
 // ensureNamespaceExists creates tenant-<org> if it does not exist (idempotent).
@@ -824,7 +824,7 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// collides (409 AlreadyExists) rather than spawning a duplicate — the
 	// idempotency key, no monotonic counter. The org slug is the INJECTIVE
 	// normalizer so two orgs' identically-named apps never share a Job name.
-	jobName := truncate("pf-build-"+provisioning.SanitizeOrg(org)+"-"+a.Slug+"-"+jobIDSuffix(buildID), 63)
+	jobName := truncate("pf-build-"+namespace.Sanitize(org)+"-"+a.Slug+"-"+jobIDSuffix(buildID), 63)
 
 	// buildctl-daemonless git frontend context: https://<repo>.git#<ref>.
 	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
@@ -991,6 +991,40 @@ const gitTokenSecret = "console-git-token"
 // Dockerfile has no host-root / device / privileged-syscall surface to escape
 // from (H2). It is a public image on Docker Hub — no pull secret needed.
 const buildkitRootlessImage = "moby/buildkit:v0.16.0-rootless"
+
+// buildCacheLimit bounds the buildkitd emptyDir — the build's whole working set,
+// and the only thing in the pod that grows without bound.
+//
+// It is a bound, not a measurement: half of a runner node's ~105G, which also
+// carries the node's images, its snapshots and any concurrent build. The number
+// matters far less than having one, because the failure it prevents is not this
+// build running out of room — it is the NODE running out, which the kubelet
+// answers by evicting every pod on it.
+//
+// The two consts below bound this package's OTHER two emptyDirs for the same
+// reason, and they are stated here together because "how much node disk may a
+// job take" is one question with three answers, not three unrelated numbers. An
+// uncapped emptyDir is the default, and the default is the bug: nothing about
+// `emptyDir: {}` says it is charged to the node's ephemeral storage, so every
+// one of these read as harmless scratch until a runaway filled a runner rootfs.
+const (
+	buildCacheLimit = "50Gi"
+
+	// artifactWorkspaceLimit bounds the artifact job's /w — the clone, HOME,
+	// GOPATH, the npm cache and every produced binary for every platform, for
+	// every recipe entry in turn, all in one volume. Same half-a-node bound as
+	// the build cache, and for the same reason: a recipe that loops is bounded
+	// by this or by the node.
+	artifactWorkspaceLimit = "50Gi"
+
+	// smokeDataLimit bounds the smoke job's /data. This one is scratch for a
+	// single 120s boot test — a fresh SQLite and whatever the image writes at
+	// startup — so it is small on purpose. It is capped anyway because the
+	// failure mode is not this pod's: an image that loops writing on boot would
+	// fill the runner's rootfs and evict its NEIGHBOURS while staying well
+	// inside its own resource limits.
+	smokeDataLimit = "10Gi"
+)
 
 // buildPushSecretPrefix + buildPushSecret select the PER-ORG push credential a
 // build mounts. The Secret is named push-<namespace> (push-hanzoai / push-luxfi /
@@ -1165,7 +1199,14 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							"name":   "ghcr",
 							"secret": map[string]any{"secretName": pushSecret, "items": []any{map[string]any{"key": ".dockerconfigjson", "path": "config.json"}}},
 						},
-						map[string]any{"name": "buildkitd", "emptyDir": map[string]any{}},
+						// buildkitd's worker cache + snapshots — the whole of a build's
+						// working set, and the only thing in this pod that grows without
+						// bound. An emptyDir is charged to the NODE's ephemeral storage,
+						// so uncapped, one runaway build fills the node rootfs, trips
+						// DiskPressure, and the kubelet evicts every pod on that node
+						// rather than the build that caused it. A cap makes an overrun
+						// evict THIS pod only, which is the one that can be retried.
+						map[string]any{"name": "buildkitd", "emptyDir": map[string]any{"sizeLimit": buildCacheLimit}},
 					},
 				},
 			},
@@ -1329,7 +1370,7 @@ func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Un
 						},
 						"volumeMounts": []any{map[string]any{"name": "data", "mountPath": "/data"}},
 					}},
-					"volumes": []any{map[string]any{"name": "data", "emptyDir": map[string]any{}}},
+					"volumes": []any{map[string]any{"name": "data", "emptyDir": map[string]any{"sizeLimit": smokeDataLimit}}},
 				},
 			},
 		},
@@ -1425,7 +1466,7 @@ func mustStatus(job *unstructured.Unstructured) map[string]any {
 // ── pure helpers ─────────────────────────────────────────────────────────────
 //
 // The org→slug normalizer is NOT here: cloud has exactly ONE, the injective
-// provisioning.SanitizeOrg (see tenantNamespace / buildImageRef). A second,
+// namespace.Sanitize (see tenantNamespace / buildImageRef). A second,
 // lossy copy previously lived here and was the CRIT-2 collision — deleted.
 
 func splitImageRef(ref string) (repo, tag string) {
