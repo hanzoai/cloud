@@ -76,8 +76,8 @@
     "/v1/marketplace/listings": {
       "get": {
         "operationId": "get_v1_marketplace_listings",
-        "summary": "ListListings returns the listings the caller's own org has published — what this org is offering, not what it can buy.",
-        "description": "ListListings returns the listings the caller's own org has published — what this\norg is offering, not what it can buy. A publisher only ever sees its own rows.",
+        "summary": "Returns the listings the caller's own org has published — what this org is offering, not what it can buy.",
+        "description": "Returns the listings the caller's own org has published — what this\norg is offering, not what it can buy. A publisher only ever sees its own rows.",
         "tags": [
           "marketplace"
         ],

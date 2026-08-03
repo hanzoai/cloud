@@ -124,8 +124,8 @@
     "/v1/team/account/cookie": {
       "delete": {
         "operationId": "delete_v1_team_account_cookie",
-        "summary": "ClearCookie signs this browser out of team by expiring the HttpOnly account-token cookie the OAuth callback set.",
-        "description": "ClearCookie signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one.",
+        "summary": "Signs this browser out of team by expiring the HttpOnly account-token cookie the OAuth callback set.",
+        "description": "Signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one.",
         "tags": [
           "team"
         ],
@@ -154,8 +154,8 @@
     "/v1/team/account/providers": {
       "get": {
         "operationId": "get_v1_team_account_providers",
-        "summary": "ListProviders returns the identity providers this deployment starts a login with.",
-        "description": "ListProviders returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
+        "summary": "Returns the identity providers this deployment starts a login with.",
+        "description": "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
         "tags": [
           "team"
         ],
@@ -185,8 +185,8 @@
     "/v1/team/billing/plan": {
       "get": {
         "operationId": "get_v1_team_billing_plan",
-        "summary": "ReadPlan returns the plan and seat counts for the caller's OWN org, resolved from the VERIFIED team session token — never a client header.",
-        "description": "ReadPlan returns the plan and seat counts for the caller's OWN org, resolved\nfrom the VERIFIED team session token — never a client header. Seats and guests\nare the org's distinct active human members (a bot member is not a seat); the\nplan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier. A\ncaller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
+        "summary": "Returns the plan and seat counts for the caller's OWN org, resolved from the VERIFIED team session token — never a client header.",
+        "description": "Returns the plan and seat counts for the caller's OWN org, resolved\nfrom the VERIFIED team session token — never a client header. Seats and guests\nare the org's distinct active human members (a bot member is not a seat); the\nplan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier. A\ncaller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
         "tags": [
           "team"
         ],
@@ -245,8 +245,8 @@
     "/v1/team/bots": {
       "get": {
         "operationId": "get_v1_team_bots",
-        "summary": "ListBots returns the caller org's bot members — the org's agents projected as the workspace Employees they become, each with the member account uuid and Person reference the roster addresses it by.",
-        "description": "ListBots returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
+        "summary": "Returns the caller org's bot members — the org's agents projected as the workspace Employees they become, each with the member account uuid and Person reference the roster addresses it by.",
+        "description": "Returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
         "tags": [
           "team"
         ],
@@ -309,8 +309,8 @@
     "/v1/team/files/{workspace}/{filename}": {
       "delete": {
         "operationId": "delete_v1_team_files_workspace_filename",
-        "summary": "DeleteBlob removes one blob from a workspace's file store.",
-        "description": "DeleteBlob removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
+        "summary": "Removes one blob from a workspace's file store.",
+        "description": "Removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
         "tags": [
           "team"
         ],
