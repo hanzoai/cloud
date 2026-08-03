@@ -289,22 +289,92 @@ const subjectMax = 512
 // record.
 const evidenceMax = 512
 
+// admitSubject is the ONE ceiling on a subject reference, and every door that
+// carries one asks it: the write, the resolve, the read filter.
+//
+// A COUNT OVER CALLER-SIZED VALUES IS NOT A BOUND. maxResolve caps a resolve at
+// 500 named events; with no ceiling on a subject, 500 bounds the ROWS and nothing
+// bounds the BYTES, and the only thing that did was the edge's BodyLimit — a fact
+// about the deployment, not about this plane. Each subject is then amplified on
+// the way down: the dedupe key, the grouping key, and one bound parameter per
+// event in a statement against a single-writer file. With this ceiling asked at
+// the door, `count × subjectMax` IS the byte bound of everything below it, which
+// is the property the numbers were always claimed to have.
+//
+// The ceiling is also the only one that could be right, which is why there is one
+// spelling of it and not two: the write refuses a longer subject, so a longer one
+// cannot be IN the store, and a read that accepted it could only ever answer
+// nothing after paying for the scan.
+func admitSubject(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	switch {
+	case s == "":
+		return "", fmt.Errorf("no subject, so nothing is named")
+	case len(s) > subjectMax:
+		return "", fmt.Errorf("subject is %d bytes and the bound is %d", len(s), subjectMax)
+	}
+	return s, nil
+}
+
+// admitKind admits a kind against the closed set. Asked on the READ path too: a
+// kind outside the vocabulary can only ever match zero rows, so refusing says so
+// instead of charging the caller for a scan — and a closed set is itself the byte
+// bound on the field, which an open one would not be.
+func admitKind(k string) (Kind, error) {
+	out := Kind(strings.TrimSpace(k))
+	if !knownKind(out) {
+		return "", fmt.Errorf("kind %q is not one this plane judges", k)
+	}
+	return out, nil
+}
+
+// admitSource admits a source against the precedence declaration, which is the
+// closed set: a source with no rank is one a conflict could not be resolved
+// against. Asked on the read path for the same two reasons as the kind.
+func admitSource(s string) (Source, error) {
+	out := Source(strings.TrimSpace(s))
+	if _, ok := rank(out); !ok {
+		return "", fmt.Errorf("source %q has no precedence, so a conflict with it could not be resolved", s)
+	}
+	return out, nil
+}
+
+// admitEvidence is the ceiling on the evidence pointer. It names a record; it is
+// not the record.
+func admitEvidence(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	switch {
+	case s == "":
+		return "", fmt.Errorf("no evidence, so this label could not be defended in an adverse action")
+	case len(s) > evidenceMax:
+		return "", fmt.Errorf("evidence is %d bytes and the bound is %d", len(s), evidenceMax)
+	}
+	return s, nil
+}
+
 // admit validates one assertion and completes it. It is the ONE gate: every
 // write path goes through it, so a rule stated here cannot be bypassed by a
 // caller that found another door.
 //
 // FAIL CLOSED. Every branch refuses; none coerces. A coerced label is a label
 // somebody will later defend in front of a regulator as though a human meant it.
+//
+// The per-value ceilings are the same functions the read doors ask, so there is
+// one spelling of "how long may a subject be" and not one per door.
 func admit(f Fact, now time.Time) (Fact, error) {
-	f.Subject = strings.TrimSpace(f.Subject)
-	f.Evidence = strings.TrimSpace(f.Evidence)
+	subject, err := admitSubject(f.Subject)
+	if err != nil {
+		return Fact{}, err
+	}
+	f.Subject = subject
+	evidence, err := admitEvidence(f.Evidence)
+	if err != nil {
+		return Fact{}, err
+	}
+	f.Evidence = evidence
 	switch {
 	case !knownKind(f.Kind):
 		return Fact{}, fmt.Errorf("kind %q is not one this plane judges", f.Kind)
-	case f.Subject == "":
-		return Fact{}, fmt.Errorf("no subject, so the assertion judges nothing")
-	case len(f.Subject) > subjectMax:
-		return Fact{}, fmt.Errorf("subject is longer than %d bytes", subjectMax)
 	case !knownDisposition(f.Disposition):
 		return Fact{}, fmt.Errorf("disposition %q is not in the closed vocabulary", f.Disposition)
 	case f.Source == "":
@@ -315,10 +385,6 @@ func admit(f Fact, now time.Time) (Fact, error) {
 		}
 	}
 	switch {
-	case f.Evidence == "":
-		return Fact{}, fmt.Errorf("no evidence, so this label could not be defended in an adverse action")
-	case len(f.Evidence) > evidenceMax:
-		return Fact{}, fmt.Errorf("evidence is longer than %d bytes", evidenceMax)
 	case f.At.IsZero():
 		return Fact{}, fmt.Errorf("no event time, so there is nothing for a maturity horizon to measure")
 	case f.Seen.IsZero():
