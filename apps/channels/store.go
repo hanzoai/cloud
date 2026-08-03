@@ -6,7 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cloud/cek"
+	// cek is the ONE opener: it renders this subsystem's path from the
+	// namespace and opens it under the key cek derives for that name.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both build tags). Blank import registers
 	// the driver — same as apps/integrations.
@@ -26,31 +31,21 @@ const (
 	sendKeepSec = 48 * 3600
 )
 
-// store is the channels database. ONE SQLite file ({DataDir}/channels.db)
-// holds every org's policy, pairing, allowlist, inbox, send-idempotency, and
-// route rows; tenancy is the org column — org leads every PK. No secrets in
-// any row (pairing codes are capability strings a sender must present; they
-// are stored, never logged).
+// store is the channels database. ONE SQLite file — the system namespace's
+// "channels" — holds every org's policy, pairing, allowlist, inbox,
+// send-idempotency, and route rows; tenancy is the org column — org leads every
+// PK. No secrets in any row (pairing codes are capability strings a sender must
+// present; they are stored, never logged).
 type store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*store, error) {
+	db, err := cek.Open(namespace.System(), "channels", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open channels store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	st := &store{db: db}
 	if err := st.migrate(); err != nil {
 		_ = db.Close()

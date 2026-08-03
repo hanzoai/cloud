@@ -180,8 +180,7 @@ tidy` is stable. Do NOT commit a `go.work` here — it would flip the Dockerfile
 its `-mod=readonly` download step.
 
 Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
-tests (`cek`, `CLOUD_KMS_MASTER_KEY_REF` set) REQUIRE `CGO_ENABLED=1` +
-libsqlcipher (`cek/cek.go` refuses to encrypt in pure-Go); those run only in the
+tests REQUIRE `CGO_ENABLED=1` + libsqlcipher; those run only in the
 Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
 by design (kms, flags, x402, plugin/kmsreseal, finance). Bundle-embed
 tests (apps/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
@@ -210,8 +209,7 @@ STILL DIVERGENT, and a decision for the owner rather than a patch: `go-unit`
 declares no `CLOUD_KMS_MASTER_KEY_REF`, while `make test` injects a dev key
 (`TEST_ENV`) precisely so the suite has one dev posture instead of a copy per
 package — and `hanzoai/ci` exports only GIT_TOKEN / S3 / registry creds into the
-step, never that key. So every cek-backed package still fails there for want of
-it (measured: `apps/code`, 6 tests, "cek: CLOUD_KMS_MASTER_KEY_REF is required").
+step, never that key.
 The fix is one of two shapes and both are policy: give CI the dev key, or route
 the step through the Makefile so the posture is declared once. Copying the key
 into `hanzo.yml` would make it two declarations, which is the drift above again.
@@ -243,7 +241,7 @@ entry, not a process. The apps that own a listener or a background loop
 (`manifest.App.Eager`) start WITH the host instead.
 
 Each subsystem is its OWN binary at `plugin/<app>`, linking only that app's graph
-through `cloud.Serve` — never the fleet. `ls cmd/` shows exactly `cloud/`; `ls
+through `cloud.Listen` — never the fleet. `ls cmd/` shows exactly `cloud/`; `ls
 plugin/` shows the ~116 per-app + tool dirs. A dedicated plugin binary is ~40 MB
 of which ~35 MB is the core every plugin also links; that duplication is the
 deliberate price of never linking the fleet union into one mega binary again.
@@ -286,7 +284,7 @@ An app the walk cannot reduce to prefixes gets no row and says why on stderr —
 `make generate` names them. The fix for an under-reported app is one line in its
 Wire entry: `Prefixes:` outranks the walk.
 
-`cloud.Serve` honours the plugin side of the contract in ONE place, `listenOn`:
+`cloud.Listen` honours the plugin side of the contract in ONE place, `listenOn`:
 with `ZIP_ADDR` set the process serves that socket and binds no ops port, so
 every generated `plugin/<app>` is a valid plugin with no code of its own. Without
 that, each child binds cfg's fixed `:8080/:9653/:9090`, the host never sees it
@@ -461,7 +459,7 @@ for the credentials of the app it is.**
   *service* credentials. The pod is the data-plane boundary; the app is the
   credential boundary.
 
-Ordering is load-bearing: `cek` memoizes the master key on first use, so
+Ordering is load-bearing: a store opened before the master is installed fails, so
 `credz.Boot` runs before the first store opens (top of `Serve`, and again at the
 top of `BuildDeps` for callers that skip `Serve` — it is `sync.Once`). Installing
 a key any later loses to the cached "no key" while the log claims success, which
@@ -625,9 +623,22 @@ package under `apps/<name>` that obeys these seams — nothing more.
   when project-scoped. Isolation is PHYSICAL: a distinct `(org[, project])` is a
   distinct file. `org`/`project` MUST be the VALIDATED principal values
   (`principal.Org(c)`, `principal.Project(c)`) — never a raw body/header — and are
-  folded through `SanitizeOrg`, the ONE injective org slugger. hanzoai/sqlite is
+  folded through `namespace.Sanitize`, the ONE injective org slugger. hanzoai/sqlite is
   the SOLE driver (blank-imported once, in orgdb.go); subsystems never import a
   SQLite driver themselves. The caller owns its schema/migration and Close.
+- **Naming lives in hanzoai/namespace, not here.** A namespace, the injective
+  slug it is built from, and the key and path it renders to are ONE primitive and
+  it is `github.com/hanzoai/namespace` (v1.2.0+): `Sanitize` (the slugger),
+  `OrgProject`/`MustOrgProject` (org + project → a namespace), `Key` (→
+  `orgs/{slug}[/projects/{project}]/{sub}.db`) and `Path` (that, resolved against
+  DataDir). These strings are directory names on live volumes and keys in live
+  buckets, so a second implementation of them does not fail — it opens an empty
+  database beside a real one. cloud keeps only the DOOR: `OrgNamespace` /
+  `MustOrgNamespace` in orgns.go, the one file allowed to fold a value into an
+  ENTITY's name (`TestOnlyOrgnsBuildsANamespace` enforces it). `namespace.System()`
+  is outside that argument rather than an exception to it — it takes no input, so
+  nothing can be folded into it, and a platform store says so where it opens. The
+  key derivation is cek's, from that same name.
 
 ## Zero-downtime HA for per-org stores (rolling-upgrade safe)
 
@@ -1474,12 +1485,12 @@ invisible to prose, MCP, the CLI and every typed SDK method. What it taught:
   emit the Makefile beside the main it already writes, then run `make -f
   mk/fleet.mk openapi-check` and commit whatever drift those three have been
   hiding.
-**The six-plugin pass (bots, entitlements, sbom, translate, agentskills, gateway):
+**The six-plugin pass (bots, entitlements, sbom, translate, skills, gateway):
 11 typed, 5 refused, out of 16 operations that published NOTHING.** Same work list
 rule as the pass below — every operation in `plugin/<name>/openapi.json` carrying
 neither `description` nor `summary`. All six subsets were 100% undescribed before;
 five of the six are now fully or mostly typed (`entitlements` 3/3, `gateway` 2/2,
-`bots` 2/3, `sbom` 2/3, `translate` 2/3), and `agentskills` is 0/2 by structure. Each
+`bots` 2/3, `sbom` 2/3, `translate` 2/3), and `skills` is 0/2 by structure. Each
 package carries `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` reading the REAL
 mount, whose two ledgers must SUM to the served surface, so a route added untyped
 here goes red and a stale reason goes red too. What it taught, beyond the counts:
@@ -1495,7 +1506,7 @@ here goes red and a stale reason goes red too. What it taught, beyond the counts
   parameter is then declared `in: query` rather than `in: path`. apps/pricing's
   refusal, re-measured rather than inherited.
 - **Two more instances of the apps/plan prefix defect, and one of them is partial —
-  which is the harder shape to see.** `plugin/agentskills` declared no `Prefixes`,
+  which is the harder shape to see.** `plugin/skills` declared no `Prefixes`,
   so the `/v1/<name>` default covered NOTHING it serves (its routes are the root
   `/.well-known/agent-skills/…` convention). `plugin/entitlements` declared none
   either, and its default covered ONE of its two top-level nouns: `/v1/entitlements`
@@ -2462,7 +2473,7 @@ forbids and any weave refuses. Fixed there: an alias is named by its address.
 **And it CLOSED a reachability gap.** `manifest/router_test.go`'s `unreachable`
 ledger carried `iam /.well-known/{wildcard1} -> nothing` — a relying party's FIRST
 call reaching no app. Relayed, the only prefix that could have routed it was
-`/.well-known`, which owns the whole subtree and would have taken agentskills' with
+`/.well-known`, which owns the whole subtree and would have taken skills' with
 it. Grafted, iam declares the three exact documents its router holds, so
 `manifest.Apps` routes exactly those three and nothing else.
 
@@ -2587,6 +2598,128 @@ migration silently strips request shapes from every generated CLI and SDK.
   983/692/109. Every number in this file is tagged with how to re-measure it;
   keep it that way.
 
+## Lifecycle defense: ONE scorer seam, ONE fail policy, a sensor at the edge
+
+`risk.go` · `agency.go` · `middleware_abuse.go` · `apps/gateway/edge/traffic.go`
+
+**`cloud.Decide` is the only door to `/v1/risk`.** The app that owns `/v1/risk`
+hands its scoring function to the core with `cloud.SetRiskScorer` — the same
+inversion `SetObsEventIngest` uses, because package `cloud` cannot import an app.
+Nothing in cloud scores; a second scorer would be a second answer to one question
+and the two would disagree silently.
+
+**The fail policy is `riskUnavailable`, and it is the only copy.** A scorer that
+is absent, erroring, silent, out-of-vocabulary, panicking or past `RiskBudget`
+(150ms, enforced by the caller) ALLOWS an ordinary request and BLOCKS a
+`Privileged` one. Every answer carries a `Refusal`, so an allow-because-nobody-
+was-listening is never recorded as clean. `Privileged(method, path)` is the
+data list of grants: credential minting/revocation, identity provisioning,
+sign-up, onboarding, the key store (all methods), and admin/org MUTATIONS.
+
+**`AbuseGate` sits `AuditTrail → ScopeRateLimit → AbuseGate → StarterGrant →
+BillingGate`.** It keys on the CREDENTIAL, which neither existing limiter can see
+— EdgeRateLimit keys on IP pre-auth, ScopeRateLimit on (org, project, service) —
+so a stolen key inside its org's normal ceiling is invisible to both. It counts,
+classifies, asks and enforces; it never scores. A non-allow verdict is HELD for a
+minute so an attack costs one screen, not one per request. A refusal is a 401/403,
+which AuditTrail already puts in the tamper-evident trail — there is no second
+audit write, because one event must not have two records.
+
+**SHADOW PER ORG BY DEFAULT** (`edge.Policy.Mode`, the one new knob). Shadow
+senses and records and enforces nothing. `PUT /v1/gateway/config {"mode":"live"}`
+is REFUSED while no scorer is installed: fail-closed on a component that was never
+wired is an outage, not a defense, and this is what makes the distinction real.
+Only live mode reaches the scorer, meters a screen, or fails closed.
+
+Mode is the one field on that route whose SCOPE and whose AUTHORITY are different
+questions, and both were wrong once:
+
+- **It does not inherit.** Every other per-org field layers a platform default
+  under the org's own value. Mode is not a default, it is an arming decision, so
+  seeding it from the platform row meant the single PUT that arms the anonymous
+  lane (the reserved admin org — the only way to arm the lane that has no tenant)
+  silently armed every tenant in the estate. `Store.Mode` reads the org's OWN row
+  and nothing else; the platform row governs exactly one scope, the empty org.
+- **It is not self-service.** It lives on a tenant's row but writing it requires
+  SuperAdmin, whichever row it lands on. The subject of an abuse control does not
+  get to switch the control off — and an org-admin credential is what a stolen key
+  buys, so leaving it in the self-service branch made the gate disarmable by the
+  account it was watching.
+
+**Agency — the differentiator.** `agency(class, pattern)` is pure and total, and
+reads OUR issuance, never the client's self-description (there is no user-agent
+heuristic and there must not be one) and never a REQUEST HEADER. "We minted this
+credential" is a fact only the identity boundary can state, so the boundary states
+it: `SanitizeIdentity` parks the principal it resolved with `principal.Mint`, a
+request-local slot no client can write, and the classifier reads `principal.Minted`.
+Reading `c.Org()`/`c.User()` instead was forgeable twice over — X-Org-Id survives
+the boundary on the anonymous path by design, and a hand-written plugin process may
+have no boundary in front of it at all — so two headers plus an `sk-`-shaped string
+that never validated bought the agent lane. Absent attestation resolves to
+anonymous, which is the fail-closed direction: only a credential we resolved buys
+the lane. An attributable machine credential is the
+`agent` lane whatever it claims to be; a browser session is `human`; an
+unattributable caller is `unknown` until it shows an abuse SHAPE — many
+credentials from one address, a wall of refusals, a path sweep — and only then
+`bot`. Anonymous is not malicious.
+
+**The sensor** (`edge.Traffic`, a LEAF package so the middleware and the app share
+ONE object) counts requests, 401/403 failures, path spread and peer spread per
+(org, credential) over a rolling minute. Bounded by construction: a fixed ring
+plus two 64-bit population-count words per key. Credentials appear only as a keyed
+per-process fingerprint — never a bare digest, so a published fingerprint cannot be
+tested against a candidate key off-box.
+
+**TENANCY IS THE DATA STRUCTURE AND THE BOUND IS PER TENANT.** One org's callers,
+hosts and lane counters live in that org's OWN tables, reached only by indexing
+`tenants[org]`; there is no shared map with org-prefixed keys, so a cross-tenant
+read or eviction is unwritable rather than merely refused. Each tenant has its own
+ceiling and reclaims only its own keys — a process-wide cap over a shared table is
+a cross-tenant denial of service, because the org that fills it evicts whoever was
+quietest and that victim's controls then go silent with no error. A tenant at its
+ceiling degrades exactly one tenant, itself, and says so: `TrafficView.Saturated`
+is its own count of its own reclaims. The one reclaim policy lives in `table[V]`
+(unexported map, cap as a constructor argument, a pinned live verdict is never
+dropped) so the wrong shape is unrepresentable rather than discouraged.
+
+**The client address is `cloud.ClientIP`, and it is the only one.** The peer is the
+truth: a caller that is not one of our own proxies IS the client, and no header it
+sent is read. When the peer IS ours, the forwarded chain is walked from the RIGHT —
+the end each hop appends to — and the first entry that is not one of ours is the
+answer; everything to its left was written before our infrastructure saw the
+request. A chain that is entirely ours is an in-cluster caller with no client
+address (`""`), which is what keeps sibling services out of the public rate limiter.
+Our own hops are a CIDR set (`CLOUD_TRUSTED_PROXIES`, defaulting to private space)
+rather than a hop count, because a count is a promise about topology that nothing
+enforces. Reading the LEFT-most entry — the one the client writes — let one host
+present a million clients: it defeated the per-IP limit keyed on it, put a chosen
+address in an audit row, and fed the sensor's address table without bound.
+
+`GET /v1/gateway/traffic` (`gatewayTraffic`) reports the caller's own org: lane
+split, denials, screens, and its busiest credentials by fingerprint. Screens are
+counted there from the first request AND metered on the org's usage ledger —
+`ResourceMeter.Meter` is a no-op while `CLOUD_RISK_SCREEN_CENTS` is unset (0),
+because the price belongs to the pricing catalog and inventing one here would be
+a fabricated number.
+
+**A path is what the ROUTER says it is.** `cloud.RoutePath` normalizes to fiber's
+own detection path — lower-cased, trailing slashes stripped — and every security
+comparison (`Privileged`, `Probe`, the gate's exemptions) runs against it, on
+segment boundaries. `strings.HasPrefix` over the raw `c.Path()` meant one capital
+letter routed to the key store while matching no grant prefix, so the scorer's
+silence ALLOWED what the fail-closed branch exists to refuse.
+
+**Asking is bounded.** Each ask costs a goroutine that lives until the scorer
+returns, so `Decide` holds `MaxScorerCalls` in flight and answers `RefusalBusy`
+past the ceiling — the same fail policy a timeout gets, reached without allocating.
+A scorer stuck on a lock cannot become an out-of-memory in the process it was
+installed to protect.
+
+The other enforcement point is in `hanzoai/iam` (`internal/risk` +
+`internal/oidc/signup_gate.go`), which calls `POST /v1/risk/decide` over the wire
+at sign-up. Its arming signal is `RISK_URL` rather than a per-org mode; the
+semantic is identical — fail closed once armed, allow before.
+
 ## Cross-subsystem seams that are values, not places
 
 - **AN AGGREGATOR CALLS; IT DOES NOT IMPORT.** Apps are separate binaries, so a Go
@@ -2629,18 +2762,37 @@ migration silently strips request shapes from every generated CLI and SDK.
   two structs — 1246 packages for a DTO. One definition, neither end importing the
   other. Measured: `plugin/admin` 2261 → 1115 packages, `apps/billing` 1246 → 945,
   and two boards that had been reporting zeros started reporting the truth.
-- **THE FLEET HAS ONE MCP DOOR: `POST /v1/mcp`, on the HOST.** zip serves it
-  (`zip.MCPConfig{Path:"/v1/mcp"}` in `cmd/cloud`), and its tool list is the union
-  of every mounted plugin's BUILD-TIME catalogue — `plugin/<app>/mcp.json`, written
-  by the same `<app> describe` run that writes that app's `openapi.json`, embedded
-  by the leaf `plugin/embed.go` and handed to zip as `Plugin.Tools`. So `tools/list`
-  is a memcpy of a constant and starts NO child; only a `tools/call` wakes one — the
-  single plugin that owns the name — over ZAP on its private socket, where the
-  child's OWN registry answers. There were THREE hand-rolled registries for this one
-  concept (`apps/tools/http.go`, `apps/tools/builtin.go`, `apps/automations/mcp.go`)
-  and the public one exposed none of the typed ops; all three are deleted. Type an
+- **THE FLEET HAS ONE MCP DOOR: `POST /v1/mcp`, on the HOST, AND IT IS A QUERY.**
+  The host serves it itself (`fleet.Mount` in `cmd/cloud`; zip's own door is
+  `Disabled` there so exactly one handler holds the address). A `tools/list`
+  forwards the CALLER's own message to every composed subsystem's own `/mcp` over
+  its private ZAP socket, in parallel, and unions the replies — so what the door
+  carries is what the subsystems serve at that instant, and a subsystem whose tools
+  depend on the tenant answers for THIS caller out of its own rows. `zip.App.Start`
+  resolves a cold child, which is the same single-flighted path a prefix request
+  takes, so the first list pays one start per app and nothing after it does.
+  **A subsystem that does not answer is NAMED** in `result._meta["hanzo.ai/unavailable"]`,
+  because a silently-short list and a stale file are the same defect. A `tools/call`
+  goes to the app that listed the name, verbatim; a name nobody has listed costs one
+  discovery, then `-32602`.
+  It used to read a BUILD-TIME catalogue — `plugin/<app>/mcp.json`, embedded by
+  `plugin/embed.go` and handed to zip as `Plugin.Tools` — and `tools/list` was a
+  memcpy. **Those 116 files are deleted (49,865 lines).** They were a second source
+  for a fact each child already knows, and they were wrong: `plugin/o11y/mcp.json`
+  held 12 tools while the o11y binary at the same commit served 365, because the
+  missing 353 ops live in `github.com/hanzoai/o11y` and a `go.mod` bump in ANOTHER
+  repository invalidated an artifact in this one with nothing in the diff to say so
+  — no generator on a hook here could ever have seen that trigger. There were also
+  THREE hand-rolled registries for this one concept (`apps/tools/http.go`,
+  `apps/tools/builtin.go`, `apps/automations/mcp.go`); all three are deleted. Type an
   op and it IS a tool — do not write a second JSON-RPC envelope, and note
   `manifest/mcp_test.go` turns one red (no served path may end in `/mcp`).
+  `plugin/<app>/openapi.json` SURVIVES, for the one reason the catalogue could not:
+  the fleet weave carries each subsystem's PROSE, and that prose is lifted from the
+  app's SOURCE at describe time (`openapi.Synopsis`) — a running child has no comment
+  to read and would answer with its deployment's brand blurb, which the weave would
+  publish as the description of every product tag. Making the synopsis a declared
+  value is what deleting that half is waiting on.
 - **The per-tenant tool plane is ONE typed op, and callable in-process.** An org's
   connectors, functions, agents, authored skills and external MCP servers are ROWS,
   not code, so no build-time catalogue can hold them: they are reached through
@@ -3006,7 +3158,7 @@ create a single table in the shipped image. `terms` is keyed
 in every build lane. Verify any SQLite module against the production lane
 (`-tags "libsqlite3 sqlite_fts5"` + `-lsqlcipher`) before designing on it.
 
-The store is `{DataDir}/index.db`, and a rename must carry the WHOLE family: cek
+The store is the `index` subsystem, and a rename must carry the WHOLE family: cek
 keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
 strands the key and every document becomes undecryptable — data loss that presents
 as an empty index.
@@ -3278,7 +3430,7 @@ containment ─┘
 | **containment** | apps/controlplane is unreachable from every real binary | stub crypto in a serve binary |
 | **image** | version derived ONCE → build → push → resolve → smoke | a tag naming an image that did not boot |
 | **rollout** | tag → universe pin → **poll `x-api-version` until it is ours** | describing a version that is not running |
-| **reach** | `openapi/reach.py` over every literal address + the MCP tool count | an address this document publishes that production does not route |
+| **reach** | `go run ./cmd/reach` over every literal address + the MCP tool count | an address this document publishes that production does not route |
 | **fanout** | `repository_dispatch: spec-update` → 9 repos, payload `(version, sha, spec_sha256)` | a projection that never heard about this release |
 | **receipt** | `release.json` on the tag's GitHub Release, `if: always()` | a hole, silently |
 
@@ -3313,9 +3465,15 @@ The file may only shrink: a 404 not listed fails the release, and a listed line
 that starts answering must be deleted in the same commit. Today it holds 14
 `/v1/pricing/*` lines, all owned by a Cloudflare worker that exists in no repo.
 
-**The projections are gated, not hoped for.** MCP needs no car — the door serves
-exactly the tools in the committed `plugin/*/mcp.json`, so car 3 checks the
-number rather than claiming it (833 = 833 at v1.801.350). The eight clients and
+**The projections are gated, not hoped for.** MCP needs no car — but the gate
+changed with the door. Car 3 used to compare the live tool count against
+`jq -s length` over the committed `plugin/*/mcp.json`; both sides came from the
+same files (the door was SERVING those bytes), so it proved only that the image
+carried the tree it was built from, and it passed for months while o11y's
+catalogue held 12 of 365. The door composes itself by asking now, so car 3 asks
+the better question: **did every subsystem answer** — any name in
+`result._meta["hanzo.ai/unavailable"]` fails the release. A broken deployment used
+to match the files exactly. The eight clients and
 the docs each run hanzoai/ci's `client:` lane, which fetches `openapi.yaml` at
 the release's sha, **refuses on a digest mismatch**, regenerates, compiles itself
 and its examples, writes `.spec-lock` and cuts a patch.
@@ -3761,7 +3919,7 @@ address.
 stores open a concurrent read pool AND a serialized write pool on the same file, which
 needs the LIVE libsqlcipher codec — the pure-Go codec envelope is single-writer and
 cannot serve that shape. So `commerceMasterKey` gates on `sqlitedrv.CodecLinked()`, the
-same predicate `cek.EnsureDevKey` uses:
+the same predicate:
 
 - codec linked (the image: `CGO_ENABLED=1 -tags "libsqlite3 sqlite_fts5"`) ⇒ inject
   cloud's master key; commerce encrypts, and its own `resolveMasterKey` still fails
@@ -3801,49 +3959,46 @@ another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
 preference, but because they all move the same balance and the suite is otherwise
 `fullyParallel`.
 
-## Encryption at rest: cek is the gate, and it binds the owner
+## Encryption at rest: one key per database, derived
 
-`cek.Open(principal, path)` is the ONE encryption-at-rest gate. The principal comes
-first because it is a question the caller must answer, not one it can forget:
-`cek.Global` for a platform store, `cek.Org(slug)` for a tenant's. `cek.User(id)` exists
-for the per-user partition, which has no store yet.
+`github.com/hanzoai/cek` is the whole of it, and cloud owns none of it:
 
-If you add a store, open it through cek. A store inside the envelope has a `.dek`
-sidecar beside it; one outside does not, and this is the check worth running on any data
-dir — note it looks for the SIDECAR, because on a pure-Go build the codec envelope keys
-the file out of band and the database may not exist at that path at all:
+    cek.SetMaster(k)                        // once, at boot, from KMS (credz does this)
+    cek.Open(ns, subsystem, dir)            // everywhere else
 
-    find $DATA_DIR -name '*.db' -printf '%P\n' | while read -r r; do
-      printf '%-40s dek=%s\n' "$r" "$([ -f "$DATA_DIR/$r.dek" ] && echo yes || echo NO)"; done
+The key is DERIVED — `HKDF(master, "hanzo/cek/v1/" + ns + "/" + subsystem)` — so it
+is not generated, not wrapped, not stored and not rotated in place. There is no
+unwrap step, no rewrap step, no per-file key material to lose, no sidecar beside the
+database and no migration path to maintain. A database is born encrypted or it does
+not exist. Losing the master loses the data, which is the property you want from
+encryption at rest and the reason the master lives in KMS.
 
-**The derivation.** The KEK binds (owner, file) and never the path, so a store survives a
-move but not a change of owner:
+`namespace` decides WHERE, from the same two values: `{dir}/orgs/{slug}/{sub}.db`
+for an org, `{dir}/orgs/_platform/{sub}.db` for the deployment's own. A caller
+therefore passes a DIRECTORY and a NAME, never a path — the file and its key cannot
+name different things.
 
-    tenant:   KEK = HKDF(master, lp("org") || lp(slug || "/" || hex(fileID)))
-    platform: KEK = HKDF(master, lp("global") || lp(hex(fileID)))
+**Open through `cek.Open`, then `sqlpool.Single`.** cek creates the parent directory
+itself (it chose the path), so cloud no longer wraps it — the `basedb` package that
+existed only to `MkdirAll` is gone. `sqlpool.Single` pins the pool to one connection,
+which is the single-writer discipline every store depends on and, for a two-statement
+read-modify-write, relies on for atomicity.
 
-The platform form is byte-identical to what every store on disk was written under, which
-`TestGlobalDerivationIsUnchanged` asserts against an independently written reference — so
-the platform fleet cannot be silently orphaned. Only tenant stores gained an owner.
+**Do not set connection PRAGMAs.** `busy_timeout`, `journal_mode=WAL`,
+`foreign_keys=ON` and `synchronous=NORMAL` are already applied by
+`github.com/hanzoai/sqlite`, per CONNECTION — which a one-shot `db.Exec` was not, since
+it lands on whichever connection serves it and is lost when that connection is recycled.
+Roughly fifty stores each restated those by hand; they now say nothing, and
+`sqlpool_test.go` asserts the driver still delivers them so the deletion cannot rot.
+`cloud.OrgDB` is `cek.Open` plus `sqlpool.Single`, nothing more.
 
-**Migration is an operation, not a fallback.** `cek.Rebind(from, to, path)` rewraps one
-sidecar; `cek.RebindOrgs(dataDir, platformSlug)` is the walk over `{DataDir}/orgs`. It
-rewrites no database page and never opens the file, so it is safe on a store too large to
-copy and a failure cannot corrupt data. Already-bound reports `ErrNotBound` and counts as
-skipped, so the walk converges rather than pretending to be a transaction; a sidecar that
-unwraps under NEITHER principal is a real error, because an operator must not read
-corruption as success.
+**A test binary keys itself.** cek reads no environment; a process with no KMS mints
+its own master. `import _ "github.com/hanzoai/cloud/internal/devmaster"` in one
+_test.go of the package says so, once, instead of a TestMain per package.
 
-There is deliberately no legacy path inside `Open`. A second derivation tried on failure
-would mean every open silently accepts two answers forever — which is exactly what made
-the old binding unenforceable.
-
-⚠️ **Deploy order.** A volume written before the binding must be rebound before its
-tenants can open their stores. Run `RebindOrgs` against the data dir, then start.
-
-**IAM's store is `iam/global.db`** and opens through cek like everything else. It is named
-for its principal partition, not for a version — it previously opened through
-`iamserver.OpenSQLite`, which has no key to give it, and sat in plaintext.
+**A store that is open has no file yet** on the pure-Go codec, so "does this org
+have a store" is the union of the open set and the disk — `OrgStore.Has`, which
+`Each` and `Stored` both go through.
 
 **Still outside the envelope:** `tasks/<org>/<namespace>.db`. `hanzoai/tasks`'s
 `EmbedConfig` has no key field, so that is an upstream change.
@@ -3935,7 +4090,7 @@ free-port allocation that seven of eight children used to lose.
 ## After the split: a store has one owner, and everyone else asks
 
 `cmd/cloud` is a light plugin HOST. Each app is its own binary (`plugin/<app>/main.go`
-→ `cloud.Serve`), started lazily on the first request to its prefix, and a child's
+→ `cloud.Listen`), started lazily on the first request to its prefix, and a child's
 `--enable` contains ONLY its own name. So `cfg.Enabled("commerce")` is false in every
 process but commerce, `finance.Current()` is nil in every process but commerce, and
 `iamclient.DB()` is nil in every process but iam.

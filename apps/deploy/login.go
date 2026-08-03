@@ -48,7 +48,6 @@ package deploy
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
@@ -61,6 +60,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/iam/pkg/pkce"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
@@ -203,8 +203,8 @@ func login(s *cloud.Service[state], c *zip.Ctx) error {
 		"response_type":         {"code"},
 		"scope":                 {"openid profile email"},
 		"state":                 {nonce},
-		"code_challenge":        {pkceChallenge(verifier)},
-		"code_challenge_method": {"S256"},
+		"code_challenge":        {pkce.Challenge(verifier)},
+		"code_challenge_method": {pkce.Method},
 	}
 	return c.Redirect(http.StatusFound, o.oauthBase()+"/oauth/authorize?"+q.Encode())
 }
@@ -393,13 +393,6 @@ func wantsDocument(method, dest, mode, accept, requestedWith string) bool {
 		return false
 	}
 	return strings.Contains(accept, "text/html")
-}
-
-// pkceChallenge is the RFC 7636 S256 challenge: base64url(sha256(verifier)),
-// unpadded — byte-identical to IAM's own pkceChallenge.
-func pkceChallenge(verifier string) string {
-	sum := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 // randomToken mints a 256-bit URL-safe secret (the state nonce and the PKCE

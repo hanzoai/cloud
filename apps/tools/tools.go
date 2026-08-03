@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
@@ -112,26 +110,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("tools.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("tools.Mount: data dir: %w", err)
-	}
-	activation, err := OpenActivationStore(filepath.Join(deps.DataDir, "tools-activation.db"))
+	activation, err := OpenActivationStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("tools.Mount: open activation store: %w", err)
 	}
-	servers, err := OpenMCPServerStore(filepath.Join(deps.DataDir, "tools-mcp.db"))
+	servers, err := OpenMCPServerStore(deps.DataDir)
 	if err != nil {
 		_ = activation.Close()
 		return fmt.Errorf("tools.Mount: open mcp-server store: %w", err)
 	}
-	authored, err := OpenAuthoredStore(filepath.Join(deps.DataDir, "tools-plugins.db"))
+	authored, err := OpenAuthoredStore(deps.DataDir)
 	if err != nil {
 		_ = activation.Close()
 		_ = servers.Close()
 		return fmt.Errorf("tools.Mount: open authored-plugin store: %w", err)
 	}
 
-	skills, err := OpenSkillStore(filepath.Join(deps.DataDir, "tools-skills.db"))
+	skills, err := OpenSkillStore(deps.DataDir)
 	if err != nil {
 		_ = activation.Close()
 		_ = servers.Close()
@@ -139,7 +134,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("tools.Mount: open skill store: %w", err)
 	}
 
-	catalog, err := OpenCatalogStore(filepath.Join(deps.DataDir, "tools-catalog.db"))
+	catalog, err := OpenCatalogStore(deps.DataDir)
 	if err != nil {
 		_ = activation.Close()
 		_ = servers.Close()

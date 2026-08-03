@@ -5,18 +5,19 @@ package cloud
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"github.com/hanzoai/authz"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/hanzoai/authz"
-
-	"github.com/hanzoai/cloud/plane"
 )
 
 // The identity boundary (SanitizeIdentity) validates a JWT and mints the identity
-// headers every subsystem trusts. An opaque API key (hk-/sk-/pk-/fw_/hz_) is not a
+// headers every subsystem trusts. An opaque API key (pk-/sk-) is not a
 // JWT, so it yielded no principal — and a subsystem that gates on the minted
 // identity (zen's billing gate) refused an API-key request as anonymous, though the
 // key is a first-class credential. keyResolver closes that gap: it turns a key into
@@ -30,23 +31,29 @@ type keyResolver interface {
 	resolve(ctx context.Context, key string) *idClaims
 }
 
-// iamKeys turns an opaque key into the principal it authenticates, by reading the
-// identity store where it lives (iam_store.go). The resolved user is exactly what a
-// JWT for that user carries, so SanitizeIdentity mints identical headers for a key
-// and a session. A brief cache keeps the hot auth path off the plane; it caches
-// misses too, so a bad key cannot hammer the store.
+// iamKeys resolves an `sk-` key against IAM's get-user?accessKey endpoint,
+// authenticating as the confidential `hanzo-console` client (the credential
+// clients/account already uses). The resolved user is exactly what a JWT for that
+// user carries, so SanitizeIdentity mints identical headers for a key and a session.
+// A brief cache keeps the hot auth path off the network; it caches misses too, so a
+// bad key cannot hammer IAM.
 type iamKeys struct {
+	base  string
+	auth  string // client_secret_basic, or "" when unconfigured
+	http  *http.Client
 	cache cache[string, *idClaims]  // secret key -> principal (get-user?accessKey)
 	orgs  cache[string, string]     // publishable key -> org, and no principal (resolve-key)
 	why   cache[string, KeyRefusal] // secret key -> WHY it did not resolve, for diagnosis only
 }
 
-// newIAMKeys builds the resolver. It reads no configuration at all: where the
-// identity store is, is a fact about this process, not a setting — so there is no
-// credential to be missing and no URL to be wrong. A fleet with no identity at all
-// resolves nothing (keys stay anonymous, never a fabricated principal).
+// newIAMKeys reads the same IAM env clients/account does. With no confidential
+// credential it returns a resolver that resolves nothing (keys stay anonymous —
+// never a fabricated principal), so a deployment lacking the credential is safe.
 func newIAMKeys() *iamKeys {
 	return &iamKeys{
+		base:  iamHost(),
+		auth:  iamCred(),
+		http:  &http.Client{Timeout: 5 * time.Second},
 		cache: newCache[string, *idClaims](60 * time.Second),
 		orgs:  newCache[string, string](60 * time.Second),
 		why:   newCache[string, KeyRefusal](60 * time.Second),
@@ -57,8 +64,8 @@ func newIAMKeys() *iamKeys {
 // binary. The identity boundary (SanitizeIdentity, via newIdentityValidator) and
 // any subsystem that must resolve a key OUT-OF-BAND of the Authorization header
 // (analytics capture: a project key posted in the SDK body/query) both go through
-// this ONE seam, so a key resolves to the SAME org either way and the store sees
-// one warm cache — never a second, drifting resolver.
+// this ONE seam, so a key resolves to the SAME org either way and IAM sees one
+// warm cache — never a second, drifting resolver.
 var (
 	sharedKeysOnce sync.Once
 	sharedKeysInst *iamKeys
@@ -74,7 +81,7 @@ func sharedKeys() *iamKeys {
 // is refused rather than stored.
 const maxKeyOrgLen = 128
 
-// OrgForKey resolves an opaque Hanzo API key (pk-/sk-/hk-) to the org it belongs
+// OrgForKey resolves an opaque Hanzo API key (pk-/sk-) to the org it belongs
 // to — the SAME owner org SanitizeIdentity mints when that key arrives as a bearer
 // — and is the exported door a keyed, bearer-less SDK path uses to attribute a
 // project key to a tenant.
@@ -82,19 +89,21 @@ const maxKeyOrgLen = 128
 // TWO doors in IAM, because a publishable key and a secret key are resolved by
 // different questions and the answers must not be interchangeable:
 //
-//   - a SECRET key (sk-/hk-) asks WHO, and the answer is a principal. The store
-//     refuses a pk- there BY DESIGN (store.UserByAccessKey), which is right and was
-//     also the bug: cloud sent every prefix down this one door, so a publishable key
-//     resolved to nothing and the ingest path it exists for could never attribute a
-//     beacon. A publishable key that resolves to nobody is one that does not work.
-//   - a PUBLISHABLE key (pk-) asks WHICH ORG, and the answer is an org and nothing
-//     else — no user, no email, no admin bit. That is the property that makes it
-//     safe to ship in client JS, so it is a separate door, not a flag on the first.
+//   - a SECRET key (sk-) asks WHO, and get-user?accessKey answers with the
+//     principal. IAM refuses a pk- there BY DESIGN (store.UserByAccessKey), which
+//     is right and was also the bug: cloud sent every prefix down this one door, so
+//     a publishable key resolved to nothing and the ingest path it exists for could
+//     never attribute a beacon. A publishable key that resolves to nobody is a
+//     publishable key that does not work.
+//   - a PUBLISHABLE key (pk-) asks WHICH ORG, and resolve-key answers with the org
+//     and nothing else — no user, no email, no admin bit. That is the property that
+//     makes it safe to ship in client JS, so it is a separate door with its own
+//     narrower capability (CapPublishableResolve), not a flag on the first.
 //
 // FAILS CLOSED: ("", false) for a non-key-shaped string, an unknown/unresolvable
 // key, an unconfigured resolver, or an out-of-bounds org — never a fabricated or
 // default tenant, so a bad key can never be written into another org's partition.
-// The isAPIKey prefix gate keeps garbage strings off the store entirely.
+// The isAPIKey prefix gate keeps garbage strings off the IAM network path.
 func OrgForKey(ctx context.Context, key string) (string, bool) {
 	key = strings.TrimSpace(key)
 	if !isAPIKey(key) {
@@ -113,6 +122,22 @@ func OrgForKey(ctx context.Context, key string) (string, bool) {
 	return owner, true
 }
 
+// iamHost is the standalone IAM origin cloud talks to; iamCred is the service
+// credential (client_secret_basic) it presents — the ONE IAM identity, shared by
+// the API-key resolver here and the /v1/iam edge (iam_edge.go), so both
+// authenticate to IAM the same way. Empty cred → a deployment lacking the
+// credential stays safe (the caller treats "" as unconfigured).
+func iamHost() string { return strings.TrimRight(env("IAM_URL", "IAM_INTERNAL_URL"), "/") }
+
+func iamCred() string {
+	id := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID"))
+	secret := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET"))
+	if id == "" || secret == "" {
+		return ""
+	}
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
+}
+
 func env(names ...string) string {
 	for _, n := range names {
 		if v := strings.TrimSpace(os.Getenv(n)); v != "" {
@@ -123,7 +148,7 @@ func env(names ...string) string {
 }
 
 func (k *iamKeys) resolve(ctx context.Context, key string) *idClaims {
-	if key == "" {
+	if k.auth == "" || k.base == "" || key == "" {
 		return nil
 	}
 	if c, ok := k.cache.get(key); ok {
@@ -142,7 +167,7 @@ func (k *iamKeys) resolve(ctx context.Context, key string) *idClaims {
 // let a pk- entry read as a principal or a sk- entry read as a bare org. The values
 // are different types precisely so they cannot be confused.
 func (k *iamKeys) resolveOrg(ctx context.Context, key string) string {
-	if key == "" {
+	if k.auth == "" || k.base == "" || key == "" {
 		return ""
 	}
 	if org, ok := k.orgs.get(key); ok {
@@ -153,26 +178,49 @@ func (k *iamKeys) resolveOrg(ctx context.Context, key string) string {
 	return org
 }
 
-// lookupOrg resolves a publishable key at the ORG-ONLY door. It reads the owner
-// and deliberately nothing else: there is no principal on this path, and this
-// function would have nowhere to put one.
+// lookupOrg performs the authenticated resolve-key call — the ORG-ONLY dual of
+// get-user?accessKey. It reads `org` and deliberately nothing else: the envelope
+// carries no principal, and this function would have nowhere to put one.
 func (k *iamKeys) lookupOrg(ctx context.Context, key string) string {
-	if db := iamStore(); db != nil {
-		return OrgFromStore(ctx, db, key)
+	u := k.base + "/v1/iam/resolve-key?" + url.Values{"accessKey": {key}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return ""
 	}
-	return askOrg(ctx, key)
+	req.Header.Set("Authorization", k.auth)
+	req.Header.Set("Accept", "application/json")
+	resp, err := k.http.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return ""
+	}
+	var env struct {
+		Status string `json:"status"`
+		Data   *struct {
+			Org string `json:"org"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
+		return ""
+	}
+	return strings.TrimSpace(env.Data.Org)
 }
 
-// KeyRefusal is the machine-readable reason a key did not resolve — iamstore's
-// KeyFailure, carried rather than interpreted, so the surface that faces a human can
-// say "revoked, mint a new one" instead of the store's generic "the entity does not
-// exist". "" means no reason was given, which includes a real store fault — NOT a
-// bad credential.
+// KeyRefusal is the machine-readable reason IAM gives for not resolving a key —
+// `code` on the get-user?accessKey / resolve-key envelope (iam internal/store
+// apikey.go). Cloud does not interpret it; it carries it, so the surface that faces
+// a human can say "revoked, mint a new one" instead of IAM's generic "the entity
+// does not exist". "" means IAM gave no reason (an older IAM, or a store fault,
+// which is NOT a bad credential).
 type KeyRefusal string
 
 // RefusalForKey resolves an opaque secret key and reports WHY it failed, for the
 // surface that must explain the failure to a person. It shares resolve()'s cache, so
-// asking why costs no extra lookup on the hot path: a resolved key answers ("",
+// asking why costs no extra IAM call on the hot path: a resolved key answers ("",
 // true) from the same cached principal the auth path uses.
 func RefusalForKey(ctx context.Context, key string) (KeyRefusal, bool) {
 	key = strings.TrimSpace(key)
@@ -185,8 +233,8 @@ func RefusalForKey(ctx context.Context, key string) (KeyRefusal, bool) {
 	return sharedKeys().refusal(ctx, key), false
 }
 
-// refusal reports the cached reason a key did not resolve. lookup records it as it
-// resolves, so this never issues a second lookup — the reason is a by-product of the
+// refusal reports the cached reason a key did not resolve. lookup records it when it
+// asks IAM, so this never issues a second call — the reason is a by-product of the
 // resolution that already happened, not a separate question.
 func (k *iamKeys) refusal(_ context.Context, key string) KeyRefusal {
 	r, _ := k.why.get(key)
@@ -194,27 +242,23 @@ func (k *iamKeys) refusal(_ context.Context, key string) KeyRefusal {
 }
 
 // KeyHint is the ONE way a key is named in a log line or an error message: its
-// prefix and nothing else. A credential must never be echoed whole, and "hk-902abd…"
+// prefix and nothing else. A credential must never be echoed whole, and "sk-902abd…"
 // is enough for a holder to tell WHICH of their keys failed while being useless to
 // anyone who intercepts it.
 func KeyHint(key string) string {
 	key = strings.TrimSpace(key)
-	const shown = 9 // "hk-" + 6
+	const shown = 9 // "sk-" + 6
 	if len(key) <= shown {
 		return "…"
 	}
 	return key[:shown] + "…"
 }
 
-// lookup resolves a SECRET key to the principal it authenticates and maps it to
-// idClaims. Any failure (unreachable, refused, unknown key) yields nil. Name is
+// lookup performs the authenticated get-user?accessKey call and maps the user row
+// to idClaims. Any failure (unreachable, denied, unknown key) yields nil. Name is
 // both the username IAM's owner/name lookups parse and the id fallback: a key has
 // no UUID subject, so userID() falls through to name — the gateway's historical
 // X-User-Id==name behavior the owner/name path expects.
-//
-// The store is read where it lives (iam_store.go): directly when this process holds
-// it, over the plane when a neighbour does. Both give back the same KeyPrincipal,
-// so this mapping happens once.
 //
 // A refusal's REASON is recorded beside the (nil) principal rather than discarded.
 // It changes no decision here — a key that does not resolve is anonymous either way,
@@ -222,38 +266,57 @@ func KeyHint(key string) string {
 // rendering IAM's generic "the entity does not exist" to users whose key had simply
 // been revoked.
 func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
-	var p *plane.KeyPrincipal
-	if db := iamStore(); db != nil {
-		p = PrincipalFromStore(ctx, db, key)
-	} else {
-		p = askPrincipal(ctx, key)
-	}
-	if p == nil {
-		// No identity was REACHABLE. That is not a refusal — there is no answer to
-		// give — so no reason is recorded and the key simply stays anonymous.
+	u := k.base + "/v1/iam/get-user?" + url.Values{"accessKey": {key}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
 		return nil
 	}
-	owner := strings.TrimSpace(p.Owner)
-	if owner == "" {
-		k.why.put(key, KeyRefusal(p.Refusal))
+	req.Header.Set("Authorization", k.auth)
+	req.Header.Set("Accept", "application/json")
+	resp, err := k.http.Do(req)
+	if err != nil {
 		return nil
 	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil
+	}
+	var env struct {
+		Status string `json:"status"`
+		Code   string `json:"code"` // WHY, when IAM refused (iam store.KeyFailure)
+		Data   *struct {
+			Owner   string `json:"owner"`
+			Name    string `json:"name"`
+			Email   string `json:"email"`
+			IsAdmin bool   `json:"isAdmin"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
+		k.why.put(key, KeyRefusal(strings.TrimSpace(env.Code)))
+		return nil
+	}
+	if strings.TrimSpace(env.Data.Owner) == "" {
+		k.why.put(key, KeyRefusal(strings.TrimSpace(env.Code)))
+		return nil
+	}
+	owner := strings.TrimSpace(env.Data.Owner)
 	return &idClaims{
 		Claims: authz.Claims{
 			Owner:             owner,
-			Name:              strings.TrimSpace(p.Name),
-			PreferredUsername: strings.TrimSpace(p.Name),
-			Email:             strings.TrimSpace(p.Email),
-			IsAdmin:           p.IsAdmin,
+			Name:              strings.TrimSpace(env.Data.Name),
+			PreferredUsername: strings.TrimSpace(env.Data.Name),
+			Email:             strings.TrimSpace(env.Data.Email),
+			IsAdmin:           env.Data.IsAdmin,
 		},
 		// The org came from the SUBJECT: IAM resolved this accessKey to a user row,
 		// and that row's owner is the tenant. No application mints it and no claim
 		// carries it, so it is NOT the app-selected value homeOrg exists to reject —
 		// it is the same "the organization comes from the token subject" rule IAM
-		// states for itself. Recorded here so the identity boundary can tell a KEY
-		// principal (which legitimately has no `orgs`, because a machine is a member
-		// of nothing) from a HUMAN token that has merely lost its claim — the latter
-		// must still fail closed.
+		// states for itself in internal/authz/authz.go. Recorded here so the identity
+		// boundary can tell a KEY principal (which legitimately has no `orgs`, because
+		// a machine is a member of nothing) from a HUMAN token that has merely lost
+		// its claim — the latter must still fail closed.
 		subjectOrg: owner,
 	}
 }
@@ -297,20 +360,4 @@ func (c *cache[K, V]) put(k K, v V) {
 		c.m = make(map[K]entry[V])
 	}
 	c.m[k] = entry[V]{v: v, exp: time.Now().Add(c.ttl)}
-}
-
-// iamHost is the IAM origin the /v1/iam EDGE proxies to, and the signal serve.go
-// reads to decide whether a deployment that has not enabled the embedded "iam"
-// still has a standalone one to fall back on. The API-key resolver no longer uses
-// it: it reads the embedded store in process (iam_store.go). When the edge follows,
-// this and iamCred go with it.
-func iamHost() string { return strings.TrimRight(env("IAM_URL", "IAM_INTERNAL_URL"), "/") }
-
-func iamCred() string {
-	id := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID"))
-	secret := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET"))
-	if id == "" || secret == "" {
-		return ""
-	}
-	return "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
 }

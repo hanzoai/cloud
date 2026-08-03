@@ -8,8 +8,8 @@ cloud embeds the o11y subsystem in-process against the shared Datastore
 The whole plane is registered as a SINGLE subsystem — one
 `RegisterWithShutdown` of the name `o11y` (order 69, `mountO11y` / `shutdownO11y`,
 `HealthOwner`) in `o11y.go`. `mountO11y` performs the ordered sub-mounts in-process:
-`mountEventIngest` → `mountScope` → `mountRuntime` → `mountIngest` →
-`mountTraceSink`. This replaced FIVE separately-registered subsystems
+`mountScope` → `mountRuntime` → `mountIngest` → `mountTraceSink`. This replaced
+FIVE separately-registered subsystems
 (`o11yscope` 69, `o11y-runtime` 71, `o11y-event-ingest` 68, `o11y-otlp-ingest`
 72, `o11y-trace-inproc` 73) whose names leaked five public concepts (five config
 toggles + five `/v1/<name>/health` routes). The k8s-style ordering was an internal
@@ -27,8 +27,16 @@ The public contract is FLAT — the upstream engine version is an internal
 impl detail resolved inside the handlers, never leaked into a route:
 
 - `/v1/o11y/{logs,metrics,status}` — tenant-scoped reads (`scope.go`).
-- `/v1/o11y/vm/{query,query_range}` — SuperAdmin VictoriaMetrics proxy
-  (`vmproxy.go`); the upstream `api/v1/*` VM path stays INSIDE the handler.
+- `/v1/o11y/availability` — platform-sudo fleet availability (`availability.go`):
+  the current per-service inventory plus an up/reporting trend, read from
+  `event.metric` (`hanzo_service_up`, written by `probes.go` and carried in by
+  `metricspush.go`). It REPLACES the SuperAdmin VictoriaMetrics proxy that stood
+  at `/v1/o11y/vm/{query,query_range}` — VM is gone, so a route named for it and
+  speaking its envelope went with it. Of that proxy's 19 allowlisted PromQL
+  strings only `up`/`sum(up)`/`count(up)` are still MEASURED; the other 16 lost
+  their producer (node-exporter, kube-state-metrics, cAdvisor, the lux exporter's
+  federation, vmalert's `ALERTS` remote-write) and `availability.go`'s header is
+  the ledger of what each one would have to measure to come back.
 - `/v1/o11y/{query,query_range}` — the flat builder query (`query.go`); resolves
   to the v3 engine route INTERNALLY (the version-less alias would resolve to v5,
   which 400s the v3 composite payload the console speaks), delegating to the same
@@ -43,9 +51,117 @@ impl detail resolved inside the handlers, never leaked into a route:
 - `/v1/o11y/{services,dependency_graph,dashboards,rules,…}` — resolved by the
   upstream module's version-less alias (highest engine version wins).
 
-## The o11y pin is BLOCKED at v1.5.34 — do not bump it alone
+## The unified door: it was shut TWICE, and the locks were different
 
-`go.mod` pins `github.com/hanzoai/o11y v1.5.34`. v1.5.37 renamed the module's
+`api.hanzo.ai/v1/o11y/version` answered `403 {"status":403,"error":"no validated
+principal"}` while `o11y.hanzo.ai` answered it 200. Fixing the obvious cause
+turned the 403 into a 404. Two independent defects sat at one seam, and the
+second was invisible for as long as the first refused the request ahead of it.
+Both are fixed; this section exists so the next 4xx here is diagnosed by SHAPE
+instead of re-guessed.
+
+**1. The gate exempted routes nobody served.** `gate()` kept its own list of the
+paths needing no principal, and it named `/v1/o11y/api/v1/health` plus three
+`/api/v2` siblings — the INTERNAL namespace the module stopped rewriting onto at
+v1.5.37. Four names, zero routes: the exemption matched nothing, so every public
+op was refused. The list is gone (with `isHealthPath`, `isErrorIngestPath` and
+`isSentryIngestPath`); the answer is `o11y.Anonymous(method, path)`, which lives
+beside the routes it describes. A copy of a route fact kept one repo away drifts
+the moment the routes move.
+
+**2. relay handed the runtime a request with no request-target.** `relay` builds
+its call with `http.NewRequestWithContext` — a CLIENT request, whose
+`RequestURI` is empty by design — and passes it straight to an `http.Handler`.
+The EMBEDDED runtime is `adaptor.FiberApp`, which copies `RequestURI` into
+fasthttp verbatim, so the path was erased, fasthttp normalized it to `/`, no API
+route matched, and the request fell through to the console web provider's
+`http.NotFound`. Fixed in o11y **v1.5.49** (`req.RequestURI = target`). The
+out-of-process backing never showed it — a reverse proxy re-derives the target
+from `URL` — so this only ever bit the embed, which is what production runs.
+
+**READ THE SHAPE, NOT THE STATUS.** Three different bodies mean three different
+hops, and they are how this gets diagnosed next time:
+
+| body | who wrote it |
+|---|---|
+| `{"status":"error","msg":"…"}` | `gate()` itself — a route that FALLS THROUGH to the runtime handler (`livez`, `healthz`, `readyz`) |
+| `{"status":403,"error":"…"}` | a TYPED op: `relay` re-wrapped the gate's refusal as a `zip.HTTPError` |
+| `{"status":404,"error":"404 page not found"}` | the runtime's web provider — the request reached it with no path |
+
+The three probes are the control: `mountHealth` dispatches them itself and never
+calls `relay`, so "probes 200 but everything else 404" means a lost path, never
+an auth problem.
+
+**What is exempt, and why each needs no principal.** The set is
+`o11y.Anonymous` — the runtime's own `OpenAccess` routes plus the two
+public-dashboard reads it gates with `CheckWithoutClaims`. The rule is this
+gate's purpose read backwards: it exists only because the runtime trusts
+`X-Org-Id` as gateway-minted, so an op whose own gate reads NO tenant from the
+request has nothing for a forged tenant to reach, and gating it can only remove
+an answer.
+
+- `GET /v1/o11y/{livez,healthz,readyz,version,health}` — the process describing
+  itself. A kubelet probe and an external status check hold no principal, and a
+  gate that hides whether the process is up makes an incident invisible.
+- `GET /v1/o11y/global/config` — branding, ingest URL, which sign-in methods
+  exist. Read to RENDER the sign-in page, so requiring a session is circular.
+  Deployment-global; no tenant.
+- the sign-in family (`register`, `sessions/email_password`, `sessions/context`,
+  `sessions/rotate`, `DELETE sessions`, `complete/{google,oidc,saml}`,
+  `reset_password_tokens/verify`, `resetPassword`, `factor_password/forgot`) —
+  the path to HAVING a principal. Each still presents its own credential.
+- the self-addressed reads/writes (`user/me`, `users/me`,
+  `users/me/factor_password`, `service_accounts/me`) — the subject is the
+  caller's own credential, resolved from the runtime's claims and never from a
+  header, so there is no tenant to forge. No claims ⇒ the runtime's own 401.
+- `GET /v1/o11y/public/dashboards/{id}` and `…/widgets/{idx}/query_range` — the
+  tenant comes from the SHARE's scope, not from a header.
+- the DSN ingest wires (`POST …/{envelope,store}` under `/v1/o11y/api/` and
+  `/v1/sentry/`) — the DSN key is the credential and the org comes from the
+  project segment. The gateway waives its JWT check on exactly these, so a
+  request it lets through tokenless must not be refused here for having no token.
+
+Exemption is not authorization: every one of these still faces its own admission
+test one layer in. Everything else — every read of a tenant's telemetry — stays
+gated HERE and at the runtime, which is one rule enforced twice.
+
+**`/v1/o11y` is the API, and only the API.** There is no SPA under it and there
+must not be one: the module names all 367 routes precisely so an unconverted
+route 404s instead of falling through a wildcard, so `/v1/o11y/` is a 404 and
+every answer on the prefix is JSON. The console is `o11y-site` at
+`o11y.hanzo.ai` / `obs.hanzo.ai` behind `admin-guard`, which 302s a browser to
+hanzo.id PKCE and 401s a machine. One door per concern.
+
+**The tests.** `red_forge_test.go` calls `gate()` directly against a backend that
+answers 200 to anything — it proves the predicate and CANNOT see the chain, which
+is why it passed throughout the outage. `door_test.go` drives the real
+`MountO11y` route table against a runtime that routes: the tenant-free reads must
+return the RUNTIME's bytes anonymously, tenant reads must still be refused with
+the DOOR's own reason (the runtime's 401 would mean the request got through), and
+the four dead `/api/v1|v2` names must NOT be exempt. A fake more forgiving than
+production is not a test of production.
+
+## The o11y pin is at v1.5.49 (was BLOCKED at v1.5.34 — that blocker is gone)
+
+> ⚠️ **THE BUMP HAPPENED; THE THREE FORWARDS BELOW WERE NOT UPDATED WITH IT.**
+> `go.mod` now pins **v1.5.49**, well past the v1.5.37 this section was written to
+> hold the line against — so the warning below is no longer a plan, it is a
+> description of live code. Verified against the pinned module: `"/api/sessions"`
+> is registered NOWHERE (the list is `/v1/o11y/llm/sessions`), and `"/api/v3"`
+> survives only inside `parser_test.go`, never as a registration. So
+> `sessions.go` (which sets `r.URL.Path = "/api/sessions"`) and `query.go` (which
+> forwards to `/api/v3/<resource>`) both name routes the runtime no longer
+> serves. Both are ORG-GATED, so neither can be probed anonymously and neither
+> showed up in the door work above — they need their own pass, and the fix is to
+> forward to the current spellings rather than to re-pin.
+>
+> A second reason they cannot be trusted as written: rewriting `r.URL.Path`
+> alone does not redirect anything at the EMBEDDED runtime. That backing is
+> `adaptor.FiberApp`, which routes on `RequestURI` — see the door section above —
+> so a handler that edits `URL.Path` and leaves `RequestURI` pointing at the
+> original public path will be routed by the ORIGINAL path.
+
+`go.mod` USED TO PIN `github.com/hanzoai/o11y v1.5.34`. v1.5.37 renamed the module's
 INTERNAL route literals (`/api/vN/<rest>` → `/v1/o11y/<rest>`) and deleted
 `mount.go`'s `rewriteExternalPath`. The PUBLIC contract did not move — the seam
 existed precisely so `/v1/o11y/<resource>` stayed fixed while the internals
@@ -66,23 +182,93 @@ forwards, which name the internal spelling:
   module in `query_test.go`. So the bump turns every console trace/log explorer
   into a 400. There is no cloud-only edit that avoids this: the engine the
   console speaks to no longer has a route.
-- `o11y.go`'s `isHealthPath` allowlists `/api/v{1,2}/{health,healthz,readyz,livez}`;
-  v1.5.37 moved the probes to `/v1/o11y/{healthz,readyz,livez}`. `typed_wire_test.go`
-  DOES catch this one — a bump fails the build there, which is the only reason
-  the query.go trap is reachable at all (fix the red test, ship the silent 400).
+- `o11y.go`'s `isHealthPath` allowlisted `/api/v{1,2}/{health,healthz,readyz,livez}`;
+  v1.5.37 moved the probes to `/v1/o11y/{healthz,readyz,livez}`. **This one shipped.**
+  The pin reached v1.5.46 while that list stayed, so the exemption named four
+  addresses nothing served and the gate refused EVERY public op — `/version`,
+  `/health`, the three probes, sign-in and the shared-dashboard reads all answered
+  `403 {"status":403,"error":"no validated principal"}` at api.hanzo.ai while
+  o11y.hanzo.ai served them 200. That gap is the whole reason o11y still had a door
+  of its own. FIXED by deleting the list: `gate()` asks `o11y.Anonymous(method, path)`,
+  which lives beside the routes it describes, and `anonymous_test.go` there fails on
+  any exemption that names a path Mount does not register.
 
 `o11y.go`'s other forward, `eventToRuntimePath` (`/v1/event/<p>/envelope|store`
 → `/v1/sentry/<p>/…`), is unaffected: both families survive the rename verbatim.
-`isErrorIngestPath`'s `/v1/o11y/api/<project>/envelope|store` also stays — that
-`/api/` segment is the Sentry SDK's own wire format, received as-is, not our
-spelling of a route.
+The DSN ingest wires (`/v1/o11y/api/<project>/envelope|store` and the clean
+`/v1/sentry/<project>/…`) also stay — that `/api/` segment is the Sentry SDK's own
+wire format, received as-is, not our spelling of a route — and they are now
+`o11y.IngestWire`, exported precisely because the gateway's JWT bypass must match
+it byte-for-byte.
 
-Unblocking it is a console change, not a cloud one: migrate `listQueryPayload`
+## The published document carries o11y's typed ops — the surface is grafted
+
+`plugin/o11y/openapi.json` is the build-time subset the fleet document is woven
+from. It was STALE at 34 operations (including a `/v1/o11y/{wildcard1}` and three
+`/api/v2` probes that v1.5.46 deleted); it now carries 389, and `make -f
+mk/fleet.mk openapi-weave` composes them into `openapi.yaml`.
+
+It could not, for one commit-and-a-half, because the weave refused — rightly:
+
+    schema "Service" means different things in "ingress" and "o11y"
+
+Six names collided across the fleet with DIFFERENT shapes, all six from o11y's
+internal type packages: `Account` (cloudintegrationtypes), `Channel`
+(alertmanagertypes), `Event` (spantypes/sentrytypes), `Host` (zeustypes),
+`Service` (cloudintegrationtypes) and `TLSConfig`. The fleet's schema namespace is
+flat and `openapi/weave.go` fails closed on one name with two shapes, because a
+generated SDK would bind whichever it read last. And it was not only o11y's
+document that was stuck: `openapi.yaml` is regenerated by ONE command for the
+whole fleet, so while the weave refused, nobody could add or change any API
+surface and prove it.
+
+**The fix is the seam, not the six names.** Renaming `Service` upstream would
+have revealed the next collision, and the one after that — `Account`, `Channel`,
+`Event`, `Host` and `TLSConfig` are ordinary words, six other apps use them, and
+a type name that has to stay unique against every app in the fleet is a name
+nobody can choose safely. So `MountO11y` GRAFTS instead: it builds one
+`zip.App{AppName: "o11y"}`, mounts the whole surface on it — cloud's own scoped
+reads and hanzoai/o11y's relay table both — and hands it to `host.Graft`. Every
+op then carries `Origin = "o11y"` and zip qualifies each type it reaches as
+`o11y.<Type>`, unconditionally rather than on collision, so a published name is
+never a function of who else is in the room. All 777 of o11y's schemas are
+`o11y.*`; none of the six bare names moved, and each stays with the app that
+already owned it (`Service`/`TLSConfig` → ingress, `Account` → books, `Channel` →
+content, `Event` → analytics, `Host` → plugins).
+
+This is `apps/iam`'s mechanism, unchanged — identity's 95 schemas have been
+`iam.*` since it was grafted, and there is exactly one way to namespace a
+composed surface. The rename is a PURE one: all 389 addresses, operationIds and
+operation objects are byte-identical once the `o11y.` prefix is undone.
+
+Two facts the graft made local, both load-bearing:
+
+- **`ALL /v1/sentry/*` is registered on the HOST, not on the child.**
+  `zip.App.Declaration` drops HEAD and OPTIONS unconditionally — they are the
+  shadows fiber generates — so a door opened with `All` cannot cross a graft
+  intact, and OPTIONS is a method that proxy genuinely answers and publishes. It
+  stays at the same point in the same order, and costs nothing: a wildcard proxy
+  declares no typed op and contributes no schema.
+- **cloud and the module both claim three addresses** — `GET /v1/o11y/logs`,
+  `GET /v1/o11y/metrics`, `POST /v1/o11y/query_range`. `scope.go` is the ONE
+  owner (it pins the caller's org server-side); the module's are relays. First
+  registered wins, which used to depend on the host's global mount order and is
+  now two adjacent lines in `mount()`. `TestHostRoutesStillWinTheThreeSharedAddresses`
+  is the gate, and it is mutation-proven: flip the order and all three go red.
+
+One document defect SURVIVES this and is still open: at `POST /v1/o11y/query_range`
+the router answers cloud's untyped `builderQueryHandler` while the document
+publishes the module's typed contract, because only the module's half has a
+registry entry to publish. It is unchanged by the graft and it goes away with the
+console migration below, which deletes cloud's half.
+
+Unblocking THAT is a console change, not a cloud one: migrate `listQueryPayload`
 + `parseListRows` (hanzoai/console `src/lib/api/apm.ts`) to the v5 composite
 (`{schemaVersion, requestType, compositeQuery:{queries:[…]}}`), then bump, then
 DELETE `builderQueryHandler` outright — once the shapes agree the forward is an
-identity rewrite of the path it is already registered on, and the order-70
-wildcard serves it. Restoring the v3 route upstream is the wrong direction: it
+identity rewrite of the path it is already registered on, and the module's own
+`POST /v1/o11y/query_range` serves it (there is no wildcard left; every route is
+named). Restoring the v3 route upstream is the wrong direction: it
 resurrects a second spelling of one noun and undoes a deliberate deletion.
 
 The bump was rehearsed end to end before being refused — `plugin/o11y` built at
@@ -116,50 +302,28 @@ the published description: `zipdoc` lifts it into `zipdoc_gen.go` (committed;
 regenerated by `make -C apps/o11y openapi` and the Dockerfile), because Go drops
 comments at compile time.
 
-- typed: `GET /v1/o11y/{logs,metrics,status}` (scope.go), the eight
-  `/v1/o11y/annotation-queues*` routes, and `POST /v1/o11y/ingestion`.
-- **`POST /v1/o11y/ingestion` is typed and reaches NO consumer**, because being
-  typed is necessary and not sufficient: the op has to be REGISTERED in the
-  process that writes the document. `mountEventIngest` returns early when
-  `embeddedDSN()` is empty and again when `newDatastoreSink` cannot ping, so
-  `zip.Post(g, o11yIngestLeaf, o.ingest)` never runs without a reachable Hanzo
-  Datastore — and `make -C apps/o11y openapi` runs `bin/o11y openapi` with
-  `GIT_SSH_ADDR` and nothing else (mk/plugin.mk). The generator says so itself:
-  `o11y event ingest: no Datastore DSN; write path unmounted`. So the LLM-obs
-  write path — the one route that ingests traces/observations/scores — is in
-  neither `plugin/o11y/openapi.json` nor the woven `openapi.yaml`, and therefore
-  has no SDK method, no MCP tool, no CLI command and no published schema. Its op,
-  its In/Out and its zipdoc prose all exist and project nowhere.
-  This is NOT the "spec varies per deployment" property working as intended: that
-  property is honest when the generating process resembles a deployment, and this
-  one resembles none — every real o11y deployment sets the DSN. Closing it is a
-  BEHAVIOUR decision, not a description one, and that is why it is still open:
-  `zip.Post` registers a fiber route and a registry entry inseparably
-  (`registerTyped` ends in `app.fiber.Add`), so making the op visible necessarily
-  makes the path stop falling through to the order-70 wildcard. Whoever takes it
-  owns that wire change; typing cannot.
-  MEASURED, so the size of that decision is known rather than assumed: **the
-  fallthrough serves nothing.** The pinned runtime (`hanzoai/o11y v1.5.34`)
-  registers no `/ingestion` route at all — its only ingest-named paths are the
-  unrelated `/api/v2/gateway/ingestion_keys*` — and a no-DSN process cannot init
-  the embed either, so `mountRuntime` installs the reverse-proxy fallback and the
-  request lands on the same server build, which has no such route. The wire change
-  on the table is therefore **404 → an honest 503**, with no working write path at
-  risk; it is NOT "remote ingest stops working", which is what "stops falling
-  through" reads like and is the reason this looked more expensive than it is.
-  Re-measure before acting on it:
-
-      grep -rE '"/[^"]*ingest[^"]*"' \
-        "$(go env GOMODCACHE)/github.com/hanzoai/o11y@v1.5.34" --include='*.go'
-
-  This gap is GATED too — `TestIngestOpIsTypedButUnreachableWithoutADSN` proves
-  BOTH halves on the real code: it registers the op on a throwaway app and reads
-  it out of zip's registry (so "it is a typed op, with prose" is measured, not
-  claimed), then asserts the DSN-less `MountO11y` router does not carry it. The
-  moment somebody closes it, that test goes red and names the wire change and this
-  paragraph, so the decision cannot land as a silent side effect.
+- typed: `GET /v1/o11y/{logs,metrics,status}` (scope.go) and the eight
+  `/v1/o11y/annotation-queues*` routes.
+- **The LLM-obs ingest path is GONE, and the open question it carried closed with
+  it.** This section used to describe `POST /v1/o11y/ingestion` — a typed op that
+  reached no consumer because `mountEventIngest` returned early without a
+  Datastore DSN, so it was published in no document and had no SDK method, MCP
+  tool or CLI command. The route became a plane op (`obs_event_claim`) and then
+  went away entirely, together with `event_ingest.go` and the sink behind it.
+  The reason is worth keeping, because it is the shape of the mistake: that sink
+  inserted UNQUALIFIED `traces` / `observations` / `scores`, and the DSN it used
+  (`O11Y_DATASTORE_DSN`) names no database, so the names resolved to `default` —
+  an EMPTY database on the live datastore. Its schema said so itself
+  (`⚠️ ASSUMED SCHEMA`), the datastore's query log holds no such INSERT in its
+  whole retained window, and the concept was already served twice: LLM
+  observability is READ off `gen_ai` spans in `event.span` by the runtime, and
+  the eval product owns the grounded projections (`hanzo.eval_traces` /
+  `hanzo.eval_scores`, `apps/eval/telemetry.go`, whose DDL it creates itself).
+  Three claimants on one concept; the one that could never have worked is the one
+  that went. `planesink.go` keeps the shared `datastoreSink` and states every
+  table FULLY QUALIFIED — pinned by `TestPlaneTablesAreQualified`.
 - **`cloud.Bridge()` is installed by `MountO11y` on the `/v1/o11y` group, first.**
-  Not optional and not redundant with `cloud.Serve`: o11y runs as its OWN process
+  Not optional and not redundant with `cloud.Listen`: o11y runs as its OWN process
   (`plugin/o11y/main.go` builds a bare `zip.App`), and the host's context does not
   cross the socket — so without this install every typed op here 403s a caller the
   host already validated. Pinned by
@@ -184,10 +348,6 @@ CLAIM — the `text/plain` receipt, the 200 over a body that is not JSON, and th
 `text/plain` replay — so the refusals are evidence, not assertion. Prose cannot go
 red; that is why this list was a promise until the gate existed.
 
-- `GET /v1/o11y/vm/{query,query_range}` — return VictoriaMetrics' own status code
-  and its Prometheus envelope VERBATIM (`c.Bytes(status, body)`). A typed op
-  answers its declared status and marshals a Go value, so a VM 4xx would become a
-  200 and the envelope would be re-shaped.
 - `POST /v1/o11y/{query,query_range}` and `GET /v1/o11y/sessions` — reverse
   proxies: request body, query string, upstream status, headers and body all ride
   through untouched. There is no Go type for "whatever the runtime answered".
@@ -257,38 +417,44 @@ Three planes, one datastore:
   READS Datastore via the branded `github.com/hanzo-ds/go` **v1.0.1**. `/v1/settings/:product`
   is NOT here — it is console product config, split out to `apps/settings`.
 
-- **Ingest / write plane** — `ingest.go`. An in-process OpenTelemetry Collector
-  that folds the standalone `otel-collector` Deployment into cloud. Accepts OTLP
-  (gRPC :4317, HTTP :4318) and writes spans+logs into the same Datastore the
-  query plane reads (`o11y_traces` / `o11y_logs`). Trimmed pipeline:
-  `otlp -> memory_limiter, resource(namespace=hanzo, env), batch -> {clickhousetraces, clickhouselogsexporter}`.
-  - **OFF by default.** Enable with `CLOUD_OTLP_INGEST_ENABLED=true` (+ a
-    datastore DSN). Fail-soft: any error leaves the standalone collector as the
-    ingest path. Registered with a ShutdownFunc so batches flush on stop.
-  - DSN rides `${env:CLOUD_OTLP_INGEST_DSN}` (envprovider) — never written to
-    disk. `service.telemetry.metrics.level=none` so the collector binds ONLY
-    :4317/:4318 (no :8888/:8889/:13133) — avoids the :9090 class of clash.
+- **Ingest / write plane** — `planesink.go`. A ZAP span receiver (:4317) and log
+  receiver (:4318) decode the same wire the retired embedded collector bound, and
+  a native `datastoreSink` appends prepared batches to the EVENT PLANE —
+  `event.span` / `event.log`, the same 15-column envelope `event.event` /
+  `event.error` / `event.metric` share. The `o11y_*` databases are closed.
+  - The whole otelcol pipeline (`ingest.go` + `zapingest.go` + `spanconv.go` +
+    `tracesink.go`) was DELETED, not ported: it existed to feed the SigNoz-schema
+    exporters, and with the plane as the store the translation layer has no job.
+  - **Bound by CAPABILITY, not a flag** — ingest runs exactly when a datastore DSN
+    is configured, because the DSN is the thing it writes to. Fail-soft at every
+    branch; a bad telemetry config can never take cloud down.
+  - Row identity is DERIVED (a span's id is its span_id, a log line's a content
+    hash salted by batch position), so ReplacingMergeTree idempotency is structural.
+  - `service` is the WORKLOAD, resolved in ONE place (`planeService`) for spans and
+    logs alike: `service.name`, else the wire app name, else the legacy `app` label,
+    else OTel's k8s derivation (`k8s.deployment.name` → replicaset → statefulset →
+    daemonset → cronjob → job → container). That last leg is not optional — the
+    fleet's biggest log producer is the otel-agent's filelog receiver, which stamps
+    `k8s.*` and NO `service.name`, and every reader keys on this column.
 
-## Metrics ingest is DEFERRED (driver-fork conflict — do not "fix" naively)
+## Metrics ingest — LANDED, natively (`metrics.go`)
 
-The metrics write path (the datastore metrics exporter + the `o11yspanmetrics`
-connector) is intentionally NOT embedded. That exporter references the upstream
-**dd-sketch fork** of ch-go (`chproto.DD/Store/IndexMapping`), which does NOT
-compile against cloud's `hanzo-ds/native` v0.72.0 / `hanzo-ds/go` v1.0.1 (verified:
-`undefined: chproto.DD` etc.). The two driver lines cannot coexist in one binary
-because the o11y QUERY plane pins upstream. Traces + logs exporters DO compile
-against upstream and are embedded.
+Metrics were deferred once because the SigNoz metrics exporter needed a **dd-sketch
+fork** of ch-go that cannot coexist with the upstream driver the query plane pins.
+The fork is not needed: `startNativeMetricsIngest` runs a ZAP metric receiver
+(`O11Y_METRICS_ZAP_LISTEN`, `:4319`) that decodes `MsgMetricBatch` and writes via
+o11y's `pkg/datastoremetrics` over UPSTREAM ch-go, into `event.series` /
+`event.metric`. Classic bucket/quantile decomposition, no DDSketch, one datastore
+connection shared with the query plane.
 
-Consequence: `otel-collector` cannot be fully ripped yet — 16 `otel-agent` pods
-(+ the logs-agent) forward metrics to it over ZAP :4319, and cloud can't persist
-metrics without the fork. Full rip requires porting the metrics exporter onto
-upstream ch-go (or aligning drivers). Until then the standalone collector stays
-for metrics; cloud takes traces+logs.
+That native writer is the shape `planesink.go` copied for spans and logs — a
+receiver decodes the wire, a writer appends a prepared batch. **One write path per
+signal, all four the same shape, all four on the event plane.**
 
 ## cloud's own telemetry — split host / sink
 
 The **host** owns the tracer + meter providers (`cloud/telemetry.go`,
-`cloud.InstallTelemetry`, called by `cloud.Serve` before `MountAll` and by
+`cloud.InstallTelemetry`, called by `cloud.Listen` before `MountAll` and by
 `cmd/o11y` for its own process). This package owns the SINK.
 
 That split is not cosmetic. The provider used to be BUILT here and handed to the
@@ -309,44 +475,47 @@ The ai adoption (`aiobject.AdoptHostTracerProvider`) moved to
 `cloud.TracerProviderInstalled()` — `apps/` already links ai; the host must not
 (`hanzoai/ai/object` is 1270 packages).
 
-## cloud's own spans → in-process trace sink (`tracesink.go`)
+## cloud's own spans → the plane (`planesink.go`)
 
-The dogfood: cloud's OWN spans (service + ai GenAI/LLM-obs) reach the embedded
-Datastore trace store WITHOUT a socket, via the ZAP locality-adaptive **Router**
-(`github.com/luxfi/zap`: `Router`/`InProcessInterface`/`Destination`/`Payload`).
-One Send API, Cost-table routing — not a caller branch. **The router lives in the
-host now** (`cloud/telemetry.go`); this package registers a handler on it.
+The dogfood: cloud's OWN spans (service + ai GenAI/LLM-obs) reach `event.span`
+WITHOUT a socket, via the ZAP locality-adaptive **Router** (`github.com/luxfi/zap`:
+`Router`/`InProcessInterface`/`Destination`/`Payload`). One Send API, Cost-table
+routing — not a caller branch. **The router lives in the host**
+(`cloud/telemetry.go`); this package registers a handler on it.
 
 - Seam: `cloud.RegisterTraceSink(cloud.TraceSink)` where
-  `TraceSink = func(ctx, []sdktrace.ReadOnlySpan) error`. `mountTraceSink`
-  registers `traceSink(exp)`; `shutdownTraceSink` registers nil. The payload is
-  SDK spans, not pdata, so the conversion — and therefore the collector import —
-  stays on this side.
-- **Same code, both deployments.** Registration is process-local. Linked in, the
-  host's `Send` to `traceDest` ("hanzo.o11y.traces") finds this handler and hands
-  over the LIVE batch by value (zero serialize, zero socket, no second collector
-  hop). As a plugin, the handler is registered in the CHILD, the host's router
-  returns `ErrNoRoute`, and the identical `Send` falls through to the ZAP wire
-  (`luxfi/trace` → this package's `zapreceiver` on :4317). Neither producer nor
-  exporter branches on where o11y lives.
-- The handler converts SDK spans → collector pdata **in place** (`spanconv.go`;
-  no proto, no marshal, no OTLP) and writes via the REAL `dstraces` exporter
-  (`ConsumeTraces`), the one writer that produces the `o11y_index_v3` schema the
-  query plane reads. The pdata→SpanV3 conversion is unexported there, so the sink
-  reuses the exporter as a `consumer.Traces` rather than duplicating ~90 lines of
-  schema-coupled conversion.
-- **OPT-IN + fail-soft.** Mounts (via `mountTraceSink` in the one order-69 mount)
-  only when `O11Y_TRACES_ZAP_INPROCESS` is truthy AND a datastore DSN is set.
-  `cloud.TraceInprocEnabled()` is the ONE gate, read by both the sink (whether to
-  mount) and the host producer (whether to install a provider with no wire
-  endpoint). Any construction error leaves cloud's spans on the wire — activating
-  it can never take cloud down. Shutdown deregisters the handler then flushes the
-  exporter's sending queue.
+  `TraceSink = func(ctx, []sdktrace.ReadOnlySpan) error`. `mountPlaneIngest`
+  registers it; `shutdownPlaneIngest` registers nil. The payload is SDK spans —
+  and now it stays SDK spans: `sdkSpanRowsOf` renders them straight to
+  `event.span` rows, one converter fewer than the retired pdata detour, sharing
+  every helper (`planeOrg`, `planeService`, `planeSpanKind`, `planeStatus`) with
+  the wire path.
+- **Same code, both deployments — but the wire needs an ADDRESS.** Registration is
+  process-local. Linked in, the host's `Send` to `traceDest` ("hanzo.o11y.traces")
+  finds this handler and hands over the LIVE batch by value (zero serialize, zero
+  socket). As a plugin, the handler is registered in the CHILD, the host's router
+  returns `ErrNoRoute`, and the identical `Send` falls through to the ZAP wire.
+  - Cloud runs its ~20 subsystems as sibling plugin PROCESSES in one pod, so
+    "co-resident" means loopback for all but one of them. `wireEndpointFor`
+    (host, `telemetry.go`) resolves that: explicit `OTEL_EXPORTER_ZAP_ENDPOINT`,
+    else the fleet collector when a legacy OTLP endpoint declares remote intent,
+    else `127.0.0.1:4317` — `planeSpanListen` — whenever
+    `O11Y_TRACES_ZAP_INPROCESS` says a sink exists in this DEPLOYMENT. Without
+    that last leg the siblings had neither a route nor an endpoint and every span
+    they produced was dropped, which is precisely how `event.span` stayed empty
+    while five migrated read paths queried it. The process HOLDING the sink is
+    routed and never reaches the fallback, so it cannot self-dial.
+- **Capability-bound + fail-soft.** `mountPlaneIngest` (in the one order-69 mount)
+  starts when a datastore DSN is set; the in-process sink additionally honours
+  `cloud.TraceInprocEnabled()` — the ONE gate, read by both the sink (whether to
+  register) and the host producer (whether a wire address is even needed). Any
+  construction error leaves cloud's spans on the wire; activating it can never
+  take cloud down. Shutdown deregisters the handler, stops the listeners, closes
+  the connection.
 - Boot window: the provider installs before `MountAll` but the sink registers at
   mount (order 69); spans in between take the wire fallback, else surface
-  `ErrNoRoute` (visible, never a silent drop). Steady state is in-process. A ZAP
-  `NodeInterface` for traces slots behind the same Send call site with no producer
-  change.
-- Covered by `TestTracing_EndToEnd_WithO11yLinkedIn` (this pkg — real provider,
-  real `RegisterTraceSink`, real `traceSink`, asserts the converted pdata and its
-  resource) and the routing/Cost-table tests in `cloud/telemetry_test.go`.
+  `ErrNoRoute` (visible, never a silent drop).
+- Covered by `planesink_test.go` (the pure row builders — wire span, wire log, SDK
+  span, the k8s workload derivation and the filelog regression it closes, with a
+  column-count guard pinning each row to its column list) and the routing /
+  Cost-table / `wireEndpointFor` tests in `cloud/telemetry_test.go`.

@@ -146,8 +146,8 @@
     "/v1/usage/leaderboard/optin": {
       "get": {
         "operationId": "get_v1_usage_leaderboard_optin",
-        "summary": "GetOptin returns the caller's own public-listing preference and their org's, each with whether the caller may change it.",
-        "description": "GetOptin returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
+        "summary": "Returns the caller's own public-listing preference and their org's, each with whether the caller may change it.",
+        "description": "Returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
         "tags": [
           "usage"
         ],
@@ -166,8 +166,8 @@
       },
       "put": {
         "operationId": "put_v1_usage_leaderboard_optin",
-        "summary": "PutUserOptin sets the CALLER's own public-listing preference on the leaderboard.",
-        "description": "PutUserOptin sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
+        "summary": "Sets the CALLER's own public-listing preference on the leaderboard.",
+        "description": "Sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
         "tags": [
           "usage"
         ],
@@ -202,8 +202,8 @@
     "/v1/usage/leaderboard/optin/org": {
       "put": {
         "operationId": "put_v1_usage_leaderboard_optin_org",
-        "summary": "PutOrgOptin sets the ORG's listing on the cross-org global board.",
-        "description": "PutOrgOptin sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
+        "summary": "Sets the ORG's listing on the cross-org global board.",
+        "description": "Sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
         "tags": [
           "usage"
         ],
@@ -466,7 +466,7 @@
       "backfillQuery": {
         "properties": {
           "before": {
-            "description": "Before bounds the seed to ledger rows written before this RFC3339 instant.\nDefaults to now; pass the incremental view's creation instant so the seed and\nthe live view never overlap and double a day.",
+            "description": "Before bounds the seed to ledger rows written before this RFC3339 instant.\nDefaults to now, and is snapped down to UTC midnight — the rollup's grain, so\nthe seeded days and the guarded days are the same set. Pass the day the\nincremental view started capturing, so seed and view never share a day.",
             "type": "string"
           },
           "force": {

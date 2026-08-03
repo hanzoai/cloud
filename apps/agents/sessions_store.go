@@ -350,15 +350,20 @@ func (s *Store) ListTree(ctx context.Context, org, root string, cap int) ([]Sess
 	return out, rows.Err()
 }
 
-// UpdateSession persists status/title/ended_at for an existing (org,id) session.
+// UpdateSession persists the mutable fields of an existing (org,id) session.
 // Scoped by org so a cross-tenant id can never mutate another's session.
+//
+// Every column the patch can set has to be listed here. A field added to
+// patchSessionIn and forgotten in this statement accepts the request, answers
+// 200 with the new value in the response body, and persists nothing — a success
+// that did nothing, which is the hardest shape of bug to see.
 func (s *Store) UpdateSession(ctx context.Context, x Session) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE agent_sessions SET status=?, title=?, ended_at=?, updated_at=?, target=?,
-		        terminal=?, project=?, published=?
+		        terminal=?, project=?, published=?, cwd=?
 		 WHERE org=? AND id=?`,
 		x.Status, x.Title, x.EndedAt, x.UpdatedAt, x.Target, x.Terminal, x.Project, x.Published,
-		x.Org, x.ID)
+		x.Cwd, x.Org, x.ID)
 	if err != nil {
 		return fmt.Errorf("update session: %w", err)
 	}

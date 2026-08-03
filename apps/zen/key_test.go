@@ -20,6 +20,7 @@ func (s stubKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 	return nil, errors.New("secret not found")
 }
 func (stubKMS) PutSecret(context.Context, string, []byte) error      { return nil }
+func (stubKMS) DeleteSecret(context.Context, string) error           { return nil }
 func (stubKMS) Sign(context.Context, string, []byte) ([]byte, error) { return nil, nil }
 
 // TestZenKeyResolver_EnvFallback pins the production wiring: the upstream provider

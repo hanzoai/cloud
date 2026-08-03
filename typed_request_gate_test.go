@@ -67,7 +67,7 @@ var allowedRequestUses = map[string]string{
 		"caller, no mutation.",
 	"apps/provisioning/typed.go": "tenantOf — the provisioning control plane ALLOCATES and DESTROYS real " +
 		"backend resources, and its tenant is not the org principal.OrgFrom carries. Two facts differ, both " +
-		"live: the org is folded through sanitizeOrg (cloud.SanitizeOrg — the slug every physical name, S3 " +
+		"live: the org is folded through namespace.Sanitize (the slug every physical name, S3 " +
 		"bucket and tenant-<org> namespace is keyed on, so a read that skipped the fold would look in a " +
 		"different bucket than the create wrote), and an ORG-LESS SuperAdmin is bucketed under the literal " +
 		"\"admin\" org, which OrgFrom cannot express — it refuses an empty org outright, so reading the tenant " +
@@ -178,6 +178,14 @@ var allowedRequestUses = map[string]string{
 		"alone would turn that live admin bucket into a 403). ONE function, which every typed op asks, " +
 		"delegating to the same tenant() the untyped handlers beside them use; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no namespace to name.",
+	"apps/risk/typed.go": "gate — the ONE money seam for the model plane, and money is the reason it " +
+		"needs more of the principal than the org: the debit is keyed on the SELECTED billing ledger " +
+		"(principal.Ledger, which a SuperAdmin masquerade moves off the effective org), narrowed by the " +
+		"server-minted project (X-Project-Id, with its validated-ness), and attributed with the user, the " +
+		"request id and the client IP — none of which principal.OrgFrom carries. The TENANT is never read " +
+		"through it: tenantFor uses principal.OrgFrom, right beside this. ONE function, which every priced " +
+		"op asks, so the gate and the meter cannot disagree about who pays; off the HTTP path there is no " +
+		"ledger, and the pair is a no-op, which is the rule the rest of the fleet applies.",
 	"apps/o11y/typed.go": "callerIsAdmin / callerProject — the o11y surface's ONE identity seam. The " +
 		"scoped reads switch on platform-sudo (X-User-IsAdmin: the infra-log god-view and the " +
 		"whole-product RED) and the annotation queues narrow by project (X-Project-Id); neither header " +
@@ -262,7 +270,7 @@ var allowedRequestUses = map[string]string{
 		"org principal.OrgFrom carries. Two facts say why, both live: a platform SuperAdmin has NO org at all " +
 		"(X-User-IsAdmin, a header OrgFrom does not carry) and reads every platform namespace rather than one " +
 		"tenant's, so an org is not merely absent from that scope, it would be wrong; and a normal org's scope " +
-		"is the injective provisioning.SanitizeOrg slug — the name of the tenant-<org> namespace its App CRs " +
+		"is the injective namespace.Sanitize slug — the name of the tenant-<org> namespace its App CRs " +
 		"live in — not the verbatim owner claim. consoleUser is the second: the session read must ANSWER for " +
 		"an anonymous caller rather than refuse one, and it reports the validated user ID (X-User-Id) " +
 		"beside admin-ness. TWO functions in ONE file, delegating to the same resolveScope every raw handler " +

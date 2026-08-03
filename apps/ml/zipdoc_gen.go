@@ -10,28 +10,31 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/ml/models/:name", zip.Doc{
-		Description: "DeleteModel deletes a deployed inference model. kserve owns the teardown: the\nInferenceService goes away and the serving deployment behind it follows, so the\nmodel stops answering predict calls. Answers 204, or 404 for a name the\ncaller's org does not own.",
+		Description: "Deletes a deployed inference model. kserve owns the teardown: the\nInferenceService goes away and the serving deployment behind it follows, so the\nmodel stops answering predict calls. Answers 204, or 404 for a name the\ncaller's org does not own.",
 		Fields: map[string]string{
 			"mlRef.name": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 		},
 		Example: json.RawMessage(`{"name":"sentiment"}`),
 	})
 	zip.Describe("DELETE /v1/train/experiments/:name", zip.Doc{
-		Description: "DeleteExperiment deletes a hyperparameter-tuning experiment. Kubernetes\ngarbage-collects the Trials katib created under it, because they carry the\nExperiment as their owner. Answers 204, or 404 for a name the caller's org does\nnot own.",
+		Description: "Deletes a hyperparameter-tuning experiment. Kubernetes\ngarbage-collects the Trials katib created under it, because they carry the\nExperiment as their owner. Answers 204, or 404 for a name the caller's org does\nnot own.",
 		Fields: map[string]string{
 			"mlRef.name": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 		},
 		Example: json.RawMessage(`{"name":"sweep-1"}`),
 	})
 	zip.Describe("DELETE /v1/train/jobs/:name", zip.Doc{
-		Description: "DeleteJob deletes a training job. Kubernetes garbage-collects the pods the\ntrainer operator created under it, because they carry the TrainJob as their\nowner — so deleting the job is how a run is stopped. Answers 204, or 404 for a\nname the caller's org does not own.",
+		Description: "Deletes a training job. Kubernetes garbage-collects the pods the\ntrainer operator created under it, because they carry the TrainJob as their\nowner — so deleting the job is how a run is stopped. Answers 204, or 404 for a\nname the caller's org does not own.",
 		Fields: map[string]string{
 			"mlRef.name": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 		},
 		Example: json.RawMessage(`{"name":"finetune-1"}`),
 	})
+	zip.Describe("GET /v1/ml/health", zip.Doc{
+		Description: "Is a REAL probe: it verifies the API server is reachable and that the\nsubsystem's CRDs are served, and reports the actual state. 200 only when\neverything is ok; 503 + the real reason otherwise (never status-theater).",
+	})
 	zip.Describe("GET /v1/ml/models", zip.Doc{
-		Description: "ListModels lists the inference models deployed in the caller's org. Each entry\ncarries the model's name, when Kubernetes admitted it, and kserve's live status\n— the spec is on the single-model read. An org that has deployed nothing gets\nan empty list.",
+		Description: "Lists the inference models deployed in the caller's org. Each entry\ncarries the model's name, when Kubernetes admitted it, and kserve's live status\n— the spec is on the single-model read. An org that has deployed nothing gets\nan empty list.",
 		Fields: map[string]string{
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
 			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
@@ -41,7 +44,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/ml/models/:name", zip.Doc{
-		Description: "GetModel returns one deployed inference model. Its spec comes with it, and\nkserve's live status, which is where readiness and the serving address appear.\nA name the caller's org does not own answers 404, exactly as an unknown name\ndoes, so a probe learns nothing about another tenant's models.",
+		Description: "Returns one deployed inference model. Its spec comes with it, and\nkserve's live status, which is where readiness and the serving address appear.\nA name the caller's org does not own answers 404, exactly as an unknown name\ndoes, so a probe learns nothing about another tenant's models.",
 		Fields: map[string]string{
 			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
@@ -52,7 +55,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"sentiment"}`),
 	})
 	zip.Describe("GET /v1/train/experiments", zip.Doc{
-		Description: "ListExperiments lists the caller org's tuning experiments. Each entry carries\nthe experiment's name, when Kubernetes admitted it, and katib's live status —\nthe spec is on the single-experiment read.",
+		Description: "Lists the caller org's tuning experiments. Each entry carries\nthe experiment's name, when Kubernetes admitted it, and katib's live status —\nthe spec is on the single-experiment read.",
 		Fields: map[string]string{
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
 			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
@@ -62,7 +65,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/train/experiments/:name", zip.Doc{
-		Description: "GetExperiment returns one hyperparameter-tuning experiment. Its spec comes with\nit, and katib's live status, which is where the best trial found so far is\nreported.",
+		Description: "Returns one hyperparameter-tuning experiment. Its spec comes with\nit, and katib's live status, which is where the best trial found so far is\nreported.",
 		Fields: map[string]string{
 			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
@@ -73,7 +76,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"sweep-1"}`),
 	})
 	zip.Describe("GET /v1/train/experiments/:name/trials", zip.Doc{
-		Description: "ListTrials lists the katib Trials one experiment owns. The experiment is read\nFIRST, so a name the caller's org does not own is a clean 404 rather than an\nempty list; the Trials themselves are selected by katib's own\nkatib.kubeflow.org/experiment label within the caller's tenant namespace.",
+		Description: "Lists the katib Trials one experiment owns. The experiment is read\nFIRST, so a name the caller's org does not own is a clean 404 rather than an\nempty list; the Trials themselves are selected by katib's own\nkatib.kubeflow.org/experiment label within the caller's tenant namespace.",
 		Fields: map[string]string{
 			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
@@ -85,8 +88,11 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"sweep-1"}`),
 	})
+	zip.Describe("GET /v1/train/health", zip.Doc{
+		Description: "Is a REAL probe: it verifies the API server is reachable and that the\nsubsystem's CRDs are served, and reports the actual state. 200 only when\neverything is ok; 503 + the real reason otherwise (never status-theater).",
+	})
 	zip.Describe("GET /v1/train/jobs", zip.Doc{
-		Description: "ListJobs lists the training jobs in the caller's org. Each entry carries the\njob's name, when Kubernetes admitted it, and the trainer operator's live status\n— the spec is on the single-job read.",
+		Description: "Lists the training jobs in the caller's org. Each entry carries the\njob's name, when Kubernetes admitted it, and the trainer operator's live status\n— the spec is on the single-job read.",
 		Fields: map[string]string{
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
 			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
@@ -96,7 +102,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/train/jobs/:name", zip.Doc{
-		Description: "GetJob returns one training job. Its spec comes with it, and the trainer\noperator's live status, which is where a run's phase and its conditions are\nreported.",
+		Description: "Returns one training job. Its spec comes with it, and the trainer\noperator's live status, which is where a run's phase and its conditions are\nreported.",
 		Fields: map[string]string{
 			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
@@ -105,5 +111,8 @@ func init() {
 			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
 		},
 		Example: json.RawMessage(`{"name":"finetune-1"}`),
+	})
+	zip.Describe("POST /v1/ml/models/:name/predict", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 }

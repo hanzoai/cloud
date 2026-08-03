@@ -121,7 +121,7 @@ func AuditTrail(rec *audit.Recorder) zip.Handler {
 			Method:    method,
 			// Path is scrubbed of any credential-shaped segment: Hanzo routes use
 			// identifiers (:name/:slug/:id), not secrets, but a token that ever
-			// rides in the path (an hk-/sk-/pk-/fw_/hz_ key) must never be recorded
+			// rides in the path (a pk-/sk- key) must never be recorded
 			// verbatim. resourceFromPath applies the same scrub to the resource id.
 			Path: scrubCredentialSegments(path),
 		}
@@ -279,7 +279,7 @@ func crossOrgHome(c *zip.Ctx) string {
 // IsAdmin comes from c.IsAdmin() (the sanitized X-User-IsAdmin, true only for a
 // verified SuperAdmin), never a raw header. Method is inferred from the
 // presence/shape of a credential: an Authorization/X-Authorization bearer or a
-// session cookie ⇒ "jwt" (or "api-key" for an opaque hk-/sk- token); none ⇒
+// session cookie ⇒ "jwt" (or "api-key" for an opaque sk- token); none ⇒
 // "none".
 func authFromCtx(c *zip.Ctx) audit.AuthContext {
 	return audit.AuthContext{
@@ -393,8 +393,8 @@ func resourceFromPath(path string) audit.Resource {
 // scrubToken replaces a path segment that is a credential-shaped token with a
 // fixed marker, so a secret that ever appears in a URL is never recorded
 // verbatim. It catches, in increasing generality:
-//   - a known API-key prefix (hk-/sk-/pk-/fw_/hz_ — what isAPIKey recognizes),
-//     ALSO after percent-decoding, so hk%2DKEY can't slip the prefix check,
+//   - a known API-key prefix (pk-/sk- — what isAPIKey recognizes),
+//     ALSO after percent-decoding, so sk%2DKEY can't slip the prefix check,
 //   - a JWT (three base64url parts split by '.', starting eyJ),
 //   - a long, high-entropy base64url/hex run (>=24) — a raw API key / access
 //     token / hex secret that carries no telltale prefix.
@@ -494,7 +494,7 @@ const highEntropyMinLen = 24
 // (over-engineering for a defense-in-depth URL/UA backstop). Mixed-case base64
 // chunks AND small-hex chunks (md5/sha display grouping) ARE now caught
 // (isWordLikeGroup). The residual does not widen exposure for any REAL credential:
-// Hanzo keys are hk-/sk-/pk-/fw_/hz_-prefixed (isAPIKey, caught at any
+// Hanzo keys carry a pk-/sk- prefix (isAPIKey, caught at any
 // length/shape), JWTs are eyJ-prefixed (looksLikeJWT), and request/response BODIES
 // are never read. It is an adversary DELIBERATELY base32-chunking their OWN secret
 // into a URL path to seed an admin-only audit row — contrived, low-value. The
@@ -685,8 +685,8 @@ func scrubFreeText(s string) string {
 // separator.
 //
 // RED re-review (UA bypass persists): '.' '@' '#' '~' are INCLUDED — a prefixed
-// key glued by one of them (client@sk-live-KEY, app.sk-live-KEY, build#hk-KEY)
-// otherwise stayed one token whose PREFIX was no longer sk-/hk-, so isAPIKey
+// key glued by one of them (client@sk-live-KEY, app.sk-live-KEY, build#pk-KEY)
+// otherwise stayed one token whose PREFIX was no longer sk-/pk-, so isAPIKey
 // missed it. Splitting on them exposes the bare key to scrubToken. Real UA dots
 // are numeric version separators (<24, safe) and are split harmlessly. A JWT
 // (eyJ.h.p.s) is handled up-front by scrubToken via looksLikeJWT before any

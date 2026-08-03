@@ -292,9 +292,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("agents.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("agents.Mount: data dir: %w", err)
-	}
 	// The typed-op registry lives on the App: it is what makes each op a document
 	// operation, an MCP tool, a CLI command and an SDK method rather than only a
 	// route. A Router that cannot reach it must fail the mount rather than serve
@@ -327,8 +324,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			tasks: disabledTaskController{},
 		},
 	}
-	// Split a pre-existing fleet-wide agents.db into per-org files BEFORE a route
-	// exists to read them, and fail the mount if it cannot be done: an empty
+	// Split a pre-existing fleet-wide agents database into per-org files BEFORE a
+	// route exists to read them, and fail the mount if it cannot be done: an empty
 	// registry served over live rows is the one outcome worse than not booting.
 	if err := fanOutLegacy(context.Background(), deps.DataDir, &s.State); err != nil {
 		_ = s.State.stores.CloseAll()

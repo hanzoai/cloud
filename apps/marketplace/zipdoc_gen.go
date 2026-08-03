@@ -37,7 +37,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/marketplace/listings", zip.Doc{
-		Description: "ListListings returns the listings the caller's own org has published — what this\norg is offering, not what it can buy. A publisher only ever sees its own rows.",
+		Description: "Returns the listings the caller's own org has published — what this\norg is offering, not what it can buy. A publisher only ever sees its own rows.",
 		Fields: map[string]string{
 			"Currency.Code":        "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
 			"Currency.Decimals":    "fractional digits of the smallest unit",

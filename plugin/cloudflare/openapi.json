@@ -39,8 +39,8 @@
     "/v1/cloudflare/d1/databases": {
       "get": {
         "operationId": "get_v1_cloudflare_d1_databases",
-        "summary": "D1DatabaseList lists the D1 databases on the org's Cloudflare account.",
-        "description": "D1DatabaseList lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
+        "summary": "Lists the D1 databases on the org's Cloudflare account.",
+        "description": "Lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
         "tags": [
           "cloudflare"
         ],
@@ -86,8 +86,8 @@
       },
       "post": {
         "operationId": "post_v1_cloudflare_d1_databases",
-        "summary": "D1DatabaseCreate creates a D1 database on the org's Cloudflare account.",
-        "description": "D1DatabaseCreate creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
+        "summary": "Creates a D1 database on the org's Cloudflare account.",
+        "description": "Creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -119,8 +119,8 @@
     "/v1/cloudflare/d1/databases/{database}": {
       "delete": {
         "operationId": "delete_v1_cloudflare_d1_databases_database",
-        "summary": "D1DatabaseDelete deletes a D1 database and everything stored in it.",
-        "description": "D1DatabaseDelete deletes a D1 database and everything stored in it. Requires\norg admin.",
+        "summary": "Deletes a D1 database and everything stored in it.",
+        "description": "Deletes a D1 database and everything stored in it. Requires\norg admin.",
         "tags": [
           "cloudflare"
         ],
@@ -404,8 +404,8 @@
     "/v1/cloudflare/pages/projects": {
       "get": {
         "operationId": "get_v1_cloudflare_pages_projects",
-        "summary": "PagesList lists the org's Cloudflare Pages projects.",
-        "description": "PagesList lists the org's Cloudflare Pages projects. Any org member may read.",
+        "summary": "Lists the org's Cloudflare Pages projects.",
+        "description": "Lists the org's Cloudflare Pages projects. Any org member may read.",
         "tags": [
           "cloudflare"
         ],
@@ -422,8 +422,8 @@
       },
       "post": {
         "operationId": "post_v1_cloudflare_pages_projects",
-        "summary": "PagesCreate creates a Cloudflare Pages project on the org's account.",
-        "description": "PagesCreate creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
+        "summary": "Creates a Cloudflare Pages project on the org's account.",
+        "description": "Creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
         "tags": [
           "cloudflare"
         ],
@@ -456,8 +456,8 @@
     "/v1/cloudflare/pages/projects/{project}": {
       "delete": {
         "operationId": "delete_v1_cloudflare_pages_projects_project",
-        "summary": "PagesDelete deletes a Cloudflare Pages project, and with it every deployment it has ever made.",
-        "description": "PagesDelete deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
+        "summary": "Deletes a Cloudflare Pages project, and with it every deployment it has ever made.",
+        "description": "Deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -486,8 +486,8 @@
       },
       "get": {
         "operationId": "get_v1_cloudflare_pages_projects_project",
-        "summary": "PagesGet reads one Cloudflare Pages project — its build config, deployment configs and latest deployment.",
-        "description": "PagesGet reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
+        "summary": "Reads one Cloudflare Pages project — its build config, deployment configs and latest deployment.",
+        "description": "Reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
         "tags": [
           "cloudflare"
         ],
@@ -557,8 +557,8 @@
     "/v1/cloudflare/pages/projects/{project}/domains": {
       "post": {
         "operationId": "post_v1_cloudflare_pages_projects_project_domains",
-        "summary": "PagesDomainAdd attaches a custom domain to a Cloudflare Pages project.",
-        "description": "PagesDomainAdd attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
+        "summary": "Attaches a custom domain to a Cloudflare Pages project.",
+        "description": "Attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
         "tags": [
           "cloudflare"
         ],
@@ -603,8 +603,8 @@
     "/v1/cloudflare/pages/projects/{project}/domains/{domain}": {
       "delete": {
         "operationId": "delete_v1_cloudflare_pages_projects_project_domains_domain",
-        "summary": "PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.",
-        "description": "PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
+        "summary": "Detaches a custom domain from a Cloudflare Pages project.",
+        "description": "Detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -645,8 +645,8 @@
     "/v1/cloudflare/r2/buckets": {
       "get": {
         "operationId": "get_v1_cloudflare_r2_buckets",
-        "summary": "R2BucketList lists the R2 buckets on the org's Cloudflare account.",
-        "description": "R2BucketList lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
+        "summary": "Lists the R2 buckets on the org's Cloudflare account.",
+        "description": "Lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
         "tags": [
           "cloudflare"
         ],
@@ -709,8 +709,8 @@
       },
       "post": {
         "operationId": "post_v1_cloudflare_r2_buckets",
-        "summary": "R2BucketCreate creates an R2 bucket on the org's Cloudflare account.",
-        "description": "R2BucketCreate creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
+        "summary": "Creates an R2 bucket on the org's Cloudflare account.",
+        "description": "Creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
         "tags": [
           "cloudflare"
         ],
@@ -742,8 +742,8 @@
     "/v1/cloudflare/r2/buckets/{bucket}": {
       "delete": {
         "operationId": "delete_v1_cloudflare_r2_buckets_bucket",
-        "summary": "R2BucketDelete deletes an R2 bucket.",
-        "description": "R2BucketDelete deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
+        "summary": "Deletes an R2 bucket.",
+        "description": "Deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
         "tags": [
           "cloudflare"
         ],
@@ -774,8 +774,8 @@
     "/v1/cloudflare/workers/scripts": {
       "get": {
         "operationId": "get_v1_cloudflare_workers_scripts",
-        "summary": "WorkersScriptList lists the Worker scripts on the org's Cloudflare account.",
-        "description": "WorkersScriptList lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
+        "summary": "Lists the Worker scripts on the org's Cloudflare account.",
+        "description": "Lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
         "tags": [
           "cloudflare"
         ],
@@ -794,8 +794,8 @@
     "/v1/cloudflare/workers/scripts/{script}": {
       "delete": {
         "operationId": "delete_v1_cloudflare_workers_scripts_script",
-        "summary": "WorkersScriptDelete removes a Worker script from the org's Cloudflare account.",
-        "description": "WorkersScriptDelete removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
+        "summary": "Removes a Worker script from the org's Cloudflare account.",
+        "description": "Removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
         "tags": [
           "cloudflare"
         ],
@@ -863,8 +863,8 @@
     "/v1/cloudflare/workers/scripts/{script}/subdomain": {
       "post": {
         "operationId": "post_v1_cloudflare_workers_scripts_script_subdomain",
-        "summary": "WorkersScriptSubdomainSet publishes or withdraws one Worker script on the account's workers.dev subdomain.",
-        "description": "WorkersScriptSubdomainSet publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
+        "summary": "Publishes or withdraws one Worker script on the account's workers.dev subdomain.",
+        "description": "Publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -909,8 +909,8 @@
     "/v1/cloudflare/workers/subdomain": {
       "get": {
         "operationId": "get_v1_cloudflare_workers_subdomain",
-        "summary": "WorkersSubdomainGet reads the org account's workers.dev subdomain — the name under which every subdomain-enabled script is served.",
-        "description": "WorkersSubdomainGet reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
+        "summary": "Reads the org account's workers.dev subdomain — the name under which every subdomain-enabled script is served.",
+        "description": "Reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
         "tags": [
           "cloudflare"
         ],
@@ -929,8 +929,8 @@
     "/v1/cloudflare/workers/zones/{zone}/routes": {
       "get": {
         "operationId": "get_v1_cloudflare_workers_zones_zone_routes",
-        "summary": "WorkersRouteList lists the Worker routes bound within one zone — the URL patterns that dispatch to a script.",
-        "description": "WorkersRouteList lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
+        "summary": "Lists the Worker routes bound within one zone — the URL patterns that dispatch to a script.",
+        "description": "Lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
         "tags": [
           "cloudflare"
         ],
@@ -959,8 +959,8 @@
       },
       "post": {
         "operationId": "post_v1_cloudflare_workers_zones_zone_routes",
-        "summary": "WorkersRouteCreate binds a URL pattern in a zone to a Worker script.",
-        "description": "WorkersRouteCreate binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
+        "summary": "Binds a URL pattern in a zone to a Worker script.",
+        "description": "Binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
         "tags": [
           "cloudflare"
         ],
@@ -1006,8 +1006,8 @@
     "/v1/cloudflare/workers/zones/{zone}/routes/{route}": {
       "delete": {
         "operationId": "delete_v1_cloudflare_workers_zones_zone_routes_route",
-        "summary": "WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a script.",
-        "description": "WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
+        "summary": "Unbinds a Worker route, so its pattern stops dispatching to a script.",
+        "description": "Unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -1048,8 +1048,8 @@
     "/v1/cloudflare/zones": {
       "get": {
         "operationId": "get_v1_cloudflare_zones",
-        "summary": "ZonesList lists the Cloudflare zones the org's connected API token can see, paged and filtered by the query parameters Cloudflare itself accepts.",
-        "description": "ZonesList lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
+        "summary": "Lists the Cloudflare zones the org's connected API token can see, paged and filtered by the query parameters Cloudflare itself accepts.",
+        "description": "Lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
         "tags": [
           "cloudflare"
         ],
@@ -1123,8 +1123,8 @@
     "/v1/cloudflare/zones/{zone}": {
       "get": {
         "operationId": "get_v1_cloudflare_zones_zone",
-        "summary": "ZoneGet reads one Cloudflare zone the org's token can see.",
-        "description": "ZoneGet reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
+        "summary": "Reads one Cloudflare zone the org's token can see.",
+        "description": "Reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
         "tags": [
           "cloudflare"
         ],
@@ -1155,8 +1155,8 @@
     "/v1/cloudflare/zones/{zone}/analytics": {
       "get": {
         "operationId": "get_v1_cloudflare_zones_zone_analytics",
-        "summary": "ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth, threats and pageviews over the since/until window.",
-        "description": "ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
+        "summary": "Reads a zone's Cloudflare traffic dashboard — requests, bandwidth, threats and pageviews over the since/until window.",
+        "description": "Reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
         "tags": [
           "cloudflare"
         ],
@@ -1215,8 +1215,8 @@
     "/v1/cloudflare/zones/{zone}/purge": {
       "post": {
         "operationId": "post_v1_cloudflare_zones_zone_purge",
-        "summary": "ZonePurge drops a zone's Cloudflare edge cache — either the whole zone (purge_everything) or exactly the listed file URLs.",
-        "description": "ZonePurge drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
+        "summary": "Drops a zone's Cloudflare edge cache — either the whole zone (purge_everything) or exactly the listed file URLs.",
+        "description": "Drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
         "tags": [
           "cloudflare"
         ],

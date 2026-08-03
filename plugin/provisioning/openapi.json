@@ -37,8 +37,8 @@
     "/v1/datastore": {
       "get": {
         "operationId": "get_v1_datastore",
-        "summary": "ListDatastore lists the caller org's Hanzo Datastore warehouses.",
-        "description": "ListDatastore lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
+        "summary": "Lists the caller org's Hanzo Datastore warehouses.",
+        "description": "Lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
         "tags": [
           "datastore"
         ],
@@ -91,8 +91,8 @@
     "/v1/datastore/{name}": {
       "delete": {
         "operationId": "delete_v1_datastore_name",
-        "summary": "DropDatastore deprovisions one Hanzo Datastore warehouse.",
-        "description": "DropDatastore deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
+        "summary": "Deprovisions one Hanzo Datastore warehouse.",
+        "description": "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
         "tags": [
           "datastore"
         ],
@@ -116,8 +116,8 @@
       },
       "get": {
         "operationId": "get_v1_datastore_name",
-        "summary": "GetDatastore returns one Hanzo Datastore warehouse's metadata.",
-        "description": "GetDatastore returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
+        "summary": "Returns one Hanzo Datastore warehouse's metadata.",
+        "description": "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
         "tags": [
           "datastore"
         ],
@@ -376,8 +376,8 @@
     "/v1/s3": {
       "get": {
         "operationId": "get_v1_s3",
-        "summary": "ListS3 lists the caller org's object-storage buckets.",
-        "description": "ListS3 lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
+        "summary": "Lists the caller org's object-storage buckets.",
+        "description": "Lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
         "tags": [
           "s3"
         ],
@@ -430,8 +430,8 @@
     "/v1/s3/{name}": {
       "delete": {
         "operationId": "delete_v1_s3_name",
-        "summary": "DropS3 deletes one bucket from the shared object store and removes its metadata row.",
-        "description": "DropS3 deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
+        "summary": "Deletes one bucket from the shared object store and removes its metadata row.",
+        "description": "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
           "s3"
         ],
@@ -455,8 +455,8 @@
       },
       "get": {
         "operationId": "get_v1_s3_name",
-        "summary": "GetS3 returns one bucket's metadata.",
-        "description": "GetS3 returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
+        "summary": "Returns one bucket's metadata.",
+        "description": "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
         "tags": [
           "s3"
         ],
@@ -489,8 +489,8 @@
     "/v1/search": {
       "get": {
         "operationId": "get_v1_search",
-        "summary": "ListSearch lists the caller org's search indexes.",
-        "description": "ListSearch lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
+        "summary": "Lists the caller org's search indexes.",
+        "description": "Lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
         "tags": [
           "search"
         ],
@@ -543,8 +543,8 @@
     "/v1/search/{name}": {
       "delete": {
         "operationId": "delete_v1_search_name",
-        "summary": "DropSearch deletes one search index from the shared backend and removes its metadata row.",
-        "description": "DropSearch deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
+        "summary": "Deletes one search index from the shared backend and removes its metadata row.",
+        "description": "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
           "search"
         ],
@@ -568,8 +568,8 @@
       },
       "get": {
         "operationId": "get_v1_search_name",
-        "summary": "GetSearch returns one search index's metadata.",
-        "description": "GetSearch returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
+        "summary": "Returns one search index's metadata.",
+        "description": "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
         "tags": [
           "search"
         ],
@@ -715,8 +715,8 @@
     "/v1/vector": {
       "get": {
         "operationId": "get_v1_vector",
-        "summary": "ListVector lists the caller org's vector collections.",
-        "description": "ListVector lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
+        "summary": "Lists the caller org's vector collections.",
+        "description": "Lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
         "tags": [
           "vector"
         ],
@@ -769,8 +769,8 @@
     "/v1/vector/{name}": {
       "delete": {
         "operationId": "delete_v1_vector_name",
-        "summary": "DropVector deletes one vector collection from the shared backend and removes its metadata row.",
-        "description": "DropVector deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
+        "summary": "Deletes one vector collection from the shared backend and removes its metadata row.",
+        "description": "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
           "vector"
         ],
@@ -794,8 +794,8 @@
       },
       "get": {
         "operationId": "get_v1_vector_name",
-        "summary": "GetVector returns one vector collection's metadata.",
-        "description": "GetVector returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
+        "summary": "Returns one vector collection's metadata.",
+        "description": "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
         "tags": [
           "vector"
         ],

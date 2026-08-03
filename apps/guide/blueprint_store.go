@@ -6,7 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cloud/cek"
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 )
 
 // blueprint_store.go is the SHARED, platform-scoped store for the brand blueprint —
@@ -33,23 +37,16 @@ type BlueprintStore struct {
 	db *sql.DB
 }
 
-// openBlueprintStore opens the shared blueprint DB at path (a cek-sealed SQLite file,
-// the house pattern) and migrates. MaxOpenConns(1) serializes writes.
-func openBlueprintStore(path string) (*BlueprintStore, error) {
-	db, err := cek.Open(cek.Global, path)
+// openBlueprintStore opens the shared blueprint DB under dir and migrates. It is
+// the DEPLOYMENT's own partition — namespace.System takes no input and names no
+// entity — because a brand blueprint is platform content, not an org's.
+// MaxOpenConns(1) serializes writes.
+func openBlueprintStore(dir string) (*BlueprintStore, error) {
+	db, err := cek.Open(namespace.System(), "guide-blueprint", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open blueprint store %q: %w", path, err)
+		return nil, fmt.Errorf("open blueprint store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &BlueprintStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

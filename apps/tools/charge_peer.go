@@ -35,6 +35,11 @@ import (
 const (
 	peerX402 = "x402"
 
+	// peerMarketplace owns the price table, which is a DIFFERENT fact from the rail
+	// and is asked for separately — see railless, the one place it is reached from
+	// here, and the only thing this process ever learns about money.
+	peerMarketplace = "marketplace"
+
 	// settleTimeout bounds the hop a CLIENT is holding open, and it is derived
 	// rather than picked: the rail's own hops — price, payee, debit, credit — are
 	// 10s each (apps/x402/peer.go), so 60s leaves every one of them room to answer
@@ -55,11 +60,9 @@ const (
 // not paid and the challenge is on the response", and anything else fails the call
 // CLOSED.
 //
-// ErrChargerUnset is the ONE fallback, and it is a fact rather than a guess:
-// cloud.ErrNoPeer means the fleet does not run x402 at all, which is the same world
-// the nil Charger describes — no payment rail here. Dispatch answers it the way it
-// always has: a tool that DECLARES a price is refused, and a tool that declares none
-// is free by its own statement, not by our silence. Every other failure — the rail
+// A rail that cannot be reached is NOT a tool that costs nothing, and that is the
+// whole of railless below: cloud.ErrNoPeer says only that no x402 answers here, and
+// what a tool costs was never x402's to know anyway. Every other failure — the rail
 // down, a peer that answered badly — is an outage and is returned as itself.
 func chargePeer(ctx context.Context, tool string) error {
 	// The request carries the two things the rail cannot derive: WHO pays, and the
@@ -98,7 +101,7 @@ func chargePeer(ctx context.Context, tool string) error {
 	out, err := cloud.Ask[plane.SettleIn, plane.Settled](call, peerX402, plane.X402Settle, &in)
 	switch {
 	case errors.Is(err, cloud.ErrNoPeer):
-		return ErrChargerUnset
+		return railless(call, in.Resource)
 	case err != nil:
 		return fmt.Errorf("tools: payment rail: %w", err)
 	case out == nil:
@@ -127,4 +130,45 @@ func chargePeer(ctx context.Context, tool string) error {
 	default:
 		return fmt.Errorf("tools: payment refused: %s (%s)", out.Reason, out.Code)
 	}
+}
+
+// railless decides what "no x402 answers here" MEANS for ONE tool, because on its
+// own it means nothing about money.
+//
+// THE RAIL IS NOT THE PRICE TABLE. cloud.ErrNoPeer reports a deployment with no
+// x402 in it; what a tool COSTS is the marketplace's listing, and this process does
+// not hold one — in the split fleet the registry row carries no Price at all, so
+// "the row declares none" is silence rather than an answer. Reading the rail's
+// absence as "nothing is priced" therefore gave away precisely the tools that earn:
+// x402 stops answering, every listed tool dispatches for nothing, and the only trace
+// is revenue that is not there.
+//
+// So the OWNER is asked, and its answer decides:
+//
+//   - FOR SALE ⇒ refused as the outage it is. A price nobody can collect is not a
+//     discount, and no challenge can be issued for a rail that is gone — so this is
+//     returned as itself and never as a 402 the client could act on.
+//   - not priced ⇒ ErrChargerUnset, which is also the answer when the table is not
+//     in this deployment either: neither a rail nor a table is a deployment that
+//     sells nothing, and Dispatch then weighs the one price evidence left, the tool
+//     row's own declaration.
+//
+// It asks a SECOND question rather than repeating the first: the settlement was not
+// made, so there is no settlement for a gate to disagree with — only "is there money
+// here I cannot collect", which nothing else in this process can answer.
+func railless(ctx context.Context, resource string) error {
+	out, err := cloud.Ask[plane.PriceIn, plane.Priced](ctx, peerMarketplace, plane.MarketPrice,
+		&plane.PriceIn{Resource: resource})
+	switch {
+	case errors.Is(err, cloud.ErrNoPeer):
+		return ErrChargerUnset
+	case err != nil:
+		return fmt.Errorf("tools: no payment rail, and the price table: %w", err)
+	case out == nil:
+		// A void reply from a price table is not "free". Nothing answered.
+		return errors.New("tools: no payment rail, and the price table answered nothing")
+	case out.Priced:
+		return fmt.Errorf("tools: %s is for sale and no payment rail is reachable", resource)
+	}
+	return ErrChargerUnset
 }

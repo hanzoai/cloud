@@ -2,10 +2,10 @@
 // rollup from pre-MV ledger history. SuperAdmin only.
 //
 // The incremental MV captures rows inserted AFTER its creation; this seeds everything
-// before. Because SummingMergeTree accumulates, a second unguarded run would double a
-// day — so it refuses when the rollup is already non-empty unless ?force=true. Pass
-// ?before=<RFC3339> to bound the seed (default now); use the MV-creation instant so
-// the seed and the live MV never overlap.
+// before. Because SummingMergeTree accumulates, re-seeding a day the rollup already
+// holds would double that day — so it refuses when the rollup already covers days in
+// the seed's OWN range unless ?force=true. Pass ?before=<RFC3339> to bound the seed
+// (default now); it is snapped to UTC midnight, the rollup's grain.
 
 package leaderboard
 
@@ -21,8 +21,9 @@ import (
 // string and both are optional.
 type backfillQuery struct {
 	// Before bounds the seed to ledger rows written before this RFC3339 instant.
-	// Defaults to now; pass the incremental view's creation instant so the seed and
-	// the live view never overlap and double a day.
+	// Defaults to now, and is snapped down to UTC midnight — the rollup's grain, so
+	// the seeded days and the guarded days are the same set. Pass the day the
+	// incremental view started capturing, so seed and view never share a day.
 	Before string `json:"before"`
 	// Force must be exactly "true" to seed a rollup that already holds rows. It is
 	// spelled as a string, not a flag, because the guard has always compared this
@@ -58,24 +59,26 @@ func (o boardOps) backfill(ctx context.Context, in *backfillQuery) (*backfillRes
 		return nil, zip.Errorf(http.StatusInternalServerError, "ensure rollup: %v", err)
 	}
 
-	before := time.Now().UTC()
+	before := time.Now()
 	if raw := in.Before; raw != "" {
 		t, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
 			return nil, zip.ErrBadRequest("before must be RFC3339")
 		}
-		before = t.UTC()
+		before = t
 	}
+	before = rollupCutoff(before)
 
 	force := in.Force == "true"
 	if !force {
-		n, err := rollupRowCount(ctx)
+		n, err := rollupRowsSeeded(ctx, before)
 		if err != nil {
 			return nil, zip.Errorf(http.StatusInternalServerError, "rollup count: %v", err)
 		}
 		if n > 0 {
 			return nil, zip.Errorf(http.StatusConflict,
-				"rollup already has %d rows; pass ?force=true to re-run (WILL double-count)", n)
+				"rollup already covers %d rows before %s; pass ?force=true to re-run (WILL double-count)",
+				n, before.Format("2006-01-02"))
 		}
 	}
 

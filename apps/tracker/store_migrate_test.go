@@ -5,8 +5,9 @@ import (
 	"io"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/internal/migratetest"
+	"github.com/hanzoai/namespace"
 )
 
 // legacyIssuesDDL is the issues table as it existed BEFORE the polymorphic-spine
@@ -36,12 +37,11 @@ func TestMigrateOverLegacyIssuesTable(t *testing.T) {
 	migratetest.Case{
 		Name:      "tracker",
 		LegacyDDL: legacyIssuesDDL,
-		Open: func(path string) (io.Closer, error) {
-			db, err := cek.Open(cek.Global, path)
+		Open: func(dir string) (io.Closer, error) {
+			db, err := cloud.OrgDB(dir, namespace.System(), "tracker")
 			if err != nil {
 				return nil, err
 			}
-			db.SetMaxOpenConns(1)
 			st, err := openStore(db)
 			if err != nil {
 				return nil, err

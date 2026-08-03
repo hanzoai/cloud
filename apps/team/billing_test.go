@@ -28,7 +28,7 @@ import (
 // gateApp (entitle_test.go).
 func billingApp(t *testing.T, commerce types.CommerceClient, planEnt func(context.Context, string) (map[string]any, error)) (*zip.App, *accountStore) {
 	t.Helper()
-	store, err := openAccountStore(t.TempDir() + "/account.db")
+	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openAccountStore: %v", err)
 	}

@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 )
 
 // Org-authored skills.
 //
 // The brand's skills are GENERATED from the OpenAPI source of truth and embedded
-// (clients/agentskills), which means changing them is a rebuild and a redeploy.
+// (apps/skills), which means changing them is a rebuild and a redeploy.
 // That is right for the catalogue a deployment ships and wrong for the one an org
 // writes, so an org's own skills live here instead — added at runtime, visible
 // immediately, and never able to reach the public discovery surface because they
@@ -50,19 +52,13 @@ type SkillStore struct {
 	db *sql.DB
 }
 
-// OpenSkillStore opens (and migrates) the authored-skill store at path.
-func OpenSkillStore(path string) (*SkillStore, error) {
-	db, err := cek.Open(cek.Global, path)
+// OpenSkillStore opens (and migrates) the authored-skill store under dir.
+func OpenSkillStore(dir string) (*SkillStore, error) {
+	db, err := cek.Open(namespace.System(), "tools-skills", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open skill store %q: %w", path, err)
+		return nil, fmt.Errorf("tools: open skill store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("tools: skill pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &SkillStore{db: db}
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS skills (
@@ -144,7 +140,7 @@ func (s *SkillStore) Delete(ctx context.Context, org, id string) error {
 // as SourceSkill entries, beside the deployment brand's embedded ones.
 //
 // Two providers share SourceSkill on purpose. The registry dedups by NAME with
-// equal-rank ties going to whoever registered first, and clients/agentskills
+// equal-rank ties going to whoever registered first, and apps/skills
 // mounts at order 8 while this mounts at 123 — so a brand skill always wins a
 // name collision against an org's. The deployment's own catalogue is the one
 // that cannot be shadowed.

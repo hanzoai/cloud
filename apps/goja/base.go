@@ -70,16 +70,15 @@ type BaseRequest struct {
 // BaseConfig configures a BaseHost.
 type BaseConfig struct {
 	// Name identifies the subsystem ("captable", "esign", "dataroom"). It names
-	// the goja host AND the per-tenant data subdir ({DataDir}/{Name}/).
+	// the goja host AND the per-tenant database it opens.
 	Name string
 	// Bundle is the self-contained goja bundle exposing globalThis.handle.
 	Bundle []byte
 	// Schema is the per-tenant SQLite DDL, run (idempotently — use
 	// CREATE TABLE IF NOT EXISTS) on every tenant DB when it first opens.
 	Schema string
-	// DataDir is the deployment data root; per-tenant files land at
-	// {DataDir}/{Name}/{TenantSegment(tenant)}.db (injective, traversal-safe
-	// base32 of the raw org bytes — see basestore.go TenantSegment).
+	// DataDir is the deployment data root; per-tenant files land where namespace
+	// renders them, at {DataDir}/orgs/{slug}/{Name}.db.
 	DataDir string
 	// OnOpen is an optional per-tenant seed hook run ONCE after migration (e.g.
 	// captable seeds the tenant's company row). It runs outside the per-request
@@ -167,7 +166,7 @@ func (h *BaseHost) Dispatch(ctx context.Context, tenant string, req BaseRequest)
 	}
 	// Tenant-bound object-storage seam (e.g. sign's PDFs). Keys are namespaced to
 	// {Name}/{TenantSegment} inside the bridge, so a bundle can only ever reach its
-	// OWN tenant's blobs — the same injective TenantSegment the per-tenant DB uses.
+	// OWN tenant's blobs.
 	if h.blob != nil {
 		globals["__blob"] = h.blobBridge(ctx, tenant)
 	}
@@ -226,8 +225,8 @@ func newBridge(ctx context.Context, q execQuerier) map[string]any {
 // blobBridge builds the __blob object (put/get over base64) bound to ctx + the
 // tenant. Keys are namespaced to {name}/{TenantSegment(tenant)}/ so a bundle can
 // only ever address its OWN tenant's objects — cross-tenant isolation is a host
-// property, using the same injective encoding the per-tenant DB file uses. The
-// bundle handles base64 strings only; the binding decodes/encodes at the boundary.
+// property, using an injective encoding of the raw org bytes. The bundle handles
+// base64 strings only; the binding decodes/encodes at the boundary.
 func (h *BaseHost) blobBridge(ctx context.Context, tenant string) map[string]any {
 	prefix := h.name + "/" + TenantSegment(tenant) + "/"
 	return map[string]any{

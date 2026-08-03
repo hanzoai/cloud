@@ -20,7 +20,8 @@ func (f fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 	}
 	return nil, errors.New("secret not found")
 }
-func (f fakeKMS) PutSecret(context.Context, string, []byte) error { return nil }
+func (f fakeKMS) PutSecret(context.Context, string, []byte) error  { return nil }
+func (f fakeKMS) DeleteSecret(_ context.Context, ref string) error { delete(f.m, ref); return nil }
 func (f fakeKMS) Sign(context.Context, string, []byte) ([]byte, error) {
 	return nil, errors.New("sign unsupported")
 }

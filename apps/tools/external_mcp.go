@@ -19,8 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/cloud/types"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -80,19 +82,13 @@ type MCPServerStore struct {
 	db *sql.DB
 }
 
-// OpenMCPServerStore opens (and migrates) the external-server store at path.
-func OpenMCPServerStore(path string) (*MCPServerStore, error) {
-	db, err := cek.Open(cek.Global, path)
+// OpenMCPServerStore opens (and migrates) the external-server store under dir.
+func OpenMCPServerStore(dir string) (*MCPServerStore, error) {
+	db, err := cek.Open(namespace.System(), "tools-mcp", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open mcp-server store %q: %w", path, err)
+		return nil, fmt.Errorf("tools: open mcp-server store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("tools: mcp-server pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &MCPServerStore{db: db}
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS mcp_servers (

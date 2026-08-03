@@ -16,6 +16,7 @@ package cloud
 
 import (
 	"strings"
+	"time"
 
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
@@ -26,7 +27,7 @@ import (
 
 // TracerName is the instrumentation scope for cloud's HTTP request spans. It is
 // resolved off the GLOBAL tracer provider — the ZAP provider installed once by
-// the composition root (cloud.Serve initTelemetry, in each plugin) — so a request span ships over
+// the composition root (cloud.Listen initTelemetry, in each plugin) — so a request span ships over
 // the SAME ZAP wire to hanzoai/datastore as every log and GenAI span. One
 // transport, one provider.
 const TracerName = "hanzo-cloud"
@@ -92,6 +93,7 @@ func TracingMiddleware() zip.Handler {
 			return c.Continue()
 		}
 		method := strings.Clone(c.Method())
+		start := time.Now()
 
 		// Start the span off the request context and write the enriched context
 		// back so the rest of the chain (and every downstream client that pulls
@@ -127,9 +129,22 @@ func TracingMiddleware() zip.Handler {
 		// handler runs, so by here c.Org() reflects the authenticated org.
 		status := c.Fiber().Response().StatusCode()
 		span.SetAttributes(attribute.Int("http.response.status_code", status))
-		if org := strings.Clone(c.Org()); org != "" {
+		org := strings.Clone(c.Org())
+		if org != "" {
 			span.SetAttributes(attribute.String("hanzo.org", org))
 		}
+
+		// The METRIC half of the same observation. It belongs here and nowhere
+		// else: this is the one place every /v1 request already has its path,
+		// its status and its VALIDATED org in hand, and computing them twice in
+		// a second middleware would be the same fact measured two ways.
+		//
+		// It had been written (metrics_http.go) and never called, so
+		// hanzo_http_requests_total did not exist in the store — which is why
+		// "/v1/event is 5xx" was unalertable while the Sentry envelope returned
+		// 503 for a day with nobody paged. A metric nothing calls is not
+		// instrumentation, it is a comment.
+		observeRequest(productFromPath(path), org, status, time.Since(start))
 		switch {
 		case err != nil:
 			span.RecordError(err)

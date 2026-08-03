@@ -56,8 +56,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -94,10 +92,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("marketplace.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("marketplace.Mount: data dir: %w", err)
-	}
-	store, err := Open(filepath.Join(deps.DataDir, "marketplace.db"))
+	store, err := Open(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("marketplace.Mount: open store: %w", err)
 	}

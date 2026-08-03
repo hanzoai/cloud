@@ -1974,6 +1974,16 @@
         ]
       }
     },
+    "/v1/iam/oauth/device/info": {
+      "post": {
+        "operationId": "post_v1_iam_oauth_device_info",
+        "summary": "Name the application a pending device code is asking to sign in.",
+        "description": "Answers \"what am I approving?\" for a pending user_code, so the approval page can name the application a human is about to authorize. Both fields come off the pending code's OWN application — never off the portal the browser happens to be on — so the screen cannot name one application while the code belongs to another.\n\nRequires a signed-in session, resolved from the browser's session cookie exactly as the approval itself resolves it. Not signed in is not a refusal to explain: it carries the stable login-required code the approval page branches on to sign the human in first.\n\nPOST for a read, deliberately, for the same reason RFC 7662 introspection beside it is POST: the argument is a SECRET. A user_code in a request line is copied into ingress and proxy access logs, which a POST body is not.\n\nUnknown, expired, already used and already approved all get ONE opaque refusal — the same one the approval attempt would get. The user_code carries only 40 bits, so an answer that distinguished those states would be an oracle for hunting live codes; gated and opaque, this reveals strictly less than the approval the same caller could already attempt.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
     "/v1/iam/oauth/federation/mfa": {
       "post": {
         "operationId": "post_v1_iam_oauth_federation_mfa",
@@ -2766,7 +2776,7 @@
       "get": {
         "operationId": "get_v1_iam_resolve-key",
         "summary": "Answers which organization a PUBLISHABLE key belongs to — what a service of yours calls to attribute a request that arrived carrying a key shipped in a browser.",
-        "description": "Answers which organization a PUBLISHABLE key belongs to —\nwhat a service of yours calls to attribute a request that arrived carrying a\nkey shipped in a browser.\n\nIt names an organization and never a person: no path through it can load or\nreturn a user, so a key you put in client code cannot become a way to learn\nwho anyone is. A key that is expired, secret rather than publishable, or\nsimply unknown all answer identically, so nothing here can be probed to\ndiscover which keys exist.",
+        "description": "Answers which organization a PUBLISHABLE key belongs to —\nwhat a service of yours calls to attribute a request that arrived carrying a\nkey shipped in a browser.\n\nIt names an organization and never a person: no path through it can load or\nreturn a user, so a key you put in client code cannot become a way to learn\nwho anyone is. A key that is expired, secret rather than publishable, or\nsimply unknown all answer with the same sentence, and with a `code` saying\nwhich of those it was. Only a confidential service that already proved it may\nresolve keys at all ever reads that code — there is no anonymous caller here\nto probe for which keys exist — and telling it apart is what lets the holder\nbe told to re-mint an expired key instead of hunting a configuration error.",
         "tags": [
           "iam"
         ]
@@ -6082,6 +6092,10 @@
       },
       "iam.Response": {
         "properties": {
+          "code": {
+            "description": "Code is a STABLE machine-readable reason, where the human `msg` is\ndeliberately generic. `msg` is prose for a person and several distinct causes\nlegitimately share one sentence; a caller that must BRANCH on the cause — or\ntell its own user which of them happened — cannot parse prose. Optional, so\nevery existing envelope is byte-identical and no SDK changes.",
+            "type": "string"
+          },
           "data": {
             "type": "object"
           },
@@ -6980,7 +6994,7 @@
             "type": "string"
           },
           "id": {
-            "description": "Id is the user's STABLE OPAQUE identifier — the value the OIDC `sub` claim\ncarries. It is the v1 the legacy surface per-row UUID (e.g.\n\"e7d7fda0-4c53-4508-9d35-7ec892b7e5d7\"), migrated verbatim so a user's `sub`\nis byte-identical across the cutover: every live session, external reference,\nand the downstream money-path principal keyed on `sub` survive unchanged. A\nuser minted natively in v2 is assigned a fresh UUID here on create, so the\n`sub` is ALWAYS a stable opaque id going forward — never the (Owner, Name)\npair, which is mutable (a rename would otherwise silently reissue identity).\n\nIt is distinct from the embedded orm.Model STORAGE KEY — the value the datastore\nlocks and looks a row up by — which is NOT (Owner, Name) for every row: a MIGRATED\nlegacy row is stamped \"owner/name\" (SetId in the migrator), but a v2-native\nusers.Create'd row is NOT — Create allocates rather than pinning a key, so its\nstorage key is a store-assigned surrogate id (a GenerateID decimal string like\n\"17847909129933610000001\"). (Owner, Name) is therefore the natural/QUERY key\n(unique, indexed), not necessarily the storage key: resolve a row for a locked\nwrite by its REAL key (store.GetUserByName(...).Key().Encode(), which stamps both\nshapes — see internal/oidc updateUser), never by assuming \"owner/name\". This Id is\na first-class, indexed DOMAIN field; its json tag \"id\" dominates the promoted\norm.Model `Id_` (also \"id\") by shallower depth, so the persisted record's \"id\" is\nthis UUID — exactly the v1 shape. A row that carries no Id (a not-yet-assigned\npre-cutover user) falls back to the (Owner, Name) subject at mint; every other\npath resolves `sub`→user by Id.",
+            "description": "Id is the user's STABLE OPAQUE identifier — the value the OIDC `sub` claim\ncarries. It is the v1 the legacy surface per-row UUID (e.g.\n\"e7d7fda0-4c53-4508-9d35-7ec892b7e5d7\"), migrated verbatim so a user's `sub`\nis byte-identical across the cutover: every live session, external reference,\nand the downstream money-path principal keyed on `sub` survive unchanged. A\nuser minted natively in v2 is assigned a fresh UUID here on create, so the\n`sub` is ALWAYS a stable opaque id going forward — never the (Owner, Name)\npair, which is mutable (a rename would otherwise silently reissue identity).\n\nIt is distinct from the embedded orm.Model STORAGE KEY — the value the datastore\nlocks and looks a row up by — which is NOT (Owner, Name) for every row: a MIGRATED\nlegacy row is stamped \"owner/name\" (SetId in the migrator), but a v2-native\nusers.Create'd row is NOT — Create allocates rather than pinning a key, so its\nstorage key is a store-assigned surrogate id (a decimal string like\n\"17847909129933610000001\"). (Owner, Name) is therefore the natural/QUERY key\n(unique, indexed), not necessarily the storage key: resolve a row for a locked\nwrite by its REAL key (store.GetUserByName(...).Key().Encode(), which stamps both\nshapes — see internal/oidc updateUser), never by assuming \"owner/name\". This Id is\na first-class, indexed DOMAIN field; its json tag \"id\" dominates the promoted\norm.Model `Id_` (also \"id\") by shallower depth, so the persisted record's \"id\" is\nthis UUID — exactly the v1 shape. A row that carries no Id (a not-yet-assigned\npre-cutover user) falls back to the (Owner, Name) subject at mint; every other\npath resolves `sub`→user by Id.",
             "type": "string"
           },
           "idCard": {
