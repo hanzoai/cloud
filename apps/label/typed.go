@@ -118,7 +118,36 @@ const (
 	// idMax bounds a record id on the wire. It is a 64-character digest; the
 	// bound is what keeps a caller from binding megabytes into an IN list.
 	idMax = 128
+	// instantMax bounds an RFC 3339 timestamp on the wire. The longest legal one
+	// is well under 40 bytes; the bound exists because every other ceiling here
+	// would be pointless beside a time field that accepted a megabyte and only
+	// discovered it was not a timestamp after time.Parse had walked it. It is
+	// applied in stamp(), which is the ONE parser every instant on this surface
+	// goes through, so there is one place a time field is bounded and not one per
+	// field.
+	instantMax = 64
 )
+
+// THE BYTE BOUND OF EVERY DOOR, WHICH IS WHAT THE COUNTS ABOVE ARE WORTH.
+//
+// A bound on COUNT over caller-sized values is not a bound. Every ceiling below
+// is asked at the first statement of the op, before the value reaches a dedupe
+// key, a grouping key, a bound parameter or a row, so `count × ceiling` is the
+// byte bound on everything this plane allocates for one request:
+//
+//	riskLabel        maxAssert  × (subjectMax + evidenceMax + vocabularies + instants)
+//	riskLabels       1          × (subjectMax + vocabularies + 2 instants)
+//	riskResolveLabels maxResolve × (subjectMax + vocabulary + instant) + 1 instant
+//	riskLabelCoverage 1          × 2 instants
+//	riskDisposeLabels 1          × 1 instant
+//	riskHoldLabels   maxHold    × idMax
+//	riskLabelVocabulary — no caller-sized value at all
+//
+// What is read off the SOCKET is the edge's BodyLimit and is not this plane's to
+// state (config.go, GATEWAY_BODY_LIMIT). What this plane BINDS, HOLDS and STORES
+// is the product above, and it is finite in every term. wireBoundsTest walks each
+// In type with reflect and fails on a caller-sized field that has no ceiling
+// declared, so a NEW field cannot arrive unbounded and be noticed later.
 
 func routes(app cloud.Router, s *cloud.Service[*state]) {
 	// cloud.Bridge FIRST, on the ONE prefix this subsystem owns. serve.go
@@ -434,10 +463,29 @@ func (o ops) labels(ctx context.Context, in *riskLabelsIn) (*riskLabelsOut, erro
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadRequest, "to: %v", err)
 	}
-	facts, err := st.facts(ctx, query{
-		Kind: Kind(in.Kind), Subject: in.Subject, Source: Source(in.Source),
-		From: from, To: to, Limit: in.Limit,
-	})
+	// EVERY NARROWING TERM IS ADMITTED BEFORE IT IS BOUND, through the same
+	// functions the write door asks. A filter is caller-sized and it becomes a
+	// bound parameter against a single-writer file, so an unbounded one is a
+	// megabyte in a statement for a value that could not be in the store; and a
+	// filter outside a closed vocabulary can only ever match zero rows, so
+	// refusing it says so rather than charging for the scan and answering `[]`.
+	q := query{From: from, To: to, Limit: in.Limit}
+	if strings.TrimSpace(in.Kind) != "" {
+		if q.Kind, err = admitKind(in.Kind); err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "kind: %v", err)
+		}
+	}
+	if strings.TrimSpace(in.Subject) != "" {
+		if q.Subject, err = admitSubject(in.Subject); err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "subject: %v", err)
+		}
+	}
+	if strings.TrimSpace(in.Source) != "" {
+		if q.Source, err = admitSource(in.Source); err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "source: %v", err)
+		}
+	}
+	facts, err := st.facts(ctx, q)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "the record plane could not be read")
 	}
@@ -593,13 +641,18 @@ func (o ops) resolve(ctx context.Context, in *riskResolveIn) (*riskResolveOut, e
 		if err != nil {
 			return nil, zip.Errorf(http.StatusBadRequest, "subjects[%d].at: %v", i, err)
 		}
-		k := Kind(strings.TrimSpace(e.Kind))
-		if !knownKind(k) {
-			return nil, zip.Errorf(http.StatusBadRequest, "subjects[%d].kind %q is not one this plane judges", i, e.Kind)
+		k, err := admitKind(e.Kind)
+		if err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "subjects[%d].%v", i, err)
 		}
-		subject := strings.TrimSpace(e.Subject)
-		if subject == "" {
-			return nil, zip.Errorf(http.StatusBadRequest, "subjects[%d] names no subject", i)
+		// The CEILING, at the door and before the value is amplified. Without it
+		// maxResolve bounds the events and NOTHING bounds the bytes: each subject
+		// is copied into a dedupe key, a grouping key and a bound parameter, so
+		// 500 × whatever the edge let through is what one request could make a
+		// shared single-writer pod hold. With it, 500 × subjectMax is the bound.
+		subject, err := admitSubject(e.Subject)
+		if err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "subjects[%d]: %v", i, err)
 		}
 		ev := Fact{Kind: k, Subject: subject, At: at.UTC().Truncate(time.Second)}
 		key := eventKey(ev.Kind, ev.Subject, ev.At)
@@ -914,9 +967,18 @@ func (o ops) vocabulary(ctx context.Context, _ *riskVocabularyIn) (*riskLabelVoc
 	}
 	out := &riskLabelVocabulary{
 		Retention: int(minRetention.Hours() / 24),
+		// THE RULE NAMES THE FIELD THE RESOLVER ACTUALLY READS. This op exists so a
+		// caller holding a contested resolution can reproduce it, and the second
+		// term said `seen` while stronger() compares `knowable` — the derived
+		// instant, the later of the filer's `seen` and the server clock at the
+		// write. The two are equal for a live pipeline and differ for exactly the
+		// history the derivation exists to hold back, so a caller reproducing the
+		// published rule on backfilled ground truth got a different winner from the
+		// plane and no way to see why. A precedence rule published against a field
+		// that decides nothing is worse than none: it is checkable and wrong.
 		Rule: []string{
 			"rank: the source's adjudication weight, strongest first",
-			"seen: within one rank, the assertion that became knowable LATEST wins, so a source correcting itself wins only from the moment the correction was knowable",
+			"knowable: within one rank, the assertion that became KNOWABLE latest wins — knowable is the later of the filer's `seen` and the server clock at the write, and `seen` alone decides nothing — so a source correcting itself wins only from the moment the correction was knowable to this plane",
 			"confidence: higher wins, and only within one rank",
 			"id: the content digest, lowest wins, so a tie is broken deterministically rather than by storage order",
 		},
@@ -957,6 +1019,19 @@ type riskDisposeOut struct {
 	// Held is how many records inside the boundary were kept under litigation
 	// hold.
 	Held int `json:"held"`
+	// Restored is how many records this sweep had already removed from the derived
+	// columnar copy and then did NOT dispose of, because a litigation hold arrived
+	// between the identify and the delete — and which were therefore written back
+	// to the derived copy before this answered.
+	//
+	// It is a NAMED state and not a silent repair. The copy is swept before the
+	// record so nothing is orphaned in the warehouse, which means a record the
+	// delete declines to remove is one the warehouse has already lost, with its
+	// seq behind the delivery cursor and no retry that can reach it. Non-zero here
+	// says the collision happened and was repaired; a non-zero that keeps
+	// recurring says retention and hold are racing on the same records, which is
+	// worth an operator's attention rather than a debug line.
+	Restored int `json:"restored,omitempty"`
 	// Total and Oldest describe what the tenant still holds afterwards, so a
 	// disposal that removed nothing is distinguishable from a tenant that had
 	// nothing.
@@ -1003,6 +1078,7 @@ func (o ops) dispose(ctx context.Context, in *riskDisposeIn) (*riskDisposeOut, e
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "the record plane could not be read")
 	}
+	var kept []string
 	if len(expired) > 0 {
 		if err := o.s.State.derived.sweep(ctx, sc.tenant, expired); err != nil {
 			o.s.Log.Warn("label: the columnar copy could not be disposed of; the record is kept",
@@ -1010,8 +1086,37 @@ func (o ops) dispose(ctx context.Context, in *riskDisposeIn) (*riskDisposeOut, e
 			return nil, zip.Errorf(http.StatusServiceUnavailable,
 				"the derived copy could not be reached, so disposing here would leave rows in the warehouse: %v", err)
 		}
-		if err := st.remove(ctx, expired); err != nil {
+		kept, err = st.remove(ctx, expired)
+		if err != nil {
 			return nil, zip.Errorf(http.StatusInternalServerError, "the record plane could not be written")
+		}
+		// A HOLD THAT ARRIVES MID-SWEEP KEEPS THE RECORD IN BOTH PLANES OR IN
+		// NEITHER. The copy is swept FIRST so nothing is orphaned in the warehouse,
+		// which means a record the delete then declines to remove is one the
+		// warehouse has already lost — its seq is behind the delivery cursor, and
+		// deliver() asks the cursor rather than the world, so no retry re-sends it
+		// and pending() answers zero. The row would be present in the record,
+		// absent from the answer key a training join reads, and the row it happens
+		// to is the one somebody is litigating.
+		//
+		// So the repair is here, from the record that is still there, and a repair
+		// that cannot be made FAILS the request: telling a tenant its hold held
+		// while the copy it trains on quietly lost the row is the shape of defect
+		// this plane exists to prevent. Retrying is free — the sweep identifies the
+		// same rows again and the columnar copy collapses a byte-identical re-send.
+		if len(kept) > 0 {
+			facts, err := st.byIDs(ctx, kept)
+			if err != nil {
+				return nil, zip.Errorf(http.StatusInternalServerError, "the record plane could not be read")
+			}
+			if err := o.s.State.derived.send(ctx, sc.tenant, facts); err != nil {
+				o.s.Log.Error("label: a hold kept records the derived copy had already lost, and they could not be written back",
+					"tenant", sc.tenant.String(), "kept", len(kept), "err", err)
+				return nil, zip.Errorf(http.StatusServiceUnavailable,
+					"%d records were placed under litigation hold during this sweep and had already been removed from the derived copy; writing them back failed, so the copy is short and this sweep is not acknowledged; retry: %v", len(kept), err)
+			}
+			o.s.Log.Warn("label: a litigation hold arrived mid-sweep; the records were kept and written back to the derived copy",
+				"tenant", sc.tenant.String(), "restored", len(kept))
 		}
 		// SHIP BEFORE ACK, for the same reason the write path does and with the
 		// direction reversed: an unshipped disposal is a tenant told its records
@@ -1028,15 +1133,21 @@ func (o ops) dispose(ctx context.Context, in *riskDisposeIn) (*riskDisposeOut, e
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "the record plane could not be read")
 	}
+	// Disposed is what was DISPOSED OF: what was identified, less what a hold
+	// kept. Reporting the identified count told a tenant its retention had removed
+	// a record it is still holding, and a compliance report that overstates a
+	// deletion is not a rounding error — it is the wrong answer to the only
+	// question the report is asked.
 	out := &riskDisposeOut{
-		Before: before.Format(time.RFC3339), Disposed: len(expired),
-		Remaining: remaining, Held: held, Total: int(total),
+		Before: before.Format(time.RFC3339), Disposed: len(expired) - len(kept),
+		Remaining: remaining, Held: held, Total: int(total), Restored: len(kept),
 	}
 	if !oldest.IsZero() {
 		out.Oldest = oldest.Format(time.RFC3339)
 	}
 	o.s.Log.Info("label: retention applied", "tenant", sc.tenant.String(),
-		"before", out.Before, "disposed", out.Disposed, "held", out.Held, "remaining", out.Remaining)
+		"before", out.Before, "disposed", out.Disposed, "held", out.Held,
+		"restored", out.Restored, "remaining", out.Remaining)
 	return out, nil
 }
 
@@ -1168,7 +1279,15 @@ func readErr(err error) error {
 // stamp parses a required RFC 3339 instant. It refuses anything else rather than
 // defaulting to now: a label whose time was invented by the parser is a label
 // whose maturity is invented too.
+//
+// The length is checked BEFORE the parse and before the value reaches an error
+// message: this is the one parser every instant on this surface goes through, so
+// it is the one place a time field is bounded, and %q on a megabyte that is not a
+// timestamp is a megabyte in a log line.
 func stamp(s string) (time.Time, error) {
+	if len(s) > instantMax {
+		return time.Time{}, fmt.Errorf("an instant is %d bytes and the bound is %d", len(s), instantMax)
+	}
 	t, err := time.Parse(time.RFC3339, strings.TrimSpace(s))
 	if err != nil {
 		return time.Time{}, fmt.Errorf("%q is not an RFC 3339 instant", s)
