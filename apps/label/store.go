@@ -47,6 +47,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"strings"
 	"time"
 )
 
@@ -446,26 +447,77 @@ func (s *store) expired(ctx context.Context, before time.Time, limit int) (ids [
 // package that deletes, it takes ids and not a predicate, and it re-asserts the
 // hold in the WHERE clause: a record placed under hold between the identify and
 // the delete is still not disposed of.
-func (s *store) remove(ctx context.Context, ids []string) error {
+//
+// IT REPORTS WHAT IT KEPT, and that return is the whole point of the re-assertion
+// rather than an accessory to it. The disposal removes the derived copy FIRST (see
+// dispose) so nothing is orphaned in the warehouse — which means a record this
+// statement declines to delete has ALREADY been swept from the warehouse, its seq
+// is already behind the delivery cursor, and no retry re-sends it: the record
+// survives in the tenant's own file and is permanently absent from the copy a
+// training join reads, with pending() answering zero. A hole in the answer key
+// reads as an honest customer, and the row it happens to is the one somebody is
+// litigating. Returning the kept ids is what lets the caller repair the copy and
+// count the disposal honestly; discarding them made both impossible.
+func (s *store) remove(ctx context.Context, ids []string) (kept []string, err error) {
 	if len(ids) == 0 {
-		return nil
+		return nil, nil
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	stmt, err := tx.PrepareContext(ctx, `DELETE FROM assert WHERE id = ? AND hold = 0`)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer stmt.Close()
 	for _, id := range ids {
-		if _, err := stmt.ExecContext(ctx, id); err != nil {
-			return err
+		res, err := stmt.ExecContext(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			kept = append(kept, id)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return kept, nil
+}
+
+// byIDs reads named records whole, for the one caller that needs the assertions
+// back rather than their ids: a disposal repairing the derived copy for records a
+// litigation hold kept. Chunked on the same ceiling forSubjects uses, and for the
+// same reason — the host-variable limit is a property of whichever SQLite the
+// build linked, and this must not depend on it.
+func (s *store) byIDs(ctx context.Context, ids []string) ([]Fact, error) {
+	var out []Fact
+	for chunk := range chunks(ids, subjectChunk) {
+		holes := make([]string, len(chunk))
+		args := make([]any, 0, len(chunk))
+		for i, id := range chunk {
+			holes[i] = "?"
+			args = append(args, id)
+		}
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT `+cols+` FROM assert WHERE id IN (`+strings.Join(holes, ",")+`)`, args...)
+		if err != nil {
+			return nil, err
+		}
+		got, err := scan(rows)
+		_ = rows.Close()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, got...)
+	}
+	return out, nil
 }
 
 // setHold places or releases a litigation hold on named records. It is the ONE

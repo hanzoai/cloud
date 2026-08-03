@@ -832,8 +832,12 @@ func TestAHeldRecordIsNeverDisposedOf(t *testing.T) {
 	if remaining != 0 {
 		t.Fatalf("remaining = %d, want 0", remaining)
 	}
-	if err := st.remove(ctx, ids); err != nil {
+	kept, err := st.remove(ctx, ids)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(kept) != 0 {
+		t.Fatalf("remove kept %v; nothing was held between the identify and the delete", kept)
 	}
 	left, err := st.facts(ctx, query{})
 	if err != nil {
@@ -844,9 +848,15 @@ func TestAHeldRecordIsNeverDisposedOf(t *testing.T) {
 	}
 
 	// And a hold placed between the identify and the delete still wins: remove
-	// re-asserts it in the WHERE clause rather than trusting the earlier read.
-	if err := st.remove(ctx, []string{left[0].ID}); err != nil {
+	// re-asserts it in the WHERE clause rather than trusting the earlier read — and
+	// it REPORTS the record it kept, which is what lets the op repair the derived
+	// copy it has already swept.
+	stillHeld, err := st.remove(ctx, []string{left[0].ID})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(stillHeld) != 1 || stillHeld[0] != left[0].ID {
+		t.Fatalf("remove reported kept = %v, want the one held id %q", stillHeld, left[0].ID)
 	}
 	again, err := st.facts(ctx, query{})
 	if err != nil {
@@ -1020,6 +1030,25 @@ func TestVocabularyPublishesTheRuleThatIsEnforced(t *testing.T) {
 	}
 	if len(v.Rule) != 4 {
 		t.Fatalf("the tie-break rule is published in %d parts, want the 4 stronger() applies", len(v.Rule))
+	}
+	// EACH TERM NAMES THE FIELD stronger() ACTUALLY COMPARES. Counting the parts
+	// made the only property that matters unobservable: the published second term
+	// said `seen` for a release while stronger() compared `knowable`, and the two
+	// differ for exactly the backfilled history the derivation exists to hold back.
+	// A caller reproducing the published rule on such a record gets a different
+	// winner from the plane and no way to see why — a precedence rule published
+	// against a field that decides nothing is worse than none, because it is
+	// checkable and wrong.
+	for i, want := range []string{"rank", "knowable", "confidence", "id"} {
+		if !strings.HasPrefix(v.Rule[i], want+":") {
+			t.Errorf("rule[%d] = %q, want the term stronger() compares at that position (%q)", i, v.Rule[i], want)
+		}
+	}
+	// `seen` may be MENTIONED — the term explains that knowable is derived from it —
+	// but it may never be the term itself. This is the assertion the count could not
+	// make.
+	if strings.HasPrefix(v.Rule[1], "seen:") {
+		t.Error("rule[1] names `seen` as the deciding term; stronger() compares Knowable, and Seen is provenance that decides nothing")
 	}
 }
 
