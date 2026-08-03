@@ -16,7 +16,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `automations openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "automations",
 		Price:    cloud.Metered,
 		Mount:    automations.Mount,

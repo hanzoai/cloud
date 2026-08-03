@@ -9,7 +9,11 @@ import (
 	"math"
 	"strings"
 
-	"github.com/hanzoai/cloud/cek"
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -63,29 +67,19 @@ type annItem struct {
 	CompletedAt int64
 }
 
-// annStore is the annotation-queue metastore over one SQLite file
-// ({DataDir}/o11y_annotations.db). MaxOpenConns(1) serializes writes against the
+// annStore is the annotation-queue metastore over one SQLite file — the system
+// namespace's "o11y_annotations". MaxOpenConns(1) serializes writes against the
 // file lock (the same discipline the eval metastore uses).
 type annStore struct {
 	db *sql.DB
 }
 
-func openAnnStore(path string) (*annStore, error) {
-	db, err := cek.Open(cek.Global, path)
+func openAnnStore(dir string) (*annStore, error) {
+	db, err := cek.Open(namespace.System(), "o11y_annotations", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open o11y_annotations store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &annStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

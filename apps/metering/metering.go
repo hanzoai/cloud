@@ -67,7 +67,6 @@ const (
 	pathBalance         = "/v1/billing/balance"
 	pathTier            = "/v1/billing/tier"
 	pathUsage           = "/v1/billing/usage"
-	pathSpendAlerts     = "/v1/billing/alerts"
 	pathLimitsAuthorize = "/v1/billing/alerts/authorize"
 )
 
@@ -391,39 +390,16 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 
 // ScopeRule is one scope's rate-limit config, consumed by the cloud
 // ScopeRateLimit middleware. Only rows with a positive RateLimitRpm are returned.
+//
+// The rows are READ over the internal plane (plane.FinanceScopeRules), not over
+// this client: the reader is an edge middleware, and a GET /v1/billing/alerts
+// through the commerce transport re-dispatched the whole shared app back through
+// that same middleware until the depth guard 502'd. This type is the shape the
+// limiter keeps; the wire that fills it is the socket.
 type ScopeRule struct {
 	Project      string
 	Service      string
 	RateLimitRpm int
-}
-
-// ScopeRules lists the org's per-scope rate-limit rules (the rate-limited subset
-// of its spend-alert rows). It is the config source for the cloud ScopeRateLimit
-// middleware, which caches it with a short TTL and fails open on error. Org is
-// sent as X-Org-Id so the rules are the caller org's own — never another tenant's.
-func (c *Client) ScopeRules(ctx context.Context, org string) ([]ScopeRule, error) {
-	if !c.Enabled() {
-		return nil, nil
-	}
-	body, err := c.get(ctx, pathSpendAlerts, nil, c.orgFor(org))
-	if err != nil {
-		return nil, err
-	}
-	var rows []struct {
-		Project      string `json:"project"`
-		Service      string `json:"service"`
-		RateLimitRpm int    `json:"rateLimitRpm"`
-	}
-	if err := json.Unmarshal(body, &rows); err != nil {
-		return nil, err
-	}
-	out := make([]ScopeRule, 0, len(rows))
-	for _, r := range rows {
-		if r.RateLimitRpm > 0 {
-			out = append(out, ScopeRule{Project: r.Project, Service: r.Service, RateLimitRpm: r.RateLimitRpm})
-		}
-	}
-	return out, nil
 }
 
 // scopeAuthorize consults commerce's per-scope cap verdict for this request. The
@@ -605,6 +581,34 @@ type Usage struct {
 	Stream           bool   `json:"stream,omitempty"`
 	Status           string `json:"status,omitempty"`
 	ClientIP         string `json:"clientIp,omitempty"`
+}
+
+// Clone returns a Usage that OWNS every string it carries.
+//
+// A Usage assembled inside a request handler routinely carries zero-copy views
+// into the server's reused request arena: c.User(), c.RequestID() and the
+// forwarded client IP are header reads that alias fasthttp's buffer, and that
+// buffer is handed to the NEXT request on the same connection the instant the
+// handler returns. Retaining such a Usage past its handler is a use-after-free
+// whose symptom is not a crash — it is another caller's bytes marshalled onto
+// this caller's debit, on a connection two tenants took turns on.
+//
+// So anything that retains a Usage clones it first. [ResourceMeter.MeterUsage]
+// records on a background goroutine and clones there, once, rather than each of
+// its callers having to remember.
+func (u Usage) Clone() Usage {
+	u.User = strings.Clone(u.User)
+	u.Actor = strings.Clone(u.Actor)
+	u.Org = strings.Clone(u.Org)
+	u.Currency = strings.Clone(u.Currency)
+	u.Model = strings.Clone(u.Model)
+	u.Provider = strings.Clone(u.Provider)
+	u.Project = strings.Clone(u.Project)
+	u.Service = strings.Clone(u.Service)
+	u.RequestID = strings.Clone(u.RequestID)
+	u.Status = strings.Clone(u.Status)
+	u.ClientIP = strings.Clone(u.ClientIP)
+	return u
 }
 
 // amount returns the canonical typed charge this gate weighs. Amount wins;

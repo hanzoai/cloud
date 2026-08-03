@@ -12,7 +12,6 @@ import (
 // RecordUsage wrote (magnitude + model), most-recent-first, and excludes deposits —
 // so /v1/billing/usage can answer from the ledger instead of self-dispatching.
 func TestListUsage(t *testing.T) {
-	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 	f := New(t.TempDir())
 	ctx := context.Background()
 	const org = "acme"

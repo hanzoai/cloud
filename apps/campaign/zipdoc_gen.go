@@ -10,13 +10,13 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/campaign/:id", zip.Doc{
-		Description: "DeleteCampaign removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them.",
+		Description: "Removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them.",
 		Fields: map[string]string{
 			"campaignRef.id": "ID is the campaign's server-minted handle, \"cmp_\"-prefixed.",
 		},
 	})
 	zip.Describe("DELETE /v1/campaign/:id/channels/:kind", zip.Doc{
-		Description: "RemoveCampaignChannel drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards.",
+		Description: "Drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards.",
 		Fields: map[string]string{
 			"ChannelSpec.account":  "provider account ref (ad-account/page/list id)",
 			"ChannelSpec.detail":   "honest last-outcome detail (never a secret)",
@@ -28,7 +28,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/campaign", zip.Doc{
-		Description: "ListCampaigns returns the org's campaigns, newest first, optionally narrowed to\none status.\n\nA campaign is the top-level go-to-market object: a value that SPANS channels\n(paid, organic, email) and fans out to the executor for each. The listing is\norg-scoped server-side, so one org can never see another's campaigns.",
+		Description: "Returns the org's campaigns, newest first, optionally narrowed to\none status.\n\nA campaign is the top-level go-to-market object: a value that SPANS channels\n(paid, organic, email) and fans out to the executor for each. The listing is\norg-scoped server-side, so one org can never see another's campaigns.",
 		Fields: map[string]string{
 			"ChannelSpec.account":   "provider account ref (ad-account/page/list id)",
 			"ChannelSpec.detail":    "honest last-outcome detail (never a secret)",
@@ -42,7 +42,7 @@ func init() {
 		Example: json.RawMessage(`{"status":"live","limit":50}`),
 	})
 	zip.Describe("GET /v1/campaign/:id", zip.Doc{
-		Description: "GetCampaign returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
+		Description: "Returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
 		Fields: map[string]string{
 			"ChannelSpec.account":  "provider account ref (ad-account/page/list id)",
 			"ChannelSpec.detail":   "honest last-outcome detail (never a secret)",
@@ -53,7 +53,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/campaign/:id/metrics", zip.Doc{
-		Description: "CampaignMetrics returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
+		Description: "Returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
 		Fields: map[string]string{
 			"ChannelMetric.spendError": "honest: connector spend read failed",
 			"metricsQuery.end":         "End is an explicit RFC3339 window end.",
@@ -64,7 +64,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"cmp_1f…","range":"7d"}`),
 	})
 	zip.Describe("GET /v1/campaign/summary", zip.Doc{
-		Description: "SummarizeCampaigns returns the org's go-to-market roll-up: how many campaigns\nexist, how many are live, their total budget in cents, and which channel\nexecutors this deployment can actually reach.\n\nThe channel list is the deployment's honest capability, not a wish: a kind\nmissing from it is one a launch will record as \"unavailable\" rather than fail\non.",
+		Description: "Returns the org's go-to-market roll-up: how many campaigns\nexist, how many are live, their total budget in cents, and which channel\nexecutors this deployment can actually reach.\n\nThe channel list is the deployment's honest capability, not a wish: a kind\nmissing from it is one a launch will record as \"unavailable\" rather than fail\non.",
 		Fields: map[string]string{
 			"campaignSummary.budget":    "Budget is the sum of every campaign's budget, in CENTS.",
 			"campaignSummary.campaigns": "Campaigns is how many campaigns the org has, in any state.",
@@ -73,7 +73,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/campaign", zip.Doc{
-		Description: "CreateCampaign creates a campaign as a DRAFT and returns it.\n\nA draft is inert: nothing is sent, no connector is touched and no budget is\ncommitted until the campaign is launched. The channels named here are validated\nand de-duplicated by kind (one executor per kind), and every channel starts\n\"pending\" whatever the caller claims — a client can never assert a launched\nstate.",
+		Description: "Creates a campaign as a DRAFT and returns it.\n\nA draft is inert: nothing is sent, no connector is touched and no budget is\ncommitted until the campaign is launched. The channels named here are validated\nand de-duplicated by kind (one executor per kind), and every channel starts\n\"pending\" whatever the caller claims — a client can never assert a launched\nstate.",
 		Fields: map[string]string{
 			"ChannelSpec.account":      "provider account ref (ad-account/page/list id)",
 			"ChannelSpec.detail":       "honest last-outcome detail (never a secret)",
@@ -90,7 +90,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Spring launch","budget":250000,"content":["Ship faster"],"channels":[{"kind":"paid","platform":"meta"}]}`),
 	})
 	zip.Describe("POST /v1/campaign/:id/channels", zip.Doc{
-		Description: "AddCampaignChannel adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it.",
+		Description: "Adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it.",
 		Fields: map[string]string{
 			"ChannelSpec.account":  "provider account ref (ad-account/page/list id)",
 			"ChannelSpec.detail":   "honest last-outcome detail (never a secret)",
@@ -104,8 +104,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"cmp_1f…","kind":"email","platform":"sendgrid","account":"list_42"}`),
 	})
+	zip.Describe("POST /v1/campaign/:id/launch", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/campaign/:id/pause", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("PUT /v1/campaign/:id", zip.Doc{
-		Description: "UpdateCampaign rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",
+		Description: "Rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",
 		Fields: map[string]string{
 			"ChannelSpec.account":      "provider account ref (ad-account/page/list id)",
 			"ChannelSpec.detail":       "honest last-outcome detail (never a secret)",

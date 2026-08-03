@@ -10,27 +10,27 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/flags/defs/:key", zip.Doc{
-		Description: "DeleteFlagDefinition removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.",
+		Description: "Removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.",
 		Fields: map[string]string{
 			"deletedOut.deleted": "Deleted is the key that no longer exists.",
 			"keyIn.key":          "Key is the flag key to act on, from the path.",
 		},
 	})
 	zip.Describe("GET /v1/flags/activity", zip.Doc{
-		Description: "ListFlagActivity returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
+		Description: "Returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
 		Fields: map[string]string{
 			"activityIn.limit": "Limit caps the rows returned. 1–500; anything else takes the default 100.",
 			"activityOut.data": "Data is the change log newest-first: who created, updated or deleted which key, when.",
 		},
 	})
 	zip.Describe("GET /v1/flags/defs", zip.Doc{
-		Description: "ListFlagDefinitions returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
+		Description: "Returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
 		Fields: map[string]string{
 			"defsOut.data": "Data is every definition in the caller's (org, project) store, by key.",
 		},
 	})
 	zip.Describe("GET /v1/flags/defs/:key", zip.Doc{
-		Description: "GetFlagDefinition returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
+		Description: "Returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
 		Fields: map[string]string{
 			"keyIn.key": "Key is the flag key to act on, from the path.",
 		},
@@ -64,7 +64,7 @@ func init() {
 		Response: json.RawMessage(`{"featureFlags":{"new-editor":true},"featureFlagPayloads":{},"errorsWhileComputingFlags":false}`),
 	})
 	zip.Describe("PUT /v1/flags/defs/:key", zip.Doc{
-		Description: "PutFlagDefinition creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
+		Description: "Creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
 		Fields: map[string]string{
 			"putDefIn.definition": "Definition is the flag definition document, carried verbatim.",
 			"putDefIn.key":        "Key is the flag key to write, from the path.",

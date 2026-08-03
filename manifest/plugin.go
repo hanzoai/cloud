@@ -56,13 +56,6 @@ type App struct {
 	// empty dashboard rather than an error.
 	Eager bool
 
-	// Open means this app also serves tools that depend on WHO is asking, so its
-	// build-time catalogue (plugin/<name>/mcp.json) is incomplete BY CONSTRUCTION
-	// and the host asks it per caller — see zip.Plugin.Open. Exactly one app in
-	// the fleet may be open, because a tool name no catalogue claims has to
-	// resolve somewhere and two candidates would make it ambiguous.
-	Open bool
-
 	// Required means the HOST must not serve without this app. A required app
 	// that will not start aborts the process; every other app degrades to being
 	// absent — its prefixes answer 503 and the rest of the fleet serves.
@@ -85,6 +78,37 @@ type App struct {
 	// sibling. CrashLoopBackOff is the state in which a process cannot tell you
 	// why it is unhappy.
 	Required bool
+
+	// Vital means the host is not fit to RECEIVE TRAFFIC without this app: its
+	// absence is reported on /readyz as a 503, so Kubernetes takes the pod out of
+	// the Service and a rollout that breaks it stalls against the old pods instead
+	// of replacing them.
+	//
+	// It is the other half of Required, and the two are deliberately separate
+	// because they answer different questions. Required asks "may this process
+	// run at all", and the answer is argued above: aborting destroys the console,
+	// the health surface, the log stream and every healthy sibling, so nothing
+	// sets it. Vital asks "should this process be sent requests", and the pod that
+	// answers no is still up, still serving its siblings, and still able to say
+	// why. Required's own doc names "a pod that never goes Ready" as the one thing
+	// aborting buys; Vital buys exactly that and nothing else.
+	//
+	// The bar is NOT "serving without it is unsafe" — that is Required's bar. It
+	// is "serving without it is pointless": traffic that arrives will not be
+	// answered, so routing it here helps nobody. That is a strictly narrower claim
+	// and it is why `ai` qualifies where the credz broker does not.
+	//
+	// Written against 2026-08-01, ~30 minutes of api.hanzo.ai/v1/models and
+	// /v1/chat/completions answering 503 {"error":"mount /v1: no instance
+	// running"} while the pod stayed Ready with 0 restarts. o11y v1.5.41 seized
+	// :4317-:4319 from the `ai` child, the child's listen failed, and mount()
+	// correctly degraded it to absent — but absence went into a map that only
+	// /healthz reported, in a FIELD, and the probe reads the STATUS CODE. Every
+	// specifically-mounted prefix (/v1/sentry, /v1/o11y, /v1/commerce/tenant,
+	// /v1/admin/*) kept answering from its own subsystem, so only a path falling
+	// THROUGH to `ai` showed it. A health check that returns 200 while the entire
+	// product API is absent is not a health check.
+	Vital bool
 }
 
 // Names is every app, in mount order — which is the fleet's routing order and
@@ -122,14 +146,7 @@ func Names() []string {
 // single lean plugin they are editing; a release ships every per-app binary and
 // the host falls through to the index). A dedicated binary present on disk is
 // someone's explicit intent, so it wins over the index.
-func (a App) Plugin() zip.Plugin {
-	p := a.resolve()
-	// Open is a property of the APP — what it serves — and not of where its binary
-	// came from, so it is stamped once here rather than in each of resolve's four
-	// rungs, which is four places for it to be forgotten.
-	p.Open = a.Open
-	return p
-}
+func (a App) Plugin() zip.Plugin { return a.resolve() }
 
 // resolve is the ladder: an operator's address, an operator's path, the binary on
 // disk beside the host, a published release, and finally the on-disk path again so

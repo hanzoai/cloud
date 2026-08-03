@@ -7,41 +7,36 @@ import (
 	"errors"
 	"fmt"
 
-	// cek opens the store encrypted at rest (migrate-on-open + shred).
-	"github.com/hanzoai/cloud/cek"
-	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
+	// The ONE "sqlite" driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
 // errNotFound is returned when an org has no formation yet. Handlers map it to 404.
 var errNotFound = errors.New("company: formation not found")
 
-// Store persists formations. ONE SQLite file ({DataDir}/company.db) holds every
-// org's formation; tenant isolation is the `org` primary key, enforced on EVERY
-// query. There is at most one formation per org (an org forms one company through
-// this flow), so the aggregate is stored as a single row: the machine-relevant
+// Store persists formations. ONE SQLite file — the system namespace's "company"
+// — holds every org's formation; tenant isolation is the `org` primary key,
+// enforced on EVERY query. There is at most one formation per org (an org forms
+// one company through this flow), so the aggregate is stored as a single row:
+// the machine-relevant
 // projection (stage/structure/name) in columns for cheap listing, and the full
 // Formation as a JSON document in `data`. MaxOpenConns(1) serializes writes.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "company", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open company store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

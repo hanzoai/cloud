@@ -180,9 +180,10 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	// of a valid master key (Ready()): with a key, secret ops seal/open and cek
 	// encrypts each file at rest; without one, every secret op fails closed with
 	// ErrMasterKeyMissing and NO org file is created (nothing to persist, nothing to
-	// brick). The former ZapDB KEYREGISTRY brick foot-gun is gone: cek rotates by
-	// re-wrapping a per-file sidecar (no page is rewritten), and a wrong/absent key
-	// makes cek.Open FAIL at first access — never a silent plaintext downgrade.
+	// brick). The former ZapDB KEYREGISTRY brick foot-gun is gone: a file's key is
+	// DERIVED from the master and the namespace that owns it, with nothing stored
+	// beside the file to lose, and a wrong or absent master makes the open FAIL at
+	// first access — never a silent plaintext downgrade.
 	//
 	// Reader HA role fails CLOSED at New (not at first read) so a mis-provisioned
 	// reader never boots "healthy" over nothing:

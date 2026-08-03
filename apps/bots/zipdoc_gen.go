@@ -26,4 +26,7 @@ func init() {
 			"BotStopped.status": "Status is the run's terminal state: \"stopped\".",
 		},
 	})
+	zip.Describe("POST /v1/bots/run", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 }

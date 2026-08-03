@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/prefs", zip.Doc{
-		Description: "GetPrefs returns the signed-in caller's OWN preference document — the theme,\ndensity and pinned nav that follow them across every Hanzo surface. There is no\npath to another user's preferences: not for an org admin, not for a platform\nSuperAdmin, because the subject is built from the validated credential and is the\nmandatory predicate on the read. A caller who has never saved anything gets an\nempty document at 200, never a 404, so the user menu always renders.",
+		Description: "Returns the signed-in caller's OWN preference document — the theme,\ndensity and pinned nav that follow them across every Hanzo surface. There is no\npath to another user's preferences: not for an org admin, not for a platform\nSuperAdmin, because the subject is built from the validated credential and is the\nmandatory predicate on the read. A caller who has never saved anything gets an\nempty document at 200, never a 404, so the user menu always renders.",
 		Fields: map[string]string{
 			"prefsView.prefs":     "Prefs is the caller's preference document: an opaque JSON object whose keys\nthe surfaces own, returned verbatim. `{}` when nothing has been saved.",
 			"prefsView.updatedAt": "UpdatedAt is when the document was last written, unix seconds. Absent when\nnothing has been saved.",

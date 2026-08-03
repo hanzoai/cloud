@@ -39,8 +39,8 @@
     "/v1/deploy/applications": {
       "get": {
         "operationId": "get_v1_deploy_applications",
-        "summary": "ListDeployApplications returns the fleet as an argocd ApplicationList: one projected Application per operator App CR, carrying the image tag the CR DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled health, and the sync verdict those two produce (declared == running ⇒ Synced, both known and different ⇒ OutOfSync, either unknown ⇒ Unknown).",
-        "description": "ListDeployApplications returns the fleet as an argocd ApplicationList: one\nprojected Application per operator App CR, carrying the image tag the CR\nDECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled\nhealth, and the sync verdict those two produce (declared == running ⇒ Synced,\nboth known and different ⇒ OutOfSync, either unknown ⇒ Unknown).\n\nIt is TENANT-SCOPED: a platform SuperAdmin reads every platform namespace, a\nvalidated org member reads only its own org's tenant namespace and only the App\nCRs labelled with its org, and anyone else is refused. A cross-tenant CR is\nnever projected into an answer.",
+        "summary": "Returns the fleet as an argocd ApplicationList: one projected Application per operator App CR, carrying the image tag the CR DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled health, and the sync verdict those two produce (declared == running ⇒ Synced, both known and different ⇒ OutOfSync, either unknown ⇒ Unknown).",
+        "description": "Returns the fleet as an argocd ApplicationList: one\nprojected Application per operator App CR, carrying the image tag the CR\nDECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled\nhealth, and the sync verdict those two produce (declared == running ⇒ Synced,\nboth known and different ⇒ OutOfSync, either unknown ⇒ Unknown).\n\nIt is TENANT-SCOPED: a platform SuperAdmin reads every platform namespace, a\nvalidated org member reads only its own org's tenant namespace and only the App\nCRs labelled with its org, and anyone else is refused. A cross-tenant CR is\nnever projected into an answer.",
         "tags": [
           "deploy"
         ],
@@ -61,8 +61,8 @@
     "/v1/deploy/applications/{name}": {
       "get": {
         "operationId": "get_v1_deploy_applications_name",
-        "summary": "GetDeployApplication returns ONE projected argocd Application by name, with status.resources filled in from its reconciled resource tree — which is what makes it the detail view rather than a row of the list.",
-        "description": "GetDeployApplication returns ONE projected argocd Application by name, with\nstatus.resources filled in from its reconciled resource tree — which is what\nmakes it the detail view rather than a row of the list.\n\nIt is TENANT-SCOPED, and a name that belongs to another org is reported NOT\nFOUND rather than refused: a 403 would confirm the application exists, so the\nroute would become a cross-tenant existence oracle. A name that is not a\nDNS-1123 label is a 400 before any cluster read.",
+        "summary": "Returns ONE projected argocd Application by name, with status.resources filled in from its reconciled resource tree — which is what makes it the detail view rather than a row of the list.",
+        "description": "Returns ONE projected argocd Application by name, with\nstatus.resources filled in from its reconciled resource tree — which is what\nmakes it the detail view rather than a row of the list.\n\nIt is TENANT-SCOPED, and a name that belongs to another org is reported NOT\nFOUND rather than refused: a 403 would confirm the application exists, so the\nroute would become a cross-tenant existence oracle. A name that is not a\nDNS-1123 label is a 400 before any cluster read.",
         "tags": [
           "deploy"
         ],
@@ -94,8 +94,8 @@
     "/v1/deploy/applications/{name}/resource-tree": {
       "get": {
         "operationId": "get_v1_deploy_applications_name_resource-tree",
-        "summary": "GetDeployResourceTree returns one application's argocd ApplicationTree: the objects the operator reconciled from its App CR, reached by ownerRef — the Deployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress, HorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node carrying its parent edges and its health.",
-        "description": "GetDeployResourceTree returns one application's argocd ApplicationTree: the\nobjects the operator reconciled from its App CR, reached by ownerRef — the\nDeployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress,\nHorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node\ncarrying its parent edges and its health.\n\nSecrets are DELIBERATELY not walked, so no materialized environment can ever\nappear in the tree. Tenant-scoped exactly like the application read: another\norg's name is not found, a malformed name is a 400.",
+        "summary": "Returns one application's argocd ApplicationTree: the objects the operator reconciled from its App CR, reached by ownerRef — the Deployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress, HorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node carrying its parent edges and its health.",
+        "description": "Returns one application's argocd ApplicationTree: the\nobjects the operator reconciled from its App CR, reached by ownerRef — the\nDeployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress,\nHorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node\ncarrying its parent edges and its health.\n\nSecrets are DELIBERATELY not walked, so no materialized environment can ever\nappear in the tree. Tenant-scoped exactly like the application read: another\norg's name is not found, a malformed name is a 400.",
         "tags": [
           "deploy"
         ],
@@ -127,8 +127,8 @@
     "/v1/deploy/applications/{name}/revisions/{revision}/metadata": {
       "get": {
         "operationId": "get_v1_deploy_applications_name_revisions_revision_metadata",
-        "summary": "GetDeployRevisionMetadata returns the argocd RevisionMetadata for one revision of one application — what the detail view shows beside a revision.",
-        "description": "GetDeployRevisionMetadata returns the argocd RevisionMetadata for one revision\nof one application — what the detail view shows beside a revision.\n\nAn App CR is IMAGE-pinned rather than commit-pinned: the deploy names an image\ntag, and the git source this projection reports is the display-only manifest\nrepo, not the application's own source. Nothing in this process can read a\ncommit's author or message for an arbitrary revision. So rather than 404 (which\nthe SPA turns into an error toast) or invent a git author, it answers the\nHONEST minimum: date is when the App CR was created, message is the revision\nasked for — with the empty revision and \"HEAD\" resolving to the image tag the\nCR declares — and author is empty. An over-long revision is truncated before it\nis echoed back.\n\nTenant-scoped exactly like the application read.",
+        "summary": "Returns the argocd RevisionMetadata for one revision of one application — what the detail view shows beside a revision.",
+        "description": "Returns the argocd RevisionMetadata for one revision\nof one application — what the detail view shows beside a revision.\n\nAn App CR is IMAGE-pinned rather than commit-pinned: the deploy names an image\ntag, and the git source this projection reports is the display-only manifest\nrepo, not the application's own source. Nothing in this process can read a\ncommit's author or message for an arbitrary revision. So rather than 404 (which\nthe SPA turns into an error toast) or invent a git author, it answers the\nHONEST minimum: date is when the App CR was created, message is the revision\nasked for — with the empty revision and \"HEAD\" resolving to the image tag the\nCR declares — and author is empty. An over-long revision is truncated before it\nis echoed back.\n\nTenant-scoped exactly like the application read.",
         "tags": [
           "deploy"
         ],
@@ -209,8 +209,8 @@
     "/v1/deploy/applications/{name}/syncwindows": {
       "get": {
         "operationId": "get_v1_deploy_applications_name_syncwindows",
-        "summary": "GetDeploySyncWindows returns one application's argocd ApplicationSyncWindowState — the answer to \"is anything blocking a sync of this application right now?\".",
-        "description": "GetDeploySyncWindows returns one application's argocd\nApplicationSyncWindowState — the answer to \"is anything blocking a sync of this\napplication right now?\".\n\nThis platform runs NO sync windows, so the answer is always the permissive\nempty one: canSync true, with no active and no assigned windows. The\napplication is still resolved first, so a name that is not the caller's is not\nfound rather than handed the static body — the endpoint discloses nothing about\nanother tenant's fleet.",
+        "summary": "Returns one application's argocd ApplicationSyncWindowState — the answer to \"is anything blocking a sync of this application right now?\".",
+        "description": "Returns one application's argocd\nApplicationSyncWindowState — the answer to \"is anything blocking a sync of this\napplication right now?\".\n\nThis platform runs NO sync windows, so the answer is always the permissive\nempty one: canSync true, with no active and no assigned windows. The\napplication is still resolved first, so a name that is not the caller's is not\nfound rather than handed the static body — the endpoint discloses nothing about\nanother tenant's fleet.",
         "tags": [
           "deploy"
         ],
@@ -252,8 +252,8 @@
     "/v1/deploy/clusters": {
       "get": {
         "operationId": "get_v1_deploy_clusters",
-        "summary": "ListDeployClusters returns the argocd ClusterList of the destinations the caller's applications reconcile into: one entry per distinct destination server, carrying the count of applications reconciling into it.",
-        "description": "ListDeployClusters returns the argocd ClusterList of the destinations the\ncaller's applications reconcile into: one entry per distinct destination\nserver, carrying the count of applications reconciling into it. The in-cluster\ndestination is always present, so an empty fleet still answers one cluster, and\nno cluster credential can appear — the projected type physically has no config\nfield.\n\nIt is TENANT-SCOPED and reads the SAME App CRs the applications list reads: a\nplatform SuperAdmin counts the whole fleet, a validated org member counts only\nits own org's applications, anyone else is refused.",
+        "summary": "Returns the argocd ClusterList of the destinations the caller's applications reconcile into: one entry per distinct destination server, carrying the count of applications reconciling into it.",
+        "description": "Returns the argocd ClusterList of the destinations the\ncaller's applications reconcile into: one entry per distinct destination\nserver, carrying the count of applications reconciling into it. The in-cluster\ndestination is always present, so an empty fleet still answers one cluster, and\nno cluster credential can appear — the projected type physically has no config\nfield.\n\nIt is TENANT-SCOPED and reads the SAME App CRs the applications list reads: a\nplatform SuperAdmin counts the whole fleet, a validated org member counts only\nits own org's applications, anyone else is refused.",
         "tags": [
           "deploy"
         ],
@@ -274,8 +274,8 @@
     "/v1/deploy/gitops": {
       "get": {
         "operationId": "get_v1_deploy_gitops",
-        "summary": "GetDeployGitOps lists every Hanzo CD Application in the cluster: the git source each one polls, the commit it last APPLIED, how its last sync operation ended, and its recent deploy history — newest deploy first, ordered by namespace then name.",
-        "description": "GetDeployGitOps lists every Hanzo CD Application in the cluster: the git source\neach one polls, the commit it last APPLIED, how its last sync operation ended,\nand its recent deploy history — newest deploy first, ordered by namespace then\nname.\n\nThis is the layer ABOVE the application board, and the two disagree in exactly\nthe case an operator most needs to see: main carries a new image pin, CD has\nnot applied that commit yet, so every App CR still declares the old tag and the\napplication board is legitimately \"Synced\" while the deploy has not landed.\nOnly the applied revision here can show that.\n\ninstalled is false — with a reason and an empty list — when the CD CRD is not\nserved in this cluster. That is a FACT about the cluster rather than a failure\nof the request, so the caller can say \"no CD plane here\" instead of rendering\nan error it cannot act on; a genuine transport or RBAC failure still errors.\n\nRead-only, and platform SuperAdmin only: the CD plane is fleet infrastructure\nwith no tenant dimension. This view observes CD and never drives it — the sync\npolicy is automated with self-heal, and the actionable verb an operator has is\nthe per-application reconcile at POST /v1/deploy/applications/{name}/sync.",
+        "summary": "Lists every Hanzo CD Application in the cluster: the git source each one polls, the commit it last APPLIED, how its last sync operation ended, and its recent deploy history — newest deploy first, ordered by namespace then name.",
+        "description": "Lists every Hanzo CD Application in the cluster: the git source\neach one polls, the commit it last APPLIED, how its last sync operation ended,\nand its recent deploy history — newest deploy first, ordered by namespace then\nname.\n\nThis is the layer ABOVE the application board, and the two disagree in exactly\nthe case an operator most needs to see: main carries a new image pin, CD has\nnot applied that commit yet, so every App CR still declares the old tag and the\napplication board is legitimately \"Synced\" while the deploy has not landed.\nOnly the applied revision here can show that.\n\ninstalled is false — with a reason and an empty list — when the CD CRD is not\nserved in this cluster. That is a FACT about the cluster rather than a failure\nof the request, so the caller can say \"no CD plane here\" instead of rendering\nan error it cannot act on; a genuine transport or RBAC failure still errors.\n\nRead-only, and platform SuperAdmin only: the CD plane is fleet infrastructure\nwith no tenant dimension. This view observes CD and never drives it — the sync\npolicy is automated with self-heal, and the actionable verb an operator has is\nthe per-application reconcile at POST /v1/deploy/applications/{name}/sync.",
         "tags": [
           "deploy"
         ],
@@ -326,8 +326,8 @@
     "/v1/deploy/projects": {
       "get": {
         "operationId": "get_v1_deploy_projects",
-        "summary": "ListDeployProjects returns the argocd AppProjectList this console groups and filters applications by.",
-        "description": "ListDeployProjects returns the argocd AppProjectList this console groups and\nfilters applications by. Projects are owned by Hanzo IAM rather than by argocd,\nso they are REFLECTED read-only from the IAM project store and nothing is\npersisted here: a validated org member gets its own organization's projects and\na platform SuperAdmin gets every organization's.\n\nA SuperAdmin whose IAM store is not reachable falls back to the real\nargoproj.io AppProject CRs when that CRD is served, and otherwise to one\npermissive synthesized project per distinct project name the App CRs declare.\nA project named \"default\" is always present, because that is what an App CR\ncarrying no project label projects to.",
+        "summary": "Returns the argocd AppProjectList this console groups and filters applications by.",
+        "description": "Returns the argocd AppProjectList this console groups and\nfilters applications by. Projects are owned by Hanzo IAM rather than by argocd,\nso they are REFLECTED read-only from the IAM project store and nothing is\npersisted here: a validated org member gets its own organization's projects and\na platform SuperAdmin gets every organization's.\n\nA SuperAdmin whose IAM store is not reachable falls back to the real\nargoproj.io AppProject CRs when that CRD is served, and otherwise to one\npermissive synthesized project per distinct project name the App CRs declare.\nA project named \"default\" is always present, because that is what an App CR\ncarrying no project label projects to.",
         "tags": [
           "deploy"
         ],
@@ -358,8 +358,8 @@
     "/v1/deploy/session/userinfo": {
       "get": {
         "operationId": "get_v1_deploy_session_userinfo",
-        "summary": "GetDeploySession answers \"is this browser signed in, and if not where does it sign in?\" — the dashboard SPA's bootstrap question, and the only route on this plane that answers for an anonymous caller.",
-        "description": "GetDeploySession answers \"is this browser signed in, and if not where does it\nsign in?\" — the dashboard SPA's bootstrap question, and the only route on this\nplane that answers for an anonymous caller.\n\nThe anonymous answer carries loggedIn:false and a URL and NOTHING else: no\nusername, no org, no groups, no issuer, no hint about who the caller might be or\nwhat exists in the cluster. Answering it costs nothing (the caller already knows\nwhether it holds a cookie) and withholding it costs the whole sign-in journey.\n\nThe predicate is the platform SuperAdmin fact — the SAME one every other route\nhere gates on, minted from a validated principal whose org is the reserved admin\norg — so a validated-but-not-SuperAdmin caller is reported as NOT signed in,\nwhich is the truth as this console defines it: they cannot use it.",
+        "summary": "Answers \"is this browser signed in, and if not where does it sign in?\" — the dashboard SPA's bootstrap question, and the only route on this plane that answers for an anonymous caller.",
+        "description": "Answers \"is this browser signed in, and if not where does it\nsign in?\" — the dashboard SPA's bootstrap question, and the only route on this\nplane that answers for an anonymous caller.\n\nThe anonymous answer carries loggedIn:false and a URL and NOTHING else: no\nusername, no org, no groups, no issuer, no hint about who the caller might be or\nwhat exists in the cluster. Answering it costs nothing (the caller already knows\nwhether it holds a cookie) and withholding it costs the whole sign-in journey.\n\nThe predicate is the platform SuperAdmin fact — the SAME one every other route\nhere gates on, minted from a validated principal whose org is the reserved admin\norg — so a validated-but-not-SuperAdmin caller is reported as NOT signed in,\nwhich is the truth as this console defines it: they cannot use it.",
         "tags": [
           "deploy"
         ],
@@ -380,8 +380,8 @@
     "/v1/deploy/settings": {
       "get": {
         "operationId": "get_v1_deploy_settings",
-        "summary": "GetDeploySettings returns the argocd AuthSettings object the dashboard SPA awaits before its first render.",
-        "description": "GetDeploySettings returns the argocd AuthSettings object the dashboard SPA\nawaits before its first render.\n\nEvery value is a CONSTANT of this projection rather than configuration read\nfrom anywhere: the SPA's own login form is reported disabled and its OIDC\nconfig null because Hanzo IAM owns identity at the edge and this console's\nsign-in is GET /v1/deploy/login, and every argocd feature the projection does\nnot implement — status badges, Dex connectors, config-management plugins,\nkustomize versions, the exec terminal, apps-in-any-namespace, the hydrator,\nsync-with-replace — is reported off. Platform SuperAdmin only.",
+        "summary": "Returns the argocd AuthSettings object the dashboard SPA awaits before its first render.",
+        "description": "Returns the argocd AuthSettings object the dashboard SPA\nawaits before its first render.\n\nEvery value is a CONSTANT of this projection rather than configuration read\nfrom anywhere: the SPA's own login form is reported disabled and its OIDC\nconfig null because Hanzo IAM owns identity at the edge and this console's\nsign-in is GET /v1/deploy/login, and every argocd feature the projection does\nnot implement — status badges, Dex connectors, config-management plugins,\nkustomize versions, the exec terminal, apps-in-any-namespace, the hydrator,\nsync-with-replace — is reported off. Platform SuperAdmin only.",
         "tags": [
           "deploy"
         ],
@@ -432,8 +432,8 @@
     "/v1/deploy/version": {
       "get": {
         "operationId": "get_v1_deploy_version",
-        "summary": "GetDeployVersion returns the argocd VersionMessage the dashboard SPA reads at bootstrap.",
-        "description": "GetDeployVersion returns the argocd VersionMessage the dashboard SPA reads at\nbootstrap. There is no argocd binary behind this plane — it is a projection\nover operator App CRs — so the fields say so rather than describing a build:\nVersion names the projection, BuildDate is the moment this response was\ngenerated, and Compiler/Platform/GoVersion are the constants the SPA tolerates\nrather than facts about this process. Platform SuperAdmin only.",
+        "summary": "Returns the argocd VersionMessage the dashboard SPA reads at bootstrap.",
+        "description": "Returns the argocd VersionMessage the dashboard SPA reads at\nbootstrap. There is no argocd binary behind this plane — it is a projection\nover operator App CRs — so the fields say so rather than describing a build:\nVersion names the projection, BuildDate is the moment this response was\ngenerated, and Compiler/Platform/GoVersion are the constants the SPA tolerates\nrather than facts about this process. Platform SuperAdmin only.",
         "tags": [
           "deploy"
         ],

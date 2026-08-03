@@ -15,7 +15,6 @@
 package cloud
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -34,32 +33,29 @@ import (
 // therefore gets its own file. If someone collapses these back onto one name,
 // this test fails before the fleet does.
 func TestAuditChainIsPerProcess(t *testing.T) {
-	const dir = "/data/cloud"
 	for _, tc := range []struct {
 		proc string
 		want string
 	}{
-		{"cloud", "audit.db"}, // host keeps the canonical name (and its history)
-		{"", "audit.db"},      // unknown proc must not invent a second host chain
-		{"tasks", "audit-tasks.db"},
-		{"integrations", "audit-integrations.db"},
-		{"visor", "audit-visor.db"},
+		{"cloud", "audit"}, // host keeps the canonical name (and its history)
+		{"", "audit"},      // unknown proc must not invent a second host chain
+		{"tasks", "audit-tasks"},
+		{"integrations", "audit-integrations"},
+		{"visor", "audit-visor"},
 	} {
 		t.Run(tc.proc, func(t *testing.T) {
-			got := auditDBName(tc.proc)
-			if got != tc.want {
-				t.Fatalf("auditDBName(%q) = %q, want %q", tc.proc, got, tc.want)
+			if got := auditName(tc.proc); got != tc.want {
+				t.Fatalf("auditName(%q) = %q, want %q", tc.proc, got, tc.want)
 			}
-			_ = filepath.Join(dir, got)
 		})
 	}
 
 	// The property that actually matters: distinct processes never collide.
 	seen := map[string]string{}
 	for _, p := range []string{"cloud", "tasks", "integrations", "visor", "commerce", "iam"} {
-		n := auditDBName(p)
+		n := auditName(p)
 		if prev, dup := seen[n]; dup {
-			t.Fatalf("processes %q and %q share audit file %q — two writers on one hash chain", prev, p, n)
+			t.Fatalf("processes %q and %q share audit chain %q — two writers on one hash chain", prev, p, n)
 		}
 		seen[n] = p
 	}

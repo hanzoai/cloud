@@ -52,7 +52,7 @@ const (
 	codingDefaultOrgConcurrency = 2
 	// agentCredProvider / agentCredToken / agentCredUser name the per-org agent git
 	// credential in the integrations KMS namespace (/orgs/{org}/integrations/agent).
-	// An operator/automation seals the org's agent hk- key there; the coding path
+	// An operator/automation seals the org's agent sk- key there; the coding path
 	// reads it fail-closed and never logs it.
 	agentCredProvider = "agent"
 	agentCredToken    = "git-token"
@@ -287,7 +287,7 @@ func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, th
 // agentGitCredential reads the org's agent git credential from KMS, fail-closed:
 // unmounted, KMS-down, or an absent/empty token each return an error and NEVER a
 // value. The username is a fixed basic-auth label (git ignores it; the token is
-// the hk- secret) unless an operator sealed a specific one.
+// the sk- secret) unless an operator sealed a specific one.
 func agentGitCredential(s *cloud.Service[state], ctx context.Context, org string) (user, token string, err error) {
 	if !validOrg(org) {
 		return "", "", fmt.Errorf("integrations: invalid org")

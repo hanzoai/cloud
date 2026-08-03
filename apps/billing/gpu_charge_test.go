@@ -37,7 +37,7 @@ func (f *countingCommerce) server(t *testing.T) *httptest.Server {
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"transactionId":"txn_` + string(rune('0'+n)) + `","status":"ok"}`))
 	})
-	mux.HandleFunc("/v1/billing/portal/payment-methods", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/v1/billing/portal/methods", func(w http.ResponseWriter, _ *http.Request) {
 		body := f.cards
 		if body == "" {
 			body = `[{"id":"pm_1","brand":"visa","last4":"4242","isDefault":true}]`
@@ -60,7 +60,6 @@ func (f *countingCommerce) count() int {
 // in the fleet lands in) for the duration of the test, funded with cents for org.
 func publishLedger(t *testing.T, org string, cents int64) finance.Client {
 	t.Helper()
-	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=") // 32 zero bytes, dev-only
 	fin := finance.New(t.TempDir())
 	if cents > 0 {
 		if _, err := fin.Deposit(context.Background(), types.DepositInput{

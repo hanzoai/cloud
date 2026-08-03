@@ -20,7 +20,7 @@
 // read/write/delete another org's data.
 //
 // THE GATE. X-User-Id is set ONLY by the middleware, ONLY from a credential it
-// verified (a JWT bearer or session cookie — an opaque hk-/sk- API key does NOT
+// verified (a JWT bearer or session cookie — an opaque pk-/sk- API key does NOT
 // validate to a principal). So c.User() != "" is the authoritative "this request
 // carries a validated principal" signal. It is the SAME gate the S3 data plane
 // (clients/s3) and the audit trail (audit_middleware.go actorFromCtx) already
@@ -137,6 +137,58 @@ func OrgOf(user, org string) (string, bool) {
 		return "", false
 	}
 	return strings.Clone(org), true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The MINTED principal — the boundary's own attestation
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Principal is what the identity boundary MINTED for a request: the effective
+// org it resolved and the user it verified. Both empty for an anonymous caller.
+type Principal struct {
+	Org  string
+	User string
+}
+
+// mintedSlot names the request-local slot the boundary parks its attestation in.
+// A request-local value is server-side state — it is not a header, it does not
+// cross the wire, and there is no request a client can send that creates one.
+// Unexported zero-size type, so only this package can mint or read it.
+type mintedSlot struct{}
+
+// Mint records the principal the identity boundary resolved. It is called by the
+// boundary itself (cloud.SanitizeIdentity) and by nothing else.
+//
+// WHY THIS EXISTS BESIDE Validated. Validated reads X-User-Id, which is
+// trustworthy only DOWNSTREAM of the boundary that strips and re-mints it. Most
+// of cloud is downstream of it and Validated is the right question there. But a
+// middleware is not guaranteed to be: the same handler is installed in the fused
+// binary (behind the boundary) and in a hand-written plugin process (where the
+// boundary may not be installed at all), and a gate that reads a header in the
+// second case is reading whatever the client typed. So a gate whose correctness
+// must not depend on its position asks THIS instead — a fact only the boundary
+// can state, absent when the boundary did not run, which fails closed to
+// anonymous rather than open to forged.
+// Both fields are CLONED. A value read off a request is a zero-copy view into
+// the reused fasthttp buffer, and this one is retained past the read — it becomes
+// a map key in the edge sensor and a column in a meter — so an un-owned copy
+// would mutate into unrelated bytes on the next request through that worker.
+// (A string used as a map key copies the header, never the backing array; Org
+// clones for exactly this reason.)
+func Mint(c *zip.Ctx, p Principal) {
+	c.Fiber().Locals(mintedSlot{}, Principal{
+		Org:  strings.Clone(p.Org),
+		User: strings.Clone(p.User),
+	})
+}
+
+// Minted returns the principal the boundary attested, and false when no boundary
+// ran on this request. An anonymous request that DID pass a boundary returns
+// (zero, true): "we looked, and there is nobody" is a different fact from "nobody
+// looked", and only the caller knows which of them it can live with.
+func Minted(c *zip.Ctx) (Principal, bool) {
+	p, ok := c.Fiber().Locals(mintedSlot{}).(Principal)
+	return p, ok
 }
 
 // orgKey names the request-scoped slot the validated org crosses the typed-op
@@ -411,7 +463,7 @@ func ValidatedProject(c *zip.Ctx) (string, bool) {
 // the caller's own org and falls back when it is absent.
 //
 // Empty when IAM minted no account: a token from before the claim shipped, or an
-// opaque hk-/sk- key that never carried claims. Payer's legacy rule answers for
+// opaque pk-/sk- key that never carried claims. Payer's legacy rule answers for
 // those, so an empty value bills the same account it always did — never nothing.
 // The value is CLONED because it is retained past the request for telemetry.
 func BillingAccount(c *zip.Ctx) string {

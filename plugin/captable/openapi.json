@@ -19,8 +19,8 @@
     "/v1/captable/classes": {
       "get": {
         "operationId": "get_v1_captable_classes",
-        "summary": "ListShareClasses returns the caller org's share classes, in creation order.",
-        "description": "ListShareClasses returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
+        "summary": "Returns the caller org's share classes, in creation order.",
+        "description": "Returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
         "tags": [
           "captable"
         ],
@@ -72,8 +72,8 @@
     "/v1/captable/company": {
       "get": {
         "operationId": "get_v1_captable_company",
-        "summary": "GetCompany returns the caller org's cap-table company record.",
-        "description": "GetCompany returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
+        "summary": "Returns the caller org's cap-table company record.",
+        "description": "Returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
         "tags": [
           "captable"
         ],
@@ -92,8 +92,8 @@
       },
       "put": {
         "operationId": "put_v1_captable_company",
-        "summary": "UpdateCompany sets the caller org's company name and incorporation details.",
-        "description": "UpdateCompany sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.",
+        "summary": "Sets the caller org's company name and incorporation details.",
+        "description": "Sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.",
         "tags": [
           "captable"
         ],
@@ -124,8 +124,8 @@
     "/v1/captable/convertibles": {
       "get": {
         "operationId": "get_v1_captable_convertibles",
-        "summary": "ListConvertibles returns the caller org's convertible notes, newest first.",
-        "description": "ListConvertibles returns the caller org's convertible notes, newest first. A\nnote's principal sits OUTSIDE issued equity until it converts, so it is not\npart of the share counts.",
+        "summary": "Returns the caller org's convertible notes, newest first.",
+        "description": "Returns the caller org's convertible notes, newest first. A\nnote's principal sits OUTSIDE issued equity until it converts, so it is not\npart of the share counts.",
         "tags": [
           "captable"
         ],
@@ -154,8 +154,8 @@
     "/v1/captable/convertibles/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_convertibles_id",
-        "summary": "DeleteConvertible removes one of the caller org's convertible notes, taking its principal out of the cap table's unconverted-instrument totals.",
-        "description": "DeleteConvertible removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
+        "summary": "Removes one of the caller org's convertible notes, taking its principal out of the cap table's unconverted-instrument totals.",
+        "description": "Removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -187,8 +187,8 @@
     "/v1/captable/investments": {
       "get": {
         "operationId": "get_v1_captable_investments",
-        "summary": "ListInvestments returns the caller org's investments, newest first.",
-        "description": "ListInvestments returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.",
+        "summary": "Returns the caller org's investments, newest first.",
+        "description": "Returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.",
         "tags": [
           "captable"
         ],
@@ -209,8 +209,8 @@
     "/v1/captable/options": {
       "get": {
         "operationId": "get_v1_captable_options",
-        "summary": "ListOptions returns the caller org's option grants, newest first.",
-        "description": "ListOptions returns the caller org's option grants, newest first. Each row is\njoined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED\nor CANCELLED are listed here but do not dilute the cap table.",
+        "summary": "Returns the caller org's option grants, newest first.",
+        "description": "Returns the caller org's option grants, newest first. Each row is\njoined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED\nor CANCELLED are listed here but do not dilute the cap table.",
         "tags": [
           "captable"
         ],
@@ -239,8 +239,8 @@
     "/v1/captable/options/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_options_id",
-        "summary": "DeleteOption removes one of the caller org's option grants, taking its shares out of the cap table's granted-options and fully-diluted counts.",
-        "description": "DeleteOption removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
+        "summary": "Removes one of the caller org's option grants, taking its shares out of the cap table's granted-options and fully-diluted counts.",
+        "description": "Removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -272,8 +272,8 @@
     "/v1/captable/plans": {
       "get": {
         "operationId": "get_v1_captable_plans",
-        "summary": "ListEquityPlans returns the caller org's equity plans, newest first.",
-        "description": "ListEquityPlans returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
+        "summary": "Returns the caller org's equity plans, newest first.",
+        "description": "Returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
         "tags": [
           "captable"
         ],
@@ -302,8 +302,8 @@
     "/v1/captable/rounds": {
       "get": {
         "operationId": "get_v1_captable_rounds",
-        "summary": "ListRounds returns the caller org's fundraising rounds, newest first.",
-        "description": "ListRounds returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.",
+        "summary": "Returns the caller org's fundraising rounds, newest first.",
+        "description": "Returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.",
         "tags": [
           "captable"
         ],
@@ -332,8 +332,8 @@
     "/v1/captable/rounds/{id}": {
       "get": {
         "operationId": "get_v1_captable_rounds_id",
-        "summary": "GetRound returns one of the caller org's fundraising rounds together with every investment written into it, oldest first.",
-        "description": "GetRound returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
+        "summary": "Returns one of the caller org's fundraising rounds together with every investment written into it, oldest first.",
+        "description": "Returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
         "tags": [
           "captable"
         ],
@@ -365,8 +365,8 @@
     "/v1/captable/rounds/{id}/close": {
       "post": {
         "operationId": "post_v1_captable_rounds_id_close",
-        "summary": "CloseRound closes one of the caller org's fundraising rounds, recording the close date and moving its status to CLOSED.",
-        "description": "CloseRound closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
+        "summary": "Closes one of the caller org's fundraising rounds, recording the close date and moving its status to CLOSED.",
+        "description": "Closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
         "tags": [
           "captable"
         ],
@@ -428,8 +428,8 @@
     "/v1/captable/safes": {
       "get": {
         "operationId": "get_v1_captable_safes",
-        "summary": "ListSafes returns the caller org's SAFEs, newest first.",
-        "description": "ListSafes returns the caller org's SAFEs, newest first. A SAFE is a simple\nagreement for future equity: its capital sits OUTSIDE issued equity until it\nconverts, so it is not part of the share counts.",
+        "summary": "Returns the caller org's SAFEs, newest first.",
+        "description": "Returns the caller org's SAFEs, newest first. A SAFE is a simple\nagreement for future equity: its capital sits OUTSIDE issued equity until it\nconverts, so it is not part of the share counts.",
         "tags": [
           "captable"
         ],
@@ -458,8 +458,8 @@
     "/v1/captable/safes/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_safes_id",
-        "summary": "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the cap table's unconverted-instrument totals.",
-        "description": "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
+        "summary": "Removes one of the caller org's SAFEs, taking its capital out of the cap table's unconverted-instrument totals.",
+        "description": "Removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
         "tags": [
           "captable"
         ],
@@ -491,8 +491,8 @@
     "/v1/captable/shares": {
       "get": {
         "operationId": "get_v1_captable_shares",
-        "summary": "ListShares returns the caller org's share certificates, newest first.",
-        "description": "ListShares returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.",
+        "summary": "Returns the caller org's share certificates, newest first.",
+        "description": "Returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.",
         "tags": [
           "captable"
         ],
@@ -531,8 +531,8 @@
     "/v1/captable/shares/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_shares_id",
-        "summary": "DeleteShare removes one of the caller org's share certificates, taking its shares out of the cap table's outstanding and fully-diluted counts.",
-        "description": "DeleteShare removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
+        "summary": "Removes one of the caller org's share certificates, taking its shares out of the cap table's outstanding and fully-diluted counts.",
+        "description": "Removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -564,8 +564,8 @@
     "/v1/captable/stakeholders": {
       "get": {
         "operationId": "get_v1_captable_stakeholders",
-        "summary": "ListStakeholders returns the caller org's stakeholders, newest first.",
-        "description": "ListStakeholders returns the caller org's stakeholders, newest first. The\nresponse is a bare JSON array, not an envelope. Each row carries the holder's\ncontact and address fields alongside the company's name.",
+        "summary": "Returns the caller org's stakeholders, newest first.",
+        "description": "Returns the caller org's stakeholders, newest first. The\nresponse is a bare JSON array, not an envelope. Each row carries the holder's\ncontact and address fields alongside the company's name.",
         "tags": [
           "captable"
         ],
@@ -597,8 +597,8 @@
     "/v1/captable/stakeholders/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_stakeholders_id",
-        "summary": "DeleteStakeholder removes one of the caller org's stakeholders.",
-        "description": "DeleteStakeholder removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
+        "summary": "Removes one of the caller org's stakeholders.",
+        "description": "Removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -628,8 +628,8 @@
       },
       "patch": {
         "operationId": "patch_v1_captable_stakeholders_id",
-        "summary": "UpdateStakeholder changes one of the caller org's stakeholders.",
-        "description": "UpdateStakeholder changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
+        "summary": "Changes one of the caller org's stakeholders.",
+        "description": "Changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
         "tags": [
           "captable"
         ],
@@ -671,8 +671,8 @@
     "/v1/captable/summary": {
       "get": {
         "operationId": "get_v1_captable_summary",
-        "summary": "GetSummary computes the caller org's cap table.",
-        "description": "GetSummary computes the caller org's cap table. It answers who owns what on a\nfully-diluted basis: outstanding shares, granted options, per-stakeholder\nownership percentages, each share class's authorized versus issued position,\nand the capital sitting on SAFEs and convertible notes that have not yet\nconverted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and\nCANCELLED grants are excluded, so equity issued through an exercised option is\nnever counted twice.",
+        "summary": "Computes the caller org's cap table.",
+        "description": "Computes the caller org's cap table. It answers who owns what on a\nfully-diluted basis: outstanding shares, granted options, per-stakeholder\nownership percentages, each share class's authorized versus issued position,\nand the capital sitting on SAFEs and convertible notes that have not yet\nconverted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and\nCANCELLED grants are excluded, so equity issued through an exercised option is\nnever counted twice.",
         "tags": [
           "captable"
         ],

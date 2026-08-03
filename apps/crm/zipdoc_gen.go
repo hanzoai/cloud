@@ -10,28 +10,28 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/crm/companies/:id", zip.Doc{
-		Description: "DeleteCompany removes one of the caller org's companies and answers 204. Any\ncontact or opportunity in the org that referenced it keeps existing with the\nreference cleared, so nothing is left pointing at a company that is gone.",
+		Description: "Removes one of the caller org's companies and answers 204. Any\ncontact or opportunity in the org that referenced it keeps existing with the\nreference cleared, so nothing is left pointing at a company that is gone.",
 		Fields: map[string]string{
 			"ref.id": "ID is the record to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"comp_1"}`),
 	})
 	zip.Describe("DELETE /v1/crm/contacts/:id", zip.Doc{
-		Description: "DeleteContact removes one of the caller org's contacts and answers 204. Any\nopportunity in the org that named it point of contact keeps existing with\nthat reference cleared.",
+		Description: "Removes one of the caller org's contacts and answers 204. Any\nopportunity in the org that named it point of contact keeps existing with\nthat reference cleared.",
 		Fields: map[string]string{
 			"ref.id": "ID is the record to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"cont_1"}`),
 	})
 	zip.Describe("DELETE /v1/crm/opportunities/:id", zip.Doc{
-		Description: "DeleteOpportunity removes one of the caller org's deals and answers 204.",
+		Description: "Removes one of the caller org's deals and answers 204.",
 		Fields: map[string]string{
 			"ref.id": "ID is the record to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"oppo_1"}`),
 	})
 	zip.Describe("GET /v1/crm/applications", zip.Doc{
-		Description: "ListApplications returns the org's Startup Program applications, newest first.\nEach carries its AI screen and its stage history; a stage narrows the page to\none pipeline stage.",
+		Description: "Returns the org's Startup Program applications, newest first.\nEach carries its AI screen and its stage history; a stage narrows the page to\none pipeline stage.",
 		Fields: map[string]string{
 			"Application.company":           "Company is the applicant's company name.",
 			"Application.companyId":         "CompanyID is the CRM Company minted for this lead at intake, so the startup\nalso appears in the org's standard CRM tabs. Empty when that best-effort\nprojection did not run.",
@@ -69,7 +69,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/crm/applications/:id", zip.Doc{
-		Description: "GetApplication returns one Startup Program application with its AI screen and stage history.\nAn id belonging to another org reads as not found.",
+		Description: "Returns one Startup Program application with its AI screen and stage history.\nAn id belonging to another org reads as not found.",
 		Fields: map[string]string{
 			"Application.company":           "Company is the applicant's company name.",
 			"Application.companyId":         "CompanyID is the CRM Company minted for this lead at intake, so the startup\nalso appears in the org's standard CRM tabs. Empty when that best-effort\nprojection did not run.",
@@ -106,7 +106,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"appl_1"}`),
 	})
 	zip.Describe("GET /v1/crm/companies", zip.Doc{
-		Description: "ListCompanies returns the caller org's companies, most recently updated first.",
+		Description: "Returns the caller org's companies, most recently updated first.",
 		Fields: map[string]string{
 			"Company.arr":                  "ARR is annual recurring revenue in minor units (cents) of Currency.",
 			"Company.city":                 "City is the head-office city.",
@@ -126,7 +126,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/crm/companies/:id", zip.Doc{
-		Description: "GetCompany returns one of the caller org's companies. An id belonging to\nanother org reads as not found.",
+		Description: "Returns one of the caller org's companies. An id belonging to\nanother org reads as not found.",
 		Fields: map[string]string{
 			"Company.arr":                  "ARR is annual recurring revenue in minor units (cents) of Currency.",
 			"Company.city":                 "City is the head-office city.",
@@ -146,7 +146,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"comp_1"}`),
 	})
 	zip.Describe("GET /v1/crm/contacts", zip.Doc{
-		Description: "ListContacts returns the caller org's contacts, most recently updated first.\nA companyId narrows the page to the people at that company.",
+		Description: "Returns the caller org's contacts, most recently updated first.\nA companyId narrows the page to the people at that company.",
 		Fields: map[string]string{
 			"Contact.city":          "City is where the person is based.",
 			"Contact.companyId":     "CompanyID links the contact to one of the org's companies; empty when the\ncontact stands alone, and cleared when its company is deleted. A write\nnaming a company the org does not own is refused with 422.",
@@ -166,7 +166,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/crm/contacts/:id", zip.Doc{
-		Description: "GetContact returns one of the caller org's contacts. An id belonging to\nanother org reads as not found.",
+		Description: "Returns one of the caller org's contacts. An id belonging to\nanother org reads as not found.",
 		Fields: map[string]string{
 			"Contact.city":         "City is where the person is based.",
 			"Contact.companyId":    "CompanyID links the contact to one of the org's companies; empty when the\ncontact stands alone, and cleared when its company is deleted. A write\nnaming a company the org does not own is refused with 422.",
@@ -185,7 +185,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"cont_1"}`),
 	})
 	zip.Describe("GET /v1/crm/opportunities", zip.Doc{
-		Description: "ListOpportunities returns the caller org's deals, most recently updated first.\nA stage narrows the page to one pipeline stage.",
+		Description: "Returns the caller org's deals, most recently updated first.\nA stage narrows the page to one pipeline stage.",
 		Fields: map[string]string{
 			"Opportunity.amount":           "Amount is the deal value in minor units (cents) of Currency.",
 			"Opportunity.closeDate":        "CloseDate is the expected close as a unix second (0 = unset).",
@@ -203,7 +203,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/crm/opportunities/:id", zip.Doc{
-		Description: "GetOpportunity returns one of the caller org's deals. An id belonging to\nanother org reads as not found.",
+		Description: "Returns one of the caller org's deals. An id belonging to\nanother org reads as not found.",
 		Fields: map[string]string{
 			"Opportunity.amount":           "Amount is the deal value in minor units (cents) of Currency.",
 			"Opportunity.closeDate":        "CloseDate is the expected close as a unix second (0 = unset).",
@@ -228,7 +228,7 @@ func init() {
 		},
 	})
 	zip.Describe("PATCH /v1/crm/applications/:id", zip.Doc{
-		Description: "PatchApplication moves one Startup Program application through the pipeline. The\nmove is recorded on the application's timeline, attributed to the calling\nstaff user: it may advance exactly one stage, go back to any earlier stage,\nreject from any non-rejected stage, or reopen a rejected application to\n`applied`; anything else is refused. Rejecting requires a reason. A note with\nno stage change is still recorded.",
+		Description: "Moves one Startup Program application through the pipeline. The\nmove is recorded on the application's timeline, attributed to the calling\nstaff user: it may advance exactly one stage, go back to any earlier stage,\nreject from any non-rejected stage, or reopen a rejected application to\n`applied`; anything else is refused. Rejecting requires a reason. A note with\nno stage change is still recorded.",
 		Fields: map[string]string{
 			"Application.company":           "Company is the applicant's company name.",
 			"Application.companyId":         "CompanyID is the CRM Company minted for this lead at intake, so the startup\nalso appears in the org's standard CRM tabs. Empty when that best-effort\nprojection did not run.",
@@ -267,8 +267,11 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"appl_1","stage":"rejected","reason":"not a fit this round"}`),
 	})
+	zip.Describe("POST /v1/crm/applications", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("POST /v1/crm/companies", zip.Doc{
-		Description: "CreateCompany adds a company to the caller's org and answers 201 with the stored record.\nA name is required; an empty currency defaults to USD.",
+		Description: "Adds a company to the caller's org and answers 201 with the stored record.\nA name is required; an empty currency defaults to USD.",
 		Fields: map[string]string{
 			"Company.arr":                     "ARR is annual recurring revenue in minor units (cents) of Currency.",
 			"Company.city":                    "City is the head-office city.",
@@ -298,7 +301,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"MaxPower Inc","domainName":"maxpower.ai","employees":42}`),
 	})
 	zip.Describe("POST /v1/crm/contacts", zip.Doc{
-		Description: "CreateContact adds a person to the caller's org and answers 201 with the stored record.\nOne of firstName, lastName or email is required, and a companyId must name a\ncompany in the same org.",
+		Description: "Adds a person to the caller's org and answers 201 with the stored record.\nOne of firstName, lastName or email is required, and a companyId must name a\ncompany in the same org.",
 		Fields: map[string]string{
 			"Contact.city":            "City is where the person is based.",
 			"Contact.companyId":       "CompanyID links the contact to one of the org's companies; empty when the\ncontact stands alone, and cleared when its company is deleted. A write\nnaming a company the org does not own is refused with 422.",
@@ -326,7 +329,7 @@ func init() {
 		Example: json.RawMessage(`{"firstName":"Dave","lastName":"Lorenzini","email":"dave@maxpower.ai"}`),
 	})
 	zip.Describe("POST /v1/crm/opportunities", zip.Doc{
-		Description: "CreateOpportunity adds a deal to the caller's org and answers 201 with the stored record.\nA name is required; the stage defaults to NEW; companyId and pointOfContactId\nmust name records in the same org.",
+		Description: "Adds a deal to the caller's org and answers 201 with the stored record.\nA name is required; the stage defaults to NEW; companyId and pointOfContactId\nmust name records in the same org.",
 		Fields: map[string]string{
 			"Opportunity.amount":           "Amount is the deal value in minor units (cents) of Currency.",
 			"Opportunity.closeDate":        "CloseDate is the expected close as a unix second (0 = unset).",
@@ -350,7 +353,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Enterprise Deal","amount":5000000,"stage":"PROPOSAL"}`),
 	})
 	zip.Describe("PUT /v1/crm/companies/:id", zip.Doc{
-		Description: "UpdateCompany replaces one of the caller org's companies. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required.",
+		Description: "Replaces one of the caller org's companies. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required.",
 		Fields: map[string]string{
 			"Company.arr":                     "ARR is annual recurring revenue in minor units (cents) of Currency.",
 			"Company.city":                    "City is the head-office city.",
@@ -380,7 +383,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"comp_1","name":"MaxPower Inc","employees":64}`),
 	})
 	zip.Describe("PUT /v1/crm/contacts/:id", zip.Doc{
-		Description: "UpdateContact replaces one of the caller org's contacts. Every writable field\nis taken from the request, so a field the request omits is CLEARED — send the\nwhole record. One of firstName, lastName or email is required.",
+		Description: "Replaces one of the caller org's contacts. Every writable field\nis taken from the request, so a field the request omits is CLEARED — send the\nwhole record. One of firstName, lastName or email is required.",
 		Fields: map[string]string{
 			"Contact.city":            "City is where the person is based.",
 			"Contact.companyId":       "CompanyID links the contact to one of the org's companies; empty when the\ncontact stands alone, and cleared when its company is deleted. A write\nnaming a company the org does not own is refused with 422.",
@@ -408,7 +411,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"cont_1","firstName":"Dave","jobTitle":"CTO"}`),
 	})
 	zip.Describe("PUT /v1/crm/opportunities/:id", zip.Doc{
-		Description: "UpdateOpportunity replaces one of the caller org's deals. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required and the stage must be a pipeline\nstage.",
+		Description: "Replaces one of the caller org's deals. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required and the stage must be a pipeline\nstage.",
 		Fields: map[string]string{
 			"Opportunity.amount":           "Amount is the deal value in minor units (cents) of Currency.",
 			"Opportunity.closeDate":        "CloseDate is the expected close as a unix second (0 = unset).",

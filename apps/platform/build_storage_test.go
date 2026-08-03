@@ -168,3 +168,65 @@ func TestBuildPodCanReachTheObjectStore(t *testing.T) {
 		t.Errorf("job labels are %v; countActiveBuilds selects on hanzo.ai/build + hanzo.ai/org", j)
 	}
 }
+
+// capOf returns a named volume's emptyDir sizeLimit, failing if the volume is
+// absent or is not an emptyDir. It exists so the rule below is stated once per
+// job rather than once per volume — the assertion is the same sentence three
+// times, and the third one is the one somebody forgets.
+func capOf(t *testing.T, job *unstructured.Unstructured, vol string) any {
+	t.Helper()
+	vols, _, err := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "volumes")
+	if err != nil {
+		t.Fatalf("volumes: %v", err)
+	}
+	for _, v := range vols {
+		m, ok := v.(map[string]any)
+		if !ok || m["name"] != vol {
+			continue
+		}
+		ed, ok := m["emptyDir"].(map[string]any)
+		if !ok {
+			t.Fatalf("volume %q is not an emptyDir: %v", vol, m)
+		}
+		return ed["sizeLimit"]
+	}
+	t.Fatalf("no %q volume in the Job", vol)
+	return nil
+}
+
+// EVERY emptyDir this package creates must be capped, not just the build cache.
+//
+// An uncapped emptyDir does not fail its own pod — it is charged to the NODE's
+// ephemeral storage, so it fills the runner rootfs, trips DiskPressure, and the
+// kubelet evicts the pod's NEIGHBOURS. A job whose own resource limits are never
+// exceeded can take down every other job on the node, which is why the cap has
+// to be on the volume and not only on the container. Not hypothetical: three of
+// eight runners sat under DiskPressure with 70 finished build Jobs still holding
+// their pods and emptyDirs, and a release was Evicted mid-flight for "node was
+// low on resource: ephemeral-storage".
+//
+// The build cache was capped first, because it is the one that grew. This is the
+// same assertion for all three, as a table, because the other two were left as
+// `emptyDir: {}` — and "the one nobody got to yet" is the entire shape of the
+// incident. A fourth job without a cap fails here rather than on a runner at 3am.
+func TestEveryJobEmptyDirIsCapped(t *testing.T) {
+	k := fakeK8s()
+	for _, c := range []struct {
+		name string
+		job  *unstructured.Unstructured
+		vol  string
+		want string
+	}{
+		{"build", k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}), "buildkitd", buildCacheLimit},
+		{"artifact", k.artifactJobSpec("pf-art-t", "https://github.com/hanzoai/runner", "main", "v1", "base", "put", nil), "w", artifactWorkspaceLimit},
+		{"smoke", k.smokeJobSpec("pf-smoke-t", "registry.hanzo.ai/hanzoai/runner:v1", "kms-key"), "data", smokeDataLimit},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := capOf(t, c.job, c.vol); got != c.want {
+				t.Fatalf("%s job's %q emptyDir sizeLimit is %v, want %q — uncapped, this job "+
+					"evicts its neighbours off the node while staying inside its own limits",
+					c.name, c.vol, got, c.want)
+			}
+		})
+	}
+}

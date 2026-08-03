@@ -249,3 +249,27 @@ func (r *recorder) ExportSpans(_ context.Context, s []sdktrace.ReadOnlySpan) err
 	return nil
 }
 func (r *recorder) Shutdown(context.Context) error { return nil }
+
+// TestWireEndpointFor pins the span-destination table, including the leg whose
+// absence dropped every span the sibling plugin processes produced: cloud runs its
+// subsystems as separate processes in one pod, the plane sink registers in exactly
+// one of them, and the rest had no route AND no endpoint.
+func TestWireEndpointFor(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		zapEP  string
+		legacy string
+		inproc bool
+		want   string
+	}{
+		{"explicit ZAP endpoint wins", "o11y.hanzo.svc:4317", "http://otel:4318", true, "o11y.hanzo.svc:4317"},
+		{"legacy OTLP means ship remotely", "", "http://otel:4318", true, defaultZapEndpoint},
+		{"sink in a sibling process -> pod loopback", "", "", true, localPlaneEndpoint},
+		{"no destination at all -> in-process only", "", "", false, ""},
+	} {
+		if got := wireEndpointFor(tc.zapEP, tc.legacy, tc.inproc); got != tc.want {
+			t.Errorf("%s: wireEndpointFor(%q,%q,%v) = %q, want %q",
+				tc.name, tc.zapEP, tc.legacy, tc.inproc, got, tc.want)
+		}
+	}
+}

@@ -127,6 +127,28 @@ func mountSections(zapp *zip.App, o ops) {
 	zip.Get(zapp, "/v1/pricing/policy", o.policy)
 	zip.Get(zapp, "/v1/pricing/tools", o.tools)
 	zip.Get(zapp, "/v1/pricing/gpu", o.gpu)
+	zip.Get(zapp, "/v1/pricing/datastore", o.datastore)
+	zip.Get(zapp, "/v1/pricing/services", o.services)
+}
+
+// GetServicePricing returns the managed-service rate cards — Search, Crawl,
+// Vector, Console and Managed Services — each with its own tiers, and some with
+// usage rates or a comparison table. It is the section as authored, un-gated.
+//
+// These are DISPLAY rate cards: what a product costs, not what a plan grants. No
+// entitlement or limit fields ride here, so nothing can bill off them.
+func (o ops) services(ctx context.Context, _ *pricingNoInput) (*pricingBlob, error) {
+	return sectionOf[pricingBlob](ctx, o, "services")
+}
+
+// GetDatastorePricing returns the Hanzo Datastore rate card: the tier list, the
+// per-GB storage and egress usage rates, the annual discount and the trial. It is
+// the section as authored, un-gated — no provider identity appears in it.
+//
+// The route was missing while the data existed, so this 404d and every visitor to
+// hanzo.ai's Infrastructure tab was told pricing was "temporarily unavailable".
+func (o ops) datastore(ctx context.Context, _ *pricingNoInput) (*pricingBlob, error) {
+	return sectionOf[pricingBlob](ctx, o, "datastore")
 }
 
 // ---- infrastructure ----

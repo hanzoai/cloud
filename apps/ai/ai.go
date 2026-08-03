@@ -93,7 +93,7 @@ func aiProse() map[string]openapi.Said {
 // callback is left alone — cloud leaves one nil exactly when that subsystem
 // isn't co-resident, and the module's own fallback applies.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	// One provider, one wire. cloud.Serve installed the process-global tracer
+	// One provider, one wire. cloud.Listen installed the process-global tracer
 	// provider before MountAll; DECLARE it to ai here so ai emits every gen_ai span
 	// through THAT provider instead of forking its own. Without this ai's
 	// object.InitTelemetry (run inside ai.Mount, just below) finds no exporter
@@ -228,6 +228,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		}
 		return f(ctx, subject, namespace)
 	})
+	// The MCP door's inventory, registered BEFORE the wildcard below so the
+	// reading order is the routing order (see mcp.go — the router would pick the
+	// static path over All("/v1/*") either way).
+	mountMCP(app)
 	// The door: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
 	// beego ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
 	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire

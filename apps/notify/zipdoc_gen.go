@@ -14,4 +14,13 @@ func init() {
 			"notifyHealth.status":  "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
 		},
 	})
+	zip.Describe("POST /v1/notify/send", zip.Doc{
+		Description: "Returns the POST /v1/notify/send handler. pinnedChannel is set on the\nper-channel convenience routes (/send/sms, /send/email) and left empty on the\ngeneric route, which reads the channel from the body.",
+	})
+	zip.Describe("POST /v1/notify/send/email", zip.Doc{
+		Description: "Returns the POST /v1/notify/send handler. pinnedChannel is set on the\nper-channel convenience routes (/send/sms, /send/email) and left empty on the\ngeneric route, which reads the channel from the body.",
+	})
+	zip.Describe("POST /v1/notify/send/sms", zip.Doc{
+		Description: "Returns the POST /v1/notify/send handler. pinnedChannel is set on the\nper-channel convenience routes (/send/sms, /send/email) and left empty on the\ngeneric route, which reads the channel from the body.",
+	})
 }

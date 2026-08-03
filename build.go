@@ -12,7 +12,6 @@ import (
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/openapi"
@@ -65,11 +64,9 @@ import (
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
 
-	// Credentials, before anything opens a store. cek memoizes the resolved master
-	// on the FIRST use, and the first use is edge.New at the bottom of this
-	// function — so a key installed any later is installed after the once has
-	// already cached "no key", and every subsequent open fails while the log
-	// cheerfully reports a key was active. That was the bug. Boot is
+	// Credentials, before anything opens a store. The first open is edge.New at the
+	// bottom of this function, and an open with no master installed fails — so a key
+	// installed any later is installed after the store that needed it. Boot is
 	// sync.Once-guarded and Serve calls it earlier still; this call is what covers
 	// every caller that builds deps directly.
 	logCredz(logger, credz.Boot(DataDir()))
@@ -147,6 +144,12 @@ func BuildDeps(cfg *Config) Deps {
 		logger.Warn("gateway policy store degraded to static-only", "err", err)
 	}
 	deps.GatewayPolicy = gp
+
+	// The edge traffic sensor the abuse gate writes and /v1/gateway/traffic reads.
+	// One object per process, hung off deps for the same reason the policy store
+	// is: two of them would be two answers to "who is calling", and the middleware
+	// and the subsystem would each be sure of a different one.
+	deps.Traffic = edge.NewTraffic()
 
 	return deps
 }
@@ -636,7 +639,7 @@ func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) Commer
 // can only access read-only endpoints … use a secret key (sk-)". So the COMPLETIONS
 // resolver must refuse it (it would only 403 chat), while the EMBED resolver accepts
 // it (embeddings ARE read-only). pk- is the IAM key family's read-only member
-// (hk-/sk-/pk-/fw_/hz_; clients/admission). This ONE predicate is the split's crux:
+// (pk-/sk-; clients/admission). This ONE predicate is the split's crux:
 // it kept the intermittent-403 bug — a pk- embed key riding the shared completions
 // client — from ever recurring, wherever the key comes from.
 func publishableKey(apiKey string) bool {
@@ -652,7 +655,7 @@ func publishableKey(apiKey string) bool {
 // this resolver NEVER rides a pk- key — that is the embed credential (pickEmbedClient).
 // Preference order:
 //  1. Static SECRET-key HTTP gateway when a base URL AND a completions-capable
-//     (non-pk-) static key are configured — an explicit operator override (sk-/hk-).
+//     (non-pk-) static key are configured — an explicit operator override (sk-).
 //     A pk- key here is REFUSED (it would only 403 chat) and the resolver falls
 //     through to M2M — THE fix for the intermittent publishable-key 403 on bot replies.
 //  2. M2M HTTP gateway when a base URL AND the binary's IAM identity are present
@@ -858,10 +861,10 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []
 	_ = members.Start(context.Background()) // initial refresh populates Members() before first request
 
 	cipher := durableCipher(cfg, log)
-	if cipher == nil && cek.Encrypting() {
-		// The master that satisfied cek must decode here too, so this is a genuine
-		// misconfig, not a dev path: never ship plaintext snapshots AND never silently
-		// drop durability — fail closed and log LOUDLY for the replica count.
+	if cipher == nil && sqlitedrv.EncryptionAvailable() {
+		// The master that keys the local file must decode here too, so this is a
+		// genuine misconfig, not a dev path: never ship plaintext snapshots AND never
+		// silently drop durability — fail closed and log LOUDLY for the replica count.
 		disabledDurability(log, multiReplica, "encryption-capable build but no durable cipher (would ship plaintext snapshots)")
 		return nil, nil
 	}

@@ -1,7 +1,7 @@
 package analytics
 
 // outcomes.go — the MEASUREMENT seam the experiments primitive composes. An
-// experiment's per-variant metric is read from the ONE event plane (event.event),
+// experiment's per-variant metric is read from the ONE event plane (event.fact),
 // never a second event store: outcomes are already captured by distinct_id
 // (capture.go), so an experiment only needs to fold them per subject and join each
 // subject to its flags variant. This is the scientific-growth loop's MEASUREMENT
@@ -26,7 +26,7 @@ type SubjectOutcome struct {
 }
 
 // Outcomes returns, for one org over [start,end), each subject's exposure +
-// conversion for an experiment's two event names, read from event.event. It is the
+// conversion for an experiment's two event names, read from event.fact. It is the
 // measurement seam the experiments primitive composes: flags assignment joins to
 // these outcomes by distinct_id. The plane is never created here — its DDL owner is
 // hanzoai/o11y — so a missing table surfaces as the query's own error.
@@ -63,7 +63,7 @@ func Outcomes(ctx context.Context, org, exposureEvent, metricEvent string, start
 	return out, nil
 }
 
-// outcomesSQL builds the per-subject exposure/conversion query over event.event —
+// outcomesSQL builds the per-subject exposure/conversion query over event.fact —
 // the pure, I/O-free core so the isolation invariant is testable without a warehouse.
 // TENANCY: org rides eventsWhere as a BOUND parameter (never interpolated) and every
 // event name is BOUND too, so nothing user-derived escapes into SQL. The SELECT
@@ -74,13 +74,13 @@ func outcomesSQL(org, exposureEvent, metricEvent string, start, end time.Time) (
 	if exposureEvent == "" {
 		args := append([]any{metricEvent}, wargs...)
 		return "SELECT distinct_id AS subject, 1 AS exposed, " +
-			"maxIf(1, name = ?) AS converted FROM " + eventsTable +
+			"maxIf(1, name = ?) AS converted FROM " + factTable +
 			" WHERE " + where + " GROUP BY distinct_id", args
 	}
 	args := append([]any{exposureEvent, metricEvent}, wargs...)
 	args = append(args, exposureEvent, metricEvent)
 	return "SELECT distinct_id AS subject, " +
 		"maxIf(1, name = ?) AS exposed, " +
-		"maxIf(1, name = ?) AS converted FROM " + eventsTable +
+		"maxIf(1, name = ?) AS converted FROM " + factTable +
 		" WHERE " + where + " AND name IN (?, ?) GROUP BY distinct_id", args
 }

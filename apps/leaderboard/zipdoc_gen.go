@@ -43,7 +43,7 @@ func init() {
 		Example: json.RawMessage(`{"scope":"personal","metric":"tokens","period":"week","limit":10}`),
 	})
 	zip.Describe("GET /v1/usage/leaderboard/optin", zip.Doc{
-		Description: "GetOptin returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
+		Description: "Returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
 		Fields: map[string]string{
 			"orgOptinView.canManage": "may the caller edit the org opt-in",
 			"userOptinView.canSet":   "false when the caller's identity can't be resolved",
@@ -52,7 +52,7 @@ func init() {
 	zip.Describe("POST /v1/usage/rollup/backfill", zip.Doc{
 		Description: "Backfill seeds the derived usage rollup from ledger history — the rows written\nbefore the incremental view existed, which that view can never capture. SuperAdmin\nonly. Because the rollup accumulates, a second unguarded run would double every\nday it re-reads, so it refuses with 409 when the rollup already holds rows unless\nforce=true is passed; forcing WILL double-count.",
 		Fields: map[string]string{
-			"backfillQuery.before":        "Before bounds the seed to ledger rows written before this RFC3339 instant.\nDefaults to now; pass the incremental view's creation instant so the seed and\nthe live view never overlap and double a day.",
+			"backfillQuery.before":        "Before bounds the seed to ledger rows written before this RFC3339 instant.\nDefaults to now, and is snapped down to UTC midnight — the rollup's grain, so\nthe seeded days and the guarded days are the same set. Pass the day the\nincremental view started capturing, so seed and view never share a day.",
 			"backfillQuery.force":         "Force must be exactly \"true\" to seed a rollup that already holds rows. It is\nspelled as a string, not a flag, because the guard has always compared this\nvalue literally — \"1\" and \"yes\" do NOT force.",
 			"backfillResult.forced":       "Forced is true when the caller overrode the already-populated guard.",
 			"backfillResult.seededBefore": "SeededBefore is the RFC3339 upper bound the seed actually used.",
@@ -61,7 +61,7 @@ func init() {
 		Example: json.RawMessage(`{"before":"2026-01-01T00:00:00Z"}`),
 	})
 	zip.Describe("PUT /v1/usage/leaderboard/optin", zip.Doc{
-		Description: "PutUserOptin sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
+		Description: "Sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
 		Fields: map[string]string{
 			"userOptinReq.handle":  "Handle is the display name shown on a listed row: 1-40 characters of letters,\ndigits, space, dot, underscore, apostrophe or hyphen. Left empty on a listing\nopt-in it defaults to the caller's username.",
 			"userOptinReq.listed":  "Listed publishes the caller's row to other viewers of the board when true, and\nanonymizes it when false.",
@@ -70,7 +70,7 @@ func init() {
 		Example: json.RawMessage(`{"listed":true,"handle":"ada"}`),
 	})
 	zip.Describe("PUT /v1/usage/leaderboard/optin/org", zip.Doc{
-		Description: "PutOrgOptin sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
+		Description: "Sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
 		Fields: map[string]string{
 			"orgOptinReq.display":    "Display is the name shown for the org on that board: 1-40 characters of\nletters, digits, space, dot, underscore, apostrophe or hyphen. Left empty on a\nlisting opt-in it defaults to the org id.",
 			"orgOptinReq.listed":     "Listed publishes the org on the cross-org global board when true, and withdraws\nit when false.",

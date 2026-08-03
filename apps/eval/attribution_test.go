@@ -69,7 +69,7 @@ func seedRun(t *testing.T, app *zip.App, org, project, dataset, authz string) {
 // is stored ONLY as a non-reversible ref, and the plaintext key never appears.
 func TestTraceAttributionRecorded(t *testing.T) {
 	app, _ := mountApp(t)
-	const bearer = "Bearer hk-secret-key"
+	const bearer = "Bearer sk-secret-key"
 	seedRun(t, app, "o", "", "qa", bearer)
 
 	code, body := doProj(t, app, http.MethodGet, "/v1/evals/traces", "o", "", "", nil)
@@ -98,12 +98,12 @@ func TestTraceAttributionRecorded(t *testing.T) {
 	}
 
 	// The credential is stored ONLY as a SHA-256 ref — never plaintext.
-	want := sha256.Sum256([]byte("hk-secret-key"))
+	want := sha256.Sum256([]byte("sk-secret-key"))
 	if tr.APIKeyHash != hex.EncodeToString(want[:]) {
-		t.Fatalf("apiKeyHash = %q, want sha256(hk-secret-key)", tr.APIKeyHash)
+		t.Fatalf("apiKeyHash = %q, want sha256(sk-secret-key)", tr.APIKeyHash)
 	}
 	// The plaintext must not appear anywhere in the response body.
-	if bytes.Contains(body, []byte("hk-secret-key")) {
+	if bytes.Contains(body, []byte("sk-secret-key")) {
 		t.Fatalf("plaintext credential leaked into trace list: %s", body)
 	}
 }
@@ -113,7 +113,7 @@ func TestTraceAttributionRecorded(t *testing.T) {
 // the whole org (every project). Org stays the hard tenant boundary throughout.
 func TestTraceProjectIsolation(t *testing.T) {
 	app, _ := mountApp(t)
-	const bearer = "Bearer hk-test"
+	const bearer = "Bearer sk-test"
 
 	seedRun(t, app, "o", "alpha", "da", bearer) // project alpha
 	seedRun(t, app, "o", "beta", "db", bearer)  // project beta
@@ -157,12 +157,12 @@ func TestHashCredential(t *testing.T) {
 	if got := hashCredential("  "); got != "" {
 		t.Fatalf("blank credential must yield empty ref, got %q", got)
 	}
-	want := sha256.Sum256([]byte("hk-abc"))
-	if got := hashCredential("Bearer hk-abc"); got != hex.EncodeToString(want[:]) {
-		t.Fatalf("hashCredential(Bearer hk-abc) = %q", got)
+	want := sha256.Sum256([]byte("sk-abc"))
+	if got := hashCredential("Bearer sk-abc"); got != hex.EncodeToString(want[:]) {
+		t.Fatalf("hashCredential(Bearer sk-abc) = %q", got)
 	}
 	// Bearer-less raw token hashes the same as the Bearer-prefixed form.
-	if hashCredential("hk-abc") != hashCredential("Bearer hk-abc") {
+	if hashCredential("sk-abc") != hashCredential("Bearer sk-abc") {
 		t.Fatal("raw and Bearer-prefixed tokens must hash identically")
 	}
 }

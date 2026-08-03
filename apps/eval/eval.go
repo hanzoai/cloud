@@ -57,7 +57,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -167,10 +166,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("eval.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("eval.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "evals.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("eval.Mount: open metastore: %w", err)
 	}
@@ -448,7 +444,7 @@ func Shutdown() error {
 //     strips any client copy on ingress — so c.User() is the one unforgeable
 //     "this request carried a validated identity" signal. Its Phase-1 residual
 //     RESTORES a client-supplied X-Org-Id on the NO-principal path (bearer-less,
-//     opaque hk-/sk- API key, or invalid bearer). Without this gate, a
+//     opaque pk-/sk- API key, or invalid bearer). Without this gate, a
 //     direct-to-pod / in-cluster caller could send `X-Org-Id: victim` with no
 //     bearer and read/write/DELETE the victim org's datasets (golden outputs +
 //     PII), scores and runs — a cross-tenant break (Red HIGH). This is the SAME

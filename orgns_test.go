@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/namespace"
 )
 
 // TestOnlyOrgnsBuildsANamespace is the structural half of the isolation
@@ -27,11 +29,38 @@ import (
 // It is a source assertion because that is the only kind that survives code
 // nobody has written yet.
 func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
-	// The Namespace constructors, and Of, which derives one from a billing
-	// subject. NewGroup and MustGroup are deliberately absent: a group is CODE a
-	// package declares once, not data that arrives with a request, and a group
-	// alone names no database.
-	build := regexp.MustCompile(`\bnamespace\.(Org|User|Repo|System|MustOrg|MustUser|MustRepo|Parse|Of)\(`)
+	// Every constructor that turns a VALUE INTO A NAME: the entity ones, Parse, Of
+	// (from a billing subject) and OrgProject (from an org and a project, which is
+	// what OrgNamespace below IS). OrgProject and MustOrgProject are on this list
+	// precisely BECAUSE they are the friendly ones — they fold a hostile name into
+	// a safe segment, which makes namespace.MustOrgProject(c.Query("org")) compile,
+	// run, and quietly name somebody else's database.
+	//
+	// namespace.System is deliberately absent, and it is the one exception the
+	// argument survives: it takes NO INPUT. There is one deployment and one system
+	// namespace, it is a different KIND from every entity namespace, and no string
+	// anywhere can be folded into it — so a store naming the deployment's own
+	// partition is naming a constant, not an entity, and nothing about "what can a
+	// database be named after" is at stake. Every platform store says so where it
+	// opens, which is where a reader asks.
+	//
+	// namespace.Sanitize is absent for a different reason, and NewGroup and
+	// MustGroup with it: none of them returns a Namespace. A slug is a string until
+	// a constructor accepts it, and a group is CODE a package declares once rather
+	// than data that arrives with a request.
+	build := regexp.MustCompile(`\bnamespace\.(Org|User|Repo|MustOrg|MustUser|MustRepo|Parse|Of|OrgProject|MustOrgProject)\(`)
+
+	// The doors. orgns.go is cloud's, and holds the argument. finance.go is the
+	// SECOND and last, and it is one because cloud imports it: a package below
+	// cloud cannot call OrgNamespace, so before this it carried its own org→slug
+	// regexp instead — a second injective slugger the gate could not see, which is
+	// strictly worse than the call it now makes. Its org is principal.Org, the same
+	// validated claim every OrgNamespace caller passes. A THIRD door is not a thing
+	// to add; move the caller above cloud, or take the namespace as a parameter.
+	doors := map[string]bool{
+		"orgns.go":                true,
+		"apps/finance/finance.go": true,
+	}
 
 	root, err := filepath.Abs(".")
 	if err != nil {
@@ -49,7 +78,10 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 			return nil
 		}
 		name := d.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "orgns.go" {
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
+		if rel, _ := filepath.Rel(root, path); doors[filepath.ToSlash(rel)] {
 			return nil
 		}
 		b, err := os.ReadFile(path)
@@ -60,7 +92,7 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 			rel, _ := filepath.Rel(root, path)
 			line := 1 + strings.Count(string(b[:loc[0]]), "\n")
 			t.Errorf("%s:%d builds a namespace outside orgns.go — every namespace must come "+
-				"from OrgNamespace or PlatformNamespace so the entity naming the file is "+
+				"from OrgNamespace so the entity naming the file is "+
 				"provably the validated one", rel, line)
 		}
 		return nil
@@ -70,10 +102,10 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 	}
 }
 
-// TestOrgNamespaceRefusesWhatSanitizeOrgRefuses pins the door shut on the inputs
+// TestOrgNamespaceRefusesWhatSanitizeRefuses pins the door shut on the inputs
 // that must never become a database name. Each of these would, if admitted, be a
 // file two distinct orgs could share or a segment that escapes the data dir.
-func TestOrgNamespaceRefusesWhatSanitizeOrgRefuses(t *testing.T) {
+func TestOrgNamespaceRefusesWhatSanitizeRefuses(t *testing.T) {
 	for _, tc := range []struct{ org, project, why string }{
 		{"", "", "an empty org names no entity"},
 		{"acme ", "", "a trailing space folds onto acme after any TrimSpace"},
@@ -88,7 +120,7 @@ func TestOrgNamespaceRefusesWhatSanitizeOrgRefuses(t *testing.T) {
 }
 
 // TestOrgNamespaceNeutralisesTraversal pins what happens to an org that looks
-// like a path. It is not refused — SanitizeOrg folds every separator and dot to
+// like a path. It is not refused — namespace.Sanitize folds every separator and dot to
 // "-" and then disambiguates with a hash of the raw owner, so "../etc" becomes
 // one safe segment that is still distinct from an org actually named "etc". The
 // property that matters is not "rejected" but "cannot leave its directory", and
@@ -105,9 +137,9 @@ func TestOrgNamespaceNeutralisesTraversal(t *testing.T) {
 		if id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
 			t.Errorf("OrgNamespace(%q) = %q, whose id %q can leave its directory", org, ns, id)
 		}
-		key, err := nsKey(ns, "widget")
+		key, err := namespace.Key(ns, "widget")
 		if err != nil {
-			t.Fatalf("nsKey(%q): %v", ns, err)
+			t.Fatalf("namespace.Key(%q): %v", ns, err)
 		}
 		if want := path.Join(orgsRoot, id, "widget.db"); key != want {
 			t.Errorf("OrgNamespace(%q) rendered to %q, want %q", org, key, want)
@@ -129,9 +161,9 @@ func TestOrgNamespaceNeutralisesTraversal(t *testing.T) {
 }
 
 // TestOrgNamespaceIsInjective proves the property the whole boundary rests on:
-// two distinct orgs never name one database. SanitizeOrg carries it (every fold
+// two distinct orgs never name one database. namespace.Sanitize carries it (every fold
 // is disambiguated by a hash of the raw owner) and namespace.Org's case fold
-// cannot undo it, because SanitizeOrg has already lowercased everything it emits.
+// cannot undo it, because namespace.Sanitize has already lowercased everything it emits.
 func TestOrgNamespaceIsInjective(t *testing.T) {
 	seen := map[string]string{}
 	for _, org := range []string{
@@ -153,11 +185,11 @@ func TestOrgNamespaceIsInjective(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if ns == PlatformNamespace() {
+		if ns == namespace.System() {
 			t.Fatalf("org %q named the platform partition", org)
 		}
-		if k, err := nsKey(ns, "kms"); err == nil {
-			if p, _ := nsKey(PlatformNamespace(), "kms"); k == p {
+		if k, err := namespace.Key(ns, "kms"); err == nil {
+			if p, _ := namespace.Key(namespace.System(), "kms"); k == p {
 				t.Fatalf("org %q rendered to the platform partition's file %q", org, k)
 			}
 		}

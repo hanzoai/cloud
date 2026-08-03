@@ -1,6 +1,8 @@
 package o11y
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -29,12 +31,11 @@ const sentryPrefix = "/v1/sentry"
 // the upstream module it ends with) shows up here without anyone remembering to
 // list it.
 //
-// Two branches are taken deliberately, and they are the SAME two `bin/o11y
-// openapi` takes (mk/plugin.mk runs it with GIT_SSH_ADDR and nothing else):
-// with no Datastore DSN the runtime installs its reverse-proxy fallback instead
-// of the in-process engine, and mountEventIngest returns before registering
-// POST /v1/event/ingestion. Probes are off because they knock on in-cluster
-// Services a test has no business reaching.
+// One branch is taken deliberately, and it is the SAME one `bin/o11y openapi`
+// takes (mk/plugin.mk runs it with GIT_SSH_ADDR and nothing else): with no
+// Datastore DSN the runtime installs its reverse-proxy fallback instead of the
+// in-process engine. Probes are off because they knock on in-cluster Services a
+// test has no business reaching.
 func surfaceApp(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("O11Y_PROBES", "false")
@@ -55,13 +56,11 @@ func surfaceApp(t *testing.T) *zip.App {
 // task. Addresses are written the way the DOCUMENT writes them, which is the
 // identity every projection keys on.
 var untypedByDesign = map[string]string{
-	"GET /v1/o11y/vm/query": "returns VictoriaMetrics' own status code and its Prometheus envelope " +
-		"VERBATIM (vmProxy: c.Bytes(status, body)). A typed op answers its ONE declared status and " +
-		"marshals a Go value, so a VM 4xx would become a 200 and the envelope would be re-shaped.",
-	"GET /v1/o11y/vm/query_range": "same verbatim status+envelope passthrough as /vm/query, over the " +
-		"range form. Its `values` entries are [unixSeconds, \"sample\"] pairs — a heterogeneous JSON " +
-		"array no Go struct field can hold without becoming []any, which publishes a schema the wire " +
-		"does not have.",
+	// The two /v1/o11y/vm/* entries that stood here are GONE, and their absence is
+	// the point: they were untyped because they answered VictoriaMetrics' status
+	// code and its Prometheus envelope verbatim, and a wire fact about a store we
+	// no longer run cannot keep a route out of the registry. What is still
+	// measured is served typed, at /v1/o11y/availability (availability.go).
 	"POST /v1/o11y/query": "a reverse proxy into the o11y runtime's v3 engine route (builderQueryHandler: " +
 		"zip.AdaptNetHTTP, r.URL.Path rewritten to /api/v3/query). Request body, query string, upstream " +
 		"status, headers and body all ride through untouched; there is no Go type for \"whatever the " +
@@ -213,7 +212,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
-// TestUntypedRoutesKeepTheirWire measures the four wire facts the reasons above
+// TestUntypedRoutesKeepTheirWire measures the wire facts the reasons above
 // CLAIM, on the real router, so the refusals are evidence rather than assertion.
 // Each is a fact a typed op could not answer: a text/plain body, a 200 over a
 // body that is not JSON, and a non-JSON content type on the replay read.
@@ -234,10 +233,21 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 		return resp
 	}
 
-	t.Run("the receipt answers 200 text/plain over a body that is not JSON", func(t *testing.T) {
+	t.Run("the receipt answers text/plain over a body that is not JSON, and never 4xx", func(t *testing.T) {
+		// An egress that accepts, because the status code now reports DELIVERY
+		// rather than arrival: without one this answers 503, which is the point
+		// of that change and is pinned in alerts_egress_test.go.
+		swapEgress(t, egress{name: "test", send: func(context.Context, string) error { return nil }})
+
 		resp := send(t, http.MethodPost, "/v1/o11y/alerts/page-critical", "{not json at all")
 		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("unparseable receipt = %d, want 200 — any other status makes Alertmanager retry forever", resp.StatusCode)
+			t.Fatalf("unparseable receipt = %d, want 200", resp.StatusCode)
+		}
+		// The wire fact this test exists for: a malformed payload is RECORDED,
+		// never REFUSED. A 4xx would make Alertmanager retry it forever, and the
+		// delivery still happened — which is the fact being recorded.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			t.Fatalf("unparseable body was refused with %d — Alertmanager retries a 4xx forever", resp.StatusCode)
 		}
 		if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
 			t.Errorf("Content-Type = %q, want text/plain — a typed op would answer JSON", ct)
@@ -254,11 +264,161 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 		}
 	})
 
-	t.Run("the VM proxy stays SuperAdmin-only and allowlisted", func(t *testing.T) {
-		// Not the passthrough itself (that needs a live VM), but the two refusals
-		// that prove this handler — not a typed binder — owns the boundary.
-		if resp := send(t, http.MethodGet, "/v1/o11y/vm/query?query=up", ""); resp.StatusCode != http.StatusForbidden {
-			t.Errorf("non-admin /vm/query = %d, want 403", resp.StatusCode)
+}
+
+// ---- the graft, measured -------------------------------------------------
+
+// TestGraftQualifiesEveryPublishedType is the deliverable of the graft, and the
+// reason it exists: the fleet's schema namespace is FLAT, o11y names its types
+// after ordinary nouns, and five other apps name theirs the same way.
+//
+// Unqualified, o11y's Service (a traced APM service) and ingress's Service (a
+// backend pool) are one name with two shapes, and so are Account, Channel, Event,
+// Host and TLSConfig — six collisions that made openapi.Weave refuse the whole
+// fleet document. It refused correctly: a generated SDK binds whichever shape the
+// merge read last.
+//
+// Origin is what answers it, unconditionally rather than on collision, so a name
+// published here is never a function of who else is in the room. The assertion is
+// therefore TOTAL — every schema, not a sample — because a rule that holds for
+// most names is not this rule.
+func TestGraftQualifiesEveryPublishedType(t *testing.T) {
+	reg, err := openapi.Typed(surfaceApp(t))
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	if len(reg.Schemas) == 0 {
+		t.Fatal("the composed document carries no component schemas at all")
+	}
+	var bare []string
+	for name := range reg.Schemas {
+		if !strings.HasPrefix(name, "o11y.") {
+			bare = append(bare, name)
 		}
-	})
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("%d schema(s) published unqualified: %s\n"+
+			"Every type o11y publishes must arrive through the graft, which qualifies it by the app "+
+			"that declared it. An unqualified name is a name another app may also claim.",
+			len(bare), strings.Join(bare, ", "))
+	}
+	// The six that actually collided, named so a regression says WHICH contract
+	// broke rather than counting.
+	for _, n := range []string{
+		"o11y.Service", "o11y.TLSConfig", "o11y.Account",
+		"o11y.Channel", "o11y.Event", "o11y.Host",
+	} {
+		if _, ok := reg.Schemas[n]; !ok {
+			t.Errorf("components.schemas has no %q", n)
+		}
+		if _, collides := reg.Schemas[strings.TrimPrefix(n, "o11y.")]; collides {
+			t.Errorf("%q is still published unqualified — it collides with another app's", strings.TrimPrefix(n, "o11y."))
+		}
+	}
+}
+
+// TestGraftLeavesAddressesAlone is the other half: a graft changes what the fleet
+// CALLS o11y's types and nothing about where o11y answers or what an SDK method
+// is named. Paths are absolute and untouched; operationIds are published SDK
+// method names and rewriting one at compose time would make it a function of
+// where the app is deployed.
+func TestGraftLeavesAddressesAlone(t *testing.T) {
+	served, typed := o11yOps(t)
+	for _, want := range []string{
+		"GET /v1/o11y/logs",         // cloud's own org-pinned read, at its own address
+		"GET /v1/o11y/metrics",      // ditto
+		"POST /v1/o11y/query_range", // ditto — the three both halves claim
+		"GET /v1/o11y/version",      // the module's, relayed to the runtime
+		"POST /v1/o11y/alerts/last", // not a route: the negative control below
+	} {
+		if want == "POST /v1/o11y/alerts/last" {
+			if served[want] {
+				t.Errorf("%s is served, and this list's negative control assumes it is not", want)
+			}
+			continue
+		}
+		if !served[want] {
+			t.Errorf("%s is not served by the composed router", want)
+		}
+	}
+	reg, err := openapi.Typed(surfaceApp(t))
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	for key, op := range reg.Ops {
+		if op.OperationID == "" {
+			continue
+		}
+		if strings.Contains(op.OperationID, "o11y.") {
+			t.Errorf("%s has operationId %q — the origin qualifies TYPES, never addresses", key, op.OperationID)
+		}
+	}
+	if len(typed) == 0 {
+		t.Fatal("no typed o11y ops in the registry at all")
+	}
+}
+
+// TestHostRoutesStillWinTheThreeSharedAddresses is the routing fact the graft had
+// to preserve, and the one it made local.
+//
+// cloud's scope.go is the ONE owner of /v1/o11y/{logs,metrics} and
+// /v1/o11y/query_range — it pins the caller's org SERVER-SIDE into the query —
+// and hanzoai/o11y's table declares all three too, relaying them to the runtime
+// unpinned. First-registered is what makes the tenant-pinned handler the one that
+// answers. Before the graft that depended on the host's global mount order; now
+// both halves are registered on one app, in the order written in mount(), and
+// this is the gate on that order.
+//
+// Each case below is the ANSWER only cloud's half can give, measured on the real
+// mount. Under surfaceApp there is no datastore and the runtime's upstream is
+// unreachable, so the module's half answers 502 on all three — which is what this
+// distinguishes against, and what it does answer if mount() registers the module
+// first (verified by mutation).
+func TestHostRoutesStillWinTheThreeSharedAddresses(t *testing.T) {
+	app := surfaceApp(t)
+
+	ask := func(t *testing.T, method, path string, org bool) (int, string) {
+		t.Helper()
+		rq := httptest.NewRequest(method, path, strings.NewReader("{}"))
+		rq.Header.Set("Content-Type", "application/json")
+		if org {
+			rq.Header.Set("X-Org-Id", "acme")
+			rq.Header.Set("X-User-Id", "u_acme")
+		}
+		resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 20 * time.Second, FailOnTimeout: true})
+		if err != nil {
+			t.Fatalf("Test %s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read %s %s: %v", method, path, err)
+		}
+		return resp.StatusCode, string(b)
+	}
+
+	// The org-pinned log read answers FROM THE NATIVE STORE: 200 and cloud's own
+	// body, naming the product it was asked for. The relay cannot reach a store.
+	if code, body := ask(t, http.MethodGet, "/v1/o11y/logs?product=kms", true); code != http.StatusOK ||
+		!strings.Contains(body, `"product":"kms"`) {
+		t.Errorf("GET /v1/o11y/logs = %d %s, want 200 from scope.go's org-pinned read", code, body)
+	}
+
+	// The org-pinned RED read refuses with ITS OWN sentence about ITS OWN
+	// dependency. A 502 here is the relay failing to reach the runtime instead.
+	if code, body := ask(t, http.MethodGet, "/v1/o11y/metrics?product=kms", true); !strings.Contains(body, "o11y metrics: datastore not connected") {
+		t.Errorf("GET /v1/o11y/metrics = %d %s, want scope.go's own datastore refusal", code, body)
+	}
+
+	// query_range is cloud's UNTYPED proxy, so an anonymous caller meets gate()
+	// directly and gets gate's own flat envelope. The module's op is typed, so the
+	// same refusal would arrive re-wrapped as a zip.HTTPError — the two shapes
+	// door_test.go's note describes. The shape is the tell; the status is 403 either
+	// way.
+	if code, body := ask(t, http.MethodPost, "/v1/o11y/query_range", false); code != http.StatusForbidden ||
+		!strings.Contains(body, `"msg"`) {
+		t.Errorf("POST /v1/o11y/query_range = %d %s, want 403 in gate()'s own {\"status\":\"error\",\"msg\":…} "+
+			"envelope — a zip.HTTPError body means the module's typed op answered", code, body)
+	}
 }

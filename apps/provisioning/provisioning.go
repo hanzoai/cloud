@@ -43,7 +43,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -52,6 +51,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -216,10 +216,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if z == nil {
 		return fmt.Errorf("provisioning.Mount: %T does not expose the typed-op registry", app)
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("provisioning.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "provisioning.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("provisioning.Mount: open store: %w", err)
 	}
@@ -538,7 +535,7 @@ func tenant(c *zip.Ctx) (string, bool) {
 	if !principal.Validated(c) {
 		return "", false // no validated principal — refuse the forgeable data path
 	}
-	org := sanitizeOrg(c.Org())
+	org := namespace.Sanitize(c.Org())
 	if org != "" {
 		return org, true
 	}
@@ -547,16 +544,6 @@ func tenant(c *zip.Ctx) (string, bool) {
 	}
 	return "", false
 }
-
-// sanitizeOrg reduces a gateway org id to a lowercase [a-z0-9-] slug that is
-// INJECTIVE in the raw owner. It delegates to cloud.SanitizeOrg — the ONE org-slug
-// normalizer for the tenant layer — so the slug this control plane keys its
-// bucket/DB names on is byte-identical to the one cloud.OrgDB folds every
-// per-tenant SQLite path through (and to what S3/KMS/knowledge derive). The
-// isolation-boundary rationale (refuse unsafe-rune owners; identity on a clean
-// DNS-1123 label; else fold + "-"+SHA-256(raw)[:8], with the suffixed-shape
-// fast-path exclusion) lives with the implementation in cloud/orgdb.go.
-func sanitizeOrg(s string) string { return cloud.SanitizeOrg(s) }
 
 // orgHash returns a fixed-width, collision-resistant tag for an org slug: the
 // first 16 hex chars (64 bits) of SHA-256(org). The FIXED WIDTH is the whole
@@ -607,12 +594,6 @@ func BucketName(org, name string) string { return bucketName(physicalName(org, n
 // friendly names. Derived through bucketName so it matches the real bucket names
 // exactly, INCLUDING the '_'→'-' fold of the org-hash separator.
 func BucketPrefix(org string) string { return bucketName("o"+orgHash(org)) + "-" }
-
-// SanitizeOrg exports the org-slug normalizer so clients/s3 derives the caller's
-// org tag from the SAME reduced slug this control plane keys on — otherwise a
-// bucket created here (keyed on the sanitized org) would be invisible to a file
-// manager that hashed the raw org, and vice-versa.
-func SanitizeOrg(org string) string { return sanitizeOrg(org) }
 
 func genID() (string, error) {
 	tok, err := genToken(12)

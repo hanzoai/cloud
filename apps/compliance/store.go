@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/idv"
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -16,30 +18,20 @@ import (
 // tenant is indistinguishable from one that does not exist (no cross-tenant probe).
 var errNotFound = errors.New("compliance: not found")
 
-// Store persists compliance records. ONE SQLite file ({DataDir}/compliance.db),
-// opened through cek so subject PII (name/email) is ENCRYPTED AT REST. Tenant
-// isolation is a physical property: `org` is a column on every table and every read
-// and write is filtered by it. MaxOpenConns(1) serializes writes.
+// Store persists compliance records. ONE SQLite file — the system namespace's
+// "compliance" — born encrypted, so subject PII (name/email) is ENCRYPTED AT
+// REST. Tenant isolation is a physical property: `org` is a column on every table
+// and every read and write is filtered by it. MaxOpenConns(1) serializes writes.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "compliance", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open compliance store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

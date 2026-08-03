@@ -470,8 +470,11 @@ func TestSiteHostLaneNeverConsultsHandle(t *testing.T) {
 		app := carveApp(t, "hanzo")
 		code := postHost(t, app, "yadota.hanzo.app", d.path, commerceFor(t, d),
 			map[string]string{"X-User-Id": "user-dave", "X-Org-Id": "acme"})
-		if code != http.StatusOK {
-			t.Fatalf("site-host door %s with raw identity headers = %d, want 200", d.path, code)
+		// 401: the projection refused the whole payload, which is the point — had the
+		// carve consulted handle, those raw headers would have bought full capability
+		// and the batch would have reached the write core (503) and been STORED.
+		if code != http.StatusUnauthorized {
+			t.Fatalf("site-host door %s with raw identity headers = %d, want 401", d.path, code)
 		}
 		if got := w.tenants(t); len(got) != 0 {
 			t.Errorf("site-host door %s STORED a commerce payload under %v — the site-host lane "+
@@ -625,7 +628,7 @@ func TestEveryDoorFailsClosedOnUnresolvableCredential(t *testing.T) {
 		app := mountApp(t)
 		stubResolver(t, func(string) (string, bool) { return "", false })
 		for _, hdr := range []map[string]string{
-			{"x-api-key": "hk-nosuch"},
+			{"x-api-key": "sk-nosuch"},
 			{"Authorization": "Bearer pk-nosuch"},
 			{"x-hanzo-ingest-key": "pk-nosuch"},
 		} {
@@ -654,13 +657,7 @@ func TestEveryDoorProjectsTheAnonymousCaller(t *testing.T) {
 					"credential-less caller must never write revenue/groupId/personId into a real org", d.path, host)
 				continue
 			}
-			if code != http.StatusOK {
-				t.Errorf("door %s on host %q = %d (%s), want 200 all-dropped", d.path, host, code, body)
-				continue
-			}
-			if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-				t.Errorf("door %s on host %q receipt = %+v, want accepted:0 dropped:1", d.path, host, r)
-			}
+			refusedAnon(t, "door "+d.path+" on host "+host, code, body)
 		}
 	}
 }
@@ -677,14 +674,14 @@ func TestEveryDoorAdmitsAValidatedPrincipal(t *testing.T) {
 	}
 }
 
-// TestEveryDoorAdmitsAResolvedKey: the same for out-of-band keys — a resolvable hk-
+// TestEveryDoorAdmitsAResolvedKey: the same for out-of-band keys — a resolvable sk-
 // and a resolvable pk- both reach the write core at full capability on every door.
 func TestEveryDoorAdmitsAResolvedKey(t *testing.T) {
 	for _, d := range doors {
 		app := mountApp(t)
 		stubResolver(t, func(string) (string, bool) { return "acme", true })
 		for _, hdr := range []map[string]string{
-			{"x-api-key": "hk-good"},
+			{"x-api-key": "sk-good"},
 			{"Authorization": "Bearer pk-good"},
 		} {
 			if code := postKeyed(t, app, d.path, "", commerceFor(t, d), hdr); code != http.StatusServiceUnavailable {

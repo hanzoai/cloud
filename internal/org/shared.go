@@ -49,10 +49,6 @@ type (
 )
 
 var (
-	// NewReplicator binds the DB at key to its store slot.
-	NewReplicator = replica.NewReplicator
-	// WithEncryption seals every pushed snapshot with the org's per-org key.
-	WithEncryption = replica.WithEncryption
 	// Owner returns the single writer for orgID (HRW), fail-closed on empty.
 	Owner = ha.Owner
 	// IsOwner reports whether selfID owns the writer for orgID.

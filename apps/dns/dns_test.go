@@ -298,7 +298,7 @@ func TestDegenerateURLFailsClosed(t *testing.T) {
 
 // An API KEY caller is refused BY CLOUD, and the DNS plane is never touched.
 //
-// CallerBearer returns "" for pk-/sk-/hk- (middleware_identity: an API key is not a
+// CallerBearer returns "" for pk-/sk- (middleware_identity: an API key is not a
 // JWT, and the OIDC-gated DNS plane cannot validate one). The relay used to set the
 // Authorization header only when that was non-empty, so an API-key request was
 // forwarded with NO credential at all and the caller received the DNS plane's own
@@ -311,7 +311,7 @@ func TestDegenerateURLFailsClosed(t *testing.T) {
 // upstream do it, because X-Org-Id is stamped from the validated org and a
 // headerless forward would arrive carrying a tenant claim with no proof of identity.
 func TestAPIKeyCallerIsRefusedAndNeverReachesUpstream(t *testing.T) {
-	for _, key := range []string{"hk-live-abc123", "sk-live-abc123", "pk-live-abc123"} {
+	for _, key := range []string{"sk-live-abc123", "pk-live-abc123"} {
 		t.Run(key[:3], func(t *testing.T) {
 			up := newStubDNS()
 			defer up.Close()

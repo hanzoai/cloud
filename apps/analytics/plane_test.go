@@ -59,22 +59,22 @@ func TestBrowserErrorReachesTheErrorPlane(t *testing.T) {
 	f := factOf(t, w)
 	if f.signal != signalError {
 		t.Fatalf("a thrown error published signal %q, want %q — it lands in %s, and that is the "+
-			"whole reason that table exists", f.signal, signalError, signalError.table())
+			"whole reason that table exists", f.signal, signalError, factTable)
 	}
 	if f.org != "acme" {
 		t.Fatalf("fact org = %q, want acme — an unattributed error row is readable by every tenant", f.org)
 	}
-	if f.fault == nil {
-		t.Fatal("error fact carries no fault body — the message, class and group ARE the error")
+	if f.signal != signalError {
+		t.Fatalf("signal = %q, want error", f.signal)
 	}
-	if !strings.Contains(f.fault.message, "Loading chunk 7192 failed") {
-		t.Errorf("fault message = %q, want the thrown text", f.fault.message)
+	if !strings.Contains(f.message, "Loading chunk 7192 failed") {
+		t.Errorf("fault message = %q, want the thrown text", f.message)
 	}
-	if f.fault.class != "ChunkLoadError" {
-		t.Errorf("fault class = %q, want ChunkLoadError", f.fault.class)
+	if f.class != "ChunkLoadError" {
+		t.Errorf("fault class = %q, want ChunkLoadError", f.class)
 	}
-	if strings.TrimSpace(f.fault.group) == "" {
-		t.Error("fault carries no group — group leads event.error's ORDER BY, so an ungrouped " +
+	if strings.TrimSpace(f.issue) == "" {
+		t.Error("fault carries no issue — issue is what an issue list groups by, so an ungrouped " +
 			"error is one an issue list cannot assemble")
 	}
 
@@ -106,26 +106,23 @@ func TestThePublishedFaultIsScrubbed(t *testing.T) {
 		t.Fatalf("error ingest = %d (%s), want 200", code, resp)
 	}
 	f := factOf(t, w)
-	if f.fault == nil {
-		t.Fatal("no fault on the published error fact")
-	}
-	published := f.fault.message + " " + strings.Join(frameFiles(f.fault), " ")
+	published := f.message + " " + strings.Join(frameFiles(f), " ")
 	for _, secret := range []string{"z@hanzo.ai", "abcdef0123456789"} {
 		if strings.Contains(published, secret) {
 			t.Errorf("%q reached the published fault: %q", secret, published)
 		}
 	}
-	if !strings.Contains(f.fault.message, "login failed") {
-		t.Errorf("redaction ate the message itself: %q", f.fault.message)
+	if !strings.Contains(f.message, "login failed") {
+		t.Errorf("redaction ate the message itself: %q", f.message)
 	}
-	if f.fault.class != "TypeError" {
-		t.Errorf("fault class = %q, want TypeError", f.fault.class)
+	if f.class != "TypeError" {
+		t.Errorf("fault class = %q, want TypeError", f.class)
 	}
 }
 
 // frameFiles is every file path the fault's frames carry — the other place free text
 // reaches a column, since a bundler emits a source URL with a query string on it.
-func frameFiles(f *fault) []string {
+func frameFiles(f fact) []string {
 	out := make([]string, 0, len(f.frames))
 	for _, fr := range f.frames {
 		out = append(out, fr.file)
@@ -163,7 +160,7 @@ func TestOneAdmissionOneProjection(t *testing.T) {
 			t.Errorf("fact %q carries org %q, want acme", f.id, f.org)
 		}
 	}
-	if got[signalEvent] != 2 || got[signalError] != 1 {
+	if got[signalAct] != 2 || got[signalError] != 1 {
 		t.Errorf("signals published = %v, want 2 event + 1 error", got)
 	}
 }
@@ -209,7 +206,7 @@ func TestLandableIsExactlyTheWriterSet(t *testing.T) {
 	// (env, temporality, metric_name, fingerprint) hashes two orgs reporting the same
 	// metric name and labels into ONE series. A writer would interleave their samples —
 	// a cross-tenant write. See writers (warehouse.go).
-	if landableSignals[signalMetric] {
+	if landableSignals[signalSample] {
 		t.Error("the door accepts metrics — event.metric has no org column, so landing one is a " +
 			"cross-tenant write and not a feature")
 	}
@@ -218,21 +215,22 @@ func TestLandableIsExactlyTheWriterSet(t *testing.T) {
 // TestMetricIsRefusedNotAccepted is the other half, at the door. Answering 200
 // {"accepted":1} to something stored nowhere is a lie whether the discard happens in the
 // handler or four hops later on a stream nothing drains; the receipt has to say what
-// actually happened. It stays 200 because the request was well-formed and the batch may
-// carry other signals that DID land — `dropped` is the field that already means "this one
-// did not", and a second refusal mechanism beside it would be one too many.
+// actually happened.
+//
+// It used to stay 200, on the argument that the request was well-formed and the batch
+// MAY carry other signals that did land. When it does, it still 200s — that is
+// TestAMixedBatchDropsOnlyTheMetric below, and the reason the rule is `accepted == 0`
+// rather than `dropped > 0`. But when the batch is ONE metric, nothing landed at all,
+// and "well-formed" is not the question a caller is asking. `dropped` was the field that
+// already meant "this one did not" and no client ever read it, which is how three
+// separate ingest outages stayed invisible. So the status carries it: 400, because this
+// caller HAS capability and it is the body that has nowhere to go.
 func TestMetricIsRefusedNotAccepted(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
 	code, resp := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme",
 		`{"batch":[{"type":"metric","metric":{"name":"page_load_ms","value":812}}]}`)
-	if code != http.StatusOK {
-		t.Fatalf("metric ingest = %d (%s), want 200 with an honest receipt", code, resp)
-	}
-	if !strings.Contains(string(resp), `"accepted":0`) || !strings.Contains(string(resp), `"dropped":1`) {
-		t.Fatalf("metric receipt = %s, want accepted:0 dropped:1 — a 200 that means 'discarded' "+
-			"is the bug", resp)
-	}
+	refused(t, "metric ingest", code, resp, http.StatusBadRequest, "unroutable_events")
 	if len(w.facts) != 0 {
 		t.Errorf("published %d metric facts onto a subject no writer drains", len(w.facts))
 	}
@@ -255,8 +253,8 @@ func TestAMixedBatchDropsOnlyTheMetric(t *testing.T) {
 	if !strings.Contains(string(resp), `"accepted":1`) || !strings.Contains(string(resp), `"dropped":1`) {
 		t.Fatalf("mixed receipt = %s, want accepted:1 dropped:1", resp)
 	}
-	if f := factOf(t, w); f.signal != signalEvent {
-		t.Errorf("surviving fact is %s, want %s", f.signal, signalEvent)
+	if f := factOf(t, w); f.signal != signalAct {
+		t.Errorf("surviving fact is %s, want %s", f.signal, signalAct)
 	}
 }
 

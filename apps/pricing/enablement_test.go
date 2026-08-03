@@ -56,7 +56,7 @@ func TestEnablement_TriStateVisibility(t *testing.T) {
 // bypass an off kill switch or touch a ga item — it only ever adds an org to a
 // BETA item's list.
 func TestEnablement_OptInRefusesNonBeta(t *testing.T) {
-	c, err := openCatalog(":memory:")
+	c, err := openCatalog(t.TempDir())
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

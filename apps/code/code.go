@@ -113,7 +113,7 @@ func routes(app cloud.Router, s *service) error {
 	// The Bridge FIRST, bounded to the subtree code owns: a typed op receives only
 	// a context, so the validated org has to be parked there, and fiber runs
 	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Serve installs one app-wide too; nesting is harmless, and
+	// never run. cloud.Listen installs one app-wide too; nesting is harmless, and
 	// having it here is what makes this package's own tests — which mount on a
 	// bare app — exercise the same tenancy the binary does.
 	g.Use(cloud.Bridge())

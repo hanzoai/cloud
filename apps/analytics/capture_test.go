@@ -38,7 +38,7 @@ func TestNormalize_TenantAlwaysServerOrg(t *testing.T) {
 	if f.org != "acme" {
 		t.Fatalf("org = %q, want acme", f.org)
 	}
-	if f.name != "signup_completed" || f.signal != signalEvent || f.kind != kindTrack {
+	if f.name != "signup_completed" || f.signal != signalAct || f.kind != kindTrack {
 		t.Fatalf("name/signal/kind = %q/%q/%q", f.name, f.signal, f.kind)
 	}
 }
@@ -132,15 +132,10 @@ func TestBackdatedTimestampIsClamped(t *testing.T) {
 // is hanzoai/o11y; the pin over the DDL string moved there with the DDL.
 func TestRetentionIsNotARequestParameter(t *testing.T) {
 	for _, w := range writers {
-		for _, c := range w.columns {
+		for _, c := range w.table.columns {
 			if strings.Contains(c, "ingested_at") {
 				t.Errorf("%s writer binds ingested_at — the caller can set the column retention is measured from", w.signal)
 			}
-		}
-	}
-	for _, c := range envelopeColumns {
-		if c == "ingested_at" {
-			t.Error("ingested_at is in the envelope column list, so every writer binds the TTL anchor")
 		}
 	}
 }
@@ -332,14 +327,14 @@ func decodeProps(t *testing.T, s string) map[string]any {
 func TestEventWriterStatementTargetsThePlane(t *testing.T) {
 	var ew writer
 	for _, w := range writers {
-		if w.signal == signalEvent {
+		if w.signal == signalAct {
 			ew = w
 		}
 	}
-	stmt := ew.statement()
-	if !strings.HasPrefix(stmt, "INSERT INTO event.event (") {
-		t.Fatalf("stmt prefix: %s — the ONE product-event INSERT lands on the plane, "+
-			"never on the retired wide table", stmt)
+	stmt := ew.table.statement()
+	if !strings.HasPrefix(stmt, "INSERT INTO event.fact (") {
+		t.Fatalf("stmt prefix: %s — the ONE occurrence INSERT lands on the plane's one "+
+			"fact table, never on a per-signal table and never on the retired wide table", stmt)
 	}
 	if strings.Contains(stmt, "hanzo.events") {
 		t.Fatalf("the event writer still names the retired wide table: %s", stmt)
@@ -351,21 +346,29 @@ func TestEventWriterStatementTargetsThePlane(t *testing.T) {
 	}
 	// One placeholder per bound value: the el tuple binds six, every other
 	// envelope column one.
-	want := len(envelopeColumns) - 1 + 6
+	want := len(factColumns) - 1 + 6
 	if got := strings.Count(stmt, "?"); got != want {
 		t.Fatalf("placeholder count = %d, want %d", got, want)
 	}
+	// EVERY signal renders the IDENTICAL statement, which is the property that
+	// replaced "one table per signal": five writers cannot drift into five row
+	// shapes if they are literally the same string.
+	for _, w := range writers {
+		if got := w.table.statement(); got != stmt {
+			t.Fatalf("%s writer renders a different INSERT than act:\n%s\n%s", w.signal, got, stmt)
+		}
+	}
 }
 
-func TestEnvelopeColumnsMatchArgsWidth(t *testing.T) {
+func TestFactColumnsMatchArgsWidth(t *testing.T) {
 	// The positional args MUST be exactly as wide as the placeholder list, or the
 	// INSERT binds the wrong column — the one invariant that silently corrupts data.
 	// (el is one column bound as a six-element tuple, hence the +5.)
-	if got, want := len(envelopeArgs(message{})), len(envelopeColumns)+5; got != want {
-		t.Fatalf("envelopeArgs width = %d, want %d (envelopeColumns + el's extra 5)", got, want)
+	if got, want := len(factArgs(message{})), len(factColumns)+5; got != want {
+		t.Fatalf("factArgs width = %d, want %d (factColumns + el's extra 5)", got, want)
 	}
 	// org leads: the tenant is the first bound value of every fact insert.
-	args := envelopeArgs(message{Org: "acme"})
+	args := factArgs(message{Org: "acme"})
 	if args[0] != "acme" {
 		t.Fatalf("org arg = %v, want acme (server tenant, positional)", args[0])
 	}
@@ -415,12 +418,7 @@ func TestCapture_NoPrincipalGetsAnonymousLane(t *testing.T) {
 		t.Fatalf("no-principal POST %s want 503 (anonymous lane, admitted), got %d (%s)", p, code, body)
 	}
 	code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`)
-	if code != http.StatusOK {
-		t.Fatalf("no-principal commerce POST %s want 200 all-dropped, got %d (%s)", p, code, body)
-	}
-	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-		t.Fatalf("no-principal commerce POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
-	}
+	refusedAnon(t, "no-principal commerce POST "+p, code, body)
 }
 
 // TestCapture_ForgedOrgWithoutBearerBuysNothing: a raw X-Org-Id with no validated
@@ -435,12 +433,7 @@ func TestCapture_ForgedOrgWithoutBearerBuysNothing(t *testing.T) {
 	p := canonDoor
 	code, body := doBody(t, app, http.MethodPost, p, "", "maxpower",
 		`{"batch":[{"type":"event","event":"steal","groupId":"maxpower","personId":"victim","revenue":1}]}`)
-	if code != http.StatusOK {
-		t.Fatalf("forged-org-no-bearer POST %s want 200 all-dropped, got %d (%s)", p, code, body)
-	}
-	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-		t.Fatalf("forged-org-no-bearer POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
-	}
+	refusedAnon(t, "forged-org-no-bearer POST "+p, code, body)
 }
 
 func TestCapture_EmptyBatchOK(t *testing.T) {

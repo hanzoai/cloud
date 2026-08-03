@@ -21,8 +21,8 @@ import (
 // while answering 200.
 //
 // Same observable as anon_capability_test.go: 503 ⇒ ADMITTED (reached the write core,
-// no warehouse in the harness); 200 {accepted:0,dropped:N} ⇒ the projection refused it;
-// 403 ⇒ refused at the gate.
+// no warehouse in the harness); 401 ingest_key_required ⇒ the projection refused every
+// event; 403 ⇒ refused at the gate.
 
 // ── 1. the canonical wire could not say what kind it was ─────────────────────
 
@@ -72,13 +72,7 @@ func TestAnonCanonicalWireStillCannotWidenItsKind(t *testing.T) {
 				"the wire may now NAME a kind; it may not ADMIT one", kind)
 			continue
 		}
-		if code != http.StatusOK {
-			t.Errorf("anonymous kind %q = %d (%s), want 200 all-dropped", kind, code, got)
-			continue
-		}
-		if r := receipt(t, got); r.Accepted != 0 || r.Dropped != 1 {
-			t.Errorf("anonymous kind %q receipt = %+v, want accepted:0 dropped:1", kind, r)
-		}
+		refusedAnon(t, "anonymous kind "+kind, code, got)
 	}
 }
 
@@ -101,9 +95,9 @@ func postAuth(t *testing.T, app *zip.App, path, auth, body string) (int, []byte)
 
 // TestUnresolvableAccessKeyBearerRefuses: presented() names the carriers eventTenant
 // consults so the two cannot disagree about what "presented" MEANS — and they did.
-// ingestKey matches the bearer only for pk- (deliberately: an hk-/sk- bearer is IAM's
+// ingestKey matches the bearer only for pk- (deliberately: an sk- bearer is IAM's
 // to validate, and widening ingestKey would shadow the identity path). projectKey never
-// reads Authorization at all. So an hk-/sk- bearer that FAILED to resolve fell through
+// reads Authorization at all. So an sk- bearer that FAILED to resolve fell through
 // both and took the ANONYMOUS lane: 200, with the caller's rows filed under $public — a
 // partition its owner cannot read.
 //
@@ -116,7 +110,7 @@ func TestUnresolvableAccessKeyBearerRefuses(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
 	body := `{"batch":[{"type":"pageview","distinctId":"anon-1","path":"/pricing"}]}`
-	for _, key := range []string{"hk-nonexistent-0001", "sk-nonexistent-0001", "pk-nonexistent-0001"} {
+	for _, key := range []string{"sk-nonexistent-0001", "pk-nonexistent-0001"} {
 		for _, door := range doors {
 			code, got := postAuth(t, app, door.path, "Bearer "+key, body)
 			if code != http.StatusForbidden {
