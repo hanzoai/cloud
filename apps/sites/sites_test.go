@@ -604,3 +604,51 @@ func TestNotFoundAnswersDataRequestsInType(t *testing.T) {
 		}
 	}
 }
+
+// Behind the ingress the parsed URI host is EMPTY and the only carrier of the
+// customer-facing name is X-Forwarded-Host. Without this, siteSlug("") failed,
+// customCandidate("") failed, and every published site fell through to the API
+// pipeline — <slug>.hanzo.app served the console SPA and mounted the whole cloud
+// API under a customer's own hostname (measured live 2026-08-03).
+func TestMiddlewareResolvesFromForwardedHostWhenParsedHostIsEmpty(t *testing.T) {
+	fr := &fakeResolver{found: false}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+
+	// The shape behind the ingress: the parsed host is not a site host (the
+	// ingress' own name), and the customer-facing name rides X-Forwarded-Host.
+	// NOTE httptest synthesizes "localhost" for an empty Host, so an empty
+	// string cannot be used to express "no parsed host" — measured, not assumed.
+	req := httptest.NewRequest("GET", "http://localhost/index.html", nil)
+	req.Header.Set("X-Forwarded-Host", "quest.hanzo.app")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if resp.Header.Get("X-Sentinel") == "hit" {
+		t.Fatal("a published site fell through to the API pipeline — this is the console-instead-of-site defect")
+	}
+	if got := fr.slugs(); len(got) != 1 || got[0] != "quest" {
+		t.Fatalf("resolver called with %v, want exactly [quest]", got)
+	}
+}
+
+// ...and the fallback must never become an override. A request that HAS a host
+// ignores the header completely — the host picks the ORG, so a client able to
+// override a real host could serve itself another tenant's site.
+func TestMiddlewareForwardedHostNeverOverridesARealHost(t *testing.T) {
+	fr := &fakeResolver{found: false}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+
+	req := httptest.NewRequest("GET", "http://victim.hanzo.app/index.html", nil)
+	req.Header.Set("X-Forwarded-Host", "attacker.hanzo.app")
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if got := fr.slugs(); len(got) != 1 || got[0] != "victim" {
+		t.Fatalf("resolver called with %v, want exactly [victim] — the header must not override a real host", got)
+	}
+}
