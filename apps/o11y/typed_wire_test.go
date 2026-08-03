@@ -2,6 +2,7 @@ package o11y
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -263,4 +264,161 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 		}
 	})
 
+}
+
+// ---- the graft, measured -------------------------------------------------
+
+// TestGraftQualifiesEveryPublishedType is the deliverable of the graft, and the
+// reason it exists: the fleet's schema namespace is FLAT, o11y names its types
+// after ordinary nouns, and five other apps name theirs the same way.
+//
+// Unqualified, o11y's Service (a traced APM service) and ingress's Service (a
+// backend pool) are one name with two shapes, and so are Account, Channel, Event,
+// Host and TLSConfig — six collisions that made openapi.Weave refuse the whole
+// fleet document. It refused correctly: a generated SDK binds whichever shape the
+// merge read last.
+//
+// Origin is what answers it, unconditionally rather than on collision, so a name
+// published here is never a function of who else is in the room. The assertion is
+// therefore TOTAL — every schema, not a sample — because a rule that holds for
+// most names is not this rule.
+func TestGraftQualifiesEveryPublishedType(t *testing.T) {
+	reg, err := openapi.Typed(surfaceApp(t))
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	if len(reg.Schemas) == 0 {
+		t.Fatal("the composed document carries no component schemas at all")
+	}
+	var bare []string
+	for name := range reg.Schemas {
+		if !strings.HasPrefix(name, "o11y.") {
+			bare = append(bare, name)
+		}
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("%d schema(s) published unqualified: %s\n"+
+			"Every type o11y publishes must arrive through the graft, which qualifies it by the app "+
+			"that declared it. An unqualified name is a name another app may also claim.",
+			len(bare), strings.Join(bare, ", "))
+	}
+	// The six that actually collided, named so a regression says WHICH contract
+	// broke rather than counting.
+	for _, n := range []string{
+		"o11y.Service", "o11y.TLSConfig", "o11y.Account",
+		"o11y.Channel", "o11y.Event", "o11y.Host",
+	} {
+		if _, ok := reg.Schemas[n]; !ok {
+			t.Errorf("components.schemas has no %q", n)
+		}
+		if _, collides := reg.Schemas[strings.TrimPrefix(n, "o11y.")]; collides {
+			t.Errorf("%q is still published unqualified — it collides with another app's", strings.TrimPrefix(n, "o11y."))
+		}
+	}
+}
+
+// TestGraftLeavesAddressesAlone is the other half: a graft changes what the fleet
+// CALLS o11y's types and nothing about where o11y answers or what an SDK method
+// is named. Paths are absolute and untouched; operationIds are published SDK
+// method names and rewriting one at compose time would make it a function of
+// where the app is deployed.
+func TestGraftLeavesAddressesAlone(t *testing.T) {
+	served, typed := o11yOps(t)
+	for _, want := range []string{
+		"GET /v1/o11y/logs",         // cloud's own org-pinned read, at its own address
+		"GET /v1/o11y/metrics",      // ditto
+		"POST /v1/o11y/query_range", // ditto — the three both halves claim
+		"GET /v1/o11y/version",      // the module's, relayed to the runtime
+		"POST /v1/o11y/alerts/last", // not a route: the negative control below
+	} {
+		if want == "POST /v1/o11y/alerts/last" {
+			if served[want] {
+				t.Errorf("%s is served, and this list's negative control assumes it is not", want)
+			}
+			continue
+		}
+		if !served[want] {
+			t.Errorf("%s is not served by the composed router", want)
+		}
+	}
+	reg, err := openapi.Typed(surfaceApp(t))
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	for key, op := range reg.Ops {
+		if op.OperationID == "" {
+			continue
+		}
+		if strings.Contains(op.OperationID, "o11y.") {
+			t.Errorf("%s has operationId %q — the origin qualifies TYPES, never addresses", key, op.OperationID)
+		}
+	}
+	if len(typed) == 0 {
+		t.Fatal("no typed o11y ops in the registry at all")
+	}
+}
+
+// TestHostRoutesStillWinTheThreeSharedAddresses is the routing fact the graft had
+// to preserve, and the one it made local.
+//
+// cloud's scope.go is the ONE owner of /v1/o11y/{logs,metrics} and
+// /v1/o11y/query_range — it pins the caller's org SERVER-SIDE into the query —
+// and hanzoai/o11y's table declares all three too, relaying them to the runtime
+// unpinned. First-registered is what makes the tenant-pinned handler the one that
+// answers. Before the graft that depended on the host's global mount order; now
+// both halves are registered on one app, in the order written in mount(), and
+// this is the gate on that order.
+//
+// Each case below is the ANSWER only cloud's half can give, measured on the real
+// mount. Under surfaceApp there is no datastore and the runtime's upstream is
+// unreachable, so the module's half answers 502 on all three — which is what this
+// distinguishes against, and what it does answer if mount() registers the module
+// first (verified by mutation).
+func TestHostRoutesStillWinTheThreeSharedAddresses(t *testing.T) {
+	app := surfaceApp(t)
+
+	ask := func(t *testing.T, method, path string, org bool) (int, string) {
+		t.Helper()
+		rq := httptest.NewRequest(method, path, strings.NewReader("{}"))
+		rq.Header.Set("Content-Type", "application/json")
+		if org {
+			rq.Header.Set("X-Org-Id", "acme")
+			rq.Header.Set("X-User-Id", "u_acme")
+		}
+		resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 20 * time.Second, FailOnTimeout: true})
+		if err != nil {
+			t.Fatalf("Test %s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read %s %s: %v", method, path, err)
+		}
+		return resp.StatusCode, string(b)
+	}
+
+	// The org-pinned log read answers FROM THE NATIVE STORE: 200 and cloud's own
+	// body, naming the product it was asked for. The relay cannot reach a store.
+	if code, body := ask(t, http.MethodGet, "/v1/o11y/logs?product=kms", true); code != http.StatusOK ||
+		!strings.Contains(body, `"product":"kms"`) {
+		t.Errorf("GET /v1/o11y/logs = %d %s, want 200 from scope.go's org-pinned read", code, body)
+	}
+
+	// The org-pinned RED read refuses with ITS OWN sentence about ITS OWN
+	// dependency. A 502 here is the relay failing to reach the runtime instead.
+	if code, body := ask(t, http.MethodGet, "/v1/o11y/metrics?product=kms", true); !strings.Contains(body, "o11y metrics: datastore not connected") {
+		t.Errorf("GET /v1/o11y/metrics = %d %s, want scope.go's own datastore refusal", code, body)
+	}
+
+	// query_range is cloud's UNTYPED proxy, so an anonymous caller meets gate()
+	// directly and gets gate's own flat envelope. The module's op is typed, so the
+	// same refusal would arrive re-wrapped as a zip.HTTPError — the two shapes
+	// door_test.go's note describes. The shape is the tell; the status is 403 either
+	// way.
+	if code, body := ask(t, http.MethodPost, "/v1/o11y/query_range", false); code != http.StatusForbidden ||
+		!strings.Contains(body, `"msg"`) {
+		t.Errorf("POST /v1/o11y/query_range = %d %s, want 403 in gate()'s own {\"status\":\"error\",\"msg\":…} "+
+			"envelope — a zip.HTTPError body means the module's typed op answered", code, body)
+	}
 }
