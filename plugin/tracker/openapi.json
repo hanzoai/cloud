@@ -19,8 +19,8 @@
     "/v1/tracker/projects": {
       "get": {
         "operationId": "get_v1_tracker_projects",
-        "summary": "ListProjects returns every tracker project in the caller's org, newest first.",
-        "description": "ListProjects returns every tracker project in the caller's org, newest first.\n\nA project is the board: it owns a KEY (the uppercase handle that prefixes every\nissue identifier, \"ENG-14\") and the issues filed under it. The listing is\norg-scoped server-side — the org is the validated bearer claim, never a\nclient-supplied header — so one org can never see another's boards.",
+        "summary": "Returns every tracker project in the caller's org, newest first.",
+        "description": "Returns every tracker project in the caller's org, newest first.\n\nA project is the board: it owns a KEY (the uppercase handle that prefixes every\nissue identifier, \"ENG-14\") and the issues filed under it. The listing is\norg-scoped server-side — the org is the validated bearer claim, never a\nclient-supplied header — so one org can never see another's boards.",
         "tags": [
           "tracker"
         ],
@@ -52,8 +52,8 @@
     "/v1/tracker/projects/{key}": {
       "delete": {
         "operationId": "delete_v1_tracker_projects_key",
-        "summary": "DeleteProject removes one tracker project of the caller's org AND every issue filed under it, and answers 204 with no body.",
-        "description": "DeleteProject removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
+        "summary": "Removes one tracker project of the caller's org AND every issue filed under it, and answers 204 with no body.",
+        "description": "Removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
         "tags": [
           "tracker"
         ],
@@ -76,8 +76,8 @@
       },
       "get": {
         "operationId": "get_v1_tracker_projects_key",
-        "summary": "GetProject returns one tracker project of the caller's org by its key — its name, description and timestamps.",
-        "description": "GetProject returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
+        "summary": "Returns one tracker project of the caller's org by its key — its name, description and timestamps.",
+        "description": "Returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
         "tags": [
           "tracker"
         ],
@@ -107,8 +107,8 @@
       },
       "patch": {
         "operationId": "patch_v1_tracker_projects_key",
-        "summary": "UpdateProject renames a tracker project or rewrites its description, and returns the updated project.",
-        "description": "UpdateProject renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
+        "summary": "Renames a tracker project or rewrites its description, and returns the updated project.",
+        "description": "Renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
         "tags": [
           "tracker"
         ],
@@ -153,8 +153,8 @@
     "/v1/tracker/projects/{key}/issues": {
       "get": {
         "operationId": "get_v1_tracker_projects_key_issues",
-        "summary": "ListIssues returns the issues of one tracker project, optionally filtered by status, kind, repo and source.",
-        "description": "ListIssues returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo and source.\n\nThis is the ONE place a surface takes its slice of the shared issue table:\nhanzo.team passes no filter or a status, a git repository's Issues tab passes\nkind=issue\u0026repo=\u003cr\u003e and its Pull Requests tab kind=pr\u0026repo=\u003cr\u003e. A filter value\noutside its closed set is refused with 400 rather than silently returning an\nempty board.",
+        "summary": "Returns the issues of one tracker project, optionally filtered by status, kind, repo and source.",
+        "description": "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo and source.\n\nThis is the ONE place a surface takes its slice of the shared issue table:\nhanzo.team passes no filter or a status, a git repository's Issues tab passes\nkind=issue\u0026repo=\u003cr\u003e and its Pull Requests tab kind=pr\u0026repo=\u003cr\u003e. A filter value\noutside its closed set is refused with 400 rather than silently returning an\nempty board.",
         "tags": [
           "tracker"
         ],
@@ -246,8 +246,8 @@
     "/v1/tracker/projects/{key}/issues/{num}": {
       "delete": {
         "operationId": "delete_v1_tracker_projects_key_issues_num",
-        "summary": "DeleteIssue removes one issue from a tracker project and answers 204 with no body.",
-        "description": "DeleteIssue removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
+        "summary": "Removes one issue from a tracker project and answers 204 with no body.",
+        "description": "Removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
         "tags": [
           "tracker"
         ],
@@ -279,8 +279,8 @@
       },
       "get": {
         "operationId": "get_v1_tracker_projects_key_issues_num",
-        "summary": "GetIssue returns one issue of one tracker project by its per-project number — title, description, status, priority, assignee, labels, kind, source and its git bindings.",
-        "description": "GetIssue returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
+        "summary": "Returns one issue of one tracker project by its per-project number — title, description, status, priority, assignee, labels, kind, source and its git bindings.",
+        "description": "Returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
         "tags": [
           "tracker"
         ],
@@ -319,8 +319,8 @@
       },
       "patch": {
         "operationId": "patch_v1_tracker_projects_key_issues_num",
-        "summary": "UpdateIssue edits one issue in place and returns it — retitle it, rewrite its body, move it between board columns, reprioritize, reassign, or replace its labels.",
-        "description": "UpdateIssue edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, or replace its\nlabels. Every field is optional: one the caller omits keeps its stored value,\nand `labels` REPLACES the set rather than adding to it.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
+        "summary": "Edits one issue in place and returns it — retitle it, rewrite its body, move it between board columns, reprioritize, reassign, or replace its labels.",
+        "description": "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, or replace its\nlabels. Every field is optional: one the caller omits keeps its stored value,\nand `labels` REPLACES the set rather than adding to it.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
         "tags": [
           "tracker"
         ],
