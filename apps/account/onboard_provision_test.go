@@ -30,7 +30,7 @@ func TestOnboardFirstRun_ProvisionsOnce(t *testing.T) {
 			b, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(b, &provBody)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"org": "dave", "accessKey": "hk-x", "accessSecret": "sk-x",
+				"org": "dave", "accessKey": "sk-x", "accessSecret": "secret-x",
 			})
 		default:
 			http.NotFound(w, r)

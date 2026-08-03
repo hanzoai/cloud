@@ -54,7 +54,7 @@ func TestTask_StreamsStepsAndResult(t *testing.T) {
 	var steps []Step
 	res, err := runner{}.Run(context.Background(), "acme", "u-1", RunRequest{
 		CloneURL: "https://git.test/v1/git/acme/api.git", Branch: "agent/x", Prompt: "fix",
-		CredUser: "x-access-token", CredToken: "hk-SECRETtoken",
+		CredUser: "x-access-token", CredToken: "sk-SECRETtoken",
 	}, func(s Step) { steps = append(steps, s) })
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -90,7 +90,7 @@ func TestTask_StreamsStepsAndResult(t *testing.T) {
 	if err := json.Unmarshal(gotBody, &body); err != nil {
 		t.Fatalf("body decode: %v", err)
 	}
-	if body.Credential.Token != "hk-SECRETtoken" || body.Credential.Username != "x-access-token" {
+	if body.Credential.Token != "sk-SECRETtoken" || body.Credential.Username != "x-access-token" {
 		t.Fatalf("credential not carried in body: %+v", body.Credential)
 	}
 }
@@ -141,12 +141,12 @@ func TestTask_RefusesCleartextByDefault(t *testing.T) {
 	t.Setenv("BOT_GATEWAY_URL", srv.URL) // http://
 	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "")
 	_, err := runner{}.Run(context.Background(), "acme", "u", RunRequest{
-		CredUser: "x", CredToken: "hk-SECRET",
+		CredUser: "x", CredToken: "sk-SECRET",
 	}, nil)
 	if err == nil {
 		t.Fatal("cleartext coding POST must fail closed by default")
 	}
-	if strings.Contains(err.Error(), "hk-SECRET") {
+	if strings.Contains(err.Error(), "sk-SECRET") {
 		t.Fatalf("error must not leak the credential: %v", err)
 	}
 }

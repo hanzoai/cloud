@@ -214,9 +214,9 @@ func TestEvent_BearerPrincipalAdmitted(t *testing.T) {
 func TestEvent_ResolvedKeyAdmitted(t *testing.T) {
 	app := mountApp(t)
 	got := stubResolver(t, func(string) (string, bool) { return "acme", true })
-	code := postKeyed(t, app, "/v1/event", "", `{"api_key":"hk-k","event":"e","distinctId":"d"}`, nil)
-	if *got != "hk-k" {
-		t.Fatalf("resolver handed key %q, want hk-k", *got)
+	code := postKeyed(t, app, "/v1/event", "", `{"api_key":"sk-k","event":"e","distinctId":"d"}`, nil)
+	if *got != "sk-k" {
+		t.Fatalf("resolver handed key %q, want sk-k", *got)
 	}
 	if code == http.StatusForbidden {
 		t.Fatalf("a resolved access key must pass the /v1/event gate, got 403")
@@ -226,7 +226,7 @@ func TestEvent_ResolvedKeyAdmitted(t *testing.T) {
 func TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost(t *testing.T) {
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false })
-	code := postKeyed(t, app, "/v1/event", "hanzo.ai", `{"api_key":"hk-bad","event":"e","distinctId":"d"}`, nil)
+	code := postKeyed(t, app, "/v1/event", "hanzo.ai", `{"api_key":"sk-bad","event":"e","distinctId":"d"}`, nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("presented-but-unresolvable key on /v1/event must 403 (fail closed), got %d", code)
 	}

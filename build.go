@@ -145,6 +145,12 @@ func BuildDeps(cfg *Config) Deps {
 	}
 	deps.GatewayPolicy = gp
 
+	// The edge traffic sensor the abuse gate writes and /v1/gateway/traffic reads.
+	// One object per process, hung off deps for the same reason the policy store
+	// is: two of them would be two answers to "who is calling", and the middleware
+	// and the subsystem would each be sure of a different one.
+	deps.Traffic = edge.NewTraffic()
+
 	return deps
 }
 
@@ -633,7 +639,7 @@ func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) Commer
 // can only access read-only endpoints … use a secret key (sk-)". So the COMPLETIONS
 // resolver must refuse it (it would only 403 chat), while the EMBED resolver accepts
 // it (embeddings ARE read-only). pk- is the IAM key family's read-only member
-// (hk-/sk-/pk-/fw_/hz_; clients/admission). This ONE predicate is the split's crux:
+// (pk-/sk-; clients/admission). This ONE predicate is the split's crux:
 // it kept the intermittent-403 bug — a pk- embed key riding the shared completions
 // client — from ever recurring, wherever the key comes from.
 func publishableKey(apiKey string) bool {
@@ -649,7 +655,7 @@ func publishableKey(apiKey string) bool {
 // this resolver NEVER rides a pk- key — that is the embed credential (pickEmbedClient).
 // Preference order:
 //  1. Static SECRET-key HTTP gateway when a base URL AND a completions-capable
-//     (non-pk-) static key are configured — an explicit operator override (sk-/hk-).
+//     (non-pk-) static key are configured — an explicit operator override (sk-).
 //     A pk- key here is REFUSED (it would only 403 chat) and the resolver falls
 //     through to M2M — THE fix for the intermittent publishable-key 403 on bot replies.
 //  2. M2M HTTP gateway when a base URL AND the binary's IAM identity are present

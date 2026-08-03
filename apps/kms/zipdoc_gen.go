@@ -7,6 +7,21 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/kms/secrets/+", zip.Doc{
+		Description: "Wraps a secrets handler with the platform gate (cloud.Member — a\nvalidated principal, HIP-0519's one predicate set) and then the two facts that\nare this subsystem's OWN business: the org key must be a storage-safe label,\nand the store must hold a master key. Fail-closed in that order, before any\nrecord is touched: 403 for an unvalidated caller, 400 for a malformed org, 503\nfor an unconfigured key.\n\nThe org match is EXACT (==), not case-folded: this mirrors the platform's own\ntenant boundary (SanitizeIdentity gates admin on `owner == adminOrg`, and\nX-Org-Id is the raw owner claim), and it keeps the authz check and the store\npath in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a\ncase-insensitive authz check would let org \"Acme\" reach org \"acme\"'s namespace.",
+	})
+	zip.Describe("GET /v1/kms/config", zip.Doc{
+		Description: "Serves the KMS console SPA's runtime config (the OIDC issuer the\nconsole logs in against + the KMS API base). Kept under the /v1/kms namespace\n(not /v1/admin) so a gateway that admin-gates the /v1/admin/* prefix cannot\nblock the console's legitimate public config fetch. No secrets, so it is public.",
+	})
+	zip.Describe("GET /v1/kms/health", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("GET /v1/kms/secrets", zip.Doc{
+		Description: "Wraps a secrets handler with the platform gate (cloud.Member — a\nvalidated principal, HIP-0519's one predicate set) and then the two facts that\nare this subsystem's OWN business: the org key must be a storage-safe label,\nand the store must hold a master key. Fail-closed in that order, before any\nrecord is touched: 403 for an unvalidated caller, 400 for a malformed org, 503\nfor an unconfigured key.\n\nThe org match is EXACT (==), not case-folded: this mirrors the platform's own\ntenant boundary (SanitizeIdentity gates admin on `owner == adminOrg`, and\nX-Org-Id is the raw owner claim), and it keeps the authz check and the store\npath in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a\ncase-insensitive authz check would let org \"Acme\" reach org \"acme\"'s namespace.",
+	})
+	zip.Describe("GET /v1/kms/secrets/+", zip.Doc{
+		Description: "Wraps a secrets handler with the platform gate (cloud.Member — a\nvalidated principal, HIP-0519's one predicate set) and then the two facts that\nare this subsystem's OWN business: the org key must be a storage-safe label,\nand the store must hold a master key. Fail-closed in that order, before any\nrecord is touched: 403 for an unvalidated caller, 400 for a malformed org, 503\nfor an unconfigured key.\n\nThe org match is EXACT (==), not case-folded: this mirrors the platform's own\ntenant boundary (SanitizeIdentity gates admin on `owner == adminOrg`, and\nX-Org-Id is the raw owner claim), and it keeps the authz check and the store\npath in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a\ncase-insensitive authz check would let org \"Acme\" reach org \"acme\"'s namespace.",
+	})
 	zip.Describe("POST /kms/delete", zip.Doc{
 		Description: "Delete forgets one secret. It is here for the same reason put is: exactly one\nprocess holds the store, so an app that custodies a credential on a customer's\nbehalf must be able to REMOVE it when that customer disconnects — otherwise\ndisconnecting leaves the material behind and the connection row is the only\nthing that goes.\n\nIt widens no boundary. The surface is deliberately narrow because material\nLEAVING is the risk, and delete moves nothing outward; a caller that can put can\nalready overwrite a secret into uselessness, so this adds no destructive power\neither. The same ref rule as every other op applies, so a tenant's material is\nremovable only by a call acting for that tenant.",
 	})
@@ -18,5 +33,11 @@ func init() {
 	})
 	zip.Describe("POST /kms/sign", zip.Doc{
 		Description: "Sign returns a signature over the submitted payload, produced by the key the ref\nnames. The KEY ITSELF NEVER LEAVES this process — that is the whole point of the\nop: a caller that needs something signed sends the payload rather than fetching\nthe key, so signing material has one custodian and no copies.\n\nThe value field carries the payload on the way in and the signature on the way\nout; it is never a key. The same ref rule as the read applies, so a tenant's key\nsigns only for a call acting for that tenant.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
+	zip.Describe("POST /v1/kms/auth/login", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/kms/secrets", zip.Doc{
+		Description: "Wraps a secrets handler with the platform gate (cloud.Member — a\nvalidated principal, HIP-0519's one predicate set) and then the two facts that\nare this subsystem's OWN business: the org key must be a storage-safe label,\nand the store must hold a master key. Fail-closed in that order, before any\nrecord is touched: 403 for an unvalidated caller, 400 for a malformed org, 503\nfor an unconfigured key.\n\nThe org match is EXACT (==), not case-folded: this mirrors the platform's own\ntenant boundary (SanitizeIdentity gates admin on `owner == adminOrg`, and\nX-Org-Id is the raw owner claim), and it keeps the authz check and the store\npath in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a\ncase-insensitive authz check would let org \"Acme\" reach org \"acme\"'s namespace.",
 	})
 }

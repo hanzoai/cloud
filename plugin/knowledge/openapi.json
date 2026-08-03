@@ -19,8 +19,8 @@
     "/v1/kb/connectors": {
       "get": {
         "operationId": "get_v1_kb_connectors",
-        "summary": "ListConnectors returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store.",
-        "description": "ListConnectors returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
+        "summary": "Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store.",
+        "description": "Returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
         "tags": [
           "kb"
         ],
@@ -41,8 +41,8 @@
     "/v1/kb/connectors/catalog": {
       "get": {
         "operationId": "get_v1_kb_connectors_catalog",
-        "summary": "ListConnectorCatalog returns the ONE catalog of everything a caller can connect: every first-party connector and every long-tail one, in a single list sorted by provider.",
-        "description": "ListConnectorCatalog returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
+        "summary": "Returns the ONE catalog of everything a caller can connect: every first-party connector and every long-tail one, in a single list sorted by provider.",
+        "description": "Returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
         "tags": [
           "kb"
         ],
@@ -74,8 +74,8 @@
     "/v1/kb/connectors/{provider}": {
       "delete": {
         "operationId": "delete_v1_kb_connectors_provider",
-        "summary": "DisconnectConnector revokes a connection: it tombstones the stored credential so a later sync cannot reuse it, purges this provider's points from the org's vector namespace, and marks the connector disconnected.",
-        "description": "DisconnectConnector revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
+        "summary": "Revokes a connection: it tombstones the stored credential so a later sync cannot reuse it, purges this provider's points from the org's vector namespace, and marks the connector disconnected.",
+        "description": "Revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
         "tags": [
           "kb"
         ],
@@ -200,8 +200,8 @@
     "/v1/kb/connectors/{provider}/sync": {
       "post": {
         "operationId": "post_v1_kb_connectors_provider_sync",
-        "summary": "SyncConnector pulls the provider's documents for the caller's org and files them as knowledge sources, which the store's own hook then indexes — so a synced document is retrievable exactly like a hand-written page.",
-        "description": "SyncConnector pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
+        "summary": "Pulls the provider's documents for the caller's org and files them as knowledge sources, which the store's own hook then indexes — so a synced document is retrievable exactly like a hand-written page.",
+        "description": "Pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
         "tags": [
           "kb"
         ],
@@ -233,8 +233,8 @@
     "/v1/kb/graph": {
       "get": {
         "operationId": "get_v1_kb_graph",
-        "summary": "GetKnowledgeGraph returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges.",
-        "description": "GetKnowledgeGraph returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
+        "summary": "Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges.",
+        "description": "Returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
         "tags": [
           "kb"
         ],
@@ -276,8 +276,8 @@
     "/v1/kb/search": {
       "post": {
         "operationId": "post_v1_kb_search",
-        "summary": "SearchKnowledge runs a semantic search over the caller org's own knowledge — its wiki pages, its agent memories and everything its connectors have synced — and returns the matching passages.",
-        "description": "SearchKnowledge runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",
+        "summary": "Runs a semantic search over the caller org's own knowledge — its wiki pages, its agent memories and everything its connectors have synced — and returns the matching passages.",
+        "description": "Runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",
         "tags": [
           "kb"
         ],

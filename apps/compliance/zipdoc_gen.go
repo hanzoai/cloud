@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/compliance/accreditation", zip.Doc{
-		Description: "ListAccreditation returns the org's tracked accreditation-state records, newest\nfirst — evidence entries the org keeps, never a platform certification.",
+		Description: "Returns the org's tracked accreditation-state records, newest\nfirst — evidence entries the org keeps, never a platform certification.",
 		Fields: map[string]string{
 			"accList.data":          "Data is the org's tracked accreditation records, newest first.",
 			"accList.disclaimer":    "Disclaimer states that statuses are tracked or provider-reported, never a\nplatform assertion of legal or regulatory compliance.",
@@ -29,7 +29,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/compliance/accreditation/:id", zip.Doc{
-		Description: "GetAccreditation returns one tracked accreditation record.",
+		Description: "Returns one tracked accreditation record.",
 		Fields: map[string]string{
 			"accView.basis":         "Basis is the qualification category: income, net_worth, professional_license,\nor entity.",
 			"accView.createdAt":     "CreatedAt is the unix second the record was created.",
@@ -103,7 +103,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/compliance/subjects", zip.Doc{
-		Description: "ListSubjects returns the org's subjects as PII-MINIMIZED summaries — no name or\nemail, only whether an email is on file. The full record is returned only by the\nexplicit single-subject read.",
+		Description: "Returns the org's subjects as PII-MINIMIZED summaries — no name or\nemail, only whether an email is on file. The full record is returned only by the\nexplicit single-subject read.",
 		Fields: map[string]string{
 			"listIn.limit":             "Limit caps the rows returned; non-positive means the server default.",
 			"subjectList.data":         "Data is the org's subjects, newest first, without contact PII.",
@@ -115,7 +115,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/compliance/subjects/:id", zip.Doc{
-		Description: "GetSubject returns one subject WITH its contact PII — the only surface that\nreturns it, and only to the owning org. The response is never cached by any\nintermediary.",
+		Description: "Returns one subject WITH its contact PII — the only surface that\nreturns it, and only to the owning org. The response is never cached by any\nintermediary.",
 		Fields: map[string]string{
 			"Subject.ref":   "the org's own opaque external id for this subject",
 			"subjectRef.id": "ID is the subject to read, from the path.",
@@ -123,7 +123,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"sub_1"}`),
 	})
 	zip.Describe("GET /v1/compliance/verifications", zip.Doc{
-		Description: "ListVerifications returns the org's KYC/KYB verifications, newest first — opaque\nsubject references and provider-reported statuses only, no subject PII.",
+		Description: "Returns the org's KYC/KYB verifications, newest first — opaque\nsubject references and provider-reported statuses only, no subject PII.",
 		Fields: map[string]string{
 			"checkList.data":       "Data is the org's verifications, newest first, without subject PII.",
 			"checkList.disclaimer": "Disclaimer states that statuses are provider-reported, never a platform\nassertion of legal or regulatory compliance.",
@@ -141,7 +141,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/compliance/verifications/:id", zip.Doc{
-		Description: "GetVerification returns one verification — its opaque subject reference and\nprovider-reported status, no subject PII.",
+		Description: "Returns one verification — its opaque subject reference and\nprovider-reported status, no subject PII.",
 		Fields: map[string]string{
 			"checkView.createdAt": "CreatedAt is the unix second the verification was started.",
 			"checkView.decidedAt": "DecidedAt is the unix second a terminal status was recorded.",
@@ -158,7 +158,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"chk_1"}`),
 	})
 	zip.Describe("POST /v1/compliance/accreditation", zip.Doc{
-		Description: "CreateAccreditation records an ASSERTED accreditation state for a subject — the\nsubject's own assertion, with no verifier. Every CONFIRMED state\n(provider_verified, reviewer_confirmed) and every rejected/expired state is a\nDECISION recorded via the decision endpoint, attributed to the reviewer — a\ncreate can never stamp a confirmation. The underlying figures (income, net\nworth) are never stored; only the method, category, and state.",
+		Description: "Records an ASSERTED accreditation state for a subject — the\nsubject's own assertion, with no verifier. Every CONFIRMED state\n(provider_verified, reviewer_confirmed) and every rejected/expired state is a\nDECISION recorded via the decision endpoint, attributed to the reviewer — a\ncreate can never stamp a confirmation. The underlying figures (income, net\nworth) are never stored; only the method, category, and state.",
 		Fields: map[string]string{
 			"accView.basis":                  "Basis is the qualification category: income, net_worth, professional_license,\nor entity.",
 			"accView.createdAt":              "CreatedAt is the unix second the record was created.",
@@ -182,7 +182,7 @@ func init() {
 		Example: json.RawMessage(`{"subjectId":"sub_1","method":"self_attested","basis":"income"}`),
 	})
 	zip.Describe("POST /v1/compliance/accreditation/:id/decision", zip.Doc{
-		Description: "DecideAccreditation records an org reviewer's decision on an accreditation\nrecord — a reviewer confirmation, a provider verification the reviewer has\nevidence of (a CPA/attorney letter, a verifier report), a rejection, or an\nexpiry. ROLE-GATED (an org admin or platform reviewer) and ATTRIBUTED: the\nreviewer's identity is recorded as ReviewerSub and audited. Human-in-the-loop:\nthe platform never confirms on its own, and even a provider_verified state\ncarries the reviewer who recorded it.",
+		Description: "Records an org reviewer's decision on an accreditation\nrecord — a reviewer confirmation, a provider verification the reviewer has\nevidence of (a CPA/attorney letter, a verifier report), a rejection, or an\nexpiry. ROLE-GATED (an org admin or platform reviewer) and ATTRIBUTED: the\nreviewer's identity is recorded as ReviewerSub and audited. Human-in-the-loop:\nthe platform never confirms on its own, and even a provider_verified state\ncarries the reviewer who recorded it.",
 		Fields: map[string]string{
 			"accView.basis":                "Basis is the qualification category: income, net_worth, professional_license,\nor entity.",
 			"accView.createdAt":            "CreatedAt is the unix second the record was created.",
@@ -201,7 +201,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"acc_1","status":"reviewer_confirmed"}`),
 	})
 	zip.Describe("POST /v1/compliance/subjects", zip.Doc{
-		Description: "CreateSubject records a party the org is verifying as part of its own\nonboarding/compliance — a team member, vendor, customer, or counterparty. The\nsubject's contact PII (name/email) is sealed at rest and returned only to the\nowning org; downstream records reference the subject by opaque id.",
+		Description: "Records a party the org is verifying as part of its own\nonboarding/compliance — a team member, vendor, customer, or counterparty. The\nsubject's contact PII (name/email) is sealed at rest and returned only to the\nowning org; downstream records reference the subject by opaque id.",
 		Fields: map[string]string{
 			"Subject.ref":      "the org's own opaque external id for this subject",
 			"subjectReq.email": "Email is the subject's contact email, sealed at rest.",
@@ -212,7 +212,7 @@ func init() {
 		Example: json.RawMessage(`{"kind":"individual","email":"founder@example.com","name":"Ada"}`),
 	})
 	zip.Describe("POST /v1/compliance/verifications", zip.Doc{
-		Description: "StartVerification begins a KYC/KYB verification of a subject through the wired\nprovider — an existing subject by id, or one created inline from the request.\nThe returned status is provider-reported and never terminal on a fresh start:\nstarting a verification can never yield a verified record, and a provider error\nis a 502, never a verification.",
+		Description: "Begins a KYC/KYB verification of a subject through the wired\nprovider — an existing subject by id, or one created inline from the request.\nThe returned status is provider-reported and never terminal on a fresh start:\nstarting a verification can never yield a verified record, and a provider error\nis a 502, never a verification.",
 		Fields: map[string]string{
 			"checkView.createdAt":       "CreatedAt is the unix second the verification was started.",
 			"checkView.decidedAt":       "DecidedAt is the unix second a terminal status was recorded.",
@@ -233,7 +233,7 @@ func init() {
 		Example: json.RawMessage(`{"subjectId":"sub_1"}`),
 	})
 	zip.Describe("POST /v1/compliance/verifications/:id/decision", zip.Doc{
-		Description: "DecideVerification records a privileged reviewer's MANUAL decision on a\nverification — the human-in-the-loop path, and the ONLY route to a passing status\nwhen no real provider is wired. It produces a DISTINCT reviewer_confirmed, never\na provider_verified (a provider decision is the provider's to report, via the\nwebhook or a reconcile), and it is ROLE-GATED (an org admin or platform reviewer)\nAND ATTRIBUTED (the reviewer's user id is DecidedBy), so a manual pass is always\naccountable.",
+		Description: "Records a privileged reviewer's MANUAL decision on a\nverification — the human-in-the-loop path, and the ONLY route to a passing status\nwhen no real provider is wired. It produces a DISTINCT reviewer_confirmed, never\na provider_verified (a provider decision is the provider's to report, via the\nwebhook or a reconcile), and it is ROLE-GATED (an org admin or platform reviewer)\nAND ATTRIBUTED (the reviewer's user id is DecidedBy), so a manual pass is always\naccountable.",
 		Fields: map[string]string{
 			"checkView.createdAt":         "CreatedAt is the unix second the verification was started.",
 			"checkView.decidedAt":         "DecidedAt is the unix second a terminal status was recorded.",
@@ -251,7 +251,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"chk_1","status":"reviewer_confirmed"}`),
 	})
 	zip.Describe("POST /v1/compliance/verifications/:id/refresh", zip.Doc{
-		Description: "RefreshVerification polls the wired provider for its current decision and\nrecords it, ATTRIBUTED to the provider — the internal PULL reconcile. For the\nManual provider the check stays pending; for a hosted provider it reflects the\nprovider's settled status. A poll error is a 502, never a verification.",
+		Description: "Polls the wired provider for its current decision and\nrecords it, ATTRIBUTED to the provider — the internal PULL reconcile. For the\nManual provider the check stays pending; for a hosted provider it reflects the\nprovider's settled status. A poll error is a 502, never a verification.",
 		Fields: map[string]string{
 			"checkView.createdAt": "CreatedAt is the unix second the verification was started.",
 			"checkView.decidedAt": "DecidedAt is the unix second a terminal status was recorded.",
@@ -266,5 +266,8 @@ func init() {
 			"verificationRef.id":  "ID is the verification to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"chk_1"}`),
+	})
+	zip.Describe("POST /v1/compliance/verifications/webhook", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 }

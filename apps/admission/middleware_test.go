@@ -46,7 +46,7 @@ func gateApp(t *testing.T, approvalStatus string) *zip.App {
 type greq struct {
 	host, path, user, org, accept string
 	admin, approvedHdr, setApprov bool
-	authorization                 string // raw Authorization header (e.g. "Bearer hk-…")
+	authorization                 string // raw Authorization header (e.g. "Bearer sk-…")
 	apiKeyHeader                  string // raw api-key header value
 }
 
@@ -150,11 +150,11 @@ func TestRule_UnauthenticatedBrowser_BouncedToWaitlist(t *testing.T) {
 // inference cluster-wide.
 func TestRule_APIKeyInference_NeverGated(t *testing.T) {
 	app := gateApp(t, "pending")
-	// The three families cloud actually mints, mirroring APIKeyPrefixes in
-	// auth_identity.go. fw_ and hz_ were dropped there as dead entries that were
-	// never minted and only widened what counts as a credential, so asserting them
-	// here would push that surface back open.
-	for _, key := range []string{"hk-43f50b6b", "sk-hz-abc", "pk-hz-obs"} {
+	// The two families cloud actually mints, mirroring APIKeyPrefixes in
+	// auth_identity.go. Every other spelling was dropped there as a dead entry that
+	// was never minted and only widened what counts as a credential, so asserting
+	// one here would push that surface back open.
+	for _, key := range []string{"sk-hz-abc", "pk-hz-obs"} {
 		// The exact paid-inference shape: Bearer key, JSON accept, NO session/user, on a
 		// GATED host — the exemption, not mode, must carry it through.
 		for _, p := range []string{"/v1/chat/completions", "/v1/models", "/v1/embeddings"} {
@@ -168,7 +168,7 @@ func TestRule_APIKeyInference_NeverGated(t *testing.T) {
 		}
 	}
 	// The api-key / x-api-key header form is exempt too.
-	code, _ := drive(t, app, greq{host: "hanzo.chat", path: "/v1/chat/completions", accept: "application/json", apiKeyHeader: "hk-headerform"})
+	code, _ := drive(t, app, greq{host: "hanzo.chat", path: "/v1/chat/completions", accept: "application/json", apiKeyHeader: "sk-headerform"})
 	if code != 200 {
 		t.Fatalf("api-key header inference = %d, want 200", code)
 	}

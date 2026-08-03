@@ -253,7 +253,7 @@ func TestStarterGrant_SwitchedOrgIsNotFunded(t *testing.T) {
 }
 
 // TestStarterGrant_NoSignedHomeIsNotFunded: a token carrying no membership set — a
-// pre-v1.33.0 JWT, an hk-/sk- key, a client_credentials machine — mints no
+// pre-v1.33.0 JWT, an sk- key, a client_credentials machine — mints no
 // X-User-Owner, because SanitizeIdentity derives it from orgs[0] and fails closed when
 // there is none. The grant must refuse rather than fall back: the field it would fall
 // back to (the `owner` claim) is the APPLICATION's org, which is exactly what

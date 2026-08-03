@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/share", zip.Doc{
-		Description: "ListShares returns the tunnel shares the caller's org currently has open, across\nevery environment that org has enabled. It is a READ and it degrades honestly: an\nunconfigured deployment, an org that has not provisioned yet, and an unreachable\ncontroller all answer an EMPTY list at 200 rather than an error, so the console\nnever error-toasts on load.",
+		Description: "Returns the tunnel shares the caller's org currently has open, across\nevery environment that org has enabled. It is a READ and it degrades honestly: an\nunconfigured deployment, an org that has not provisioned yet, and an unreachable\ncontroller all answer an EMPTY list at 200 rather than an error, so the console\nnever error-toasts on load.",
 		Fields: map[string]string{
 			"shareView.backend":     "Backend is the local endpoint the share proxies to.",
 			"shareView.backendMode": "BackendMode is how the tunnel serves the backend, e.g. proxy or web.",

@@ -1,12 +1,13 @@
 package main
 
 import (
-	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/zap-proto/zip"
@@ -33,28 +34,27 @@ func doMethod(t *testing.T, app *zip.App, method, path, body string) (int, strin
 	return resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Location"), string(b)
 }
 
-// app308 builds the host the way run() does: the MCP door at manifest.MCPPath,
-// then the console catch-all LAST. There is no second registration in between,
-// and that is the point — webui's handler is TERMINAL, so it answers the bare
-// /mcp precisely because nothing else claimed it. This test is therefore a test
-// of the COMPOSED host and not of a helper: neuter mcpDoor (webui/mcp.go) and
-// every case below fails with the console shell.
+// app308 builds the host the way run() does: the fleet's own MCP door at
+// manifest.MCPPath, then the console catch-all LAST. There is no second
+// registration in between, and that is the point — webui's handler is TERMINAL,
+// so it answers the bare /mcp precisely because nothing else claimed it. This
+// test is therefore a test of the COMPOSED host and not of a helper: neuter
+// mcpDoor (webui/mcp.go) and every case below fails with the console shell.
 //
-// The typed op is not decoration. zip installs the door only when the app has at
-// least one op, plugin tool or caller (installMCP), so a host with an empty
-// registry serves no /v1/mcp at all — and a redirect onto a door that was never
-// installed is the very bug this file is about. One op is the smallest thing that
-// makes the target real.
+// The door is the HOST's, registered by fleet.Mount, and zip's is disabled — the
+// same pair run() sets. It fronts no app here (an empty composed set), which is
+// exactly right for this file: what is being tested is that the ADDRESS is
+// reachable and answers JSON-RPC, not what is behind it. What is behind it is
+// tested against running subsystems in fleet/mcp_test.go.
 func app308(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{
 		AppName:               "cloud",
 		DisableStartupMessage: true,
-		MCP:                   zip.MCPConfig{Path: manifest.MCPPath},
+		MCP:                   zip.MCPConfig{Disabled: true},
 	})
-	type ping struct{ Ok bool }
-	zip.Get(app, "/v1/ping", func(context.Context, *ping) (*ping, error) {
-		return &ping{Ok: true}, nil
+	fleet.Mount(app, manifest.MCPPath, nil, func(string) (string, error) {
+		return "", errNoFleetHere
 	})
 	if err := webui.Mount(app); err != nil {
 		t.Skipf("console embed unavailable in this build: %v", err)
@@ -62,6 +62,10 @@ func app308(t *testing.T) *zip.App {
 	app.Prepare()
 	return app
 }
+
+// errNoFleetHere: this host composes no subsystem, so nothing is reachable. A
+// door that answers anyway is the property under test.
+var errNoFleetHere = errors.New("this host composes no subsystems")
 
 // TestBareMCPBeatsTheConsoleCatchAll is the defect, as a test.
 //

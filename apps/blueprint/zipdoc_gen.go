@@ -28,4 +28,7 @@ func init() {
 			"blueprintHealth.status":       "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
 		},
 	})
+	zip.Describe("GET /v1/blueprint/sbom", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 }
