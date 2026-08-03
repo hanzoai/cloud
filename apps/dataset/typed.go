@@ -161,6 +161,15 @@ type mlDataset struct {
 	// trailing subject is dropped whole when that happens, because half a subject
 	// on one side of a split is exactly the leak the grouping prevents.
 	Truncated bool `json:"truncated,omitempty"`
+	// Oversize is how many of the window's subjects this version could NOT carry
+	// because their subject identity exceeds the plane's per-subject byte bound.
+	//
+	// It is on the wire, not only in a log, because it is the one degradation a
+	// caller cannot otherwise detect: the rows that are here look complete, and a
+	// dataset silently missing a population is a model silently blind to it.
+	// Non-zero does not make a version invalid — it makes it a version whose
+	// coverage is STATED. Zero is the normal case and omits.
+	Oversize int `json:"oversize,omitempty"`
 }
 
 // mlSplitCounts is how a version's rows fall, and how much of it is judged.
@@ -218,6 +227,10 @@ type mlLineage struct {
 	Subjects int `json:"subjects"`
 	// Share is the fraction of subjects admitted, in thousandths.
 	Share int `json:"share"`
+	// Oversize is how many subjects the window held that were too large to
+	// represent when this version was built. It is part of the fingerprint, so it
+	// is part of what "reproducible" is measured over.
+	Oversize int `json:"oversize,omitempty"`
 	// Holds is what the source holds for the same window NOW. The difference
 	// between it and Rows is the whole of the reproducibility claim.
 	Holds int `json:"holds"`
@@ -513,8 +526,14 @@ func (o ops) export(ctx context.Context, in *mlExportIn) (*mlDatasetRows, error)
 	return out, nil
 }
 
-// page is the largest export page. An export is a read of the same store every
-// other tenant is using, so the page size is the plane's to set.
+// page is the largest export page, in ROWS. An export is a read of the same store
+// every other tenant is using, so the page size is the plane's to set.
+//
+// It bounds the response BODY — at most [maxPageBytes] — only because every row in
+// the rows table came through [representable] on the way in, so a row's subject is
+// at most [maxSubjectBytes]. A page count over rows carrying caller-sized strings
+// would bound the row count and nothing else. There is deliberately no second
+// size check on this read path: the bound is enforced where rows ENTER, once.
 const page = 5_000
 
 // DeleteDataset disposes of one dataset and every version of it: the rows are
@@ -653,5 +672,6 @@ func (o ops) view(c caller, e entry) *mlDataset {
 		},
 		Share:     e.Share,
 		Truncated: e.Truncated,
+		Oversize:  e.Oversize,
 	}
 }
