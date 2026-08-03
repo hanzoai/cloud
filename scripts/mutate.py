@@ -451,6 +451,117 @@ MUTANTS = [
              '\t\tnamed[key] = struct{}{}\n\t\twant = append(want, ev)',
              '\t\t_ = named\n\t\twant = append(want, ev)')],
      "TestAnAssertionIsNotItsOwnConflict", PL),
+    # ── THE ADDRESS IS THE PRODUCT ───────────────────────────────────────────
+    #
+    # openapi.Product reads an operation's product tag off the first /v1 segment
+    # and nothing else, so an address under /v1/ml publishes these compliance ops
+    # as part of the live KServe model-SERVING product. The floor ratchet reads
+    # that as growth (ml: 7 -> 14) because it refuses only a shrink.
+    ("label: address the ground-truth plane inside the model-serving product", [
+        (LT, '\tzip.Post(zapp, "/v1/risk/labels", o.label,',
+             '\tzip.Post(zapp, "/v1/ml/labels", o.label,')],
+     "TestEveryAddressFilesIntoOneProductAndItIsRisk", PL),
+
+    # An operation id is the SDK method name and the CLI command, so a wrong
+    # prefix survives a right address and tells every generated caller that this
+    # op belongs to a product it is not part of.
+    ("label: name an operation for the model-serving product", [
+        (LT, 'zip.WithOperationID("riskLabelCoverage")',
+             'zip.WithOperationID("mlLabelCoverage")')],
+     "TestTheOperationIDsCarryTheProduct", PL),
+
+    # ── A COUNT OVER CALLER-SIZED VALUES IS NOT A BOUND ──────────────────────
+    #
+    # maxResolve bounds the EVENTS at 500. Without a ceiling on the subject,
+    # nothing bounds the bytes but the edge's BodyLimit — and each subject is
+    # copied into a dedupe key, a grouping key and one bound parameter per event
+    # in a statement against a single-writer file.
+    ("label: the resolve door takes a subject of any size", [
+        (LT, '\t\tsubject, err := admitSubject(e.Subject)\n'
+             '\t\tif err != nil {\n'
+             '\t\t\treturn nil, zip.Errorf(http.StatusBadRequest, "subjects[%d]: %v", i, err)\n'
+             '\t\t}',
+             '\t\tsubject := strings.TrimSpace(e.Subject)')],
+     "TestNoCountBoundStandsWithoutAByteBound", PL),
+
+    # The read filter becomes a bound parameter against the tenant's own file, so
+    # an unbounded one is kilobytes in a statement looking for a value the write
+    # door could never have stored.
+    ("label: the read filter binds a subject of any size", [
+        (LT, '\tif strings.TrimSpace(in.Subject) != "" {\n'
+             '\t\tif q.Subject, err = admitSubject(in.Subject); err != nil {\n'
+             '\t\t\treturn nil, zip.Errorf(http.StatusBadRequest, "subject: %v", err)\n'
+             '\t\t}\n\t}',
+             '\tq.Subject = in.Subject')],
+     "TestNoCountBoundStandsWithoutAByteBound", PL),
+
+    # A filter outside the closed vocabulary can only ever match zero rows, so
+    # admitting it charges the caller for a scan and answers [] — and an open
+    # field has no byte bound at all.
+    ("label: the read filter admits a kind outside the vocabulary", [
+        (LT, '\tif strings.TrimSpace(in.Kind) != "" {\n'
+             '\t\tif q.Kind, err = admitKind(in.Kind); err != nil {\n'
+             '\t\t\treturn nil, zip.Errorf(http.StatusBadRequest, "kind: %v", err)\n'
+             '\t\t}\n\t}',
+             '\tq.Kind = Kind(in.Kind)')],
+     "TestNoCountBoundStandsWithoutAByteBound", PL),
+
+    # An instant is measured BEFORE the parser walks it and before %q renders it
+    # into a refusal and the log line beside it. Removing the measurement puts the
+    # caller's own kilobytes in the response.
+    ("label: an instant is rendered into its refusal before it is measured", [
+        (LT, '\tif len(s) > instantMax {\n'
+             '\t\treturn time.Time{}, fmt.Errorf("an instant is %d bytes and the bound is %d", len(s), instantMax)\n'
+             '\t}\n',
+             '')],
+     "TestNoCountBoundStandsWithoutAByteBound", PL),
+
+    # THE STRUCTURAL HALF: a new caller-sized field on a door, with no ceiling.
+    # This is the shape the defect actually arrived in — the write door bounded
+    # its subject, the read doors added later did not, and nothing compared them.
+    ("label: a new caller-sized field arrives on a door with no ceiling", [
+        (LT, '\tBefore string `json:"before"`\n}',
+             '\tBefore string `json:"before"`\n\tReason string `json:"reason,omitempty"`\n}')],
+     "TestEveryCallerSizedFieldDeclaresACeiling", PL),
+
+    # ── A HOLD MID-SWEEP MUST KEEP THE RECORD IN BOTH PLANES ────────────────
+    #
+    # The copy is swept first so nothing is orphaned in the warehouse. A record
+    # the delete then declines to remove has already been swept, its seq is behind
+    # the delivery cursor, and deliver() asks the cursor rather than the world — so
+    # no retry re-sends it and pending() answers zero. A hole in the answer key
+    # reads as an honest customer, and the row is the one somebody is litigating.
+    ("label: a hold that arrives mid-sweep loses the row from the answer key", [
+        (LT, '\t\tif len(kept) > 0 {\n\t\t\tfacts, err := st.byIDs(ctx, kept)',
+             '\t\tif false {\n\t\t\tfacts, err := st.byIDs(ctx, kept)')],
+     "TestAHoldPlacedDuringASweepKeepsTheRecordInBothPlanes", PL),
+
+    # A repair that cannot be made must fail the request. Answering 200 tells a
+    # tenant its litigation hold held while the answer key quietly lost the row.
+    ("label: a repair the derived copy refuses is a shrug rather than a refusal", [
+        (LT, '\t\t\t\treturn nil, zip.Errorf(http.StatusServiceUnavailable,\n'
+             '\t\t\t\t\t"%d records were placed under litigation hold during this sweep',
+             '\t\t\t\t_ = zip.Errorf(http.StatusServiceUnavailable,\n'
+             '\t\t\t\t\t"%d records were placed under litigation hold during this sweep')],
+     "TestARepairTheDerivedCopyRefusesIsNotAcknowledged", PL),
+
+    # A compliance report that says it deleted a record it is still holding is the
+    # wrong answer to the only question the report is asked.
+    ("label: the retention report counts what was identified, not what was disposed of", [
+        (LT, 'Disposed: len(expired) - len(kept),',
+             'Disposed: len(expired),')],
+     "TestAHoldPlacedDuringASweepKeepsTheRecordInBothPlanes", PL),
+
+    # ── THE PUBLISHED RULE NAMES THE FIELD THE RESOLVER READS ───────────────
+    #
+    # The op exists so a caller can reproduce a contested resolution. `seen` and
+    # `knowable` are equal for a live pipeline and differ for exactly the
+    # backfilled history the derivation exists to hold back, so a rule published
+    # against `seen` is checkable and wrong.
+    ("label: the published precedence rule names the filer's own instant again", [
+        (LT, '\t\t\t"knowable: within one rank, the assertion that became KNOWABLE latest wins',
+             '\t\t\t"seen: within one rank, the assertion that became KNOWABLE latest wins')],
+     "TestVocabularyPublishesTheRuleThatIsEnforced", PL),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)

@@ -12,17 +12,17 @@
   ],
   "tags": [
     {
-      "name": "ml"
+      "name": "risk"
     }
   ],
   "paths": {
-    "/v1/ml/labels": {
+    "/v1/risk/labels": {
       "get": {
-        "operationId": "mlLabels",
+        "operationId": "riskLabels",
         "summary": "Read the assertions this tenant has recorded",
         "description": "Reads the assertions this tenant has recorded, newest event first.\n\nIt reads the RECORD — the tenant's own store — and not the columnar copy, so\nwhat it returns is what would be produced in an audit. Narrow it by entity, by\nasserter, or by event window.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "parameters": [
           {
@@ -83,7 +83,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlLabelsOut"
+                  "$ref": "#/components/schemas/riskLabelsOut"
                 }
               }
             },
@@ -92,17 +92,17 @@
         }
       },
       "post": {
-        "operationId": "mlLabel",
+        "operationId": "riskLabel",
         "summary": "Assert ground truth about events",
         "description": "Records a batch of ground truth against the entities it judges.\n\nEach assertion carries TWO times — when the judged event happened, and when\nthe assertion became knowable — and both are required. The second is what\nkeeps a chargeback that landed in June out of a model that had to decide in\nFebruary.\n\nIt is idempotent on the CONTENT of an assertion, so a webhook that redelivers\nis safe. It never overwrites: a source that corrects itself later files a NEW\nassertion, which wins from the moment it became knowable and leaves every\nearlier observation instant seeing exactly what it saw.\n\nThe asserter is stamped from the validated credential and is not a body field.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/mlLabelIn"
+                "$ref": "#/components/schemas/riskLabelIn"
               }
             }
           },
@@ -113,7 +113,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlLabelOut"
+                  "$ref": "#/components/schemas/riskLabelOut"
                 }
               }
             },
@@ -122,13 +122,13 @@
         }
       }
     },
-    "/v1/ml/labels/coverage": {
+    "/v1/risk/labels/coverage": {
       "get": {
-        "operationId": "mlLabelCoverage",
+        "operationId": "riskLabelCoverage",
         "summary": "How much of the window has matured, and how much of that is judged",
         "description": "Reports how much of a window has matured and how much of that is\njudged, per source.\n\nIt is the gate on training. A supervised fit over a window whose judged count\nis near zero produces a number, and the number is meaningless; this op is what\nlets that be stated before the fit rather than discovered after it.\n\nIt reads the RECORD plane and folds every assertion at that event's OWN as-of,\nso the counts obey exactly the leakage rule a materialisation would. It counts\nonly what was ASSERTED: what share of the whole event STREAM carries a label is\na question about the feature plane's denominator and is not answerable here.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "parameters": [
           {
@@ -163,7 +163,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlLabelCoverage"
+                  "$ref": "#/components/schemas/riskLabelCoverage"
                 }
               }
             },
@@ -172,19 +172,19 @@
         }
       }
     },
-    "/v1/ml/labels/dispose": {
+    "/v1/risk/labels/dispose": {
       "post": {
-        "operationId": "mlDisposeLabels",
+        "operationId": "riskDisposeLabels",
         "summary": "Dispose of this tenant's expired assertions, whole records only",
         "description": "Applies this tenant's retention, and only this tenant's.\n\nIt is bounded three ways, each a compliance property rather than a\nconvenience. It refuses a boundary younger than the platform floor, because a\nlabel can be the input to an adverse action and five years is what the\nretention ledger holds such a record for. It never touches a record under\nlitigation hold. And it disposes of whole records rather than redacting\nfields.\n\nIt removes the derived columnar copy BEFORE the record, and refuses the whole\ndisposal if the warehouse cannot be reached. The other order would leave rows\nin the warehouse that nothing can identify any more, which is a disposal that\ndid not happen and says it did.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/mlDisposeIn"
+                "$ref": "#/components/schemas/riskDisposeIn"
               }
             }
           },
@@ -195,7 +195,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlDisposeOut"
+                  "$ref": "#/components/schemas/riskDisposeOut"
                 }
               }
             },
@@ -204,19 +204,19 @@
         }
       }
     },
-    "/v1/ml/labels/hold": {
+    "/v1/risk/labels/hold": {
       "post": {
-        "operationId": "mlHoldLabels",
+        "operationId": "riskHoldLabels",
         "summary": "Place or release a litigation hold on named records",
         "description": "Places or releases a litigation hold on named records.\n\nA hold is a fact about the RECORD, not about the world: it says retention may\nnot dispose of this row, and it asserts nothing about what happened. So it is\nnot a field on an assertion and it is not folded into the content digest —\ncarried there it was silently a no-op on any record that already existed, since\nre-filing the same assertion with a hold flag produced the same digest, the\ninsert was ignored, and the caller was answered `duplicate` while the hold it\nasked for was never placed. This op is the one way a hold moves, in either\ndirection, and the move is written to the audit log.\n\nEvery named id is this tenant's or is nothing. The statement runs against the\ntenant's own file, which holds no other tenant's rows and has no column that\ncould name one.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/mlHoldIn"
+                "$ref": "#/components/schemas/riskHoldIn"
               }
             }
           },
@@ -227,7 +227,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlHoldOut"
+                  "$ref": "#/components/schemas/riskHoldOut"
                 }
               }
             },
@@ -236,19 +236,19 @@
         }
       }
     },
-    "/v1/ml/labels/resolve": {
+    "/v1/risk/labels/resolve": {
       "post": {
-        "operationId": "mlResolveLabels",
+        "operationId": "riskResolveLabels",
         "summary": "Resolve the label in force for named events, as of each event's own horizon",
         "description": "Answers, for each named event, which assertion was in force AS OF that\nevent's own horizon — and what disagreed with it.\n\nThis is the join surface: the dataset materialiser calls it to attach ground\ntruth to training rows, and the evaluator calls it to score a past decision\nagainst what was knowable when the decision had to be made. One mechanism for\nboth, so a model can never be trained under one leakage rule and scored under\nanother.\n\nThree answers are distinct and all three are honest: a resolved label, an\nevent that has not matured, and a matured event nobody has judged. The last is\nnever reported as unproductive.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/mlResolveIn"
+                "$ref": "#/components/schemas/riskResolveIn"
               }
             }
           },
@@ -259,7 +259,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlResolveOut"
+                  "$ref": "#/components/schemas/riskResolveOut"
                 }
               }
             },
@@ -268,20 +268,20 @@
         }
       }
     },
-    "/v1/ml/labels/vocabulary": {
+    "/v1/risk/labels/vocabulary": {
       "get": {
-        "operationId": "mlLabelVocabulary",
+        "operationId": "riskLabelVocabulary",
         "summary": "The closed vocabularies and the precedence rule that resolves a conflict",
         "description": "Publishes the closed vocabularies and the precedence rule that\nresolves a conflict between two sources.\n\nA precedence rule nobody can read is a rule nobody can audit or dispute, and\nthe whole defensibility of a contested label rests on being able to say why\none assertion beat another. The order returned here is derived from the same\ndeclaration the resolver reads — it is not a description of it.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlLabelVocabulary"
+                  "$ref": "#/components/schemas/riskLabelVocabulary"
                 }
               }
             },
@@ -293,7 +293,7 @@
   },
   "components": {
     "schemas": {
-      "mlDisposeIn": {
+      "riskDisposeIn": {
         "properties": {
           "before": {
             "description": "Before disposes of assertions WRITTEN before this instant, RFC 3339. It is\nmeasured against the server clock at the write and not against the event\nor observation times, both of which the asserting caller supplies — a\ntenant that could back-date could delete a compliance record on demand.",
@@ -302,7 +302,7 @@
         },
         "type": "object"
       },
-      "mlDisposeOut": {
+      "riskDisposeOut": {
         "properties": {
           "before": {
             "type": "string"
@@ -322,6 +322,10 @@
             "description": "Remaining is how many disposable records are still older than the\nboundary. A sweep is bounded per call, so a non-zero value here means call\nagain rather than that something failed.",
             "type": "integer"
           },
+          "restored": {
+            "description": "Restored is how many records this sweep had already removed from the derived\ncolumnar copy and then did NOT dispose of, because a litigation hold arrived\nbetween the identify and the delete — and which were therefore written back\nto the derived copy before this answered.\n\nIt is a NAMED state and not a silent repair. The copy is swept before the\nrecord so nothing is orphaned in the warehouse, which means a record the\ndelete declines to remove is one the warehouse has already lost, with its\nseq behind the delivery cursor and no retry that can reach it. Non-zero here\nsays the collision happened and was repaired; a non-zero that keeps\nrecurring says retention and hold are racing on the same records, which is\nworth an operator's attention rather than a debug line.",
+            "type": "integer"
+          },
           "total": {
             "description": "Total and Oldest describe what the tenant still holds afterwards, so a\ndisposal that removed nothing is distinguishable from a tenant that had\nnothing.",
             "type": "integer"
@@ -329,21 +333,7 @@
         },
         "type": "object"
       },
-      "mlEvent": {
-        "properties": {
-          "at": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "mlHoldIn": {
+      "riskHoldIn": {
         "properties": {
           "hold": {
             "description": "Hold is the state to put them in: true places the hold, false releases it.\nOne op both ways, because a hold that can be placed and not released pins a\ncompliance record past every retention boundary with nothing able to let it\ngo — and an operator who cannot release a hold stops placing them.",
@@ -359,7 +349,7 @@
         },
         "type": "object"
       },
-      "mlHoldOut": {
+      "riskHoldOut": {
         "properties": {
           "changed": {
             "description": "Changed is how many records moved into that state. A record already in it\nis not counted and is not an error: the op is idempotent, so a retry after\na network failure is safe.",
@@ -380,7 +370,7 @@
         },
         "type": "object"
       },
-      "mlLabelCoverage": {
+      "riskLabelCoverage": {
         "properties": {
           "contested": {
             "description": "Contested is how many matured events have two visible assertions that\ndisagree. It is the number that says whether the precedence rule is\nload-bearing or decorative, and it is the one to watch after wiring a new\nsource.",
@@ -421,7 +411,7 @@
           "sources": {
             "description": "Sources breaks the judged events down by the source that WON, so a plane\nthat looks labelled because one noisy source dominates is visible as such.",
             "items": {
-              "$ref": "#/components/schemas/mlSourceCoverage"
+              "$ref": "#/components/schemas/riskSourceCoverage"
             },
             "type": "array"
           },
@@ -442,7 +432,21 @@
         },
         "type": "object"
       },
-      "mlLabelFact": {
+      "riskLabelEvent": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskLabelFact": {
         "properties": {
           "at": {
             "description": "At is when the judged event happened, RFC 3339.",
@@ -479,19 +483,19 @@
         },
         "type": "object"
       },
-      "mlLabelIn": {
+      "riskLabelIn": {
         "properties": {
           "labels": {
             "description": "Labels is the batch. Each member is judged on its own: one refusal does\nnot discard the rest, because a webhook redelivering five disputes must\nnot lose four of them to one malformed fifth.",
             "items": {
-              "$ref": "#/components/schemas/mlLabelFact"
+              "$ref": "#/components/schemas/riskLabelFact"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "mlLabelOut": {
+      "riskLabelOut": {
         "properties": {
           "duplicate": {
             "type": "integer"
@@ -513,14 +517,14 @@
           "results": {
             "description": "Results is per fact, in the order sent, so a caller can retry exactly the\nmembers that were refused and can log the content digest of the ones that\nlanded.",
             "items": {
-              "$ref": "#/components/schemas/mlLabelResult"
+              "$ref": "#/components/schemas/riskLabelResult"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "mlLabelRecord": {
+      "riskLabelRecord": {
         "properties": {
           "at": {
             "type": "string"
@@ -568,7 +572,7 @@
         },
         "type": "object"
       },
-      "mlLabelResult": {
+      "riskLabelResult": {
         "properties": {
           "id": {
             "description": "ID is the content digest of the assertion — the id a redelivery of the\nsame fact resolves to.",
@@ -585,7 +589,7 @@
         },
         "type": "object"
       },
-      "mlLabelVocabulary": {
+      "riskLabelVocabulary": {
         "properties": {
           "dispositions": {
             "items": {
@@ -621,7 +625,7 @@
         },
         "type": "object"
       },
-      "mlLabelsOut": {
+      "riskLabelsOut": {
         "properties": {
           "count": {
             "description": "Count is how many this page holds. It is not a total: a total over an\nunbounded append-only log is a full scan of a single-writer file.",
@@ -630,14 +634,14 @@
           "labels": {
             "description": "Labels is the page, newest event first.",
             "items": {
-              "$ref": "#/components/schemas/mlLabelRecord"
+              "$ref": "#/components/schemas/riskLabelRecord"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "mlResolveIn": {
+      "riskResolveIn": {
         "properties": {
           "horizon": {
             "description": "Horizon is how many days an event must age before it may be resolved at\nall, and it is the whole of the no-leakage rule. 120 for the payment lane\n(past the Visa and Mastercard dispute windows), 14 for signup abuse.\nUnstated takes 120.",
@@ -650,21 +654,21 @@
           "subjects": {
             "description": "Subjects are the exact events being judged. Each carries its own event\ntime, because the as-of that keeps the future out is derived from that\ninstant plus the horizon — one as-of over a whole batch would give a\nJanuary row six extra months of hindsight.\n\nOne entry per DISTINCT (kind, subject, at): naming an event twice answers\nonce, because an event resolved twice would list its own winner as a\ncontrary claim and would hand a materialiser duplicate training rows.",
             "items": {
-              "$ref": "#/components/schemas/mlEvent"
+              "$ref": "#/components/schemas/riskLabelEvent"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "mlResolveOut": {
+      "riskResolveOut": {
         "properties": {
           "horizon": {
             "type": "integer"
           },
           "labels": {
             "items": {
-              "$ref": "#/components/schemas/mlResolved"
+              "$ref": "#/components/schemas/riskResolved"
             },
             "type": "array"
           },
@@ -683,7 +687,7 @@
         },
         "type": "object"
       },
-      "mlResolved": {
+      "riskResolved": {
         "properties": {
           "asOf": {
             "description": "AsOf is the instant this answer was true at: the event time plus the\nhorizon. Nothing seen after it was visible to this resolution.",
@@ -701,7 +705,7 @@
           "conflicts": {
             "description": "Conflicts is every other visible assertion, strongest first, whole. They\nare kept and returned rather than dropped, so an adverse action can show\nthat the plane knew of a contrary claim and say why it lost. They are\nhorizon-filtered exactly like the winner: an assertion that was not\nknowable yet cannot even be named here, because naming it would leak its\nexistence into a past decision.",
             "items": {
-              "$ref": "#/components/schemas/mlLabelRecord"
+              "$ref": "#/components/schemas/riskLabelRecord"
             },
             "type": "array"
           },
@@ -730,7 +734,7 @@
         },
         "type": "object"
       },
-      "mlSourceCoverage": {
+      "riskSourceCoverage": {
         "properties": {
           "facts": {
             "description": "Facts is how many assertions this source filed; Won is how many judged\nevents it was the assertion in force for. A source with many facts and few\nwins is one that is being outranked, which is worth knowing before\nconcluding it is wired correctly.",

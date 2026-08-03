@@ -75,6 +75,7 @@ func init() {
 			"riskDisposeOut.disposed":  "Disposed is how many whole records were removed. Records are disposed of\nwhole, never redacted: a partially-erased compliance record is one nobody\ncan attest to.",
 			"riskDisposeOut.held":      "Held is how many records inside the boundary were kept under litigation\nhold.",
 			"riskDisposeOut.remaining": "Remaining is how many disposable records are still older than the\nboundary. A sweep is bounded per call, so a non-zero value here means call\nagain rather than that something failed.",
+			"riskDisposeOut.restored":  "Restored is how many records this sweep had already removed from the derived\ncolumnar copy and then did NOT dispose of, because a litigation hold arrived\nbetween the identify and the delete — and which were therefore written back\nto the derived copy before this answered.\n\nIt is a NAMED state and not a silent repair. The copy is swept before the\nrecord so nothing is orphaned in the warehouse, which means a record the\ndelete declines to remove is one the warehouse has already lost, with its\nseq behind the delivery cursor and no retry that can reach it. Non-zero here\nsays the collision happened and was repaired; a non-zero that keeps\nrecurring says retention and hold are racing on the same records, which is\nworth an operator's attention rather than a debug line.",
 			"riskDisposeOut.total":     "Total and Oldest describe what the tenant still holds afterwards, so a\ndisposal that removed nothing is distinguishable from a tenant that had\nnothing.",
 		},
 	})
