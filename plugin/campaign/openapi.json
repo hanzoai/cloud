@@ -19,8 +19,8 @@
     "/v1/campaign": {
       "get": {
         "operationId": "get_v1_campaign",
-        "summary": "ListCampaigns returns the org's campaigns, newest first, optionally narrowed to one status.",
-        "description": "ListCampaigns returns the org's campaigns, newest first, optionally narrowed to\none status.\n\nA campaign is the top-level go-to-market object: a value that SPANS channels\n(paid, organic, email) and fans out to the executor for each. The listing is\norg-scoped server-side, so one org can never see another's campaigns.",
+        "summary": "Returns the org's campaigns, newest first, optionally narrowed to one status.",
+        "description": "Returns the org's campaigns, newest first, optionally narrowed to\none status.\n\nA campaign is the top-level go-to-market object: a value that SPANS channels\n(paid, organic, email) and fans out to the executor for each. The listing is\norg-scoped server-side, so one org can never see another's campaigns.",
         "tags": [
           "campaign"
         ],
@@ -61,8 +61,8 @@
       },
       "post": {
         "operationId": "post_v1_campaign",
-        "summary": "CreateCampaign creates a campaign as a DRAFT and returns it.",
-        "description": "CreateCampaign creates a campaign as a DRAFT and returns it.\n\nA draft is inert: nothing is sent, no connector is touched and no budget is\ncommitted until the campaign is launched. The channels named here are validated\nand de-duplicated by kind (one executor per kind), and every channel starts\n\"pending\" whatever the caller claims — a client can never assert a launched\nstate.",
+        "summary": "Creates a campaign as a DRAFT and returns it.",
+        "description": "Creates a campaign as a DRAFT and returns it.\n\nA draft is inert: nothing is sent, no connector is touched and no budget is\ncommitted until the campaign is launched. The channels named here are validated\nand de-duplicated by kind (one executor per kind), and every channel starts\n\"pending\" whatever the caller claims — a client can never assert a launched\nstate.",
         "tags": [
           "campaign"
         ],
@@ -106,8 +106,8 @@
     "/v1/campaign/summary": {
       "get": {
         "operationId": "get_v1_campaign_summary",
-        "summary": "SummarizeCampaigns returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach.",
-        "description": "SummarizeCampaigns returns the org's go-to-market roll-up: how many campaigns\nexist, how many are live, their total budget in cents, and which channel\nexecutors this deployment can actually reach.\n\nThe channel list is the deployment's honest capability, not a wish: a kind\nmissing from it is one a launch will record as \"unavailable\" rather than fail\non.",
+        "summary": "Returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach.",
+        "description": "Returns the org's go-to-market roll-up: how many campaigns\nexist, how many are live, their total budget in cents, and which channel\nexecutors this deployment can actually reach.\n\nThe channel list is the deployment's honest capability, not a wish: a kind\nmissing from it is one a launch will record as \"unavailable\" rather than fail\non.",
         "tags": [
           "campaign"
         ],
@@ -128,8 +128,8 @@
     "/v1/campaign/{id}": {
       "delete": {
         "operationId": "delete_v1_campaign_id",
-        "summary": "DeleteCampaign removes one campaign of the caller's org and answers 204 with no body.",
-        "description": "DeleteCampaign removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them.",
+        "summary": "Removes one campaign of the caller's org and answers 204 with no body.",
+        "description": "Removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them.",
         "tags": [
           "campaign"
         ],
@@ -152,8 +152,8 @@
       },
       "get": {
         "operationId": "get_v1_campaign_id",
-        "summary": "GetCampaign returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status.",
-        "description": "GetCampaign returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
+        "summary": "Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status.",
+        "description": "Returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
         "tags": [
           "campaign"
         ],
@@ -183,8 +183,8 @@
       },
       "put": {
         "operationId": "put_v1_campaign_id",
-        "summary": "UpdateCampaign rewrites a campaign's core fields — name, audience, creatives, schedule and budget — and returns the updated campaign.",
-        "description": "UpdateCampaign rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",
+        "summary": "Rewrites a campaign's core fields — name, audience, creatives, schedule and budget — and returns the updated campaign.",
+        "description": "Rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",
         "tags": [
           "campaign"
         ],
@@ -230,8 +230,8 @@
     "/v1/campaign/{id}/channels": {
       "post": {
         "operationId": "post_v1_campaign_id_channels",
-        "summary": "AddCampaignChannel adds a channel to a campaign, or REPLACES the one it already has of that kind, and returns the updated campaign.",
-        "description": "AddCampaignChannel adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it.",
+        "summary": "Adds a channel to a campaign, or REPLACES the one it already has of that kind, and returns the updated campaign.",
+        "description": "Adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it.",
         "tags": [
           "campaign"
         ],
@@ -280,8 +280,8 @@
     "/v1/campaign/{id}/channels/{kind}": {
       "delete": {
         "operationId": "delete_v1_campaign_id_channels_kind",
-        "summary": "RemoveCampaignChannel drops one channel from a campaign and returns the updated campaign.",
-        "description": "RemoveCampaignChannel drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards.",
+        "summary": "Drops one channel from a campaign and returns the updated campaign.",
+        "description": "Drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards.",
         "tags": [
           "campaign"
         ],
@@ -342,8 +342,8 @@
     "/v1/campaign/{id}/metrics": {
       "get": {
         "operationId": "get_v1_campaign_id_metrics",
-        "summary": "CampaignMetrics returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS.",
-        "description": "CampaignMetrics returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
+        "summary": "Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS.",
+        "description": "Returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
         "tags": [
           "campaign"
         ],
