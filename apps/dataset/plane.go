@@ -157,7 +157,8 @@ const manifestDDL = `
 		unproductive UInt64,
 		horizon      UInt32,
 		share        UInt16,
-		truncated    UInt8
+		truncated    UInt8,
+		oversize     UInt64
 	) ENGINE = ReplacingMergeTree(seq)
 	PARTITION BY (org, name)
 	ORDER BY (org, name, version)`
@@ -220,6 +221,10 @@ type entry struct {
 	Horizon   int
 	Share     int
 	Truncated bool
+	// Oversize is how many of this window's subjects could not be represented —
+	// their subject identity exceeded [maxSubjectBytes]. Recorded so a bound that
+	// bound is a fact on the version rather than a difference nobody can see.
+	Oversize int
 }
 
 // manifestColumns is the fixed column list of every manifest write and read, in
@@ -228,6 +233,7 @@ var manifestColumns = []string{
 	"org", "name", "version", "seq", "at", "by", "status", "refusal",
 	"spec", "source", "digest", "rows", "train", "val", "test", "subjects",
 	"judged", "productive", "unproductive", "horizon", "share", "truncated",
+	"oversize",
 }
 
 // put writes manifest rows. It is the ONLY writer of hanzo.risk_dataset.
@@ -258,7 +264,7 @@ func (p *plane) put(ctx context.Context, k tenant.Key, es ...entry) error {
 			e.Spec.canon(), e.Source, e.Digest,
 			uint64(e.Counts.Rows), uint64(e.Counts.Train), uint64(e.Counts.Val), uint64(e.Counts.Test),
 			uint64(e.Counts.Subjects), uint64(e.Counts.Judged), uint64(e.Counts.Productive), uint64(e.Counts.Unproductive),
-			uint32(e.Horizon), uint16(e.Share), boolByte(e.Truncated))
+			uint32(e.Horizon), uint16(e.Share), boolByte(e.Truncated), uint64(e.Oversize))
 	}
 	stmt := "INSERT INTO " + manifestTable + " (" + strings.Join(manifestColumns, ", ") + ") VALUES " +
 		strings.TrimSuffix(strings.Repeat(group+", ", len(es)), ", ")
@@ -367,6 +373,7 @@ func (p *plane) read(ctx context.Context, k tenant.Key, stmt string, args ...any
 			Horizon:   int(number(r["horizon"])),
 			Share:     int(number(r["share"])),
 			Truncated: number(r["truncated"]) != 0,
+			Oversize:  int(number(r["oversize"])),
 		}
 		if e.Spec, err = decode(text(r["spec"])); err != nil {
 			return nil, fmt.Errorf("dataset %q version %d: %w", e.Name, e.Version, err)
@@ -564,11 +571,48 @@ type census struct {
 	Subjects int
 	First    time.Time
 	Last     time.Time
+	// Oversize is how many subjects the window holds that CANNOT be represented in
+	// a dataset — their subject identity is longer than [maxSubjectBytes]. It is
+	// measured on the same pass that measures the rest, so naming it costs nothing
+	// and omitting it would make the bound silent.
+	Oversize int
+}
+
+// representable is the predicate a source row must satisfy to FIT IN A DATASET:
+// its subject identity is at most [maxSubjectBytes]. It returns the SQL and its
+// one bound argument, and it is the only place either is written.
+//
+// IT IS ONE EXPRESSION BECAUSE TWO STATEMENTS DEPEND ON IT AGREEING WITH ITSELF.
+// [plane.census] counts what satisfies it AND what does not, in one pass; [plane.facts]
+// returns only what satisfies it. Were the two spelled separately, the share would
+// be computed against a population the read then did not return, and a capped
+// dataset would sample from rows that were never eligible — a reproducibility bug
+// with nothing pointing at it.
+//
+// It is applied on the way OUT of the source, which is the way IN to this process
+// and to the rows table, so it is the single point at which [maxRowBytes] becomes
+// true of every row this plane holds, writes or returns.
+func representable() (string, any) {
+	return "length(subject_kind) + length(subject) <= ?", maxSubjectBytes
+}
+
+// oversized is representable's complement: the rows the bound EXCLUDES. It exists
+// so the exclusion can be COUNTED rather than merely happening — a bound that
+// binds silently is indistinguishable from a tenant with no data, which is the one
+// reading an operator must never have to guess at.
+func oversized() (string, any) {
+	pred, arg := representable()
+	return "NOT (" + pred + ")", arg
 }
 
 // sourceWhere is THE source predicate: org first and bound, then the kind, then
 // the window. The order follows the source table's own sort key
 // (org, subject_kind, subject, bucket), so the read is a prefix scan.
+//
+// The row-size bound is NOT here, deliberately: the census must see the rows it
+// excludes in order to count them, so [representable] is applied per-aggregate
+// there and as a conjunct in [plane.facts]. Both name it; the AST gate
+// [TestEveryReadOfTheSourceIsBoundedInBytes] refuses a reader that names neither.
 func sourceWhere(k tenant.Key, s spec, until time.Time) (string, []any) {
 	where := []string{"org = ?"}
 	args := []any{k.String()}
@@ -602,9 +646,22 @@ func (p *plane) census(ctx context.Context, a scan, s spec, until time.Time) (ce
 		return census{}, errStore
 	}
 	where, args := sourceWhere(k, s, until)
-	raw, err := p.store.Query(ctx,
-		"SELECT uniqExact((subject_kind, subject, bucket)) AS rows, uniqExact((subject_kind, subject)) AS subjects,"+
-			" min(bucket) AS first, max(bucket) AS last FROM "+sourceTable+" WHERE "+where, args...)
+	// The measurement is CONDITIONAL rather than filtered, so one pass answers both
+	// halves: what this window contributes to a dataset, and what it holds that no
+	// dataset can carry. The extent is measured over the representable rows only —
+	// it is the extent of the thing being built, and comparing a version against a
+	// window whose edges were set by a row the version never held is a drift report
+	// that fires on nothing anybody can act on.
+	fits, bound := representable()
+	over, _ := oversized()
+	stmt := "SELECT uniqExactIf((subject_kind, subject, bucket), " + fits + ") AS rows," +
+		" uniqExactIf((subject_kind, subject), " + fits + ") AS subjects," +
+		" uniqExactIf((subject_kind, subject), " + over + ") AS oversize," +
+		" minIf(bucket, " + fits + ") AS first, maxIf(bucket, " + fits + ") AS last" +
+		" FROM " + sourceTable + " WHERE " + where
+	// The aggregates precede the WHERE in the statement, so their arguments precede
+	// the predicate's. Five occurrences, one value.
+	raw, err := p.store.Query(ctx, stmt, append([]any{bound, bound, bound, bound, bound}, args...)...)
 	if err != nil {
 		return census{}, fmt.Errorf("%w: measure the source: %v", errStore, err)
 	}
@@ -616,6 +673,7 @@ func (p *plane) census(ctx context.Context, a scan, s spec, until time.Time) (ce
 		Subjects: int(number(raw[0]["subjects"])),
 		First:    when(raw[0]["first"]),
 		Last:     when(raw[0]["last"]),
+		Oversize: int(number(raw[0]["oversize"])),
 	}, nil
 }
 
@@ -639,6 +697,12 @@ func (p *plane) facts(ctx context.Context, a scan, s spec, until time.Time, shar
 		return nil, false, errStore
 	}
 	where, args := sourceWhere(k, s, until)
+	// THE ROW-SIZE BOUND, and the reason [maxRows] means anything. It is the SAME
+	// expression the census counted with, so the population the share was chosen
+	// against is exactly the population this returns.
+	fits, bound := representable()
+	where += " AND " + fits
+	args = append(args, bound)
 	if share < shareDenominator {
 		where += fmt.Sprintf(" AND cityHash64(?, subject) %% %d < ?", shareDenominator)
 		args = append(args, s.Seed, uint32(share))
