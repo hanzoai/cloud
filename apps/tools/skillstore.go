@@ -14,7 +14,7 @@ import (
 // Org-authored skills.
 //
 // The brand's skills are GENERATED from the OpenAPI source of truth and embedded
-// (clients/agentskills), which means changing them is a rebuild and a redeploy.
+// (apps/skills), which means changing them is a rebuild and a redeploy.
 // That is right for the catalogue a deployment ships and wrong for the one an org
 // writes, so an org's own skills live here instead — added at runtime, visible
 // immediately, and never able to reach the public discovery surface because they
@@ -140,7 +140,7 @@ func (s *SkillStore) Delete(ctx context.Context, org, id string) error {
 // as SourceSkill entries, beside the deployment brand's embedded ones.
 //
 // Two providers share SourceSkill on purpose. The registry dedups by NAME with
-// equal-rank ties going to whoever registered first, and clients/agentskills
+// equal-rank ties going to whoever registered first, and apps/skills
 // mounts at order 8 while this mounts at 123 — so a brand skill always wins a
 // name collision against an org's. The deployment's own catalogue is the one
 // that cannot be shadowed.

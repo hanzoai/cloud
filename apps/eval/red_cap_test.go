@@ -108,7 +108,7 @@ func TestRed_RunNameAndJudgeNameGuarded(t *testing.T) {
 	})
 	req.Header.Set("X-User-Id", "u_o")
 	req.Header.Set("X-Org-Id", "o")
-	req.Header.Set("Authorization", "Bearer hk-test")
+	req.Header.Set("Authorization", "Bearer sk-test")
 	if code, _ := send(t, app, req); code != http.StatusBadRequest {
 		t.Fatalf("traversal runName want 400, got %d", code)
 	}

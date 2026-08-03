@@ -15,18 +15,18 @@ package ai
 // and an inventory nobody can read is how a door that serves nothing passes for
 // a healthy one.
 //
-// So this file adds exactly one op, and it reports THREE numbers that are three
-// different questions, never one number standing in for all of them:
+// So this file adds exactly one op, and it reports what THIS PROCESS's door
+// actually carries — read from the live registry, never from a description of it.
 //
-//	published — every tool this BUILD can serve: the union of every subsystem's
-//	            committed catalogue, the same plugin/<app>/mcp.json bytes the host
-//	            hands zip at Load. A property of the artifact, true in any process.
-//	served    — what THIS PROCESS's door actually composed. Read from the LIVE
-//	            composition (App.Plugins + App.MCPTools), so a subsystem that did
-//	            not mount is missing from it. This is the number that can be zero
-//	            while `published` is nine hundred, and saying so is the whole point.
-//	local     — the part of `served` this process registered itself, as opposed to
-//	            composing from a child's catalogue.
+// IT USED TO REPORT A THIRD NUMBER, `published`: every tool the BUILD could
+// serve, summed over the committed plugin/<app>/mcp.json catalogues. Those files
+// are gone. They were a second source for a fact each child already knows, and
+// they were wrong — plugin/o11y/mcp.json held 12 tools while the o11y binary at
+// the same commit served 365 — so the fleet-wide question is answered by ASKING
+// the fleet now, at the one door, which also NAMES every subsystem it could not
+// reach (package fleet). No process but the host can ask that question, and a
+// subsystem inventing an answer to it is precisely the green surface this file
+// was written against.
 //
 // A deployment manifest answers what was INTENDED; only the process answers what
 // it LOADED, and during a rolling upgrade the two disagree by design (scope.go
@@ -39,20 +39,16 @@ package ai
 // the PATH-derived id (get_v1_o11y_logs, get_v1_analytics_top), and a path lives
 // under the subtree the manifest grants exactly one subsystem, so two defaults
 // cannot meet; an op that DOES name itself escapes that, so the name is checked
-// instead — zip refuses a Load whose catalogue claims a name another plugin
-// already owns (a boot failure), and manifest's TestEveryCatalogueToolIsAnOpOfItsOwnApp
-// turns that boot failure into a red build. A hand-written id in this package
-// therefore carries its subsystem: aiMCPTools, never mcpTools.
+// instead — the fleet door refuses to serve one name from two apps and logs both
+// (fleet/mcp.go). A hand-written id in this package therefore carries its
+// subsystem: aiMCPTools, never mcpTools.
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
-	"sync"
 
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plugin"
 	"github.com/zap-proto/zip"
 )
 
@@ -90,52 +86,49 @@ func mountMCP(app *zip.App) {
 	zip.Get(app, "/v1/ai/mcp/tools", o.tools, zip.WithOperationID("aiMCPTools"))
 }
 
-// aiMCPQuery narrows the answer to one subsystem.
+// aiMCPQuery asks for the tool names as well as the counts.
 //
 // A typed op's Go type name IS its schema name and the fleet's schema namespace
 // is FLAT, so every name in this file carries the product prefix.
 type aiMCPQuery struct {
-	// App names one subsystem whose tool NAMES to list. Empty answers counts
-	// only: nine hundred names is a page no operator reads and no model can
-	// afford to be handed by accident.
-	App string `json:"app"`
+	// Names asks for this process's tool NAMES and not only how many there are.
+	// Off by default: a list of names is a page, and the question this op exists
+	// to answer ("is the door up and does it have anything behind it") is answered
+	// by the count.
+	Names bool `json:"names"`
 }
 
 // aiMCPSurface is what the one MCP door carries, from this process's vantage.
 type aiMCPSurface struct {
-	// Published is every tool this BUILD can serve — the union of every
-	// subsystem's committed catalogue, which is a property of the artifact and
-	// therefore the same answer in every process.
-	Published int `json:"published"`
-	// Served is what THIS PROCESS's door actually composed. It is the number that
-	// can be far smaller than Published — a host that mounted nothing serves
-	// nothing — and the only one that describes the door a client is talking to.
-	Served int `json:"served"`
-	// Local is the part of Served this process registered ITSELF, rather than
-	// composing from a mounted child's catalogue.
-	Local int `json:"local"`
-	// Apps is one row per subsystem the build publishes, in manifest order.
-	Apps []aiMCPApp `json:"apps"`
-}
-
-// aiMCPApp is one subsystem's contribution to the door.
-type aiMCPApp struct {
-	// Name is the subsystem, as the manifest names it.
-	Name string `json:"name"`
-	// Tools is how many tools its committed catalogue publishes.
+	// Tools is how many tools THIS PROCESS's door carries: its own typed-op
+	// registry, projected. It is the only number a subsystem can state honestly —
+	// what the FLEET's door carries is a question only the host can ask, and it
+	// asks it by asking every subsystem (POST /v1/mcp, tools/list).
 	Tools int `json:"tools"`
-	// Served reports that THIS process actually mounted it, so its tools are on
-	// the door a client can call rather than only in the build.
-	Served bool `json:"served"`
-	// Names are its tool names, present only for the subsystem the query named.
+	// Apps is one row per subsystem this deployment composes, in manifest order.
+	Apps []aiMCPApp `json:"apps"`
+	// Names are this process's own tool names, present only when the query asked
+	// for them.
 	Names []string `json:"names,omitempty"`
 }
 
-// Tools reports what this binary's MCP door carries: every tool the build
-// publishes, how many of them this process actually serves, and which subsystem
-// each belongs to. It is the answer to "is the door up and does it have anything
-// behind it" — a question a status code cannot answer, since an empty door and a
-// full one are both 200.
+// aiMCPApp is one subsystem, as this process sees it.
+type aiMCPApp struct {
+	// Name is the subsystem, as the manifest names it.
+	Name string `json:"name"`
+	// Served reports that THIS process mounted it, so its tools are on this
+	// process's door rather than behind a sibling this process only knows the name
+	// of.
+	Served bool `json:"served"`
+}
+
+// Tools reports what THIS PROCESS's MCP door carries: how many tools its own
+// registry projects, optionally their names, and which subsystems this process
+// composed. It is the answer to "is this door up and does it have anything behind
+// it" — a question a status code cannot answer, since an empty door and a full
+// one are both 200. What the FLEET's door carries is the fleet door's own answer:
+// POST /v1/mcp, tools/list, which asks every subsystem and names the ones that
+// did not reply.
 func (o mcpOps) tools(ctx context.Context, in *aiMCPQuery) (*aiMCPSurface, error) {
 	// A TOOL CALL IS AN API CALL. The gate is the op's own, read from the bit
 	// cloud.Bridge parked, so it holds identically over REST and over MCP — and
@@ -143,56 +136,31 @@ func (o mcpOps) tools(ctx context.Context, in *aiMCPQuery) (*aiMCPSurface, error
 	if !principal.ValidatedFrom(ctx) {
 		return nil, zip.ErrForbidden(mcpGate)
 	}
-	return surface(o.app, in.App), nil
+	return surface(o.app, in.Names), nil
 }
 
-// surface reads the door. The published half comes from the committed
-// catalogues — the same bytes the host hands zip — and the served half from the
-// live composition, never from a list of what was meant to mount.
-func surface(app *zip.App, only string) *aiMCPSurface {
-	cat := published()
+// surface reads the door: this process's own registry, and which subsystems it
+// actually composed.
+//
+// Both halves come from the LIVE app — App.MCPTools and App.Plugins — never from
+// a list of what was meant to mount, and never from an artifact. There is no
+// build-time half left to disagree with them.
+func surface(app *zip.App, names bool) *aiMCPSurface {
+	tools := app.MCPTools()
 	mounted := map[string]bool{}
 	for _, p := range app.Plugins() {
 		mounted[p.Name] = true
 	}
-	out := &aiMCPSurface{
-		Local: len(app.MCPTools()),
-		Apps:  make([]aiMCPApp, 0, len(manifest.Apps)),
-	}
-	out.Served = out.Local
+	out := &aiMCPSurface{Tools: len(tools), Apps: make([]aiMCPApp, 0, len(manifest.Apps))}
 	for _, a := range manifest.Apps {
-		row := aiMCPApp{Name: a.Name, Tools: len(cat[a.Name]), Served: mounted[a.Name]}
-		if row.Served {
-			out.Served += row.Tools
+		out.Apps = append(out.Apps, aiMCPApp{Name: a.Name, Served: mounted[a.Name]})
+	}
+	if names {
+		out.Names = make([]string, 0, len(tools))
+		for _, t := range tools {
+			out.Names = append(out.Names, t["name"].(string))
 		}
-		if only != "" && only == a.Name {
-			row.Names = cat[a.Name]
-		}
-		out.Published += row.Tools
-		out.Apps = append(out.Apps, row)
+		sort.Strings(out.Names)
 	}
 	return out
 }
-
-// published is the build's catalogue — subsystem → its tool names — parsed ONCE.
-// The bytes are the artifact each app's own binary projected from its own
-// registry at build time (plugin/embed.go), so this reads what the door serves
-// rather than a description of it.
-var published = sync.OnceValue(func() map[string][]string {
-	out := make(map[string][]string, len(manifest.Apps))
-	for _, a := range manifest.Apps {
-		var tools []struct {
-			Name string `json:"name"`
-		}
-		if json.Unmarshal(plugin.Tools(a.Name), &tools) != nil {
-			continue // an app that has not been described yet publishes nothing
-		}
-		names := make([]string, 0, len(tools))
-		for _, t := range tools {
-			names = append(names, t.Name)
-		}
-		sort.Strings(names)
-		out[a.Name] = names
-	}
-	return out
-})

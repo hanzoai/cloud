@@ -106,7 +106,7 @@ func commerceServiceToken() string { return getenv("COMMERCE_SERVICE_TOKEN", "")
 // s2sBillingCall reports whether the request carries the verified COMMERCE_SERVICE_TOKEN
 // as its Bearer — a trusted IN-PROC service-to-service caller (the metering cap-gate's
 // authorize, the SuperAdmin cap-oversight Forward). Safety rests on the edge: the gateway
-// 401s a public Bearer that is not an IAM JWT / hk-|pk-|sk- API key (the 64-hex service
+// 401s a public Bearer that is not an IAM JWT / pk-|sk- API key (the 64-hex service
 // token is a JWT candidate that fails to parse), so an EXTERNAL client can never reach a
 // handler holding it — only in-proc commerce-transport dispatch does. Constant-time
 // compare; the token is never logged.
