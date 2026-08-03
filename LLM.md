@@ -1485,12 +1485,12 @@ invisible to prose, MCP, the CLI and every typed SDK method. What it taught:
   emit the Makefile beside the main it already writes, then run `make -f
   mk/fleet.mk openapi-check` and commit whatever drift those three have been
   hiding.
-**The six-plugin pass (bots, entitlements, sbom, translate, agentskills, gateway):
+**The six-plugin pass (bots, entitlements, sbom, translate, skills, gateway):
 11 typed, 5 refused, out of 16 operations that published NOTHING.** Same work list
 rule as the pass below — every operation in `plugin/<name>/openapi.json` carrying
 neither `description` nor `summary`. All six subsets were 100% undescribed before;
 five of the six are now fully or mostly typed (`entitlements` 3/3, `gateway` 2/2,
-`bots` 2/3, `sbom` 2/3, `translate` 2/3), and `agentskills` is 0/2 by structure. Each
+`bots` 2/3, `sbom` 2/3, `translate` 2/3), and `skills` is 0/2 by structure. Each
 package carries `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` reading the REAL
 mount, whose two ledgers must SUM to the served surface, so a route added untyped
 here goes red and a stale reason goes red too. What it taught, beyond the counts:
@@ -1506,7 +1506,7 @@ here goes red and a stale reason goes red too. What it taught, beyond the counts
   parameter is then declared `in: query` rather than `in: path`. apps/pricing's
   refusal, re-measured rather than inherited.
 - **Two more instances of the apps/plan prefix defect, and one of them is partial —
-  which is the harder shape to see.** `plugin/agentskills` declared no `Prefixes`,
+  which is the harder shape to see.** `plugin/skills` declared no `Prefixes`,
   so the `/v1/<name>` default covered NOTHING it serves (its routes are the root
   `/.well-known/agent-skills/…` convention). `plugin/entitlements` declared none
   either, and its default covered ONE of its two top-level nouns: `/v1/entitlements`
@@ -2473,7 +2473,7 @@ forbids and any weave refuses. Fixed there: an alias is named by its address.
 **And it CLOSED a reachability gap.** `manifest/router_test.go`'s `unreachable`
 ledger carried `iam /.well-known/{wildcard1} -> nothing` — a relying party's FIRST
 call reaching no app. Relayed, the only prefix that could have routed it was
-`/.well-known`, which owns the whole subtree and would have taken agentskills' with
+`/.well-known`, which owns the whole subtree and would have taken skills' with
 it. Grafted, iam declares the three exact documents its router holds, so
 `manifest.Apps` routes exactly those three and nothing else.
 
