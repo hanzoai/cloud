@@ -217,6 +217,12 @@ type riskScoreOut struct {
 	// learning and recording what it WOULD have alerted on, and changing no
 	// outcome. It is the default for a model no one has reviewed yet.
 	Shadow bool `json:"shadow"`
+	// Policy is the version of your organisation's decision regime this verdict
+	// was reached under, from its own policy history (GET /v1/risk/policy). Cut is
+	// derived from the appetite that version states, so it is the record that makes
+	// this decision reconstructible after the appetite is restated. Zero means no
+	// regime has ever been stated and the default posture — shadow — was in force.
+	Policy int `json:"policy"`
 	// Causes is the per-feature attribution, ordered by contribution. Each is a
 	// COUNTERFACTUAL on the model that produced the score — the coordinate moved
 	// to its neutral value and the event rescored — so the explanation is the
@@ -321,6 +327,12 @@ type riskModelState struct {
 	// recording what it WOULD have alerted on, and changing no outcome. Shadow is
 	// the default for a new tenant.
 	Live bool `json:"live"`
+	// Policy is the version of the decision regime this model is deciding under,
+	// from your organisation's own policy history (GET /v1/risk/policy). Every
+	// score cites it, so it is the join between a past decision and the appetite
+	// that produced its threshold. Zero means no regime has ever been stated and
+	// the default posture — shadow — is in force.
+	Policy int `json:"policy"`
 	// Learned is how many events the model has learned from.
 	Learned int64 `json:"learned"`
 	// Warm is whether that is enough for the model to have an opinion at all.
@@ -749,12 +761,12 @@ func (o ops) score(ctx context.Context, in *riskScoreIn) (*riskScoreOut, error) 
 		return nil, err
 	}
 	defer leave()
-	a, err := p.score(t, obs)
+	d, err := p.score(t, obs)
 	if err != nil {
 		return nil, wrap(err)
 	}
 	pay(1)
-	out := verdict(a)
+	out := verdict(d)
 	return &out, nil
 }
 
@@ -806,8 +818,8 @@ func (o ops) learn(ctx context.Context, in *riskLearnIn) (*riskLearnOut, error) 
 	}
 	pay(len(verdicts))
 	out := riskLearnOut{Learned: len(verdicts), Verdicts: make([]riskScoreOut, 0, len(verdicts))}
-	for _, a := range verdicts {
-		out.Verdicts = append(out.Verdicts, verdict(a))
+	for _, d := range verdicts {
+		out.Verdicts = append(out.Verdicts, verdict(d))
 	}
 	return &out, nil
 }
@@ -835,8 +847,12 @@ func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error)
 	if err != nil {
 		return nil, wrap(err)
 	}
+	ver, err := p.regimeNow(t)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	pay(1)
-	out := modelState(t, st, p.surface(t), agg)
+	out := modelState(t, st, p.surface(t), agg, ver)
 	return &out, nil
 }
 
@@ -856,12 +872,10 @@ func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error)
 //
 // Example: {"review":0.01,"sample":0.001,"live":false}
 func (o ops) appetite(ctx context.Context, in *riskAppetiteIn) (*riskModelState, error) {
-	switch {
-	case in.Review <= 0 || in.Review > 0.5:
-		return nil, zip.ErrBadRequest("'review' must be in (0, 0.5] — a share of the stream, not a count")
-	case in.Sample < 0 || in.Sample > 1:
-		return nil, zip.ErrBadRequest("'sample' must be in [0, 1]")
-	}
+	// The bounds on `review` and `sample` are NOT restated here. They live in
+	// admitRegime, which every path that records a regime goes through — including
+	// the one-time adoption of a regime that predates the record — so a rule stated
+	// here as well would be a second spelling to disagree with the first.
 	pay, err := o.gate(ctx, "appetite", 1)
 	if err != nil {
 		return nil, err
@@ -871,12 +885,12 @@ func (o ops) appetite(ctx context.Context, in *riskAppetiteIn) (*riskModelState,
 		return nil, err
 	}
 	defer leave()
-	st, agg, err := p.appetite(t, in.Review, in.Sample, in.Live)
+	st, agg, ver, err := p.appetite(t, in.Review, in.Sample, in.Live, caller(ctx))
 	if err != nil {
 		return nil, wrap(err)
 	}
 	pay(1)
-	out := modelState(t, st, p.surface(t), agg)
+	out := modelState(t, st, p.surface(t), agg, ver)
 	return &out, nil
 }
 
@@ -931,8 +945,12 @@ func (o ops) restore(ctx context.Context, in *riskRestoreIn) (*riskModelState, e
 	if err != nil {
 		return nil, wrap(err)
 	}
+	ver, err := p.regimeNow(t)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	pay(1)
-	out := modelState(t, st, p.surface(t), agg)
+	out := modelState(t, st, p.surface(t), agg, ver)
 	return &out, nil
 }
 
@@ -1262,10 +1280,11 @@ func wrap(err error) error {
 	return zip.Errorf(500, "%v", err)
 }
 
-func verdict(a anomaly.Assessment) riskScoreOut {
+func verdict(d decided) riskScoreOut {
+	a := d.A
 	out := riskScoreOut{
 		Scored: a.Scored, Refusal: a.Reason, Score: a.Score,
-		Cut: a.Cut, Alert: a.Alert, Shadow: a.Shadow,
+		Cut: a.Cut, Alert: a.Alert, Shadow: a.Shadow, Policy: d.Version,
 	}
 	for _, c := range a.Causes {
 		out.Causes = append(out.Causes, riskCause{
@@ -1283,9 +1302,9 @@ func verdict(a anomaly.Assessment) riskScoreOut {
 	return out
 }
 
-func modelState(t tenant, st anomaly.State, f fold, s strain) riskModelState {
+func modelState(t tenant, st anomaly.State, f fold, s strain, policy int) riskModelState {
 	return riskModelState{
-		Tenant: string(t), Shape: st.Digest, Live: !st.Config.Shadow,
+		Tenant: string(t), Shape: st.Digest, Live: !st.Config.Shadow, Policy: policy,
 		Learned: st.Learned, Warm: st.Warm,
 		Stated: st.Config.Appetite.Review, Realised: st.Realised, Sample: st.Config.Appetite.Sample,
 		Cut: st.Cut, Saturated: st.Saturated,
