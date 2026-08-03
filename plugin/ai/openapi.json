@@ -134,192 +134,6 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
-    "/v1/ai/applications": {
-      "get": {
-        "operationId": "get_v1_ai_applications",
-        "summary": "List applications",
-        "description": "List the caller's applications.",
-        "tags": [
-          "ai"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "post": {
-        "operationId": "post_v1_ai_applications",
-        "summary": "Create a application",
-        "description": "Create one application.",
-        "tags": [
-          "ai"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/ai/applications/{owner}/{name}": {
-      "delete": {
-        "operationId": "delete_v1_ai_applications_by_owner_by_name",
-        "summary": "Delete a application",
-        "description": "Delete one application.",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "get": {
-        "operationId": "get_v1_ai_applications_by_owner_by_name",
-        "summary": "Retrieve a application",
-        "description": "Read one application by its (owner, name) key.",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "patch": {
-        "operationId": "patch_v1_ai_applications_by_owner_by_name",
-        "summary": "Update a application",
-        "description": "Update one application. PATCH and PUT reach the same handler, which has always taken a whole object.",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "put": {
-        "operationId": "put_v1_ai_applications_by_owner_by_name",
-        "summary": "Replace a application",
-        "description": "Identical to PATCH — the handler takes a whole object either way.",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/ai/applications/{owner}/{name}/deploy": {
-      "post": {
-        "operationId": "post_v1_ai_applications_by_owner_by_name_deploy",
-        "summary": "Deploy (application)",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/ai/applications/{owner}/{name}/undeploy": {
-      "post": {
-        "operationId": "post_v1_ai_applications_by_owner_by_name_undeploy",
-        "summary": "Undeploy (application)",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
     "/v1/ai/articles": {
       "get": {
         "operationId": "get_v1_ai_articles",
@@ -909,6 +723,192 @@
         "summary": "Dashboards Vm",
         "tags": [
           "ai"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
+    "/v1/ai/deployments": {
+      "get": {
+        "operationId": "get_v1_ai_deployments",
+        "summary": "List deployments",
+        "description": "List the caller's deployments.",
+        "tags": [
+          "ai"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      },
+      "post": {
+        "operationId": "post_v1_ai_deployments",
+        "summary": "Create a application",
+        "description": "Create one application.",
+        "tags": [
+          "ai"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
+    "/v1/ai/deployments/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_v1_ai_deployments_by_owner_by_name",
+        "summary": "Delete a application",
+        "description": "Delete one application.",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      },
+      "get": {
+        "operationId": "get_v1_ai_deployments_by_owner_by_name",
+        "summary": "Retrieve a application",
+        "description": "Read one application by its (owner, name) key.",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      },
+      "patch": {
+        "operationId": "patch_v1_ai_deployments_by_owner_by_name",
+        "summary": "Update a application",
+        "description": "Update one application. PATCH and PUT reach the same handler, which has always taken a whole object.",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      },
+      "put": {
+        "operationId": "put_v1_ai_deployments_by_owner_by_name",
+        "summary": "Replace a application",
+        "description": "Identical to PATCH — the handler takes a whole object either way.",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
+    "/v1/ai/deployments/{owner}/{name}/deploy": {
+      "post": {
+        "operationId": "post_v1_ai_deployments_by_owner_by_name_deploy",
+        "summary": "Deploy (application)",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
+    "/v1/ai/deployments/{owner}/{name}/undeploy": {
+      "post": {
+        "operationId": "post_v1_ai_deployments_by_owner_by_name_undeploy",
+        "summary": "Undeploy (application)",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "x-app": "github.com/hanzoai/ai"
       }
@@ -1786,136 +1786,6 @@
       "post": {
         "operationId": "post_v1_ai_nodes_by_owner_by_name_tunnel",
         "summary": "Tunnel (node)",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/ai/permissions": {
-      "get": {
-        "operationId": "get_v1_ai_permissions",
-        "summary": "List permissions",
-        "description": "List the caller's permissions.",
-        "tags": [
-          "ai"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "post": {
-        "operationId": "post_v1_ai_permissions",
-        "summary": "Create a permission",
-        "description": "Create one permission.",
-        "tags": [
-          "ai"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/ai/permissions/{owner}/{name}": {
-      "delete": {
-        "operationId": "delete_v1_ai_permissions_by_owner_by_name",
-        "summary": "Delete a permission",
-        "description": "Delete one permission.",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "get": {
-        "operationId": "get_v1_ai_permissions_by_owner_by_name",
-        "summary": "Retrieve a permission",
-        "description": "Read one permission by its (owner, name) key.",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "patch": {
-        "operationId": "patch_v1_ai_permissions_by_owner_by_name",
-        "summary": "Update a permission",
-        "description": "Update one permission. PATCH and PUT reach the same handler, which has always taken a whole object.",
-        "tags": [
-          "ai"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "put": {
-        "operationId": "put_v1_ai_permissions_by_owner_by_name",
-        "summary": "Replace a permission",
-        "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
           "ai"
         ],
@@ -2896,18 +2766,28 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
-    "/v1/ai/sessions": {
+    "/v1/ai/signin": {
+      "post": {
+        "operationId": "post_v1_ai_signin",
+        "summary": "Signin",
+        "tags": [
+          "ai"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
+    "/v1/ai/signin-sessions": {
       "get": {
-        "operationId": "get_v1_ai_sessions",
-        "summary": "List sessions",
-        "description": "List the caller's sessions.",
+        "operationId": "get_v1_ai_signin-sessions",
+        "summary": "List signin-sessions",
+        "description": "List the caller's signin-sessions.",
         "tags": [
           "ai"
         ],
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_sessions",
+        "operationId": "post_v1_ai_signin-sessions",
         "summary": "Create a session",
         "description": "Create one session.",
         "tags": [
@@ -2916,9 +2796,9 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
-    "/v1/ai/sessions/duplicated": {
+    "/v1/ai/signin-sessions/duplicated": {
       "get": {
-        "operationId": "get_v1_ai_sessions_duplicated",
+        "operationId": "get_v1_ai_signin-sessions_duplicated",
         "summary": "Duplicated (session)",
         "tags": [
           "ai"
@@ -2926,9 +2806,9 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
-    "/v1/ai/sessions/{owner}/{name}": {
+    "/v1/ai/signin-sessions/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_sessions_by_owner_by_name",
+        "operationId": "delete_v1_ai_signin-sessions_by_owner_by_name",
         "summary": "Delete a session",
         "description": "Delete one session.",
         "tags": [
@@ -2955,7 +2835,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_sessions_by_owner_by_name",
+        "operationId": "get_v1_ai_signin-sessions_by_owner_by_name",
         "summary": "Retrieve a session",
         "description": "Read one session by its (owner, name) key.",
         "tags": [
@@ -2982,7 +2862,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_sessions_by_owner_by_name",
+        "operationId": "patch_v1_ai_signin-sessions_by_owner_by_name",
         "summary": "Update a session",
         "description": "Update one session. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -3009,7 +2889,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_sessions_by_owner_by_name",
+        "operationId": "put_v1_ai_signin-sessions_by_owner_by_name",
         "summary": "Replace a session",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -3032,16 +2912,6 @@
               "type": "string"
             }
           }
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/ai/signin": {
-      "post": {
-        "operationId": "post_v1_ai_signin",
-        "summary": "Signin",
-        "tags": [
-          "ai"
         ],
         "x-app": "github.com/hanzoai/ai"
       }
@@ -3713,6 +3583,16 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
+    "/v1/ai/usages/by-user": {
+      "get": {
+        "operationId": "get_v1_ai_usages_by-user",
+        "summary": "By User (usage)",
+        "tags": [
+          "ai"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
     "/v1/ai/usages/cloud": {
       "get": {
         "operationId": "get_v1_ai_usages_cloud",
@@ -3733,21 +3613,10 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
-    "/v1/ai/users": {
+    "/v1/ai/usages/user-names": {
       "get": {
-        "operationId": "get_v1_ai_users",
-        "summary": "List users",
-        "description": "List the caller's users.",
-        "tags": [
-          "ai"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/ai/users/table-infos": {
-      "get": {
-        "operationId": "get_v1_ai_users_table-infos",
-        "summary": "Table Infos (user)",
+        "operationId": "get_v1_ai_usages_user-names",
+        "summary": "User Names (usage)",
         "tags": [
           "ai"
         ],
@@ -4615,7 +4484,7 @@
       "get": {
         "operationId": "get_v1_models",
         "summary": "Returns the list of available models from the routing table.",
-        "description": "Returns the list of available models from the routing table.\nRequires a valid Bearer token (JWT, hk-, pk-, sk-, or hz_ key).",
+        "description": "Returns the list of available models from the routing table.\n\nPUBLIC BY DESIGN, AND IT DOES NOT AUTHENTICATE — that is the whole contract, so it\nis stated here rather than left to be inferred. The catalogue is the same for\neveryone (listAvailableModels takes no principal), docs.hanzo.ai fetches it from\nthe browser, and every policy layer around it already says so out loud: the authz\nfilter lists \"models\" as public, filter_balance refuses to gate it (a 402 here was\na console-wide outage), the rate limiter excludes it, and cloud's spend.Reachable\ncarries /v1/models/ as \"the model catalog the shell reads for discovery\".\n\nSO THE Authorization HEADER IS NOT AN ADMISSION CHECK HERE. It is read for ONE\nthing — annotating gated SKUs with the caller's own access standing — and\nannotation degrades to nothing when there is no verified principal.\n\nIt used to hold a \"require authentication\" gate that authenticated nobody: it\nrejected an ABSENT credential and a MALFORMED one, then accepted any string that\nmerely looked like a key. `Bearer sk-` followed by 36 zeroes returned 200 in\nproduction; so did a JWT three days expired. It was a shape check wearing an auth\ncheck's clothes, and its cost was diagnostic: /v1/models is the natural \"is my auth\nworking?\" probe, and answering 200 to a dead credential sent people debugging the\nwrong system. A public endpoint must not appear to validate. Either check the\ncredential or ignore it — this one ignores it, deliberately and visibly.\n\nRemoving that gate discloses nothing new: the catalogue was already reachable by\nanyone willing to type three characters, so there is no confidentiality delta, only\nan honesty one.",
         "tags": [
           "models"
         ]
