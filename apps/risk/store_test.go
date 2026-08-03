@@ -311,7 +311,7 @@ func newTestPlane(t *testing.T) *plane {
 	if err != nil {
 		t.Fatalf("newPlane: %v", err)
 	}
-	t.Cleanup(func() { _ = p.close() })
+	t.Cleanup(func() { _ = p.close(context.Background()) })
 	return p
 }
 
