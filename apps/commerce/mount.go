@@ -332,18 +332,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// misses on the /v1 remainder instead of self-dispatching.
 	app.Get("/v1/billing/plans", commercemid.RequestContext(), commercebilling.ListPlans)
 
-	// GET /v1/billing/tier — the per-key rate-limit tier the ai router reads on
-	// every request (hanzoai/ai routers/ratelimit.go commerceTierLookup). Naming
-	// the prefix in the manifest says WHO owns the path; it does not serve it, and
-	// commerce's api.Route() bundle that would is never compiled here — so the
-	// route 404'd, every lookup failed, and the fallback is zen-free: 60 rpm
-	// against 500 for pro and 50000 for enterprise. It did not give anything away,
-	// it silently served every PAYING customer the most restrictive tier.
-	//
-	// Public like plans, deliberately: the caller is an S2S router read, and the
-	// answer is a plan NAME, not money. RequestContext alone, no subject pin.
-	app.Get("/v1/billing/tier", commercemid.RequestContext(), commercebilling.GetTier)
-
 	// The rest of the console's billing READS, served co-resident for the SAME reason
 	// plans is: commerce's api.Route() billing bundle is never compiled here, so without
 	// these registrations every one of them fell through to the account bridge's
@@ -378,6 +366,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		// and subject-scoped like the rest; MINTING credit stays where it is, on
 		// the mint-gated POST /v1/billing/credit.
 		{"/v1/billing/credits", commercebilling.ListCreditGrants},
+		// The per-key rate-limit tier the ai router reads on every request
+		// (hanzoai/ai routers/ratelimit.go commerceTierLookup). Naming the prefix in
+		// the manifest says WHO owns a path; it does not serve one, and commerce's
+		// api.Route() bundle that would is never compiled here — so this 404'd, every
+		// lookup failed, and the fallback is zen-free: 60 rpm against 500 for pro.
+		// It gave nothing away; it silently served every PAYING customer the most
+		// restrictive tier in the table.
+		//
+		// It belongs on THIS chain and not the bare public one plans uses: GetTier
+		// opens with middleware.GetOrganization, so without the IAM leg it panicked
+		// on a nil interface conversion and answered 500. A tier is org state, and
+		// the org has to be resolved before it can be read.
+		{"/v1/billing/tier", commercebilling.GetTier},
 	}
 	for _, r := range billingRead {
 		app.Get(r.path,
