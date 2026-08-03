@@ -112,15 +112,15 @@ surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	  case " $(CORESIDENT) " in \
 	    *" $$a "*) echo ">> skip $$a — coresident: middleware on a sibling's router, no standalone mount to project"; continue;; \
 	  esac; \
-	  $(MAKE) --no-print-directory -C $$d describe >/dev/null \
-	    || { echo "!! $$a cannot project its own document — an app that cannot describe itself is the bug"; exit 1; }; \
+	  out=$$($(MAKE) --no-print-directory -C $$d describe 2>&1) \
+	    || { echo "$$out"; echo "!! $$a cannot project its own document — an app that cannot describe itself is the bug"; exit 1; }; \
 	done; \
 	for a in $(EXTERNAL); do \
-	  $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe >/dev/null \
-	    || { echo "!! $$a cannot project its own document"; exit 1; }; \
+	  out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe 2>&1) \
+	    || { echo "$$out"; echo "!! $$a cannot project its own document"; exit 1; }; \
 	done
-	@$(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml >/dev/null \
-	  || { echo "!! the weave refused — see the message above; nothing was written"; exit 1; }
+	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml 2>&1) \
+	  || { echo "$$out"; echo "!! the weave refused; nothing was written"; exit 1; }
 	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml openapi/floor.json plugin/); \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \
