@@ -39,10 +39,12 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/hanzoai/cloud/credz/launch"
+	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plugin"
@@ -95,23 +97,24 @@ func forward(kv map[string]string) {
 }
 
 func run(addr, zapAddr, enable string) error {
-	// THE FLEET'S ONE AGENT DOOR, at POST /v1/mcp. zip serves it: initialize, ping,
-	// tools/list and tools/call are its handleMCP, and the tool list is the union
-	// of every mounted plugin's build-time catalogue (mount below), rendered once
-	// as bytes. So tools/list — the method an MCP client calls constantly — is a
-	// memcpy and starts NO child; only a tools/call wakes one, the single plugin
-	// that owns the named tool, over ZAP on its private socket.
+	// THE FLEET'S ONE AGENT DOOR is served BY THIS HOST, at POST /v1/mcp, and
+	// zip's is switched off so that exactly one handler holds the address.
 	//
-	// The host is the only process that can own it. MCPTools() is in-process, so a
-	// plugin cannot enumerate a lazy sibling, and a plugin-hosted door would cost
-	// its own wake on the very first list.
+	// zip's door answers out of an app's own typed-op registry plus the build-time
+	// catalogues a host hands it. This host has neither: it registers no op, and
+	// the catalogues are deleted. What it has is CHILDREN, and the honest content
+	// of the fleet's door is what they serve RIGHT NOW — so the host asks them
+	// (fleet.Mount, below, after the mount loops have built the plugin table).
+	//
+	// The host is still the only process that can own it: a plugin's MCPTools() is
+	// in-process, so no subsystem can enumerate a lazy sibling.
 	//
 	// The address comes from manifest, not from a literal here: the console's
 	// terminal handler has to know it too (to refuse to answer a machine door with
 	// the SPA shell, and to send an agent that guessed zip's default to the real
 	// one), and when those two were written down separately the second one was
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
-	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Path: manifest.MCPPath}})
+	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Disabled: true}})
 
 	// Mint this host's child-signing secret and take the KMS root key OUT of the
 	// host's own environment — both BEFORE the first Load spawns an eager child.
@@ -202,6 +205,16 @@ func run(addr, zapAddr, enable string) error {
 	// whole fleet and no plugin can see past itself.
 	spec(app, composed)
 
+	// THE AGENT DOOR, at POST /v1/mcp — composed by ASKING, at the moment of
+	// asking. Registered after the mount loops so the plugin table it starts from
+	// is the finished one, and before anything listens.
+	//
+	// It is the composed set minus the CORESIDENT apps: a coresident app is
+	// middleware on a sibling's router (zen on ai's), so it is not a child this
+	// host can start and its ops are already in the sibling's registry — asking
+	// for it by name would report a permanent outage for an app that is serving.
+	fleet.Mount(app, manifest.MCPPath, routed(composed), locate(app))
+
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
 	// manifest.MCPPath (webui/mcp.go) — one rule, in the one place that can tell a
 	// machine door from a client-side console route. A route registered here would
@@ -235,6 +248,13 @@ func run(addr, zapAddr, enable string) error {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-stop
+		// Flip readiness BEFORE tearing anything down, so /readyz tells the truth
+		// for whatever window remains. The host cannot call cloud.SetDraining():
+		// that flag belongs to the root package, which this binary deliberately
+		// does not link (it is zip + manifest + the webui leaf and nothing else),
+		// and it is a different PROCESS's state anyway. Same contract, owned by
+		// the process K8s actually signals.
+		draining.Store(true)
 		_ = app.Shutdown()
 	}()
 
@@ -284,10 +304,13 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	}
 	p := a.Plugin()
 	p.Lazy = !eager
-	// This app's MCP tools, from the artifact its own binary wrote when it was
-	// built. Given them, zip serves this app's tools on the host's door and
-	// forwards a tools/call to this app alone — without ever running it to ask.
-	p.Tools = plugin.Tools(a.Name)
+	// NO BUILD-TIME TOOL CATALOGUE. zip.Plugin.Tools took the array this app's
+	// binary projected when it was BUILT (plugin/<app>/mcp.json) so the host could
+	// answer tools/list without running anything. That artifact was a second
+	// source for a fact the child already knows, and it was wrong: o11y's held 12
+	// tools while the o11y binary at the same commit served 365. The door asks the
+	// child now (fleet.Mount), so there is nothing to hand over here.
+	//
 	// Per-plugin, on the plugin's OWN Env, which zip appends to that ONE child's
 	// environment: a scoped token for every child, and — for the broker alone —
 	// the launch secret and the root key. A token or key placed in the host's
@@ -329,19 +352,86 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	return nil
 }
 
-// health is the host's liveness route AND the one place a probe can read which
-// subsystems are absent.
+// routed drops the CORESIDENT apps from a composed set: the ones that mount as
+// middleware on a sibling's router and are therefore not children this host can
+// reach by name. Their ops are registered on the sibling's app, so the sibling
+// already answers for them; asking for one by name would report a permanent
+// outage for a subsystem that is serving perfectly.
+func routed(composed []string) []string {
+	co := map[string]bool{}
+	for _, a := range manifest.Apps {
+		if a.Coresident {
+			co[a.Name] = true
+		}
+	}
+	out := make([]string, 0, len(composed))
+	for _, name := range composed {
+		if !co[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// locate is how the door reaches ONE app: the child this host started, or the
+// instance an operator pointed CLOUD_<NAME>_ADDR at.
 //
-// The status code and "status" field are about THIS PROCESS and never move: the
-// host is a router, it is up, and 112 cold plugins are not a reason to take it
-// out of rotation. Failing liveness or readiness for an optional plugin would
-// recreate the outage this fix exists to prevent, one layer up — K8s would
-// restart a pod that is serving every other subsystem correctly.
+// Both are needed because they are reached differently and only the composition
+// root knows which is which. zip.App.Start covers a spawned child and is the
+// right door for it — idempotent, and the same single-flighted path a request to
+// the app's prefix takes, so a burst of askers still produces one process. A
+// remotely mounted app is never started, so Start has nothing to report about it
+// and would name it unavailable forever.
+func locate(app *zip.App) fleet.At {
+	remote := map[string]string{}
+	for _, a := range manifest.Apps {
+		if addr := a.Plugin().Addr; addr != "" {
+			remote[a.Name] = addr
+		}
+	}
+	return func(name string) (string, error) {
+		if addr := remote[name]; addr != "" {
+			return addr, nil
+		}
+		return app.Start(name)
+	}
+}
+
+// draining flips true when this host is shutting down, and is read lock-free by
+// /readyz. It is the HOST's copy of the contract drain.go states for the root
+// package: the host is the process K8s signals and probes, and it does not link
+// the root package to borrow its flag.
+var draining atomic.Bool
+
+// health is the host's TWO probe routes, and the split between them is the whole
+// point: /healthz answers "is this process alive", /readyz answers "should it be
+// sent requests". They are different questions and they had one answer.
 //
-// "absent" is about the FLEET, and it carries the REASON. That distinction is
-// what "staged" vs "failed" needs (degraded.go): both answer 503 on the wire, so
-// without the reason an operator cannot tell a subsystem this deployment never
-// ran from one that died, and a release gate tolerates both.
+// /healthz — LIVENESS. 200 while the process routes, always. The host is a
+// router, it is up, and 112 cold plugins are not a reason to restart it. Failing
+// liveness for a broken plugin recreates the 2026-07-29 outage one layer up: K8s
+// would kill a pod that is serving every other subsystem correctly, and the
+// replacement would fail identically because the cause is in the image or the
+// config, not in the process. `absent` rides in the BODY with its reason —
+// "staged" vs "failed" (degraded.go) is unanswerable without it.
+//
+// /readyz — READINESS. 503 when the host is draining, or when a VITAL subsystem
+// is absent (manifest.App.Vital). This is the route that was missing, and its
+// absence is what let 2026-08-01 happen: `ai` — the greedy /v1 catch-all, i.e.
+// the entire product API — degraded to absent, main.go recorded the reason in
+// the `absent` FIELD, and the probe read the STATUS CODE, which was 200. The pod
+// stayed Ready with 0 restarts for ~30 minutes while /v1/models 503d.
+//
+// A 503 here is not an outage, it is the outage becoming VISIBLE, and the timing
+// is what makes it cheap: a rollout whose new image cannot start `ai` never gets
+// a Ready pod, so the Deployment stalls and the OLD pods keep serving. The bad
+// config stops at the first replica instead of reaching all of them. When it is
+// already fleet-wide the endpoints empty and the product is down — but it was
+// ALREADY down, silently, and now `kubectl get pods` says so.
+//
+// A non-vital absence stays READY and is still reported. Taking a pod out of
+// rotation because one minor subsystem died would turn a partial failure into a
+// total one, which is the same mistake as aborting, just later.
 func health(app *zip.App, absent map[string]string) {
 	app.Get("/healthz", func(c *zip.Ctx) error {
 		out := map[string]any{"status": "ok"}
@@ -350,6 +440,46 @@ func health(app *zip.App, absent map[string]string) {
 		}
 		return c.JSON(200, out)
 	})
+
+	app.Get("/readyz", func(c *zip.Ctx) error {
+		// Draining first: a pod on its way out is not ready regardless of what
+		// it is still able to serve. drain.go describes this contract for the
+		// root package's ops listener; the HOST is a different process with its
+		// own lifecycle, and it is the one K8s signals and probes.
+		if draining.Load() {
+			return c.JSON(503, map[string]any{"status": "draining"})
+		}
+		a := stillAbsent(app, absent)
+		if u := unfit(a); len(u) > 0 {
+			return c.JSON(503, map[string]any{"status": "unfit", "absent": u})
+		}
+		out := map[string]any{"status": "ok"}
+		if len(a) > 0 {
+			out["absent"] = a
+		}
+		return c.JSON(200, out)
+	})
+}
+
+// unfit narrows the absence set to the subsystems this deployment has declared
+// it should not take traffic without — the intersection of "did not start" and
+// "Vital". Reading vitality from manifest.Apps rather than from a list here
+// keeps ONE source: the row that declares what an app serves is the row that
+// declares whether serving without it is worth doing.
+func unfit(absent map[string]string) map[string]string {
+	if len(absent) == 0 {
+		return nil
+	}
+	out := map[string]string{}
+	for _, a := range manifest.Apps {
+		if !a.Vital {
+			continue
+		}
+		if why, ok := absent[a.Name]; ok {
+			out[a.Name] = why
+		}
+	}
+	return out
 }
 
 // spec is the fleet's published document, and the HOST is the only process that

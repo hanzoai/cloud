@@ -95,9 +95,9 @@ func postAuth(t *testing.T, app *zip.App, path, auth, body string) (int, []byte)
 
 // TestUnresolvableAccessKeyBearerRefuses: presented() names the carriers eventTenant
 // consults so the two cannot disagree about what "presented" MEANS — and they did.
-// ingestKey matches the bearer only for pk- (deliberately: an hk-/sk- bearer is IAM's
+// ingestKey matches the bearer only for pk- (deliberately: an sk- bearer is IAM's
 // to validate, and widening ingestKey would shadow the identity path). projectKey never
-// reads Authorization at all. So an hk-/sk- bearer that FAILED to resolve fell through
+// reads Authorization at all. So an sk- bearer that FAILED to resolve fell through
 // both and took the ANONYMOUS lane: 200, with the caller's rows filed under $public — a
 // partition its owner cannot read.
 //
@@ -110,7 +110,7 @@ func TestUnresolvableAccessKeyBearerRefuses(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
 	body := `{"batch":[{"type":"pageview","distinctId":"anon-1","path":"/pricing"}]}`
-	for _, key := range []string{"hk-nonexistent-0001", "sk-nonexistent-0001", "pk-nonexistent-0001"} {
+	for _, key := range []string{"sk-nonexistent-0001", "pk-nonexistent-0001"} {
 		for _, door := range doors {
 			code, got := postAuth(t, app, door.path, "Bearer "+key, body)
 			if code != http.StatusForbidden {

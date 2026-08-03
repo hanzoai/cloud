@@ -19,8 +19,8 @@
     "/v1/research/artifacts": {
       "get": {
         "operationId": "get_v1_research_artifacts",
-        "summary": "ListResearchArtifacts returns the caller org's research-diary feed newest-first — the snapshots and reports tied to its runs, as metadata and content addresses; the bytes themselves are fetched by hash.",
-        "description": "ListResearchArtifacts returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
+        "summary": "Returns the caller org's research-diary feed newest-first — the snapshots and reports tied to its runs, as metadata and content addresses; the bytes themselves are fetched by hash.",
+        "description": "Returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
         "tags": [
           "research"
         ],
@@ -68,8 +68,8 @@
       },
       "post": {
         "operationId": "post_v1_research_artifacts",
-        "summary": "RecordResearchArtifact records one research-diary artifact — a board snapshot or a generated report — CONTENT-ADDRESSED inside the trust boundary.",
-        "description": "RecordResearchArtifact records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
+        "summary": "Records one research-diary artifact — a board snapshot or a generated report — CONTENT-ADDRESSED inside the trust boundary.",
+        "description": "Records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
         "tags": [
           "research"
         ],
@@ -125,8 +125,8 @@
     "/v1/research/experiments": {
       "get": {
         "operationId": "get_v1_research_experiments",
-        "summary": "ListExperiments returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history.",
-        "description": "ListExperiments returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
+        "summary": "Returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history.",
+        "description": "Returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
         "tags": [
           "research"
         ],
@@ -165,8 +165,8 @@
       },
       "post": {
         "operationId": "post_v1_research_experiments",
-        "summary": "IngestExperiments appends one batch of experiment and attempt versions to the caller org's evidence store, idempotently by content, then rolls it up to the analytics plane best-effort.",
-        "description": "IngestExperiments appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
+        "summary": "Appends one batch of experiment and attempt versions to the caller org's evidence store, idempotently by content, then rolls it up to the analytics plane best-effort.",
+        "description": "Appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
         "tags": [
           "research"
         ],
@@ -210,8 +210,8 @@
     "/v1/research/grants": {
       "post": {
         "operationId": "post_v1_research_grants",
-        "summary": "GrantResearchVisibility records the SEPARATE authorization an upload never implies: a record's visibility (private, org or public) and, for a run, its training and commons-publication consent.",
-        "description": "GrantResearchVisibility records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
+        "summary": "Records the SEPARATE authorization an upload never implies: a record's visibility (private, org or public) and, for a run, its training and commons-publication consent.",
+        "description": "Records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
         "tags": [
           "research"
         ],
@@ -247,8 +247,8 @@
     "/v1/research/projects": {
       "get": {
         "operationId": "get_v1_research_projects",
-        "summary": "ListResearchProjects returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view.",
-        "description": "ListResearchProjects returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
+        "summary": "Returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view.",
+        "description": "Returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
         "tags": [
           "research"
         ],
@@ -269,8 +269,8 @@
     "/v1/research/totals": {
       "get": {
         "operationId": "get_v1_research_totals",
-        "summary": "GetResearchTotals returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target.",
-        "description": "GetResearchTotals returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
+        "summary": "Returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target.",
+        "description": "Returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
         "tags": [
           "research"
         ],

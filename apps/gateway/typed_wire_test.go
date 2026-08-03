@@ -80,8 +80,8 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			len(typed), len(untypedByDesign), got, want)
 	}
 	// The MEASURED partition, so the prose cannot drift from the binary.
-	if len(served) != 2 || len(typed) != 2 {
-		t.Errorf("served = %d (want 2), typed = %d (want 2)", len(served), len(typed))
+	if len(served) != 3 || len(typed) != 3 {
+		t.Errorf("served = %d (want 3), typed = %d (want 3)", len(served), len(typed))
 	}
 }
 

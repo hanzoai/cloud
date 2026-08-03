@@ -142,8 +142,8 @@
       },
       "post": {
         "operationId": "post_v1_flow_workflows",
-        "summary": "WorkflowCreate creates a workflow in the caller's org.",
-        "description": "WorkflowCreate creates a workflow in the caller's org. The org's project id\nis pinned server-side from the validated principal — there is no field by\nwhich a caller could place a workflow in another org.",
+        "summary": "Creates a workflow in the caller's org.",
+        "description": "Creates a workflow in the caller's org. The org's project id\nis pinned server-side from the validated principal — there is no field by\nwhich a caller could place a workflow in another org.",
         "tags": [
           "flow"
         ],
@@ -176,8 +176,8 @@
     "/v1/flow/workflows/{workflow}": {
       "delete": {
         "operationId": "delete_v1_flow_workflows_workflow",
-        "summary": "WorkflowDelete deletes one of the caller's workflows and its runs.",
-        "description": "WorkflowDelete deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
+        "summary": "Deletes one of the caller's workflows and its runs.",
+        "description": "Deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
         "tags": [
           "flow"
         ],
@@ -234,8 +234,8 @@
       },
       "patch": {
         "operationId": "patch_v1_flow_workflows_workflow",
-        "summary": "WorkflowUpdate patches one of the caller's workflows: name, description, graph, or the locked flag — only the stated fields move.",
-        "description": "WorkflowUpdate patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
+        "summary": "Patches one of the caller's workflows: name, description, graph, or the locked flag — only the stated fields move.",
+        "description": "Patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
         "tags": [
           "flow"
         ],

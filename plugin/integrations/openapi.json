@@ -576,8 +576,8 @@
     "/v1/integrations/github/repos/import": {
       "post": {
         "operationId": "post_v1_integrations_github_repos_import",
-        "summary": "GithubImport imports the selected (or all) granted repos into git.hanzo.ai.",
-        "description": "GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
+        "summary": "Imports the selected (or all) granted repos into git.hanzo.ai.",
+        "description": "Imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
         "tags": [
           "integrations"
         ],
@@ -812,8 +812,8 @@
     "/v1/integrations/github/repos/{repo}/pages/builds": {
       "post": {
         "operationId": "post_v1_integrations_github_repos_repo_pages_builds",
-        "summary": "GithubPagesBuild requests a Pages rebuild and returns the queued build's status.",
-        "description": "GithubPagesBuild requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
+        "summary": "Requests a Pages rebuild and returns the queued build's status.",
+        "description": "Requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
         "tags": [
           "integrations"
         ],

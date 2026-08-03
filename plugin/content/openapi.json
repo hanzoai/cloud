@@ -19,8 +19,8 @@
     "/v1/content/board": {
       "get": {
         "operationId": "get_v1_content_board",
-        "summary": "GetBoard aggregates the caller org's marketing content across every publishable content type into ONE queue board — the cross-type read the framework's per-DocType list cannot give.",
-        "description": "GetBoard aggregates the caller org's marketing content across every publishable\ncontent type into ONE queue board — the cross-type read the framework's\nper-DocType list cannot give. It never fails on a partial outage: a content type\nthe org has not installed, or one whose search errors, is skipped and logged\nrather than failing the whole board.",
+        "summary": "Aggregates the caller org's marketing content across every publishable content type into ONE queue board — the cross-type read the framework's per-DocType list cannot give.",
+        "description": "Aggregates the caller org's marketing content across every publishable\ncontent type into ONE queue board — the cross-type read the framework's\nper-DocType list cannot give. It never fails on a partial outage: a content type\nthe org has not installed, or one whose search errors, is skipped and logged\nrather than failing the whole board.",
         "tags": [
           "content"
         ],
@@ -81,8 +81,8 @@
     "/v1/content/channels": {
       "get": {
         "operationId": "get_v1_content_channels",
-        "summary": "GetChannels lists the distribution channels the caller's org has connected — the social integrations a publish can target.",
-        "description": "GetChannels lists the distribution channels the caller's org has connected — the\nsocial integrations a publish can target. A deployment with no distribution edge\nwired answers 503 rather than an empty list that would read as \"no channels\".",
+        "summary": "Lists the distribution channels the caller's org has connected — the social integrations a publish can target.",
+        "description": "Lists the distribution channels the caller's org has connected — the\nsocial integrations a publish can target. A deployment with no distribution edge\nwired answers 503 rather than an empty list that would read as \"no channels\".",
         "tags": [
           "content"
         ],
@@ -113,8 +113,8 @@
     "/v1/content/lifecycle": {
       "get": {
         "operationId": "get_v1_content_lifecycle",
-        "summary": "GetLifecycle returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state.",
-        "description": "GetLifecycle returns the ONE marketing-content state machine: the ordered\nlifecycle states, which state a fresh document starts in, which one is publicly\nlive, and the legal successors of every state. The console builds its board\ncolumns and its per-item action buttons from this single answer, so the UI and\nthe write-time enforcement hook can never disagree about what is legal.",
+        "summary": "Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state.",
+        "description": "Returns the ONE marketing-content state machine: the ordered\nlifecycle states, which state a fresh document starts in, which one is publicly\nlive, and the legal successors of every state. The console builds its board\ncolumns and its per-item action buttons from this single answer, so the UI and\nthe write-time enforcement hook can never disagree about what is legal.",
         "tags": [
           "content"
         ],
@@ -171,8 +171,8 @@
     "/v1/content/{doctype}/{name}/transition": {
       "post": {
         "operationId": "post_v1_content_doctype_name_transition",
-        "summary": "PostTransition moves one content item to a new lifecycle state and, on the move to published, fans it out to the item's channels.",
-        "description": "PostTransition moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
+        "summary": "Moves one content item to a new lifecycle state and, on the move to published, fans it out to the item's channels.",
+        "description": "Moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
         "tags": [
           "content"
         ],

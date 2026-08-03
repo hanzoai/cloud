@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/content/board", zip.Doc{
-		Description: "GetBoard aggregates the caller org's marketing content across every publishable\ncontent type into ONE queue board — the cross-type read the framework's\nper-DocType list cannot give. It never fails on a partial outage: a content type\nthe org has not installed, or one whose search errors, is skipped and logged\nrather than failing the whole board.",
+		Description: "Aggregates the caller org's marketing content across every publishable\ncontent type into ONE queue board — the cross-type read the framework's\nper-DocType list cannot give. It never fails on a partial outage: a content type\nthe org has not installed, or one whose search errors, is skipped and logged\nrather than failing the whole board.",
 		Fields: map[string]string{
 			"boardPage.count":    "Count is the number of rows in THIS page — never the org's total.",
 			"boardPage.data":     "Data is the matching items, most recently updated first.",
@@ -22,7 +22,7 @@ func init() {
 		Example: json.RawMessage(`{"status":"queued","limit":50}`),
 	})
 	zip.Describe("GET /v1/content/channels", zip.Doc{
-		Description: "GetChannels lists the distribution channels the caller's org has connected — the\nsocial integrations a publish can target. A deployment with no distribution edge\nwired answers 503 rather than an empty list that would read as \"no channels\".",
+		Description: "Lists the distribution channels the caller's org has connected — the\nsocial integrations a publish can target. A deployment with no distribution edge\nwired answers 503 rather than an empty list that would read as \"no channels\".",
 		Fields: map[string]string{
 			"Channel.id":       "the social integration id to target in a post",
 			"Channel.provider": "\"x\" | \"instagram\" | \"tiktok\" | ...",
@@ -30,10 +30,10 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/content/lifecycle", zip.Doc{
-		Description: "GetLifecycle returns the ONE marketing-content state machine: the ordered\nlifecycle states, which state a fresh document starts in, which one is publicly\nlive, and the legal successors of every state. The console builds its board\ncolumns and its per-item action buttons from this single answer, so the UI and\nthe write-time enforcement hook can never disagree about what is legal.",
+		Description: "Returns the ONE marketing-content state machine: the ordered\nlifecycle states, which state a fresh document starts in, which one is publicly\nlive, and the legal successors of every state. The console builds its board\ncolumns and its per-item action buttons from this single answer, so the UI and\nthe write-time enforcement hook can never disagree about what is legal.",
 	})
 	zip.Describe("POST /v1/content/:doctype/:name/transition", zip.Doc{
-		Description: "PostTransition moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
+		Description: "Moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
 		Fields: map[string]string{
 			"ChannelResult.channel":    "the social integration id targeted",
 			"ChannelResult.error":      "short reason, when it failed",
@@ -46,6 +46,9 @@ func init() {
 			"transitionIn.to":          "To is the lifecycle state to move to. Required, and the move must be a legal\nedge from the item's current state.",
 		},
 		Example: json.RawMessage(`{"doctype":"SocialPost","name":"spring-teaser","to":"published"}`),
+	})
+	zip.Describe("POST /v1/content/generate", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 	zip.Describe("POST /v1/content/publish", zip.Doc{
 		Description: "Publish distributes one CMS content item to the channels recorded on it and\nreturns the honest per-channel outcome. The item names itself — its caption,\nmedia and channel list are read from the stored document, not from this request.\nIt is idempotent per channel (a channel already posted for this item is skipped),\nand a publish that loses the per-item lease to a live publisher answers status\n\"in_progress\" having posted nothing.",

@@ -14,14 +14,14 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.1
-	github.com/hanzoai/cek v0.2.2
-	github.com/hanzoai/commerce v1.49.43
+	github.com/hanzoai/cek v0.2.3
+	github.com/hanzoai/commerce v1.49.53
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.0
+	github.com/hanzoai/iam v1.34.5
 	github.com/hanzoai/kafka v1.3.1
-	github.com/hanzoai/money v0.2.2
+	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/plans v1.4.11
@@ -29,7 +29,7 @@ require (
 	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.4.0
+	github.com/hanzoai/sqlite v0.5.0
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/lib/pq v1.12.3
@@ -43,8 +43,9 @@ require (
 	github.com/vulcand/oxy/v2 v2.2.0
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
+	github.com/zap-proto/http v0.3.1
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.18.22
+	github.com/zap-proto/zip v1.18.23
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
@@ -98,7 +99,6 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
-	github.com/zap-proto/http v0.3.1 // indirect
 	github.com/zap-proto/zap2pb v0.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opentelemetry.io/collector/component v1.54.0 // indirect
@@ -440,7 +440,7 @@ require (
 	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
-	github.com/hanzoai/tasks v1.52.4
+	github.com/hanzoai/tasks v1.52.9
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
@@ -483,13 +483,14 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
 	github.com/luxfi/age v1.6.0 // indirect
+	github.com/luxfi/aml v0.3.5
 	github.com/luxfi/cache v1.3.1 // indirect
 	github.com/luxfi/consensus v1.36.11
 	github.com/luxfi/container v0.2.1 // indirect
 	github.com/luxfi/corona v0.10.4 // indirect
 	github.com/luxfi/crypto v1.20.2
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
-	github.com/luxfi/fhe v1.8.2 // indirect
+	github.com/luxfi/fhe v1.8.8 // indirect
 	github.com/luxfi/geth v1.20.1
 	github.com/luxfi/ids v1.3.2
 	github.com/luxfi/kms v1.12.9
@@ -554,7 +555,7 @@ require (
 	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/prometheus/alertmanager v0.31.1 // indirect
 	github.com/prometheus/client_golang v1.23.2
-	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
@@ -654,7 +655,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260615183401-62b3387ff324 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/grpc v1.81.1 // indirect
-	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect
@@ -683,12 +684,12 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.832.10
+	github.com/hanzoai/ai v1.832.16
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.11
 	github.com/hanzoai/licensing v0.1.5
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.49
+	github.com/hanzoai/o11y v1.5.52
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.4
