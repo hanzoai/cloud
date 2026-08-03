@@ -94,7 +94,7 @@ type state struct {
 // second owner of the state.
 var mounted *state
 
-// Mount registers /v1/ml/labels.
+// Mount registers /v1/risk/labels.
 //
 // EVERY INHERITED CAPABILITY IS WIRED HERE, EXPLICITLY:
 //
