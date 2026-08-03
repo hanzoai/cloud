@@ -72,6 +72,42 @@ func For(id string) Info {
 	return brands[Default]
 }
 
+// Registered reports whether id names a brand in the registry. It is the
+// FALLIBLE half of [For], which cannot say so because it answers Hanzo for
+// everything it does not know — the right default for rendering a title, and the
+// wrong one for any decision that turns on which brand a caller belongs to.
+// Lookup is case-insensitive, exactly like For.
+func Registered(id string) bool {
+	_, ok := brands[strings.ToLower(strings.TrimSpace(id))]
+	return ok
+}
+
+// ForIssuer resolves the brand whose IAM minted a token, from the token's own
+// verified `iss`. It is the reverse of [IssuerFor] over the SAME registry, so
+// the two cannot name different brands for one issuer.
+//
+// It exists because the deployment's brand and the token's brand are two facts,
+// not one: cloud accepts every white-label brand's issuer (trustedIssuers), so a
+// process configured CLOUD_BRAND=hanzo can hold a validly-signed token minted by
+// lux.id. Anything keyed by brand — a tenant key, a derived-key salt — has to be
+// able to tell those apart, and it can only do that from a value the ISSUER
+// signed rather than one the process assumed.
+//
+// ok is false for an issuer no brand claims, so a caller fails closed instead of
+// silently folding an unknown issuer onto the default brand.
+func ForIssuer(iss string) (string, bool) {
+	iss = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(iss)), "/")
+	if iss == "" {
+		return "", false
+	}
+	for id, b := range brands {
+		if strings.TrimSuffix(strings.ToLower(b.IAMIssuer), "/") == iss {
+			return id, true
+		}
+	}
+	return "", false
+}
+
 // IssuerFor returns the canonical OIDC issuer for a brand id.
 func IssuerFor(id string) string {
 	return For(id).IAMIssuer

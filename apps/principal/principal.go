@@ -271,6 +271,55 @@ func Owner(c *zip.Ctx) string {
 	return strings.Clone(owner)
 }
 
+// brandKey names the slot the vouching brand crosses the typed-op seam in.
+// Unexported zero-size type, exactly like orgKey.
+type brandKey struct{}
+
+// Brand resolves WHICH BRAND'S IAM vouched for this principal — the brand the
+// identity boundary resolved from the token's VERIFIED `iss` and minted as
+// X-User-Brand (cloud.HeaderUserBrand), never a value a caller sent.
+//
+// It is the caller's half of a pair whose other half is the deployment's own
+// brand. One cloud binary serves every brand's API host and trusts every brand's
+// issuer, so those two are not the same fact, and a plane that keys rows by brand
+// has to compare them rather than assume: `hanzo` the process and `lux.id` the
+// signer disagreeing means one brand's org is about to be written into another's
+// key space.
+//
+// ok is false when there is nothing to compare — no validated principal, or a
+// principal with no issuer to resolve (an hk-/sk- key, minted by this
+// deployment's own IAM). A caller must read that as "no second fact", never as
+// a brand.
+func Brand(c *zip.Ctx) (string, bool) {
+	if !Validated(c) {
+		return "", false
+	}
+	id := strings.TrimSpace(c.Header("X-User-Brand"))
+	if id == "" {
+		return "", false
+	}
+	return strings.Clone(id), true
+}
+
+// WithBrand parks the vouching brand on ctx so a TYPED op — which receives a
+// context.Context and nothing else — can compare it with the deployment's. It IS
+// Brand, carried to the one seam that cannot call it, exactly as WithOrg is Org.
+// A request with nothing to compare parks NOTHING.
+func WithBrand(ctx context.Context, c *zip.Ctx) context.Context {
+	id, ok := Brand(c)
+	if !ok {
+		return ctx
+	}
+	return context.WithValue(ctx, brandKey{}, id)
+}
+
+// BrandFrom resolves what WithBrand parked — the typed-op counterpart of Brand,
+// and the same value.
+func BrandFrom(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(brandKey{}).(string)
+	return id, ok && id != ""
+}
+
 // BillingOrg resolves the org whose ledger PAYS for this request — the org the
 // caller SELECTED, i.e. the effective org (Org). It is the ONE "who pays" resolver:
 // the edge gate, the AI meter, and the resource meter all key their balance CHECK
