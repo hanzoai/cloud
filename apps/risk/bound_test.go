@@ -517,7 +517,7 @@ func TestFold_IsBoundedAndRetriedRatherThanForgotten(t *testing.T) {
 	}
 	// And the ticket comes back, or the bound closes over the process one fold at
 	// a time until nothing folds at all.
-	if err := p.close(); err != nil {
+	if err := p.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 	if held := len(p.folds); held != 0 {
