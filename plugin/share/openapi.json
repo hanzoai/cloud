@@ -19,8 +19,8 @@
     "/v1/share": {
       "get": {
         "operationId": "get_v1_share",
-        "summary": "ListShares returns the tunnel shares the caller's org currently has open, across every environment that org has enabled.",
-        "description": "ListShares returns the tunnel shares the caller's org currently has open, across\nevery environment that org has enabled. It is a READ and it degrades honestly: an\nunconfigured deployment, an org that has not provisioned yet, and an unreachable\ncontroller all answer an EMPTY list at 200 rather than an error, so the console\nnever error-toasts on load.",
+        "summary": "Returns the tunnel shares the caller's org currently has open, across every environment that org has enabled.",
+        "description": "Returns the tunnel shares the caller's org currently has open, across\nevery environment that org has enabled. It is a READ and it degrades honestly: an\nunconfigured deployment, an org that has not provisioned yet, and an unreachable\ncontroller all answer an EMPTY list at 200 rather than an error, so the console\nnever error-toasts on load.",
         "tags": [
           "share"
         ],

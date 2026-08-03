@@ -56,6 +56,9 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"Spring Launch","platform":"meta","objective":"conversions","budget":50000}`),
 	})
+	zip.Describe("POST /v1/ads/campaigns/:id/launch", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("PUT /v1/ads/campaigns/:id", zip.Doc{
 		Description: "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
 		Fields: map[string]string{

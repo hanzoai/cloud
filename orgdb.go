@@ -307,7 +307,7 @@ func (c *OrgStore[T]) openDurable(ns namespace.Namespace, path string) (T, *org.
 	if err != nil {
 		return zero, nil, err
 	}
-	d := c.dur.For(ns.ID(), dbKey, path)
+	d := c.dur.For(ns, c.subsystem, dbKey, path)
 	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
 	err = d.Hydrate(ctx)
 	cancel()

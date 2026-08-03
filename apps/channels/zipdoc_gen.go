@@ -38,6 +38,9 @@ func init() {
 			"pairingQueue.pending": "Pending is every unexpired pairing request waiting on an org admin, each\ncarrying the channel, the requesting sender and the code to approve it with.",
 		},
 	})
+	zip.Describe("POST /v1/channels/:channel/send", zip.Doc{
+		Description: "Wraps a handler so a returned *zip.HTTPError is written in-band (its\nstatus + the {status,code,error} JSON zip's default errorHandler would emit)\nand nil is returned, instead of propagating the error up the middleware chain.\n\nIt exists for routes mounted UNDER an outer error-flattening filter. The\ncommerce embed installs one: mountCommerce (apps) registers ErrorHandlerJSON on\nan app.Group(\"/v1\") whose middleware rewrites ANY error a downstream /v1 handler\nPROPAGATES into a hardcoded HTTP 500 — so a reject that returns zip.ErrUnauthorized\n(401) or zip.ErrBadRequest (400) up the chain surfaces to the client as 500. A\nsubsystem mounted after commerce (git, sync, integrations, …) whose reject path\nmust keep its real 4xx wraps its handler here: the status is written before the\nfilter runs, so the filter's c.Next() sees nil and has nothing to flatten. A\nnon-HTTPError (a genuine unexpected failure) passes through unchanged — those are\n500s regardless. Compose with Handle: cloud.Terminal(cloud.Handle(s, fn)).",
+	})
 	zip.Describe("POST /v1/channels/pairing/approve", zip.Doc{
 		Description: "Turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant.",
 		Fields: map[string]string{

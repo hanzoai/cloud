@@ -57,7 +57,7 @@ func TestBrandForHost(t *testing.T) {
 		}
 	}
 	// No brand domain matches → not ok, and BrandForHost defaults to hanzo. The
-	// caller (agentskills) uses the not-ok signal to fall back to the DEPLOYMENT
+	// caller (skills) uses the not-ok signal to fall back to the DEPLOYMENT
 	// brand instead of blindly emitting Hanzo on a non-hanzo pod.
 	for _, host := range []string{"example.com", "localhost", "", "10.0.0.1"} {
 		if _, ok := BrandForHostOK(host); ok {

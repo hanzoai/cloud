@@ -89,7 +89,7 @@ func TestDurablePromotionLiveReacquireNoRestart(t *testing.T) {
 
 	// Owner pod: elected owner under {a,b}. Writes k1, ships.
 	ownerDur := NewDurability(cs, &liveView{self: ownerID, set: set}, nil)
-	owner := ownerDur.For(orgID, dbKey, filepath.Join(t.TempDir(), "research.db"))
+	owner := ownerDur.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
 	if err := owner.Hydrate(ctx); err != nil {
 		t.Fatalf("owner hydrate: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestDurablePromotionLiveReacquireNoRestart(t *testing.T) {
 	otherView := &liveView{self: otherID, set: set}
 	otherDur := NewDurability(cs, otherView, nil)
 	otherPath := filepath.Join(t.TempDir(), "research.db")
-	other := otherDur.For(orgID, dbKey, otherPath)
+	other := otherDur.For(testNS(orgID), "research", dbKey, otherPath)
 	if err := other.Hydrate(ctx); err != nil {
 		t.Fatalf("other hydrate: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestDurablePromotionLiveReacquireNoRestart(t *testing.T) {
 	}
 	_ = otherDB.Close() // quiesce before the reopen's CarryForward swaps the file.
 
-	promoted := otherDur.For(orgID, dbKey, otherPath)
+	promoted := otherDur.For(testNS(orgID), "research", dbKey, otherPath)
 	if err := promoted.Hydrate(ctx); err != nil {
 		t.Fatalf("promoted hydrate: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestPendingPromotionFalseWhenNotElected(t *testing.T) {
 
 	// Owned store: not pending (already the writer).
 	ownerDur := NewDurability(cs, &liveView{self: ownerID, set: set}, nil)
-	owner := ownerDur.For(orgID, dbKey, filepath.Join(t.TempDir(), "research.db"))
+	owner := ownerDur.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
 	if err := owner.Hydrate(ctx); err != nil {
 		t.Fatalf("owner hydrate: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestPendingPromotionFalseWhenNotElected(t *testing.T) {
 	}
 
 	// Degraded store, still not elected: not pending.
-	other := NewDurability(cs, &liveView{self: otherID, set: set}, nil).For(orgID, dbKey, filepath.Join(t.TempDir(), "research.db"))
+	other := NewDurability(cs, &liveView{self: otherID, set: set}, nil).For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
 	if err := other.Hydrate(ctx); err != nil {
 		t.Fatalf("other hydrate: %v", err)
 	}

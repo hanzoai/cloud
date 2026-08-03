@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/keys", zip.Doc{
-		Description: "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
+		Description: "Revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
 		Fields: map[string]string{
 			"keyTypeIn.type":  "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
 			"revokedKey.ok":   "OK is true when the key was revoked. A failure is an error status, never a\nfalse here.",
@@ -19,7 +19,7 @@ func init() {
 		Example: json.RawMessage(`{"type":"publishable"}`),
 	})
 	zip.Describe("GET /v1/commerce/topup/rails", zip.Doc{
-		Description: "TopupRails lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail\ntherefore meant rebuilding and redeploying the frontend, and with them unset the\nUI reported \"not available yet\" no matter what the server could actually accept.\nServing the set at runtime keeps ONE source of truth (the server's config) and\nlets a rail be switched on without shipping a bundle.\n\nEverything here is public on-chain data; no secret is exposed, and the set is\nempty on a deployment that accepts no crypto rail.",
+		Description: "Lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail\ntherefore meant rebuilding and redeploying the frontend, and with them unset the\nUI reported \"not available yet\" no matter what the server could actually accept.\nServing the set at runtime keeps ONE source of truth (the server's config) and\nlets a rail be switched on without shipping a bundle.\n\nEverything here is public on-chain data; no secret is exposed, and the set is\nempty on a deployment that accepts no crypto rail.",
 		Fields: map[string]string{
 			"railList.rails":    "Rails is every (chain, token, treasury) triple this deployment accepts.",
 			"railView.chain":    "Chain is the human chain name, e.g. \"Base\".",
@@ -39,7 +39,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/embed", zip.Doc{
-		Description: "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always <app>.<this deployment's own brand domain>: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
+		Description: "Reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always <app>.<this deployment's own brand domain>: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
 		Fields: map[string]string{
 			"embedStatusReq.app":        "App is the embedded app to report on: cms (Content Studio), erp or help.",
 			"embedStatusResp.app":       "App is the app this verdict is about.",
@@ -52,7 +52,7 @@ func init() {
 		Example: json.RawMessage(`{"app":"cms"}`),
 	})
 	zip.Describe("GET /v1/keys", zip.Doc{
-		Description: "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
+		Description: "Returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
 		Fields: map[string]string{
 			"apiKey.createdAt": "CreatedAt is when the key last changed, as IAM records it.",
 			"apiKey.key":       "Key is the FULL value, and is present for a publishable key only: it is\npublic by construction and useless to its holder if it cannot be read back.",
@@ -62,7 +62,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/commerce/topup/wallet", zip.Doc{
-		Description: "WalletTopup credits the caller's org for a stablecoin transfer they already sent\nto the treasury. It reads the receipt from that rail's chain, confirms a mined,\nsuccessful ERC-20 Transfer to the rail's treasury, derives USD cents from the\non-chain value using the token's own decimals, records the credit, and returns\nthe amount plus the new balance.\n\nThe credited amount is the ON-CHAIN value, never a number the caller sends, and\nthe credit lands on the caller's own validated org — there is no way to name a\nthird-party subject. Nothing is credited that the chain did not confirm: a\nmissing, failed or non-matching transaction is refused, and a deployment with no\npayment rail enabled says so rather than inventing a credit.",
+		Description: "Credits the caller's org for a stablecoin transfer they already sent\nto the treasury. It reads the receipt from that rail's chain, confirms a mined,\nsuccessful ERC-20 Transfer to the rail's treasury, derives USD cents from the\non-chain value using the token's own decimals, records the credit, and returns\nthe amount plus the new balance.\n\nThe credited amount is the ON-CHAIN value, never a number the caller sends, and\nthe credit lands on the caller's own validated org — there is no way to name a\nthird-party subject. Nothing is credited that the chain did not confirm: a\nmissing, failed or non-matching transaction is refused, and a deployment with no\npayment rail enabled says so rather than inventing a credit.",
 		Fields: map[string]string{
 			"walletTopupReq.fromAddress":    "FromAddress is the wallet the transfer was sent from. Optional; when given it\nmust match the transfer's on-chain sender.",
 			"walletTopupReq.rail":           "Which accepted rail the transfer was sent on, e.g. \"base-usdc\". The client\nnames it rather than the server guessing from the tx: the same address can\nexist on several chains, so inferring would risk crediting against the wrong\ntreasury. It may be omitted only while exactly one rail is enabled.",
@@ -75,7 +75,7 @@ func init() {
 		Example: json.RawMessage(`{"rail":"base-usdc","txHash":"0x0000000000000000000000000000000000000000000000000000000000000001"}`),
 	})
 	zip.Describe("POST /v1/keys", zip.Doc{
-		Description: "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
+		Description: "Creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
 		Fields: map[string]string{
 			"keyTypeIn.type":      "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
 			"mintedKey.accessKey": "AccessKey is the same value under its predecessor name, carried so callers\nwritten against the older field keep working. One value, two names.",

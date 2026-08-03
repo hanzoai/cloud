@@ -120,7 +120,7 @@ func TestRun_NoTarget_LocalPathUnchanged(t *testing.T) {
 	gate := &fakeGate{}
 	d, _ := routedDispatcher(sess, run, router, gate)
 	// A local run DOES need a credential.
-	req := Req{Org: "acme", UserID: "u-1", AgentRef: "hanzo", Repo: "api", Prompt: "fix it", CredToken: "hk-secret"}
+	req := Req{Org: "acme", UserID: "u-1", AgentRef: "hanzo", Repo: "api", Prompt: "fix it", CredToken: "sk-secret"}
 
 	res := d.Run(context.Background(), req)
 

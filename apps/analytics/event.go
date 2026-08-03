@@ -34,7 +34,7 @@
 //  2. a publishable key (pk-…) — IAM resolves it to its org; it can write but not read
 //     (the SAME key publishable.go mints; folded in here so a pk- caller uses
 //     /v1/event directly);
-//  3. an out-of-band IAM access key (hk-/sk-…) — resolved through the ONE key seam
+//  3. an out-of-band IAM access key (sk-…) — resolved through the ONE key seam
 //     (cloud.OrgForKey).
 //
 // One of those resolves ⇒ FULL capability into that credential's org, and that branch of
@@ -150,7 +150,7 @@ type admission struct {
 //  2. else a presented write-only publishable key (pk_…) is HMAC-verified to its org
 //     with no IAM/DB hop (the SAME verifier publishable.go's /v1/ingest used — folded
 //     in here so a pk_ caller uses /v1/event directly), at FULL capability;
-//  3. else a presented out-of-band IAM access key (hk-/sk-…) is resolved to its org
+//  3. else a presented out-of-band IAM access key (sk-…) is resolved to its org
 //     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey), at FULL capability;
 //  4. else a verified Hanzo Team workspace token — at FULL capability for a member,
 //     and at REDUCED capability for a guest (teamTenant, team.go).
@@ -489,7 +489,7 @@ var (
 // tell them apart pages the wrong team.
 //
 // Both a counter and a log line, deliberately: the counter is what an alert rule reads
-// (it reaches VictoriaMetrics by scrape, via the registry apps/o11y publishes), and the
+// (it reaches the telemetry store in-process, via apps/o11y's metrics push), and the
 // log line is what names the tenant and door to whoever the alert wakes.
 func observeDropped(c *zip.Ctx, org, source string, unattributable, unroutable int) {
 	dropOnce.Do(func() {
@@ -526,7 +526,7 @@ func observeDropped(c *zip.Ctx, org, source string, unattributable, unroutable i
 // WHY A KEY AND A TEAM TOKEN REFUSE, AND A STALE IAM BEARER DOES NOT. The asymmetry is
 // a fact about what is DECIDABLE, not a preference:
 //
-//   - an ingest key is self-identifying by PREFIX (pk-/hk-/sk-), and a team token is
+//   - an ingest key is self-identifying by PREFIX (pk-/sk-), and a team token is
 //     self-identifying by STRUCTURE (it carries an `account` claim, which an IAM token
 //     does not). For both, "the caller presented THIS kind of credential" is answerable
 //     without trusting anything, so a failure to resolve is unambiguously a
@@ -540,10 +540,10 @@ func observeDropped(c *zip.Ctx, org, source string, unattributable, unroutable i
 // So: identifiable credential that fails ⇒ 403. Unidentifiable bearer ⇒ the anonymous
 // lane, exactly as before this file learned about team tokens.
 // WHY bearerAPIKey IS HERE AND ingestKey IS NOT WIDENED. ingestKey returns only a
-// pk- so this door never SHADOWS the identity path: an hk-/sk- bearer is IAM's to
+// pk- so this door never SHADOWS the identity path: an sk- bearer is IAM's to
 // validate, and it arrives here already resolved (tenant ⇒ full capability) or not
 // at all. That is right, and it is not the question presented() asks. presented()
-// asks whether the caller PRESENTED an identifiable credential, and an hk-/sk-
+// asks whether the caller PRESENTED an identifiable credential, and an sk-
 // bearer is identifiable by the SAME prefix authority every other carrier is judged
 // by — so a FAILED one is a misconfiguration and must refuse, exactly as the same
 // key refuses today on x-api-key. Without this it took the anonymous lane instead:

@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/automations/flows/:id", zip.Doc{
-		Description: "DeleteFlow deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
+		Description: "Deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
 		Fields: map[string]string{
 			"flowRef.id": "ID is the flow to act on, from the path.",
 		},
@@ -23,7 +23,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/automations/flows", zip.Doc{
-		Description: "ListFlows returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
+		Description: "Returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
 		Fields: map[string]string{
 			"Flow.projectId":  "projectId == org (server-derived)",
 			"flowPage.data":   "Data is the page of flows, newest-updated first.",
@@ -31,7 +31,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/automations/flows/:id", zip.Doc{
-		Description: "GetFlow returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
+		Description: "Returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
 		Fields: map[string]string{
 			"FlowAction.type":                  "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
 			"FlowTrigger.type":                 "PIECE_TRIGGER | EMPTY",
@@ -49,7 +49,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
 	zip.Describe("GET /v1/automations/flows/:id/versions", zip.Doc{
-		Description: "ListVersions returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
+		Description: "Returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
 		Fields: map[string]string{
 			"FlowAction.type":    "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
 			"FlowTrigger.type":   "PIECE_TRIGGER | EMPTY",
@@ -66,7 +66,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/automations/runs", zip.Doc{
-		Description: "ListRuns returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
+		Description: "Returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
 		Fields: map[string]string{
 			"runPage.data":    "Data is the page of runs, newest first.",
 			"runQuery.flowId": "FlowID narrows the history to one flow. Omit it for the whole org's runs.",
@@ -74,14 +74,14 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/automations/runs/:id", zip.Doc{
-		Description: "GetRun returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
+		Description: "Returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
 		Fields: map[string]string{
 			"runRef.id": "ID is the run to read, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"run_1"}`),
 	})
 	zip.Describe("PATCH /v1/automations/flows/:id", zip.Doc{
-		Description: "UpdateFlow updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
+		Description: "Updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
 		Fields: map[string]string{
 			"Flow.projectId":                 "projectId == org (server-derived)",
 			"patchFlowIn.externalId":         "ExternalID sets the caller's own id for this flow.",
@@ -93,7 +93,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"flow_1","folderId":"ops"}`),
 	})
 	zip.Describe("POST /v1/automations/flows", zip.Doc{
-		Description: "CreateFlow creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that.",
+		Description: "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that.",
 		Fields: map[string]string{
 			"FlowAction.type":                  "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
 			"FlowTrigger.type":                 "PIECE_TRIGGER | EMPTY",
@@ -114,7 +114,7 @@ func init() {
 		Example: json.RawMessage(`{"displayName":"Nightly Sync","trigger":{"name":"trigger","type":"PIECE_TRIGGER","displayName":"Start","strategy":"MANUAL","settings":{"pieceName":"core","triggerName":"manual"}}}`),
 	})
 	zip.Describe("POST /v1/automations/flows/:id/disable", zip.Doc{
-		Description: "DisableFlow disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
+		Description: "Disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
 		Fields: map[string]string{
 			"Flow.projectId": "projectId == org (server-derived)",
 			"flowRef.id":     "ID is the flow to act on, from the path.",
@@ -122,22 +122,25 @@ func init() {
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
 	zip.Describe("POST /v1/automations/flows/:id/enable", zip.Doc{
-		Description: "EnableFlow arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
+		Description: "Arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
 		Fields: map[string]string{
 			"Flow.projectId": "projectId == org (server-derived)",
 			"flowRef.id":     "ID is the flow to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
+	zip.Describe("POST /v1/automations/flows/:id/operations", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("POST /v1/automations/flows/:id/run", zip.Doc{
-		Description: "RunFlow starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
+		Description: "Starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
 		Fields: map[string]string{
 			"flowRef.id": "ID is the flow to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
 	zip.Describe("POST /v1/automations/flows/:id/versions", zip.Doc{
-		Description: "CreateVersion adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
+		Description: "Adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
 		Fields: map[string]string{
 			"FlowAction.type":             "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
 			"FlowTrigger.type":            "PIECE_TRIGGER | EMPTY",
@@ -146,5 +149,11 @@ func init() {
 			"createVersionIn.trigger":     "Trigger is the root of the version's step tree. Optional: a version with no\ntrigger is created invalid, and cannot run until one is set.",
 		},
 		Example: json.RawMessage(`{"id":"flow_1","displayName":"v2"}`),
+	})
+	zip.Describe("POST /v1/automations/hooks/:source/:event", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/automations/runs/:id/resume", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 }

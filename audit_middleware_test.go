@@ -261,7 +261,7 @@ func TestAudit_NeverCapturesRequestBody(t *testing.T) {
 }
 
 // TestAudit_ScrubsCredentialInPath proves a credential-shaped token that rides in
-// the URL PATH (e.g. a KMS route where a caller wrongly puts an sk-/hk- key in the
+// the URL PATH (e.g. a KMS route where a caller wrongly puts an sk- key in the
 // path) is never recorded verbatim in either Path or resource.ID — defense in
 // depth beyond "bodies are never read". A normal identifier is untouched.
 func TestAudit_ScrubsCredentialInPath(t *testing.T) {
@@ -368,7 +368,7 @@ func TestScrubToken_NoFalsePositives(t *testing.T) {
 	}
 	// And genuine secrets ARE scrubbed.
 	for _, sec := range []string{
-		"sk-live-abcdef", "hk-1234567890abcdef", "eyJhbG.payload.signature",
+		"sk-live-abcdef", "pk-1234567890abcdef", "eyJhbG.payload.signature",
 		"deadbeefcafe0123456789abcdef0123456789abcdef0123", // 48-char raw hex
 	} {
 		if scrubToken(sec) == sec {
@@ -384,12 +384,12 @@ func TestScrubToken_RedReviewBypassClasses(t *testing.T) {
 	for _, sec := range []string{
 		"AbCdEf-GhIjKl_MnOpQrStUvWxYz012345",       // base64url with - and _
 		"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN", // all-alpha opaque, no digit
-		"hk%2DROTATEKEY0001SECRETKEY",              // percent-encoded hk-
+		"sk%2DROTATEKEY0001SECRETKEY",              // percent-encoded sk-
 		"sk%5Flive%5FBYPASS0001SECRETKEY",          // percent-encoded sk_
 		// Red re-review round 2 — dotted-exemption + encoding + standard-base64:
 		"deadbeefcafe0123456789abcdef0123456789abcdef.x", // ".x" tail forces dotted exemption
 		"AbCdEfGhIjKlMnOpQrStUvWxYz012345.json",          // secret with a filename-ish suffix
-		"hk%252DROTATEKEY0001SECRETKEY",                  // double percent-encoded hk-
+		"sk%252DROTATEKEY0001SECRETKEY",                  // double percent-encoded sk-
 		"AbCdEfGhIjKlMnOpQrStUvWx0123456789",             // 34-char opaque run (standard/url b64)
 		// Red re-review round 3 — interior-hyphen raw secret (NOT a structured id:
 		// only 1 hyphen, long parts) must still redact despite '-' in the run.
@@ -411,8 +411,8 @@ func TestScrubToken_RedReviewBypassClasses(t *testing.T) {
 		}
 	}
 	// UA with a secret glued by :/()[]= — must be scrubbed, client name kept.
-	ua := scrubFreeText("myapp/1.0 (token:sk-live-BYPASS0001) [key=hk-1234567890abcdef]")
-	for _, leak := range []string{"sk-live-BYPASS0001", "hk-1234567890abcdef"} {
+	ua := scrubFreeText("myapp/1.0 (token:sk-live-BYPASS0001) [key=pk-1234567890abcdef]")
+	for _, leak := range []string{"sk-live-BYPASS0001", "pk-1234567890abcdef"} {
 		if strings.Contains(ua, leak) {
 			t.Errorf("UA bypass: %q leaked in %q", leak, ua)
 		}
@@ -423,7 +423,7 @@ func TestScrubToken_RedReviewBypassClasses(t *testing.T) {
 	// Red re-review round 2 — a key glued by . @ # ~ must NOT survive.
 	for _, glued := range []string{
 		"client@sk-live-SECRETKEY00001", "app.sk-live-SECRETKEY00001",
-		"build#hk-SECRETKEY000000001", "v1~sk-live-SECRETKEY00001",
+		"build#pk-SECRETKEY000000001", "v1~sk-live-SECRETKEY00001",
 	} {
 		if got := scrubFreeText(glued); strings.Contains(got, "SECRETKEY") {
 			t.Errorf("UA glue-char bypass: %q → %q (secret survives)", glued, got)

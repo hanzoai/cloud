@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/iam/pkg/pkce"
 )
 
 // TestTwitterPKCEAuthorizeURL proves the authorize URL carries an S256 code_challenge
@@ -63,7 +65,7 @@ func TestTwitterVerifierDeterministic(t *testing.T) {
 	if v1a == twitterVerifier(OAuthConfig{ClientID: "cid", ClientSecret: "s2"}) {
 		t.Fatal("verifier must change when the client secret rotates")
 	}
-	if twitterChallenge(v1a) == v1a {
+	if pkce.Challenge(v1a) == v1a {
 		t.Fatal("challenge must be the HASH of the verifier, not the verifier")
 	}
 }
