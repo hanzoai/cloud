@@ -79,7 +79,7 @@ type boundKey struct{}
 func Bridge() zip.Handler {
 	return func(c *zip.Ctx) error {
 		b := &bound{req: c}
-		ctx := principal.WithValidated(principal.WithOrg(c.Context(), c), c)
+		ctx := principal.WithBrand(principal.WithValidated(principal.WithOrg(c.Context(), c), c), c)
 		c.SetContext(context.WithValue(ctx, boundKey{}, b))
 		err := c.Continue()
 		// Success only: an error already carries its own status. fasthttp writes
