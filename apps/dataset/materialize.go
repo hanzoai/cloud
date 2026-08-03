@@ -317,6 +317,7 @@ func (p *plane) build(ctx context.Context, a scan, e entry) (entry, error) {
 	e.Digest = digest(s, e.Version, rows)
 	e.Share = share
 	e.Truncated = hitLimit
+	e.Oversize = seen.Oversize
 	e.Status = statusReady
 	e.Refusal = ""
 	e.At = time.Now().UTC()
@@ -329,6 +330,7 @@ func (p *plane) build(ctx context.Context, a scan, e entry) (entry, error) {
 		First:     stamp(seen.First),
 		Last:      stamp(seen.Last),
 		Share:     share,
+		Oversize:  seen.Oversize,
 		Retention: p.retention(ctx),
 	})
 
@@ -344,14 +346,19 @@ func (p *plane) build(ctx context.Context, a scan, e entry) (entry, error) {
 // on the manifest so the claim "these rows came from that window of that plane"
 // can be CHECKED later rather than believed.
 type origin struct {
-	Table     string `json:"table"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Rows      int    `json:"rows"`
-	Subjects  int    `json:"subjects"`
-	First     string `json:"first"`
-	Last      string `json:"last"`
-	Share     int    `json:"share"`
+	Table    string `json:"table"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Rows     int    `json:"rows"`
+	Subjects int    `json:"subjects"`
+	First    string `json:"first"`
+	Last     string `json:"last"`
+	Share    int    `json:"share"`
+	// Oversize is how many subjects the window held that no dataset can represent.
+	// It is IN THE FINGERPRINT because it is part of what the source looked like: a
+	// window whose unrepresentable population changed is a window that changed, and
+	// the reproducibility check is exact agreement over everything recorded here.
+	Oversize  int    `json:"oversize"`
 	Retention string `json:"retention"`
 }
 
@@ -406,6 +413,7 @@ func (p *plane) lineage(ctx context.Context, a scan, e entry) (mlLineage, error)
 		Rows:      o.Rows,
 		Subjects:  o.Subjects,
 		Share:     o.Share,
+		Oversize:  o.Oversize,
 		Digest:    e.Digest,
 		Retention: o.Retention,
 	}
@@ -425,9 +433,11 @@ func (p *plane) lineage(ctx context.Context, a scan, e entry) (mlLineage, error)
 }
 
 // drift names the first way the source no longer holds what a version was built
-// from, or "" when it holds exactly that. It is a total comparison of the four
-// measurements the manifest records, so "reproducible" means all four agree and
-// nothing else.
+// from, or "" when it holds exactly that. It is a total comparison of EVERY
+// measurement the manifest records, so "reproducible" means all of them agree and
+// nothing else — including the unrepresentable population, because a window whose
+// oversize count moved is a window whose contents moved, and a claim that is not
+// checked is not a claim.
 func drift(o origin, now census) string {
 	switch {
 	case now.Rows == 0:
@@ -438,6 +448,9 @@ func drift(o origin, now census) string {
 	case now.Subjects != o.Subjects:
 		return fmt.Sprintf("the source now holds %d subjects for this window where this version was built from %d",
 			now.Subjects, o.Subjects)
+	case now.Oversize != o.Oversize:
+		return fmt.Sprintf("the source now holds %d subjects too large to represent for this window where this version was built alongside %d",
+			now.Oversize, o.Oversize)
 	case stamp(now.First) != o.First:
 		return fmt.Sprintf("the source now starts at %s where this version was built from %s", stamp(now.First), o.First)
 	case stamp(now.Last) != o.Last:
