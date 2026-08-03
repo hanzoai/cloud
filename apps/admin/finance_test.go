@@ -266,8 +266,8 @@ func newFakeCommerceFinance() *httptest.Server {
 			io.WriteString(w, `{"consumedCents":15000,"overageCents":0,"balance":{"balanceCents":0,"availableCents":0}}`)
 		case strings.HasSuffix(r.URL.Path, "/subscriptions"):
 			io.WriteString(w, `{"subscriptions":[
-				{"status":"active","plan":{"price":5000,"currency":"usd","interval":"month"}},
-				{"status":"canceled","plan":{"price":9900,"currency":"usd","interval":"month"}}
+				{"status":"active","mrrCents":5000,"plan":{"price":5000,"currency":"usd","interval":"month"}},
+				{"status":"canceled","mrrCents":9900,"plan":{"price":9900,"currency":"usd","interval":"month"}}
 			]}`)
 		default:
 			w.WriteHeader(404)

@@ -237,7 +237,7 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 
 	// hanzo caller stores a secret in its own org.
-	body, _ := json.Marshal(map[string]string{"name": "API_KEY", "value": "hk-abc123", "env": "main"})
+	body, _ := json.Marshal(map[string]string{"name": "API_KEY", "value": "sk-abc123", "env": "main"})
 	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("POST secret (own org) = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
@@ -248,8 +248,8 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET secret (own org) = %d, want 200", resp.StatusCode)
 	}
-	if v, _ := decode(t, resp.Body)["value"].(string); v != "hk-abc123" {
-		t.Errorf("GET secret value = %q, want hk-abc123", v)
+	if v, _ := decode(t, resp.Body)["value"].(string); v != "sk-abc123" {
+		t.Errorf("GET secret value = %q, want sk-abc123", v)
 	}
 
 	// A different org (evil) sends the IDENTICAL request and gets not-found: its
@@ -260,7 +260,7 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 		t.Errorf("cross-org GET = %d, want 404 (org unspellable in URL ⇒ resolves in the "+
 			"caller's own namespace ⇒ not-found, which hides existence rather than confirming it)", resp.StatusCode)
 	}
-	if b := readAll(resp.Body); strings.Contains(b, "hk-abc123") {
+	if b := readAll(resp.Body); strings.Contains(b, "sk-abc123") {
 		t.Fatalf("LEAK: cross-org GET returned hanzo's secret: %s", b)
 	}
 
@@ -283,7 +283,7 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 		t.Errorf("admin cross-org GET = %d, want 404 (no URL names an org, admin or not; "+
 			"the retained admin path is the claim-bound org-switch — see TestRedIso_C_AdminCrossOrg)", resp.StatusCode)
 	}
-	if b := readAll(resp.Body); strings.Contains(b, "hk-abc123") {
+	if b := readAll(resp.Body); strings.Contains(b, "sk-abc123") {
 		t.Fatalf("LEAK: admin URL-traversal GET returned hanzo's secret: %s", b)
 	}
 
@@ -294,7 +294,7 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 	if resp.StatusCode != 403 {
 		t.Errorf("anonymous GET = %d, want 403", resp.StatusCode)
 	}
-	if b := readAll(resp.Body); strings.Contains(b, "hk-abc123") {
+	if b := readAll(resp.Body); strings.Contains(b, "sk-abc123") {
 		t.Fatalf("LEAK: anonymous GET returned hanzo's secret: %s", b)
 	}
 }

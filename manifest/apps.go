@@ -2,12 +2,18 @@
 //
 // Apps is every subsystem that ships as its own binary, in mount order — which
 // IS the routing order: the host loads them in this sequence and the router
-// takes the first prefix that matches. Three facts per app and no more — name,
-// the absolute paths it answers, and whether it must already be running when the
-// first request arrives — because that is the whole of what the light host needs
-// to know (cmd/cloud links this package and zip and NOTHING else). What an app
-// DOES lives in the app's own binary (plugin/<name>/main.go), which states its
+// takes the first prefix that matches. Four facts per app and no more — name,
+// the absolute paths it answers, whether it must already be running when the
+// first request arrives, and whether the host should take traffic at all without
+// it — because that is the whole of what the light host needs to know (cmd/cloud
+// links this package and zip and NOTHING else). What an app DOES lives in the
+// app's own binary (plugin/<name>/main.go), which states its
 // Mount/Shutdown/OwnsHealth/Price once, where they are used.
+//
+// The fourth fact is Vital, and it earns its place here rather than in the app
+// because readiness is the HOST's answer: the host is what a probe reaches, what
+// a Service routes to, and the only process that can see one child missing while
+// the other 111 serve. See App.Vital — exactly one row sets it.
 //
 // This list was the composition root once removed (apps.Wire()); that root is
 // gone. Editing an app is now two coordinated edits with no generator between
@@ -30,7 +36,7 @@ var Apps = []App{
 	{Name: "pubsub", Prefixes: []string{"/v1/pubsub"}, Eager: true},
 	{Name: "kafka", Prefixes: []string{"/v1/kafka"}, Eager: true},
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
-	{Name: "agentskills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
+	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
 	// /v1/logs and /v1/traces are metrics' own ingestion + query doors (see
@@ -43,7 +49,7 @@ var Apps = []App{
 	// naming them at all is new: OIDC discovery and JWKS live at the ISSUER root by
 	// spec (RFC 8414 / OIDC Discovery 1.0), so before iam was grafted the only thing
 	// it could declare here was /.well-known/*, which would have taken the whole
-	// subtree from agentskills and from anything else that ever lands under it. A
+	// subtree from skills and from anything else that ever lands under it. A
 	// grafted child declares the addresses its router actually holds, so the host can
 	// route the three and nothing more. They were in manifest/router_test.go's
 	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
@@ -113,6 +119,21 @@ var Apps = []App{
 	// inference and training, this serves the lookup data a decision consults, and
 	// they share no state.
 	{Name: "reference", Prefixes: []string{"/v1/ml/reference"}},
+	// risk owns /v1/risk OUTRIGHT — the per-organisation model plane that decides
+	// AND learns. It shares no prefix with the row above: `ml` is model SERVING
+	// (InferenceServices, predict) and it is live with customers on it, so the two
+	// products are two names. This row used to list /v1/ml leaves, which would have
+	// made /v1/ml/models mean "models you serve" and "models that learn" at once.
+	//
+	// One row and not two, and that is the sharpest structural fact here: the model
+	// is IN-PROCESS MUTABLE STATE (per-tenant mass counters). A row is a BINARY, so
+	// if one process learned and another scored, the two would hold different
+	// counters and answer one question two ways — with no error and no log. One
+	// owner of the state, one row.
+	//
+	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
+	// always-ok liveness route would otherwise shadow.
+	{Name: "risk", Prefixes: []string{"/v1/risk"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
@@ -209,12 +230,14 @@ var Apps = []App{
 	{Name: "engine", Prefixes: []string{"/v1/engine"}},
 	{Name: "registry", Prefixes: []string{"/v1/registry"}},
 	{Name: "auto", Prefixes: []string{"/v1/auto"}},
-	// Open: the tool plane also serves the CALLER's own tools — its connectors,
-	// skills, agents, and the external MCP servers it enabled — which are rows and
-	// cannot be in a build-time catalogue. The host asks it per caller on a
-	// tools/list that names one. It is the only open app in the fleet, and zip
-	// refuses a second.
-	{Name: "tools", Open: true, Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
+	// The tool plane also serves the CALLER's own tools — its connectors, skills,
+	// agents, and the external MCP servers it enabled — which are rows and could
+	// never have been in a build-time catalogue. It used to be the fleet's single
+	// "open" app for that reason, and zip refused a second. Nothing marks it now:
+	// the host forwards the caller's OWN tools/list to EVERY subsystem, so each one
+	// answers for this caller out of its own registry and its own rows, and being
+	// asked per caller is no longer a privilege one app holds.
+	{Name: "tools", Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
 	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},
@@ -230,7 +253,14 @@ var Apps = []App{
 	// (hanzoai/ai mount), so whichever row holds "/v1" decides whether that
 	// surface exists at all. Every deeper prefix above still wins; ai takes only
 	// what nobody named.
-	{Name: "ai", Prefixes: []string{"/v1"}},
+	//
+	// Vital, and the ONLY app that is: "/v1" is not one subsystem's prefix, it is
+	// the product API's remainder, so a pod serving without ai answers 503 to
+	// every model, completion and embedding call while its 111 siblings look
+	// perfect. That is not a degraded deployment, it is one there is no reason to
+	// route to — which is exactly what Vital says and all it says. The pod stays
+	// up and keeps reporting why (App.Vital).
+	{Name: "ai", Prefixes: []string{"/v1"}, Vital: true},
 	// zen serves only CO-RESIDENT: its mount is a Claim middleware on ai's router
 	// (apps/zen), routing zen-SKU requests and Next()ing the rest. It therefore
 	// routes NO prefix of its own — see App.Coresident. The row exists because

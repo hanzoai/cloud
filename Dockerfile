@@ -23,7 +23,7 @@
 # force-cache-busted every build) used to dominate the ~20-min build; it is now
 # a registry pull.
 #   console-embed (hanzoai/console Dockerfile.embed)  → /dist    → webui/dist               (go:embed)
-#   agent-skills  (hanzoai/openapi Dockerfile.skills) → /catalog → apps/agentskills/catalog (go:embed)
+#   agent-skills  (hanzoai/openapi Dockerfile.skills) → /catalog → apps/skills/catalog (go:embed)
 # Pinned to ghcr.io so BOTH buildx lanes (release.yml + platform arcbuild) pull
 # it directly; the SAME tags are mirrored to registry.hanzo.ai (S3-backed) for
 # GET-flow consumers (docker/kaniko/crane). Override any pin with
@@ -144,14 +144,14 @@ COPY --from=console /dist/ /src/webui/dist/
 # Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
 # bakes the complete set (all services × brands), not the committed `ai` fallback.
 #
-# The path is apps/agentskills/catalog because that is where the embed is
-# (apps/agentskills/agentskills.go). It read clients/agentskills/catalog until
+# The path is apps/skills/catalog because that is where the embed is
+# (apps/skills/skills.go). It read apps/skills/catalog until
 # now — the pre-f873d1a1 home of every subsystem — and COPY CREATES a missing
 # destination, so the overlay landed in a directory no package embeds and nothing
 # anywhere disagreed. Every image since that move has shipped the tracked fallback
 # instead: one skill (ai_models) per brand, served as the whole of
 # /.well-known/agent-skills/index.json. The RUN below is the gate that was missing.
-COPY --from=skills /catalog/ /src/apps/agentskills/catalog/
+COPY --from=skills /catalog/ /src/apps/skills/catalog/
 # RED gate — the overlays landed WHERE THE EMBED READS. Both COPYs above write
 # into a tracked fallback that exists precisely so a bare `go build` works, and
 # `COPY` creates a missing destination rather than failing — so a stale path is
@@ -162,8 +162,8 @@ COPY --from=skills /catalog/ /src/apps/agentskills/catalog/
 # skill per brand, and the console fallback is a hand-written index.html with no
 # script at all — a static SPA export carrying zero JavaScript is not a build.
 RUN set -eu; \
-    n="$(sed -n 's/.*"skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/agentskills/catalog/hanzo/index.json)"; \
-    [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/agentskills/catalog holds the ${n:-0}-skill fallback — the overlay missed the //go:embed path"; exit 1; }; \
+    n="$(sed -n 's/.*"skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/skills/catalog/hanzo/index.json)"; \
+    [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/skills/catalog holds the ${n:-0}-skill fallback — the overlay missed the //go:embed path"; exit 1; }; \
     j="$(find /src/webui/dist -type f -name '*.js' | wc -l)"; \
     [ "$j" -gt 0 ] || { echo "CONSOLE-GATE FAIL: webui/dist carries no JavaScript — the overlay missed the //go:embed path and the image would ship the fallback shell"; exit 1; }; \
     echo ">> overlays landed: $n skills/brand, $j console scripts"

@@ -16,8 +16,8 @@ package org
 //	               round below the recorded one is rejected (ErrStaleRound), and a
 //	               takeover carries the latest durable bytes forward before sealing,
 //	               so no acknowledged write is lost. (github.com/hanzoai/vfs/replica)
-//	AT REST       — the durable object is sealed with the org's envelope key (Cipher);
-//	               the local file keeps whatever cek wrote it as.
+//	AT REST       — the durable object is sealed under the database's own cek key
+//	               (Cipher), the SAME key the local file was opened with.
 //
 // # Snapshot is a raw file copy, not VACUUM/logical export
 //
@@ -49,6 +49,7 @@ import (
 	"sync"
 
 	"github.com/hanzoai/ha"
+	"github.com/hanzoai/namespace"
 	"github.com/hanzoai/vfs/replica"
 )
 
@@ -106,12 +107,15 @@ func WithCheckpoint(fn func(context.Context, *sql.DB) error) DurabilityOption {
 	return func(o *durabilityOpts) { o.checkpoint = fn }
 }
 
-// For mints the Durable binding for one org DB: orgID is the org SLUG (the HRW
-// election key AND the cipher AAD — the caller passes the SAME slug the on-disk path
-// and the shard router hash use). dbKey is the durable object location
-// (replica.DBPath). dbPath is the local SQLite file.
-func (dy *Durability) For(orgID, dbKey, dbPath string) *Durable {
-	return &Durable{dy: dy, orgID: orgID, dbKey: dbKey, dbPath: dbPath}
+// For mints the Durable binding for one org DB. It takes the NAME — the same
+// (ns, subsystem) the local file was opened under — rather than the parts a name
+// is made of, so the snapshot cannot be keyed for one database and shipped as
+// another: the election key is ns.ID() (the ENTITY, so every one of an org's
+// project-scoped files has one elected writer) and the snapshot key is cek's over
+// (ns, subsystem). dbKey is the durable object location (replica.DBPath). dbPath
+// is the local SQLite file.
+func (dy *Durability) For(ns namespace.Namespace, subsystem, dbKey, dbPath string) *Durable {
+	return &Durable{dy: dy, ns: ns, subsystem: subsystem, dbKey: dbKey, dbPath: dbPath}
 }
 
 // Durable binds one org's local SQLite file to its fenced durable object slot,
@@ -119,10 +123,11 @@ func (dy *Durability) For(orgID, dbKey, dbPath string) *Durable {
 // (the store owns that) — Bind lends it the handle so Sync can checkpoint on the
 // same single connection the store writes through.
 type Durable struct {
-	dy     *Durability
-	orgID  string // org slug — HRW key + cipher AAD
-	dbKey  string // durable object key (replica.DBPath)
-	dbPath string // local SQLite file path
+	dy        *Durability
+	ns        namespace.Namespace // the database's name — HRW key (ns.ID()) + snapshot key
+	subsystem string              // which database of that entity — bound into the snapshot key
+	dbKey     string              // durable object key (replica.DBPath)
+	dbPath    string              // local SQLite file path
 
 	mu    sync.Mutex
 	owned bool     // true iff we hold the lease as the elected writer
@@ -146,7 +151,7 @@ type Durable struct {
 // handle and CarryForward-restores the latest snapshot under the FRESH handle (never
 // under the live one — the swap is why the reopen is required). No process restart.
 func (d *Durable) Hydrate(ctx context.Context) error {
-	lease, err := d.dy.fencer.Acquire(ctx, d.orgID)
+	lease, err := d.dy.fencer.Acquire(ctx, d.ns.ID())
 	if err != nil {
 		// Not the elected writer, or no safe owner / unreachable store: serve reads
 		// off the freshest local copy we can get, writes fail closed via Sync.
@@ -154,7 +159,7 @@ func (d *Durable) Hydrate(ctx context.Context) error {
 		if errors.Is(err, ErrNotOwner) || errors.Is(err, ErrNoMembership) {
 			return nil
 		}
-		return fmt.Errorf("org: durable acquire %s: %w", d.orgID, err)
+		return fmt.Errorf("org: durable acquire %s: %w", d.ns, err)
 	}
 	if err := d.dy.fenced.CarryForward(ctx, d.dbKey, uint64(lease.Round), d.restore); err != nil {
 		if errors.Is(err, replica.ErrStaleRound) {
@@ -198,7 +203,7 @@ func (d *Durable) PendingPromotion() bool {
 	if owned {
 		return false
 	}
-	return d.dy.fencer.ElectsSelf(d.orgID)
+	return d.dy.fencer.ElectsSelf(d.ns.ID())
 }
 
 // TryClaim probes whether this replica can hold the org's writer lease right now and, if
@@ -210,7 +215,7 @@ func (d *Durable) PendingPromotion() bool {
 // snapshot under the fresh handle. Returns (false, nil) when not the elected owner,
 // (false, err) on a store error, (true, nil) when claimed.
 func (d *Durable) TryClaim(ctx context.Context) (bool, error) {
-	_, err := d.dy.fencer.Acquire(ctx, d.orgID)
+	_, err := d.dy.fencer.Acquire(ctx, d.ns.ID())
 	switch {
 	case err == nil:
 		return true, nil
@@ -241,7 +246,7 @@ func (d *Durable) Sync(ctx context.Context) (acked bool, err error) {
 	}
 	payload := snap
 	if d.dy.cipher != nil {
-		sealed, err := d.dy.cipher.Seal(d.orgID, snap)
+		sealed, err := d.dy.cipher.Seal(d.ns, d.subsystem, snap)
 		if err != nil {
 			return false, fmt.Errorf("org: durable seal %s: %w", d.dbKey, err)
 		}
@@ -296,7 +301,7 @@ func (d *Durable) restore(sealed []byte) error {
 	}
 	payload := sealed
 	if d.dy.cipher != nil {
-		pt, err := d.dy.cipher.Open(d.orgID, sealed)
+		pt, err := d.dy.cipher.Open(d.ns, d.subsystem, sealed)
 		if err != nil {
 			return fmt.Errorf("org: durable open %s: %w", d.dbKey, err)
 		}

@@ -14,6 +14,8 @@
 
 package manifest
 
+import "strings"
+
 // PrefixesFor returns the paths app answers, as declared in Apps.
 //
 // WHY THIS EXISTS. "Which paths does this app answer" is ONE fact, and it was
@@ -45,4 +47,34 @@ func PrefixesFor(name string) []string {
 		}
 	}
 	return nil
+}
+
+// OwnerOf reports which app the host routes a path to: the app whose declared
+// prefix is the LONGEST match. That is the same rule the router itself applies,
+// and stating it here lets anything downstream ask "whose surface is this?"
+// without restating the routing table — the mistake PrefixesFor exists to avoid.
+//
+// It matters because prefixes nest. `provisioning` is routed /v1/vector and
+// /v1/search, while `product` is routed the more specific /v1/vector/collections
+// and /v1/search/indexes — so a shorter prefix from a different app can swallow a
+// path it does not actually serve. Anything deciding policy from a bare
+// HasPrefix scan will attribute those paths to the wrong app.
+//
+// An unrouted path returns "" — the caller decides what that means.
+func OwnerOf(path string) string {
+	best, bestLen := "", -1
+	for _, a := range Apps {
+		for _, p := range a.Prefixes {
+			root := strings.TrimSuffix(p, "/")
+			if root == "" {
+				continue
+			}
+			if path == root || strings.HasPrefix(path, root+"/") {
+				if len(root) > bestLen {
+					best, bestLen = a.Name, len(root)
+				}
+			}
+		}
+	}
+	return best
 }

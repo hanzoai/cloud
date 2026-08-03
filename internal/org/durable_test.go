@@ -46,7 +46,7 @@ type durablePod struct {
 func newDurablePod(t *testing.T, cs replica.ConditionalStore, id string, set []Member, orgID, dbKey string) *durablePod {
 	t.Helper()
 	dy := NewDurability(cs, stubView{id: id, set: set}, nil) // nil cipher: plaintext local
-	d := dy.For(orgID, dbKey, filepath.Join(t.TempDir(), "research.db"))
+	d := dy.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
 	return &durablePod{id: id, d: d}
 }
 
@@ -305,7 +305,7 @@ func TestDurableRestoreIntoFreshNestedDir(t *testing.T) {
 
 	// Successor DB path lives under a NESTED dir that does not exist yet.
 	succPath := filepath.Join(t.TempDir(), "orgs", orgID, "research.db")
-	succ := NewDurability(cs, stubView{id: "pod-new", set: []Member{{ID: "pod-new"}}}, nil).For(orgID, dbKey, succPath)
+	succ := NewDurability(cs, stubView{id: "pod-new", set: []Member{{ID: "pod-new"}}}, nil).For(testNS(orgID), "research", dbKey, succPath)
 	if err := succ.Hydrate(ctx); err != nil {
 		t.Fatalf("hydrate into a fresh nested dir must succeed (restore mkdirs): %v", err)
 	}

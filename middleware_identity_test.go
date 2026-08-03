@@ -274,9 +274,9 @@ func TestSanitizeIdentity(t *testing.T) {
 			wantOrg: "",
 		},
 		{
-			name: "opaque hk- API key is not a JWT; no admin",
+			name: "opaque sk- API key is not a JWT; no admin",
 			mutate: func(r *http.Request) {
-				r.Header.Set("Authorization", "Bearer hk-deadbeef")
+				r.Header.Set("Authorization", "Bearer sk-deadbeef")
 				r.Header.Set("X-User-IsAdmin", "true")
 			},
 			wantAdmin: false,
@@ -453,7 +453,7 @@ func TestSanitizeIdentity_OrgAdminHeader(t *testing.T) {
 // A nil validator (unconfigured) must still STRIP a forged admin header — the
 // sanitizer never fails open to admin, even with no JWKS wired.
 // TestSanitizeIdentity_StampsUserName proves the validated IAM username is stamped
-// as X-User-Name, DISTINCT from X-User-Id (the JWT subject). The direct-Bearer hk-
+// as X-User-Name, DISTINCT from X-User-Id (the JWT subject). The direct-Bearer sk-
 // mint depends on this split: IAM's user-key ops parse <owner>/<username>, while
 // X-User-Id is a UUID subject that fails that lookup. Both must be present and
 // distinct on the direct path.

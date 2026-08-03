@@ -10,13 +10,13 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/team/account/cookie", zip.Doc{
-		Description: "ClearCookie signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one.",
+		Description: "Signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one.",
 		Fields: map[string]string{
 			"cookieAck.result": "Result is true when the cookie was written or cleared.",
 		},
 	})
 	zip.Describe("DELETE /v1/team/files/:workspace/:filename", zip.Doc{
-		Description: "DeleteBlob removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
+		Description: "Removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
 		Fields: map[string]string{
 			"blobRef.file":      "File is the blob id, and wins over the path segment when both are present.",
 			"blobRef.filename":  "Filename is the last path segment, which the front sets to the blob id\nwhen it sends no explicit `file`.",
@@ -25,7 +25,7 @@ func init() {
 		Example: json.RawMessage(`{"workspace":"6579…","file":"0d4f…"}`),
 	})
 	zip.Describe("GET /v1/team/account/providers", zip.Doc{
-		Description: "ListProviders returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
+		Description: "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
 		Fields: map[string]string{
 			"ProviderInfo.displayName": "DisplayName is the human label for the sign-in button; this deployment\nsends \"Hanzo\". Omitted from the body when empty.",
 			"ProviderInfo.name":        "Name is the provider id, and it is the value that goes back in the URL to\nstart a login: GET /v1/team/account/auth/{provider}. This deployment\nsurfaces exactly one, \"openid\" — the hanzo.id door.",
@@ -33,7 +33,7 @@ func init() {
 		Response: json.RawMessage(`[{"name":"openid","displayName":"Hanzo"}]`),
 	})
 	zip.Describe("GET /v1/team/billing/plan", zip.Doc{
-		Description: "ReadPlan returns the plan and seat counts for the caller's OWN org, resolved\nfrom the VERIFIED team session token — never a client header. Seats and guests\nare the org's distinct active human members (a bot member is not a seat); the\nplan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier. A\ncaller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
+		Description: "Returns the plan and seat counts for the caller's OWN org, resolved\nfrom the VERIFIED team session token — never a client header. Seats and guests\nare the org's distinct active human members (a bot member is not a seat); the\nplan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier. A\ncaller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
 		Fields: map[string]string{
 			"planInfo.active":     "Active is whether that plan's entitlement is live.",
 			"planInfo.guestLimit": "GuestLimit is the plan's team.guests cap, when the plan carries one.",
@@ -45,7 +45,7 @@ func init() {
 		Response: json.RawMessage(`{"plan":"pro","active":true,"seats":3,"guests":1,"guestLimit":3,"upgradeUrl":"https://billing.hanzo.ai"}`),
 	})
 	zip.Describe("GET /v1/team/bots", zip.Doc{
-		Description: "ListBots returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
+		Description: "Returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
 		Fields: map[string]string{
 			"botMember.active":    "Active is whether the agent projects as a LIVE workspace member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
 			"botMember.id":        "the agent id",

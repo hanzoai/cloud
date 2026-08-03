@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/base/health", zip.Doc{
-		Description: "BaseHealth reports that the base subsystem is serving.\n\nIt is deliberately INDEPENDENT of whether this deployment actually embeds the\nBase engine: the route answers before the CLOUD_BASE_EMBED gate and before the\n/v1/base/* wildcard, so a liveness probe measures the process rather than an\noptional feature, and the wildcard can never shadow it. It reads no tenant, so a\nprober that sends no principal is answered rather than refused.",
+		Description: "Reports that the base subsystem is serving.\n\nIt is deliberately INDEPENDENT of whether this deployment actually embeds the\nBase engine: the route answers before the CLOUD_BASE_EMBED gate and before the\n/v1/base/* wildcard, so a liveness probe measures the process rather than an\noptional feature, and the wildcard can never shadow it. It reads no tenant, so a\nprober that sends no principal is answered rather than refused.",
 		Fields: map[string]string{
 			"baseHealth.service": "Service is \"base\" — which subsystem answered.",
 			"baseHealth.status":  "Status is \"ok\" when the subsystem is serving.",
