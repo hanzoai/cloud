@@ -1,4 +1,4 @@
-package agentskills
+package skills
 
 import (
 	"context"

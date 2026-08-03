@@ -36,7 +36,7 @@ var Apps = []App{
 	{Name: "pubsub", Prefixes: []string{"/v1/pubsub"}, Eager: true},
 	{Name: "kafka", Prefixes: []string{"/v1/kafka"}, Eager: true},
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
-	{Name: "agentskills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
+	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
 	// /v1/logs and /v1/traces are metrics' own ingestion + query doors (see
@@ -49,7 +49,7 @@ var Apps = []App{
 	// naming them at all is new: OIDC discovery and JWKS live at the ISSUER root by
 	// spec (RFC 8414 / OIDC Discovery 1.0), so before iam was grafted the only thing
 	// it could declare here was /.well-known/*, which would have taken the whole
-	// subtree from agentskills and from anything else that ever lands under it. A
+	// subtree from skills and from anything else that ever lands under it. A
 	// grafted child declares the addresses its router actually holds, so the host can
 	// route the three and nothing more. They were in manifest/router_test.go's
 	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
