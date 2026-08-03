@@ -17,7 +17,7 @@ import (
 )
 
 // The identity boundary (SanitizeIdentity) validates a JWT and mints the identity
-// headers every subsystem trusts. An opaque API key (hk-/sk-/pk-/fw_/hz_) is not a
+// headers every subsystem trusts. An opaque API key (pk-/sk-) is not a
 // JWT, so it yielded no principal — and a subsystem that gates on the minted
 // identity (zen's billing gate) refused an API-key request as anonymous, though the
 // key is a first-class credential. keyResolver closes that gap: it turns a key into
@@ -31,7 +31,7 @@ type keyResolver interface {
 	resolve(ctx context.Context, key string) *idClaims
 }
 
-// iamKeys resolves an `hk-` key against IAM's get-user?accessKey endpoint,
+// iamKeys resolves an `sk-` key against IAM's get-user?accessKey endpoint,
 // authenticating as the confidential `hanzo-console` client (the credential
 // clients/account already uses). The resolved user is exactly what a JWT for that
 // user carries, so SanitizeIdentity mints identical headers for a key and a session.
@@ -81,7 +81,7 @@ func sharedKeys() *iamKeys {
 // is refused rather than stored.
 const maxKeyOrgLen = 128
 
-// OrgForKey resolves an opaque Hanzo API key (pk-/sk-/hk-) to the org it belongs
+// OrgForKey resolves an opaque Hanzo API key (pk-/sk-) to the org it belongs
 // to — the SAME owner org SanitizeIdentity mints when that key arrives as a bearer
 // — and is the exported door a keyed, bearer-less SDK path uses to attribute a
 // project key to a tenant.
@@ -89,7 +89,7 @@ const maxKeyOrgLen = 128
 // TWO doors in IAM, because a publishable key and a secret key are resolved by
 // different questions and the answers must not be interchangeable:
 //
-//   - a SECRET key (sk-/hk-) asks WHO, and get-user?accessKey answers with the
+//   - a SECRET key (sk-) asks WHO, and get-user?accessKey answers with the
 //     principal. IAM refuses a pk- there BY DESIGN (store.UserByAccessKey), which
 //     is right and was also the bug: cloud sent every prefix down this one door, so
 //     a publishable key resolved to nothing and the ingest path it exists for could
@@ -242,12 +242,12 @@ func (k *iamKeys) refusal(_ context.Context, key string) KeyRefusal {
 }
 
 // KeyHint is the ONE way a key is named in a log line or an error message: its
-// prefix and nothing else. A credential must never be echoed whole, and "hk-902abd…"
+// prefix and nothing else. A credential must never be echoed whole, and "sk-902abd…"
 // is enough for a holder to tell WHICH of their keys failed while being useless to
 // anyone who intercepts it.
 func KeyHint(key string) string {
 	key = strings.TrimSpace(key)
-	const shown = 9 // "hk-" + 6
+	const shown = 9 // "sk-" + 6
 	if len(key) <= shown {
 		return "…"
 	}

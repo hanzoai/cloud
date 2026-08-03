@@ -1,0 +1,20 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "openapi/skills.py",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "scope": "master",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read ai models: List available models, Retrieve a model.",
+      "name": "ai_models",
+      "path": "ai_models/SKILL.md",
+      "service": "ai",
+      "sha256": "aaa0cc11ced53e8f414178abb36c26cb1c112c26860a66647438b5446ed9a329",
+      "version": "8.0.0"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

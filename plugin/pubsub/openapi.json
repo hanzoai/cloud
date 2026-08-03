@@ -19,8 +19,8 @@
     "/v1/pubsub/jetstream/streams": {
       "get": {
         "operationId": "get_v1_pubsub_jetstream_streams",
-        "summary": "ListStreams returns the org's streams, sorted by name.",
-        "description": "ListStreams returns the org's streams, sorted by name.\n\nA stream is the durable log: it captures every message published to its\nsubjects and retains them by its own limits, independent of any consumer.\nThe listing is org-scoped server-side — one org can never see another's\nstreams, and the platform's own planes never appear.",
+        "summary": "Returns the org's streams, sorted by name.",
+        "description": "Returns the org's streams, sorted by name.\n\nA stream is the durable log: it captures every message published to its\nsubjects and retains them by its own limits, independent of any consumer.\nThe listing is org-scoped server-side — one org can never see another's\nstreams, and the platform's own planes never appear.",
         "tags": [
           "pubsub"
         ],
@@ -39,8 +39,8 @@
       },
       "post": {
         "operationId": "post_v1_pubsub_jetstream_streams",
-        "summary": "CreateStream creates a durable stream capturing the given subjects and returns it.",
-        "description": "CreateStream creates a durable stream capturing the given subjects and\nreturns it. 409 when the org already has a stream of that name; the subjects\nare the org's own and cannot collide with another org's.",
+        "summary": "Creates a durable stream capturing the given subjects and returns it.",
+        "description": "Creates a durable stream capturing the given subjects and\nreturns it. 409 when the org already has a stream of that name; the subjects\nare the org's own and cannot collide with another org's.",
         "tags": [
           "pubsub"
         ],
@@ -78,8 +78,8 @@
     "/v1/pubsub/jetstream/streams/{stream}": {
       "delete": {
         "operationId": "delete_v1_pubsub_jetstream_streams_stream",
-        "summary": "DeleteStream removes one stream of the caller's org — its retained messages and its consumers with it — and answers 204 with no body.",
-        "description": "DeleteStream removes one stream of the caller's org — its retained messages\nand its consumers with it — and answers 204 with no body. 404 when the org\nhas no stream of that name.",
+        "summary": "Removes one stream of the caller's org — its retained messages and its consumers with it — and answers 204 with no body.",
+        "description": "Removes one stream of the caller's org — its retained messages\nand its consumers with it — and answers 204 with no body. 404 when the org\nhas no stream of that name.",
         "tags": [
           "pubsub"
         ],
@@ -102,8 +102,8 @@
       },
       "get": {
         "operationId": "get_v1_pubsub_jetstream_streams_stream",
-        "summary": "GetStream returns one stream of the caller's org — its configuration and its live state (messages, bytes, sequence range, consumer count).",
-        "description": "GetStream returns one stream of the caller's org — its configuration and its\nlive state (messages, bytes, sequence range, consumer count). 404 when the\norg has no stream of that name.",
+        "summary": "Returns one stream of the caller's org — its configuration and its live state (messages, bytes, sequence range, consumer count).",
+        "description": "Returns one stream of the caller's org — its configuration and its\nlive state (messages, bytes, sequence range, consumer count). 404 when the\norg has no stream of that name.",
         "tags": [
           "pubsub"
         ],
@@ -133,8 +133,8 @@
       },
       "put": {
         "operationId": "put_v1_pubsub_jetstream_streams_stream",
-        "summary": "UpdateStream rewrites a stream's configuration — subjects, limits, discard — and returns the updated stream.",
-        "description": "UpdateStream rewrites a stream's configuration — subjects, limits, discard —\nand returns the updated stream. It is a PUT: the spec sent replaces the spec\nheld, with one reading for the enums a caller omits — an empty storage,\nretention or discard keeps the stream's current one, because JetStream holds\nstorage and retention immutable and refuses a change with a 400 rather than\nthis door pretending it took.",
+        "summary": "Rewrites a stream's configuration — subjects, limits, discard — and returns the updated stream.",
+        "description": "Rewrites a stream's configuration — subjects, limits, discard —\nand returns the updated stream. It is a PUT: the spec sent replaces the spec\nheld, with one reading for the enums a caller omits — an empty storage,\nretention or discard keeps the stream's current one, because JetStream holds\nstorage and retention immutable and refuses a change with a 400 rather than\nthis door pretending it took.",
         "tags": [
           "pubsub"
         ],
@@ -183,8 +183,8 @@
     "/v1/pubsub/jetstream/streams/{stream}/consumers": {
       "get": {
         "operationId": "get_v1_pubsub_jetstream_streams_stream_consumers",
-        "summary": "ListConsumers returns one stream's consumers, sorted by name.",
-        "description": "ListConsumers returns one stream's consumers, sorted by name. 404 when the\norg has no stream of that name.",
+        "summary": "Returns one stream's consumers, sorted by name.",
+        "description": "Returns one stream's consumers, sorted by name. 404 when the\norg has no stream of that name.",
         "tags": [
           "pubsub"
         ],
@@ -214,8 +214,8 @@
       },
       "post": {
         "operationId": "post_v1_pubsub_jetstream_streams_stream_consumers",
-        "summary": "CreateConsumer creates a durable consumer on one stream and returns it.",
-        "description": "CreateConsumer creates a durable consumer on one stream and returns it. A\nconsumer is a named cursor: it tracks what has been delivered and what is\nacknowledged, so many workers can share it and none sees a message twice\noutside redelivery. 409 when the stream already has a consumer of that name\nwith a different configuration.",
+        "summary": "Creates a durable consumer on one stream and returns it.",
+        "description": "Creates a durable consumer on one stream and returns it. A\nconsumer is a named cursor: it tracks what has been delivered and what is\nacknowledged, so many workers can share it and none sees a message twice\noutside redelivery. 409 when the stream already has a consumer of that name\nwith a different configuration.",
         "tags": [
           "pubsub"
         ],
@@ -262,8 +262,8 @@
     "/v1/pubsub/jetstream/streams/{stream}/consumers/{name}": {
       "delete": {
         "operationId": "delete_v1_pubsub_jetstream_streams_stream_consumers_name",
-        "summary": "DeleteConsumer removes one consumer — its cursor, not the stream's messages — and answers 204 with no body.",
-        "description": "DeleteConsumer removes one consumer — its cursor, not the stream's messages —\nand answers 204 with no body. 404 when the stream or the consumer does not\nexist.",
+        "summary": "Removes one consumer — its cursor, not the stream's messages — and answers 204 with no body.",
+        "description": "Removes one consumer — its cursor, not the stream's messages —\nand answers 204 with no body. 404 when the stream or the consumer does not\nexist.",
         "tags": [
           "pubsub"
         ],
@@ -295,8 +295,8 @@
       },
       "get": {
         "operationId": "get_v1_pubsub_jetstream_streams_stream_consumers_name",
-        "summary": "GetConsumer returns one consumer of one org stream — its configuration and its cursor: delivered and acknowledged sequences, pending and redelivered counts.",
-        "description": "GetConsumer returns one consumer of one org stream — its configuration and\nits cursor: delivered and acknowledged sequences, pending and redelivered\ncounts. 404 when the stream or the consumer does not exist.",
+        "summary": "Returns one consumer of one org stream — its configuration and its cursor: delivered and acknowledged sequences, pending and redelivered counts.",
+        "description": "Returns one consumer of one org stream — its configuration and\nits cursor: delivered and acknowledged sequences, pending and redelivered\ncounts. 404 when the stream or the consumer does not exist.",
         "tags": [
           "pubsub"
         ],
@@ -393,8 +393,8 @@
     "/v1/pubsub/kv/{bucket}": {
       "delete": {
         "operationId": "delete_v1_pubsub_kv_bucket",
-        "summary": "DeleteBucket removes one bucket of the caller's org — every key and every revision with it — and answers 204 with no body.",
-        "description": "DeleteBucket removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
+        "summary": "Removes one bucket of the caller's org — every key and every revision with it — and answers 204 with no body.",
+        "description": "Removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
         "tags": [
           "pubsub"
         ],
@@ -417,8 +417,8 @@
       },
       "post": {
         "operationId": "post_v1_pubsub_kv_bucket",
-        "summary": "CreateBucket creates a KV bucket and returns it.",
-        "description": "CreateBucket creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
+        "summary": "Creates a KV bucket and returns it.",
+        "description": "Creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
         "tags": [
           "pubsub"
         ],

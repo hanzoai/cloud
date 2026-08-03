@@ -10,14 +10,14 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/books/accounts", zip.Doc{
-		Description: "ListAccounts returns the org's chart of accounts — the seeded fixed chart every\nposting key in the ledger refers to.",
+		Description: "Returns the org's chart of accounts — the seeded fixed chart every\nposting key in the ledger refers to.",
 		Fields: map[string]string{
 			"ledgerIn.sandbox": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
 	zip.Describe("GET /v1/books/bank/transactions", zip.Doc{
-		Description: "ListBankTransactions returns the org's normalized bank transactions, newest first —\nevery row the import and connector paths have ingested, with its amount in exact cents,\nits direction, and whether it has been matched to a voucher yet.",
+		Description: "Returns the org's normalized bank transactions, newest first —\nevery row the import and connector paths have ingested, with its amount in exact cents,\nits direction, and whether it has been matched to a voucher yet.",
 		Fields: map[string]string{
 			"bankLimitIn.limit":   "Limit caps how many rows come back; 500 when absent or not positive.",
 			"bankLimitIn.sandbox": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
@@ -25,7 +25,7 @@ func init() {
 		Example: json.RawMessage(`{"limit":100}`),
 	})
 	zip.Describe("GET /v1/books/bank/unreconciled", zip.Doc{
-		Description: "ListUnreconciled returns the org's unmatched bank inflows and their open clarifying\nquestions — the queue a human answers so an unexplained deposit is never guessed into\nrevenue.",
+		Description: "Returns the org's unmatched bank inflows and their open clarifying\nquestions — the queue a human answers so an unexplained deposit is never guessed into\nrevenue.",
 		Fields: map[string]string{
 			"ledgerIn.sandbox":             "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
 			"unreconciledOut.questions":    "Questions is the open clarifying question per unmatched inflow.",
@@ -34,7 +34,7 @@ func init() {
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
 	zip.Describe("GET /v1/books/export", zip.Doc{
-		Description: "ExportPackage returns the complete financial package for the caller's org over\n(from, to]: the trial balance, the P&L, the balance sheet, and the GL detail behind\nthem — the four statements a tax preparer or an investor asks for, assembled from the\none ledger in a single read so they cannot disagree with each other.",
+		Description: "Returns the complete financial package for the caller's org over\n(from, to]: the trial balance, the P&L, the balance sheet, and the GL detail behind\nthem — the four statements a tax preparer or an investor asks for, assembled from the\none ledger in a single read so they cannot disagree with each other.",
 		Fields: map[string]string{
 			"BalanceLine.amount":     "cents, display sign",
 			"BalanceSheet.balanced":  "TotalAssets == TotalLiabilities + TotalEquity",
@@ -59,7 +59,7 @@ func init() {
 		Example: json.RawMessage(`{"limit":100}`),
 	})
 	zip.Describe("GET /v1/books/inbox", zip.Doc{
-		Description: "ListInbox returns the org's open document queue — everything uploaded but not yet\nbooked, newest first, each with its extracted summary and the confidence the scanner\nresolved its category at. A booked document drops out of the queue.",
+		Description: "Returns the org's open document queue — everything uploaded but not yet\nbooked, newest first, each with its extracted summary and the confidence the scanner\nresolved its category at. A booked document drops out of the queue.",
 		Fields: map[string]string{
 			"Extracted.category": "proposed slug (software|cloud|office|…)",
 			"Extracted.issuedAt": "YYYY-MM-DD",
@@ -99,7 +99,7 @@ func init() {
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-06-30T23:59:59Z"}`),
 	})
 	zip.Describe("GET /v1/books/pnl", zip.Doc{
-		Description: "ProfitAndLoss returns the org's accrual-basis Profit & Loss over an optional (from, to]\nwindow of RFC3339 posting times: recognized revenue, matched cost, and the net.",
+		Description: "Returns the org's accrual-basis Profit & Loss over an optional (from, to]\nwindow of RFC3339 posting times: recognized revenue, matched cost, and the net.",
 		Fields: map[string]string{
 			"PnL.netIncome":    "TotalIncome − TotalExpense",
 			"PnLLine.amount":   "cents, display sign (income & expense both positive when normal)",
@@ -110,7 +110,7 @@ func init() {
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-03-31T23:59:59Z"}`),
 	})
 	zip.Describe("GET /v1/books/position", zip.Doc{
-		Description: "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
+		Description: "Returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
 		Fields: map[string]string{
 			"BalanceLine.amount":    "cents, display sign",
 			"BalanceSheet.balanced": "TotalAssets == TotalLiabilities + TotalEquity",
@@ -120,7 +120,7 @@ func init() {
 		Example: json.RawMessage(`{"to":"2026-03-31T23:59:59Z"}`),
 	})
 	zip.Describe("GET /v1/books/questions", zip.Doc{
-		Description: "ListQuestions returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;\nthe detector is deterministic over the ledger and invents nothing.",
+		Description: "Returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;\nthe detector is deterministic over the ledger and invents nothing.",
 		Fields: map[string]string{
 			"Question.amount":  "formatted figure ($…)",
 			"Question.id":      "the source transaction id it concerns",
@@ -131,7 +131,7 @@ func init() {
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
 	zip.Describe("GET /v1/books/rules", zip.Doc{
-		Description: "ListRules returns the org's auto-categorization rules, highest priority first. A rule\nis a standing instruction — \"anything whose merchant contains X books to category Y\" —\nand it overrides a vendor's default category, so this is the list that decides how a\nfuture bill classifies itself.",
+		Description: "Returns the org's auto-categorization rules, highest priority first. A rule\nis a standing instruction — \"anything whose merchant contains X books to category Y\" —\nand it overrides a vendor's default category, so this is the list that decides how a\nfuture bill classifies itself.",
 		Fields: map[string]string{
 			"Rule.category":    "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
 			"Rule.pattern":     "Pattern is the merchant substring the rule matches on, case-insensitively. It is\nalso the key an upsert writes by.",
@@ -142,7 +142,7 @@ func init() {
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
 	zip.Describe("GET /v1/books/transactions", zip.Doc{
-		Description: "ListTransactions returns the org's booked ledger as a single-line register, newest\nfirst: one row per voucher, with its date, description, vendor, category, source and\namount in exact cents. It is the double-entry ledger projected to the register a human\nreads, filterable by posting-time window, category and vendor. Strictly read-only — it\nrestates the books, it never moves them.",
+		Description: "Returns the org's booked ledger as a single-line register, newest\nfirst: one row per voucher, with its date, description, vendor, category, source and\namount in exact cents. It is the double-entry ledger projected to the register a human\nreads, filterable by posting-time window, category and vendor. Strictly read-only — it\nrestates the books, it never moves them.",
 		Fields: map[string]string{
 			"Txn.category":                 "COA account number of the P&L line",
 			"Txn.source":                   "source_kind: bank_txn | scan | commerce_txn",
@@ -157,7 +157,7 @@ func init() {
 		Example: json.RawMessage(`{"category":"software","limit":50}`),
 	})
 	zip.Describe("GET /v1/books/trial", zip.Doc{
-		Description: "TrialBalance returns the org's trial balance over an optional [from, to] window of\nRFC3339 posting times, including the opening/closing columns and the\nTotalDebit == TotalCredit proof that the books balance.",
+		Description: "Returns the org's trial balance over an optional [from, to] window of\nRFC3339 posting times, including the opening/closing columns and the\nTotalDebit == TotalCredit proof that the books balance.",
 		Fields: map[string]string{
 			"TrialBalanceRow.credit": "period movement",
 			"TrialBalanceRow.debit":  "period movement",
@@ -168,7 +168,7 @@ func init() {
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-03-31T23:59:59Z"}`),
 	})
 	zip.Describe("GET /v1/books/vendors", zip.Doc{
-		Description: "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to. A\nvendor here is what makes a scanned bill self-classify instead of asking again.",
+		Description: "Returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to. A\nvendor here is what makes a scanned bill self-classify instead of asking again.",
 		Fields: map[string]string{
 			"VendorRow.aliases":         "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",
 			"VendorRow.canonical":       "Canonical is the vendor's one true name, and the key an upsert writes by.",
@@ -179,7 +179,7 @@ func init() {
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
 	zip.Describe("POST /v1/books/ask", zip.Doc{
-		Description: "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber. A deterministic keyword router picks the intent and reads the real metrics, and\nthose figures, followups and report sources are computed BEFORE any model call and are\nnever altered by one: the optional narration seam only rephrases the sentence, and it\ndegrades silently to the templated answer when no AI plane is wired. It is strictly\nread-only — it restates the books, it never posts to them.",
+		Description: "Answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber. A deterministic keyword router picks the intent and reads the real metrics, and\nthose figures, followups and report sources are computed BEFORE any model call and are\nnever altered by one: the optional narration seam only rephrases the sentence, and it\ndegrades silently to the templated answer when no AI plane is wired. It is strictly\nread-only — it restates the books, it never posts to them.",
 		Fields: map[string]string{
 			"AskRequest.from":       "From is the RFC3339 start of the metric window. Empty means all time, treated as a\nsingle reporting period (see monthsBetween).",
 			"AskRequest.question":   "Question is the plain-language question about the org's books, e.g. \"what is my\nMRR?\". Longer than 2000 characters is truncated, never refused.",
@@ -195,7 +195,7 @@ func init() {
 		Example: json.RawMessage(`{"question":"how long is my runway?"}`),
 	})
 	zip.Describe("POST /v1/books/bank/sync", zip.Doc{
-		Description: "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped. One connector's\noutage is skipped rather than failing the whole sync. It reports the batch: how many\ntransactions were seen, how many vouchers posted, how many inflows reconciled against\nthe processor clearing account, how many raised a question, how many were own-account\ntransfers, and how many were already-processed no-ops. It is READ-ONLY against the\nbank — it ingests, it never sends money.",
+		Description: "Pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped. One connector's\noutage is skipped rather than failing the whole sync. It reports the batch: how many\ntransactions were seen, how many vouchers posted, how many inflows reconciled against\nthe processor clearing account, how many raised a question, how many were own-account\ntransfers, and how many were already-processed no-ops. It is READ-ONLY against the\nbank — it ingests, it never sends money.",
 		Fields: map[string]string{
 			"BankTally.ingested":   "transactions seen",
 			"BankTally.posted":     "vouchers newly posted (outflow + reconciled)",
@@ -206,7 +206,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/books/rules", zip.Doc{
-		Description: "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority. The\ncategory is normalized to a real COA expense account, and anything unrecognized becomes\n5900 Uncategorized rather than a guessed real account. It answers the row exactly as\nstored, so the caller sees the normalization. A rule overrides a vendor's default\ncategory, so this is the standing instruction that decides how a future bill classifies.",
+		Description: "Creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority. The\ncategory is normalized to a real COA expense account, and anything unrecognized becomes\n5900 Uncategorized rather than a guessed real account. It answers the row exactly as\nstored, so the caller sees the normalization. A rule overrides a vendor's default\ncategory, so this is the standing instruction that decides how a future bill classifies.",
 		Fields: map[string]string{
 			"Rule.category": "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
 			"Rule.pattern":  "Pattern is the merchant substring the rule matches on, case-insensitively. It is\nalso the key an upsert writes by.",
@@ -215,7 +215,7 @@ func init() {
 		Example: json.RawMessage(`{"pattern":"aws","category":"cloud","priority":5}`),
 	})
 	zip.Describe("POST /v1/books/scan/book", zip.Doc{
-		Description: "BookScan posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:\nthe voucher goes through the same post() choke point every other source uses, so it is\nchecked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking\nthe same scan answers posted=false and writes nothing. A bill whose economic identity\n(vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless\noverride is set, which is what stops the same receipt re-scanned into a new file hash\nfrom double-booking. An unbalanced voucher is refused 400.",
+		Description: "Posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:\nthe voucher goes through the same post() choke point every other source uses, so it is\nchecked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking\nthe same scan answers posted=false and writes nothing. A bill whose economic identity\n(vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless\noverride is set, which is what stops the same receipt re-scanned into a new file hash\nfrom double-booking. An unbalanced voucher is refused 400.",
 		Fields: map[string]string{
 			"BookRequest.override": "Override books this bill even when one of the SAME economic identity\n(vendor, total, issue date) already posted — the explicit human confirmation that a\nsame-looking bill is a genuine second spend, not the same receipt re-scanned.",
 			"BookRequest.scanId":   "ScanID is the scanned document's file hash, as GET /v1/books/inbox and the scan\ndraft report it. It is the idempotency key: re-booking the same scan writes nothing.",
@@ -241,7 +241,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/books/vendors", zip.Doc{
-		Description: "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again.",
+		Description: "Creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again.",
 		Fields: map[string]string{
 			"VendorRow.aliases":         "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",
 			"VendorRow.canonical":       "Canonical is the vendor's one true name, and the key an upsert writes by.",

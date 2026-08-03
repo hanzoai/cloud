@@ -366,7 +366,7 @@ var emailRe = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
 
 // secretRe redacts credential shapes that leak in free-text — chiefly error
 // stacks/messages (which bypass the key-based denylist): bearer tokens, the key
-// families (pk-/sk-/hk-), and ?token=/api_key=/access_token=/password=/secret=
+// families (pk-/sk-), and ?token=/api_key=/access_token=/password=/secret=
 // query params. Applied to every scrubbed string so a token in a URL property or
 // an exception frame is redacted before storage AND before the destinations
 // fan-out.
@@ -374,7 +374,7 @@ var emailRe = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
 // A published key is not a secret — it ships in public bundles by design — but it
 // is redacted anyway: a key in an error frame is noise, and telling the two apart
 // here would be a second place that has to know the families.
-var secretRe = regexp.MustCompile(`(?i)(bearer\s+[a-z0-9._~+/\-]{8,}={0,2}|(?:pk|sk|hk)-[a-z0-9._\-]{8,}|[?&](?:access_token|refresh_token|id_token|api[_-]?key|token|password|secret|auth)=[^&\s"']+)`)
+var secretRe = regexp.MustCompile(`(?i)(bearer\s+[a-z0-9._~+/\-]{8,}={0,2}|(?:pk|sk)-[a-z0-9._\-]{8,}|[?&](?:access_token|refresh_token|id_token|api[_-]?key|token|password|secret|auth)=[^&\s"']+)`)
 
 // scrubText redacts email- and credential-shaped substrings from a free-text
 // string. This is the ONE string scrubber; scrubValue and scrubException both
