@@ -45,6 +45,7 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -90,6 +91,24 @@ func OrgHasUnsafeRune(s string) bool { return s != "" && namespace.Sanitize(s) =
 // account.go, clients/team), and are read only if no un-shadowable cookie is present.
 var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "iam_access_token", "access_token", "hanzo_token"}
 
+// HeaderUserBrand carries WHICH BRAND'S IAM vouched for the principal, resolved
+// from the token's verified `iss` through the one brand registry (brand.ForIssuer).
+//
+// It is a SECOND fact, distinct from the deployment's own brand: one cloud binary
+// serves every brand's API host and trusts every brand's issuer (trustedIssuers),
+// so `cfg.Brand` says which brand this PROCESS is and this header says which
+// brand this CALLER is. A plane that keys rows by brand — a tenant key, a
+// derived-key salt — must be able to compare them, because "the process assumed
+// hanzo" and "lux.id signed this" disagreeing is one org's rows landing in
+// another's key space.
+//
+// It is minted only from validated claims and stripped on ingress like every
+// other authority header, so it is never a value a caller chose. Absent for a
+// principal that carries no issuer to resolve — an hk-/sk- API key, which this
+// deployment's own IAM issued — and a consumer must treat absent as "no second
+// fact to compare", never as a brand.
+const HeaderUserBrand = "X-User-Brand"
+
 // authorityHeaders are the identity/authority headers the gateway writes and the
 // ONLY ones a downstream may trust. The sanitizer deletes every one on ingress
 // so nothing a client sent survives as identity, then re-injects from a
@@ -122,6 +141,12 @@ var authorityHeaders = []string{
 	// org). Stripped on ingress like every authority header so a client can never
 	// forge who pays, then re-injected only from validated claims.
 	"X-User-Owner",
+	// X-User-Brand is WHICH BRAND'S IAM vouched for this principal, resolved from
+	// the token's VERIFIED `iss` (HeaderUserBrand below). Stripped on ingress like
+	// every authority header and re-injected only from validated claims: a caller
+	// that could choose it would choose which brand's tenant space its org lands
+	// in, which is exactly the collision brand-qualification exists to prevent.
+	HeaderUserBrand,
 	// Legacy identity aliases an attacker might try; none are org sub-scopes.
 	"X-User-Role",
 	"X-User-Roles",
@@ -279,6 +304,15 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 			// empty owner mints nothing (billing then fails closed with no home org).
 			if owner != "" {
 				req.Header.Set(authz.HeaderUserOwner, owner)
+			}
+			// The brand whose IAM actually minted this token, from the `iss` the
+			// verifier just checked the signature against. It is stamped for every
+			// validated principal whose issuer a brand claims, and for no other:
+			// an issuer the registry does not know mints NOTHING, so a consumer
+			// sees "no brand" rather than the default brand asserted over a
+			// stranger's token.
+			if id, ok := brand.ForIssuer(claims.Issuer); ok {
+				req.Header.Set(HeaderUserBrand, id)
 			}
 			// effOrg is the org actually acted as: the switched-to org for a global
 			// admin, else the principal's own owner. Sub-scopes are validated against

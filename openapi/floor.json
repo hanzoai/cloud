@@ -1,5 +1,5 @@
 {
-  "paths": 1684,
+  "paths": 1683,
   "operations": 2335,
   "products": {
     "admin": 87,
@@ -112,7 +112,7 @@
     "mesh": 1,
     "messages": 2,
     "metrics": 4,
-    "ml": 7,
+    "ml": 14,
     "models": 3,
     "mq": 15,
     "networks": 3,
@@ -141,7 +141,7 @@
     "rerank": 1,
     "research": 8,
     "responses": 1,
-    "risk": 17,
+    "risk": 10,
     "router": 40,
     "run": 1,
     "runner": 3,
