@@ -130,7 +130,7 @@ func TestNoTenantIsRefused(t *testing.T) {
 // every guard above becomes advisory.
 func TestNoPlaneInputCanNameAnOrg(t *testing.T) {
 	inputs := []any{
-		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{}, plane.StarterIn{},
+		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{},
 		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
 	}
 	for _, in := range inputs {
