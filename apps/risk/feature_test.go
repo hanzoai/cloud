@@ -324,11 +324,11 @@ func TestRollup_RollsEachWindowOnce(t *testing.T) {
 			"history is now inflated, and a SummingMergeTree will never converge back", twice, once)
 	}
 	// The watermark is DURABLE, so a rollout does not re-roll what already landed.
-	if err := p.close(); err != nil {
+	if err := p.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	if _, err := second.roll(context.Background(), k); err != nil {
 		t.Fatalf("roll after restart: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestRollup_NeverSplitsABucket(t *testing.T) {
 	probe.reset(true)
 	dir := t.TempDir()
 	p := planeAt(t, dir)
-	defer func() { _ = p.close() }()
+	defer func() { _ = p.close(context.Background()) }()
 	k := key(t, brandA, orgA)
 	// The only rolls that reach the warehouse are the three this test drives — and
 	// so the clock below is read by one goroutine.
