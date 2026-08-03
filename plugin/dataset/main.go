@@ -21,12 +21,12 @@ import (
 // cost nothing and declare nothing — Price is what ONE request to this surface
 // costs at the edge gate, and the per-op fee is stated in the app.
 //
-// It does not own health. Serve's generic /v1/dataset/health liveness route is
+// It does not own health. Listen's generic /v1/dataset/health liveness route is
 // the honest answer for this plane: everything it knows is in the store, so a
 // probe of its own would report the store's reachability, which is already what
 // every op reports in band as a 503 rather than as an empty answer.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "dataset",
 		Price: cloud.Metered,
 		Mount: dataset.Mount,

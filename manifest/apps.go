@@ -127,16 +127,23 @@ var Apps = []App{
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
 	{Name: "risk", Prefixes: []string{"/v1/risk"}},
-	// The dataset plane sits BESIDE ml under /v1/ml rather than inside it, because
-	// the two share a face and nothing else. ml is a Kubernetes CRD bridge whose
-	// tenant boundary is a per-org NAMESPACE and whose failure domain is the
-	// cluster; this is a warehouse-backed record plane whose tenant boundary is a
-	// qualified `<brand>/<org>` KEY and whose failure domain is the columnar store.
-	// One package holding two tenancy models is the shape a privilege bug grows in,
-	// so they are two rows claiming two disjoint sets of leaves — and zip refuses
-	// two owners for one prefix at compose time, which checks it rather than
-	// trusting it.
-	{Name: "dataset", Prefixes: []string{"/v1/ml/datasets"}},
+	// dataset is the risk product's RECORD plane, and it is addressed UNDER /v1/risk
+	// because that is the product it belongs to: it owns hanzo.risk_dataset and
+	// hanzo.risk_row and reads hanzo.risk_feature. It was written at /v1/ml/datasets
+	// before /v1/risk existed — and /v1/ml is model SERVING, live with customers, so
+	// that address named the wrong product. Nothing published it, so it moved.
+	//
+	// A SEPARATE ROW FROM `risk`, not a folded-in one, because the two hold different
+	// tenancy models and different failure domains: risk's tenant boundary is
+	// in-process per-org counters and its failure domain is this process, while this
+	// plane's boundary is a qualified `<brand>/<org>` KEY and its failure domain is
+	// the columnar store. One package holding two tenancy models is the shape a
+	// privilege bug grows in.
+	//
+	// The nesting is the routing rule, not a collision: [OwnerOf] and the router both
+	// take the LONGEST match, which is how `storage` already holds /v1/s3/buckets
+	// against provisioning's /v1/s3. No risk route moves.
+	{Name: "dataset", Prefixes: []string{"/v1/risk/datasets"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},

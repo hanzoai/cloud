@@ -77,13 +77,13 @@ func TestEveryRouteIsATypedOp(t *testing.T) {
 // generated artefacts at once and must be a deliberate edit here.
 func TestTheSurfaceIsExactlyWhatItSays(t *testing.T) {
 	want := []string{
-		"DELETE /v1/ml/datasets/{name}",
-		"GET /v1/ml/datasets",
-		"GET /v1/ml/datasets/{name}",
-		"GET /v1/ml/datasets/{name}/export",
-		"GET /v1/ml/datasets/{name}/lineage",
-		"POST /v1/ml/datasets",
-		"POST /v1/ml/datasets/{name}/materialize",
+		"DELETE /v1/risk/datasets/{name}",
+		"GET /v1/risk/datasets",
+		"GET /v1/risk/datasets/{name}",
+		"GET /v1/risk/datasets/{name}/export",
+		"GET /v1/risk/datasets/{name}/lineage",
+		"POST /v1/risk/datasets",
+		"POST /v1/risk/datasets/{name}/materialize",
 	}
 	served, _ := projections(t)
 	var got []string
@@ -113,11 +113,21 @@ func TestEveryOpIsNamedTaggedAndDescribed(t *testing.T) {
 			t.Errorf("operation id %q is claimed by both %s and %s", op.OperationID, prev, key)
 		}
 		ids[op.OperationID] = key
-		if !strings.HasPrefix(op.OperationID, "ml") {
-			t.Errorf("%s is called %q; every leaf of this plane belongs to the ml face", key, op.OperationID)
+		// The name and the tag both say `risk`, because that is the product these
+		// leaves belong to — they own hanzo.risk_dataset and read hanzo.risk_feature.
+		// They were `ml*` while the plane was addressed at /v1/ml/datasets, and /v1/ml
+		// is model SERVING: an SDK method called mlExportDataset beside a live
+		// mlPredict names two products as one.
+		if !strings.HasPrefix(op.OperationID, "risk") {
+			t.Errorf("%s is called %q; every leaf of this plane belongs to the risk face", key, op.OperationID)
 		}
 		if len(op.Tags) == 0 {
 			t.Errorf("%s carries no tag", key)
+		}
+		for _, tag := range op.Tags {
+			if tag != "risk" {
+				t.Errorf("%s is tagged %q; a dataset of risk features is not part of the %s product", key, tag, tag)
+			}
 		}
 		if strings.TrimSpace(op.Summary) == "" {
 			t.Errorf("%s has no summary", key)

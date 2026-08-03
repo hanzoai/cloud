@@ -1,4 +1,4 @@
-// Package dataset is the per-org dataset plane of /v1/ml: a dataset is a
+// Package dataset is the per-org dataset plane of /v1/risk: a dataset is a
 // VERSIONED, IMMUTABLE snapshot of one tenant's own event surface, and this is
 // where it is declared, materialised, described, exported and disposed of.
 //
@@ -35,9 +35,22 @@
 // the store, so it restarts empty and a restart loses nothing but the jobs in
 // flight — which is exactly what a plane holding the record of what a model
 // trained on must do, and exactly what a process pinned to one replica for its
-// in-memory forests cannot promise. Its surface is five leaves under /v1/ml that
-// no other app claims; zip refuses two owners for one prefix at compose time, so
-// that is checked rather than agreed.
+// in-memory forests cannot promise.
+//
+// WHY IT IS ADDRESSED UNDER /v1/risk. It owns hanzo.risk_dataset and hanzo.risk_row
+// and reads hanzo.risk_feature: it is the risk product's record plane, so it is at
+// that product's address. It was written at /v1/ml/datasets before /v1/risk existed,
+// and /v1/ml is model SERVING — InferenceServices and predict, live with customers.
+// A dataset of risk features is not a thing you serve, and one prefix meaning both
+// "models you serve" and "the rows a model learned from" is the ambiguity the risk
+// row was split out of /v1/ml to end. Nothing had published these five leaves, so
+// the address moved rather than being kept for the sake of an unused spelling.
+//
+// It is a SEPARATE app from risk, not a folded-in one, because the two hold
+// different tenancy models and different failure domains — risk's boundary is
+// in-process per-org counters, this plane's is a qualified `<brand>/<org>` key over
+// the columnar store. The prefixes nest and that is the routing rule, not a
+// collision: manifest.OwnerOf and the router both take the LONGEST match.
 //
 // WHAT IS PER PROCESS, SAID PLAINLY. Every read, every declaration and every
 // disposal is a pure function of the store and answers identically from any
@@ -133,7 +146,7 @@ type scan struct {
 	since   time.Time
 }
 
-// Mount wires the dataset leaves of /v1/ml onto app.
+// Mount wires the dataset leaves of /v1/risk onto app.
 //
 // EVERY INHERITED CAPABILITY IS WIRED HERE, EXPLICITLY. Being embedded in cloud
 // makes each one AVAILABLE; none is automatic:
@@ -216,14 +229,14 @@ func mount(p *plane, app cloud.Router) error {
 	//
 	// app.Use installs the tenant bridge ONCE PER DECLARED PREFIX — the scope
 	// reads manifest.Apps for that — so the middleware lands exactly on
-	// /v1/ml/datasets and nowhere else. Grouping at /v1/ml to get a shorter leaf
-	// would install it across a subtree this app does not own, which is the escape
-	// the scope exists to refuse.
+	// /v1/risk/datasets and nowhere else. Grouping at /v1/risk to get a shorter leaf
+	// would install it across a subtree this app does not own — the risk plane's own
+	// live leaves — which is the escape the scope exists to refuse.
 	//
 	// cloud.ZipApp recovers the typed-op registry, which the Router interface does
 	// not carry, and the ops register at ABSOLUTE paths on it. That is what keeps
-	// the published address exactly `/v1/ml/datasets` — a group root composes to
-	// `/v1/ml/datasets/`, and a trailing slash in the document is a trailing slash
+	// the published address exactly `/v1/risk/datasets` — a group root composes to
+	// `/v1/risk/datasets/`, and a trailing slash in the document is a trailing slash
 	// in every generated SDK.
 	//
 	// Bridge FIRST, before any leaf: a typed op receives only a context, and this
@@ -241,35 +254,35 @@ func mount(p *plane, app cloud.Router) error {
 	app.Use(cloud.DenyEnvelope())
 	o := ops{p: p}
 
-	zip.Post(z, "/v1/ml/datasets", o.create,
-		zip.WithOperationID("mlCreateDataset"),
+	zip.Post(z, "/v1/risk/datasets", o.create,
+		zip.WithOperationID("riskCreateDataset"),
 		zip.WithSummary("Declare the next version of a dataset"),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets", o.list,
-		zip.WithOperationID("mlDatasets"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets", o.list,
+		zip.WithOperationID("riskDatasets"),
 		zip.WithSummary("List this org's datasets"),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets/:name", o.describe,
-		zip.WithOperationID("mlDataset"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets/:name", o.describe,
+		zip.WithOperationID("riskDataset"),
 		zip.WithSummary("Describe every version of one dataset"),
-		zip.WithTags("ml"))
-	zip.Delete(z, "/v1/ml/datasets/:name", o.dispose,
-		zip.WithOperationID("mlDeleteDataset"),
+		zip.WithTags("risk"))
+	zip.Delete(z, "/v1/risk/datasets/:name", o.dispose,
+		zip.WithOperationID("riskDeleteDataset"),
 		zip.WithSummary("Dispose of one dataset and every version of it"),
-		zip.WithTags("ml"))
-	zip.Post(z, "/v1/ml/datasets/:name/materialize", o.materialize,
-		zip.WithOperationID("mlMaterializeDataset"),
+		zip.WithTags("risk"))
+	zip.Post(z, "/v1/risk/datasets/:name/materialize", o.materialize,
+		zip.WithOperationID("riskMaterializeDataset"),
 		zip.WithSummary("Materialise the declared version into immutable rows"),
 		zip.WithStatus(202),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets/:name/lineage", o.lineage,
-		zip.WithOperationID("mlDatasetLineage"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets/:name/lineage", o.lineage,
+		zip.WithOperationID("riskDatasetLineage"),
 		zip.WithSummary("Show where a version's rows came from, and whether that can still be demonstrated"),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets/:name/export", o.export,
-		zip.WithOperationID("mlExportDataset"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets/:name/export", o.export,
+		zip.WithOperationID("riskExportDataset"),
 		zip.WithSummary("Read a version's rows back, one page at a time"),
-		zip.WithTags("ml"))
+		zip.WithTags("risk"))
 	return nil
 }
 
