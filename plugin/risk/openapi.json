@@ -102,6 +102,28 @@
         }
       }
     },
+    "/v1/risk/policy": {
+      "get": {
+        "operationId": "riskPolicy",
+        "summary": "Your organisation's decision-regime history, and which version is in force",
+        "description": "Policy reports the caller organisation's own decision-regime history: every\ndistinct regime it has adopted, which version is in force, and what retention\nhas taken.\n\nWHY IT EXISTS. Every score cites the version it was decided under\n([riskScoreOut.Policy]), and the threshold that score was measured against is\nderived from the appetite that version states. Restate the appetite and, without\nthis record, every earlier decision becomes unreconstructible — the cut it was\njudged by no longer exists anywhere. An adverse decision that cannot be\nexplained against the policy in force when it was taken cannot be defended.\n\nIt covers ONE organisation. The history is on that organisation's own shelf, so\nanother's versions are not filtered out of the answer — they are not in the file\nthe answer is read from.",
+        "tags": [
+          "risk"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskPolicyOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/risk/score": {
       "post": {
         "operationId": "riskScore",
@@ -609,6 +631,10 @@
             "description": "Live is false while the model is in shadow — scoring, learning and\nrecording what it WOULD have alerted on, and changing no outcome. Shadow is\nthe default for a new tenant.",
             "type": "boolean"
           },
+          "policy": {
+            "description": "Policy is the version of the decision regime this model is deciding under,\nfrom your organisation's own policy history (GET /v1/risk/policy). Every\nscore cites it, so it is the join between a past decision and the appetite\nthat produced its threshold. Zero means no regime has ever been stated and\nthe default posture — shadow — is in force.",
+            "type": "integer"
+          },
           "realised": {
             "description": "Realised is the share that actually was. Reading it beside Stated is what\nmakes the appetite a measured commitment rather than an intention.",
             "type": "number"
@@ -688,6 +714,67 @@
         },
         "type": "object"
       },
+      "riskPolicyOut": {
+        "properties": {
+          "changes": {
+            "description": "Changes is how many DISTINCT regimes may be adopted per Window. A restatement\nidentical to the regime in force mints no version and is not counted against\nit.",
+            "type": "integer"
+          },
+          "disposed": {
+            "description": "Disposed is how many versions retention has taken. It is NOT a silence: a\nhistory bounded on disk must say what it no longer holds, because a decision\nciting a disposed version can no longer be reconstructed from this record.",
+            "type": "integer"
+          },
+          "history": {
+            "description": "History is the retained versions, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/riskPolicyVersion"
+            },
+            "type": "array"
+          },
+          "retained": {
+            "description": "Retained is how many versions this organisation's history holds at most,\nderived from the byte budget its rows are a multiple of.",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Version is the version in force — the one every score currently cites. Zero\nmeans no regime has ever been stated and the default posture, shadow, is in\nforce.",
+            "type": "integer"
+          },
+          "window": {
+            "description": "Window is the period Changes is measured over.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskPolicyVersion": {
+        "properties": {
+          "at": {
+            "description": "At is when it entered force, RFC 3339, from the server clock.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is the identity that stated it, stamped server-side from the validated\nprincipal at the moment it entered force.",
+            "type": "string"
+          },
+          "live": {
+            "description": "Live is whether the model was permitted to change an outcome under it.",
+            "type": "boolean"
+          },
+          "review": {
+            "description": "Review is the share of the stream the regime states may be examined. The\nthreshold in force is derived from it, which is why a decision is only\ndefensible against the version that produced it.",
+            "type": "number"
+          },
+          "sample": {
+            "description": "Sample is the share of below-the-line events the regime retains for review.",
+            "type": "number"
+          },
+          "version": {
+            "description": "Version names this regime in this organisation's history.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "riskRestoreIn": {
         "properties": {
           "body": {
@@ -722,6 +809,10 @@
           "cut": {
             "description": "Cut is the threshold in force, derived from the stated appetite as a\nquantile of the scores actually observed rather than fixed at a number.",
             "type": "number"
+          },
+          "policy": {
+            "description": "Policy is the version of your organisation's decision regime this verdict\nwas reached under, from its own policy history (GET /v1/risk/policy). Cut is\nderived from the appetite that version states, so it is the record that makes\nthis decision reconstructible after the appetite is restated. Zero means no\nregime has ever been stated and the default posture — shadow — was in force.",
+            "type": "integer"
           },
           "refusal": {
             "description": "Refusal names why the model declined, when it did.",
