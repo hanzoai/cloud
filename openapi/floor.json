@@ -1,6 +1,6 @@
 {
-  "paths": 1410,
-  "operations": 1979,
+  "paths": 1679,
+  "operations": 2333,
   "products": {
     "admin": 87,
     "ads": 7,
@@ -117,7 +117,7 @@
     "mq": 15,
     "networks": 3,
     "notify": 4,
-    "o11y": 28,
+    "o11y": 363,
     "oracles": 1,
     "org": 14,
     "orgs": 3,
@@ -150,7 +150,7 @@
     "scrape": 1,
     "search": 6,
     "security": 7,
-    "sentry": 7,
+    "sentry": 24,
     "settings": 2,
     "share": 2,
     "sites": 7,
