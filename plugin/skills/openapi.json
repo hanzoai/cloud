@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package agentskills is the skill catalogue an AI client reads to learn what it can do.",
+    "description": "Package skills is the skill catalogue an AI client reads to learn what it can do.",
     "version": "v1"
   },
   "servers": [
