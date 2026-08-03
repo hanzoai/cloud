@@ -5,10 +5,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -213,7 +216,7 @@ func TestNameValidation(t *testing.T) {
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "evals.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

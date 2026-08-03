@@ -42,10 +42,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	ds "github.com/hanzo-ds/go"
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -74,6 +76,23 @@ const (
 	platformOrg = "hanzo"
 )
 
+// ingested_at IS DELIBERATELY ABSENT FROM BOTH LISTS, and it is the one omission
+// that is a rule rather than a default. The plane's DDL (hanzoai/o11y owns it)
+// declares it `DateTime64(3) DEFAULT now64(3)` and then measures BOTH retention
+// and layout from it — `TTL toDateTime(ingested_at) + toIntervalDay(30)` and
+// `PARTITION BY toDate(ingested_at)` on event.span. A writer that binds it hands
+// the wire control of when its own row expires: a batch stamped 30 days back is
+// accepted, answers 200, and is TTL-eligible before the reply lands. So the
+// server stamps it, always. apps/analytics states the same rule for the four
+// warehouse writers and pins it with a test (TestRetentionIsNotARequestParameter);
+// TestPlaneWritersNeverBindIngestedAt below is that pin for these two.
+//
+// It is ALSO event.span's ReplacingMergeTree version column, which is why leaving
+// it to the DEFAULT is correct and not merely convenient: identity is
+// (org, trace_id, time, id) and every one of those is a pure function of the
+// span, so a re-sent span produces a NEW version of the SAME identity and the
+// merge collapses it. The version has to be a clock, and the server's clock is
+// the only one every writer shares.
 var (
 	planeSpanColumns = []string{"org", "time", "id", "name", "kind", "service",
 		"trace_id", "span_id", "parent", "duration", "status", "attributes"}
@@ -282,13 +301,15 @@ func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
 			continue
 		}
 		attrs := map[string]string{}
-		service := ""
 		if res := s.Resource(); res != nil {
 			for _, kv := range res.Attributes() {
 				attrs[string(kv.Key)] = kv.Value.Emit()
 			}
-			service = attrs["service.name"]
 		}
+		// The SAME resolver the wire path uses — an SDK resource that names no
+		// service still carries its workload, and one function decides what a
+		// service IS for every row on the plane.
+		service := planeService(attrs, "")
 		for _, kv := range s.Attributes() {
 			attrs[string(kv.Key)] = kv.Value.Emit()
 		}
@@ -335,8 +356,37 @@ func planeOrg(attrs map[string]string) string {
 	return platformOrg
 }
 
-// planeService resolves the service column: the resource's own service.name,
-// else the wire batch's app name, else the resource's workload label.
+// k8sWorkloadKeys is OTel's own service.name recommendation for a resource that
+// declares none, in the spec's precedence order: the workload that OWNS the pod,
+// most-stable name first. `k8s.pod.name` sits between job and container in the
+// spec and is DELIBERATELY absent — it is per-replica (ingress-b7854888d-gb8xw),
+// so it would make `service` unbounded on a LowCardinality column and would never
+// match a workload-keyed read. Everything left here is stable across a rollout
+// except k8s.replicaset.name, which only ever fires for a bare ReplicaSet because
+// the Deployment above it wins whenever one exists.
+var k8sWorkloadKeys = []string{
+	"k8s.deployment.name",
+	"k8s.replicaset.name",
+	"k8s.statefulset.name",
+	"k8s.daemonset.name",
+	"k8s.cronjob.name",
+	"k8s.job.name",
+	"k8s.container.name",
+}
+
+// planeService resolves the service column — the WORKLOAD a row came from, which
+// is what every reader keys on (apps/o11y/logs.go binds `service = ?` to the
+// product's workload name, and the fleet board groups by it).
+//
+// The resource's own service.name wins, then the wire batch's app name, then the
+// legacy `app` label the retired SigNoz exporter path resolved. Past that we
+// DERIVE it from the Kubernetes resource, because the fleet's largest log
+// producer states no service.name at all: the otel-agent's filelog receiver
+// stamps k8s.* on every tailed container line and nothing else, so 91% of
+// event.log arrived with an empty service — and the infra log lens, which filters
+// on exactly that column, went dark for every product in the catalog. Deriving
+// the workload is the one place that can fix it for spans and logs at once, and
+// it is OTel's documented inference rather than a rule invented here.
 func planeService(resource map[string]string, appName string) string {
 	if s := resource["service.name"]; s != "" {
 		return s
@@ -344,7 +394,15 @@ func planeService(resource map[string]string, appName string) string {
 	if appName != "" {
 		return appName
 	}
-	return resource["app"]
+	if s := resource["app"]; s != "" {
+		return s
+	}
+	for _, k := range k8sWorkloadKeys {
+		if s := resource[k]; s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // planeSpanKind normalizes the wire kind onto the plane's lowercase vocabulary
@@ -412,4 +470,78 @@ func attrString(v any) string {
 		}
 		return string(b)
 	}
+}
+
+// datastoreSink is this package's connection to the Hanzo Datastore, over the
+// branded github.com/hanzo-ds/go client — a thin wrapper that is the whole of
+// the client's use here. datastore-go brings the ONE ch-go transport line the
+// o11y runtime already uses (MVS-unified), so it coexists in the single binary.
+//
+// It lives beside its ONE caller. The type was written for a second writer (an
+// LLM-observability ingest path that inserted UNQUALIFIED `traces` /
+// `observations` / `scores`); that writer is deleted, because the DSN it shared
+// with this file carries no database, so those names resolved to `default` —
+// tables no migration in this platform creates. Its concept is served twice
+// over already: LLM observability is READ off gen_ai spans in event.span by the
+// o11y runtime, and the eval product owns the grounded projections
+// (hanzo.eval_traces / hanzo.eval_scores, apps/eval/telemetry.go) with DDL it
+// creates itself.
+type datastoreSink struct {
+	conn ds.Conn
+}
+
+// newDatastoreSink opens (and pings) the native Datastore connection from the DSN.
+func newDatastoreSink(ctx context.Context, dsn string) (*datastoreSink, error) {
+	opt, err := ds.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parse datastore dsn: %w", err)
+	}
+	conn, err := ds.Open(opt)
+	if err != nil {
+		return nil, fmt.Errorf("open datastore: %w", err)
+	}
+	if err := conn.Ping(ctx); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("ping datastore: %w", err)
+	}
+	return &datastoreSink{conn: conn}, nil
+}
+
+// Insert writes rows to a table as ONE prepared native batch. table is stated
+// FULLY QUALIFIED by every caller (event.span, event.log): the DSN names no
+// database, so an unqualified name would silently address `default`.
+func (s *datastoreSink) Insert(ctx context.Context, table string, columns []string, rows [][]any) error {
+	query := "INSERT INTO " + table + " (" + strings.Join(columns, ", ") + ")"
+	batch, err := s.conn.PrepareBatch(ctx, query)
+	if err != nil {
+		return fmt.Errorf("prepare batch: %w", err)
+	}
+	for _, row := range rows {
+		if err := batch.Append(row...); err != nil {
+			return fmt.Errorf("append row: %w", err)
+		}
+	}
+	if err := batch.Send(); err != nil {
+		return err
+	}
+	// Rows are counted HERE — the one choke point every plane row this process
+	// writes passes through (event.span from the ZAP span receiver and from the
+	// in-process trace sink, event.log from the log receiver) — and only AFTER
+	// Send returns, so the count is rows that LANDED, not rows that were
+	// offered. event.span going to zero here is the signal that was missing for
+	// four and a half months.
+	//
+	// The table name IS the stream name for these two, which is what lets the
+	// analytics bus drain (apps/analytics/warehouse.go) count onto the same
+	// series: a row of a given signal counts once, whichever writer carried it.
+	cloud.ObserveRows(table, len(rows))
+	return nil
+}
+
+// Close releases the native connection.
+func (s *datastoreSink) Close() error {
+	if s.conn != nil {
+		return s.conn.Close()
+	}
+	return nil
 }

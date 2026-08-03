@@ -191,13 +191,26 @@ func (c *Conflict) Error() string {
 // the part was read, and two trees that serialize identically describe the same
 // type whatever their in-memory shape. encoding/json sorts object keys, so the
 // bytes are canonical.
+//
+// The canonical bytes are the COMPARISON only. What reaches the document is the
+// claimant's own value, because [Components] states which value each seam
+// contributes — Register a *Schema, the typed fold zip's decoded JSON — and a
+// re-decode here would flatten every one of them to map[string]any, silently
+// undoing [Fold] for a document that merely passed through [Project].
 type nouns struct {
-	raw   map[string]json.RawMessage
-	owner map[string]string
+	claim map[string]noun
+}
+
+// noun is everything known about one schema name: the value to publish, the
+// canonical bytes to compare the next claimant against, and who claimed it.
+type noun struct {
+	val   any
+	raw   json.RawMessage
+	owner string
 }
 
 func newNouns() *nouns {
-	return &nouns{raw: map[string]json.RawMessage{}, owner: map[string]string{}}
+	return &nouns{claim: map[string]noun{}}
 }
 
 // add takes one claimant's schemas, or refuses the name it disagrees about.
@@ -207,14 +220,13 @@ func (n *nouns) add(owner string, schemas map[string]any) error {
 		if err != nil {
 			return fmt.Errorf("%s: schema %q: %w", owner, name, err)
 		}
-		if prev, seen := n.raw[name]; seen {
-			if !bytes.Equal(prev, raw) {
-				return &Conflict{Kind: "schema", Name: name, A: n.owner[name], B: owner}
+		if prev, seen := n.claim[name]; seen {
+			if !bytes.Equal(prev.raw, raw) {
+				return &Conflict{Kind: "schema", Name: name, A: prev.owner, B: owner}
 			}
 			continue
 		}
-		n.raw[name] = raw
-		n.owner[name] = owner
+		n.claim[name] = noun{val: schemas[name], raw: raw, owner: owner}
 	}
 	return nil
 }
@@ -222,9 +234,9 @@ func (n *nouns) add(owner string, schemas map[string]any) error {
 // into merges the accumulated schemas into doc's components, leaving doc
 // untouched when there are none — an empty components block is noise in every
 // artifact that carries it.
-func (n *nouns) into(doc *Document) error {
-	if len(n.raw) == 0 {
-		return nil
+func (n *nouns) into(doc *Document) {
+	if len(n.claim) == 0 {
+		return
 	}
 	if doc.Components == nil {
 		doc.Components = &Components{Schemas: map[string]any{}}
@@ -232,14 +244,9 @@ func (n *nouns) into(doc *Document) error {
 	if doc.Components.Schemas == nil {
 		doc.Components.Schemas = map[string]any{}
 	}
-	for name, raw := range n.raw {
-		var v any
-		if err := json.Unmarshal(raw, &v); err != nil {
-			return fmt.Errorf("schema %q: %w", name, err)
-		}
-		doc.Components.Schemas[name] = v
+	for name, c := range n.claim {
+		doc.Components.Schemas[name] = c.val
 	}
-	return nil
 }
 
 // Weave composes the parts into the fleet document, or refuses.
@@ -334,9 +341,7 @@ func Weave(parts []Part) (*Document, error) {
 	}
 	sort.Slice(out.Tags, func(i, j int) bool { return out.Tags[i].Name < out.Tags[j].Name })
 
-	if err := schemas.into(out); err != nil {
-		return nil, err
-	}
+	schemas.into(out)
 
 	// The composed document owes the same invariant a generated one does: an
 	// injective (method, path) → operation map. The path check above already

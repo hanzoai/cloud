@@ -51,13 +51,12 @@
 package treasury
 
 import (
-	"github.com/hanzoai/cloud/cek"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/namespace"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -116,7 +115,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("treasury.Mount: data dir: %w", err)
 	}
 	// Platform-level, not per-org: the treasury is the fleet's own book.
-	store, err := sqlstore.Open(cek.Global, filepath.Join(deps.DataDir, "treasury.db"))
+	store, err := sqlstore.Open(namespace.System(), "treasury", deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("treasury.Mount: open store: %w", err)
 	}
@@ -173,13 +172,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// route, the OpenAPI operation with its schemas, the MCP tool, the CLI command
 	// and the generated SDK method. Declared on the App with WHOLE paths, because
 	// this subsystem owns three unrelated nouns and no single prefix.
-	zip.Get(zapp, "/v1/finance/treasury", o.myTreasury)              // per-org: reserve transparency + policy
-	zip.Get(zapp, "/v1/finance/accounts", o.myAccounts)              // per-org: own ledger accounts (admin: ?org=/?scope=house)
-	zip.Get(zapp, "/v1/admin/treasury", o.adminReport)               // SuperAdmin: report + journal + anchor
-	zip.Post(zapp, "/v1/admin/treasury/policy", o.adminSetPolicy)    // SuperAdmin: set revenue-share %
-	zip.Post(zapp, "/v1/admin/treasury/sweep", o.adminSweep)         // SuperAdmin: accrue revenue-share
-	zip.Post(zapp, "/v1/admin/treasury/seed", o.adminSeed)           // SuperAdmin: inject reserve capital
-	zip.Post(zapp, "/v1/admin/treasury/anchor", o.adminAnchor)       // SuperAdmin: anchor ledger root on Hanzo L1
+	zip.Get(zapp, "/v1/finance/treasury", o.myTreasury)           // per-org: reserve transparency + policy
+	zip.Get(zapp, "/v1/finance/accounts", o.myAccounts)           // per-org: own ledger accounts (admin: ?org=/?scope=house)
+	zip.Get(zapp, "/v1/admin/treasury", o.adminReport)            // SuperAdmin: report + journal + anchor
+	zip.Post(zapp, "/v1/admin/treasury/policy", o.adminSetPolicy) // SuperAdmin: set revenue-share %
+	zip.Post(zapp, "/v1/admin/treasury/sweep", o.adminSweep)      // SuperAdmin: accrue revenue-share
+	zip.Post(zapp, "/v1/admin/treasury/seed", o.adminSeed)        // SuperAdmin: inject reserve capital
+	zip.Post(zapp, "/v1/admin/treasury/anchor", o.adminAnchor)    // SuperAdmin: anchor ledger root on Hanzo L1
 	// The anchor's SIGNER is a sub-resource of the anchor, not a second verb on
 	// the treasury: binding it is idempotent, so it is a PUT on the thing it sets.
 	zip.Put(zapp, "/v1/admin/treasury/anchor/signer", o.adminSetAnchorSigner) // SuperAdmin: the reserve MPC wallet that signs anchors

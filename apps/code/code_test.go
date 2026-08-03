@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
+	"os"
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/namespace"
 
-	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/zap-proto/zip"
 )
 
@@ -215,12 +218,18 @@ func TestPerOrgIsolationHTTP(t *testing.T) {
 			t.Fatalf("storeFor %s: %v", org, err)
 		}
 	}
+	// Close first: on the pure-Go codec a store still OPEN has not written its
+	// database file yet, so the file only lands at Close.
+	if err := s.stores.CloseAll(); err != nil {
+		t.Fatalf("CloseAll: %v", err)
+	}
 	for _, org := range []string{"orgA", "orgB"} {
-		p := filepath.Join(s.dataDir, "orgs", provisioning.SanitizeOrg(org), "code.db")
-		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
-		// database file on the pure-Go codec — only its sidecar is on disk.
-		if !cek.Exists(p) {
-			t.Fatalf("expected per-org store at %s", p)
+		p, err := namespace.Path(s.dataDir, cloud.MustOrgNamespace(org, ""), "code")
+		if err != nil {
+			t.Fatalf("namespace.Path %s: %v", org, err)
+		}
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("expected per-org store at %s: %v", p, err)
 		}
 	}
 }

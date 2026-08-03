@@ -7,14 +7,19 @@ import (
 	"fmt"
 	"strings"
 
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
-	// "sqlite" database/sql name under both build tags: cgo → mattn+SQLCipher;
-	// !cgo → pure-Go modernc). Same driver clients/settings and clients/eval use.
-	"github.com/hanzoai/cloud/cek"
+	// "sqlite" database/sql name under both build tags). Same driver
+	// clients/settings and clients/eval use.
 	_ "github.com/hanzoai/sqlite"
 )
 
-// The ingress STORE is one SQLite file ({DataDir}/ingress/ingress.db) holding
+// The ingress STORE is one SQLite file (the deployment's own "ingress") holding
 // every org's edge config as opaque JSON documents keyed by (org, kind, id).
 // Tenancy is the org column: every CRUD query binds `WHERE org=?`, so one org can
 // never read or overwrite another's config. Route HOST, however, is a globally
@@ -39,22 +44,12 @@ type Store struct {
 // host — another route (in any org) already claims it.
 var ErrHostTaken = errors.New("host already claimed by another route")
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "ingress", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open ingress store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

@@ -19,19 +19,20 @@ package cloud
 // tighter project/service limit never leaks across projects and an org-wide limit
 // applies to every request that has no tighter rule.
 //
-// Fail-open: the limit config is fetched from commerce and cached with a short
-// TTL; if commerce is unreachable the request is NOT limited (the funds/spend-cap
-// gate still applies). A rate-limit outage must never take down paid traffic.
+// Fail-open: the limit config is asked of commerce over the internal plane and
+// cached with a short TTL; if commerce is unreachable the request is NOT limited
+// (the funds/spend-cap gate still applies). A rate-limit outage must never take
+// down paid traffic.
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 	zipmw "github.com/zap-proto/zip/middleware"
 )
@@ -44,6 +45,11 @@ const rateScopeKeyLocal = "cloud.rateScopeKey"
 // so an org's limit change takes effect within seconds, long enough that the
 // config fetch is amortized far below the request rate.
 const rateConfigTTL = 5 * time.Second
+
+// scopeRulesTimeout bounds the plane read. A rate ceiling is a POLICY overlay,
+// never a gate on availability, so a slow commerce must fail open FAST rather
+// than hold the request that asked.
+const scopeRulesTimeout = 3 * time.Second
 
 // ScopeRateLimit returns the per-scope rate-limit middleware. It caps an
 // authenticated org from TWO config sources, most-restrictive-wins:
@@ -82,21 +88,20 @@ type scopeRateLimiter struct {
 }
 
 func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
-	// Never gate the co-resident commerce surface — it is this limiter's OWN
-	// config source, not metered user traffic. rulesFor reads the scope rules via
-	// GET /v1/billing/alerts, dispatched in-process over the co-resident
-	// commerce handler (the commerce transport), which re-runs the WHOLE app. If this
-	// handler gated that path, the rules fetch would re-enter here, re-fetch (the
-	// cache is only filled AFTER the fetch returns, so it is still cold), and
-	// re-enter again — an unbounded in-process self-dispatch that overflowed the
-	// writer's goroutine stack and piled up setRequestCancel goroutines. The
-	// billing/commerce surfaces are internal S2S plumbing; the per-IP pre-auth
-	// limiters and commerce's own gates still apply, so exempting them here removes
-	// the self-reference without loosening any user-facing ceiling.
-	if p := c.Path(); strings.HasPrefix(p, "/v1/billing/") ||
-		strings.HasPrefix(p, "/v1/commerce/") ||
-		strings.HasPrefix(p, "/_/commerce/") {
-		return c.Next()
+	// Never gate the commerce billing surface: it is internal S2S plumbing, not
+	// metered user traffic, and the per-IP pre-auth limiters plus commerce's own
+	// gates still cover it — so exempting it loosens no user-facing ceiling.
+	// (rulesFor no longer reaches commerce through this app, so this is policy
+	// now and not a self-reference guard; see rulesFor.)
+	// Compared against the ROUTER's path, not the raw spelling: a prefix test over
+	// c.Path() answers a question about how the client typed the URL, while the
+	// exemption is about which handler will run (see cloud.RoutePath). ONE
+	// normalization, the same one the abuse gate and the grant list use.
+	path := RoutePath(c.Path())
+	for _, p := range []string{"/v1/billing/", "/v1/commerce/", "/_/commerce/"} {
+		if underPrefix(path, p) {
+			return c.Next()
+		}
 	}
 
 	// Only an authenticated org is scope-rate-limited. Without a validated
@@ -108,9 +113,9 @@ func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
 		return c.Next()
 	}
 	project := principal.Project(c)
-	service := canonicalService(c.Path())
+	service := canonicalService(path)
 
-	key, rpm := bindingRateRule(rl.rulesFor(c.Context(), org), org, project, service)
+	key, rpm := bindingRateRule(rl.rulesFor(org), org, project, service)
 
 	// The /v1/gateway per-org OrgRPM is the runtime operator override. It binds
 	// when set and tighter than (or in the absence of) any commerce rule —
@@ -189,9 +194,18 @@ func (rl *scopeRateLimiter) bucketFor(rpm int) zip.Handler {
 
 // rulesFor returns the org's rate-limit rules, cached with a short TTL. On a
 // commerce fetch error it fails OPEN (empty rules) and caches that briefly so a
-// commerce blip neither blocks traffic nor hammers commerce. The fetch runs on a
-// bounded background context so a client disconnect can't poison the cache.
-func (rl *scopeRateLimiter) rulesFor(reqCtx context.Context, org string) []metering.ScopeRule {
+// commerce blip neither blocks traffic nor hammers commerce. It takes no context:
+// the fetch is DETACHED and bounded on its own, because the entry it writes is
+// shared and a client disconnect must not poison it for every later request.
+//
+// It ASKS the process that owns the rows, over the plane. It used to GET
+// /v1/billing/alerts through the commerce transport, which dispatches by
+// publishing the WHOLE shared app — so the fetch re-ran this very middleware,
+// whose cache is filled only AFTER the fetch returns and is therefore still
+// cold, which fetched again, to the transport's depth guard: 502. The plane
+// socket carries this app's ops and no edge chain, so nothing it reaches can
+// re-enter here.
+func (rl *scopeRateLimiter) rulesFor(org string) []metering.ScopeRule {
 	if !billingEnabled(rl.m) {
 		return nil // no commerce configured — only the /v1/gateway OrgRPM applies.
 	}
@@ -202,12 +216,17 @@ func (rl *scopeRateLimiter) rulesFor(reqCtx context.Context, org string) []meter
 		return e.rules
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// The org is STATED: this runs on a detached context (a client disconnect must
+	// not poison the cache), so there is no request for the callee to read it from.
+	ctx, cancel := context.WithTimeout(For(context.Background(), org), scopeRulesTimeout)
 	defer cancel()
-	rules, err := rl.m.ScopeRules(ctx, org)
-	if err != nil {
-		rules = nil // fail open.
-	}
+	var rules []metering.ScopeRule
+	if out, err := Ask[struct{}, plane.ScopeRules](ctx, peerCommerce, plane.FinanceScopeRules, &struct{}{}); err == nil && out != nil {
+		rules = make([]metering.ScopeRule, 0, len(out.Rules))
+		for _, r := range out.Rules {
+			rules = append(rules, metering.ScopeRule{Project: r.Project, Service: r.Service, RateLimitRpm: r.RateLimitRpm})
+		}
+	} // any error, or a commerce that is not deployed here, fails OPEN.
 
 	rl.mu.Lock()
 	rl.cache[org] = scopeCacheEntry{rules: rules, expiry: time.Now().Add(rl.ttl)}

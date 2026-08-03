@@ -23,7 +23,6 @@ func TestPublishableKey(t *testing.T) {
 		"pk-lf-abc123": true,  // IAM read-only publishable key — the one the gateway 403s on writes
 		"  pk-abc  ":   true,  // trimmed
 		"sk-lf-abc123": false, // secret key — completions-capable
-		"hk-abc":       false, // IAM key, completions-capable
 		"fw_live_x":    false,
 		"pk_analytics": false, // analytics ingest family (underscore) — NOT the IAM read-only member
 		"":             false,

@@ -15,16 +15,16 @@
 // campaign.go is the in-process CAMPAIGN-METRICS seam over the ONE analytics
 // warehouse: the /v1/campaign plane (apps/campaign) reads a campaign's funnel
 // from HERE rather than opening a second store. A campaign's results ARE an
-// analytics query scoped to the campaign — the utm_campaign-tagged events in
-// event.event (the attributes['utm_campaign'] entry the plane normalizer stamps)
+// analytics query scoped to the campaign — the utm_campaign-tagged acts on the
+// event plane (the attributes['utm_campaign'] entry the plane normalizer stamps)
 // — so there is one metrics plane, not a parallel one.
 //
-// TENANCY: identical to every other query this package builds. campaignWhere
-// binds the org AND the campaign id (attributes['utm_campaign']) AND the optional
-// variant (attributes['utm_content']) POSITIONALLY — nothing user-derived is ever
-// interpolated, so a caller can only ever read its OWN org's campaign, and the
-// utm_campaign filter can never escape into SQL. The variant arg powers the
-// creative-A/B evidence read the experiment primitive composes.
+// TENANCY AND SIGNAL: identical to every other query this package builds, because
+// campaignWhere composes eventsWhere. The org, the signal, the time bounds, the
+// campaign id and the optional variant are all bound POSITIONALLY — nothing
+// user-derived is ever interpolated, so a caller can only ever read its OWN org's
+// campaign, and the utm_campaign filter can never escape into SQL. The variant arg
+// powers the creative-A/B evidence read the experiment primitive composes.
 
 package analytics
 
@@ -51,15 +51,22 @@ type CampaignEvents struct {
 	Source      string  `json:"source"`
 }
 
-// campaignWhere is the org + campaign (+ optional variant) predicate over
-// event.event. org and campaignID (attributes['utm_campaign']) are ALWAYS bound;
-// variant (attributes['utm_content']) is appended only when non-empty. Time bounds
-// are bound as datastore DateTime literals (the proven cloud_usage transport). Same
-// isolation boundary as eventsWhere — the org is a bound parameter, never
-// interpolated; the map ACCESSOR is a server constant and only the VALUE binds.
+// campaignWhere is the campaign NARROWING of the behavior lens: eventsWhere,
+// plus the campaign (+ optional variant) the caller asked about. It composes
+// eventsWhere rather than writing its own FROM-clause predicate, because the
+// leading pair — whose rows, and which sort — is one decision and belongs in one
+// place: this read named its own `org = ?` and time bounds and had no `signal`
+// at all, so on the ONE fact table it counted every log line, span and error as
+// a campaign impression the moment a campaign shipped.
+//
+// campaignID (attributes['utm_campaign']) and variant (attributes['utm_content'])
+// are bound like everything else; the map ACCESSOR is a server constant and only
+// the VALUE binds. Arg order is eventsWhere's [org, signal, start, end], then
+// campaign, then the variant when there is one.
 func campaignWhere(org, campaignID, variant string, start, end time.Time) (string, []any) {
-	where := "time >= ? AND time < ? AND org = ? AND attributes['utm_campaign'] = ?"
-	args := []any{tsLiteral(start), tsLiteral(end), org, campaignID}
+	where, args := eventsWhere(org, start, end)
+	where += " AND attributes['utm_campaign'] = ?"
+	args = append(args, campaignID)
 	if variant != "" {
 		where += " AND attributes['utm_content'] = ?"
 		args = append(args, variant)
@@ -75,7 +82,7 @@ func campaignWhere(org, campaignID, variant string, start, end time.Time) (strin
 // channels. A genuine query failure against a connected warehouse returns the
 // error (the caller logs it and shows honest-empty) — never a fabricated funnel.
 func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start, end time.Time) (CampaignEvents, error) {
-	out := CampaignEvents{Available: false, Source: eventsTable}
+	out := CampaignEvents{Available: false, Source: factTable}
 	if org == "" || campaignID == "" {
 		return out, nil
 	}
@@ -96,7 +103,7 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 		"countIf(name = 'order_completed' OR name = 'signup_completed' OR name = 'conversion') AS conversions, " +
 		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue, " +
 		"uniqExact(distinct_id) AS visitors " +
-		"FROM " + eventsTable + " WHERE " + where
+		"FROM " + factTable + " WHERE " + where
 	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		// Connected warehouse rejected/failed the query (or the events table is
@@ -111,6 +118,6 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 		Conversions: aInt64(row["conversions"]),
 		Revenue:     aFloat64(row["revenue"]),
 		Visitors:    aInt64(row["visitors"]),
-		Source:      eventsTable,
+		Source:      factTable,
 	}, nil
 }

@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/settings/:product", zip.Doc{
-		Description: "GetSettings reads the caller org's configuration for one product, with every\nsecret field MASKED — only the names of the set secrets come back, never their\nvalues, which live in KMS. A product the org has never configured is not a 404:\nit answers 200 with an empty config object, so the console's Settings tab always\nrenders and merges its own display defaults on top.",
+		Description: "Reads the caller org's configuration for one product, with every\nsecret field MASKED — only the names of the set secrets come back, never their\nvalues, which live in KMS. A product the org has never configured is not a 404:\nit answers 200 with an empty config object, so the console's Settings tab always\nrenders and merges its own display defaults on top.",
 		Fields: map[string]string{
 			"productIn.product":       "Product is the catalog slug, from the path. Must match ^[a-z0-9][a-z0-9._-]{0,62}$.",
 			"settingsView.config":     "Config is the product's non-secret configuration, an opaque JSON object the\nserver stores and returns verbatim. `{}` when nothing has been saved.",
@@ -19,7 +19,7 @@ func init() {
 		},
 	})
 	zip.Describe("PUT /v1/settings/:product", zip.Doc{
-		Description: "PutSettings writes the caller org's configuration for one product and answers the\nstored result, secrets masked. Secret VALUES are sealed into KMS under\norgs/{org}/settings/{product}/{key} and never touch this deployment's database;\nwith no KMS configured a write that carries any secret is refused whole (503)\nrather than dropping it or persisting it in the clear. A secret the body omits\nkeeps its stored value, so a partial write never silently clears one.",
+		Description: "Writes the caller org's configuration for one product and answers the\nstored result, secrets masked. Secret VALUES are sealed into KMS under\norgs/{org}/settings/{product}/{key} and never touch this deployment's database;\nwith no KMS configured a write that carries any secret is refused whole (503)\nrather than dropping it or persisting it in the clear. A secret the body omits\nkeeps its stored value, so a partial write never silently clears one.",
 		Fields: map[string]string{
 			"settingsReq.config":      "Config is the product's non-secret configuration, stored verbatim. Bounded at\n64 KiB once serialized. Omit it to store an empty object.",
 			"settingsReq.product":     "Product is the catalog slug, from the PATH. zip binds the path last, so the\nURL names the product being written whatever a body field claims.",

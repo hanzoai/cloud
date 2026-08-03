@@ -52,7 +52,10 @@ func init() {
 		Description: "Returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
 		Fields: map[string]string{
 			"clusterList.clusters": "Clusters is the merged fleet — kind \"managed\" for Visor-provisioned, \"byo\"\nfor an attached kubeconfig.",
+			"clusterList.degraded": "Degraded names any source that did not answer, so an empty Clusters means\n\"you have none\" only when this is absent. Omitted when everything answered,\nso a healthy response is unchanged. See degraded.go.",
 			"clusterView.kind":     "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
+			"sourceFailure.reason": "Reason is a terse, log-safe summary — never the upstream's response body.",
+			"sourceFailure.source": "Source is the dependency that failed, named as an operator names it.",
 		},
 		Response: json.RawMessage(`{"clusters":[{"doksClusterId":"cl-1","name":"prod","status":"running","nodePools":[{"poolId":"p-1","name":"gpu","size":"gpu-h100x8-640gb","count":2}],"nodeSize":"gpu-h100x8-640gb","nodeCount":2,"kind":"managed"}]}`),
 	})
@@ -135,7 +138,10 @@ func init() {
 		Description: "Lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor\noutage is logged and skipped so a down optional provider never hides the BYO list.",
 		Fields: map[string]string{
 			"clusterList.clusters": "Clusters is the merged fleet — kind \"managed\" for Visor-provisioned, \"byo\"\nfor an attached kubeconfig.",
+			"clusterList.degraded": "Degraded names any source that did not answer, so an empty Clusters means\n\"you have none\" only when this is absent. Omitted when everything answered,\nso a healthy response is unchanged. See degraded.go.",
 			"clusterView.kind":     "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
+			"sourceFailure.reason": "Reason is a terse, log-safe summary — never the upstream's response body.",
+			"sourceFailure.source": "Source is the dependency that failed, named as an operator names it.",
 		},
 		Response: json.RawMessage(`{"clusters":[{"doksClusterId":"cl-1","doClusterId":"cl-1","name":"prod","region":"nyc3","status":"running","nodePools":[],"nodeCount":0,"kind":"managed"}]}`),
 	})

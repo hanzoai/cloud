@@ -3,35 +3,27 @@ package legal
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/cek"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
 const testTimeout = 30 * time.Second
-
-func TestMain(m *testing.M) {
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		panic(err)
-	}
-	cek.SetMasterKey(k)
-	os.Exit(m.Run())
-}
 
 // ---- pure engine tests (no HTTP) ----
 
@@ -99,9 +91,8 @@ func TestCounselNoticeOnSecurities(t *testing.T) {
 
 func mount(t *testing.T) (*zip.App, *audit.Recorder) {
 	t.Helper()
-	// A unique per-test path (not ":memory:") so each test's cek sidecar is written and
-	// read under this process's key — concurrent test binaries never share a sidecar.
-	rec, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), nil)
+	// A unique per-test directory, so concurrent test binaries never share a file.
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}

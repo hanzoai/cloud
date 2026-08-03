@@ -70,8 +70,8 @@ func TestFoldException(t *testing.T) {
 	if f.signal != signalError {
 		t.Fatalf("signal = %q, want %q", f.signal, signalError)
 	}
-	if f.fault == nil || f.fault.class != "TypeError" {
-		t.Fatalf("fault = %+v, want class TypeError", f.fault)
+	if f.signal != signalError || f.class != "TypeError" {
+		t.Fatalf("fact = %+v, want signal error and class TypeError", f)
 	}
 	if f.attributes["$exception"] == "" {
 		t.Fatal("attributes[$exception] missing — the /v1/errors lens surfaces the exception from it")

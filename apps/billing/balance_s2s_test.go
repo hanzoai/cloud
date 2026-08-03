@@ -128,7 +128,7 @@ func TestBalance_S2SDoesNotWidenScope(t *testing.T) {
 //
 // Every test here published a finance ledger, so balance() always took the co-resident
 // return and the S2S rule it holds was the only one that ran. A PLUGIN PROCESS is the
-// opposite shape and it is the shape prod runs: `cloud.Serve(…, []string{"billing"})`
+// opposite shape and it is the shape prod runs: `cloud.Listen(…, []string{"billing"})`
 // leaves cfg.Enabled("commerce") false, so build.go's wireFinance returns before
 // finance.Publish and finance.Current() is nil FOREVER in that process. availableCents
 // then falls to the plane, and when the plane cannot answer, balance() delegates to

@@ -107,7 +107,7 @@ func TestTeamWireLands(t *testing.T) {
 	want := []struct {
 		sig  signal
 		kind string
-	}{{signalError, ""}, {signalEvent, kindPage}}
+	}{{signalError, ""}, {signalAct, kindPage}}
 	for i, ev := range admitted {
 		f, ok := normalize("acme", now, foldException(ev))
 		if !ok {
@@ -228,12 +228,9 @@ func TestTeamErrorPropertiesAreRehomed(t *testing.T) {
 	if !ok {
 		t.Fatal("did not normalize")
 	}
-	stored := fmt.Sprintf("%v", f.attributes)
-	if f.fault != nil {
-		stored += " " + f.fault.message + " " + f.fault.class
-		for _, fr := range f.fault.frames {
-			stored += " " + fr.file + " " + fr.function
-		}
+	stored := fmt.Sprintf("%v", f.attributes) + " " + f.message + " " + f.class
+	for _, fr := range f.frames {
+		stored += " " + fr.file + " " + fr.function
 	}
 	if strings.Contains(stored, "sk-live-DEADBEEF") {
 		t.Errorf("raw secret from the stack reached the stored fact: %s", stored)
@@ -342,7 +339,7 @@ func TestTeamTenantResolvesSignedOrg(t *testing.T) {
 	//
 	// A customEvent is the discriminator. canonicalType is "event", which is NOT in
 	// publicKinds, so the projection drops it and the write core is never reached
-	// (200, accepted:0) — while a resolved member writes it and hits the absent
+	// (401, nothing stored) — while a resolved member writes it and hits the absent
 	// warehouse (503).
 	const custom = `[{"event":"customEvent","properties":{"event":"checkout_started","revenue":42},"timestamp":1750000000000,"distinct_id":"u"}]`
 
@@ -351,9 +348,8 @@ func TestTeamTenantResolvesSignedOrg(t *testing.T) {
 		t.Fatalf("member POST = %d %+v, want 503 (full capability reached the write core)", code, res)
 	}
 	// Same bytes, NO credential: dropped by the projection, never reaching the store.
-	code, res = postBody(t, app, "/v1/event", custom, "")
-	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
-		t.Fatalf("anonymous POST = %d %+v, want 200 accepted=0 dropped=1", code, res)
+	if code, res := postBody(t, app, "/v1/event", custom, ""); code != http.StatusUnauthorized {
+		t.Fatalf("anonymous POST = %d %+v, want 401 (projection dropped it, nothing stored)", code, res)
 	}
 	// And the resolution itself names the signed org at full capability.
 	org, ok := resolvedTeamOrg(t, app, tok)
@@ -490,9 +486,12 @@ func TestGuestWritesProjectedIntoItsOwnOrg(t *testing.T) {
 	// The forgeable payload: a custom event carrying revenue. kind "event" is not in
 	// publicKinds, so the projection drops it whole.
 	const revenue = `[{"event":"customEvent","properties":{"event":"order_completed","revenue":99999},"timestamp":1750000000000,"distinct_id":"u"}]`
+	// 403, not 401: the guest's token RESOLVED. It holds a credential and it is not the
+	// problem — it lacks capability — so telling it a key is required would send it to
+	// mint a second one and hit the identical wall (cannotWrite, event.go).
 	code, res := postBody(t, app, "/v1/event", revenue, guest)
-	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
-		t.Fatalf("guest revenue POST = %d %+v, want 200 accepted=0 dropped=1 (projected away)", code, res)
+	if code != http.StatusForbidden {
+		t.Fatalf("guest revenue POST = %d %+v, want 403 (projected away, nothing stored)", code, res)
 	}
 	// A member CAN write it — so the refusal is about the role, not the payload.
 	if code, _ := postBody(t, app, "/v1/event", revenue, member); code != http.StatusServiceUnavailable {
@@ -578,7 +577,7 @@ func TestTrustOrderPrefersTheApiCredential(t *testing.T) {
 	// Stand in for IAM's key seam: this key belongs to org "keyorg".
 	prev := resolveKeyOrg
 	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
-		if key == "hk-the-key" {
+		if key == "sk-the-key" {
 			return "keyorg", true
 		}
 		return "", false
@@ -588,7 +587,7 @@ func TestTrustOrderPrefersTheApiCredential(t *testing.T) {
 	tok := teamToken(t, "teamorg", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 	got, ok := tenantWith(t, map[string]string{
 		"Authorization": "Bearer " + tok, // team token -> teamorg
-		"x-api-key":     "hk-the-key",    // API key    -> keyorg
+		"x-api-key":     "sk-the-key",    // API key    -> keyorg
 	})
 	if !ok {
 		t.Fatal("nothing resolved with both credentials present")
