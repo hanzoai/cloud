@@ -1013,6 +1013,8 @@ github.com/hanzoai/commerce v1.49.46 h1:kel++S94yGSmTKvpUgF6L6HPGolL6fy5AgV2ykcy
 github.com/hanzoai/commerce v1.49.46/go.mod h1:Zdas0XEkdcFXjCMsQAWlvSJ9EIoRNpLFO1pVh2jZyko=
 github.com/hanzoai/commerce v1.49.47 h1:8IF/aOEuiP7CGFmNLGEcZ435fhIhQqgl8ORCaz086v4=
 github.com/hanzoai/commerce v1.49.47/go.mod h1:Zdas0XEkdcFXjCMsQAWlvSJ9EIoRNpLFO1pVh2jZyko=
+github.com/hanzoai/commerce v1.49.48 h1:veYWtyLTz24Wg+jvRZWPuoxmugzBs5se+es3B4H0YCo=
+github.com/hanzoai/commerce v1.49.48/go.mod h1:Lq2sftNQt5wB+Ib2bkxLLfpG9ogBW9OcP46J37tjgak=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
@@ -1055,6 +1057,8 @@ github.com/hanzoai/metrics v1.110.2 h1:Q79loK4YKNF255hIaf0CJsd5oq+yMRTsxZyoZREwT
 github.com/hanzoai/metrics v1.110.2/go.mod h1:+XOENte7ldQwSEsY/ASrvCifQqhIG+PFqTGzLxBLvYY=
 github.com/hanzoai/money v0.2.2 h1:moW+8TMcyuD68CktY9HCcgUAFmtL6LAbS6c0dzR+Wvc=
 github.com/hanzoai/money v0.2.2/go.mod h1:V1/RwypNNDjOArVFkkbNrgUXNUKorAiV1WtDNqfx95Q=
+github.com/hanzoai/money v0.2.3 h1:JUtbr5epArSWroWH5kRS8NzcN9+3DRXUt/YVYHYTnlQ=
+github.com/hanzoai/money v0.2.3/go.mod h1:V1/RwypNNDjOArVFkkbNrgUXNUKorAiV1WtDNqfx95Q=
 github.com/hanzoai/namespace v1.2.0 h1:FLEHzR/GyE/OltXozMvT2n2FfUUxTuVVbILKZBkEjLI=
 github.com/hanzoai/namespace v1.2.0/go.mod h1:vGuxMDHg5MdhH5q2bqqjZL/afINBWJubP4WD1YwZTm4=
 github.com/hanzoai/notify v1.7.2 h1:xHaVVcOWLvLMpmtSH128FRgskj4WyfG371K6CI3OC/I=
