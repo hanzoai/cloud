@@ -166,9 +166,9 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		t.Errorf("%d typed + %d named = %d, but risk serves %d operations",
 			len(typed), len(untypedByDesign), got, len(served))
 	}
-	if len(typed) != 9 {
-		t.Errorf("the model plane publishes %d typed ops, expected 9 "+
-			"(score, learn, state, appetite, snapshot, restore, features, search, result)", len(typed))
+	if len(typed) != 10 {
+		t.Errorf("the model plane publishes %d typed ops, expected 10 "+
+			"(score, learn, state, appetite, snapshot, restore, policy, features, search, result)", len(typed))
 	}
 }
 
@@ -293,6 +293,7 @@ func TestTypedOpsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 		{http.MethodPut, "/v1/risk/state/appetite", `{"review":0.01,"sample":0.001}`},
 		{http.MethodPost, "/v1/risk/state/snapshot", ""},
 		{http.MethodPost, "/v1/risk/state/restore", `{"body":{"version":1}}`},
+		{http.MethodGet, "/v1/risk/policy", ""},
 		{http.MethodGet, "/v1/risk/features", ""},
 		{http.MethodPost, "/v1/risk/search", `{"days":7}`},
 		{http.MethodGet, "/v1/risk/search/srch_1", ""},
