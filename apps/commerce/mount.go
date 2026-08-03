@@ -366,6 +366,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		// and subject-scoped like the rest; MINTING credit stays where it is, on
 		// the mint-gated POST /v1/billing/credit.
 		{"/v1/billing/credits", commercebilling.ListCreditGrants},
+		// The balance itself. Without a co-resident handler it fell to the account
+		// bridge's /v1/billing/* wildcard, which forwards to COMMERCE_URL — and
+		// co-resident there IS no standalone commerce, so the default base is the
+		// public edge and the read re-enters this same bridge. Live that surfaced as
+		// 502 "billing upstream unreachable" on every balance read, which the console
+		// renders as "Unavailable" while the ledger holds real money. Same defect this
+		// file's header documents, one route it did not name.
+		{"/v1/billing/balance", commercebilling.GetBalance},
+		{"/v1/billing/balance/all", commercebilling.GetBalanceAll},
 	}
 	for _, r := range billingRead {
 		app.Get(r.path,
