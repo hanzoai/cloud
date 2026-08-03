@@ -354,6 +354,11 @@ type ledger struct {
 	available int64 // cents
 	down      bool
 	posted    []debit
+	// asked counts EVERY call the real metering client makes, whatever it was for.
+	// A balance read and a debit are both the money plane being told a ledger key,
+	// so a surface that must not name one must make neither — see
+	// [TestPricedOps_NeverAskTheMoneyPlaneForANamelessSubject].
+	asked int
 }
 
 // debit is one recorded charge: who paid and how much.
@@ -362,9 +367,17 @@ type debit struct {
 	Micros    int64
 }
 
+// asks is how many times the money plane has been reached, for any reason.
+func (l *ledger) asks() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.asked
+}
+
 func (l *ledger) Do(r *http.Request) (*http.Response, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.asked++
 	if l.down {
 		return nil, fmt.Errorf("commerce unreachable")
 	}
