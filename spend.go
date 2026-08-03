@@ -279,6 +279,7 @@ var meteredApps = []string{
 	"automations",  // per-run automation fee.
 	"cloudflare",   // Workers AI + provisioning.
 	"content",      // studio renders (GPU).
+	"dataset",      // materialising a version: a bounded scan of the shared warehouse.
 	"flow",         // flow executions.
 	"functions",    // serverless invoke.
 	"ml",           // predict + train (compute).
