@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/auto/flows/:flow", zip.Doc{
-		Description: "FlowDelete deletes one of the caller's flows. A foreign id answers 404 and\ndeletes nothing.",
+		Description: "Deletes one of the caller's flows. A foreign id answers 404 and\ndeletes nothing.",
 		Fields: map[string]string{
 			"autoRef.flow": "Flow is the flow's id, taken from the path.",
 		},
@@ -46,7 +46,7 @@ func init() {
 		},
 	})
 	zip.Describe("PATCH /v1/auto/flows/:flow", zip.Doc{
-		Description: "FlowUpdate patches one of the caller's flows: the name, the graph, or both\n— only the stated fields move.",
+		Description: "Patches one of the caller's flows: the name, the graph, or both\n— only the stated fields move.",
 		Fields: map[string]string{
 			"autoUpdate.data": "Data replaces the flow graph when present, verbatim.",
 			"autoUpdate.flow": "Flow is the flow's id, taken from the path.",
@@ -55,7 +55,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"notify-on-signup-v2"}`),
 	})
 	zip.Describe("POST /v1/auto/flows", zip.Doc{
-		Description: "FlowCreate creates a flow in the caller's org. The org is stamped\nserver-side from the validated principal — there is no field by which a\ncaller could place a flow in another org.",
+		Description: "Creates a flow in the caller's org. The org is stamped\nserver-side from the validated principal — there is no field by which a\ncaller could place a flow in another org.",
 		Fields: map[string]string{
 			"autoCreate.data": "Data is the flow graph — the product's nodes/edges document, verbatim:\nnodes carry a piece type (webhook, schedule, http, set, branch) and its\nconfig; edges wire them. Omit it to create an empty flow.",
 			"autoCreate.name": "Name is the flow's display name.",

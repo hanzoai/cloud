@@ -112,7 +112,7 @@ func dispatcherFor(sess *fakeSessions, tr *fakeTracker, run *fakeRunner, verifyO
 	return d, &cloneCalls
 }
 
-const secretToken = "hk-SUPERSECRETcredential-value"
+const secretToken = "sk-SUPERSECRETcredential-value"
 
 func baseReq() Req {
 	return Req{

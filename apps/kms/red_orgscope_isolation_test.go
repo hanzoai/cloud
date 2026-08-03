@@ -278,7 +278,7 @@ func TestRedIso_B_ForgedOrgHeader(t *testing.T) {
 		isStatus(t, 403)
 
 	// A garbage bearer never validates, so it never mints a principal.
-	isoGet(t, app, "(b) junk bearer + X-Org-Id:maxpower", path, "hk-not-a-jwt",
+	isoGet(t, app, "(b) junk bearer + X-Org-Id:maxpower", path, "junk-not-a-jwt",
 		map[string]string{"X-Org-Id": paasOrgA}).noLeak(t, paasValueA).isStatus(t, 403)
 }
 

@@ -9,6 +9,9 @@ import (
 )
 
 func init() {
+	zip.Describe("GET /v1/sbom/*", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("GET /v1/sbom/health", zip.Doc{
 		Description: "Health is a pure liveness probe: the service is up; datastore reflects whether\nthe datastore store is connected. Not JWT-gated, always 200 (a disconnected\ndatastore is degraded-but-alive; the data endpoints report that as 503).",
 		Fields: map[string]string{

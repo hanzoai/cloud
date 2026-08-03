@@ -1620,6 +1620,13 @@
               "$ref": "#/components/schemas/clusterView"
             },
             "type": "array"
+          },
+          "degraded": {
+            "description": "Degraded names any source that did not answer, so an empty Clusters means\n\"you have none\" only when this is absent. Omitted when everything answered,\nso a healthy response is unchanged. See degraded.go.",
+            "items": {
+              "$ref": "#/components/schemas/sourceFailure"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -2217,6 +2224,19 @@
             "type": "string"
           },
           "unit": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sourceFailure": {
+        "properties": {
+          "reason": {
+            "description": "Reason is a terse, log-safe summary — never the upstream's response body.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the dependency that failed, named as an operator names it.",
             "type": "string"
           }
         },

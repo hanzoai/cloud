@@ -628,7 +628,7 @@ func TestEveryDoorFailsClosedOnUnresolvableCredential(t *testing.T) {
 		app := mountApp(t)
 		stubResolver(t, func(string) (string, bool) { return "", false })
 		for _, hdr := range []map[string]string{
-			{"x-api-key": "hk-nosuch"},
+			{"x-api-key": "sk-nosuch"},
 			{"Authorization": "Bearer pk-nosuch"},
 			{"x-hanzo-ingest-key": "pk-nosuch"},
 		} {
@@ -674,14 +674,14 @@ func TestEveryDoorAdmitsAValidatedPrincipal(t *testing.T) {
 	}
 }
 
-// TestEveryDoorAdmitsAResolvedKey: the same for out-of-band keys — a resolvable hk-
+// TestEveryDoorAdmitsAResolvedKey: the same for out-of-band keys — a resolvable sk-
 // and a resolvable pk- both reach the write core at full capability on every door.
 func TestEveryDoorAdmitsAResolvedKey(t *testing.T) {
 	for _, d := range doors {
 		app := mountApp(t)
 		stubResolver(t, func(string) (string, bool) { return "acme", true })
 		for _, hdr := range []map[string]string{
-			{"x-api-key": "hk-good"},
+			{"x-api-key": "sk-good"},
 			{"Authorization": "Bearer pk-good"},
 		} {
 			if code := postKeyed(t, app, d.path, "", commerceFor(t, d), hdr); code != http.StatusServiceUnavailable {

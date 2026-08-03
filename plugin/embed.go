@@ -1,14 +1,10 @@
-// Package plugin carries the fleet's build-time PROJECTIONS into the host: what
-// each subsystem serves, known without running it.
+// Package plugin carries the fleet's build-time PROJECTION into the host: the
+// OpenAPI subset each subsystem serves, known without running it.
 //
-// Both are a function of the plugin's own router and typed-op registry, so both
-// are known when the plugin is BUILT: `<app> describe plugin/<app>` writes
-// mcp.json and openapi.json from one mount of one router (describe.go). This
-// package embeds those files. The tool lists go to zip as Plugin.Tools, which is
-// what lets the host answer tools/list for all 113 subsystems without starting a
-// single one; the specs are what the host weaves into the fleet document it
-// serves at /v1/openapi.json. Same invariant, two consumers: MCPTools() and the
-// router are in-process, and a host cannot ask a plugin that is not running.
+// It is a function of the plugin's own router, so it is known when the plugin is
+// BUILT: `<app> describe plugin/<app>` writes openapi.json from one mount of one
+// router (describe.go). This package embeds those files, and the host weaves them
+// into the fleet document it serves at /v1/openapi.json.
 //
 // It exists as its own leaf package for one reason: go:embed cannot reach outside
 // its own directory, so the bytes must be embedded from HERE, and cmd/cloud must
@@ -16,30 +12,29 @@
 // so `go list -deps ./cmd/cloud` gains exactly one package and still links no
 // subsystem.
 //
-// The catalogue can only be INCOMPLETE, never wrong: the child's own registry
-// answers the call, so a name the host still lists but the child no longer serves
-// yields that child's -32602 rather than a mis-dispatch.
+// # There is no MCP catalogue here any more
+//
+// It used to embed plugin/<app>/mcp.json too — the tool array the app's binary
+// projected at build time — and hand it to zip as Plugin.Tools so the host could
+// answer tools/list without touching a child. That file was a SECOND source for a
+// fact the child already knows, and a second source can only be stale or
+// accidentally correct. It was stale: plugin/o11y/mcp.json held 12 tools while
+// the o11y binary at the same commit served 365, because the missing 353 ops live
+// in github.com/hanzoai/o11y and a go.mod bump in ANOTHER repository invalidated
+// an artifact in this one with nothing in the diff to say so. No generator on a
+// hook in this repo could have seen that trigger.
+//
+// So the catalogue is not regenerated more often; it is gone, and the door asks
+// the child (package fleet). The subset below survives for the one reason the
+// catalogue could not: the fleet's document carries each subsystem's PROSE, and
+// that prose is lifted from the app's SOURCE at describe time
+// (openapi.Synopsis) — a running child has no comment to read and would answer
+// with its deployment's brand blurb instead, which the weave would then publish
+// as the description of every product tag. Making the synopsis a declared value
+// is what the other half of this file is waiting on.
 package plugin
 
 import "embed"
-
-// catalogues holds every app's mcp.json. The pattern is a glob, so an app that
-// has not been described yet is simply absent — Tools returns nil and zip leaves
-// that plugin off the door — rather than a build failure in the host.
-//
-//go:embed */mcp.json
-var catalogues embed.FS
-
-// Tools is app's MCP catalogue: the JSON array its own App.MCPTools() projected
-// at build time, ready to hand to zip.Plugin.Tools. Nil for an app that ships
-// none, which is exactly how a plugin opts out of the composed door.
-func Tools(app string) []byte {
-	b, err := catalogues.ReadFile(app + "/mcp.json")
-	if err != nil {
-		return nil
-	}
-	return b
-}
 
 // specs holds every app's openapi.json — the same committed files the drift gate
 // regenerates from source and the weave composes into openapi.yaml
@@ -47,10 +42,10 @@ func Tools(app string) []byte {
 // whole fleet without starting any of it: the alternative is reading the live
 // router, and the light host's live router is 113 proxy prefixes.
 //
-// A glob, for the same reason the catalogues are: an app that has not been
-// described yet is absent rather than a build failure in the host. Absence is
-// then refused where it can be reported — openapi.Subsets, at the request that
-// needs it — instead of by a compiler error nobody can act on.
+// A glob, so an app that has not been described yet is absent rather than a build
+// failure in the host. Absence is then refused where it can be reported —
+// openapi.Subsets, at the request that needs it — instead of by a compiler error
+// nobody can act on.
 //
 //go:embed */openapi.json
 var specs embed.FS

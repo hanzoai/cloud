@@ -25,13 +25,14 @@ func scopeApp(t *testing.T) *zip.App {
 	return app
 }
 
-// mountScopedReads is the three typed reads, registered exactly as mountScope
-// does. Shared by the tests that need only this slice of the surface.
+// mountScopedReads is the typed reads, registered exactly as mountScope does.
+// Shared by the tests that need only this slice of the surface.
 func mountScopedReads(app *zip.App) {
 	g := app.Group(o11yPrefix)
 	zip.Get(g, "/logs", handleLogs)
 	zip.Get(g, "/metrics", handleMetrics)
 	zip.Get(g, "/status", handleStatus)
+	zip.Get(g, "/availability", handleAvailability)
 }
 
 // authReq builds a request with a VALIDATED principal (X-User-Id set, as
