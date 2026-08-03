@@ -110,6 +110,47 @@ func SetResolver(r Resolver) {
 // 404 (the projects subsystem is not mounted)". That premise was the bug:
 // projects IS mounted, just somewhere else, and 404 is not honest when the site
 // exists.
+// PlaneSite is the wire shape of a resolved site, exported so a host that has
+// no business importing the root package can still speak this call.
+//
+// Found is explicit: the edge must tell "no such site" (an honest 404) from
+// "could not ask" (503). Collapsing them serves 404s for live customer sites
+// during any transient failure of the owning app, which is indistinguishable
+// from the site being deleted.
+type PlaneSite struct {
+	Found                bool   `json:"found"`
+	Org                  string `json:"org"`
+	Slug                 string `json:"slug"`
+	Bucket               string `json:"bucket"`
+	Prefix               string `json:"prefix"`
+	Status               string `json:"status"`
+	CrossOriginIsolation bool   `json:"crossOriginIsolation"`
+}
+
+// PlaneSiteIn names the site to resolve. Org is set only on the first-party
+// path, which pins the lookup to one org.
+type PlaneSiteIn struct {
+	Slug string `json:"slug"`
+	Org  string `json:"org,omitempty"`
+}
+
+// SiteOf projects a wire answer onto a Site. Exported for the same reason the
+// types are: the caller lives outside this package and must not restate the
+// mapping.
+func SiteOf(out *PlaneSite) (Site, bool) {
+	if out == nil || !out.Found {
+		return Site{}, false
+	}
+	return Site{
+		Org:                  out.Org,
+		Slug:                 out.Slug,
+		Bucket:               out.Bucket,
+		Prefix:               out.Prefix,
+		Status:               out.Status,
+		CrossOriginIsolation: out.CrossOriginIsolation,
+	}, true
+}
+
 func SetFallbackResolver(r Resolver) {
 	resolverMu.Lock()
 	fallback = r
@@ -119,6 +160,16 @@ func SetFallbackResolver(r Resolver) {
 // currentResolver prefers the in-process store and falls back to the plane. A
 // process that owns the store never pays for a hop; one that does not can still
 // answer, instead of silently serving the API for every customer's site.
+// HasFallbackResolver reports whether a cross-process resolver is installed. It
+// exists so the host can PROVE it wired the edge: the defect this guards was a
+// middleware that ran nowhere, which no behavioural test in this package could
+// have caught, because the package itself was always correct.
+func HasFallbackResolver() bool {
+	resolverMu.RLock()
+	defer resolverMu.RUnlock()
+	return fallback != nil
+}
+
 func currentResolver() Resolver {
 	resolverMu.RLock()
 	r, fb := resolver, fallback

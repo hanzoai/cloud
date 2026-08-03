@@ -229,6 +229,12 @@ func run(addr, zapAddr, enable string) error {
 	// through to the white-labelled shell. The embed is the light webui leaf
 	// (stdlib + the brand registry), so owning "/" costs the host the console
 	// bytes, not the fleet's package graph.
+	// The published-site edge goes BEFORE the console: <slug>.hanzo.app must serve
+	// the customer's site, and webui owns "/" for every path no app prefix claims,
+	// so mounting it after would let the console answer first — which is exactly
+	// the defect. See sites.go.
+	mountSites(app)
+
 	if err := webui.Mount(app); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
