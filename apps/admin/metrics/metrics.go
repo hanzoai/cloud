@@ -245,22 +245,29 @@ func activeSubs() string {
 
 // headlineSQL: run-rate MRR (paying, non-trial), active-sub count, paying-customer
 // count, and trial count — one pass over the active-subs state.
+//
+// The revenue predicate is `status = 'active'`, which is commerce's
+// subscription.Status.CountsTowardMRR spelled in SQL — this board reads the
+// warehouse, so it cannot call the Go function, and the two must be kept in
+// step by hand. It used to say `status != 'trialing'`, which also counted
+// past_due and unpaid as run-rate revenue, so this board and the money board
+// reported different MRR for the same account in both directions at once.
 func headlineSQL() string {
-	return "SELECT sumIf(mrr_cents, status != 'trialing') AS mrr, " +
+	return "SELECT sumIf(mrr_cents, status = 'active') AS mrr, " +
 		"count() AS active_subs, " +
-		"uniqExactIf(org, status != 'trialing' AND mrr_cents > 0) AS paying, " +
+		"uniqExactIf(org, status = 'active' AND mrr_cents > 0) AS paying, " +
 		"countIf(status = 'trialing') AS trials FROM " + activeSubs()
 }
 
 func byCategorySQL() string {
-	return "SELECT category, sumIf(mrr_cents, status != 'trialing') AS mrr, count() AS subs " +
+	return "SELECT category, sumIf(mrr_cents, status = 'active') AS mrr, count() AS subs " +
 		"FROM " + activeSubs() + " GROUP BY category ORDER BY mrr DESC"
 }
 
 func byPlanSQL() string {
 	return "SELECT plan, any(plan_name) AS name, any(category) AS category, " +
 		"countIf(status = 'active') AS active, countIf(status = 'trialing') AS trialing, " +
-		"sum(seats) AS seats, sumIf(mrr_cents, status != 'trialing') AS mrr " +
+		"sum(seats) AS seats, sumIf(mrr_cents, status = 'active') AS mrr " +
 		"FROM " + activeSubs() + " GROUP BY plan ORDER BY mrr DESC"
 }
 
@@ -296,7 +303,7 @@ func orgCountSQL() string {
 }
 
 func perOrgSubsSQL() string {
-	return "SELECT org, sumIf(mrr_cents, status != 'trialing') AS mrr, sum(seats) AS seats, " +
+	return "SELECT org, sumIf(mrr_cents, status = 'active') AS mrr, sum(seats) AS seats, " +
 		"argMax(plan_name, mrr_cents) AS plan, argMax(category, mrr_cents) AS category, " +
 		"argMax(status, mrr_cents) AS status, min(first_ts) AS since " +
 		"FROM " + activeSubs() + " GROUP BY org"
