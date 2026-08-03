@@ -133,7 +133,7 @@ func TestADeadSubsystemDoesNotTakeTheHostDown(t *testing.T) {
 // prefixes across FIVE apps escape that list and are still answered by the shell:
 //
 //	iam          /login/oauth      ← an OAuth client gets HTML, not a redirect
-//	agentskills  /.well-known/agent-skills/{index.json,:skill/SKILL.md}
+//	skills  /.well-known/agent-skills/{index.json,:skill/SKILL.md}
 //	commerce     /_/commerce
 //	git          /git, /explore
 //	tasks        /tasks

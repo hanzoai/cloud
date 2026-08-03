@@ -32,6 +32,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/commerce/models/subscription"
+
 	"github.com/hanzoai/cloud/apps/admin/money"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 )
@@ -118,21 +120,28 @@ type Plan struct {
 }
 
 // subscriptionsWire is the /v1/billing/subscriptions list shape Plan folds over.
+//
+// MRRCents is commerce's own figure for what the subscription contributes per
+// month — interval-normalized and multiplied by its seats. This surface used to
+// re-derive it here from Price and Interval, with its own copy of commerce's
+// normalization and no knowledge of the seat count at all, so a 10-seat plan
+// read as one seat. Commerce bills Price x quantity; it is the authority on
+// what that subscription is worth, and this is a display surface.
 type subscriptionsWire struct {
 	Subscriptions []struct {
-		Status string `json:"status"`
-		Plan   struct {
-			Name     string      `json:"name"`
-			Price    money.Cents `json:"price"`
-			Interval string      `json:"interval"`
+		Status   string      `json:"status"`
+		MRRCents money.Cents `json:"mrrCents"`
+		Plan     struct {
+			Name string `json:"name"`
 		} `json:"plan"`
 	} `json:"subscriptions"`
 }
 
 // Plan reads a subject's subscription tier + MRR in ONE decode (GET
 // /v1/billing/subscriptions), so the customer + revenue surfaces share a single
-// upstream read. Only "active"/"trialing" subscriptions count. Honest
-// zero/"pay-as-you-go" (not an error) when commerce is unwired.
+// upstream read. MRR counts what commerce says counts; "active"/"trialing" both
+// mark the subject subscribed. Honest zero/"pay-as-you-go" (not an error) when
+// commerce is unwired.
 func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 	out := Plan{Name: "pay-as-you-go"}
 	if !c.Ready() {
@@ -147,9 +156,20 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 		return out, fmt.Errorf("commerce plan decode: %w", err)
 	}
 	for _, s := range w.Subscriptions {
+		// Revenue and entitlement are two questions, and this loop answers
+		// both. commerce owns the revenue one — Status.CountsTowardMRR — so
+		// this surface and commerce's own rollup can no longer report a
+		// different MRR for the same account. They did: this counted trials as
+		// revenue and the rollup did not, so the money board and the SaaS board
+		// disagreed by the whole trial cohort.
+		//
+		// A trial is not revenue, but it IS a live plan, so it still names the
+		// plan and marks the subject subscribed.
+		if subscription.Status(s.Status).CountsTowardMRR() {
+			out.MRR += s.MRRCents
+		}
 		switch strings.ToLower(strings.TrimSpace(s.Status)) {
 		case "active", "trialing":
-			out.MRR += monthlyNormalized(s.Plan.Price, s.Plan.Interval)
 			out.Active = true
 			if name := strings.TrimSpace(s.Plan.Name); name != "" && out.Name == "pay-as-you-go" {
 				out.Name = name
@@ -157,21 +177,6 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 		}
 	}
 	return out, nil
-}
-
-// monthlyNormalized normalizes a plan price to a monthly figure by its billing
-// interval so annual and monthly plans are comparable in one MRR sum.
-func monthlyNormalized(price money.Cents, interval string) money.Cents {
-	switch strings.ToLower(strings.TrimSpace(interval)) {
-	case "year", "yearly", "annual", "annually":
-		return price / 12
-	case "week", "weekly":
-		return price * 52 / 12
-	case "day", "daily":
-		return price * 365 / 12
-	default: // month/monthly and anything unrecognized → treat as monthly
-		return price
-	}
 }
 
 // Entry is one ledger row. Kind is "deposit" (credit) or "withdraw" (usage). At is

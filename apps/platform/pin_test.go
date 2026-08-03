@@ -285,14 +285,14 @@ func TestPinTokenFailsClosed(t *testing.T) {
 		t.Error("absent secret: want a refusal, got nil")
 	}
 	sealed := newFakeKMS()
-	if err := sealed.PutSecret(ctx, pinTokenRef, []byte(" hk-real-token \n")); err != nil {
+	if err := sealed.PutSecret(ctx, pinTokenRef, []byte(" sk-real-token \n")); err != nil {
 		t.Fatal(err)
 	}
 	got, err := pinToken(serviceWithKMS(sealed), ctx)
 	if err != nil {
 		t.Fatalf("sealed token: %v", err)
 	}
-	if got != "hk-real-token" {
+	if got != "sk-real-token" {
 		t.Errorf("token = %q, want it trimmed", got)
 	}
 }
@@ -302,7 +302,7 @@ func TestPinTokenFailsClosed(t *testing.T) {
 // container, and a URL credential is echoed back by git in its own error messages.
 // It is presented over https ONLY — never on a plaintext wire.
 func TestPinCredentialIsEnvOnlyAndHTTPSOnly(t *testing.T) {
-	const token = "hk-secret-value"
+	const token = "sk-secret-value"
 	restore := swapUniverseRemote("https://git.hanzo.ai/hanzo/universe")
 	env := pinGitEnv(token)
 	restore()
@@ -402,7 +402,7 @@ func TestPinMovesTheRealPin(t *testing.T) {
 		}
 	}
 	// The credential must not have been written into the clone's remote URL.
-	if strings.Contains(log, "hk-") {
+	if strings.Contains(log, "sk-") {
 		t.Error("the commit records something token-shaped")
 	}
 }
@@ -518,7 +518,7 @@ func serviceWithKMS(k cloud.KMSClient) *cloud.Service[state] {
 func kmsWithPinToken(t *testing.T) *fakeKMS {
 	t.Helper()
 	k := newFakeKMS()
-	if err := k.PutSecret(context.Background(), pinTokenRef, []byte("hk-test-token")); err != nil {
+	if err := k.PutSecret(context.Background(), pinTokenRef, []byte("sk-test-token")); err != nil {
 		t.Fatal(err)
 	}
 	return k

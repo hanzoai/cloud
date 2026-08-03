@@ -1485,12 +1485,12 @@ invisible to prose, MCP, the CLI and every typed SDK method. What it taught:
   emit the Makefile beside the main it already writes, then run `make -f
   mk/fleet.mk openapi-check` and commit whatever drift those three have been
   hiding.
-**The six-plugin pass (bots, entitlements, sbom, translate, agentskills, gateway):
+**The six-plugin pass (bots, entitlements, sbom, translate, skills, gateway):
 11 typed, 5 refused, out of 16 operations that published NOTHING.** Same work list
 rule as the pass below — every operation in `plugin/<name>/openapi.json` carrying
 neither `description` nor `summary`. All six subsets were 100% undescribed before;
 five of the six are now fully or mostly typed (`entitlements` 3/3, `gateway` 2/2,
-`bots` 2/3, `sbom` 2/3, `translate` 2/3), and `agentskills` is 0/2 by structure. Each
+`bots` 2/3, `sbom` 2/3, `translate` 2/3), and `skills` is 0/2 by structure. Each
 package carries `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` reading the REAL
 mount, whose two ledgers must SUM to the served surface, so a route added untyped
 here goes red and a stale reason goes red too. What it taught, beyond the counts:
@@ -1506,7 +1506,7 @@ here goes red and a stale reason goes red too. What it taught, beyond the counts
   parameter is then declared `in: query` rather than `in: path`. apps/pricing's
   refusal, re-measured rather than inherited.
 - **Two more instances of the apps/plan prefix defect, and one of them is partial —
-  which is the harder shape to see.** `plugin/agentskills` declared no `Prefixes`,
+  which is the harder shape to see.** `plugin/skills` declared no `Prefixes`,
   so the `/v1/<name>` default covered NOTHING it serves (its routes are the root
   `/.well-known/agent-skills/…` convention). `plugin/entitlements` declared none
   either, and its default covered ONE of its two top-level nouns: `/v1/entitlements`
@@ -2473,7 +2473,7 @@ forbids and any weave refuses. Fixed there: an alias is named by its address.
 **And it CLOSED a reachability gap.** `manifest/router_test.go`'s `unreachable`
 ledger carried `iam /.well-known/{wildcard1} -> nothing` — a relying party's FIRST
 call reaching no app. Relayed, the only prefix that could have routed it was
-`/.well-known`, which owns the whole subtree and would have taken agentskills' with
+`/.well-known`, which owns the whole subtree and would have taken skills' with
 it. Grafted, iam declares the three exact documents its router holds, so
 `manifest.Apps` routes exactly those three and nothing else.
 
@@ -2598,6 +2598,128 @@ migration silently strips request shapes from every generated CLI and SDK.
   983/692/109. Every number in this file is tagged with how to re-measure it;
   keep it that way.
 
+## Lifecycle defense: ONE scorer seam, ONE fail policy, a sensor at the edge
+
+`risk.go` · `agency.go` · `middleware_abuse.go` · `apps/gateway/edge/traffic.go`
+
+**`cloud.Decide` is the only door to `/v1/risk`.** The app that owns `/v1/risk`
+hands its scoring function to the core with `cloud.SetRiskScorer` — the same
+inversion `SetObsEventIngest` uses, because package `cloud` cannot import an app.
+Nothing in cloud scores; a second scorer would be a second answer to one question
+and the two would disagree silently.
+
+**The fail policy is `riskUnavailable`, and it is the only copy.** A scorer that
+is absent, erroring, silent, out-of-vocabulary, panicking or past `RiskBudget`
+(150ms, enforced by the caller) ALLOWS an ordinary request and BLOCKS a
+`Privileged` one. Every answer carries a `Refusal`, so an allow-because-nobody-
+was-listening is never recorded as clean. `Privileged(method, path)` is the
+data list of grants: credential minting/revocation, identity provisioning,
+sign-up, onboarding, the key store (all methods), and admin/org MUTATIONS.
+
+**`AbuseGate` sits `AuditTrail → ScopeRateLimit → AbuseGate → StarterGrant →
+BillingGate`.** It keys on the CREDENTIAL, which neither existing limiter can see
+— EdgeRateLimit keys on IP pre-auth, ScopeRateLimit on (org, project, service) —
+so a stolen key inside its org's normal ceiling is invisible to both. It counts,
+classifies, asks and enforces; it never scores. A non-allow verdict is HELD for a
+minute so an attack costs one screen, not one per request. A refusal is a 401/403,
+which AuditTrail already puts in the tamper-evident trail — there is no second
+audit write, because one event must not have two records.
+
+**SHADOW PER ORG BY DEFAULT** (`edge.Policy.Mode`, the one new knob). Shadow
+senses and records and enforces nothing. `PUT /v1/gateway/config {"mode":"live"}`
+is REFUSED while no scorer is installed: fail-closed on a component that was never
+wired is an outage, not a defense, and this is what makes the distinction real.
+Only live mode reaches the scorer, meters a screen, or fails closed.
+
+Mode is the one field on that route whose SCOPE and whose AUTHORITY are different
+questions, and both were wrong once:
+
+- **It does not inherit.** Every other per-org field layers a platform default
+  under the org's own value. Mode is not a default, it is an arming decision, so
+  seeding it from the platform row meant the single PUT that arms the anonymous
+  lane (the reserved admin org — the only way to arm the lane that has no tenant)
+  silently armed every tenant in the estate. `Store.Mode` reads the org's OWN row
+  and nothing else; the platform row governs exactly one scope, the empty org.
+- **It is not self-service.** It lives on a tenant's row but writing it requires
+  SuperAdmin, whichever row it lands on. The subject of an abuse control does not
+  get to switch the control off — and an org-admin credential is what a stolen key
+  buys, so leaving it in the self-service branch made the gate disarmable by the
+  account it was watching.
+
+**Agency — the differentiator.** `agency(class, pattern)` is pure and total, and
+reads OUR issuance, never the client's self-description (there is no user-agent
+heuristic and there must not be one) and never a REQUEST HEADER. "We minted this
+credential" is a fact only the identity boundary can state, so the boundary states
+it: `SanitizeIdentity` parks the principal it resolved with `principal.Mint`, a
+request-local slot no client can write, and the classifier reads `principal.Minted`.
+Reading `c.Org()`/`c.User()` instead was forgeable twice over — X-Org-Id survives
+the boundary on the anonymous path by design, and a hand-written plugin process may
+have no boundary in front of it at all — so two headers plus an `sk-`-shaped string
+that never validated bought the agent lane. Absent attestation resolves to
+anonymous, which is the fail-closed direction: only a credential we resolved buys
+the lane. An attributable machine credential is the
+`agent` lane whatever it claims to be; a browser session is `human`; an
+unattributable caller is `unknown` until it shows an abuse SHAPE — many
+credentials from one address, a wall of refusals, a path sweep — and only then
+`bot`. Anonymous is not malicious.
+
+**The sensor** (`edge.Traffic`, a LEAF package so the middleware and the app share
+ONE object) counts requests, 401/403 failures, path spread and peer spread per
+(org, credential) over a rolling minute. Bounded by construction: a fixed ring
+plus two 64-bit population-count words per key. Credentials appear only as a keyed
+per-process fingerprint — never a bare digest, so a published fingerprint cannot be
+tested against a candidate key off-box.
+
+**TENANCY IS THE DATA STRUCTURE AND THE BOUND IS PER TENANT.** One org's callers,
+hosts and lane counters live in that org's OWN tables, reached only by indexing
+`tenants[org]`; there is no shared map with org-prefixed keys, so a cross-tenant
+read or eviction is unwritable rather than merely refused. Each tenant has its own
+ceiling and reclaims only its own keys — a process-wide cap over a shared table is
+a cross-tenant denial of service, because the org that fills it evicts whoever was
+quietest and that victim's controls then go silent with no error. A tenant at its
+ceiling degrades exactly one tenant, itself, and says so: `TrafficView.Saturated`
+is its own count of its own reclaims. The one reclaim policy lives in `table[V]`
+(unexported map, cap as a constructor argument, a pinned live verdict is never
+dropped) so the wrong shape is unrepresentable rather than discouraged.
+
+**The client address is `cloud.ClientIP`, and it is the only one.** The peer is the
+truth: a caller that is not one of our own proxies IS the client, and no header it
+sent is read. When the peer IS ours, the forwarded chain is walked from the RIGHT —
+the end each hop appends to — and the first entry that is not one of ours is the
+answer; everything to its left was written before our infrastructure saw the
+request. A chain that is entirely ours is an in-cluster caller with no client
+address (`""`), which is what keeps sibling services out of the public rate limiter.
+Our own hops are a CIDR set (`CLOUD_TRUSTED_PROXIES`, defaulting to private space)
+rather than a hop count, because a count is a promise about topology that nothing
+enforces. Reading the LEFT-most entry — the one the client writes — let one host
+present a million clients: it defeated the per-IP limit keyed on it, put a chosen
+address in an audit row, and fed the sensor's address table without bound.
+
+`GET /v1/gateway/traffic` (`gatewayTraffic`) reports the caller's own org: lane
+split, denials, screens, and its busiest credentials by fingerprint. Screens are
+counted there from the first request AND metered on the org's usage ledger —
+`ResourceMeter.Meter` is a no-op while `CLOUD_RISK_SCREEN_CENTS` is unset (0),
+because the price belongs to the pricing catalog and inventing one here would be
+a fabricated number.
+
+**A path is what the ROUTER says it is.** `cloud.RoutePath` normalizes to fiber's
+own detection path — lower-cased, trailing slashes stripped — and every security
+comparison (`Privileged`, `Probe`, the gate's exemptions) runs against it, on
+segment boundaries. `strings.HasPrefix` over the raw `c.Path()` meant one capital
+letter routed to the key store while matching no grant prefix, so the scorer's
+silence ALLOWED what the fail-closed branch exists to refuse.
+
+**Asking is bounded.** Each ask costs a goroutine that lives until the scorer
+returns, so `Decide` holds `MaxScorerCalls` in flight and answers `RefusalBusy`
+past the ceiling — the same fail policy a timeout gets, reached without allocating.
+A scorer stuck on a lock cannot become an out-of-memory in the process it was
+installed to protect.
+
+The other enforcement point is in `hanzoai/iam` (`internal/risk` +
+`internal/oidc/signup_gate.go`), which calls `POST /v1/risk/decide` over the wire
+at sign-up. Its arming signal is `RISK_URL` rather than a per-org mode; the
+semantic is identical — fail closed once armed, allow before.
+
 ## Cross-subsystem seams that are values, not places
 
 - **AN AGGREGATOR CALLS; IT DOES NOT IMPORT.** Apps are separate binaries, so a Go
@@ -2640,18 +2762,37 @@ migration silently strips request shapes from every generated CLI and SDK.
   two structs — 1246 packages for a DTO. One definition, neither end importing the
   other. Measured: `plugin/admin` 2261 → 1115 packages, `apps/billing` 1246 → 945,
   and two boards that had been reporting zeros started reporting the truth.
-- **THE FLEET HAS ONE MCP DOOR: `POST /v1/mcp`, on the HOST.** zip serves it
-  (`zip.MCPConfig{Path:"/v1/mcp"}` in `cmd/cloud`), and its tool list is the union
-  of every mounted plugin's BUILD-TIME catalogue — `plugin/<app>/mcp.json`, written
-  by the same `<app> describe` run that writes that app's `openapi.json`, embedded
-  by the leaf `plugin/embed.go` and handed to zip as `Plugin.Tools`. So `tools/list`
-  is a memcpy of a constant and starts NO child; only a `tools/call` wakes one — the
-  single plugin that owns the name — over ZAP on its private socket, where the
-  child's OWN registry answers. There were THREE hand-rolled registries for this one
-  concept (`apps/tools/http.go`, `apps/tools/builtin.go`, `apps/automations/mcp.go`)
-  and the public one exposed none of the typed ops; all three are deleted. Type an
+- **THE FLEET HAS ONE MCP DOOR: `POST /v1/mcp`, on the HOST, AND IT IS A QUERY.**
+  The host serves it itself (`fleet.Mount` in `cmd/cloud`; zip's own door is
+  `Disabled` there so exactly one handler holds the address). A `tools/list`
+  forwards the CALLER's own message to every composed subsystem's own `/mcp` over
+  its private ZAP socket, in parallel, and unions the replies — so what the door
+  carries is what the subsystems serve at that instant, and a subsystem whose tools
+  depend on the tenant answers for THIS caller out of its own rows. `zip.App.Start`
+  resolves a cold child, which is the same single-flighted path a prefix request
+  takes, so the first list pays one start per app and nothing after it does.
+  **A subsystem that does not answer is NAMED** in `result._meta["hanzo.ai/unavailable"]`,
+  because a silently-short list and a stale file are the same defect. A `tools/call`
+  goes to the app that listed the name, verbatim; a name nobody has listed costs one
+  discovery, then `-32602`.
+  It used to read a BUILD-TIME catalogue — `plugin/<app>/mcp.json`, embedded by
+  `plugin/embed.go` and handed to zip as `Plugin.Tools` — and `tools/list` was a
+  memcpy. **Those 116 files are deleted (49,865 lines).** They were a second source
+  for a fact each child already knows, and they were wrong: `plugin/o11y/mcp.json`
+  held 12 tools while the o11y binary at the same commit served 365, because the
+  missing 353 ops live in `github.com/hanzoai/o11y` and a `go.mod` bump in ANOTHER
+  repository invalidated an artifact in this one with nothing in the diff to say so
+  — no generator on a hook here could ever have seen that trigger. There were also
+  THREE hand-rolled registries for this one concept (`apps/tools/http.go`,
+  `apps/tools/builtin.go`, `apps/automations/mcp.go`); all three are deleted. Type an
   op and it IS a tool — do not write a second JSON-RPC envelope, and note
   `manifest/mcp_test.go` turns one red (no served path may end in `/mcp`).
+  `plugin/<app>/openapi.json` SURVIVES, for the one reason the catalogue could not:
+  the fleet weave carries each subsystem's PROSE, and that prose is lifted from the
+  app's SOURCE at describe time (`openapi.Synopsis`) — a running child has no comment
+  to read and would answer with its deployment's brand blurb, which the weave would
+  publish as the description of every product tag. Making the synopsis a declared
+  value is what deleting that half is waiting on.
 - **The per-tenant tool plane is ONE typed op, and callable in-process.** An org's
   connectors, functions, agents, authored skills and external MCP servers are ROWS,
   not code, so no build-time catalogue can hold them: they are reached through
@@ -3324,9 +3465,15 @@ The file may only shrink: a 404 not listed fails the release, and a listed line
 that starts answering must be deleted in the same commit. Today it holds 14
 `/v1/pricing/*` lines, all owned by a Cloudflare worker that exists in no repo.
 
-**The projections are gated, not hoped for.** MCP needs no car — the door serves
-exactly the tools in the committed `plugin/*/mcp.json`, so car 3 checks the
-number rather than claiming it (833 = 833 at v1.801.350). The eight clients and
+**The projections are gated, not hoped for.** MCP needs no car — but the gate
+changed with the door. Car 3 used to compare the live tool count against
+`jq -s length` over the committed `plugin/*/mcp.json`; both sides came from the
+same files (the door was SERVING those bytes), so it proved only that the image
+carried the tree it was built from, and it passed for months while o11y's
+catalogue held 12 of 365. The door composes itself by asking now, so car 3 asks
+the better question: **did every subsystem answer** — any name in
+`result._meta["hanzo.ai/unavailable"]` fails the release. A broken deployment used
+to match the files exactly. The eight clients and
 the docs each run hanzoai/ci's `client:` lane, which fetches `openapi.yaml` at
 the release's sha, **refuses on a digest mismatch**, regenerates, compiles itself
 and its examples, writes `.spec-lock` and cuts a patch.

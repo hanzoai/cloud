@@ -444,7 +444,7 @@ func Shutdown() error {
 //     strips any client copy on ingress — so c.User() is the one unforgeable
 //     "this request carried a validated identity" signal. Its Phase-1 residual
 //     RESTORES a client-supplied X-Org-Id on the NO-principal path (bearer-less,
-//     opaque hk-/sk- API key, or invalid bearer). Without this gate, a
+//     opaque pk-/sk- API key, or invalid bearer). Without this gate, a
 //     direct-to-pod / in-cluster caller could send `X-Org-Id: victim` with no
 //     bearer and read/write/DELETE the victim org's datasets (golden outputs +
 //     PII), scores and runs — a cross-tenant break (Red HIGH). This is the SAME

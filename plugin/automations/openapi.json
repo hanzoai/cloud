@@ -93,8 +93,8 @@
     "/v1/automations/flows": {
       "get": {
         "operationId": "get_v1_automations_flows",
-        "summary": "ListFlows returns the caller org's automations, most-recently-updated first.",
-        "description": "ListFlows returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
+        "summary": "Returns the caller org's automations, most-recently-updated first.",
+        "description": "Returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
         "tags": [
           "automations"
         ],
@@ -124,8 +124,8 @@
       },
       "post": {
         "operationId": "post_v1_automations_flows",
-        "summary": "CreateFlow creates an automation and its initial DRAFT version in one call.",
-        "description": "CreateFlow creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that.",
+        "summary": "Creates an automation and its initial DRAFT version in one call.",
+        "description": "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that.",
         "tags": [
           "automations"
         ],
@@ -169,8 +169,8 @@
     "/v1/automations/flows/{id}": {
       "delete": {
         "operationId": "delete_v1_automations_flows_id",
-        "summary": "DeleteFlow deletes one automation, its versions and its run history.",
-        "description": "DeleteFlow deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
+        "summary": "Deletes one automation, its versions and its run history.",
+        "description": "Deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
         "tags": [
           "automations"
         ],
@@ -194,8 +194,8 @@
       },
       "get": {
         "operationId": "get_v1_automations_flows_id",
-        "summary": "GetFlow returns one automation and its latest version.",
-        "description": "GetFlow returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
+        "summary": "Returns one automation and its latest version.",
+        "description": "Returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
         "tags": [
           "automations"
         ],
@@ -226,8 +226,8 @@
       },
       "patch": {
         "operationId": "patch_v1_automations_flows_id",
-        "summary": "UpdateFlow updates one automation's metadata in place.",
-        "description": "UpdateFlow updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
+        "summary": "Updates one automation's metadata in place.",
+        "description": "Updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
         "tags": [
           "automations"
         ],
@@ -274,8 +274,8 @@
     "/v1/automations/flows/{id}/disable": {
       "post": {
         "operationId": "post_v1_automations_flows_id_disable",
-        "summary": "DisableFlow disarms a flow's trigger and marks it DISABLED.",
-        "description": "DisableFlow disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
+        "summary": "Disarms a flow's trigger and marks it DISABLED.",
+        "description": "Disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
         "tags": [
           "automations"
         ],
@@ -308,8 +308,8 @@
     "/v1/automations/flows/{id}/enable": {
       "post": {
         "operationId": "post_v1_automations_flows_id_enable",
-        "summary": "EnableFlow arms a flow's trigger and marks it ENABLED.",
-        "description": "EnableFlow arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
+        "summary": "Arms a flow's trigger and marks it ENABLED.",
+        "description": "Arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
         "tags": [
           "automations"
         ],
@@ -362,8 +362,8 @@
     "/v1/automations/flows/{id}/run": {
       "post": {
         "operationId": "post_v1_automations_flows_id_run",
-        "summary": "RunFlow starts one durable run of a flow now.",
-        "description": "RunFlow starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
+        "summary": "Starts one durable run of a flow now.",
+        "description": "Starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
         "tags": [
           "automations"
         ],
@@ -396,8 +396,8 @@
     "/v1/automations/flows/{id}/versions": {
       "get": {
         "operationId": "get_v1_automations_flows_id_versions",
-        "summary": "ListVersions returns one flow's versions, newest first.",
-        "description": "ListVersions returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
+        "summary": "Returns one flow's versions, newest first.",
+        "description": "Returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
         "tags": [
           "automations"
         ],
@@ -437,8 +437,8 @@
       },
       "post": {
         "operationId": "post_v1_automations_flows_id_versions",
-        "summary": "CreateVersion adds a new DRAFT version to a flow.",
-        "description": "CreateVersion adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
+        "summary": "Adds a new DRAFT version to a flow.",
+        "description": "Adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
         "tags": [
           "automations"
         ],
@@ -535,8 +535,8 @@
     "/v1/automations/runs": {
       "get": {
         "operationId": "get_v1_automations_runs",
-        "summary": "ListRuns returns the caller org's run history, newest first.",
-        "description": "ListRuns returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
+        "summary": "Returns the caller org's run history, newest first.",
+        "description": "Returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
         "tags": [
           "automations"
         ],
@@ -577,8 +577,8 @@
     "/v1/automations/runs/{id}": {
       "get": {
         "operationId": "get_v1_automations_runs_id",
-        "summary": "GetRun returns one run.",
-        "description": "GetRun returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
+        "summary": "Returns one run.",
+        "description": "Returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
         "tags": [
           "automations"
         ],

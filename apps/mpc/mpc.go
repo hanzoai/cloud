@@ -15,15 +15,23 @@
 // MPC stays its own separate nodes on luxfi/mpc. Dropping that external
 // dependency leaves cloud depending only on luxfi/kms (embedded) +
 // hanzoai/iam (embedded). This package reproduces the
-// SDK's wire protocol and key schedule VERBATIM, so the on-node ciphertext
-// format is byte-for-byte unchanged — a pure dependency move, not a behavior
-// change.
+// SDK's wire protocol verbatim. The KEY SCHEDULE is no longer reproduced here:
+// its second stage is hanzoai/cek, the estate's one derivation. The schedule
+// this was inlined from survives only in hanzoai/kms/sdk/go, which is archived
+// and read-only — this is the live client, so it derives where everything else
+// in the estate derives rather than keeping a private copy of an HKDF and
+// hoping the copy stays equal to something nobody maintains.
 //
 // Zero-knowledge model: all encryption/decryption happens client-side with a
 // Customer Encryption Key (CEK) derived from an admin passphrase; the CEK never
 // leaves this process, and the MPC nodes only ever store encrypted blobs.
 //
-//	Passphrase -> Argon2id -> Master Key -> HKDF -> CEK (AES-256-GCM)
+//	Passphrase -> Argon2id -> Master Key -> cek -> CEK (AES-256-GCM)
+//
+// The two stages answer different questions and stay separate. Argon2id makes a
+// GUESSABLE secret expensive to guess, which is a property a passphrase needs and
+// a KMS master does not. cek turns a uniformly random 32-byte master into the key
+// for one named thing. Neither substitutes for the other.
 //
 // FOLLOW-UP (a separate, TESTED change — not this dependency move): fold
 // fleet/provisioning sealing into cloud's embedded deps.KMS once
@@ -48,15 +56,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/namespace"
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/hkdf"
 )
 
 const (
 	// cekSaltSuffix is appended to the org slug to derive the Argon2id salt.
 	cekSaltSuffix = "hanzo-kms-cek-v1"
-	// cekHKDFInfo is the HKDF info parameter for CEK derivation.
-	cekHKDFInfo = "cek-aes256gcm"
+	// cekSubsystem names WHICH of the org's stores this key opens — the MPC
+	// ring's sealed secrets. It is the subsystem half of cek's binding, so an
+	// org's ring secrets and its databases never share a key.
+	cekSubsystem = "mpc"
 	// cekSize is the CEK/master-key size in bytes (256-bit AES key).
 	cekSize = 32
 
@@ -72,15 +83,18 @@ const (
 	defaultHTTPTimeout = 30 * time.Second
 )
 
-// Config configures a client. Nodes/OrgSlug/Threshold are required; HTTPClient
+// Config configures a client. Nodes/Namespace/Threshold are required; HTTPClient
 // is optional (a 30-second-timeout client is used when nil).
 type Config struct {
 	// Nodes is the list of MPC node addresses
 	// (e.g. ["https://kms-mpc-0:9999", "https://kms-mpc-1:9999"]).
 	Nodes []string
-	// OrgSlug is the organization identifier; it is the AES-GCM AAD and the
-	// path scope, so it binds every ciphertext to exactly one tenant.
-	OrgSlug string
+	// Namespace names the org whose secrets these are. It is a NAME rather than
+	// a slug because the caller builds it at cloud's one door (cloud.OrgNamespace)
+	// — this package derives a key from it and must not be the place a string
+	// becomes a tenant. Its id is the AES-GCM AAD and the path scope, so it binds
+	// every ciphertext to exactly one tenant.
+	Namespace namespace.Namespace
 	// Threshold is the minimum number of nodes required for an operation (t-of-n).
 	Threshold int
 	// HTTPClient is an optional custom client. nil ⇒ a default 30s-timeout client.
@@ -96,7 +110,7 @@ type Client struct {
 	mu        sync.RWMutex
 	nodes     []string
 	threshold int
-	orgSlug   string
+	ns        namespace.Namespace
 	cek       []byte // CEK — client-side only, never transmitted
 	http      *http.Client
 }
@@ -107,8 +121,8 @@ func NewClient(cfg Config) (*Client, error) {
 	if len(cfg.Nodes) == 0 {
 		return nil, errors.New("mpcseal: at least one node address is required")
 	}
-	if cfg.OrgSlug == "" {
-		return nil, errors.New("mpcseal: org slug is required")
+	if cfg.Namespace.IsZero() {
+		return nil, errors.New("mpcseal: namespace is required")
 	}
 	if cfg.Threshold < 1 {
 		return nil, errors.New("mpcseal: threshold must be at least 1")
@@ -123,7 +137,7 @@ func NewClient(cfg Config) (*Client, error) {
 	return &Client{
 		nodes:     cfg.Nodes,
 		threshold: cfg.Threshold,
-		orgSlug:   cfg.OrgSlug,
+		ns:        cfg.Namespace,
 		http:      httpClient,
 	}, nil
 }
@@ -131,17 +145,17 @@ func NewClient(cfg Config) (*Client, error) {
 // Unlock derives the CEK from the passphrase (client-side only) and holds it in
 // memory. The passphrase is never transmitted.
 func (c *Client) Unlock(passphrase string) error {
-	masterKey, err := deriveMasterKey(passphrase, c.orgSlug)
+	masterKey, err := deriveMasterKey(passphrase, c.ns.ID())
 	if err != nil {
 		return fmt.Errorf("mpcseal: unlock: %w", err)
 	}
 	defer clear(masterKey)
-	cek, err := deriveCEK(masterKey, c.orgSlug)
+	key, err := deriveCEK(masterKey, c.ns)
 	if err != nil {
 		return fmt.Errorf("mpcseal: unlock: %w", err)
 	}
 	c.mu.Lock()
-	c.cek = cek
+	c.cek = key
 	c.mu.Unlock()
 	return nil
 }
@@ -173,7 +187,7 @@ func (c *Client) Set(key string, value []byte) error {
 		return err
 	}
 	defer clear(cek)
-	aad := []byte(c.orgSlug)
+	aad := []byte(c.ns.ID())
 
 	encKey, err := sealAESGCM(cek, []byte(key), aad)
 	if err != nil {
@@ -187,7 +201,7 @@ func (c *Client) Set(key string, value []byte) error {
 	if err != nil {
 		return fmt.Errorf("mpcseal: marshal secret: %w", err)
 	}
-	path := fmt.Sprintf("/v1/orgs/%s/zk/secrets", url.PathEscape(c.orgSlug))
+	path := fmt.Sprintf("/v1/orgs/%s/zk/secrets", url.PathEscape(c.ns.ID()))
 	return c.broadcastPost(path, data)
 }
 
@@ -199,14 +213,14 @@ func (c *Client) Get(key string) ([]byte, error) {
 		return nil, err
 	}
 	defer clear(cek)
-	aad := []byte(c.orgSlug)
+	aad := []byte(c.ns.ID())
 
 	encKey, err := sealAESGCM(cek, []byte(key), aad)
 	if err != nil {
 		return nil, fmt.Errorf("mpcseal: encrypt key for lookup: %w", err)
 	}
 	path := fmt.Sprintf("/v1/orgs/%s/zk/secrets/%s",
-		url.PathEscape(c.orgSlug),
+		url.PathEscape(c.ns.ID()),
 		url.PathEscape(base64URLEncode(encKey)),
 	)
 	body, err := c.quorumGet(path)
@@ -232,14 +246,14 @@ func (c *Client) Delete(key string) error {
 		return err
 	}
 	defer clear(cek)
-	aad := []byte(c.orgSlug)
+	aad := []byte(c.ns.ID())
 
 	encKey, err := sealAESGCM(cek, []byte(key), aad)
 	if err != nil {
 		return fmt.Errorf("mpcseal: encrypt key for delete: %w", err)
 	}
 	path := fmt.Sprintf("/v1/orgs/%s/zk/secrets/%s",
-		url.PathEscape(c.orgSlug),
+		url.PathEscape(c.ns.ID()),
 		url.PathEscape(base64URLEncode(encKey)),
 	)
 
@@ -376,7 +390,7 @@ func (c *Client) deleteRequest(u string) error {
 	return nil
 }
 
-// ── key schedule + AES-256-GCM (client-side, verbatim from the SDK) ───────────
+// ── key schedule + AES-256-GCM (client-side) ──────────────────────────────────
 
 // deriveMasterKey derives the 256-bit master key from a passphrase via Argon2id.
 func deriveMasterKey(passphrase, orgSlug string) ([]byte, error) {
@@ -390,17 +404,19 @@ func deriveMasterKey(passphrase, orgSlug string) ([]byte, error) {
 	return argon2.IDKey([]byte(passphrase), salt, argon2Time, argon2Memory, argon2Threads, cekSize), nil
 }
 
-// deriveCEK derives the CEK from the master key via HKDF-SHA256.
-func deriveCEK(masterKey []byte, orgSlug string) ([]byte, error) {
+// deriveCEK derives the CEK from the master key through cek, binding it to the
+// org that owns the secrets and to the ring they live on. This package used to
+// run its own HKDF here — salt=orgSlug, info="cek-aes256gcm" — which was a
+// second derivation that had to be kept equal to the SDK's by hand.
+func deriveCEK(masterKey []byte, ns namespace.Namespace) ([]byte, error) {
 	if len(masterKey) != cekSize {
 		return nil, fmt.Errorf("mpcseal: master key must be %d bytes, got %d", cekSize, len(masterKey))
 	}
-	r := hkdf.New(sha256.New, masterKey, []byte(orgSlug), []byte(cekHKDFInfo))
-	cek := make([]byte, cekSize)
-	if _, err := io.ReadFull(r, cek); err != nil {
-		return nil, fmt.Errorf("mpcseal: hkdf derive cek: %w", err)
+	key, err := cek.DeriveKey(masterKey, ns, cekSubsystem)
+	if err != nil {
+		return nil, fmt.Errorf("mpcseal: derive cek: %w", err)
 	}
-	return cek, nil
+	return key, nil
 }
 
 // deriveSalt = SHA-256(orgSlug || cekSaltSuffix).

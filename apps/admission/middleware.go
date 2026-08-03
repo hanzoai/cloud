@@ -57,7 +57,7 @@ import (
 //
 // THE RULE (per request, on a governed host in waitlist mode):
 //
-//	carries a Hanzo API key (hk-/sk-/…)   → allow (paid inference; possession-gated)
+//	carries a Hanzo API key (pk-/sk-)     → allow (paid inference; possession-gated)
 //	exempt path (health/iam/waitlist)     → allow
 //	unauthenticated                       → 302 waitlist (browser) / 401 (API)
 //	waitlist mode OFF (or host un-governed) → allow (c.Next)
@@ -155,7 +155,7 @@ func Enforce(cfg EnforceConfig) zip.Handler {
 			}
 		}
 
-		// MONEY-CRITICAL EXEMPTION: a request bearing a Hanzo API KEY (hk-/sk-/pk-/…)
+		// MONEY-CRITICAL EXEMPTION: a request bearing a Hanzo API KEY (pk-/sk-)
 		// is NEVER waitlist-gated. Paid inference on api.hanzo.ai authenticates by KEY
 		// POSSESSION + is metered downstream in the `ai` subsystem — SanitizeIdentity
 		// does NOT mint a session principal for an API key (auth_identity.go isAPIKey →
@@ -206,13 +206,13 @@ func bounce(c *zip.Ctx, waitlistURL string) error {
 	return c.NoContent(http.StatusFound)
 }
 
-// The Hanzo API-key families — a published key (pk-), a secret key (sk-), and hk-
-// (sk- under an older name) — are cloud.APIKeyPrefixes, and this package READS that
-// list rather than restating it. It used to hold its own copy "so admission stays
-// self-contained (no cloud-internal import)", which was never true: waitlist.go in
-// this same package already imports cloud. So the copy bought nothing and cost the
-// one thing a copy always costs — a second place to edit, with the two agreeing only
-// by hand. A key family added to the authority now reaches this gate by construction.
+// The Hanzo API-key families — a published key (pk-) and a secret key (sk-) — are
+// cloud.APIKeyPrefixes, and this package READS that list rather than restating it.
+// It used to hold its own copy "so admission stays self-contained (no
+// cloud-internal import)", which was never true: waitlist.go in this same package
+// already imports cloud. So the copy bought nothing and cost the one thing a copy
+// always costs — a second place to edit, with the two agreeing only by hand. A key
+// family added to the authority now reaches this gate by construction.
 
 // carriesAPIKey reports whether the request authenticates with a Hanzo API key —
 // in the Authorization header (Bearer or Basic-username) or the common api-key /

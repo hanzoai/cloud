@@ -127,7 +127,7 @@ func (p *rollPod) orgPath(org string) string {
 func (h *rollHarness) ensureOwned(p *rollPod, org string) *rollOrg {
 	oo, ok := p.stores[org]
 	if !ok {
-		d := p.dy.For(org, orgDBKey(org), p.orgPath(org))
+		d := p.dy.For(testNS(org), "research", orgDBKey(org), p.orgPath(org))
 		_ = d.Hydrate(h.ctx)
 		oo = &rollOrg{d: d, db: openBoundDB(h.t, d)}
 		p.stores[org] = oo
@@ -136,7 +136,7 @@ func (h *rollHarness) ensureOwned(p *rollPod, org string) *rollOrg {
 	if !oo.d.Owned() && oo.d.PendingPromotion() {
 		if claimed, _ := oo.d.TryClaim(h.ctx); claimed {
 			_ = oo.db.Close() // quiesce before CarryForward swaps the file
-			d := p.dy.For(org, orgDBKey(org), p.orgPath(org))
+			d := p.dy.For(testNS(org), "research", orgDBKey(org), p.orgPath(org))
 			_ = d.Hydrate(h.ctx)
 			oo = &rollOrg{d: d, db: openBoundDB(h.t, d)}
 			p.stores[org] = oo

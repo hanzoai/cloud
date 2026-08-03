@@ -270,7 +270,7 @@ func TestHTTPRunRequiresAuthAndOwnDataset(t *testing.T) {
 	}
 
 	// With a bearer but a dataset the org does not own → 404.
-	if code, _ := doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer hk-test",
+	if code, _ := doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer sk-test",
 		map[string]any{"dataset": "does-not-exist", "model": "m"}); code != http.StatusNotFound {
 		t.Fatalf("run on missing dataset want 404, got %d", code)
 	}
@@ -282,7 +282,7 @@ func TestHTTPRunRequiresAuthAndOwnDataset(t *testing.T) {
 			t.Fatalf("seed item %q: %d", in, code)
 		}
 	}
-	code, body := doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer hk-test",
+	code, body := doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer sk-test",
 		map[string]any{"dataset": "qa", "model": "m"})
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
@@ -339,7 +339,7 @@ func TestRunDeadlineBounded(t *testing.T) {
 	var code int
 	var body []byte
 	go func() {
-		code, body = doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer hk-test",
+		code, body = doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer sk-test",
 			map[string]any{"dataset": "qa", "model": "m"})
 		close(done)
 	}()

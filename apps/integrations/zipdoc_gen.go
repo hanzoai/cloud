@@ -293,7 +293,7 @@ func init() {
 		Response: json.RawMessage(`{"repo":"widgets","status":"building","url":"https://acme.github.io/widgets/","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}`),
 	})
 	zip.Describe("POST /v1/integrations/github/repos/:repo/pages/builds", zip.Doc{
-		Description: "GithubPagesBuild requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
+		Description: "Requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
 		Fields: map[string]string{
 			"githubPagesBuildOut.repo":   "Repo is the repository the build was queued for.",
 			"githubPagesBuildOut.status": "Status is GitHub's build state at the moment it was queued (\"queued\").",
@@ -304,7 +304,7 @@ func init() {
 		Response: json.RawMessage(`{"repo":"widgets","status":"queued","url":"https://api.github.com/repos/acme/widgets/pages/builds/1"}`),
 	})
 	zip.Describe("POST /v1/integrations/github/repos/import", zip.Doc{
-		Description: "GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
+		Description: "Imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
 		Fields: map[string]string{
 			"githubImportIn.all":     "All imports every repository the installation grants, instead of naming\nthem. Archived and disabled repositories are skipped either way — they\ncannot be fetched.",
 			"githubImportIn.repos":   "Repos names the repositories to import, either owner-qualified\n(\"hanzo-apps/ai\") or as a bare name (\"ai\"); a trailing \".git\" is stripped.\nA bare name that matches more than one granted repository is an error\nrather than a guess, because one Hanzo org may hold several GitHub\ninstallations and a name is only unique within an owner.\nIgnored when all is true.",

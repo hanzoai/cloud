@@ -55,7 +55,6 @@ package cloud
 import (
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -65,7 +64,6 @@ import (
 	luxtrace "github.com/luxfi/trace"
 	"github.com/luxfi/zap"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/otlptranslator"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -204,22 +202,17 @@ func TraceInprocEnabled() bool {
 // instrument, not whatever happened to be compiled in.
 var metricRegistry = prometheus.NewRegistry()
 
-// Metrics serves this process's measurements in Prometheus exposition format, so
-// a scrape can collect what InstallTelemetry's meter provider records.
+// MetricGatherer exposes the registry for the in-process push to the telemetry
+// store (apps/o11y/metricspush.go), which is the ONLY way measurements leave
+// this process now that Prometheus is retired.
 //
-// The handler is here, with the provider that fills it, and the LISTENER is not:
-// binding a port is a decision about one process, and every plugin child in this
-// fleet shares the host's environment, so a listener opened here would have every
-// child fighting for one address (the trap listenOn documents). The app that owns
-// the fleet prober owns the listener that publishes it — see apps/o11y.
-func Metrics() http.Handler {
-	return promhttp.HandlerFor(metricRegistry, promhttp.HandlerOpts{
-		// A scrape that fails should say so to the scraper, which records it as a
-		// failed scrape; writing a 200 with a partial body would report a healthy
-		// collection that did not happen.
-		ErrorHandling: promhttp.HTTPErrorOnError,
-	})
-}
+// The registry is no longer a PUBLISHED SURFACE — there is no exposition and no
+// scraper — it is the buffer the meter provider renders into and the push
+// drains, in the same family model the datastore receiver already speaks.
+// Handing out the Gatherer rather than the *Registry keeps the rule this
+// registry exists to enforce: what appears here is what this process chose to
+// instrument, so a reader cannot quietly become a registrant.
+func MetricGatherer() prometheus.Gatherer { return metricRegistry }
 
 // installMeter installs this process's meter provider and returns it with a
 // shutdown. The provider is ALWAYS installed and the shutdown is ALWAYS non-nil,
@@ -228,20 +221,20 @@ func Metrics() http.Handler {
 // discarded while the code looks perfectly instrumented, which is exactly what
 // cloud's request counters (metrics_http.go) did before this existed.
 //
-// ONE reader, and it is a PULL: the provider collects into this process's
-// registry (metricRegistry) and something scrapes the exposition apps/o11y
-// serves. Metrics used to leave over the ZAP wire instead, to match traces and
-// logs — one transport for all three signals, which reads well and did not
-// survive contact with where metrics are actually kept. That wire ends at o11y's
-// receiver, which writes the datastore; but the store every metric READER in
-// this codebase queries is VictoriaMetrics — vmquery.go, the SuperAdmin VM
-// proxy, status.go's up-inventory and /v1/summary — and VM is filled by
-// scraping. A push into a store nothing reads is not a second transport, it is a
-// missing one: the wire endpoint is empty in every deployment we run, which
-// luxfi/metric silently resolved to 127.0.0.1:4317 — the OTLP trace receiver,
-// not the metric one — so the fleet availability gauge was recorded 21 times a
-// minute into a provider with no way out. Exposing the registry puts the
-// measurements where the readers already look.
+// ONE reader, and NOBODY PULLS IT: the provider collects into this process's
+// registry (metricRegistry), and apps/o11y's metricspush.go gathers that
+// registry on a timer and writes it straight to the telemetry store in-process.
+// The registry is a buffer, not a published surface — no port is bound for it
+// and there is no exposition to scrape.
+//
+// It was a pull once, and briefly for a good reason: the store every metric
+// READER queried was VictoriaMetrics, VM was filled by scraping, and a push into
+// a store nothing reads is not a second transport but a missing one. That
+// premise is retired with VM. Every metric reader in this codebase now queries
+// the datastore — /v1/summary, status.go's up-inventory and
+// /v1/o11y/availability all go through apps/o11y/metricsgauge.go — so metrics
+// travel the same in-process road as traces and logs, to the same place, and the
+// measurements are once again where the readers look.
 func installMeter(log luxlog.Logger, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context)) {
 	exp, err := otelprom.New(
 		otelprom.WithRegisterer(metricRegistry),
