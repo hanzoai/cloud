@@ -12,7 +12,7 @@
       "name": "ai_models",
       "path": "ai_models/SKILL.md",
       "service": "ai",
-      "sha256": "77794bf89159caea339b6c0cc46b1f115b215bf378e1be1904f38267fb87039d",
+      "sha256": "dff9ddfb6947ffddab984a4148c9b66152f16c74057745e953d8936567a34ff6",
       "version": "8.0.0"
     }
   ],
