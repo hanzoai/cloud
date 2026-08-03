@@ -298,9 +298,47 @@ func analyticsIngest(c *zip.Ctx) (func(org string, c *zip.Ctx) error, bool) {
 	return h, ok && h != nil
 }
 
+// requestHost is the ONE way this server learns which host was asked for.
+//
+// fiber parses the request URI once, and behind the ingress the parsed host is
+// EMPTY — so Hostname() alone resolved nothing, every published site fell
+// through to c.Continue(), and <slug>.hanzo.app served the console SPA with the
+// whole cloud API mounted under a customer's own hostname. Measured 2026-08-03:
+// quest.hanzo.app returned <title>Hanzo Cloud Console and
+// quest.hanzo.app/v1/billing/plans returned 200. Same accessor, same failure as
+// commerce's tenant resolver earlier the same night.
+//
+// The parsed host ALWAYS wins. X-Forwarded-Host is consulted only when there is
+// no parsed host at all, which is exactly the ingress case and never a direct
+// request. That ordering is the security property, not a detail: the host picks
+// the ORG here, so a client that could override a real host could serve itself
+// another tenant's site. TestMiddlewareTenantKeyedByHostNotPath pins it — a
+// request that HAS a host ignores the header completely.
+func (s *Server) requestHost(c *zip.Ctx) string {
+	// A parsed host that names a site (or a bindable custom domain) is the
+	// truth and is never overridden. Anything else — empty behind the ingress,
+	// or the ingress' own service name — is not a host this server can serve,
+	// so the forwarded name is the only candidate left.
+	parsed := hostOnly(c.Fiber().Hostname())
+	if parsed != "" {
+		if _, _, ok := s.siteSlug(parsed); ok {
+			return parsed
+		}
+		if s.customCandidate(parsed) {
+			return parsed
+		}
+	}
+	// Left-most entry: proxies append, so the first is the client-facing name.
+	fwd := c.Header("X-Forwarded-Host")
+	if i := strings.IndexByte(fwd, ','); i >= 0 {
+		fwd = fwd[:i]
+	}
+	return hostOnly(fwd)
+}
+
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
-		raw := c.Fiber().Hostname()
+		raw := s.requestHost(c)
 		if slug, firstParty, ok := s.siteSlug(raw); ok {
 			if baseHostHandler != nil && isBasePath(c.Path()) {
 				if site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {
