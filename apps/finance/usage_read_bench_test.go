@@ -16,7 +16,6 @@ import (
 func BenchmarkListUsage(b *testing.B) {
 	for _, n := range []int{100, 1000, 5000} {
 		b.Run(fmt.Sprintf("entries=%d", n), func(b *testing.B) {
-			b.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 			f := New(b.TempDir())
 			ctx := context.Background()
 			for i := 0; i < n; i++ {

@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/kb/connectors/:provider", zip.Doc{
-		Description: "DisconnectConnector revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
+		Description: "Revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
 		Fields: map[string]string{
 			"connectionOut.account":  "Account names the connected external account, when the provider reports one.",
 			"connectionOut.provider": "Provider is the connector this answer is about.",
@@ -19,7 +19,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/kb/connectors", zip.Doc{
-		Description: "ListConnectors returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
+		Description: "Returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
 		Fields: map[string]string{
 			"connectorView.account":      "Account names the connected external account. Absent until the org connects.",
 			"connectorView.configured":   "Configured is true when this deployment holds OAuth credentials for the provider.",
@@ -52,7 +52,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/kb/connectors/catalog", zip.Doc{
-		Description: "ListConnectorCatalog returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
+		Description: "Returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
 		Fields: map[string]string{
 			"catalogEntry.kind":     "\"native\" | \"piece\"",
 			"catalogOut.connectors": "Connectors is every connectable source, sorted by provider.",
@@ -60,7 +60,7 @@ func init() {
 		Response: json.RawMessage(`{"connectors":[{"provider":"github","displayName":"GitHub","description":"Repositories, READMEs, and issues.","kind":"native","configured":true}]}`),
 	})
 	zip.Describe("GET /v1/kb/graph", zip.Doc{
-		Description: "GetKnowledgeGraph returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
+		Description: "Returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
 		Fields: map[string]string{
 			"graphEdge.kind":    "parent | link | provenance",
 			"graphIn.project":   "Project narrows the graph to one project scope. Empty reads the whole org.",
@@ -74,15 +74,18 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/kb/connectors/:provider/sync", zip.Doc{
-		Description: "SyncConnector pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
+		Description: "Pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
 		Fields: map[string]string{
 			"kbSyncOut.ingested":  "Ingested is how many documents landed in the org's knowledge store.",
 			"kbSyncOut.provider":  "Provider is the connector that was pulled.",
 			"providerIn.provider": "Provider is the connector to act on: github, slack, google or notion.",
 		},
 	})
+	zip.Describe("POST /v1/kb/import", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("POST /v1/kb/search", zip.Doc{
-		Description: "SearchKnowledge runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",
+		Description: "Runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",
 		Fields: map[string]string{
 			"searchIn.doctypes":  "DocTypes restricts retrieval to a subset of the indexed knowledge doctypes\n(kb-page, kb-memory, kb-source). An empty or foreign list reads all of them.",
 			"searchIn.limit":     "Limit bounds the hits returned. Default 10, maximum 50.",

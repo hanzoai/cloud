@@ -26,7 +26,7 @@
 //
 //   - LLM lens (REAL today): hanzo.cloud_usage, the live per-org usage ledger the
 //     cloud o11y path already writes (requests, tokens, spend, models, errors).
-//   - Web/commerce lens: event.event on the o11y-owned event plane — what this
+//   - Web/commerce lens: event.fact (signal='act') on the o11y-owned event plane — what this
 //     package's own doors ingest (as facts, landed by the sink in warehouse.go).
 //
 // The accepted batch is also handed to registered SINKS (forward.go) — apps/
@@ -62,9 +62,9 @@
 //	GET  /v1/insights/health        the insights surface is serving
 //	GET  /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
 //
-//	WRITE (the ingest doors — see doors, event.go)
-//	POST /v1/event                  the canonical wire (object | array | {batch:[…]})
-//	POST /v1/insights/e             the PostHog wire — a second WIRE, not a second name
+//	WRITE (the ingest door — see doors, event.go)
+//	POST /v1/event                  the canonical wire (object | array | {batch:[…]});
+//	                                decodeEvent sniffs the PostHog wire here too
 //	POST /v1/event/:project/envelope|store   the Sentry error wire, same door
 //
 // The six reads above /v1/analytics/health are TYPED ops, so each publishes its
@@ -311,9 +311,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 			http.Error(w, "read body", http.StatusBadRequest)
 			return
 		}
-		hdr := make(map[string]string, len(r.Header))
+		hdr := make([]planeops.Header, 0, len(r.Header))
 		for k := range r.Header {
-			hdr[k] = r.Header.Get(k)
+			hdr = append(hdr, planeops.Header{Name: k, Value: r.Header.Get(k)})
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), obsErrorTimeout)
 		defer cancel()
@@ -342,9 +342,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// has never served, and op.Path is the identity every projection reads.
 	zip.Get(cloud.ZipApp(app), "/v1/errors", o.errors)
 
-	// /v1/insights — console reads over the SAME engine. The PostHog-wire INGEST at
-	// /v1/insights/e is a door and is registered in the loop above. Flags live at
-	// /v1/flags.
+	// /v1/insights — console READS over the SAME engine, and nothing else: the
+	// PostHog-wire ingest that used to sit at /v1/insights/e is retired onto the one
+	// door, so this group registers no door of its own. Flags live at /v1/flags.
 	ig := app.Group("/v1/insights")
 	zip.Get(ig, "/health", o.insightsHealth)
 	zip.Get(ig, "/events", o.insightsEvents)
@@ -547,7 +547,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 	}
 	s := o.s
 	// Ensure the ai-owned ledger table exists (idempotent, latched) so a fresh
-	// warehouse yields honest zeros, not an error. We NEVER create event.event —
+	// warehouse yields honest zeros, not an error. We NEVER create event.fact —
 	// the plane's DDL owner is hanzoai/o11y (exactly the stance this lens has
 	// always taken for tables it does not own).
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
@@ -567,7 +567,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 	llm := buildLLMOverview(firstRow(llmRows))
 
 	// Web/commerce lens — one events query over the plane; degrades to honest-empty
-	// if event.event is absent (not yet provisioned) or errors. A pageview is
+	// if event.fact is absent (not yet provisioned) or errors. A pageview is
 	// kind='page' (the plane's discriminator, not a magic name) and revenue is the
 	// numeric read-back of the attributes entry the writer stamped (fact.go
 	// attributesOf), so the sum is the same fact forward-era rows carried in a
@@ -575,7 +575,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 	ewhere, eargs := eventsWhere(org, start, end)
 	eventsSQL := "SELECT countIf(kind = 'page') AS pageviews, uniqExact(distinct_id) AS visitors, " +
 		"uniqExact(session_id) AS sessions, countIf(name = 'order_completed') AS orders, " +
-		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue FROM " + eventsTable + " WHERE " + ewhere
+		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue FROM " + factTable + " WHERE " + ewhere
 	eventsRows, eerr := datastore.Query(ctx, eventsSQL, eargs...)
 	eventsOK := eerr == nil
 	if eerr != nil {
@@ -700,10 +700,10 @@ func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
 	prodSQL := fmt.Sprintf("SELECT attributes['product_id'] AS productId, countIf(name = 'order_completed') AS orders, "+
 		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue, sum(toUInt64OrZero(attributes['quantity'])) AS units "+
 		"FROM %s WHERE %s AND attributes['product_id'] != '' "+
-		"GROUP BY productId ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
+		"GROUP BY productId ORDER BY revenue DESC LIMIT %d", factTable, ewhere, limit)
 	prodRows, perr := datastore.Query(ctx, prodSQL, eargs...)
 
-	// Behavior lenses over event.event — WHERE people go / WHAT they look at
+	// Behavior lenses over event.fact's act rows — WHERE people go / WHAT they look at
 	// (topPages) and where they come FROM (topReferrers organic/referral,
 	// topSources campaigns). Each is ONE pageview breakdown that degrades to
 	// honest-empty if the events table is absent or the query errors — never a 500
@@ -787,7 +787,7 @@ type healthReport struct {
 type healthLenses struct {
 	// LLM is the live per-org usage ledger lens (hanzo.cloud_usage).
 	LLM healthLens `json:"llm"`
-	// Events is the web/commerce lens (event.event), honest-empty until the
+	// Events is the web/commerce lens (event.fact, signal='act'), honest-empty until the
 	// collector emits.
 	Events healthLens `json:"events"`
 }
@@ -845,7 +845,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	if connected {
 		res.Lenses = &healthLenses{
 			LLM:    healthLens{Table: llmTable, Available: tableExists(ctx, llmTable)},
-			Events: healthLens{Table: eventsTable, Available: tableExists(ctx, eventsTable)},
+			Events: healthLens{Table: factTable, Available: tableExists(ctx, factTable)},
 		}
 	}
 	switch {

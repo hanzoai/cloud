@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -62,9 +61,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("compliance.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("compliance.Mount: data dir: %w", err)
-	}
 	provider, err := idv.FromConfig(kmsGetter(deps), os.Getenv)
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: idv provider: %w", err)
@@ -77,7 +73,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: idv webhook: %w", err)
 	}
-	store, err := openStore(filepath.Join(deps.DataDir, "compliance.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: open store: %w", err)
 	}
@@ -1192,16 +1188,11 @@ func mustJSON(v any) json.RawMessage {
 	return b
 }
 
-// clientIP is the best-effort source IP for the audit record.
-func clientIP(c *zip.Ctx) string {
-	if xff := c.Header("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
-	}
-	return c.Header("X-Real-Ip")
-}
+// clientIP is the caller's address, by the ONE rule — cloud.ClientIP. It lands in
+// a durable audit record, and the LEFT-most X-Forwarded-For entry (and X-Real-Ip)
+// are values the client writes: an address chosen by the party being audited is
+// not evidence.
+func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
 
 // genID mints a prefixed, collision-resistant id (prefix + 128 random bits).
 func genID(prefix string) (string, error) {

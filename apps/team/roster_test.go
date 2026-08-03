@@ -14,7 +14,7 @@ import (
 func rosterServer(t *testing.T, org, human, humanName string, bots []Bot) (*transServer, *session, string) {
 	t.Helper()
 	dir := t.TempDir()
-	accounts, err := openAccountStore(filepath.Join(dir, "account.db"))
+	accounts, err := openAccountStore(dir)
 	if err != nil {
 		t.Fatalf("open account store: %v", err)
 	}

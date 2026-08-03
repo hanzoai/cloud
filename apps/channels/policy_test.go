@@ -2,9 +2,12 @@ package channels
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // policy_test.go is the pure-store proof of the gate engine and pairing state
@@ -16,7 +19,7 @@ const t0 int64 = 1_700_000_000
 
 func newStore(t *testing.T) *store {
 	t.Helper()
-	st, err := openStore(filepath.Join(t.TempDir(), "channels.db"))
+	st, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

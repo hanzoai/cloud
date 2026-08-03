@@ -41,8 +41,8 @@
     "/v1/guide/actions": {
       "get": {
         "operationId": "get_v1_guide_actions",
-        "summary": "ListActions returns the caller org's Business AI action ledger, most recent first: every \"do it for me\" tool call, the arguments it ran with, its result and whether it succeeded.",
-        "description": "ListActions returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
+        "summary": "Returns the caller org's Business AI action ledger, most recent first: every \"do it for me\" tool call, the arguments it ran with, its result and whether it succeeded.",
+        "description": "Returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
         "tags": [
           "guide"
         ],
@@ -85,8 +85,8 @@
     "/v1/guide/blueprint": {
       "get": {
         "operationId": "get_v1_guide_blueprint",
-        "summary": "GetBlueprint returns the FULL authored brand blueprint — every principle, section, step, strategy and template WITH its enabled flag made explicit, including the disabled items the org-facing reads never see — plus the active version number, the brand key it is stored under and the item counts.",
-        "description": "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
+        "summary": "Returns the FULL authored brand blueprint — every principle, section, step, strategy and template WITH its enabled flag made explicit, including the disabled items the org-facing reads never see — plus the active version number, the brand key it is stored under and the item counts.",
+        "description": "Returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
         "tags": [
           "guide"
         ],
@@ -115,8 +115,8 @@
     "/v1/guide/blueprint/versions": {
       "get": {
         "operationId": "get_v1_guide_blueprint_versions",
-        "summary": "ListBlueprintVersions returns the brand blueprint's version history — every stored version's number and edit time, newest first — which is the point-in-time-recovery and audit trail behind the authoring plane.",
-        "description": "ListBlueprintVersions returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
+        "summary": "Returns the brand blueprint's version history — every stored version's number and edit time, newest first — which is the point-in-time-recovery and audit trail behind the authoring plane.",
+        "description": "Returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
         "tags": [
           "guide"
         ],
@@ -200,8 +200,8 @@
     "/v1/guide/curriculum": {
       "delete": {
         "operationId": "delete_v1_guide_curriculum",
-        "summary": "DeleteCurriculum clears the caller org's curriculum override and returns the journey it falls back to — the brand blueprint, else the embedded fixture.",
-        "description": "DeleteCurriculum clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
+        "summary": "Clears the caller org's curriculum override and returns the journey it falls back to — the brand blueprint, else the embedded fixture.",
+        "description": "Clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
         "tags": [
           "guide"
         ],
@@ -220,8 +220,8 @@
       },
       "get": {
         "operationId": "get_v1_guide_curriculum",
-        "summary": "GetCurriculum returns the journey the caller's org is actually running, and whether it comes from the org's OWN override (custom) or from the platform default — the brand blueprint, else the embedded fixture.",
-        "description": "GetCurriculum returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
+        "summary": "Returns the journey the caller's org is actually running, and whether it comes from the org's OWN override (custom) or from the platform default — the brand blueprint, else the embedded fixture.",
+        "description": "Returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
         "tags": [
           "guide"
         ],
@@ -312,8 +312,8 @@
     "/v1/guide/steps/{id}/reset": {
       "post": {
         "operationId": "post_v1_guide_steps_id_reset",
-        "summary": "ResetStep returns one step of the caller org's journey to todo — clearing a manual mark or a skip — and returns the refreshed journey.",
-        "description": "ResetStep returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
+        "summary": "Returns one step of the caller org's journey to todo — clearing a manual mark or a skip — and returns the refreshed journey.",
+        "description": "Returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
         "tags": [
           "guide"
         ],
@@ -345,8 +345,8 @@
     "/v1/guide/steps/{id}/skip": {
       "post": {
         "operationId": "post_v1_guide_steps_id_skip",
-        "summary": "SkipStep marks one step of the caller org's journey skipped and returns the refreshed journey.",
-        "description": "SkipStep marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
+        "summary": "Marks one step of the caller org's journey skipped and returns the refreshed journey.",
+        "description": "Marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
         "tags": [
           "guide"
         ],

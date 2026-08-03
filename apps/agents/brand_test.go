@@ -107,7 +107,7 @@ func TestNoUpstreamNameOnTheWire(t *testing.T) {
 // are rewritten in place on store open, the rewrite is idempotent, and the
 // pre-migration value is retained so the change can be reversed.
 func TestMigrateModelRewritesStoredRows(t *testing.T) {
-	dir := t.TempDir() + "/agents.db"
+	dir := t.TempDir()
 	ctx := context.Background()
 
 	// A store holding exactly what the live registry held.

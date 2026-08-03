@@ -76,9 +76,9 @@ func TestKeyOrg_KeyExtractionReachesResolver(t *testing.T) {
 		hdr              map[string]string
 		wantKey          string
 	}{
-		{"body", "/v1/event", `{"api_key":"hk-body","event":"e","distinct_id":"d"}`, nil, "hk-body"},
-		{"query", "/v1/event?api_key=hk-query", `{"event":"e","distinct_id":"d"}`, nil, "hk-query"},
-		{"x-api-key", "/v1/event", `{"event":"e","distinct_id":"d"}`, map[string]string{"x-api-key": "hk-hdr"}, "hk-hdr"},
+		{"body", "/v1/event", `{"api_key":"sk-body","event":"e","distinct_id":"d"}`, nil, "sk-body"},
+		{"query", "/v1/event?api_key=sk-query", `{"event":"e","distinct_id":"d"}`, nil, "sk-query"},
+		{"x-api-key", "/v1/event", `{"event":"e","distinct_id":"d"}`, map[string]string{"x-api-key": "sk-hdr"}, "sk-hdr"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestKeyOrg_UnresolvableKeyFailsClosed(t *testing.T) {
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false }) // nothing resolves
 	code := postKeyed(t, app, "/v1/event", "hanzo.ai",
-		`{"api_key":"hk-bad","event":"e","distinct_id":"d"}`, nil)
+		`{"api_key":"sk-bad","event":"e","distinct_id":"d"}`, nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("presented-but-unresolvable key on a brand host must 403 (fail closed), got %d", code)
 	}
@@ -109,9 +109,10 @@ func TestKeyOrg_UnresolvableKeyFailsClosed(t *testing.T) {
 
 // TestKeyOrg_KeylessRequestNeverConsultsResolver: with NO key presented the key
 // resolver is never consulted — the key path triggers only on a real key — and the
-// request is not refused either: it takes the anonymous lane, where its custom event
-// kind is dropped and reported honestly (200), never stored. It used to be admitted
-// here at FULL capability into the brand org named by the Host.
+// request is not refused at the GATE either: it takes the anonymous lane, where its
+// custom event kind is dropped, and the door says so (401 ingest_key_required, which is
+// the projection's refusal; the gate's is 403). It used to be admitted here at FULL
+// capability into the brand org named by the Host.
 func TestKeyOrg_KeylessRequestNeverConsultsResolver(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
@@ -121,7 +122,7 @@ func TestKeyOrg_KeylessRequestNeverConsultsResolver(t *testing.T) {
 	})
 	code := postKeyed(t, app, "/v1/event", "hanzo.ai",
 		`{"event":"e","distinct_id":"d"}`, nil)
-	if code != http.StatusOK {
-		t.Fatalf("keyless PostHog event want 200 (anonymous lane, kind dropped), got %d", code)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("keyless PostHog event want 401 (anonymous lane, kind dropped, nothing stored), got %d", code)
 	}
 }

@@ -133,9 +133,9 @@ var Prefixes = []string{
 // boot at all, and the whole money plane is 503 in every local dev build and every
 // `go test`. That is the state this function exists to end.
 //
-// CodecLinked is the SAME predicate commerce's own resolveMasterKey gates on, and
-// the same one cek.EnsureDevKey uses for cloud's stores, so asking it here keeps ONE
-// posture decision across the process rather than three that can disagree:
+// CodecLinked is the SAME predicate commerce's own resolveMasterKey gates on, so
+// asking it here keeps ONE posture decision across the process rather than two that
+// can disagree:
 //
 //   - codec linked (the production image: CGO_ENABLED=1 -tags libsqlite3) → inject.
 //     commerce encrypts, and its resolveMasterKey still fails closed if the key is
@@ -179,6 +179,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	exposeStarter()
 	exposeUsage()
 	exposeTxns()
+	exposeScopeRules()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
@@ -358,6 +359,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		{"/v1/billing/alerts", commercebilling.ListSpendAlerts},
 		{"/v1/billing/payouts", commercebilling.ListPayouts},
 		{"/v1/billing/settings", commercebilling.GetPaymentConfig},
+		// The Credits tab's read. It sat in the same hole as its siblings: the
+		// handler exists in the vendored module and no app in the fleet registered
+		// it, so the address reached nobody and billing.hanzo.ai's client swallowed
+		// the 404 into an empty list — a customer with grants saw none. Read-only
+		// and subject-scoped like the rest; MINTING credit stays where it is, on
+		// the mint-gated POST /v1/billing/credit.
+		{"/v1/billing/credits", commercebilling.ListCreditGrants},
 	}
 	for _, r := range billingRead {
 		app.Get(r.path,
@@ -517,7 +525,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// payment-methods is NOT one of them, and must not be added back. That address belongs
 	// to the BILLING app: manifest.Apps names "/v1/billing/methods" on the billing
 	// row and withholds it from this one, because billing serves the GET (a proxy to
-	// commerce's /v1/billing/portal/payment-methods) — and the host claims a prefix for ONE
+	// commerce's /v1/billing/portal/methods) — and the host claims a prefix for ONE
 	// app across every method, so the POST has to sit on the same router as the read or it
 	// misses on METHOD (apps/billing/billing.go says exactly that, and the console's
 	// save-card call is what died proving it). A registration here is unreachable in the

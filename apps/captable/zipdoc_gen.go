@@ -8,42 +8,42 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/captable/convertibles/:id", zip.Doc{
-		Description: "DeleteConvertible removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
+		Description: "Removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"noteRef.id":              "ID is the convertible note to delete.",
 		},
 	})
 	zip.Describe("DELETE /v1/captable/options/:id", zip.Doc{
-		Description: "DeleteOption removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
+		Description: "Removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"optionRef.id":            "ID is the option grant to delete.",
 		},
 	})
 	zip.Describe("DELETE /v1/captable/safes/:id", zip.Doc{
-		Description: "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
+		Description: "Removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"safeRef.id":              "ID is the SAFE to delete.",
 		},
 	})
 	zip.Describe("DELETE /v1/captable/shares/:id", zip.Doc{
-		Description: "DeleteShare removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
+		Description: "Removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"shareRef.id":             "ID is the share certificate to delete.",
 		},
 	})
 	zip.Describe("DELETE /v1/captable/stakeholders/:id", zip.Doc{
-		Description: "DeleteStakeholder removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
+		Description: "Removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"stakeholderRef.id":       "ID is the stakeholder to delete.",
 		},
 	})
 	zip.Describe("GET /v1/captable/classes", zip.Doc{
-		Description: "ListShareClasses returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
+		Description: "Returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
 		Fields: map[string]string{
 			"captableShareClass.classType":                     "ClassType is COMMON or PREFERRED.",
 			"captableShareClass.companyName":                   "CompanyName is the name of the company whose cap table this is.",
@@ -62,7 +62,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/company", zip.Doc{
-		Description: "GetCompany returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
+		Description: "Returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
 		Fields: map[string]string{
 			"captableCompany.createdAt":            "CreatedAt is when the company row was seeded, in unix milliseconds.",
 			"captableCompany.id":                   "ID is the company id, which is the tenant's own org id.",
@@ -75,7 +75,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/convertibles", zip.Doc{
-		Description: "ListConvertibles returns the caller org's convertible notes, newest first. A\nnote's principal sits OUTSIDE issued equity until it converts, so it is not\npart of the share counts.",
+		Description: "Returns the caller org's convertible notes, newest first. A\nnote's principal sits OUTSIDE issued equity until it converts, so it is not\npart of the share counts.",
 		Fields: map[string]string{
 			"captableNote.capital":         "Capital is the principal the investor lent.",
 			"captableNote.conversionCap":   "ConversionCap is the valuation cap on conversion, if any.",
@@ -92,7 +92,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/investments", zip.Doc{
-		Description: "ListInvestments returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.",
+		Description: "Returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.",
 		Fields: map[string]string{
 			"captableInvestment.amount":          "Amount is the cash invested.",
 			"captableInvestment.date":            "Date is the ISO date of the investment.",
@@ -106,7 +106,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/options", zip.Doc{
-		Description: "ListOptions returns the caller org's option grants, newest first. Each row is\njoined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED\nor CANCELLED are listed here but do not dilute the cap table.",
+		Description: "Returns the caller org's option grants, newest first. Each row is\njoined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED\nor CANCELLED are listed here but do not dilute the cap table.",
 		Fields: map[string]string{
 			"captableOption.cliffYears":      "CliffYears is how many years before any of the grant vests.",
 			"captableOption.equityPlanId":    "EquityPlanID is the plan the grant draws from.",
@@ -126,7 +126,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/plans", zip.Doc{
-		Description: "ListEquityPlans returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
+		Description: "Returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
 		Fields: map[string]string{
 			"captableEquityPlan.boardApprovalDate":          "BoardApprovalDate is the ISO date the board approved the plan.",
 			"captableEquityPlan.comments":                   "Comments is free-form notes on the plan.",
@@ -141,7 +141,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/rounds", zip.Doc{
-		Description: "ListRounds returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.",
+		Description: "Returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.",
 		Fields: map[string]string{
 			"captableRound.closeDate":         "CloseDate is the ISO date the round closed, once it has.",
 			"captableRound.createdAt":         "CreatedAt is when the round was recorded, in unix milliseconds.",
@@ -158,7 +158,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/rounds/:id", zip.Doc{
-		Description: "GetRound returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
+		Description: "Returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
 		Fields: map[string]string{
 			"captableRound.closeDate":                 "CloseDate is the ISO date the round closed, once it has.",
 			"captableRound.createdAt":                 "CreatedAt is when the round was recorded, in unix milliseconds.",
@@ -184,7 +184,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/safes", zip.Doc{
-		Description: "ListSafes returns the caller org's SAFEs, newest first. A SAFE is a simple\nagreement for future equity: its capital sits OUTSIDE issued equity until it\nconverts, so it is not part of the share counts.",
+		Description: "Returns the caller org's SAFEs, newest first. A SAFE is a simple\nagreement for future equity: its capital sits OUTSIDE issued equity until it\nconverts, so it is not part of the share counts.",
 		Fields: map[string]string{
 			"captableSafe.capital":         "Capital is the cash the investor put in.",
 			"captableSafe.discountRate":    "DiscountRate is the discount to the next round's price, if any.",
@@ -202,7 +202,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/shares", zip.Doc{
-		Description: "ListShares returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.",
+		Description: "Returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.",
 		Fields: map[string]string{
 			"captableShare.capitalContribution": "CapitalContribution is the cash paid for the certificate, if recorded.",
 			"captableShare.certificateId":       "CertificateID is the certificate number, unique within the company.",
@@ -221,7 +221,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/stakeholders", zip.Doc{
-		Description: "ListStakeholders returns the caller org's stakeholders, newest first. The\nresponse is a bare JSON array, not an envelope. Each row carries the holder's\ncontact and address fields alongside the company's name.",
+		Description: "Returns the caller org's stakeholders, newest first. The\nresponse is a bare JSON array, not an envelope. Each row carries the holder's\ncontact and address fields alongside the company's name.",
 		Fields: map[string]string{
 			"captableStakeholder.city":                "City is the stakeholder's city, if recorded.",
 			"captableStakeholder.companyName":         "CompanyName is the name of the company whose cap table this is.",
@@ -240,7 +240,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/captable/summary", zip.Doc{
-		Description: "GetSummary computes the caller org's cap table. It answers who owns what on a\nfully-diluted basis: outstanding shares, granted options, per-stakeholder\nownership percentages, each share class's authorized versus issued position,\nand the capital sitting on SAFEs and convertible notes that have not yet\nconverted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and\nCANCELLED grants are excluded, so equity issued through an exercised option is\nnever counted twice.",
+		Description: "Computes the caller org's cap table. It answers who owns what on a\nfully-diluted basis: outstanding shares, granted options, per-stakeholder\nownership percentages, each share class's authorized versus issued position,\nand the capital sitting on SAFEs and convertible notes that have not yet\nconverted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and\nCANCELLED grants are excluded, so equity issued through an exercised option is\nnever counted twice.",
 		Fields: map[string]string{
 			"captableClassHolding.authorized":   "Authorized is how many shares of the class are authorized.",
 			"captableClassHolding.classType":    "ClassType is COMMON or PREFERRED.",
@@ -274,8 +274,11 @@ func init() {
 			"captableTotals.stakeholders":       "Stakeholders is how many stakeholders the company has.",
 		},
 	})
+	zip.Describe("PATCH /v1/captable/classes/:id", zip.Doc{
+		Description: "Is route with the :id path param threaded into params.",
+	})
 	zip.Describe("PATCH /v1/captable/stakeholders/:id", zip.Doc{
-		Description: "UpdateStakeholder changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
+		Description: "Changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
 		Fields: map[string]string{
 			"captableStakeholderPatch.city":                "City is the stakeholder's city.",
 			"captableStakeholderPatch.currentRelationship": "CurrentRelationship is how the stakeholder relates to the company, e.g.\nFOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike\nadding a stakeholder, it is not checked against the vocabulary.",
@@ -292,8 +295,23 @@ func init() {
 			"captableUpdated.success":                      "Success is true when the update was applied.",
 		},
 	})
+	zip.Describe("POST /v1/captable/classes", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
+	zip.Describe("POST /v1/captable/convertibles", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
+	zip.Describe("POST /v1/captable/options", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
+	zip.Describe("POST /v1/captable/plans", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
+	zip.Describe("POST /v1/captable/rounds", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
 	zip.Describe("POST /v1/captable/rounds/:id/close", zip.Doc{
-		Description: "CloseRound closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
+		Description: "Closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
 		Fields: map[string]string{
 			"captableRoundCloseRequest.closeDate": "CloseDate is the date to record the round as closed on. Optional: omitted,\nnull or empty records TODAY. Any JSON scalar is accepted and stored as its\ntext, and the text is stored unparsed, so a caller that wants an ISO date\nsends one.",
 			"captableRoundCloseRequest.id":        "ID is the round to close. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
@@ -301,8 +319,23 @@ func init() {
 			"captableUpdated.success":             "Success is true when the update was applied.",
 		},
 	})
+	zip.Describe("POST /v1/captable/rounds/:id/investments", zip.Doc{
+		Description: "Is route with the :id path param threaded into params.",
+	})
+	zip.Describe("POST /v1/captable/safes", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
+	zip.Describe("POST /v1/captable/shares", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
+	zip.Describe("POST /v1/captable/shares/transfer", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
+	zip.Describe("POST /v1/captable/stakeholders", zip.Doc{
+		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+	})
 	zip.Describe("PUT /v1/captable/company", zip.Doc{
-		Description: "UpdateCompany sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.",
+		Description: "Sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.",
 		Fields: map[string]string{
 			"captableCompanyUpdate.incorporationCountry": "IncorporationCountry is the ISO country the entity is incorporated in.\nOptional; omitted, null or empty clears it. Any JSON scalar is accepted\nand stored as its text.",
 			"captableCompanyUpdate.incorporationState":   "IncorporationState is the state or province of incorporation. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text.",

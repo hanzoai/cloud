@@ -6,18 +6,18 @@ package analytics
 // (what @hanzo/insights and every PostHog-compatible SDK emit) are mapped onto
 // the native CaptureEvent and flow through the ONE capture path (normalize →
 // scrub → the event plane), and the console reads recent events back from
-// event.event through the ONE datastore client. Flags stay at /v1/flags (the
+// event.fact's act rows through the ONE datastore client. Flags stay at /v1/flags (the
 // native flags engine) — this namespace deliberately does not duplicate them.
 //
-// The PostHog wire is why /v1/insights/e is a DOOR and not an alias: external SDKs
-// emit this shape and insights.hanzo.ai rewrites every PostHog ingest path onto it,
-// so no canonical-wire door can serve them. decodeInsights below is the whole of
-// that difference — the door is declared in doors (event.go) and shares admission,
-// the write core and the receipt with /v1/event.
+// The PostHog wire had a door of its own here — /v1/insights/e — because external
+// SDKs emit this shape and insights.hanzo.ai rewrites every PostHog ingest path onto
+// it. It is retired: a wire is a SHAPE, and a shape never earned a path, so decodeEvent
+// sniffs this one on /v1/event and hands it to decodeInsights below. The wire did not
+// move — the ingress rewrite now targets /v1/event — so no caller did either, and this
+// file is the whole of the difference between the two shapes.
 //
 // Routes (org resolved SERVER-SIDE — same tenant gates as the rest):
 //
-//	POST /v1/insights/e       PostHog wire ingest: one event or {batch:[...]} (a door)
 //	GET  /v1/insights/events  recent events for the org (console read; limit<=200)
 //	GET  /v1/insights/health  liveness of the unified surface
 //
@@ -133,7 +133,7 @@ func decodeInsights(body []byte) ([]CaptureEvent, error) {
 }
 
 // productEvent is one stored product event as the console reads it back. The columns
-// are event.event's envelope; everything else the caller sent lives in the attributes
+// are event.fact's own columns; everything else the caller sent lives in the attributes
 // map, returned as the properties object.
 type productEvent struct {
 	// ID is the row's stable event id — the client's own idempotency id when it sent
@@ -184,13 +184,14 @@ func (o readOps) insightsEvents(ctx context.Context, in *limitQuery) (*eventList
 	if err != nil {
 		return nil, err
 	}
+	where, args := scope(org, signalAct)
 	rows, err := datastore.Query(ctx, `
 		SELECT id, time, name, kind, distinct_id, session_id,
 		       product, url, path, attributes
-		FROM `+eventsTable+`
-		WHERE org = ?
+		FROM `+factTable+`
+		WHERE `+where+`
 		ORDER BY time DESC
-		LIMIT ?`, org, in.rows())
+		LIMIT ?`, append(args, in.rows())...)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}

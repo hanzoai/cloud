@@ -250,7 +250,7 @@ func TestFinance_RevenueSourceDown_NoFabrication(t *testing.T) {
 }
 
 // newFakeCommerceFinance serves the vendor-COGS god-view (/v1/costs) plus
-// usage-rollup ($150 consumed) and subscriptions (one active $50/mo sub) so the
+// usage/rollup ($150 consumed) and subscriptions (one active $50/mo sub) so the
 // finance COGS + revenue + MRR aggregation is deterministic.
 func newFakeCommerceFinance() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -262,12 +262,12 @@ func newFakeCommerceFinance() *httptest.Server {
 				{"vendor":"digitalocean","service":"compute","amountCents":300000,"source":"actual","currency":"usd"},
 				{"vendor":"openai","service":"llm-inference","amountCents":50000,"source":"actual","currency":"usd"}
 			],"totalCents":350000,"currency":"usd"}`)
-		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
+		case strings.HasSuffix(r.URL.Path, "/usage/rollup"):
 			io.WriteString(w, `{"consumedCents":15000,"overageCents":0,"balance":{"balanceCents":0,"availableCents":0}}`)
 		case strings.HasSuffix(r.URL.Path, "/subscriptions"):
 			io.WriteString(w, `{"subscriptions":[
-				{"status":"active","plan":{"price":5000,"currency":"usd","interval":"month"}},
-				{"status":"canceled","plan":{"price":9900,"currency":"usd","interval":"month"}}
+				{"status":"active","mrrCents":5000,"plan":{"price":5000,"currency":"usd","interval":"month"}},
+				{"status":"canceled","mrrCents":9900,"plan":{"price":9900,"currency":"usd","interval":"month"}}
 			]}`)
 		default:
 			w.WriteHeader(404)

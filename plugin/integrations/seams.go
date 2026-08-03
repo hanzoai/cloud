@@ -18,7 +18,7 @@ import (
 // packages import each other in ways that WOULD cycle — coding needs git, git
 // needs integrations, integrations needs automations — which is exactly why the
 // wiring lives at a composition root that imports all of them and none of them
-// imports it. init() runs once at load, before cloud.Serve.
+// imports it. init() runs once at load, before cloud.Listen.
 func init() {
 	// The coding orchestrator needs git's CloneURL + VerifyRef, but clients/git
 	// imports clients/integrations, so coding -> git would cycle. This root

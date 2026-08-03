@@ -341,27 +341,22 @@ func TestPublic_AnonymousErrorAccepted(t *testing.T) {
 
 // TestPublic_ForeignOrgClaimBuysNothing: an anonymous caller that names a foreign org
 // EVERY way the wire allows — the X-Org-Id header, a body org/tenant field, groupId —
-// is not refused (it is anonymous traffic) but gains nothing: the only kind it sent is
-// non-allowlisted, so the receipt is 200 accepted:0 dropped:1 and no row exists to
-// carry `maxpower`. The tenant it would have landed under is proven by
+// is not refused at the GATE (it is anonymous traffic) but gains nothing: the only kind
+// it sent is non-allowlisted, so nothing is stored, the door answers 401, and no row
+// exists to carry `maxpower`. The tenant it would have landed under is proven by
 // TestAdmitPublic_ForeignOrgNeverStamped.
 func TestPublic_ForeignOrgClaimBuysNothing(t *testing.T) {
 	app := mountApp(t)
 	code, body := postAnon(t, app, "/v1/event",
 		`{"org":"maxpower","tenant_id":"maxpower","batch":[{"type":"event","event":"steal","groupId":"maxpower"}]}`,
 		map[string]string{"X-Org-Id": "maxpower"})
-	if code != http.StatusOK {
-		t.Fatalf("forged-org anonymous batch want 200 (all dropped, no warehouse needed), got %d (%s)", code, body)
-	}
-	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-		t.Fatalf("receipt = %+v, want accepted:0 dropped:1", r)
-	}
+	refusedAnon(t, "forged-org anonymous batch", code, body)
 }
 
 // TestPublic_NonAllowlistedKindRejected: a custom/product/billing event is refused
-// storage anonymously and reported in the honest receipt. A mixed batch keeps its
-// allowlisted events and drops the rest, which is why marketing telemetry lands while
-// the arbitrary surface stays shut.
+// storage anonymously and the door says so (401). A mixed batch keeps its allowlisted
+// events and drops the rest — and still 200s, which is why marketing telemetry lands
+// while the arbitrary surface stays shut.
 func TestPublic_NonAllowlistedKindRejected(t *testing.T) {
 	app := mountApp(t)
 	for _, body := range []string{
@@ -370,12 +365,7 @@ func TestPublic_NonAllowlistedKindRejected(t *testing.T) {
 		`{"batch":[{"type":"group","groupId":"maxpower"}]}`,
 	} {
 		code, got := postAnon(t, app, "/v1/event", body, nil)
-		if code != http.StatusOK {
-			t.Fatalf("non-allowlisted kind %s want 200 all-dropped, got %d (%s)", body, code, got)
-		}
-		if r := receipt(t, got); r.Accepted != 0 || r.Dropped != 1 {
-			t.Fatalf("non-allowlisted kind %s receipt = %+v, want accepted:0 dropped:1", body, r)
-		}
+		refusedAnon(t, "non-allowlisted kind "+body, code, got)
 	}
 	// Mixed batch: the pageview survives (so the request reaches the warehouse → 503),
 	// the custom event does not.
@@ -504,7 +494,7 @@ func TestPublic_PresentedKeyStillFailsClosed(t *testing.T) {
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false })
 	if code := postKeyed(t, app, "/v1/event", "hanzo.ai",
-		`{"api_key":"hk-bad","batch":[{"type":"pageview"}]}`, nil); code != http.StatusForbidden {
+		`{"api_key":"sk-bad","batch":[{"type":"pageview"}]}`, nil); code != http.StatusForbidden {
 		t.Fatalf("presented-but-unresolvable api_key want 403 (fail closed, not anonymous), got %d", code)
 	}
 	// Same for a publishable key IAM cannot resolve, on the sendBeacon-friendly carriers.
@@ -532,8 +522,8 @@ func TestAuthenticated_KeepsFullCapability(t *testing.T) {
 	commerce := `{"batch":[{"type":"event","event":"order_completed","revenue":99.5,` +
 		`"productId":"prod_1","quantity":2,"currency":"USD","groupId":"acme-team",` +
 		`"personId":"p1","properties":{"plan":"pro"}}]}`
-	if code, body := postAnon(t, app, "/v1/event", commerce, nil); code != http.StatusOK {
-		t.Fatalf("precondition: the commerce event must be dropped anonymously, got %d (%s)", code, body)
+	if code, body := postAnon(t, app, "/v1/event", commerce, nil); code != http.StatusUnauthorized {
+		t.Fatalf("precondition: the commerce event must be dropped anonymously (401), got %d (%s)", code, body)
 	}
 	if code, body := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", commerce); code != http.StatusServiceUnavailable {
 		t.Fatalf("bearer commerce event want 503 (admitted, full capability), got %d (%s)", code, body)
@@ -544,8 +534,8 @@ func TestAuthenticated_KeepsFullCapability(t *testing.T) {
 		`{"batch":[{"type":"identify","distinctId":"u1","personId":"p1"}]}`,
 		`{"batch":[{"type":"group","groupId":"acme-team"}]}`,
 	} {
-		if code, got := postAnon(t, app, "/v1/event", body, nil); code != http.StatusOK {
-			t.Fatalf("precondition: %s must be dropped anonymously, got %d (%s)", body, code, got)
+		if code, got := postAnon(t, app, "/v1/event", body, nil); code != http.StatusUnauthorized {
+			t.Fatalf("precondition: %s must be dropped anonymously (401), got %d (%s)", body, code, got)
 		}
 		if code, got := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", body); code != http.StatusServiceUnavailable {
 			t.Fatalf("bearer %s want 503 (admitted), got %d (%s)", body, code, got)

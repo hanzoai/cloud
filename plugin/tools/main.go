@@ -17,7 +17,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `tools openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "tools",
 		Price: cloud.Metered,
 		// The registry views (/v1/skills, /v1/mcp/servers, /v1/plugins) are this

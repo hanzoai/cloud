@@ -24,12 +24,16 @@ import (
 	"sync"
 	"time"
 
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cloud/cek"
+	// the "sqlite" database/sql name under both build tags. Importing modernc
+	// directly instead would double-register "sqlite" under CGO and panic at
+	// init. Blank import registers the driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -378,26 +382,14 @@ type catalog struct {
 	mu sync.Mutex
 }
 
-// openCatalog opens (creating if needed) the overlay DB at path and migrates it.
-// path may be ":memory:" for an ephemeral, non-persistent overlay (degraded
-// mode when no DataDir is configured). The "sqlite" driver is the hanzoai/sqlite
-// fork (mattn+SQLCipher on cgo, pure-Go on !cgo). MaxOpenConns(1) serializes
-// writes against the file lock without retry.
-func openCatalog(path string) (*catalog, error) {
-	db, err := cek.Open(cek.Global, path)
+// openCatalog opens (creating if needed) the overlay DB under dir and migrates
+// it. MaxOpenConns(1) serializes writes against the file lock without retry.
+func openCatalog(dir string) (*catalog, error) {
+	db, err := cek.Open(namespace.System(), "catalog", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open catalog store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	c := &catalog{db: db}
 	if err := c.migrate(); err != nil {
 		_ = db.Close()

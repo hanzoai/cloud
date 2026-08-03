@@ -25,13 +25,14 @@ func scopeApp(t *testing.T) *zip.App {
 	return app
 }
 
-// mountScopedReads is the three typed reads, registered exactly as mountScope
-// does. Shared by the tests that need only this slice of the surface.
+// mountScopedReads is the typed reads, registered exactly as mountScope does.
+// Shared by the tests that need only this slice of the surface.
 func mountScopedReads(app *zip.App) {
 	g := app.Group(o11yPrefix)
 	zip.Get(g, "/logs", handleLogs)
 	zip.Get(g, "/metrics", handleMetrics)
 	zip.Get(g, "/status", handleStatus)
+	zip.Get(g, "/availability", handleAvailability)
 }
 
 // authReq builds a request with a VALIDATED principal (X-User-Id set, as
@@ -58,7 +59,7 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 
 // A typed op receives a context and its decoded input — never the request — so the
 // validated org reaches it ONLY because cloud.Bridge parked it on the context.
-// cloud.Serve installs one app-wide, but o11y runs as its OWN binary
+// cloud.Listen installs one app-wide, but o11y runs as its OWN binary
 // (plugin/o11y/main.go builds a bare zip.App and calls MountO11y), and a context
 // value does not cross the socket between host and plugin: the host's Bridge parks
 // the org in the HOST. So MountO11y installs its own on the o11y group, and this

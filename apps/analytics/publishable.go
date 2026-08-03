@@ -233,12 +233,13 @@ func (o readOps) errors(ctx context.Context, in *limitQuery) (*errorList, error)
 	if err != nil {
 		return nil, err
 	}
+	where, args := scope(org, signalError)
 	rows, err := datastore.Query(ctx, `
 		SELECT id, time, name, distinct_id, session_id, product, url, path, attributes
-		FROM `+errorsTable+`
-		WHERE org = ?
+		FROM `+factTable+`
+		WHERE `+where+`
 		ORDER BY time DESC
-		LIMIT ?`, org, in.rows())
+		LIMIT ?`, append(args, in.rows())...)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}

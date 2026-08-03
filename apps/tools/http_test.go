@@ -196,7 +196,7 @@ func TestExternalMCPDispatch(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	store, err := OpenMCPServerStore(t.TempDir() + "/mcp.db")
+	store, err := OpenMCPServerStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenMCPServerStore: %v", err)
 	}
@@ -272,6 +272,14 @@ func (f fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 	return nil, io.EOF
 }
 func (f fakeKMS) PutSecret(_ context.Context, _ string, _ []byte) error { return nil }
+func (f fakeKMS) DeleteSecret(_ context.Context, ref string) error {
+	for id := range f {
+		if ref == authRef("acme", id) {
+			delete(f, id)
+		}
+	}
+	return nil
+}
 func (f fakeKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) {
 	return nil, io.EOF
 }

@@ -312,9 +312,7 @@ func (c *iamClient) mintUserKey(ctx context.Context, id, typ string) (string, er
 }
 
 // prefixForType is the one place the wire type and the credential prefix are tied
-// together: publishable keys are pk-, secret keys are sk-. hk- is sk- under an older
-// name, so a legacy secret key satisfies neither — deliberately: this gate runs only
-// on a FRESH mint, and IAM has not minted an hk- since v1.33.9.
+// together: publishable keys are pk-, secret keys are sk-.
 func prefixForType(typ string) string {
 	if typ == keyTypePublishable {
 		return "pk-"

@@ -4,7 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/namespace"
 )
 
 // TestLegacyCentsStoreOpens: a store written before prices were exact must still
@@ -17,8 +18,10 @@ import (
 // is a no-op against a table that already exists, which is exactly why the new
 // column has to be added by the migration and cannot be assumed present.
 func TestLegacyCentsStoreOpens(t *testing.T) {
-	path := t.TempDir() + "/marketplace.db"
-	db, err := cek.Open(cek.Global, path)
+	// Seeded at the SAME (namespace, subsystem, dir) Open uses, so this IS the file
+	// Open reads back.
+	dir := t.TempDir()
+	db, err := cek.Open(namespace.System(), "marketplace", dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -38,7 +41,7 @@ INSERT INTO listings VALUES ('lst_free','acme','t_free','Free','','',0,'USD','',
 		t.Fatalf("close: %v", err)
 	}
 
-	s, err := Open(path)
+	s, err := Open(dir)
 	if err != nil {
 		t.Fatalf("Open a legacy store: %v", err)
 	}
@@ -72,7 +75,7 @@ INSERT INTO listings VALUES ('lst_free','acme','t_free','Free','','',0,'USD','',
 	}
 
 	// Re-opening a migrated store is a no-op, not a second migration.
-	again, err := Open(path)
+	again, err := Open(dir)
 	if err != nil {
 		t.Fatalf("re-Open a migrated store: %v", err)
 	}

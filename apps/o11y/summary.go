@@ -21,7 +21,7 @@ package o11y
 // data — every field is a fact about OUR OWN services, identical for every
 // caller — so there is nothing to scope. The mechanism is the one this binary
 // already uses for /v1/health (serve.go), /v1/platform/health ("liveness must be
-// probe-able without a JWT") and isHealthPath's exemption in gate(): the identity
+// probe-able without a JWT") and o11y.Anonymous's exemption in gate(): the identity
 // middleware never rejects, it only strips and re-mints, and a route is public by
 // simply not calling a principal gate. No bypass is invented here and none is
 // needed — this handler just does not ask who is calling. Reads are never
@@ -58,10 +58,10 @@ import (
 )
 
 // summaryTTL bounds how stale the served snapshot may be. The prober writes
-// hanzo_service_up every 30s, so re-reading VictoriaMetrics faster than this buys
-// no freshness — it only multiplies load on the metrics store at exactly the
+// hanzo_service_up every 30s, so re-reading the store faster than this buys no
+// freshness — it only multiplies load on the telemetry store at exactly the
 // moment (an outage) when everyone reloads the status page at once. It is also
-// what makes an unauthenticated endpoint safe to expose: a flood costs one VM
+// what makes an unauthenticated endpoint safe to expose: a flood costs one store
 // read per TTL, not one per request.
 const summaryTTL = 15 * time.Second
 
@@ -189,10 +189,16 @@ func handleSummary(ctx context.Context, _ *noArgs) (*StatusSummary, error) {
 	return buildSummary(brandID, up, checkedAt), nil
 }
 
-// serviceUp is one probed service and whether it answered.
+// serviceUp is one probed service and whether it answered. Shared with the
+// availability read (availability.go), which publishes it directly — it is the
+// same value, so it is the same type, and the tags are what let the one type
+// reach the wire without a parallel copy of itself.
 type serviceUp struct {
-	Name string
-	Up   bool
+	// Name is the service as the fleet prober knows it (probes.go's target name,
+	// which is the `service` label on hanzo_service_up).
+	Name string `json:"name"`
+	// Up is true when the service answered its own health URL on the last cycle.
+	Up bool `json:"up"`
 }
 
 // buildSummary projects the availability read into the status document. Pure —
@@ -269,7 +275,7 @@ type availabilitySnapshot struct {
 var availability availabilitySnapshot
 
 // fleetAvailability returns the current up/down state of every probed service,
-// re-reading VictoriaMetrics at most once per summaryTTL.
+// re-reading the telemetry store at most once per summaryTTL.
 //
 // An error means we do not know — the metrics store is unset, unreachable, or
 // reports no hanzo_service_up at all (the prober is not running, or has never
@@ -285,7 +291,7 @@ func fleetAvailability(ctx context.Context) ([]serviceUp, time.Time, error) {
 		return availability.services, availability.at, nil
 	}
 
-	series, err := newVMClient().queryInstant(ctx, upMetric)
+	series, err := latestGauge(ctx, upMetric)
 	if err != nil {
 		if len(availability.services) > 0 {
 			return availability.services, availability.at, nil
@@ -304,11 +310,11 @@ func fleetAvailability(ctx context.Context) ([]serviceUp, time.Time, error) {
 	// rather than reported under an empty name.
 	out := make([]serviceUp, 0, len(series))
 	for _, s := range series {
-		name := strings.TrimSpace(s.metric["service"])
+		name := strings.TrimSpace(s.Labels["service"])
 		if name == "" {
 			continue
 		}
-		out = append(out, serviceUp{Name: name, Up: s.value == 1})
+		out = append(out, serviceUp{Name: name, Up: s.Value == 1})
 	}
 	if len(out) == 0 {
 		if len(availability.services) > 0 {

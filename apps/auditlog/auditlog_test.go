@@ -14,11 +14,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// newStore opens an in-memory audit recorder (single connection keeps :memory:
-// alive across queries) and seeds it with records across two orgs.
+// newStore opens a throwaway audit recorder and seeds it with records across
+// two orgs.
 func newStore(t *testing.T) *audit.Recorder {
 	t.Helper()
-	rec, err := audit.Open(":memory:", nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}

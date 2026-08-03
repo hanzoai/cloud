@@ -384,3 +384,47 @@ func keysOf(m map[string]string) []string {
 	sort.Strings(out)
 	return out
 }
+
+// A random master is honest over an EMPTY data directory and catastrophic over a
+// populated one: every file was encrypted under a key the new master replaces, so
+// each opens as "file is not a database" while the data sits intact and
+// unreadable. This is the same mistake the launched-with-a-token branch already
+// refuses, and worse for the same reason — it succeeds.
+func TestDevMasterIsRefusedOverExistingDatabases(t *testing.T) {
+	dir := t.TempDir()
+	if had, err := hasDatabases(dir); err != nil || had {
+		t.Fatalf("an empty dir holds no databases: had=%v err=%v", had, err)
+	}
+
+	// One database, nested the way namespace.Path lays them out (<dir>/<kind>/<name>/<subsystem>.db).
+	nested := filepath.Join(dir, "org", "hanzo")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "agents.db"), []byte("not really sqlite"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	had, err := hasDatabases(dir)
+	if err != nil {
+		t.Fatalf("hasDatabases: %v", err)
+	}
+	if !had {
+		t.Fatal("a directory holding agents.db must report that it does — minting a new master over it makes every file unreadable")
+	}
+}
+
+// A directory that never existed is the clearest possible "nothing preceded this
+// process", and must not be mistaken for one we failed to read.
+func TestMissingDataDirIsNotAnError(t *testing.T) {
+	had, err := hasDatabases(filepath.Join(t.TempDir(), "never-created"))
+	if err != nil {
+		t.Fatalf("a missing dir is not an error: %v", err)
+	}
+	if had {
+		t.Fatal("a missing dir holds no databases")
+	}
+	// And neither is an unset one.
+	if had, err := hasDatabases(""); err != nil || had {
+		t.Fatalf("an unset dir holds no databases: had=%v err=%v", had, err)
+	}
+}

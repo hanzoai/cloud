@@ -105,7 +105,7 @@ func TestEventNormalizeThroughCore(t *testing.T) {
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if f.org != "acme" || f.name != "signup" || f.signal != signalEvent || f.kind != kindTrack {
+	if f.org != "acme" || f.name != "signup" || f.signal != signalAct || f.kind != kindTrack {
 		t.Fatalf("fact = org %q name %q signal %q kind %q", f.org, f.name, f.signal, f.kind)
 	}
 }
@@ -182,17 +182,16 @@ func TestSourceStampedIntoAttributes(t *testing.T) {
 // So "not 403" ⇒ the tenant gate admitted the request.
 
 // TestEvent_NoPrincipalNoKeyIsAnonymous: a caller with NO principal and NO key is not
-// refused — it takes the anonymous lane (public.go), attributed to the reserved public
-// tenant. The canonical-Event wire carries no `type`, so canonicalType folds it to
-// "event", which is not on the anonymous allowlist: the request is answered 200 with an
-// honest all-dropped receipt. What IS refused is a presented credential that does not
-// resolve (TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost).
+// refused AT THE GATE — it takes the anonymous lane (public.go), attributed to the
+// reserved public tenant. The canonical-Event wire carries no `type`, so canonicalType
+// folds it to "event", which is not on the anonymous allowlist: nothing is stored, and
+// the door answers 401 ingest_key_required rather than pretending otherwise. What is
+// refused at the GATE is a presented credential that does not resolve — 403
+// (TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost).
 func TestEvent_NoPrincipalNoKeyIsAnonymous(t *testing.T) {
 	app := mountApp(t)
 	code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"event":"e","distinctId":"d"}`)
-	if code != http.StatusOK {
-		t.Fatalf("no-principal no-key /v1/event want 200 (anonymous lane, kind dropped), got %d (%s)", code, body)
-	}
+	refusedAnon(t, "no-principal no-key /v1/event", code, body)
 	// A pageview on the same credential-less request IS stored — it reaches the
 	// warehouse (503 here, no datastore in the harness).
 	if code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
@@ -215,9 +214,9 @@ func TestEvent_BearerPrincipalAdmitted(t *testing.T) {
 func TestEvent_ResolvedKeyAdmitted(t *testing.T) {
 	app := mountApp(t)
 	got := stubResolver(t, func(string) (string, bool) { return "acme", true })
-	code := postKeyed(t, app, "/v1/event", "", `{"api_key":"hk-k","event":"e","distinctId":"d"}`, nil)
-	if *got != "hk-k" {
-		t.Fatalf("resolver handed key %q, want hk-k", *got)
+	code := postKeyed(t, app, "/v1/event", "", `{"api_key":"sk-k","event":"e","distinctId":"d"}`, nil)
+	if *got != "sk-k" {
+		t.Fatalf("resolver handed key %q, want sk-k", *got)
 	}
 	if code == http.StatusForbidden {
 		t.Fatalf("a resolved access key must pass the /v1/event gate, got 403")
@@ -227,7 +226,7 @@ func TestEvent_ResolvedKeyAdmitted(t *testing.T) {
 func TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost(t *testing.T) {
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false })
-	code := postKeyed(t, app, "/v1/event", "hanzo.ai", `{"api_key":"hk-bad","event":"e","distinctId":"d"}`, nil)
+	code := postKeyed(t, app, "/v1/event", "hanzo.ai", `{"api_key":"sk-bad","event":"e","distinctId":"d"}`, nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("presented-but-unresolvable key on /v1/event must 403 (fail closed), got %d", code)
 	}
@@ -254,11 +253,6 @@ func TestEvent_NoBrandHostFallback(t *testing.T) {
 				path, host, code, body)
 		}
 		code, body := doHost(t, app, path, "", "", host, commerce)
-		if code != http.StatusOK {
-			t.Fatalf("anonymous commerce %s on host %q want 200 all-dropped, got %d (%s)", path, host, code, body)
-		}
-		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-			t.Fatalf("anonymous commerce %s on host %q receipt = %+v, want accepted:0 dropped:1", path, host, r)
-		}
+		refusedAnon(t, "anonymous commerce "+path+" on host "+host, code, body)
 	}
 }

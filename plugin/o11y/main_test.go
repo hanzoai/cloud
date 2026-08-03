@@ -1,7 +1,7 @@
 package main
 
 // The o11y app is the ONE app binary that composes its own root instead of going
-// through cloud.Serve, and the host in front of it installs no middleware. That
+// through cloud.Listen, and the host in front of it installs no middleware. That
 // combination is how its three prefixes — /v1/o11y, /v1/sentry and, the one a
 // browser reads, /v1/summary — became the only public surface answering 200 with
 // no Access-Control-Allow-Origin: the browser received the status document and
@@ -31,7 +31,11 @@ func probeApp(t *testing.T, origins []string) *zip.App {
 	if pol == nil {
 		t.Fatal("edge.New must always return a usable store")
 	}
-	app := newApp(cloud.Deps{GatewayPolicy: pol})
+	// A config with no IAM issuer: the identity boundary still runs, still strips
+	// every client-supplied authority header, and validates nothing — the shape a
+	// deployment has before it is pointed at an issuer, and the one that must not
+	// leave the chain trusting the wire.
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
 	app.Get("/v1/summary", func(c *zip.Ctx) error {
 		return c.JSON(200, map[string]string{"page_title": "Hanzo status"})
 	})
@@ -121,5 +125,33 @@ func TestSummaryEmitsNothingWhenAllowlistEmpty(t *testing.T) {
 	}
 	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "" {
 		t.Fatalf("ACAO = %q, want none — an unset allowlist must not double the ingress header", got)
+	}
+}
+
+// This process composes its own root, so the identity trust boundary is not
+// inherited from cloud.Serve — it has to be installed here, and until it was,
+// every X-* authority header on the wire reached o11y's own org scoping and admin
+// gates verbatim. The chain must strip them whether or not a token validates.
+func TestChainStripsClientSuppliedAuthority(t *testing.T) {
+	pol, _ := edge.New("", "admin", edge.Policy{})
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
+
+	var seen struct{ org, user, admin string }
+	app.Get("/v1/summary", func(c *zip.Ctx) error {
+		seen.org, seen.user, seen.admin = c.Org(), c.User(), c.Header("X-User-IsAdmin")
+		return c.JSON(200, map[string]string{"ok": "1"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
+	req.Header.Set("X-User-Id", "u-forged")
+	req.Header.Set("X-User-IsAdmin", "true")
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if seen.user != "" {
+		t.Fatalf("a client-supplied X-User-Id survived the chain: %q", seen.user)
+	}
+	if seen.admin != "" {
+		t.Fatalf("a client-supplied X-User-IsAdmin survived the chain: %q", seen.admin)
 	}
 }

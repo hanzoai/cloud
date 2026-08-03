@@ -39,6 +39,12 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","id":"sub_7c2e"}`),
 	})
+	zip.Describe("GET /v1/git/:org/:project/:repo/info/refs", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("GET /v1/git/:org/:repo/info/refs", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("GET /v1/git/keys", zip.Doc{
 		Description: "Returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
 		Fields: map[string]string{
@@ -282,6 +288,18 @@ func init() {
 	zip.Describe("POST /git/publish", zip.Doc{
 		Description: "Reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
 	})
+	zip.Describe("POST /v1/git/:org/:project/:repo/git-receive-pack", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/git/:org/:project/:repo/git-upload-pack", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/git/:org/:repo/git-receive-pack", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/git/:org/:repo/git-upload-pack", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
 	zip.Describe("POST /v1/git/keys", zip.Doc{
 		Description: "Registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
 		Fields: map[string]string{
@@ -398,5 +416,23 @@ func init() {
 			"subscriptionView.repo":      "Repo is the repo whose lifecycle events are delivered.",
 		},
 		Example: json.RawMessage(`{"name":"widgets","channel":"#builds","events":["push.landed"]}`),
+	})
+	zip.Describe("POST /v1/git/webhook", zip.Doc{
+		Description: "Wraps a handler so a returned *zip.HTTPError is written in-band (its\nstatus + the {status,code,error} JSON zip's default errorHandler would emit)\nand nil is returned, instead of propagating the error up the middleware chain.\n\nIt exists for routes mounted UNDER an outer error-flattening filter. The\ncommerce embed installs one: mountCommerce (apps) registers ErrorHandlerJSON on\nan app.Group(\"/v1\") whose middleware rewrites ANY error a downstream /v1 handler\nPROPAGATES into a hardcoded HTTP 500 — so a reject that returns zip.ErrUnauthorized\n(401) or zip.ErrBadRequest (400) up the chain surfaces to the client as 500. A\nsubsystem mounted after commerce (git, sync, integrations, …) whose reject path\nmust keep its real 4xx wraps its handler here: the status is written before the\nfilter runs, so the filter's c.Next() sees nil and has nothing to flatten. A\nnon-HTTPError (a genuine unexpected failure) passes through unchanged — those are\n500s regardless. Compose with Handle: cloud.Terminal(cloud.Handle(s, fn)).",
+	})
+	zip.Describe("POST /v1/git/zap/createRepo", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/git/zap/deleteRepo", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/git/zap/getRepo", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/git/zap/listRepos", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/git/zap/usage", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 }

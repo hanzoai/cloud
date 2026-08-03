@@ -277,7 +277,7 @@ func TestTheListingCacheIsPerServerAndPerTenant(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	store, err := OpenMCPServerStore(t.TempDir() + "/mcp.db")
+	store, err := OpenMCPServerStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenMCPServerStore: %v", err)
 	}

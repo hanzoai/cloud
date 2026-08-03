@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/flow/workflows/:workflow", zip.Doc{
-		Description: "WorkflowDelete deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
+		Description: "Deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
 		Fields: map[string]string{
 			"flowRef.workflow": "Workflow is the workflow's UUID, taken from the path.",
 		},
@@ -42,7 +42,7 @@ func init() {
 		},
 	})
 	zip.Describe("PATCH /v1/flow/workflows/:workflow", zip.Doc{
-		Description: "WorkflowUpdate patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
+		Description: "Patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
 		Fields: map[string]string{
 			"flowUpdate.data":        "Data replaces the workflow graph when present, verbatim.",
 			"flowUpdate.description": "Description replaces the description when present.",
@@ -63,7 +63,7 @@ func init() {
 		Example: json.RawMessage(`{"workflow":"8f14e45f-…","input":"summarize today's tickets"}`),
 	})
 	zip.Describe("POST /v1/flow/workflows", zip.Doc{
-		Description: "WorkflowCreate creates a workflow in the caller's org. The org's project id\nis pinned server-side from the validated principal — there is no field by\nwhich a caller could place a workflow in another org.",
+		Description: "Creates a workflow in the caller's org. The org's project id\nis pinned server-side from the validated principal — there is no field by\nwhich a caller could place a workflow in another org.",
 		Fields: map[string]string{
 			"flowCreate.data":        "Data is the workflow graph (the product's nodes/edges document),\nverbatim. Omit it to create an empty workflow.",
 			"flowCreate.description": "Description says what the workflow does.",

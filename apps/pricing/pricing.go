@@ -33,13 +33,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	hpricing "github.com/hanzoai/pricing"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -50,6 +49,9 @@ var (
 	// catalog read path. nil only before Mount; the read handlers fall back to
 	// the raw bundle output when it is nil.
 	cat *catalog
+	// plog is the subsystem logger, kept so the document assembly in RunSync can
+	// report where it sourced first-party prices. Set by Mount.
+	plog luxlog.Logger
 )
 
 // Mount registers the pricing surface on app per HIP-0106.
@@ -71,6 +73,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: load pricing.json: %w", err)
 	}
+	// The embedded snapshot ships the document's shape and the resold section;
+	// commerce owns the retail number on the models we make. See commerce.go.
+	plog = logger
+	pricingData = overlay(context.Background(), pricingData, logger)
 	plansExtra, err := hpricing.PlansExtra()
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: load plans-extra: %w", err)
@@ -82,6 +88,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: load plans catalog: %w", err)
 	}
+	// The Datastore rate card is authored in the pricing repo rather than produced
+	// by the sync, so it is its own file and its own global.
+	datastoreCard, err := hpricing.Datastore()
+	if err != nil {
+		return fmt.Errorf("pricing.Mount: load datastore card: %w", err)
+	}
 
 	h, err := goja.New(goja.Config{
 		Name:   "pricing",
@@ -90,6 +102,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			"__PRICING_DATA__": pricingData,
 			"__PLANS_EXTRA__":  plansExtra,
 			"__PLANS_DATA__":   plansData,
+			"__DATASTORE__":    datastoreCard,
 			"__MARKUP__": map[string]any{
 				"thirdParty":     parseFloatEnv("THIRD_PARTY_MARKUP", 1.0),
 				"computeMonthly": parseFloatEnv("COMPUTE_MARKUP_MONTHLY", 1.0),
@@ -110,11 +123,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("pricing.Mount: empty DataDir — the catalog enablement overlay requires a persistent data dir (set CLOUD_DATA_DIR); refusing to boot with a non-persistent overlay that would re-expose admin-hidden models on restart")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("pricing.Mount: data dir: %w", err)
-	}
-	dbPath := filepath.Join(deps.DataDir, "catalog.db")
-	cstore, err := openCatalog(dbPath)
+	cstore, err := openCatalog(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: open catalog overlay: %w", err)
 	}
@@ -210,7 +219,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		"section_routes", 14, // the fixed plans/infra/tools/gpu/policy sections
 		"gated_routes", 6, // models, free, featured, providers, summary, model/:name
 		"admin_routes", 3, // GET /v1/admin/catalog + PATCH models/* + PATCH providers/:name
-		"overlay_db", dbPath,
+		"overlay_db", "catalog", // the subsystem; build.go already logs the data dir
 		"express", false,
 		"goja", true,
 		"brand", deps.Brand,
@@ -559,9 +568,13 @@ func RunSync(ctx context.Context) (string, error) {
 		if v, ok := shaped["freeModels"]; ok {
 			m["freeModels"] = v
 		}
+		// hpricing.Pricing() re-reads the EMBEDDED snapshot, so a sync would
+		// otherwise discard the commerce overlay and quietly restore the
+		// snapshot's first-party prices. The document is assembled the same way
+		// in both places, which is the only way the two cannot disagree.
 		ts := time.Now().UTC().Format(time.RFC3339)
 		m["updated"] = ts
-		host.SetGlobal("__PRICING_DATA__", m)
+		host.SetGlobal("__PRICING_DATA__", overlay(ctx, m, plog))
 		return ts, nil
 	}
 	return time.Now().UTC().Format(time.RFC3339), nil

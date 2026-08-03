@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,7 +35,7 @@ type state struct {
 // mounted is the process-wide handle so Shutdown can close the store.
 var mounted *cloud.Service[state]
 
-// Mount wires /v1/legal/* and opens the sealed store under {DataDir}/legal.db. The
+// Mount wires /v1/legal/* and opens the sealed store under DataDir. The
 // e-sign and filing seams default to the honest stubs; a real provider is a
 // config-driven swap (the seams are provider-agnostic).
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -50,10 +48,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("legal.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("legal.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "legal.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("legal.Mount: open store: %w", err)
 	}
@@ -319,15 +314,11 @@ func decode(c *zip.Ctx, v any) error {
 	return c.Bind(v)
 }
 
-func clientIP(c *zip.Ctx) string {
-	if xff := c.Header("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
-	}
-	return c.Header("X-Real-Ip")
-}
+// clientIP is the caller's address, by the ONE rule — cloud.ClientIP. It lands in
+// a durable audit record, and the LEFT-most X-Forwarded-For entry (and X-Real-Ip)
+// are values the client writes: an address chosen by the party being audited is
+// not evidence.
+func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
 
 func nowUnix() int64 { return time.Now().Unix() }
 
