@@ -500,7 +500,7 @@ func TestADisposalThatCannotReachTheDerivedCopyDoesNotHappen(t *testing.T) {
 	before := fmt.Sprintf(`{"before":%q}`, time.Now().UTC().Add(-minRetention-24*time.Hour).Format(time.RFC3339))
 
 	w.stop(errors.New("the warehouse is not connected"))
-	code, raw := req(t, app, http.MethodPost, "/v1/ml/labels/dispose", "acme", "u_acme", before)
+	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/dispose", "acme", "u_acme", before)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("a disposal with no reachable warehouse = %d %s, want 503", code, raw)
 	}
@@ -510,11 +510,11 @@ func TestADisposalThatCannotReachTheDerivedCopyDoesNotHappen(t *testing.T) {
 
 	// The warehouse comes back and the same sweep completes, columnar half first.
 	w.start()
-	code, raw = req(t, app, http.MethodPost, "/v1/ml/labels/dispose", "acme", "u_acme", before)
+	code, raw = req(t, app, http.MethodPost, "/v1/risk/labels/dispose", "acme", "u_acme", before)
 	if code != http.StatusOK {
 		t.Fatalf("the retried disposal = %d %s, want 200", code, raw)
 	}
-	var out mlDisposeOut
+	var out riskDisposeOut
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)
 	}
@@ -534,11 +534,11 @@ func TestADisposalThatCannotReachTheDerivedCopyDoesNotHappen(t *testing.T) {
 // count reads how many assertions a tenant holds, over the wire.
 func count(t *testing.T, app *zip.App, org string) int {
 	t.Helper()
-	code, raw := req(t, app, http.MethodGet, "/v1/ml/labels", org, "u_"+org, "")
+	code, raw := req(t, app, http.MethodGet, "/v1/risk/labels", org, "u_"+org, "")
 	if code != http.StatusOK {
 		t.Fatalf("list = %d %s", code, raw)
 	}
-	var out mlLabelsOut
+	var out riskLabelsOut
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@ package label
 //
 // IT IS NOT THE RECORD. Every write lands in the tenant's own file first and is
 // mirrored after; a mirror write that fails is reported on the response and the
-// record stands. A caller that needs certainty reads /v1/ml/labels, which reads
+// record stands. A caller that needs certainty reads /v1/risk/labels, which reads
 // the file. Nothing here is ever the answer to "what did we assert" — only to
 // "join this at scale".
 //

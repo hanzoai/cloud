@@ -13,10 +13,22 @@ package label
 // asserted for itself — and an attribution taken from one is an attribution the
 // caller chose, which is not attribution at all.
 //
-// EVERY SCHEMA NAME IS PREFIXED `ml`. openapi.Weave refuses one name with two
-// shapes across apps, because a generated SDK binds whichever it read last, and
-// `fact`, `record`, `event` and `coverage` are exactly the names the next app
-// reaches for.
+// EVERY ADDRESS IS UNDER `/v1/risk`, AND THAT IS WHAT DECIDES THE PRODUCT.
+// openapi.Fold takes an operation's product tag from the FIRST /v1 segment of its
+// path and nothing else (openapi.Product), so the address is not a routing detail
+// that a tag can override — it is the published product. An address under
+// `/v1/ml` would therefore have filed these seven operations into the KServe
+// model-SERVING product, which is a different product with its own four paths,
+// its own consumers and its own SDK namespace; the floor ratchet would have read
+// `ml: 7 -> 14` and passed, because it only refuses a shrink.
+// addressTest walks the registry and pins it.
+//
+// EVERY SCHEMA NAME IS PREFIXED `risk`, matching the address. openapi.Weave
+// refuses one name with two shapes across apps, because a generated SDK binds
+// whichever it read last, and `fact`, `record`, `event` and `coverage` are
+// exactly the names the next app reaches for — which is also why one event here
+// is `riskLabelEvent` and not `riskEvent`: apps/risk already publishes a
+// `riskEvent`, and it is a scored decision rather than a judged one.
 
 import (
 	"context"
@@ -113,7 +125,7 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 	// installs it app-wide already; nesting is harmless and this one is scoped,
 	// so a host that ever stopped installing it globally does not silently turn
 	// every op below into an unauthenticated one.
-	g := app.Group("/v1/ml/labels")
+	g := app.Group("/v1/risk/labels")
 	g.Use(cloud.Bridge())
 
 	zapp := cloud.ZipApp(app)
@@ -125,51 +137,51 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 
 	// Declared on the App with WHOLE paths: the collection route IS the prefix,
 	// which a group cannot spell.
-	zip.Post(zapp, "/v1/ml/labels", o.label,
-		zip.WithOperationID("mlLabel"),
+	zip.Post(zapp, "/v1/risk/labels", o.label,
+		zip.WithOperationID("riskLabel"),
 		zip.WithSummary("Assert ground truth about events"),
-		zip.WithTags("ml"))
-	zip.Get(zapp, "/v1/ml/labels", o.labels,
-		zip.WithOperationID("mlLabels"),
+		zip.WithTags("risk"))
+	zip.Get(zapp, "/v1/risk/labels", o.labels,
+		zip.WithOperationID("riskLabels"),
 		zip.WithSummary("Read the assertions this tenant has recorded"),
-		zip.WithTags("ml"))
-	zip.Post(zapp, "/v1/ml/labels/resolve", o.resolve,
-		zip.WithOperationID("mlResolveLabels"),
+		zip.WithTags("risk"))
+	zip.Post(zapp, "/v1/risk/labels/resolve", o.resolve,
+		zip.WithOperationID("riskResolveLabels"),
 		zip.WithSummary("Resolve the label in force for named events, as of each event's own horizon"),
-		zip.WithTags("ml"))
-	zip.Get(zapp, "/v1/ml/labels/coverage", o.coverage,
-		zip.WithOperationID("mlLabelCoverage"),
+		zip.WithTags("risk"))
+	zip.Get(zapp, "/v1/risk/labels/coverage", o.coverage,
+		zip.WithOperationID("riskLabelCoverage"),
 		zip.WithSummary("How much of the window has matured, and how much of that is judged"),
-		zip.WithTags("ml"))
-	zip.Get(zapp, "/v1/ml/labels/vocabulary", o.vocabulary,
-		zip.WithOperationID("mlLabelVocabulary"),
+		zip.WithTags("risk"))
+	zip.Get(zapp, "/v1/risk/labels/vocabulary", o.vocabulary,
+		zip.WithOperationID("riskLabelVocabulary"),
 		zip.WithSummary("The closed vocabularies and the precedence rule that resolves a conflict"),
-		zip.WithTags("ml"))
-	zip.Post(zapp, "/v1/ml/labels/dispose", o.dispose,
-		zip.WithOperationID("mlDisposeLabels"),
+		zip.WithTags("risk"))
+	zip.Post(zapp, "/v1/risk/labels/dispose", o.dispose,
+		zip.WithOperationID("riskDisposeLabels"),
 		zip.WithSummary("Dispose of this tenant's expired assertions, whole records only"),
-		zip.WithTags("ml"))
-	zip.Post(zapp, "/v1/ml/labels/hold", o.hold,
-		zip.WithOperationID("mlHoldLabels"),
+		zip.WithTags("risk"))
+	zip.Post(zapp, "/v1/risk/labels/hold", o.hold,
+		zip.WithOperationID("riskHoldLabels"),
 		zip.WithSummary("Place or release a litigation hold on named records"),
-		zip.WithTags("ml"))
+		zip.WithTags("risk"))
 }
 
 // ── assert ───────────────────────────────────────────────────────────────────
 
-// mlLabelIn is a batch of ground truth.
-type mlLabelIn struct {
+// riskLabelIn is a batch of ground truth.
+type riskLabelIn struct {
 	// Labels is the batch. Each member is judged on its own: one refusal does
 	// not discard the rest, because a webhook redelivering five disputes must
 	// not lose four of them to one malformed fifth.
-	Labels []mlLabelFact `json:"labels"`
+	Labels []riskLabelFact `json:"labels"`
 }
 
-// mlLabelFact is one assertion. It is idempotent on its CONTENT: the same
+// riskLabelFact is one assertion. It is idempotent on its CONTENT: the same
 // chargeback delivered twice is one record, and anything that differs in any
 // field is a different assertion and is recorded beside the first. Nothing here
 // ever overwrites anything.
-type mlLabelFact struct {
+type riskLabelFact struct {
 	// Kind is what the subject is: account, agent, merchant, payout, person,
 	// session or transaction. Closed, because a typo in an open field would shard
 	// a tenant's labels into a partition nothing reads and nothing would say so.
@@ -207,15 +219,15 @@ type mlLabelFact struct {
 	Confidence float64 `json:"confidence,omitempty"`
 }
 
-// mlLabelOut reports what happened to each member of the batch.
-type mlLabelOut struct {
+// riskLabelOut reports what happened to each member of the batch.
+type riskLabelOut struct {
 	Recorded  int `json:"recorded"`
 	Duplicate int `json:"duplicate"`
 	Refused   int `json:"refused"`
 	// Results is per fact, in the order sent, so a caller can retry exactly the
 	// members that were refused and can log the content digest of the ones that
 	// landed.
-	Results []mlLabelResult `json:"results"`
+	Results []riskLabelResult `json:"results"`
 	// Mirror names why the columnar copy did not take this batch, when it did
 	// not. The record is already durable in the tenant's own store by then — the
 	// warehouse copy exists to make a training join cheap, and its absence is a
@@ -230,7 +242,7 @@ type mlLabelOut struct {
 	Pending int `json:"pending,omitempty"`
 }
 
-type mlLabelResult struct {
+type riskLabelResult struct {
 	// ID is the content digest of the assertion — the id a redelivery of the
 	// same fact resolves to.
 	ID string `json:"id"`
@@ -253,7 +265,7 @@ type mlLabelResult struct {
 // earlier observation instant seeing exactly what it saw.
 //
 // The asserter is stamped from the validated credential and is not a body field.
-func (o ops) label(ctx context.Context, in *mlLabelIn) (*mlLabelOut, error) {
+func (o ops) label(ctx context.Context, in *riskLabelIn) (*riskLabelOut, error) {
 	sc, st, err := tenantOf(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -266,13 +278,13 @@ func (o ops) label(ctx context.Context, in *mlLabelIn) (*mlLabelOut, error) {
 	}
 
 	now := time.Now().UTC()
-	out := &mlLabelOut{Results: make([]mlLabelResult, 0, len(in.Labels))}
+	out := &riskLabelOut{Results: make([]riskLabelResult, 0, len(in.Labels))}
 
 	for _, w := range in.Labels {
 		f, err := decode(w, sc.by, now)
 		if err != nil {
 			out.Refused++
-			out.Results = append(out.Results, mlLabelResult{Status: refused, Refusal: err.Error()})
+			out.Results = append(out.Results, riskLabelResult{Status: refused, Refusal: err.Error()})
 			continue
 		}
 		res, err := st.record(ctx, f)
@@ -289,7 +301,7 @@ func (o ops) label(ctx context.Context, in *mlLabelIn) (*mlLabelOut, error) {
 		} else {
 			out.Duplicate++
 		}
-		out.Results = append(out.Results, mlLabelResult{ID: res.ID, Status: res.Status})
+		out.Results = append(out.Results, riskLabelResult{ID: res.ID, Status: res.Status})
 	}
 
 	// Durable first, columnar after — and the columnar half sends the BACKLOG,
@@ -326,7 +338,7 @@ func (o ops) label(ctx context.Context, in *mlLabelIn) (*mlLabelOut, error) {
 }
 
 // decode turns one wire fact into a validated record, stamping the asserter.
-func decode(w mlLabelFact, by string, now time.Time) (Fact, error) {
+func decode(w riskLabelFact, by string, now time.Time) (Fact, error) {
 	at, err := stamp(w.At)
 	if err != nil {
 		return Fact{}, fmt.Errorf("at: %w", err)
@@ -350,9 +362,9 @@ func decode(w mlLabelFact, by string, now time.Time) (Fact, error) {
 
 // ── read ─────────────────────────────────────────────────────────────────────
 
-// mlLabelsIn narrows a read of the record plane. Every field binds as a
+// riskLabelsIn narrows a read of the record plane. Every field binds as a
 // parameter; none becomes SQL text.
-type mlLabelsIn struct {
+type riskLabelsIn struct {
 	// Kind and Subject narrow to one entity.
 	Kind    string `json:"kind,omitempty"`
 	Subject string `json:"subject,omitempty"`
@@ -366,16 +378,16 @@ type mlLabelsIn struct {
 	Limit int `json:"limit,omitempty"`
 }
 
-type mlLabelsOut struct {
+type riskLabelsOut struct {
 	// Labels is the page, newest event first.
-	Labels []mlLabelRecord `json:"labels"`
+	Labels []riskLabelRecord `json:"labels"`
 	// Count is how many this page holds. It is not a total: a total over an
 	// unbounded append-only log is a full scan of a single-writer file.
 	Count int `json:"count"`
 }
 
-// mlLabelRecord is one assertion as it was recorded, with its whole provenance.
-type mlLabelRecord struct {
+// riskLabelRecord is one assertion as it was recorded, with its whole provenance.
+type riskLabelRecord struct {
 	ID      string `json:"id"`
 	Kind    string `json:"kind"`
 	Subject string `json:"subject"`
@@ -406,13 +418,13 @@ type mlLabelRecord struct {
 // It reads the RECORD — the tenant's own store — and not the columnar copy, so
 // what it returns is what would be produced in an audit. Narrow it by entity, by
 // asserter, or by event window.
-func (o ops) labels(ctx context.Context, in *mlLabelsIn) (*mlLabelsOut, error) {
+func (o ops) labels(ctx context.Context, in *riskLabelsIn) (*riskLabelsOut, error) {
 	_, st, err := tenantOf(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
 	if in == nil {
-		in = &mlLabelsIn{}
+		in = &riskLabelsIn{}
 	}
 	from, err := optional(in.From)
 	if err != nil {
@@ -429,7 +441,7 @@ func (o ops) labels(ctx context.Context, in *mlLabelsIn) (*mlLabelsOut, error) {
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "the record plane could not be read")
 	}
-	out := &mlLabelsOut{Labels: make([]mlLabelRecord, 0, len(facts)), Count: len(facts)}
+	out := &riskLabelsOut{Labels: make([]riskLabelRecord, 0, len(facts)), Count: len(facts)}
 	for _, f := range facts {
 		out.Labels = append(out.Labels, render(f))
 	}
@@ -438,9 +450,9 @@ func (o ops) labels(ctx context.Context, in *mlLabelsIn) (*mlLabelsOut, error) {
 
 // ── resolve ──────────────────────────────────────────────────────────────────
 
-// mlResolveIn names the events to resolve and the observation they are resolved
+// riskResolveIn names the events to resolve and the observation they are resolved
 // under.
-type mlResolveIn struct {
+type riskResolveIn struct {
 	// Subjects are the exact events being judged. Each carries its own event
 	// time, because the as-of that keeps the future out is derived from that
 	// instant plus the horizon — one as-of over a whole batch would give a
@@ -449,7 +461,7 @@ type mlResolveIn struct {
 	// One entry per DISTINCT (kind, subject, at): naming an event twice answers
 	// once, because an event resolved twice would list its own winner as a
 	// contrary claim and would hand a materialiser duplicate training rows.
-	Subjects []mlEvent `json:"subjects"`
+	Subjects []riskLabelEvent `json:"subjects"`
 	// Horizon is how many days an event must age before it may be resolved at
 	// all, and it is the whole of the no-leakage rule. 120 for the payment lane
 	// (past the Visa and Mastercard dispute windows), 14 for signup abuse.
@@ -465,18 +477,18 @@ type mlResolveIn struct {
 	Now string `json:"now,omitempty"`
 }
 
-type mlEvent struct {
+type riskLabelEvent struct {
 	Kind    string `json:"kind"`
 	Subject string `json:"subject"`
 	At      string `json:"at"`
 }
 
-type mlResolveOut struct {
+type riskResolveOut struct {
 	// Now and Horizon echo the observation this answer was computed under. A
 	// resolved label without them is a claim nobody can check.
 	Now     string       `json:"now"`
 	Horizon int          `json:"horizon"`
-	Labels  []mlResolved `json:"labels"`
+	Labels  []riskResolved `json:"labels"`
 	// Unmatured is how many named events had not aged past the horizon. They are
 	// not unlabelled — they are not yet ASKABLE, and a supervised training set
 	// must exclude them rather than treat them as negatives.
@@ -488,8 +500,8 @@ type mlResolveOut struct {
 	Unlabelled int `json:"unlabelled"`
 }
 
-// mlResolved is the label in force for one event, and what it beat.
-type mlResolved struct {
+// riskResolved is the label in force for one event, and what it beat.
+type riskResolved struct {
 	Kind    string `json:"kind"`
 	Subject string `json:"subject"`
 	At      string `json:"at"`
@@ -511,7 +523,7 @@ type mlResolved struct {
 	// horizon-filtered exactly like the winner: an assertion that was not
 	// knowable yet cannot even be named here, because naming it would leak its
 	// existence into a past decision.
-	Conflicts []mlLabelRecord `json:"conflicts,omitempty"`
+	Conflicts []riskLabelRecord `json:"conflicts,omitempty"`
 }
 
 // resolve answers, for each named event, which assertion was in force AS OF that
@@ -526,7 +538,7 @@ type mlResolved struct {
 // Three answers are distinct and all three are honest: a resolved label, an
 // event that has not matured, and a matured event nobody has judged. The last is
 // never reported as unproductive.
-func (o ops) resolve(ctx context.Context, in *mlResolveIn) (*mlResolveOut, error) {
+func (o ops) resolve(ctx context.Context, in *riskResolveIn) (*riskResolveOut, error) {
 	_, st, err := tenantOf(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -603,7 +615,7 @@ func (o ops) resolve(ctx context.Context, in *mlResolveIn) (*mlResolveOut, error
 		return nil, readErr(err)
 	}
 
-	out := &mlResolveOut{Now: w.Now.Format(time.RFC3339), Horizon: horizon}
+	out := &riskResolveOut{Now: w.Now.Format(time.RFC3339), Horizon: horizon}
 	held := map[string][]Fact{}
 	for _, f := range facts {
 		held[eventKey(f.Kind, f.Subject, f.At)] = append(held[eventKey(f.Kind, f.Subject, f.At)], f)
@@ -627,8 +639,8 @@ func eventKey(k Kind, subject string, at time.Time) string {
 	return string(k) + "\x00" + subject + "\x00" + at.UTC().Format(time.RFC3339)
 }
 
-func project(r Resolved) mlResolved {
-	out := mlResolved{
+func project(r Resolved) riskResolved {
+	out := riskResolved{
 		Kind: string(r.Kind), Subject: r.Subject,
 		At:          r.At.Format(time.RFC3339),
 		AsOf:        r.AsOf.Format(time.RFC3339),
@@ -648,8 +660,8 @@ func project(r Resolved) mlResolved {
 
 // ── coverage ─────────────────────────────────────────────────────────────────
 
-// mlCoverageIn bounds the coverage read.
-type mlCoverageIn struct {
+// riskCoverageIn bounds the coverage read.
+type riskCoverageIn struct {
 	// From and To bound the EVENT window, half-open, RFC 3339.
 	//
 	// Unstated, the window is the 90 days ENDING where maturity begins — `to` is
@@ -664,9 +676,9 @@ type mlCoverageIn struct {
 	Horizon int `json:"horizon,omitempty"`
 }
 
-// mlLabelCoverage answers the only question that decides whether a model can be
+// riskLabelCoverage answers the only question that decides whether a model can be
 // trained at all.
-type mlLabelCoverage struct {
+type riskLabelCoverage struct {
 	From    string `json:"from"`
 	To      string `json:"to"`
 	Horizon int    `json:"horizon"`
@@ -704,7 +716,7 @@ type mlLabelCoverage struct {
 	Unproductive int `json:"unproductive"`
 	// Sources breaks the judged events down by the source that WON, so a plane
 	// that looks labelled because one noisy source dominates is visible as such.
-	Sources []mlSourceCoverage `json:"sources"`
+	Sources []riskSourceCoverage `json:"sources"`
 	// Explore is the share of judged events whose winning assertion came from
 	// the below-the-line sample. A blocked transaction never produces a
 	// chargeback, so a training set with no exploration in it is a description of
@@ -722,7 +734,7 @@ type mlLabelCoverage struct {
 	Pending int `json:"pending,omitempty"`
 }
 
-type mlSourceCoverage struct {
+type riskSourceCoverage struct {
 	Source string `json:"source"`
 	// Facts is how many assertions this source filed; Won is how many judged
 	// events it was the assertion in force for. A source with many facts and few
@@ -743,13 +755,13 @@ type mlSourceCoverage struct {
 // so the counts obey exactly the leakage rule a materialisation would. It counts
 // only what was ASSERTED: what share of the whole event STREAM carries a label is
 // a question about the feature plane's denominator and is not answerable here.
-func (o ops) coverage(ctx context.Context, in *mlCoverageIn) (*mlLabelCoverage, error) {
+func (o ops) coverage(ctx context.Context, in *riskCoverageIn) (*riskLabelCoverage, error) {
 	_, st, err := tenantOf(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
 	if in == nil {
-		in = &mlCoverageIn{}
+		in = &riskCoverageIn{}
 	}
 	horizon := in.Horizon
 	if horizon == 0 {
@@ -791,7 +803,7 @@ func (o ops) coverage(ctx context.Context, in *mlCoverageIn) (*mlLabelCoverage, 
 	}
 
 	w := Window{Now: now, Horizon: horizonFor}
-	out := &mlLabelCoverage{
+	out := &riskLabelCoverage{
 		From: from.Format(time.RFC3339), To: to.Format(time.RFC3339),
 		Horizon: horizon, Facts: len(facts),
 	}
@@ -843,7 +855,7 @@ func (o ops) coverage(ctx context.Context, in *mlCoverageIn) (*mlLabelCoverage, 
 		if filed[s] == 0 && won[s] == 0 {
 			continue
 		}
-		out.Sources = append(out.Sources, mlSourceCoverage{Source: string(s), Facts: filed[s], Won: won[s]})
+		out.Sources = append(out.Sources, riskSourceCoverage{Source: string(s), Facts: filed[s], Won: won[s]})
 	}
 	// A source no longer in the vocabulary still has rows; report it rather than
 	// silently dropping its count out of a total that is supposed to add up.
@@ -855,7 +867,7 @@ func (o ops) coverage(ctx context.Context, in *mlCoverageIn) (*mlLabelCoverage, 
 	}
 	sort.Strings(extra)
 	for _, s := range extra {
-		out.Sources = append(out.Sources, mlSourceCoverage{Source: s, Facts: filed[Source(s)], Won: won[Source(s)]})
+		out.Sources = append(out.Sources, riskSourceCoverage{Source: s, Facts: filed[Source(s)], Won: won[Source(s)]})
 	}
 	// Read, never repaired. Delivery is the write path's job — a read that
 	// quietly wrote would be a surprise, and one that blocked on a warehouse
@@ -869,10 +881,10 @@ func (o ops) coverage(ctx context.Context, in *mlCoverageIn) (*mlLabelCoverage, 
 
 // ── vocabulary ───────────────────────────────────────────────────────────────
 
-type mlVocabularyIn struct{}
+type riskVocabularyIn struct{}
 
-// mlLabelVocabulary publishes the closed sets and the precedence rule.
-type mlLabelVocabulary struct {
+// riskLabelVocabulary publishes the closed sets and the precedence rule.
+type riskLabelVocabulary struct {
 	// Kinds, Dispositions and Sources are the closed vocabularies. A value
 	// outside them is refused at the door.
 	Kinds        []string `json:"kinds"`
@@ -896,11 +908,11 @@ type mlLabelVocabulary struct {
 // the whole defensibility of a contested label rests on being able to say why
 // one assertion beat another. The order returned here is derived from the same
 // declaration the resolver reads — it is not a description of it.
-func (o ops) vocabulary(ctx context.Context, _ *mlVocabularyIn) (*mlLabelVocabulary, error) {
+func (o ops) vocabulary(ctx context.Context, _ *riskVocabularyIn) (*riskLabelVocabulary, error) {
 	if _, _, err := tenantOf(ctx, o.s); err != nil {
 		return nil, err
 	}
-	out := &mlLabelVocabulary{
+	out := &riskLabelVocabulary{
 		Retention: int(minRetention.Hours() / 24),
 		Rule: []string{
 			"rank: the source's adjudication weight, strongest first",
@@ -923,8 +935,8 @@ func (o ops) vocabulary(ctx context.Context, _ *mlVocabularyIn) (*mlLabelVocabul
 
 // ── retention ────────────────────────────────────────────────────────────────
 
-// mlDisposeIn states the retention boundary this tenant is applying.
-type mlDisposeIn struct {
+// riskDisposeIn states the retention boundary this tenant is applying.
+type riskDisposeIn struct {
 	// Before disposes of assertions WRITTEN before this instant, RFC 3339. It is
 	// measured against the server clock at the write and not against the event
 	// or observation times, both of which the asserting caller supplies — a
@@ -932,7 +944,7 @@ type mlDisposeIn struct {
 	Before string `json:"before"`
 }
 
-type mlDisposeOut struct {
+type riskDisposeOut struct {
 	Before string `json:"before"`
 	// Disposed is how many whole records were removed. Records are disposed of
 	// whole, never redacted: a partially-erased compliance record is one nobody
@@ -965,7 +977,7 @@ type mlDisposeOut struct {
 // disposal if the warehouse cannot be reached. The other order would leave rows
 // in the warehouse that nothing can identify any more, which is a disposal that
 // did not happen and says it did.
-func (o ops) dispose(ctx context.Context, in *mlDisposeIn) (*mlDisposeOut, error) {
+func (o ops) dispose(ctx context.Context, in *riskDisposeIn) (*riskDisposeOut, error) {
 	sc, st, err := tenantOf(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -1016,7 +1028,7 @@ func (o ops) dispose(ctx context.Context, in *mlDisposeIn) (*mlDisposeOut, error
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "the record plane could not be read")
 	}
-	out := &mlDisposeOut{
+	out := &riskDisposeOut{
 		Before: before.Format(time.RFC3339), Disposed: len(expired),
 		Remaining: remaining, Held: held, Total: int(total),
 	}
@@ -1030,8 +1042,8 @@ func (o ops) dispose(ctx context.Context, in *mlDisposeIn) (*mlDisposeOut, error
 
 // ── litigation hold ──────────────────────────────────────────────────────────
 
-// mlHoldIn names the records a hold is placed on or released from.
-type mlHoldIn struct {
+// riskHoldIn names the records a hold is placed on or released from.
+type riskHoldIn struct {
 	// IDs are the content digests of the records, as returned by the write and
 	// by the read. They name records in THIS tenant's plane; an id belonging to
 	// anybody else names nothing here, because the statement runs against this
@@ -1044,7 +1056,7 @@ type mlHoldIn struct {
 	Hold bool `json:"hold"`
 }
 
-type mlHoldOut struct {
+type riskHoldOut struct {
 	// Hold echoes the state asked for.
 	Hold bool `json:"hold"`
 	// Changed is how many records moved into that state. A record already in it
@@ -1075,7 +1087,7 @@ type mlHoldOut struct {
 // Every named id is this tenant's or is nothing. The statement runs against the
 // tenant's own file, which holds no other tenant's rows and has no column that
 // could name one.
-func (o ops) hold(ctx context.Context, in *mlHoldIn) (*mlHoldOut, error) {
+func (o ops) hold(ctx context.Context, in *riskHoldIn) (*riskHoldOut, error) {
 	sc, st, err := tenantOf(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -1126,13 +1138,13 @@ func (o ops) hold(ctx context.Context, in *mlHoldIn) (*mlHoldOut, error) {
 	}
 	o.s.Log.Info("label: litigation hold", "tenant", sc.tenant.String(), "by", sc.by,
 		"hold", in.Hold, "named", len(ids), "changed", changed, "missing", len(ids)-present, "held", held)
-	return &mlHoldOut{Hold: in.Hold, Changed: changed, Missing: len(ids) - present, Held: held}, nil
+	return &riskHoldOut{Hold: in.Hold, Changed: changed, Missing: len(ids) - present, Held: held}, nil
 }
 
 // ── shared ───────────────────────────────────────────────────────────────────
 
-func render(f Fact) mlLabelRecord {
-	return mlLabelRecord{
+func render(f Fact) riskLabelRecord {
+	return riskLabelRecord{
 		ID: f.ID, Kind: string(f.Kind), Subject: f.Subject,
 		At: f.At.Format(time.RFC3339), Seen: f.Seen.Format(time.RFC3339),
 		Knowable:    f.Knowable.Format(time.RFC3339),
