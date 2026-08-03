@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -122,7 +123,13 @@ func Describe(dir string, app *zip.App) error {
 	// duties. A deployment's own /v1/openapi.json must answer with what it serves
 	// even if a subsystem it mounts is behind on its prose; a COMMITTED artifact is
 	// the fleet's contract and has no such excuse.
-	if err := openapi.Complete(doc); err != nil {
+	//
+	// manifest.OwnerOf is handed in because "whose address is this?" is a ROUTING
+	// question, and the manifest is the routing table the host itself reads. Asking
+	// it here means the gate attributes a declaration exactly as the fleet delivers
+	// the request — the two cannot drift, and openapi stays a projection that owes
+	// nothing to the fleet's shape.
+	if err := openapi.Complete(doc, manifest.OwnerOf); err != nil {
 		return fmt.Errorf("%s: %w", filepath.Base(dir), err)
 	}
 	// A subset describes ONE app, so it says what that app is — the synopsis of
