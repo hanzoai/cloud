@@ -538,12 +538,90 @@ func eventToRuntimePath(method, path string) (string, bool) {
 	return mapped, o11y.IngestWire(method, mapped)
 }
 
-// mountO11y is the ONE mount for the whole observability concept. It performs the
-// ordered sub-mounts in-process so the public registry carries a single `o11y`
-// name. Every cloud-native /v1/o11y/* route is registered here — inside this one
-// order-69 mount, hence BEFORE the hanzoai/o11y wildcard (order 70) — so Fiber's
-// in-order match gives the specific routes precedence over the runtime proxy.
-func MountO11y(a *zip.App, deps cloud.Deps) error {
+// MountO11y composes the whole observability surface into its host as ONE app,
+// through [zip.App.Graft] — the same seam apps/iam composes identity through.
+//
+// # Why the surface is an app and not a pile of routes on the host's router
+//
+// A grafted op arrives carrying Origin = the child's AppName, and zip qualifies
+// every named type that op reaches as "<origin>.<Type>" — unconditionally, not on
+// collision, so a published name is never a function of who else is in the room
+// (zip schemaRegistry.nameFor). That is why identity's 95 schemas are iam.* and
+// have never collided with anything.
+//
+// Registered straight onto the host, as this was, every one of these ops has an
+// empty Origin and its types are published under their bare Go names. o11y's are
+// ordinary words — Account, Channel, Event, Host, Service, TLSConfig — and so are
+// books', content's, analytics', plugins' and ingress'. Six names, twelve shapes,
+// one components block: a refusal at the weave (openapi/weave.go — "one name, two
+// shapes: every generated SDK would bind whichever it read last"), and had it not
+// been refused, an SDK binding whichever the merge read last. `make -f
+// mk/fleet.mk openapi-weave` could not run at all, so nobody could regenerate
+// openapi.yaml or add an API surface and prove it.
+//
+// ONE origin for the whole product, not one for the module and none for the rest.
+// The cloud-native reads here and hanzoai/o11y's relay table are two halves of one
+// route table — that is what mountScope's "specific routes before the module's"
+// invariant IS — and splitting the origin down that seam would namespace half of
+// o11y's types and leave the other half bare, which is two conventions for one
+// product.
+//
+// # What the child changes, and what it must not
+//
+// Nothing on the wire. Graft registers the child's own absolute patterns on the
+// host's router, in the order the child declares them, pointing at one delegate
+// that re-runs the child's router on the SAME fasthttp request. So the host's
+// chain — EdgeCORS, the identity boundary, the abuse gate — still runs first and
+// unchanged, and the ORDER two claimants on one address are resolved in is the
+// order they are written in below, which is the order they were already in. That
+// is load-bearing: cloud's org-pinned GET /v1/o11y/{logs,metrics} and POST
+// /v1/o11y/query_range are the ONE owner of those three addresses (scope.go), the
+// module declares them too, and first-registered is what makes the tenant-pinned
+// handler the one that answers. Inside one app that stays a local fact about two
+// adjacent lines instead of a global fact about the host's mount order.
+//
+// The child is a NAMESPACE, not a second server: it carries the host's logger and
+// cloud.ErrorHandler and no policy of its own, because everything a request meets
+// before its route belongs to the host. Contrast iam, whose child is a whole
+// service that brings its own Guard, error handler and config.
+//
+// cloud.Bridge still crosses, because [zip.Ctx.SetContext] parks on the
+// *fasthttp.RequestCtx and the delegate hands the child that same RequestCtx — so
+// the validated org parked at /v1/o11y is the one every typed op behind it reads.
+// door_test.go is the end-to-end proof, over the real mount.
+//
+// # The one thing a graft cannot carry
+//
+// [zip.App.Declaration] drops HEAD and OPTIONS unconditionally — they are the
+// shadows fiber generates for a GET and for CORS, and a host does not route those
+// on their own. A door opened with All therefore cannot cross a graft intact:
+// OPTIONS is a METHOD the /v1/sentry proxy genuinely answers, and it is published
+// as an operation. So that one door is registered on the HOST, at the same point
+// in the same order it always was, and it costs nothing here because a wildcard
+// proxy declares no typed op and contributes no schema. Everything with a shape
+// to name is in the child.
+func MountO11y(host *zip.App, deps cloud.Deps) error {
+	a := zip.New(zip.Config{
+		AppName:      "o11y",
+		Logger:       host.Logger(),
+		ErrorHandler: cloud.ErrorHandler,
+	})
+	if err := mount(a, host, deps); err != nil {
+		return err
+	}
+	return host.Graft(a)
+}
+
+// mount performs the ordered sub-mounts that make up the one observability
+// concept, onto the app that IS that concept. Every cloud-native /v1/o11y/* route
+// is registered here, BEFORE hanzoai/o11y's own table, so Fiber's in-order match
+// gives the specific routes precedence over the runtime relay.
+//
+// host is the router the graft lands on, and takes only what cannot cross one —
+// see [MountO11y]. It is registered in its own order here rather than before or
+// after the whole mount, because the /v1/sentry wildcard has to precede the
+// module's own /v1/sentry ingest routes exactly as it always did.
+func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	// Bridge FIRST, on the subtree the typed ops live under. A typed op receives
 	// only a context, so the validated org reaches it by being parked there —
 	// never as an In field, which is caller-supplied and would be a cross-tenant
@@ -554,9 +632,9 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// its OWN process (plugin/o11y/main.go builds a bare zip.App and mounts this).
 	// The host's app-wide Bridge parks the org on a context in the HOST; the
 	// request crosses to this process as headers, so without this install every
-	// typed op in the child would answer 403 for a caller the host had already
-	// validated. Nesting under Serve's own Bridge — the fused case — is harmless:
-	// the inner one is what the handler sees.
+	// typed op here would answer 403 for a caller the host had already validated.
+	// Nesting under Serve's own Bridge — the fused case — is harmless: the inner
+	// one is what the handler sees.
 	a.Group(o11yPrefix).Use(cloud.Bridge())
 
 	// READ/SERVE plane — specific routes before the wildcard.
@@ -581,7 +659,11 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// o11yapiserver/sentry.go registers them), and now that o11y runs out-of-process the HOST has
 	// to mount /v1/sentry as a second prefix or the request 404s before it ever
 	// reaches this process — see cloud.PluginSpec in apps.Wire().
-	mountSentry(a)
+	//
+	// On the HOST, because All opens OPTIONS and a graft cannot carry one; see
+	// [MountO11y]. Here in its order, so it still precedes the module's own
+	// /v1/sentry ingest routes and still swallows them exactly as before.
+	mountSentry(host)
 	// The Sentry wire on the ONE /v1/event door: POST /v1/event/{project}/envelope|store.
 	// The door's owner (analytics) carries the route — the project segment is
 	// variable, so no static prefix could route it here — and forwards through
@@ -625,10 +707,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// to take Deps for that one field, which made github.com/hanzoai/o11y require
 	// github.com/hanzoai/cloud — a module cycle, and the reason o11y's own
 	// community binary could not link its own route declarations.
-	if err := o11y.Mount(a); err != nil {
-		return err
-	}
-	return nil
+	return o11y.Mount(a)
 }
 
 // shutdownO11y tears down the write-plane resources that hold process-lifetime
