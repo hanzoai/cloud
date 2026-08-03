@@ -189,12 +189,12 @@ func TestSnapshot_SurvivesARestart(t *testing.T) {
 	if before.Learned == 0 {
 		t.Fatal("nothing was learned — the test proves nothing")
 	}
-	if err := first.close(); err != nil {
+	if err := first.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	after, _, err := second.state(k)
 	if err != nil {
 		t.Fatalf("state after restart: %v", err)
@@ -432,12 +432,12 @@ func TestResident_IsBuiltOnceHoweverManyAskAtOnce(t *testing.T) {
 	first := planeAt(t, dir)
 	holdFolds(t, first)
 	teach(t, first, k, stream(2_000, time.Now().UTC().Add(-6*time.Hour)))
-	if err := first.close(); err != nil {
+	if err := first.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	p := planeAt(t, dir)
-	defer func() { _ = p.close() }()
+	defer func() { _ = p.close(context.Background()) }()
 	holdFolds(t, p)
 	const callers = 32
 	var wg sync.WaitGroup
@@ -802,7 +802,7 @@ func TestMasses_SurviveAnUngracefulStop(t *testing.T) {
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	after, _, err := second.state(k)
 	if err != nil {
@@ -871,7 +871,7 @@ func TestMasses_AreWrittenDownOnAnIntervalToo(t *testing.T) {
 		t.Fatalf("release the files: %v", err)
 	}
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	after, _, err := second.state(k)
 	if err != nil {

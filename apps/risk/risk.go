@@ -222,11 +222,14 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 // refuses to score, which reads as "clean" to anything that does not check the
 // refusal. A control that is off for the length of a warm period is a control
 // that was off.
-func Shutdown(context.Context) error {
+// The context is the shutdown WINDOW and it is honoured, not decorative: the
+// composition root builds it with the deployment's own budget in it, so the plane
+// has no business inventing a bound of its own — or, as it did, waiting with none.
+func Shutdown(ctx context.Context) error {
 	if mounted == nil {
 		return nil
 	}
-	err := mounted.close()
+	err := mounted.close(ctx)
 	mounted = nil
 	return err
 }
