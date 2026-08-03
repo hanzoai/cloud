@@ -1,4 +1,4 @@
-package agentskills
+package skills
 
 import (
 	"sort"
@@ -50,7 +50,7 @@ var untypedByDesign = map[string]string{
 func skillOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	t.Helper()
 	app := newApp(t, "hanzo")
-	doc, err := openapi.Spec(app, openapi.Info{Title: "agentskills", Version: "v1"})
+	doc, err := openapi.Spec(app, openapi.Info{Title: "skills", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 	for key := range untypedByDesign {
 		if !served[key] {
-			t.Errorf("untypedByDesign names %q, which agentskills no longer serves", key)
+			t.Errorf("untypedByDesign names %q, which skills no longer serves", key)
 		}
 		if _, ok := typed[key]; ok {
 			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)

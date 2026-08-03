@@ -25,7 +25,7 @@
 // or an SDK method. The refusal apps/iam/typed_wire_test.go used to gate was a
 // property of that SEAM, never of IAM, and the seam is gone.
 //
-// The specific self-service routes layered in front (agentskills) still win, because
+// The specific self-service routes layered in front (skills) still win, because
 // zip matches the most specific pattern. The two addresses that were NOT specificity
 // but SHADOWING — /v1/iam/keys and /v1/iam/onboard, where apps/account registered
 // deprecated aliases at addresses IAM already owns and serves — are gone from
@@ -279,7 +279,7 @@ func paths(deps cloud.Deps) (dir, initDataPath string) {
 // /.well-known/openid-configuration off the ISSUER host, not off an API subtree. That
 // wildcard is part of the identity contract, not a catch-all, and it is narrow by
 // construction — it cannot shadow the console, and the deeper static routes under it
-// (agentskills' /.well-known/agent-skills/*, cloud's own /.well-known/openapi.json)
+// (skills' /.well-known/agent-skills/*, cloud's own /.well-known/openapi.json)
 // still win, because zip's matcher takes the most specific pattern regardless of
 // registration order.
 //

@@ -36371,7 +36371,7 @@ paths:
         schema:
           type: string
       summary: One skill's document, as markdown
-      x-app: agentskills
+      x-app: skills
   /.well-known/agent-skills/index.json:
     get:
       description: |-
@@ -36382,7 +36382,7 @@ paths:
         Public by design: the discovery surface carries no secrets, so there is no bearer and no tenant scope. Answers `Cache-Control: public, max-age=300`, and a catalogue that is not embedded is `{"error":…}` at 404.
       operationId: get_.well-known_agent-skills_index.json
       summary: The brand's master catalogue of agent skills
-      x-app: agentskills
+      x-app: skills
   /.well-known/jwks:
     get:
       description: |-
@@ -94499,8 +94499,8 @@ tags:
 - description: 'Package projects is where your sites live: create one, deploy a build,
     roll back to any release.'
   name: sites
-- description: 'Package tools is everything your org can call, in one list: connector
-    actions, functions, agents, skills and your own MCP servers.'
+- description: Package skills is the skill catalogue an AI client reads to learn what
+    it can do.
   name: skills
 - description: Package social is posting to every social account you own, now or on
     a schedule.
