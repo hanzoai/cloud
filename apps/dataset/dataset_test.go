@@ -1379,3 +1379,112 @@ func equalSets(a, b map[string]bool) bool {
 	}
 	return true
 }
+
+// ── a count over caller-sized values is not a bound ──────────────────────────
+
+// TestAnUnrepresentableSubjectIsExcludedAndCounted is the byte bound, end to end.
+//
+// THE DEFECT IT CLOSES. [maxRows] caps how many rows a materialisation holds and
+// [page] caps how many an export returns. Neither bounded a single byte: a row's
+// coordinates are float64s this plane counts, but its SUBJECT is a string this
+// plane does not write — the rollup lifts it from `distinct_id`, `session_id` and
+// `user_id`, which arrive on /v1/event from the caller, and `session_id` is length-
+// capped nowhere on the way in. So one tenant's traffic decided what "200k rows"
+// and "a few hundred megabytes" meant, and the published figures were arithmetic
+// over an unknown.
+//
+// AND THE DEGRADATION IS NAMED. A bound that quietly drops rows is worse than no
+// bound: the dataset that comes back looks complete, and a model fitted on it is
+// blind to a population nobody can see was missing. So the excluded subjects are
+// COUNTED, on the same pass, and the count rides on the version, the lineage and
+// the wire.
+func TestAnUnrepresentableSubjectIsExcludedAndCounted(t *testing.T) {
+	f := &fake{}
+	twin(f, "one")
+	k := mustKey("one")
+
+	// Two subjects no dataset can carry, in the SAME window as the representable
+	// ones, each in several buckets — so a plane that merely deduplicated would look
+	// the same as one that bounded.
+	huge := []string{strings.Repeat("a", maxSubjectBytes), strings.Repeat("b", maxSubjectBytes*40)}
+	for i, s := range huge {
+		for j := range 3 {
+			f.feature = append(f.feature, featRow{
+				Org: k.String(), Kind: kindPerson, Subject: s,
+				Bucket: origin0.Add(time.Duration(i*3+j) * time.Hour),
+				Value: map[string]float64{
+					"events": 1, "sessions": 1, "distincts": 1, "paths": 1,
+					"errors": 0, "calls": 1, "failures": 0, "tokens": 1, "spend_nano": 1, "ips": 1,
+				},
+			})
+		}
+	}
+
+	app := mountHTTP(t, newPlane(f))
+	got := build(t, app, "one", declared("d"))
+	if got.Status != statusReady {
+		t.Fatalf("refused: %s", got.Refusal)
+	}
+
+	// 1. NOT SILENT. The version states how many subjects it could not represent.
+	// `kindPerson` is 6 bytes, so the first oversized subject is 6+256 and the
+	// second 6+10240 — both past the bound, and both counted.
+	if got.Oversize != len(huge) {
+		t.Errorf("the version reports %d unrepresentable subjects, want %d — a bound that binds silently is indistinguishable from a tenant with no data", got.Oversize, len(huge))
+	}
+
+	// 2. THE BOUND BINDS. No row of an oversized subject reached the dataset, so
+	// every row in it is inside [maxRowBytes] and page*maxRowBytes bounds an export.
+	rows := exported(t, app, "one", "d")
+	if len(rows) == 0 {
+		t.Fatal("no rows at all; this test would prove nothing")
+	}
+	for _, r := range rows {
+		if n := len(r.Kind) + len(r.Subject); n > maxSubjectBytes {
+			t.Errorf("an exported row carries a %d-byte subject identity, past the %d-byte bound: %q", n, maxSubjectBytes, r.Subject)
+		}
+	}
+
+	// 3. THE REPRESENTABLE ROWS ARE ALL STILL THERE. A bound that also dropped
+	// legitimate rows would satisfy (1) and (2) and be a worse defect. twin() lays
+	// down 20 subjects across 3 buckets each.
+	if got.Counts.Subjects != 20 {
+		t.Errorf("%d representable subjects survived, want 20 — the bound excluded rows it should have carried", got.Counts.Subjects)
+	}
+
+	// 4. READABLE WHERE AN OPERATOR LOOKS, and part of what "reproducible" means.
+	var lin mlLineage
+	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	if code != http.StatusOK {
+		t.Fatalf("lineage: %d (%s)", code, body)
+	}
+	if err := json.Unmarshal(body, &lin); err != nil {
+		t.Fatalf("lineage: %v", err)
+	}
+	if lin.Oversize != len(huge) {
+		t.Errorf("lineage reports %d unrepresentable subjects, want %d", lin.Oversize, len(huge))
+	}
+	if !lin.Reproducible {
+		t.Errorf("a version whose source has not moved is not reproducible: %s", lin.Refusal)
+	}
+
+	// 5. AND IT IS FALSIFIABLE. One more oversized subject is a source that MOVED,
+	// even though nothing representable changed — so the drift report covers the
+	// population the bound excludes rather than ignoring it.
+	f.feature = append(f.feature, featRow{
+		Org: k.String(), Kind: kindPerson, Subject: strings.Repeat("c", maxSubjectBytes+1),
+		Bucket: origin0.Add(time.Hour),
+		Value:  map[string]float64{"events": 1},
+	})
+	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	if code != http.StatusOK {
+		t.Fatalf("lineage: %d (%s)", code, body)
+	}
+	lin = mlLineage{}
+	if err := json.Unmarshal(body, &lin); err != nil {
+		t.Fatalf("lineage: %v", err)
+	}
+	if lin.Reproducible {
+		t.Error("the source grew a subject this version could not carry and lineage still certifies it re-derivable")
+	}
+}
