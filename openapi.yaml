@@ -17469,6 +17469,251 @@ components:
             stripped.
           type: string
       type: object
+    mlDataset:
+      properties:
+        at:
+          description: At is when this version last changed state, and By who.
+          type: string
+        by:
+          type: string
+        counts:
+          $ref: '#/components/schemas/mlSplitCounts'
+          description: Counts is how the rows fall across the splits.
+        digest:
+          description: |-
+            Digest fingerprints the SPEC and the ROWS together. Two materialisations of
+            one spec agree on it or the plane says they do not.
+          type: string
+        name:
+          description: Name and Version identify the version.
+          type: string
+        refusal:
+          description: Refusal names why there are no bytes, when there are none.
+          type: string
+        running:
+          description: |-
+            Running is true while THIS process is materialising the version. A version
+            that is `materializing` and not running was started by a process that is
+            gone — two states the register cannot tell apart, because a register cannot
+            know which processes are alive.
+          type: boolean
+        share:
+          description: |-
+            Share is the fraction of the window's subjects admitted, in thousandths.
+            1000 means the whole window fitted under the cap; anything less means the
+            version is a reproducible sample and says by how much.
+          type: integer
+        spec:
+          $ref: '#/components/schemas/mlDatasetSpec'
+          description: Spec is the bound query this version was built from, exactly
+            as recorded.
+        status:
+          description: |-
+            Status is declared, materializing, ready or refused. Only `ready` has bytes,
+            and `ready` is terminal: a published version is never rewritten.
+          type: string
+        truncated:
+          description: |-
+            Truncated is true when the row cap bound before the window ran out. The
+            trailing subject is dropped whole when that happens, because half a subject
+            on one side of a split is exactly the leak the grouping prevents.
+          type: boolean
+        version:
+          type: integer
+      type: object
+    mlDatasetList:
+      properties:
+        items:
+          description: |-
+            Items is one entry per dataset, carrying its newest version. Never null: an
+            org that has declared nothing gets an empty array.
+          items:
+            $ref: '#/components/schemas/mlDataset'
+          type: array
+      type: object
+    mlDatasetRow:
+      properties:
+        at:
+          description: At is the row's instant.
+          type: string
+        id:
+          description: |-
+            ID names the row forever. It is DERIVED from the row's own subject and
+            instant, not allocated, so two materialisations of the same fact agree on it
+            without coordinating.
+          type: string
+        kind:
+          description: Kind and Subject name whose row this is.
+          type: string
+        point:
+          description: Point is the coordinates, in the order the version's spec names
+            its dims.
+          items:
+            type: number
+          type: array
+        split:
+          description: Split is train, val or test.
+          type: string
+        subject:
+          type: string
+      type: object
+    mlDatasetRows:
+      properties:
+        dataset:
+          type: string
+        digest:
+          description: |-
+            Digest is the version's fingerprint. An exported page that did not carry it
+            would be bytes with no way to say which dataset they are.
+          type: string
+        dims:
+          description: Dims names what each coordinate of Point means, in Point's
+            own order.
+          items:
+            type: string
+          type: array
+        limit:
+          type: integer
+        offset:
+          description: |-
+            Offset and Limit are the page actually served, which may be smaller than the
+            one asked for.
+          type: integer
+        rows:
+          description: Rows is the page. Never null.
+          items:
+            $ref: '#/components/schemas/mlDatasetRow'
+          type: array
+        version:
+          type: integer
+      type: object
+    mlDatasetSpec:
+      properties:
+        cuts:
+          description: |-
+            Cuts are the two RFC 3339 instants dividing train | val | test. Omit them to
+            take 70% and 85% of the window by time. Splitting is TEMPORAL and then
+            grouped by subject — a random split puts one device on both sides of the
+            line and the model memorises the entity instead of the behaviour.
+          items:
+            type: string
+          type: array
+        dims:
+          description: |-
+            Dims are the coordinates to carry, by published name. Empty takes the whole
+            surface. They are stored in the plane's own order, never the order given, so
+            two requests naming the same dims produce identical rows.
+          items:
+            type: string
+          type: array
+        from:
+          description: |-
+            From and To bound the event window, half-open, RFC 3339. The window may not
+            be longer than the source's own retention: past that, its older half is
+            already gone and the dataset would silently be shorter than it says.
+          type: string
+        horizon:
+          description: |-
+            Horizon is how many days a row must have aged before it may be admitted. It
+            is what keeps a fact that was not yet knowable at scoring time out of a
+            training set: a chargeback lands 30 to 120 days after the transaction it
+            condemns, so 120 for the payment lane and 14 for signup abuse. Zero admits
+            the whole window and is honest only where the outcome is immediate.
+          type: integer
+        kind:
+          description: |-
+            Kind narrows to one subject kind — person, session or account. Empty takes
+            every kind.
+          type: string
+        name:
+          description: |-
+            Name identifies the dataset across its versions: lower-case letters, digits
+            and hyphens, starting with a letter.
+          type: string
+        rows:
+          description: Rows caps the materialisation. Zero takes the plane's own bound.
+          type: integer
+        seed:
+          description: |-
+            Seed decides WHICH subjects are admitted when the window holds more rows
+            than the cap allows. It is recorded on the version, so a capped dataset is
+            reproducible rather than being whichever rows the store returned first.
+            Omit it to seed from the dataset's name.
+          type: string
+        to:
+          type: string
+      type: object
+    mlDatasetVersions:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/mlDataset'
+          type: array
+        name:
+          type: string
+      type: object
+    mlDisposal:
+      properties:
+        dataset:
+          type: string
+        rows:
+          type: integer
+        versions:
+          description: |-
+            Versions is how many versions went, and Rows how many rows they held between
+            them, as the register recorded them.
+          type: integer
+      type: object
+    mlLineage:
+      properties:
+        dataset:
+          type: string
+        digest:
+          description: |-
+            Digest is the version's fingerprint, repeated here so a lineage answer is
+            self-contained.
+          type: string
+        from:
+          description: |-
+            From and To are the window actually read — To is the window's end pulled
+            back by the maturity horizon, which is usually earlier than the spec's.
+          type: string
+        holds:
+          description: |-
+            Holds is what the source holds for the same window NOW. The difference
+            between it and Rows is the whole of the reproducibility claim.
+          type: integer
+        refusal:
+          type: string
+        reproducible:
+          description: |-
+            Reproducible is true when the source still holds what this version was built
+            from. Refusal says why not, when it is false.
+          type: boolean
+        retention:
+          description: |-
+            Retention is the source's own expiry rule as the store reports it, read at
+            materialisation time rather than assumed. A source whose retention is
+            shorter than this window cannot re-derive it.
+          type: string
+        rows:
+          description: |-
+            Rows and Subjects are what the source held for that window at
+            materialisation time.
+          type: integer
+        share:
+          description: Share is the fraction of subjects admitted, in thousandths.
+          type: integer
+        source:
+          description: Source is the plane the rows were derived from.
+          type: string
+        subjects:
+          type: integer
+        to:
+          type: string
+        version:
+          type: integer
+      type: object
     mlResource:
       properties:
         createdAt:
@@ -17502,6 +17747,36 @@ components:
           items:
             $ref: '#/components/schemas/mlResource'
           type: array
+      type: object
+    mlSplitCounts:
+      properties:
+        judged:
+          description: |-
+            Judged is how many rows carry a disposition. It is zero until a label plane
+            writes one, and reporting it plainly is what lets a model plane refuse to
+            rank rather than name a winner it cannot justify.
+          type: integer
+        productive:
+          description: |-
+            Productive and Unproductive are the two judged classes, so the imbalance is
+            visible before anyone trains on it.
+          type: integer
+        rows:
+          type: integer
+        subjects:
+          description: |-
+            Subjects is how many distinct subjects the rows belong to. Every row of one
+            subject is in ONE split, so this is the real sample size — the row count
+            flatters it whenever a subject is active.
+          type: integer
+        test:
+          type: integer
+        train:
+          type: integer
+        unproductive:
+          type: integer
+        val:
+          type: integer
       type: object
     mlTrials:
       properties:
@@ -69741,6 +70016,278 @@ paths:
       tags:
       - metrics
       x-app: metrics
+  /v1/ml/datasets:
+    get:
+      description: |-
+        Datasets lists this org's datasets, each with its newest version. An org that
+        has declared none gets an empty list; a store that cannot be reached gets a
+        refusal, never an empty list, because the two read identically and only one of
+        them is true.
+      operationId: mlDatasets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDatasetList'
+          description: ok
+      summary: List this org's datasets
+      tags:
+      - ml
+      x-app: dataset
+    post:
+      description: |-
+        Declares the next version of a dataset from a bound query over
+        this org's own feature surface.
+
+        It mints a VERSION and writes no rows: a version is declared, then materialised
+        once, then never rewritten. Version numbers are monotone and never reused, so
+        "version 3 of signups" means one thing forever — which is the whole reason a
+        model can cite one.
+
+        The window is bounded by the source's retention, the horizon by a year, the
+        rows by the plane's cap, and the number of datasets and versions per org by
+        their own limits. Every refusal names which bound it hit.
+      operationId: mlCreateDataset
+      requestBody:
+        content:
+          application/json:
+            example:
+              from: "2026-01-01T00:00:00Z"
+              horizon: 14
+              kind: person
+              name: signups
+              to: "2026-04-01T00:00:00Z"
+            schema:
+              $ref: '#/components/schemas/mlDatasetSpec'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDataset'
+          description: ok
+      summary: Declare the next version of a dataset
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}:
+    delete:
+      description: |-
+        Disposes of one dataset and every version of it: the rows are
+        dropped and the register is marked with what went.
+
+        This is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:
+        a table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is
+        the opposite of a retention decision belonging to the tenant whose records they
+        are. The drop is a partition drop on (org, dataset), so the tenant is the first
+        component of the thing being dropped and a disposal cannot be spelled across one.
+
+        The BYTES are what goes. The register keeps one `disposed` row per version — the
+        name, the number, the spec, the digest and who disposed of it when — for two
+        reasons: a retention obligation is answered by a record of the deletion, not by
+        silence; and version numbers must stay monotone, so that after `orders` is
+        disposed of and declared again the next version is 4 and not 1. A number that
+        could be reused would make every citation of `orders v3` ambiguous forever.
+
+        It is not reversible and there is no soft state in between. A version a model
+        cited has no rows once this returns, and every read of it says so.
+      operationId: mlDeleteDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDisposal'
+          description: ok
+      summary: Dispose of one dataset and every version of it
+      tags:
+      - ml
+      x-app: dataset
+    get:
+      description: |-
+        Dataset describes every version of one dataset, newest first — the whole
+        history, because the point of a version is that the older ones are still there
+        and a model fitted last quarter cites one of them.
+
+        A name this org does not own answers 404, exactly as an unknown name does, so a
+        probe learns nothing about another tenant's datasets.
+      operationId: mlDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDatasetVersions'
+          description: ok
+      summary: Describe every version of one dataset
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}/export:
+    get:
+      description: |-
+        Reads a published version's rows back, one bounded page at a
+        time, in the version's own stable row order.
+
+        Only a published version can be exported. Rows written by an attempt that never
+        completed are inert — no register row names them — and they are disposed of with
+        the dataset.
+      operationId: mlExportDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Version is the version to read. Zero takes the newest published
+          one.
+        example: 1
+        in: query
+        name: version
+        required: false
+        schema:
+          type: integer
+      - description: Split narrows to train, val or test. Empty reads every split.
+        example: train
+        in: query
+        name: split
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Offset is where the page starts, in the version's own row order (by id,
+          which is derived from the row and therefore stable forever).
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          Limit is how many rows to return. Zero and anything above the plane's bound
+          take the bound.
+        example: 500
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDatasetRows'
+          description: ok
+      summary: Read a version's rows back, one page at a time
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}/lineage:
+    get:
+      description: |-
+        Shows where a version's rows came from and whether that can
+        still be demonstrated.
+
+        The answer is MEASURED, not recalled: the plane asks the source the same
+        bounded question again and compares it to the fingerprint taken when the
+        version was built. Anything but exact agreement is reported as drift — the
+        source is fed by a rollup that runs behind the events, so "it holds more now"
+        is the ordinary case and it means re-running the spec would not reproduce this
+        version. An admitted gap is actionable; an unfalsifiable claim is not.
+
+        IT IS A PRICED, BOUNDED READ, because it is the same statement a
+        materialisation is charged for: an exact distinct-count over up to 400 days of
+        this org's feature surface. It takes the org's ONE source-scan slot, so a
+        tenant looping it spends one scan and not a thousand; it counts against the
+        plane's ceiling, so the fleet's warehouse is bounded too; and it runs under
+        this plane's own deadline rather than the caller's patience.
+      operationId: mlDatasetLineage
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Version is the version to trace. Zero takes the newest published
+          one.
+        example: 1
+        in: query
+        name: version
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlLineage'
+          description: ok
+      summary: Show where a version's rows came from, and whether that can still be
+        demonstrated
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}/materialize:
+    post:
+      description: |-
+        Builds the declared version into immutable rows and answers
+        202 as soon as the attempt is on record.
+
+        It never holds the request open for the work: a materialisation is a bounded
+        warehouse scan, and letting an HTTP client's timeout be a data plane's timeout
+        is how one tenant's retry loop becomes everyone's outage. ONE materialisation
+        runs per org at a time; a second is refused rather than queued, because a queue
+        admits the same work later and the honest answer to "again" while one is
+        running is that one is running.
+
+        Only a DECLARED version is admitted. A published version is immutable, and a
+        version whose earlier attempt did not complete is never re-attempted — that
+        would union two runs' rows under one number and make the digest a lie. In both
+        cases the answer is to declare a new version, which is what a second run over a
+        moving source honestly is.
+      operationId: mlMaterializeDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDataset'
+          description: accepted
+      summary: Materialise the declared version into immutable rows
+      tags:
+      - ml
+      x-app: dataset
   /v1/ml/health:
     get:
       description: |-

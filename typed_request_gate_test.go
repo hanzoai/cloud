@@ -29,6 +29,16 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
+	"apps/dataset/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
+		"establishes who is asking. The TENANT is resolved through apps/tenant, which reads " +
+		"principal.OrgFrom and nothing else; the request is needed for the other half, which is a " +
+		"different value on purpose: the BILLING identity. Materialising and tracing a lineage are " +
+		"priced acts, and the gate + debit need the ledger (principal.Ledger), the validated project " +
+		"sub-scope (principal.ValidatedProject — two facts, the project and whether a CLAIM backs it), " +
+		"the acting user for the register's `by` column, and the request id + client IP the debit is " +
+		"attributed with. None of those are the org and none can be an In field — a caller that could " +
+		"name its own ledger would bill another org. ONE function, which every op asks; it fails closed " +
+		"off the HTTP path, where there is no principal and so no tenant to act for.",
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
