@@ -1,4 +1,4 @@
-package agentskills
+package skills
 
 // End-to-end serve tests: drive real requests through the zip/fiber router
 // (app.Fiber().Test) exactly as production Serve wires it, so the assertions
@@ -17,8 +17,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
