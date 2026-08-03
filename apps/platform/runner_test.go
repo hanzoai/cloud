@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -20,7 +19,7 @@ const testBuildTok = "s3cr3t-build-callback-token"
 // /v1/runner request reaches launchDirectBuild and returns 202.
 func runnerApp(t *testing.T) *zip.App {
 	t.Helper()
-	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

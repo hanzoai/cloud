@@ -19,8 +19,8 @@
     "/v1/settings/{product}": {
       "get": {
         "operationId": "get_v1_settings_product",
-        "summary": "GetSettings reads the caller org's configuration for one product, with every secret field MASKED — only the names of the set secrets come back, never their values, which live in KMS.",
-        "description": "GetSettings reads the caller org's configuration for one product, with every\nsecret field MASKED — only the names of the set secrets come back, never their\nvalues, which live in KMS. A product the org has never configured is not a 404:\nit answers 200 with an empty config object, so the console's Settings tab always\nrenders and merges its own display defaults on top.",
+        "summary": "Reads the caller org's configuration for one product, with every secret field MASKED — only the names of the set secrets come back, never their values, which live in KMS.",
+        "description": "Reads the caller org's configuration for one product, with every\nsecret field MASKED — only the names of the set secrets come back, never their\nvalues, which live in KMS. A product the org has never configured is not a 404:\nit answers 200 with an empty config object, so the console's Settings tab always\nrenders and merges its own display defaults on top.",
         "tags": [
           "settings"
         ],
@@ -50,8 +50,8 @@
       },
       "put": {
         "operationId": "put_v1_settings_product",
-        "summary": "PutSettings writes the caller org's configuration for one product and answers the stored result, secrets masked.",
-        "description": "PutSettings writes the caller org's configuration for one product and answers the\nstored result, secrets masked. Secret VALUES are sealed into KMS under\norgs/{org}/settings/{product}/{key} and never touch this deployment's database;\nwith no KMS configured a write that carries any secret is refused whole (503)\nrather than dropping it or persisting it in the clear. A secret the body omits\nkeeps its stored value, so a partial write never silently clears one.",
+        "summary": "Writes the caller org's configuration for one product and answers the stored result, secrets masked.",
+        "description": "Writes the caller org's configuration for one product and answers the\nstored result, secrets masked. Secret VALUES are sealed into KMS under\norgs/{org}/settings/{product}/{key} and never touch this deployment's database;\nwith no KMS configured a write that carries any secret is refused whole (503)\nrather than dropping it or persisting it in the clear. A secret the body omits\nkeeps its stored value, so a partial write never silently clears one.",
         "tags": [
           "settings"
         ],

@@ -37,8 +37,8 @@
       },
       "post": {
         "operationId": "post_v1_auto_flows",
-        "summary": "FlowCreate creates a flow in the caller's org.",
-        "description": "FlowCreate creates a flow in the caller's org. The org is stamped\nserver-side from the validated principal — there is no field by which a\ncaller could place a flow in another org.",
+        "summary": "Creates a flow in the caller's org.",
+        "description": "Creates a flow in the caller's org. The org is stamped\nserver-side from the validated principal — there is no field by which a\ncaller could place a flow in another org.",
         "tags": [
           "auto"
         ],
@@ -79,8 +79,8 @@
     "/v1/auto/flows/{flow}": {
       "delete": {
         "operationId": "delete_v1_auto_flows_flow",
-        "summary": "FlowDelete deletes one of the caller's flows.",
-        "description": "FlowDelete deletes one of the caller's flows. A foreign id answers 404 and\ndeletes nothing.",
+        "summary": "Deletes one of the caller's flows.",
+        "description": "Deletes one of the caller's flows. A foreign id answers 404 and\ndeletes nothing.",
         "tags": [
           "auto"
         ],
@@ -137,8 +137,8 @@
       },
       "patch": {
         "operationId": "patch_v1_auto_flows_flow",
-        "summary": "FlowUpdate patches one of the caller's flows: the name, the graph, or both — only the stated fields move.",
-        "description": "FlowUpdate patches one of the caller's flows: the name, the graph, or both\n— only the stated fields move.",
+        "summary": "Patches one of the caller's flows: the name, the graph, or both — only the stated fields move.",
+        "description": "Patches one of the caller's flows: the name, the graph, or both\n— only the stated fields move.",
         "tags": [
           "auto"
         ],

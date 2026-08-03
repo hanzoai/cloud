@@ -44,10 +44,10 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -131,10 +131,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("automations.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("automations.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "automations.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("automations.Mount: open store: %w", err)
 	}
@@ -783,6 +780,17 @@ func startRun(s *cloud.Service[state], ctx context.Context, org string, f Flow, 
 	if err := checkRunBudget(s, ctx, org); err != nil {
 		return FlowRun{}, false, err
 	}
+	// Balance BEFORE the insert, and here rather than at any one caller, for the same
+	// reason the two bounds above are here: startRun is the ONE choke point every
+	// run-start path passes through — manual, MCP, trigger, cron — so a gate written
+	// anywhere else is a gate three entrypoints walk around.
+	//
+	// meterRun debits a unit for every run this starts, and nothing asked whether the
+	// org could pay for it: an org at $0 ran automations unbounded and the ledger went
+	// negative. The rate budget bounded the SHAPE of the spend, never the amount.
+	if err := gateRun(s, ctx, org); err != nil {
+		return FlowRun{}, false, err
+	}
 
 	now := time.Now().UnixMilli()
 	run := FlowRun{
@@ -1252,9 +1260,20 @@ func recordRunEnd(s *cloud.Service[state], ctx context.Context, in RunEndInput) 
 
 // ── billing + audit ───────────────────────────────────────────────────────────
 
-// meterUnit records one metered unit for an HTTP caller's org. Nil/disabled meter → no-op.
-func meterUnit(s *cloud.Service[state], org string, c *zip.Ctx) {
-	s.Bill.Meter(principal.Ledger(c), principal.Project(c), meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
+// gateRun refuses a run the org's ledger cannot cover, BEFORE the run row is written
+// and the engine dispatched. It gates the SAME unit meterRun debits, from the SAME
+// knob, so the amount authorized and the amount charged cannot drift; a deployment
+// that prices a run at 0 is un-gated exactly as it is un-billed.
+//
+// Scope is ("", false) — org- and service-scoped caps stay hard, the project axis
+// stays soft — because startRun serves the durable path too, where there is no
+// request and therefore no claim-bound project. It is the scope meterRun already
+// debits under, so the gate and the debit measure one thing.
+func gateRun(s *cloud.Service[state], ctx context.Context, org string) error {
+	if err := s.Bill.Gate(ctx, org, "", false, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind)); err != nil {
+		return cloud.Denied(err)
+	}
+	return nil
 }
 
 // meterRun records one metered unit for a flow run from the durable path (no HTTP
@@ -1441,7 +1460,14 @@ func engineErr(err error) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "automation engine not ready")
 	case ErrRateLimited, ErrBusy:
 		return zip.Errorf(http.StatusTooManyRequests, "%v", err)
-	default:
-		return zip.Errorf(http.StatusInternalServerError, "engine: %v", err)
 	}
+	// A refusal that already NAMES its own status is answered, never re-decided. The
+	// balance gate's 402 insufficient_balance has to reach the caller as itself; folded
+	// into the 500 below it tells a customer their automation is broken when what
+	// happened is that they ran out of credit, and no retry ever fixes that.
+	var he *zip.HTTPError
+	if errors.As(err, &he) {
+		return err
+	}
+	return zip.Errorf(http.StatusInternalServerError, "engine: %v", err)
 }

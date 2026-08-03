@@ -22,8 +22,8 @@
     "/v1/balancers": {
       "get": {
         "operationId": "get_v1_balancers",
-        "summary": "ListLoadBalancers returns every load balancer the caller's org owns, under the friendly names the org created them with.",
-        "description": "ListLoadBalancers returns every load balancer the caller's org owns, under the\nfriendly names the org created them with. Same account-wide filter as the VPC\nlisting: a load balancer outside the caller's \"o\"\u003corgHash\u003e- namespace is never\nin the answer.",
+        "summary": "Returns every load balancer the caller's org owns, under the friendly names the org created them with.",
+        "description": "Returns every load balancer the caller's org owns, under the\nfriendly names the org created them with. Same account-wide filter as the VPC\nlisting: a load balancer outside the caller's \"o\"\u003corgHash\u003e- namespace is never\nin the answer.",
         "tags": [
           "balancers"
         ],
@@ -54,8 +54,8 @@
       },
       "post": {
         "operationId": "post_v1_balancers",
-        "summary": "CreateLoadBalancer creates a load balancer in the caller's org namespace and answers 201 with it.",
-        "description": "CreateLoadBalancer creates a load balancer in the caller's org namespace and\nanswers 201 with it. The physical DigitalOcean name is derived server-side from\nthe validated org; a name that already exists there is a 409. Omitting\nforwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.",
+        "summary": "Creates a load balancer in the caller's org namespace and answers 201 with it.",
+        "description": "Creates a load balancer in the caller's org namespace and\nanswers 201 with it. The physical DigitalOcean name is derived server-side from\nthe validated org; a name that already exists there is a 409. Omitting\nforwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.",
         "tags": [
           "balancers"
         ],
@@ -98,8 +98,8 @@
     "/v1/balancers/{id}": {
       "delete": {
         "operationId": "delete_v1_balancers_id",
-        "summary": "DeleteLoadBalancer removes one of the caller org's load balancers and answers 204.",
-        "description": "DeleteLoadBalancer removes one of the caller org's load balancers and answers\n204. Ownership is confirmed by re-fetching the resource before anything is\ndeleted, so a cross-tenant id is a 404 rather than a delete of another org's\nload balancer.",
+        "summary": "Removes one of the caller org's load balancers and answers 204.",
+        "description": "Removes one of the caller org's load balancers and answers\n204. Ownership is confirmed by re-fetching the resource before anything is\ndeleted, so a cross-tenant id is a 404 rather than a delete of another org's\nload balancer.",
         "tags": [
           "balancers"
         ],
@@ -122,8 +122,8 @@
       },
       "get": {
         "operationId": "get_v1_balancers_id",
-        "summary": "GetLoadBalancer returns one of the caller org's load balancers by id.",
-        "description": "GetLoadBalancer returns one of the caller org's load balancers by id. One that\nexists in another org's namespace is reported 404, never 403 — the same\nexistence-oracle guard the VPC read applies.",
+        "summary": "Returns one of the caller org's load balancers by id.",
+        "description": "Returns one of the caller org's load balancers by id. One that\nexists in another org's namespace is reported 404, never 403 — the same\nexistence-oracle guard the VPC read applies.",
         "tags": [
           "balancers"
         ],
@@ -155,8 +155,8 @@
     "/v1/vpcs": {
       "get": {
         "operationId": "get_v1_vpcs",
-        "summary": "ListVpcs returns every VPC the caller's org owns, under the friendly names the org created them with.",
-        "description": "ListVpcs returns every VPC the caller's org owns, under the friendly names the\norg created them with. DigitalOcean is one account for the whole deployment, so\nthe account-wide inventory is filtered to the caller's own \"o\"\u003corgHash\u003e- name\nprefix and the prefix is stripped — another org's VPC is not merely hidden, it\nis never in the answer.",
+        "summary": "Returns every VPC the caller's org owns, under the friendly names the org created them with.",
+        "description": "Returns every VPC the caller's org owns, under the friendly names the\norg created them with. DigitalOcean is one account for the whole deployment, so\nthe account-wide inventory is filtered to the caller's own \"o\"\u003corgHash\u003e- name\nprefix and the prefix is stripped — another org's VPC is not merely hidden, it\nis never in the answer.",
         "tags": [
           "vpcs"
         ],
@@ -187,8 +187,8 @@
       },
       "post": {
         "operationId": "post_v1_vpcs",
-        "summary": "CreateVpc creates a VPC in the caller's org namespace and answers 201 with it.",
-        "description": "CreateVpc creates a VPC in the caller's org namespace and answers 201 with it.\nThe physical DigitalOcean name is derived server-side from the validated org,\nso a tenant can only ever create inside its own namespace; a name that already\nexists there is a 409.",
+        "summary": "Creates a VPC in the caller's org namespace and answers 201 with it.",
+        "description": "Creates a VPC in the caller's org namespace and answers 201 with it.\nThe physical DigitalOcean name is derived server-side from the validated org,\nso a tenant can only ever create inside its own namespace; a name that already\nexists there is a 409.",
         "tags": [
           "vpcs"
         ],
@@ -224,8 +224,8 @@
     "/v1/vpcs/{id}": {
       "delete": {
         "operationId": "delete_v1_vpcs_id",
-        "summary": "DeleteVpc removes one of the caller org's VPCs and answers 204.",
-        "description": "DeleteVpc removes one of the caller org's VPCs and answers 204. Ownership is\nconfirmed by re-fetching the resource and checking its physical name carries\nthe caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a\n404 rather than a delete of another org's VPC.",
+        "summary": "Removes one of the caller org's VPCs and answers 204.",
+        "description": "Removes one of the caller org's VPCs and answers 204. Ownership is\nconfirmed by re-fetching the resource and checking its physical name carries\nthe caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a\n404 rather than a delete of another org's VPC.",
         "tags": [
           "vpcs"
         ],
@@ -248,8 +248,8 @@
       },
       "get": {
         "operationId": "get_v1_vpcs_id",
-        "summary": "GetVpc returns one of the caller org's VPCs by id.",
-        "description": "GetVpc returns one of the caller org's VPCs by id. A VPC that exists but sits\nin another org's namespace is reported 404, never 403 — the answer must not\ntell one tenant that another tenant's resource exists.",
+        "summary": "Returns one of the caller org's VPCs by id.",
+        "description": "Returns one of the caller org's VPCs by id. A VPC that exists but sits\nin another org's namespace is reported 404, never 403 — the answer must not\ntell one tenant that another tenant's resource exists.",
         "tags": [
           "vpcs"
         ],

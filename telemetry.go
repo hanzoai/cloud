@@ -55,7 +55,6 @@ package cloud
 import (
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -65,7 +64,6 @@ import (
 	luxtrace "github.com/luxfi/trace"
 	"github.com/luxfi/zap"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/otlptranslator"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -80,9 +78,41 @@ import (
 // remotely) is set but no explicit ZAP endpoint is.
 const defaultZapEndpoint = "otel-collector.hanzo.svc:4319"
 
+// localPlaneEndpoint is the plane ingest's ZAP span wire on the POD's loopback —
+// the address apps/o11y/planesink.go binds (planeSpanListen, 0.0.0.0:4317). Cloud
+// runs its subsystems as sibling plugin PROCESSES in one pod; the sink lives in
+// exactly one of them, so loopback is what "co-resident" means to the other
+// nineteen. Same pod, same lifecycle, no Service, no collector.
+const localPlaneEndpoint = "127.0.0.1:4317"
+
 // traceDest is the destination cloud's OWN spans route to. One name for the
 // aspect "somewhere that stores traces"; who serves it is the router's business.
 const traceDest zap.Destination = "hanzo.o11y.traces"
+
+// wireEndpointFor resolves the ZAP wire fallback — where spans go when THIS
+// process has no co-resident sink. An explicit endpoint wins; a legacy OTLP
+// endpoint means "ship remotely" and picks the fleet collector; otherwise, if a
+// plane sink exists in this DEPLOYMENT, it is in a sibling plugin process in this
+// pod, so loopback reaches it. Empty means Cost-0 in-process only.
+//
+// The last case is the one that was missing, and it was a silent total loss:
+// cloud runs its subsystems as sibling PROCESSES, the sink registers in exactly
+// one of them, and the other nineteen had neither a route nor an endpoint — so
+// every request span they produced returned ErrNoRoute and event.span stayed
+// empty while five migrated read paths queried it. The process that HOLDS the
+// sink never reaches this fallback (its Send is routed), so it cannot self-dial.
+func wireEndpointFor(zapEndpoint, legacyOTLP string, inprocSinkExpected bool) string {
+	switch {
+	case zapEndpoint != "":
+		return zapEndpoint
+	case legacyOTLP != "":
+		return defaultZapEndpoint
+	case inprocSinkExpected:
+		return localPlaneEndpoint
+	default:
+		return ""
+	}
+}
 
 // traceInproc is the Cost-0 interface a co-resident sink registers on, and
 // traceRouter is the table the exporter Sends through. Both private: the ONLY
@@ -172,22 +202,17 @@ func TraceInprocEnabled() bool {
 // instrument, not whatever happened to be compiled in.
 var metricRegistry = prometheus.NewRegistry()
 
-// Metrics serves this process's measurements in Prometheus exposition format, so
-// a scrape can collect what InstallTelemetry's meter provider records.
+// MetricGatherer exposes the registry for the in-process push to the telemetry
+// store (apps/o11y/metricspush.go), which is the ONLY way measurements leave
+// this process now that Prometheus is retired.
 //
-// The handler is here, with the provider that fills it, and the LISTENER is not:
-// binding a port is a decision about one process, and every plugin child in this
-// fleet shares the host's environment, so a listener opened here would have every
-// child fighting for one address (the trap listenOn documents). The app that owns
-// the fleet prober owns the listener that publishes it — see apps/o11y.
-func Metrics() http.Handler {
-	return promhttp.HandlerFor(metricRegistry, promhttp.HandlerOpts{
-		// A scrape that fails should say so to the scraper, which records it as a
-		// failed scrape; writing a 200 with a partial body would report a healthy
-		// collection that did not happen.
-		ErrorHandling: promhttp.HTTPErrorOnError,
-	})
-}
+// The registry is no longer a PUBLISHED SURFACE — there is no exposition and no
+// scraper — it is the buffer the meter provider renders into and the push
+// drains, in the same family model the datastore receiver already speaks.
+// Handing out the Gatherer rather than the *Registry keeps the rule this
+// registry exists to enforce: what appears here is what this process chose to
+// instrument, so a reader cannot quietly become a registrant.
+func MetricGatherer() prometheus.Gatherer { return metricRegistry }
 
 // installMeter installs this process's meter provider and returns it with a
 // shutdown. The provider is ALWAYS installed and the shutdown is ALWAYS non-nil,
@@ -196,20 +221,20 @@ func Metrics() http.Handler {
 // discarded while the code looks perfectly instrumented, which is exactly what
 // cloud's request counters (metrics_http.go) did before this existed.
 //
-// ONE reader, and it is a PULL: the provider collects into this process's
-// registry (metricRegistry) and something scrapes the exposition apps/o11y
-// serves. Metrics used to leave over the ZAP wire instead, to match traces and
-// logs — one transport for all three signals, which reads well and did not
-// survive contact with where metrics are actually kept. That wire ends at o11y's
-// receiver, which writes the datastore; but the store every metric READER in
-// this codebase queries is VictoriaMetrics — vmquery.go, the SuperAdmin VM
-// proxy, status.go's up-inventory and /v1/summary — and VM is filled by
-// scraping. A push into a store nothing reads is not a second transport, it is a
-// missing one: the wire endpoint is empty in every deployment we run, which
-// luxfi/metric silently resolved to 127.0.0.1:4317 — the OTLP trace receiver,
-// not the metric one — so the fleet availability gauge was recorded 21 times a
-// minute into a provider with no way out. Exposing the registry puts the
-// measurements where the readers already look.
+// ONE reader, and NOBODY PULLS IT: the provider collects into this process's
+// registry (metricRegistry), and apps/o11y's metricspush.go gathers that
+// registry on a timer and writes it straight to the telemetry store in-process.
+// The registry is a buffer, not a published surface — no port is bound for it
+// and there is no exposition to scrape.
+//
+// It was a pull once, and briefly for a good reason: the store every metric
+// READER queried was VictoriaMetrics, VM was filled by scraping, and a push into
+// a store nothing reads is not a second transport but a missing one. That
+// premise is retired with VM. Every metric reader in this codebase now queries
+// the datastore — /v1/summary, status.go's up-inventory and
+// /v1/o11y/availability all go through apps/o11y/metricsgauge.go — so metrics
+// travel the same in-process road as traces and logs, to the same place, and the
+// measurements are once again where the readers look.
 func installMeter(log luxlog.Logger, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context)) {
 	exp, err := otelprom.New(
 		otelprom.WithRegisterer(metricRegistry),
@@ -287,6 +312,17 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// Two signals, two destinations, two decisions.
 	mp, stopMeter := installMeter(log, res)
 
+	// Seed the data-plane instruments the moment the provider exists.
+	//
+	// This call is the difference between a rule that can say "ingest stopped"
+	// and one that can say nothing. A counter first touched by its first event
+	// has no series until that event happens, so an ingest path that never runs
+	// is indistinguishable in the store from one that was never built — which is
+	// exactly how span ingest stayed dead for four and a half months without a
+	// single rule being able to notice. Seeding at boot means zero is on the
+	// wire from the first scrape, and silence becomes a measurement.
+	planeInstruments()
+
 	// TRACES. Enabled when a ZAP endpoint is set OR (legacy) any OTLP endpoint is
 	// set OR a co-resident sink is expected (spans route in-process, no wire
 	// endpoint needed). Keep the clean no-op-when-unset posture so this is safe
@@ -299,14 +335,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		return stopMeter
 	}
 
-	// Resolve the wire fallback: an explicit ZAP endpoint, else (legacy OTLP
-	// intent) the default collector, else none — Cost-0 in-process only. The wire
-	// is used exactly when no co-resident sink is registered, which is precisely
-	// the o11y-as-a-plugin case.
-	wireEndpoint := zapEndpoint
-	if wireEndpoint == "" && legacy != "" {
-		wireEndpoint = defaultZapEndpoint
-	}
+	wireEndpoint := wireEndpointFor(zapEndpoint, legacy, TraceInprocEnabled())
 	var wire sdktrace.SpanExporter
 	wireDesc := "none (co-resident sink only)"
 	if wireEndpoint != "" {

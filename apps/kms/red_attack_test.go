@@ -55,7 +55,7 @@ func TestVector1_OrgCaseFoldCollision(t *testing.T) {
 //
 // The hazard did not vanish with it, it MOVED DOWN a layer: two case-distinct
 // owners must still land on two different store partitions, or the fold itself
-// re-creates the collision with no forged header required. cloud.SanitizeOrg is the
+// re-creates the collision with no forged header required. namespace.Sanitize is the
 // injective map that closes it (a non-lowercase owner is not the identity — it gets
 // a SHA-256-derived suffix — so "AcmeCorp" and "acmecorp" never share a file). So
 // this test now asserts the PROPERTY (distinct tenants, distinct data) rather than
@@ -105,7 +105,7 @@ func TestVector1b_ExactOrgMatchNoSplit(t *testing.T) {
 			t.Fatalf("CASE-FOLD BREACH: tenant %q read %q, want %q (namespaces collided)", tc.org, got, tc.want)
 		}
 	}
-	t.Logf("case-distinct owners %q and %q hold distinct records — SanitizeOrg fold is injective", owner, lower)
+	t.Logf("case-distinct owners %q and %q hold distinct records — namespace.Sanitize fold is injective", owner, lower)
 }
 
 // ── VECTOR 2: AAD relocation — name-only DEK-wrap AAD ──────────────────────────

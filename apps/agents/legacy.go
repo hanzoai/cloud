@@ -4,19 +4,21 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"path/filepath"
+	"os"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 )
 
 // legacy.go carries the pre-split registry forward. Until this change every
 // org's agents, runs, sessions, events, targets and claim keys lived in ONE
-// {DataDir}/agents.db, isolated by an org column. They now live one file per org
-// under {DataDir}/orgs/{slug}/agents.db, so a deployment that already has the
-// single file has to be fanned out before it serves — otherwise a live plane
-// (hanzo link registers sessions into it right now) reads as empty on the first
-// boot after the upgrade, which is indistinguishable from data loss to everyone
-// looking at it.
+// database — the SYSTEM namespace's "agents" — isolated by an org column. They
+// now live one per org, the SAME subsystem under each org's own namespace, so a
+// deployment that already has the single file has to be fanned out before it
+// serves — otherwise a live plane (hanzo link registers sessions into it right
+// now) reads as empty on the first boot after the upgrade, which is
+// indistinguishable from data loss to everyone looking at it.
 //
 // The fan-out runs ONCE, on mount, BEFORE any route is registered. It is
 // FAIL-SECURE: an error fails the mount rather than serving an empty registry
@@ -29,29 +31,33 @@ import (
 // saves the work.
 //
 // The legacy file is READ and then left exactly where it is. It is not renamed
-// and not deleted: its cek sidecar pairing is cek's business and not this
-// package's to rearrange, and keeping the bytes is what makes the upgrade
-// reversible on the day someone needs it to be.
+// and not deleted: keeping the bytes is what makes the upgrade reversible on the
+// day someone needs it to be.
 
-// legacyDBName is the single pre-split file, directly under DataDir. The per-org
-// files live under {DataDir}/orgs/, so the two can never collide.
-const legacyDBName = "agents.db"
+// legacySubsystem names the single pre-split database, held in the SYSTEM
+// namespace. The per-org files are this same subsystem under each org's own
+// namespace, and the platform partition is a name no org slug can render, so the
+// two can never collide.
+const legacySubsystem = "agents"
 
-// fanOutLegacy copies every org's rows out of a pre-split {dataDir}/agents.db
-// into that org's own database, once. A deployment with no legacy file (a fresh
-// install, or one already fanned out) does nothing and returns nil.
+// fanOutLegacy copies every org's rows out of the pre-split platform-wide agents
+// database into that org's own database, once. A deployment with no legacy file
+// (a fresh install, or one already fanned out) does nothing and returns nil.
 func fanOutLegacy(ctx context.Context, dataDir string, st *state) error {
-	path := filepath.Join(dataDir, legacyDBName)
-	if !cek.Exists(path) {
+	path, err := namespace.Path(dataDir, namespace.System(), legacySubsystem)
+	if err != nil {
+		return fmt.Errorf("legacy store path: %w", err)
+	}
+	if _, err := os.Stat(path); err != nil {
 		return nil // fresh install: nothing was ever written to the shared file
 	}
 	// The legacy file was always opened under the platform key, never an org's.
-	raw, err := cek.Open(cek.Global, path)
+	raw, err := cek.Open(namespace.System(), legacySubsystem, dataDir)
 	if err != nil {
 		return fmt.Errorf("open legacy store: %w", err)
 	}
 	defer func() { _ = raw.Close() }()
-	raw.SetMaxOpenConns(1)
+	sqlpool.Single(raw)
 
 	done, err := legacyFannedOut(ctx, raw)
 	if err != nil {
@@ -75,7 +81,7 @@ func fanOutLegacy(ctx context.Context, dataDir string, st *state) error {
 	for _, org := range orgs {
 		dst, err := st.storeFor(org)
 		if err != nil {
-			// SanitizeOrg refused this org, or its file would not open. Either way
+			// namespace.Sanitize refused this org, or its file would not open. Either way
 			// the rows exist and we cannot place them: halt and name the org rather
 			// than drop a tenant's history on the floor.
 			return fmt.Errorf("legacy fan-out: org %q: %w", org, err)

@@ -3,15 +3,18 @@ package guide
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
-// testBlueprintStore opens a real shared blueprint store on a temp dir (cek is keyed by
-// TestMain, so this exercises the production open path).
+// testBlueprintStore opens a real shared blueprint store on a temp dir — the
+// production open path.
 func testBlueprintStore(t *testing.T) *BlueprintStore {
 	t.Helper()
-	store, err := openBlueprintStore(filepath.Join(t.TempDir(), "guide-blueprint.db"))
+	store, err := openBlueprintStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open blueprint store: %v", err)
 	}

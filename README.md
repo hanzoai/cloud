@@ -30,7 +30,7 @@ machine and whose verbs are different.
 links `zip`, the app manifest and the console embed — and nothing else. It knows only
 where each app lives and what path it answers, never what the app does. Each subsystem
 (iam, kms, base, gateway, ai, commerce, vfs, mq, dns, amqp, mcp, o11y, tasks, …) is its
-own `plugin/<name>` binary serving its own prefixes through the same `cloud.Serve`
+own `plugin/<name>` binary serving its own prefixes through the same `cloud.Listen`
 middleware it would serve standalone.
 
 Apps start **lazily**, on the first request that reaches their prefix; the four that own

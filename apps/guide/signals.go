@@ -42,7 +42,7 @@ type Signals struct {
 }
 
 // boundSignals is the process-wide seam set, installed once at the composition
-// root via BindSignals before cloud.Serve mounts guide. The zero value (all nil)
+// root via BindSignals before cloud.Listen mounts guide. The zero value (all nil)
 // honest-degrades every growth signal to "not present" — the state guide's own
 // tests and a minimally-wired deployment both observe.
 var boundSignals Signals
