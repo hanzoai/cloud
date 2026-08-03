@@ -43,8 +43,10 @@
 // and /v1/ml is model SERVING — InferenceServices and predict, live with customers.
 // A dataset of risk features is not a thing you serve, and one prefix meaning both
 // "models you serve" and "the rows a model learned from" is the ambiguity the risk
-// row was split out of /v1/ml to end. Nothing had published these five leaves, so
-// the address moved rather than being kept for the sake of an unused spelling.
+// row was split out of /v1/ml to end. These five leaves landed in main at the old
+// address but were never RELEASED — api.hanzo.ai/v1/openapi.json carries four
+// /v1/ml paths and none of them is a dataset — so the address moved while moving
+// it was still free. A published address is permanent.
 //
 // It is a SEPARATE app from risk, not a folded-in one, because the two hold
 // different tenancy models and different failure domains — risk's boundary is
