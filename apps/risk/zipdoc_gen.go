@@ -49,6 +49,23 @@ func init() {
 	zip.Describe("GET /v1/risk/health", zip.Doc{
 		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
+	zip.Describe("GET /v1/risk/policy", zip.Doc{
+		Description: "Policy reports the caller organisation's own decision-regime history: every\ndistinct regime it has adopted, which version is in force, and what retention\nhas taken.\n\nWHY IT EXISTS. Every score cites the version it was decided under\n([riskScoreOut.Policy]), and the threshold that score was measured against is\nderived from the appetite that version states. Restate the appetite and, without\nthis record, every earlier decision becomes unreconstructible — the cut it was\njudged by no longer exists anywhere. An adverse decision that cannot be\nexplained against the policy in force when it was taken cannot be defended.\n\nIt covers ONE organisation. The history is on that organisation's own shelf, so\nanother's versions are not filtered out of the answer — they are not in the file\nthe answer is read from.",
+		Fields: map[string]string{
+			"riskPolicyOut.changes":     "Changes is how many DISTINCT regimes may be adopted per Window. A restatement\nidentical to the regime in force mints no version and is not counted against\nit.",
+			"riskPolicyOut.disposed":    "Disposed is how many versions retention has taken. It is NOT a silence: a\nhistory bounded on disk must say what it no longer holds, because a decision\nciting a disposed version can no longer be reconstructed from this record.",
+			"riskPolicyOut.history":     "History is the retained versions, newest first.",
+			"riskPolicyOut.retained":    "Retained is how many versions this organisation's history holds at most,\nderived from the byte budget its rows are a multiple of.",
+			"riskPolicyOut.version":     "Version is the version in force — the one every score currently cites. Zero\nmeans no regime has ever been stated and the default posture, shadow, is in\nforce.",
+			"riskPolicyOut.window":      "Window is the period Changes is measured over.",
+			"riskPolicyVersion.at":      "At is when it entered force, RFC 3339, from the server clock.",
+			"riskPolicyVersion.by":      "By is the identity that stated it, stamped server-side from the validated\nprincipal at the moment it entered force.",
+			"riskPolicyVersion.live":    "Live is whether the model was permitted to change an outcome under it.",
+			"riskPolicyVersion.review":  "Review is the share of the stream the regime states may be examined. The\nthreshold in force is derived from it, which is why a decision is only\ndefensible against the version that produced it.",
+			"riskPolicyVersion.sample":  "Sample is the share of below-the-line events the regime retains for review.",
+			"riskPolicyVersion.version": "Version names this regime in this organisation's history.",
+		},
+	})
 	zip.Describe("GET /v1/risk/search/:id", zip.Doc{
 		Description: "Reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
 		Fields: map[string]string{
@@ -91,6 +108,7 @@ func init() {
 			"riskModelState.cut":        "Cut is the threshold in force, derived from Stated as a quantile of the\nscores actually observed.",
 			"riskModelState.learned":    "Learned is how many events the model has learned from.",
 			"riskModelState.live":       "Live is false while the model is in shadow — scoring, learning and\nrecording what it WOULD have alerted on, and changing no outcome. Shadow is\nthe default for a new tenant.",
+			"riskModelState.policy":     "Policy is the version of the decision regime this model is deciding under,\nfrom your organisation's own policy history (GET /v1/risk/policy). Every\nscore cites it, so it is the join between a past decision and the appetite\nthat produced its threshold. Zero means no regime has ever been stated and\nthe default posture — shadow — is in force.",
 			"riskModelState.realised":   "Realised is the share that actually was. Reading it beside Stated is what\nmakes the appetite a measured commitment rather than an intention.",
 			"riskModelState.refused":    "Refused counts events the model would not score, by reason. None of them\nwas examined; a refusal is counted, never silent.",
 			"riskModelState.sample":     "Sample is the share of below-the-line events retained for review, which is\nhow the miss rate is measured rather than assumed.",
@@ -134,6 +152,7 @@ func init() {
 			"riskScoreOut.alert":    "Alert is whether this would become evidence. It is false in shadow however\nhigh the score.",
 			"riskScoreOut.causes":   "Causes is the per-feature attribution, ordered by contribution. Each is a\nCOUNTERFACTUAL on the model that produced the score — the coordinate moved\nto its neutral value and the event rescored — so the explanation is the\nsame arithmetic the score came from.",
 			"riskScoreOut.cut":      "Cut is the threshold in force, derived from the stated appetite as a\nquantile of the scores actually observed rather than fixed at a number.",
+			"riskScoreOut.policy":   "Policy is the version of your organisation's decision regime this verdict\nwas reached under, from its own policy history (GET /v1/risk/policy). Cut is\nderived from the appetite that version states, so it is the record that makes\nthis decision reconstructible after the appetite is restated. Zero means no\nregime has ever been stated and the default posture — shadow — was in force.",
 			"riskScoreOut.refusal":  "Refusal names why the model declined, when it did.",
 			"riskScoreOut.score":    "Score is where the event sits in the tenant's own density: 0 where its\nrecent behaviour is densest, 1 where there is none of it.",
 			"riskScoreOut.scored":   "Scored is false when the model declined, and Refusal says which refusal it\nwas: warming, unusable or unidentified. None of them is a clean bill of\nhealth, which is why the refusal is stated rather than rendered as a score\nof zero.",
@@ -172,6 +191,7 @@ func init() {
 			"riskScoreOut.alert":   "Alert is whether this would become evidence. It is false in shadow however\nhigh the score.",
 			"riskScoreOut.causes":  "Causes is the per-feature attribution, ordered by contribution. Each is a\nCOUNTERFACTUAL on the model that produced the score — the coordinate moved\nto its neutral value and the event rescored — so the explanation is the\nsame arithmetic the score came from.",
 			"riskScoreOut.cut":     "Cut is the threshold in force, derived from the stated appetite as a\nquantile of the scores actually observed rather than fixed at a number.",
+			"riskScoreOut.policy":  "Policy is the version of your organisation's decision regime this verdict\nwas reached under, from its own policy history (GET /v1/risk/policy). Cut is\nderived from the appetite that version states, so it is the record that makes\nthis decision reconstructible after the appetite is restated. Zero means no\nregime has ever been stated and the default posture — shadow — was in force.",
 			"riskScoreOut.refusal": "Refusal names why the model declined, when it did.",
 			"riskScoreOut.score":   "Score is where the event sits in the tenant's own density: 0 where its\nrecent behaviour is densest, 1 where there is none of it.",
 			"riskScoreOut.scored":  "Scored is false when the model declined, and Refusal says which refusal it\nwas: warming, unusable or unidentified. None of them is a clean bill of\nhealth, which is why the refusal is stated rather than rendered as a score\nof zero.",
@@ -208,6 +228,7 @@ func init() {
 			"riskModelState.cut":        "Cut is the threshold in force, derived from Stated as a quantile of the\nscores actually observed.",
 			"riskModelState.learned":    "Learned is how many events the model has learned from.",
 			"riskModelState.live":       "Live is false while the model is in shadow — scoring, learning and\nrecording what it WOULD have alerted on, and changing no outcome. Shadow is\nthe default for a new tenant.",
+			"riskModelState.policy":     "Policy is the version of the decision regime this model is deciding under,\nfrom your organisation's own policy history (GET /v1/risk/policy). Every\nscore cites it, so it is the join between a past decision and the appetite\nthat produced its threshold. Zero means no regime has ever been stated and\nthe default posture — shadow — is in force.",
 			"riskModelState.realised":   "Realised is the share that actually was. Reading it beside Stated is what\nmakes the appetite a measured commitment rather than an intention.",
 			"riskModelState.refused":    "Refused counts events the model would not score, by reason. None of them\nwas examined; a refusal is counted, never silent.",
 			"riskModelState.sample":     "Sample is the share of below-the-line events retained for review, which is\nhow the miss rate is measured rather than assumed.",
@@ -270,6 +291,7 @@ func init() {
 			"riskModelState.cut":        "Cut is the threshold in force, derived from Stated as a quantile of the\nscores actually observed.",
 			"riskModelState.learned":    "Learned is how many events the model has learned from.",
 			"riskModelState.live":       "Live is false while the model is in shadow — scoring, learning and\nrecording what it WOULD have alerted on, and changing no outcome. Shadow is\nthe default for a new tenant.",
+			"riskModelState.policy":     "Policy is the version of the decision regime this model is deciding under,\nfrom your organisation's own policy history (GET /v1/risk/policy). Every\nscore cites it, so it is the join between a past decision and the appetite\nthat produced its threshold. Zero means no regime has ever been stated and\nthe default posture — shadow — is in force.",
 			"riskModelState.realised":   "Realised is the share that actually was. Reading it beside Stated is what\nmakes the appetite a measured commitment rather than an intention.",
 			"riskModelState.refused":    "Refused counts events the model would not score, by reason. None of them\nwas examined; a refusal is counted, never silent.",
 			"riskModelState.sample":     "Sample is the share of below-the-line events retained for review, which is\nhow the miss rate is measured rather than assumed.",
