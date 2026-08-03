@@ -47,12 +47,12 @@ func TestABacktestCannotStandInTheFuture(t *testing.T) {
 	subjects := `{"kind":"transaction","subject":"tx-young","at":"` + at.Format(time.RFC3339) + `"}`
 
 	// Standing where the plane really is: not matured, and honestly so.
-	code, raw := req(t, app, http.MethodPost, "/v1/ml/labels/resolve", "acme", "u_acme",
+	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
 		`{"horizon":30,"subjects":[`+subjects+`]}`)
 	if code != http.StatusOK {
 		t.Fatalf("resolve = %d %s", code, raw)
 	}
-	var out mlResolveOut
+	var out riskResolveOut
 	_ = json.Unmarshal(raw, &out)
 	if out.Unmatured != 1 || len(out.Labels) != 0 {
 		t.Fatalf("a four-day-old event under a thirty-day horizon resolved: %+v", out)
@@ -60,7 +60,7 @@ func TestABacktestCannotStandInTheFuture(t *testing.T) {
 
 	// Standing in the future is refused, and the refusal is the caller's to fix.
 	future := now.Add(90 * 24 * time.Hour).Format(time.RFC3339)
-	code, raw = req(t, app, http.MethodPost, "/v1/ml/labels/resolve", "acme", "u_acme",
+	code, raw = req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
 		`{"horizon":30,"now":"`+future+`","subjects":[`+subjects+`]}`)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("a backtest standing 90 days in the future = %d %s, want 422", code, raw)
@@ -68,7 +68,7 @@ func TestABacktestCannotStandInTheFuture(t *testing.T) {
 
 	// And the past still works, which is the whole point of the field.
 	past := now.Add(-time.Hour).Format(time.RFC3339)
-	code, raw = req(t, app, http.MethodPost, "/v1/ml/labels/resolve", "acme", "u_acme",
+	code, raw = req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
 		`{"horizon":30,"now":"`+past+`","subjects":[`+subjects+`]}`)
 	if code != http.StatusOK {
 		t.Fatalf("a backtest standing in the past = %d %s, want 200", code, raw)
@@ -93,28 +93,28 @@ func TestTheRecordAndTheDerivedCopyShareOneGrain(t *testing.T) {
 	app, _ := wireWith(t, "", w.plane())
 	at := time.Now().UTC().Add(-200 * 24 * time.Hour).Truncate(time.Second)
 
-	one := reqProject(t, app, "acme", "u_a", "alpha", http.MethodPost, "/v1/ml/labels",
+	one := reqProject(t, app, "acme", "u_a", "alpha", http.MethodPost, "/v1/risk/labels",
 		batch(assertion("transaction", "tx-1", at, at.Add(time.Hour), Productive, Dispute, "dp-1", 1)))
 	if one != http.StatusOK {
 		t.Fatalf("write under project alpha = %d", one)
 	}
 	// A DIFFERENT project of the SAME org reads the same ground truth.
-	code, raw := reqProjectBody(t, app, "acme", "u_a", "beta", http.MethodGet, "/v1/ml/labels", "")
+	code, raw := reqProjectBody(t, app, "acme", "u_a", "beta", http.MethodGet, "/v1/risk/labels", "")
 	if code != http.StatusOK {
 		t.Fatalf("read under project beta = %d %s", code, raw)
 	}
-	var got mlLabelsOut
+	var got riskLabelsOut
 	_ = json.Unmarshal(raw, &got)
 	if got.Count != 1 {
 		t.Fatalf("project beta sees %d of the org's labels, want 1 — the record is kept at a finer grain than the copy it is joined through", got.Count)
 	}
 	// And a neighbouring ORG still sees nothing, which is the boundary that is
 	// actually load-bearing.
-	code, raw = reqProjectBody(t, app, "globex", "u_g", "alpha", http.MethodGet, "/v1/ml/labels", "")
+	code, raw = reqProjectBody(t, app, "globex", "u_g", "alpha", http.MethodGet, "/v1/risk/labels", "")
 	if code != http.StatusOK {
 		t.Fatalf("read as globex = %d %s", code, raw)
 	}
-	var theirs mlLabelsOut
+	var theirs riskLabelsOut
 	_ = json.Unmarshal(raw, &theirs)
 	if theirs.Count != 0 {
 		t.Fatalf("globex read %d of acme's labels", theirs.Count)
