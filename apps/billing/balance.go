@@ -111,9 +111,17 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	// while the money sat there. It worsens as usage accumulates, because a longer
 	// history makes a sub-cent tail likelier.
 	//
-	// DOWN, never up, the same choice apps/ai documents for the same value: a
-	// displayed balance must never exceed what the account can actually spend.
-	// Truncation understates by less than a cent and nothing is billed from it.
+	// Minor() RESCALES, and hanzoai/decimal's Rescale rounds half-away-from-zero
+	// (decimal.go:145) — it does not truncate. Measured live: the ledger's
+	// …078983985999994361 came back as 14991308 cents, a tenth of a cent ABOVE the
+	// true balance. That is acceptable here and nowhere else: this number is a
+	// DISPLAY, nothing is billed from it, and the gate that admits or refuses
+	// spend reads the exact decimal itself. A caller that must not overstate —
+	// any debit — has to round down deliberately rather than reuse this.
+	//
+	// (apps/ai carries a comment calling this "truncated toward zero" for the same
+	// call. That is wrong in the same way and worth correcting there; its gate
+	// compares > 0, so a sub-cent rounding cannot change its verdict.)
 	amt, perr := out.Amount.Parse()
 	if perr != nil {
 		// The peer ANSWERED and the reply did not parse. That is a real failure, not
@@ -121,7 +129,7 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 		// a funded account shown as broke.
 		return 0, true, perr
 	}
-	minor := amt.Minor() // big.Int of cents, truncated toward zero by Rescale
+	minor := amt.Minor() // big.Int of cents; Rescale rounds half-away-from-zero
 	if !minor.IsInt64() {
 		return 0, true, fmt.Errorf("balance %s %s exceeds int64 cents",
 			out.Amount.Decimal, out.Amount.Currency)
