@@ -176,7 +176,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	exposeBalance()
 	exposeMeter(deps.Metering)
 	exposeCredit()
-	exposeStarter()
 	exposeUsage()
 	exposeTxns()
 	exposeScopeRules()

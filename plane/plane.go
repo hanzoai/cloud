@@ -64,7 +64,6 @@ const (
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
-	FinanceStarter   = "finance_starter"
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
 
@@ -255,19 +254,6 @@ type BalanceIn struct {
 
 // Balance is what is left to spend.
 type Balance struct {
-	Amount Money `json:"amount"`
-}
-
-// ---- finance.starter — the welcome grant ----------------------------------
-
-// StarterIn issues the opening credit for an org, once.
-type StarterIn struct {
-	Subject string `json:"subject,omitempty"`
-}
-
-// Granted reports what the grant issued. A zero amount with no error is the
-// legitimate "already granted" answer, not a failure.
-type Granted struct {
 	Amount Money `json:"amount"`
 }
 
