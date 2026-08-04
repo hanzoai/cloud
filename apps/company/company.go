@@ -203,7 +203,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// The JSON body cap, in ONE place instead of once per handler. Registered
 	// after the deck leaf (which is therefore not gated by it) and before every
 	// JSON leaf, because fiber runs middleware in registration order.
-	g.Use(limitBody)
+	g.Use(zip.H(limitBody))
 
 	// The root of the surface. Declared on the App with its whole path, not on the
 	// group with an empty leaf: joining "/v1/company" with "" yields
