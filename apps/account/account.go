@@ -106,6 +106,10 @@ type state struct {
 	iam      *iamClient
 	csrfKey  []byte       // keyed-BLAKE3 MAC key for the money-write CSRF token (csrf.go)
 	writesRL *rateLimiter // per-IP abuse cap on the money-write routes (ratelimit.go)
+	// vfs is cloud's blob seam (deps.VFS) — where a profile photo's bytes live
+	// (avatar.go). NewBase does not carry it, so it is taken from deps here, the
+	// same way apps/team's files plane takes it.
+	vfs cloud.VFSClient
 }
 
 // keysWriteRatePerMin caps money-write frequency per client IP (mint/rotate/revoke
@@ -117,7 +121,7 @@ const keysWriteRatePerMin = 30
 // singleton (csrf.go), so a token minted here verifies wherever it is echoed.
 func newService(deps cloud.Deps) *cloud.Service[state] {
 	b := cloud.NewBase(deps, "account")
-	st := state{iam: newIAMClient()}
+	st := state{iam: newIAMClient(), vfs: deps.VFS}
 	st.csrfKey = sharedCSRFKey(b.Log)
 	st.writesRL = newRateLimiter(keysWriteRatePerMin)
 	return &cloud.Service[state]{Base: b, State: st}
@@ -234,6 +238,12 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// so it needs neither CSRF nor the write limiter — but it MUST sit beside the
 	// POST at this priority, for the same reason.
 	zip.Get(open, "/commerce/topup/rails", o.topupRails)
+	// The signed-in user's profile photo (avatar.go). The write is gated like the
+	// others here; the read takes no credentials because its whole job is to be an
+	// <img src> from another origin. Both are UNTYPED and cannot be otherwise —
+	// multipart in, raw image bytes out — which is why they are the only two names
+	// in typed_wire_test.go's refusal list.
+	registerAvatar(o, open, limit, csrf)
 	return nil
 }
 

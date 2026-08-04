@@ -84,22 +84,100 @@ type Resolver interface {
 var (
 	resolverMu sync.RWMutex
 	resolver   Resolver
+	fallback   Resolver
 )
 
 // SetResolver installs the slug→Site resolver. projects.Mount calls this once
-// with its store. Until it is set, every site request is an honest 404 (the
-// projects subsystem is not mounted), never a crash.
+// with its store — the no-hop answer when the edge and projects share a process.
 func SetResolver(r Resolver) {
 	resolverMu.Lock()
 	resolver = r
 	resolverMu.Unlock()
 }
 
+// SetFallbackResolver installs the resolver used when projects is NOT in this
+// process. cloud's composition root sets it to a plane-backed client.
+//
+// It exists because in production they are never in the same process: the pod
+// boots ~25 single-app processes, so the registry above was written inside
+// `projects` and read inside whichever process fronts :8000, where it is nil. A
+// nil registry is a clean miss, not a fault — so every published site resolved
+// as not-found with no error anywhere, fell through to the API pipeline, and
+// <slug>.hanzo.app served the console SPA with the whole cloud API answering on
+// the customer's own hostname. Measured at the pod, ingress bypassed.
+//
+// The old comment here read "until it is set, every site request is an honest
+// 404 (the projects subsystem is not mounted)". That premise was the bug:
+// projects IS mounted, just somewhere else, and 404 is not honest when the site
+// exists.
+// PlaneSite is the wire shape of a resolved site, exported so a host that has
+// no business importing the root package can still speak this call.
+//
+// Found is explicit: the edge must tell "no such site" (an honest 404) from
+// "could not ask" (503). Collapsing them serves 404s for live customer sites
+// during any transient failure of the owning app, which is indistinguishable
+// from the site being deleted.
+type PlaneSite struct {
+	Found                bool   `json:"found"`
+	Org                  string `json:"org"`
+	Slug                 string `json:"slug"`
+	Bucket               string `json:"bucket"`
+	Prefix               string `json:"prefix"`
+	Status               string `json:"status"`
+	CrossOriginIsolation bool   `json:"crossOriginIsolation"`
+}
+
+// PlaneSiteIn names the site to resolve. Org is set only on the first-party
+// path, which pins the lookup to one org.
+type PlaneSiteIn struct {
+	Slug string `json:"slug"`
+	Org  string `json:"org,omitempty"`
+}
+
+// SiteOf projects a wire answer onto a Site. Exported for the same reason the
+// types are: the caller lives outside this package and must not restate the
+// mapping.
+func SiteOf(out *PlaneSite) (Site, bool) {
+	if out == nil || !out.Found {
+		return Site{}, false
+	}
+	return Site{
+		Org:                  out.Org,
+		Slug:                 out.Slug,
+		Bucket:               out.Bucket,
+		Prefix:               out.Prefix,
+		Status:               out.Status,
+		CrossOriginIsolation: out.CrossOriginIsolation,
+	}, true
+}
+
+func SetFallbackResolver(r Resolver) {
+	resolverMu.Lock()
+	fallback = r
+	resolverMu.Unlock()
+}
+
+// currentResolver prefers the in-process store and falls back to the plane. A
+// process that owns the store never pays for a hop; one that does not can still
+// answer, instead of silently serving the API for every customer's site.
+// HasFallbackResolver reports whether a cross-process resolver is installed. It
+// exists so the host can PROVE it wired the edge: the defect this guards was a
+// middleware that ran nowhere, which no behavioural test in this package could
+// have caught, because the package itself was always correct.
+func HasFallbackResolver() bool {
+	resolverMu.RLock()
+	defer resolverMu.RUnlock()
+	return fallback != nil
+}
+
 func currentResolver() Resolver {
 	resolverMu.RLock()
-	r := resolver
+	r, fb := resolver, fallback
 	resolverMu.RUnlock()
-	return r
+	if r != nil {
+		return r
+	}
+	return fb
 }
 
 // Config configures the site host-router. Apex is the zone whose subdomains are
@@ -298,9 +376,47 @@ func analyticsIngest(c *zip.Ctx) (func(org string, c *zip.Ctx) error, bool) {
 	return h, ok && h != nil
 }
 
+// requestHost is the ONE way this server learns which host was asked for.
+//
+// fiber parses the request URI once, and behind the ingress the parsed host is
+// EMPTY — so Hostname() alone resolved nothing, every published site fell
+// through to c.Continue(), and <slug>.hanzo.app served the console SPA with the
+// whole cloud API mounted under a customer's own hostname. Measured 2026-08-03:
+// quest.hanzo.app returned <title>Hanzo Cloud Console and
+// quest.hanzo.app/v1/billing/plans returned 200. Same accessor, same failure as
+// commerce's tenant resolver earlier the same night.
+//
+// The parsed host ALWAYS wins. X-Forwarded-Host is consulted only when there is
+// no parsed host at all, which is exactly the ingress case and never a direct
+// request. That ordering is the security property, not a detail: the host picks
+// the ORG here, so a client that could override a real host could serve itself
+// another tenant's site. TestMiddlewareTenantKeyedByHostNotPath pins it — a
+// request that HAS a host ignores the header completely.
+func (s *Server) requestHost(c *zip.Ctx) string {
+	// A parsed host that names a site (or a bindable custom domain) is the
+	// truth and is never overridden. Anything else — empty behind the ingress,
+	// or the ingress' own service name — is not a host this server can serve,
+	// so the forwarded name is the only candidate left.
+	parsed := hostOnly(c.Fiber().Hostname())
+	if parsed != "" {
+		if _, _, ok := s.siteSlug(parsed); ok {
+			return parsed
+		}
+		if s.customCandidate(parsed) {
+			return parsed
+		}
+	}
+	// Left-most entry: proxies append, so the first is the client-facing name.
+	fwd := c.Header("X-Forwarded-Host")
+	if i := strings.IndexByte(fwd, ','); i >= 0 {
+		fwd = fwd[:i]
+	}
+	return hostOnly(fwd)
+}
+
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
-		raw := c.Fiber().Hostname()
+		raw := s.requestHost(c)
 		if slug, firstParty, ok := s.siteSlug(raw); ok {
 			if baseHostHandler != nil && isBasePath(c.Path()) {
 				if site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {

@@ -461,12 +461,17 @@ func LoadConfig() *Config {
 		ControlPlaneQuorum: getenvInt("CONTROL_PLANE_QUORUM", 0),
 	}
 
-	enableCSV := getenv("CLOUD_ENABLE", "")
-	// Bind the CLI overrides once (see flagsOnce). A later call keeps its env-derived
-	// cfg unchanged — tests set env via t.Setenv, never argv — so guarding the
-	// registration loses nothing while making LoadConfig re-entrant.
+	// THE BINARY KNOWS WHICH APP IT IS; a deployment does not restate it.
+	//
+	// cfg.Enable is set by Listen from the app the plugin was built as — one
+	// process per app, and plugin/<app>/main.go names it. CLOUD_ENABLE/--enable
+	// used to state the same set a SECOND time, from the values file, and the
+	// only thing a second source of truth can add is disagreement: both devnet
+	// outages on 2026-08-02 were this list naming an app that does not exist
+	// ("plans") and omitting one that every other child needs ("kms"). Neither
+	// is representable now. Empty still means all, which is what production has
+	// always run.
 	flagsOnce.Do(func() {
-		flag.StringVar(&enableCSV, "enable", enableCSV, "comma-separated subsystem list (empty=all)")
 		flag.StringVar(&cfg.Brand, "brand", cfg.Brand, "white-label brand")
 		flag.StringVar(&cfg.Domain, "domain", cfg.Domain, "primary domain")
 		flag.StringVar(&cfg.IAMIssuer, "iam-issuer", cfg.IAMIssuer, "JWKS issuer")
@@ -475,14 +480,6 @@ func LoadConfig() *Config {
 		flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "HTTP listener")
 		flag.Parse()
 	})
-
-	if enableCSV != "" {
-		for _, name := range strings.Split(enableCSV, ",") {
-			if s := strings.TrimSpace(name); s != "" {
-				cfg.Enable = append(cfg.Enable, s)
-			}
-		}
-	}
 
 	// White-label by brand (HIP-0111): when the operator does not pin
 	// CLOUD_IAM_ISSUER / --iam-issuer, derive the canonical OIDC issuer from the

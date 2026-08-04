@@ -218,8 +218,11 @@ func TestAdminEnvelopesKeepTheirKeyOrder(t *testing.T) {
 	if err := json.Unmarshal(body, &sweep); err != nil {
 		t.Fatalf("sweep decode: %v", err)
 	}
-	if got := topKeys(t, sweep.Data); got != "credited,swept" {
-		t.Errorf("sweep data keys = %s, want credited,swept", got)
+	// "credited" is gone on purpose: the sweep no longer credits anything, it
+	// qualifies. A counter named for a payment that never happens is a lie the
+	// console would render.
+	if got := topKeys(t, sweep.Data); got != "qualified,swept" {
+		t.Errorf("sweep data keys = %s, want qualified,swept", got)
 	}
 
 	code, body = req(t, app, http.MethodGet, "/v1/admin/referrals/bonuses", "admin", true, nil)
@@ -241,13 +244,19 @@ func TestAdminEnvelopesKeepTheirKeyOrder(t *testing.T) {
 }
 
 // TestMyReferralsKeepsItsKeyOrder pins the customer dashboard body the same way.
+//
+// The three money keys this once pinned — creditsEarnedCents, refereeBonusCents,
+// referrerBonusCents — were REMOVED with the mint that populated them. Keeping them
+// as permanent zeroes would have been the more "compatible" move and the worse one:
+// they would advertise a bonus program that does not exist. What survives is the
+// alphabetical declaration order the map-to-struct conversion preserved.
 func TestMyReferralsKeepsItsKeyOrder(t *testing.T) {
 	app, _, _ := mount(t)
 	code, body := req(t, app, http.MethodGet, "/v1/referrals", "orgA", false, nil)
 	if code != http.StatusOK {
 		t.Fatalf("mine: %d (%s)", code, body)
 	}
-	want := "code,counts,creditsEarnedCents,link,refereeBonusCents,referrals,referrerBonusCents"
+	want := "code,counts,link,referrals"
 	if got := topKeys(t, body); got != want {
 		t.Errorf("GET /v1/referrals keys = %s, want %s", got, want)
 	}
