@@ -9,24 +9,39 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The scoped, tenant-isolated o11y surface: /v1/o11y/{logs,metrics,status}. These
-// are the ONLY code paths that serve product logs/metrics/status, and every one
-// pins the org SERVER-SIDE (tenantOf, typed.go) into the query — the client never
-// supplies an org, a raw query, or a PromQL/SQL fragment. They are registered
-// BEFORE the hanzoai/o11y wildcard (`app.All("/v1/o11y/*")`, order 70) so Fiber's
-// in-order match gives these specific routes precedence; the wildcard proxy
-// (o11y.go) is left to serve only the genuine o11y runtime UI/query API and is
-// principal-gated, so there is no un-scoped path to product telemetry.
+// The PRODUCT face of o11y: the tenant-isolated reads keyed by a console product
+// slug. Every one pins the org SERVER-SIDE (tenantOf, typed.go) into the query —
+// the client names a PRODUCT and a bounded range, never an org, a raw query or a
+// PromQL/SQL fragment.
 //
-// This is the ONE owner of /v1/o11y/{logs,metrics,status}. It supersedes the former
-// clients/observe surface (now deleted): the rich per-org RED metrics + LLM usage
-// (metricsread.go) and the two-view logs (logs.go, admin infra + per-org request)
-// were folded in here so nothing was lost, and the duplicate mount is gone.
+// THE PRODUCT DIMENSION IS THE NAME. hanzoai/o11y went native and now declares
+// every one of its 367 routes by name, so there is no wildcard left for a host
+// route to shadow: two declarations at one address is a refusal to compose. Three
+// addresses collided, and each was a DIFFERENT QUESTION wearing the same name:
 //
-// Ordering: mountScope runs inside the one order-69 `o11y` mount (mountO11y), so
-// these static routes register before the hanzoai/o11y module installs its wildcard
-// at order 70. serve.go's HIP-0106 health loop adds GET /v1/o11y/health (once, via
-// the module's order-70 co-registration of the `o11y` name — see o11y.go).
+//   - GET /v1/o11y/metrics is the module's metric-NAME CATALOG (which metrics
+//     exist in the store). Ours is one product's RED window. Two questions, so
+//     ours moved to the address that says which one it answers —
+//     /v1/o11y/product/metrics — and the module keeps the bare name.
+//   - GET /v1/o11y/logs was ours and had NO caller (the console reaches logs
+//     through the query engine); the module's is the real log-record read. Ours
+//     is gone rather than renamed — an address nobody calls is not a contract.
+//   - POST /v1/o11y/query_range pinned the runtime's v3 engine route, and the
+//     runtime has no v3 route left to pin (no /api/* routes at all since it
+//     dropped prefix-stripping, and queryRangeV3 has no caller). A route that
+//     forwards to an address nothing serves is dead; the module's v5 querier
+//     answers there now.
+//
+// So this file claims NOTHING back from the module (o11y.go mounts it with no
+// Claimed option). A host that has to name the addresses it takes is a host that
+// took addresses it did not own.
+//
+// /status and /availability keep their bare names because the module declares
+// neither — nothing to disambiguate. If it ever does, /status joins /product/.
+//
+// Ordering: mountScope runs inside the one order-69 `o11y` mount (mountO11y).
+// It no longer carries a "before the wildcard" invariant — the wildcard is gone,
+// and every address here is one the module does not declare.
 
 // admin reports whether the caller is a validated platform SuperAdmin. After
 // SanitizeIdentity, c.IsAdmin() (X-User-IsAdmin) is set to true ONLY for a verified
@@ -37,22 +52,17 @@ import (
 // telemetry).
 func admin(c *zip.Ctx) bool { return c.IsAdmin() }
 
-// mountScope registers the cloud-native SPECIFIC /v1/o11y/* routes — the ONE place
-// the whole specific-route table is declared, so the "before the wildcard" invariant
-// is obvious and lives in a single spot. Called by mountO11y (o11y.go) inside the one
-// order-69 mount, so every route here precedes the hanzoai/o11y wildcard (order 70).
-// The public surface is FLAT and version-less (one /v1/, no nested /api/vN): the
-// upstream engine version is an internal impl detail resolved inside the
-// handlers, never leaked into the route.
+// mountScope registers the cloud-native /v1/o11y routes — the ONE place the whole
+// table is declared. Called by mountO11y (o11y.go) inside the one order-69 mount.
+// Every address here is one hanzoai/o11y does NOT declare, so registration order
+// decides nothing and no claim is needed.
 func mountScope(a *zip.App) {
-	// Tenant-scoped, org-pinned reads — the ONE owner of these paths (handlers
-	// below), declared as TYPED ops on the group so the prefix is part of each
-	// op's path and every projection (the document, the MCP tool, the CLI
-	// command, the SDK method) follows from this one registration. cmd/zipdoc
-	// resolves the group prefix the same way, so the doc comments below reach the
-	// document and the tool list.
-	zip.Get(a, o11yPrefix+"/logs", handleLogs)
-	zip.Get(a, o11yPrefix+"/metrics", handleMetrics)
+	// Tenant-scoped, org-pinned reads, declared as TYPED ops at their FULL path so
+	// every projection (the document, the MCP tool, the CLI command, the SDK method)
+	// follows from this one registration — and so cmd/zipdoc, which resolves a path
+	// statically, can read it. That is why these are not on a hand-rolled router
+	// value: zipdoc cannot see through one, and the build gate refuses rather than
+	// file the prose under a path it guessed.
 	zip.Get(a, o11yPrefix+"/status", handleStatus)
 	// Platform-sudo fleet availability (availability.go), read from the native
 	// store. This is what remains of the VictoriaMetrics proxy that used to sit at
@@ -60,33 +70,16 @@ func mountScope(a *zip.App) {
 	// it is gone, and the one question inside it we still MEASURE is asked here as
 	// a typed op instead of as three allowlisted PromQL strings.
 	zip.Get(a, o11yPrefix+"/availability", handleAvailability)
-	// Flat builder query (query.go): the ONE canonical public path for the console's
-	// composite list query; the upstream engine version (v3) is resolved INTERNALLY.
-	a.Post("/v1/o11y/query", builderQueryHandler("query"))
-	a.Post("/v1/o11y/query_range", builderQueryHandler("query_range"))
+	// The per-product RED window (metricsread.go), under the dimension that says
+	// which question it answers. The module's bare /v1/o11y/metrics is the metric
+	// NAME CATALOG — a different question, so a different address.
+	zip.Get(a, productPrefix+"/metrics", handleMetrics)
 	// Flat, org-gated LLM-obs sessions list (sessions.go): pins the runtime's
 	// /api/sessions route and refuses an org-less caller at the cloud boundary.
 	a.Get("/v1/o11y/sessions", sessionsHandler)
 }
 
 // ---- the typed reads (the published contract) ----
-
-// logsIn selects one product's log window. Every field rides in the query
-// string; the org is NEVER one of them — it is the validated tenant, resolved
-// server-side.
-type logsIn struct {
-	// Product is the console product slug whose logs to read, e.g. "kms".
-	// Required.
-	Product string `json:"product"`
-	// SinceNs is the nanosecond cursor from a previous response's nextCursor.
-	// Absent (0) reads the last `window` seconds instead.
-	SinceNs int64 `json:"sinceNs"`
-	// Window is how many seconds back to read when there is no cursor.
-	// Default 900, capped at 86400.
-	Window int `json:"window"`
-	// Limit caps the returned lines. Default 200, capped at 1000.
-	Limit int `json:"limit"`
-}
 
 // metricsIn selects one product's RED window. The org is the validated tenant,
 // never a field.
@@ -106,40 +99,7 @@ type statusIn struct {
 	Product string `json:"product"`
 }
 
-// GetO11yLogs returns a page of one product's logs for the caller's org. A
-// normal caller sees its OWN request stream, derived from org-tagged spans; a
-// validated platform SuperAdmin sees the product's raw infra stdout stream
-// instead. Poll for a live tail by passing the previous response's nextCursor
-// back as sinceNs. A well-formed product with no backing workload answers an
-// empty page rather than an error; a malformed slug is a 400.
-//
-// Example: {"product": "kms", "limit": 200}
-func handleLogs(ctx context.Context, in *logsIn) (*logsResponse, error) {
-	org, err := tenantOf(ctx)
-	if err != nil {
-		return nil, err
-	}
-	svc, resolved, err := requireService(in.Product)
-	if err != nil {
-		return nil, err
-	}
-	isAdmin := callerIsAdmin(ctx)
-	if !resolved {
-		// Well-formed but unbacked product → honest-empty (never an error, never
-		// another product's data).
-		return &logsResponse{Product: svc.ID, View: viewFor(isAdmin), Lines: []logLine{}}, nil
-	}
-	rctx, cancel := context.WithTimeout(ctx, logReadTimeout)
-	defer cancel()
-	resp, err := queryLogs(rctx, svc, org, isAdmin,
-		boundSinceNs(in.SinceNs), boundWindowSec(in.Window), boundLogLimit(in.Limit))
-	if err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "o11y logs: %v", err)
-	}
-	return &resp, nil
-}
-
-// GetO11yMetrics returns one product's RED series — request rate, errors, p50
+// GetO11yProductMetrics returns one product's RED series — request rate, errors, p50
 // and p95 latency — for the caller's org, plus that org's LLM usage rollup over
 // the same window. The series come from org-tagged request spans, so a tenant
 // only ever aggregates its own traffic; a validated platform SuperAdmin sees the
