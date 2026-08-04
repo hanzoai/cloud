@@ -172,16 +172,18 @@ forwards, which name the internal spelling:
 - `sessions.go` forwards to `/api/sessions`; at v1.5.37+ that list is
   `/v1/o11y/llm/sessions` (llmobs moved under `/llm/` to stop `sessions` and
   `users` colliding with the auth/IAM nouns that already own those words).
-- `query.go` forwards to `/api/v3/<resource>` — **this is the blocker**.
-  v1.5.37 stopped mounting the v3 builder POST route
-  (`RegisterQueryRangeV3Routes` no longer registers `/query_range`;
-  `QueryRangeV3` lost its last reference, and `queryRangeV3`/`queryRangeV4`
-  survive only as unreferenced methods). `/v1/o11y/query_range` is now served by
-  the **v5** querier alone, and v5 refuses the console's composite with
-  `unknown field "queryType" in composite query` — asserted against the pinned
-  module in `query_test.go`. So the bump turns every console trace/log explorer
-  into a 400. There is no cloud-only edit that avoids this: the engine the
-  console speaks to no longer has a route.
+- `query.go` forwarded to `/api/v3/<resource>` — **this was the blocker, and it
+  is now DELETED** (see "the three addresses" below). The bump landed before the
+  console migration this file prescribed, so the ordering it assumed is gone:
+  v1.5.37 stopped mounting the v3 builder POST route (`RegisterQueryRangeV3Routes`
+  no longer registers `/query_range`; `QueryRangeV3` lost its last reference and
+  `queryRangeV3` survives only as an unreferenced method), and by v1.5.57 the
+  runtime registers every route at its full public path and has dropped prefix
+  stripping — so it serves **no `/api/*` route at all**. The forward did not 400,
+  it fell through to the runtime's terminal `/*` catch-all. A route pointing at an
+  address nothing serves is dead, so it went. `/v1/o11y/query_range` is the **v5**
+  querier's now, and v5 still refuses the console's v3 composite with
+  `unknown field "queryType"`, so the console migration below is still owed.
 - `o11y.go`'s `isHealthPath` allowlisted `/api/v{1,2}/{health,healthz,readyz,livez}`;
   v1.5.37 moved the probes to `/v1/o11y/{healthz,readyz,livez}`. **This one shipped.**
   The pin reached v1.5.46 while that list stayed, so the exemption named four
@@ -249,27 +251,39 @@ Two facts the graft made local, both load-bearing:
   intact, and OPTIONS is a method that proxy genuinely answers and publishes. It
   stays at the same point in the same order, and costs nothing: a wildcard proxy
   declares no typed op and contributes no schema.
-- **cloud and the module both claim three addresses** — `GET /v1/o11y/logs`,
-  `GET /v1/o11y/metrics`, `POST /v1/o11y/query_range`. `scope.go` is the ONE
-  owner (it pins the caller's org server-side); the module's are relays. First
-  registered wins, which used to depend on the host's global mount order and is
-  now two adjacent lines in `mount()`. `TestHostRoutesStillWinTheThreeSharedAddresses`
-  is the gate, and it is mutation-proven: flip the order and all three go red.
+- **the three shared addresses are GONE — they were told apart, not assigned.**
+  `GET /v1/o11y/logs`, `GET /v1/o11y/metrics` and `POST /v1/o11y/query_range` were
+  declared by both halves. While the module had a `/v1/o11y/*` catch-all, in-order
+  matching hid that; once it named every route, a second declaration became a
+  refusal to compose and the subsystem crash-looped. `o11y.Claimed(…)` made the
+  binary boot, but a claim SUPPRESSES the module's declaration, so each of the
+  three silently cost the fleet the module's real read at that address. What the
+  addresses needed was to answer different questions under different names:
 
-One document defect SURVIVES this and is still open: at `POST /v1/o11y/query_range`
-the router answers cloud's untyped `builderQueryHandler` while the document
-publishes the module's typed contract, because only the module's half has a
-registry entry to publish. It is unchanged by the graft and it goes away with the
-console migration below, which deletes cloud's half.
+  | address | before | now |
+  |---|---|---|
+  | `GET /v1/o11y/logs` | cloud's per-product read (**no caller** — the console reaches logs through the query engine) | the module's log-record read; cloud's is deleted |
+  | `GET /v1/o11y/metrics` | cloud's per-product RED window | the module's metric-NAME catalog; cloud's RED moved to `GET /v1/o11y/product/metrics` |
+  | `POST /v1/o11y/query_range` | cloud's forward to the non-existent `/api/v3/query_range` | the module's v5 querier; cloud's is deleted |
 
-Unblocking THAT is a console change, not a cloud one: migrate `listQueryPayload`
-+ `parseListRows` (hanzoai/console `src/lib/api/apm.ts`) to the v5 composite
-(`{schemaVersion, requestType, compositeQuery:{queries:[…]}}`), then bump, then
-DELETE `builderQueryHandler` outright — once the shapes agree the forward is an
-identity rewrite of the path it is already registered on, and the module's own
-`POST /v1/o11y/query_range` serves it (there is no wildcard left; every route is
-named). Restoring the v3 route upstream is the wrong direction: it
-resurrects a second spelling of one noun and undoes a deliberate deletion.
+  `mount()` now calls `o11y.Mount(a)` with **no `Claimed` option** — cloud takes no
+  address it does not own, and the boot log says `claimed:0`. The gates are
+  `TestTheThreeAddressesAreToldApartNotShared` (typed_wire_test.go: cloud answers
+  at its address, the module answers at the three bare ones) and
+  `TestScopedReadsOwnTheirAddressesAndOnlyTheirs` (scope_test.go: re-adding a cloud
+  route at a module address is caught here rather than at boot).
+
+STILL OWED, and it is a console change, not a cloud one: the console's trace/log
+explorers still POST a **v3** composite to `/v1/o11y/query_range`, which the v5
+querier refuses with `unknown field "queryType"`. They were already broken before
+this change (the forward reached the runtime's `/*` catch-all, not an engine), so
+deleting cloud's half regressed nothing — it turned an opaque non-answer into an
+honest 400. Migrate `listQueryPayload` + `parseListRows` (hanzoai/console
+`src/lib/api/apm.ts`, plus the duplicated bodies in `e2e/insights-o11y.spec.ts` and
+`e2e/probe-o11y.spec.ts`) to the v5 composite
+(`{schemaVersion, requestType, compositeQuery:{queries:[{type,spec}]}}`).
+Restoring the v3 route upstream is the wrong direction: it resurrects a second
+spelling of one noun and undoes a deliberate deletion.
 
 The bump was rehearsed end to end before being refused — `plugin/o11y` built at
 v1.5.38 with all three forwards updated, run against an upstream carrying
