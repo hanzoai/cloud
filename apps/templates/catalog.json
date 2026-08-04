@@ -15,7 +15,7 @@
     "useCase": "AI SaaS platforms",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/synapse",
+    "source": "https://github.com/hanzo-apps/template-synapse",
     "preview": "https://gallery.hanzo.ai/screenshots/synapse.png",
     "demo": "https://synapse.hanzo.app"
   },
@@ -35,7 +35,7 @@
     "useCase": "Social media platforms",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/circle",
+    "source": "https://github.com/hanzo-apps/template-circle",
     "preview": "https://gallery.hanzo.ai/screenshots/circle.png"
   },
   {
@@ -54,7 +54,7 @@
     "useCase": "Admin dashboards",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/metrics",
+    "source": "https://github.com/hanzo-apps/template-metrics",
     "preview": "https://gallery.hanzo.ai/screenshots/metrics.png",
     "demo": "https://metrics-template.hanzo.app"
   },
@@ -73,7 +73,7 @@
     "useCase": "Creative portfolios",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/kinetic",
+    "source": "https://github.com/hanzo-apps/template-kinetic",
     "preview": "https://gallery.hanzo.ai/screenshots/kinetic.png"
   },
   {
@@ -91,7 +91,7 @@
     "useCase": "SaaS landing pages",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/quantum",
+    "source": "https://github.com/hanzo-apps/template-quantum",
     "preview": "https://gallery.hanzo.ai/screenshots/quantum.png"
   },
   {
@@ -109,7 +109,7 @@
     "useCase": "SaaS feature sections",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/blocks",
+    "source": "https://github.com/hanzo-apps/template-blocks",
     "preview": "https://gallery.hanzo.ai/screenshots/blocks.png",
     "demo": "https://blocks.hanzo.app"
   },
@@ -128,7 +128,7 @@
     "useCase": "Food delivery apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/savor",
+    "source": "https://github.com/hanzo-apps/template-savor",
     "preview": "https://gallery.hanzo.ai/screenshots/savor.png",
     "demo": "https://savor.hanzo.app"
   },
@@ -147,7 +147,7 @@
     "useCase": "Creative portfolios",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/mint",
+    "source": "https://github.com/hanzo-apps/template-mint",
     "preview": "https://gallery.hanzo.ai/screenshots/mint.png",
     "demo": "https://mint.hanzo.app"
   },
@@ -166,7 +166,7 @@
     "useCase": "AI-focused bento card layouts",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/matrix",
+    "source": "https://github.com/hanzo-apps/template-matrix",
     "preview": "https://gallery.hanzo.ai/screenshots/matrix.png",
     "demo": "https://matrix.hanzo.app",
     "variants": [
@@ -200,7 +200,7 @@
     "useCase": "General purpose bento card layouts",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/mosaic",
+    "source": "https://github.com/hanzo-apps/template-mosaic",
     "preview": "https://gallery.hanzo.ai/screenshots/mosaic.png",
     "demo": "https://mosaic.hanzo.app",
     "variants": [
@@ -234,7 +234,7 @@
     "useCase": "Creative agencies",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/prism",
+    "source": "https://github.com/hanzo-apps/template-prism",
     "preview": "https://gallery.hanzo.ai/screenshots/prism.png",
     "variants": [
       {
@@ -274,7 +274,7 @@
     "useCase": "Web studio and agency sites",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/soar",
+    "source": "https://github.com/hanzo-apps/template-soar",
     "preview": "https://gallery.hanzo.ai/screenshots/soar.png",
     "variants": [
       {
@@ -308,7 +308,7 @@
     "useCase": "Crypto product sections",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/cipher",
+    "source": "https://github.com/hanzo-apps/template-cipher",
     "preview": "https://gallery.hanzo.ai/screenshots/cipher-html.png",
     "demo": "https://cipher.hanzo.app",
     "variants": [
@@ -356,7 +356,7 @@
     "useCase": "SaaS landing pages",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/launch",
+    "source": "https://github.com/hanzo-apps/template-launch",
     "preview": "https://gallery.hanzo.ai/screenshots/launch.png"
   },
   {
@@ -374,7 +374,7 @@
     "useCase": "App landing pages",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/construct",
+    "source": "https://github.com/hanzo-apps/template-construct",
     "preview": "https://gallery.hanzo.ai/screenshots/construct.png"
   },
   {
@@ -392,7 +392,7 @@
     "useCase": "Task and list UIs",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/deploy",
+    "source": "https://github.com/hanzo-apps/template-deploy",
     "preview": "https://gallery.hanzo.ai/screenshots/deploy.png",
     "demo": "https://deploy.hanzo.app"
   },
@@ -411,7 +411,7 @@
     "useCase": "Crypto product sites",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/loop",
+    "source": "https://github.com/hanzo-apps/template-loop",
     "preview": "https://gallery.hanzo.ai/screenshots/loop.png",
     "variants": [
       {
@@ -431,24 +431,6 @@
     "demo": "https://loop.hanzo.app"
   },
   {
-    "slug": "unfixed",
-    "title": "Unfixed",
-    "category": "Bento Cards",
-    "description": "Bento card layout — an alternative take on the v3 card set.",
-    "framework": "React 18",
-    "features": [
-      "Bento Layout",
-      "v3",
-      "Variant",
-      "Responsive"
-    ],
-    "useCase": "Bento card layouts v3 alternative",
-    "tier": 2,
-    "rating": 4,
-    "source": "https://github.com/hanzo-templates/unfixed",
-    "preview": "https://gallery.hanzo.ai/screenshots/unfixed.png"
-  },
-  {
     "slug": "unity",
     "title": "Unity",
     "category": "Dashboard",
@@ -463,7 +445,7 @@
     "useCase": "Creator and marketplace admin",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/unity",
+    "source": "https://github.com/hanzo-apps/template-unity",
     "preview": "https://gallery.hanzo.ai/screenshots/unity.png",
     "demo": "https://unity.hanzo.app"
   },
@@ -482,7 +464,7 @@
     "useCase": "Design studios",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/canvas",
+    "source": "https://github.com/hanzo-apps/template-canvas",
     "preview": "https://gallery.hanzo.ai/screenshots/canvas.png",
     "demo": "https://canvas.hanzo.app"
   },
@@ -501,7 +483,7 @@
     "useCase": "Architecture portfolios",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/vault",
+    "source": "https://github.com/hanzo-apps/template-vault",
     "preview": "https://gallery.hanzo.ai/screenshots/vault.png",
     "demo": "https://vault.hanzo.app"
   },
@@ -520,46 +502,9 @@
     "useCase": "Digital agencies",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/studio",
+    "source": "https://github.com/hanzo-apps/template-studio",
     "preview": "https://gallery.hanzo.ai/screenshots/studio.png",
     "demo": "https://studio.hanzo.app"
-  },
-  {
-    "slug": "kalli",
-    "title": "Kalli",
-    "category": "Portfolio",
-    "description": "Multi-purpose HTML portfolio — home variants, project pages and a blog.",
-    "framework": "HTML/Gulp",
-    "features": [
-      "Portfolio",
-      "Creative",
-      "Modern",
-      "Responsive"
-    ],
-    "useCase": "Creative portfolios",
-    "tier": 3,
-    "rating": 3,
-    "source": "https://github.com/hanzo-templates/kalli",
-    "preview": "https://gallery.hanzo.ai/screenshots/kalli-html.png"
-  },
-  {
-    "slug": "innovise",
-    "title": "Innovise",
-    "category": "Business",
-    "description": "Digital-agency site — about, work, services, team and contact on one scroll.",
-    "framework": "HTML/CSS",
-    "features": [
-      "Agency",
-      "Business",
-      "Modern",
-      "Responsive"
-    ],
-    "useCase": "Agency websites",
-    "tier": 3,
-    "rating": 3,
-    "source": "https://github.com/hanzo-templates/catalyst",
-    "preview": "https://gallery.hanzo.ai/screenshots/catalyst.png",
-    "demo": "https://catalyst.hanzo.app"
   },
   {
     "slug": "drive",
@@ -576,7 +521,7 @@
     "useCase": "Automotive websites",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/drive",
+    "source": "https://github.com/hanzo-apps/template-drive",
     "preview": "https://gallery.hanzo.ai/screenshots/drive.png",
     "demo": "https://drive.hanzo.app",
     "variants": [
@@ -610,7 +555,7 @@
     "useCase": "Resort/hospitality sites",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/oasis",
+    "source": "https://github.com/hanzo-apps/template-oasis",
     "preview": "https://gallery.hanzo.ai/screenshots/oasis.png",
     "demo": "https://oasis.hanzo.app"
   },
@@ -629,7 +574,7 @@
     "useCase": "SaaS landing pages",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/solo",
+    "source": "https://github.com/hanzo-apps/template-solo",
     "preview": "https://gallery.hanzo.ai/screenshots/solo.png",
     "demo": "https://solo.hanzo.app"
   },
@@ -648,7 +593,7 @@
     "useCase": "SaaS landing pages",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/forge",
+    "source": "https://github.com/hanzo-apps/template-forge",
     "preview": "https://gallery.hanzo.ai/screenshots/forge.png",
     "demo": "https://forge.hanzo.app"
   },
@@ -667,7 +612,7 @@
     "useCase": "CRM dashboards",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/beta",
+    "source": "https://github.com/hanzo-apps/template-beta",
     "preview": "https://gallery.hanzo.ai/screenshots/beta.png",
     "demo": "https://beta.hanzo.app"
   },
@@ -686,7 +631,7 @@
     "useCase": "E-commerce stores",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/hygge",
+    "source": "https://github.com/hanzo-apps/template-hygge",
     "preview": "https://gallery.hanzo.ai/screenshots/hygge.png",
     "demo": "https://hygge.hanzo.app",
     "variants": [
@@ -720,7 +665,7 @@
     "useCase": "Creative portfolios",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/folio",
+    "source": "https://github.com/hanzo-apps/template-folio",
     "preview": "https://gallery.hanzo.ai/screenshots/folio-html.png",
     "demo": "https://folio.hanzo.app",
     "variants": [
@@ -897,7 +842,7 @@
     "useCase": "Job search mobile apps",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/jobfinder",
+    "source": "https://github.com/hanzo-apps/template-jobfinder",
     "preview": "https://gallery.hanzo.ai/screenshots/jobfinder.png"
   },
   {
@@ -915,7 +860,7 @@
     "useCase": "Studio portfolios",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/pixel",
+    "source": "https://github.com/hanzo-apps/template-pixel",
     "preview": "https://gallery.hanzo.ai/screenshots/pixel.png",
     "demo": "https://pixel.hanzo.app"
   },
@@ -934,7 +879,7 @@
     "useCase": "SaaS landing pages",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/saas-landing",
+    "source": "https://github.com/hanzo-apps/template-saas-landing",
     "preview": "https://gallery.hanzo.ai/screenshots/saas-landing.png",
     "demo": "https://saas-landing.hanzo.app"
   },
@@ -953,7 +898,7 @@
     "useCase": "Editorial and magazine sites",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-templates/serif",
+    "source": "https://github.com/hanzo-apps/template-serif",
     "preview": "https://gallery.hanzo.ai/screenshots/serif.png",
     "demo": "https://serif.hanzo.app"
   },
@@ -967,7 +912,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/analytics-dashboard",
+    "source": "https://github.com/hanzo-apps/template-analytics-dashboard",
     "preview": "https://gallery.hanzo.ai/screenshots/analytics-dashboard.png",
     "demo": "https://analytics-dashboard.hanzo.app"
   },
@@ -981,7 +926,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/blog-platform",
+    "source": "https://github.com/hanzo-apps/template-blog-platform",
     "preview": "https://gallery.hanzo.ai/screenshots/blog-platform.png",
     "demo": "https://blog-platform.hanzo.app"
   },
@@ -995,7 +940,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/changelog",
+    "source": "https://github.com/hanzo-apps/template-changelog",
     "preview": "https://gallery.hanzo.ai/screenshots/changelog.png",
     "demo": "https://changelog.hanzo.app"
   },
@@ -1009,7 +954,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/crypto-portfolio",
+    "source": "https://github.com/hanzo-apps/template-crypto-portfolio",
     "preview": "https://gallery.hanzo.ai/screenshots/crypto-portfolio.png",
     "demo": "https://crypto-portfolio.hanzo.app"
   },
@@ -1023,7 +968,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/ecommerce-storefront",
+    "source": "https://github.com/hanzo-apps/template-ecommerce-storefront",
     "preview": "https://gallery.hanzo.ai/screenshots/ecommerce-storefront.png",
     "demo": "https://ecommerce-storefront.hanzo.app"
   },
@@ -1037,7 +982,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/kanban-board",
+    "source": "https://github.com/hanzo-apps/template-kanban-board",
     "preview": "https://gallery.hanzo.ai/screenshots/kanban-board.png",
     "demo": "https://kanban-board.hanzo.app"
   },
@@ -1051,7 +996,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/markdown-editor",
+    "source": "https://github.com/hanzo-apps/template-markdown-editor",
     "preview": "https://gallery.hanzo.ai/screenshots/markdown-editor.png",
     "demo": "https://markdown-editor.hanzo.app"
   },
@@ -1065,7 +1010,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/portfolio",
+    "source": "https://github.com/hanzo-apps/template-portfolio",
     "preview": "https://gallery.hanzo.ai/screenshots/portfolio.png",
     "demo": "https://portfolio.hanzo.app"
   },
@@ -1079,7 +1024,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-templates/video-streaming",
+    "source": "https://github.com/hanzo-apps/template-video-streaming",
     "preview": "https://gallery.hanzo.ai/screenshots/video-streaming.png",
     "demo": "https://video-streaming.hanzo.app"
   },
@@ -1099,7 +1044,7 @@
     "useCase": "Cross-platform mobile apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/mobile",
+    "source": "https://github.com/hanzo-apps/template-mobile",
     "preview": "https://gallery.hanzo.ai/screenshots/mobile.png",
     "demo": "https://mobile.hanzo.app"
   },
