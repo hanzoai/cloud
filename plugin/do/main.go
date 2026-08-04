@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/do"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the do app.
@@ -17,9 +18,13 @@ import (
 // `do openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "do",
-		Price: cloud.Free,
-		Mount: do.Mount,
+		Name: "do",
+		// Declared: undeclared falls back to /v1/do, which this app does not
+		// serve — the scope then guards a path with no routes and zip refuses to
+		// compose (see plugin/account/main.go).
+		Prefixes: manifest.PrefixesFor("do"),
+		Price:    cloud.Free,
+		Mount:    do.Mount,
 	}}, []string{"do"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

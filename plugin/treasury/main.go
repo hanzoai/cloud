@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/treasury"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the treasury app.
@@ -17,7 +18,11 @@ import (
 // `treasury openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:     "treasury",
+		Name: "treasury",
+		// Declared: undeclared falls back to /v1/treasury, which this app does not
+		// serve — the scope then guards a path with no routes and zip refuses to
+		// compose (see plugin/account/main.go).
+		Prefixes: manifest.PrefixesFor("treasury"),
 		Price:    cloud.Free,
 		Mount:    treasury.Mount,
 		Shutdown: cloud.CtxShutdown(treasury.Shutdown),
