@@ -91,7 +91,7 @@ func ask(t *testing.T, app *zip.App, org, question string) (int, askAnswer) {
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("ask %q: %v", question, err)
 	}
@@ -242,7 +242,7 @@ func TestAnonymousRefused(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/ask", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "acme")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}

@@ -42,7 +42,7 @@ func TestRed_BotProxyForwardsForgedOrgNoPrincipal(t *testing.T) {
 	// The off-gateway forge, post-SanitizeIdentity: forged org, NO validated user.
 	req := httptest.NewRequest(http.MethodGet, "/v1/bot/v1/models", nil)
 	req.Header.Set("X-Org-Id", "victim") // forged; no X-User-Id → no validated principal
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("forged bot request: %v", err)
 	}

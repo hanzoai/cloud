@@ -30,7 +30,6 @@ import (
 	"time"
 
 	natsio "github.com/nats-io/nats.go"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
@@ -71,7 +70,7 @@ func send(t *testing.T, app *zip.App, method, path, org, ctype, body string) (in
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org) // a validated principal (principal.Org gate)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -545,17 +544,17 @@ var refusedByDesign = map[string]string{
 	"GET /v1/pubsub/subscribe": "an SSE stream is not a typed op — zip's typed path answers ONE JSON Out " +
 		"and has no vocabulary for text/event-stream (the same measured fact that keeps POST /v1/ask " +
 		"untyped). Consumption is the pull op …/consumers/{name}/next and the NATS port's native subscriptions.",
-	"GET /v1/pubsub/objects/{bucket}":            "cloud's object door is /v1/storage; a second object store here would be two doors to one noun.",
-	"GET /v1/pubsub/objects/{bucket}/{name}":     "same: objects belong to /v1/storage.",
-	"PUT /v1/pubsub/objects/{bucket}/{name}":     "same: objects belong to /v1/storage.",
-	"DELETE /v1/pubsub/objects/{bucket}/{name}":  "same: objects belong to /v1/storage.",
-	"GET /v1/pubsub/varz":     "operator telemetry, server-wide and cross-tenant; the operator plane is apps/o11y.",
-	"GET /v1/pubsub/connz":    "lists every client of every tenant — publishing it on a tenant surface is a leak.",
-	"GET /v1/pubsub/jsz":      "operator telemetry; the tenant's slice of JetStream is its own stream records.",
-	"GET /v1/pubsub/routez":   "cluster internals; operator plane.",
-	"GET /v1/pubsub/gatewayz": "cluster internals; operator plane.",
-	"GET /v1/pubsub/leafz":    "cluster internals; operator plane.",
-	"GET /v1/pubsub/subsz":    "every subscription of every tenant; operator plane.",
+	"GET /v1/pubsub/objects/{bucket}":           "cloud's object door is /v1/storage; a second object store here would be two doors to one noun.",
+	"GET /v1/pubsub/objects/{bucket}/{name}":    "same: objects belong to /v1/storage.",
+	"PUT /v1/pubsub/objects/{bucket}/{name}":    "same: objects belong to /v1/storage.",
+	"DELETE /v1/pubsub/objects/{bucket}/{name}": "same: objects belong to /v1/storage.",
+	"GET /v1/pubsub/varz":                       "operator telemetry, server-wide and cross-tenant; the operator plane is apps/o11y.",
+	"GET /v1/pubsub/connz":                      "lists every client of every tenant — publishing it on a tenant surface is a leak.",
+	"GET /v1/pubsub/jsz":                        "operator telemetry; the tenant's slice of JetStream is its own stream records.",
+	"GET /v1/pubsub/routez":                     "cluster internals; operator plane.",
+	"GET /v1/pubsub/gatewayz":                   "cluster internals; operator plane.",
+	"GET /v1/pubsub/leafz":                      "cluster internals; operator plane.",
+	"GET /v1/pubsub/subsz":                      "every subscription of every tenant; operator plane.",
 }
 
 // TestRefusedPubsubOpsStayRefused pins each refused intent address to a

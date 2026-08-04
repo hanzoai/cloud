@@ -21,7 +21,7 @@ func TestRootSmartHTTP_HostGuard(t *testing.T) {
 	// ran (not a routing miss, which would be 404).
 	req := httptest.NewRequest(http.MethodGet, "/acme/repo.git/info/refs?service=git-receive-pack", nil)
 	req.Host = "git.hanzo.test"
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("git-host request: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestRootSmartHTTP_HostGuard(t *testing.T) {
 	// never serves off the git host.
 	req = httptest.NewRequest(http.MethodGet, "/acme/repo.git/info/refs?service=git-receive-pack", nil)
 	req.Host = "api.hanzo.test"
-	resp, err = app.Fiber().Test(req, testCfg)
+	resp, err = app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("api-host request: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestRootUI_HostGuard(t *testing.T) {
 	// git and did not fall through to the console SPA.
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "git.hanzo.test"
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("git-host / request: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestRootUI_HostGuard(t *testing.T) {
 	// from a routing miss by the git-native error body.
 	req = httptest.NewRequest(http.MethodGet, "/acme/widget", nil)
 	req.Host = "git.hanzo.test"
-	resp, err = app.Fiber().Test(req, testCfg)
+	resp, err = app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("git-host /:org/:repo request: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestRootUI_HostGuard(t *testing.T) {
 	for _, path := range []string{"/", "/acme/widget"} {
 		req = httptest.NewRequest(http.MethodGet, path, nil)
 		req.Host = "api.hanzo.test"
-		resp, err = app.Fiber().Test(req, testCfg)
+		resp, err = app.Test(req, testCfg)
 		if err != nil {
 			t.Fatalf("api-host %s request: %v", path, err)
 		}

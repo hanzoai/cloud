@@ -102,7 +102,7 @@ func TestDiscordInteractionsHandler(t *testing.T) {
 			rq.Header.Set(discordSigHeader, hex.EncodeToString(sig))
 			rq.Header.Set(discordTimestampHeader, ts)
 		}
-		resp, err := app.Fiber().Test(rq)
+		resp, err := app.Test(rq)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -255,7 +255,7 @@ func TestTelegramWebhookAuthAndIsolation(t *testing.T) {
 		if secretHdr != "" {
 			rq.Header.Set(telegramSecretHeader, secretHdr)
 		}
-		resp, err := app.Fiber().Test(rq)
+		resp, err := app.Test(rq)
 		if err != nil {
 			t.Fatal(err)
 		}

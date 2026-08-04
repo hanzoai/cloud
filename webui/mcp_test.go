@@ -38,7 +38,6 @@ func hostApp(t *testing.T) *zip.App {
 	if err := Mount(app); err != nil {
 		t.Fatal(err)
 	}
-	app.Prepare()
 	return app
 }
 
@@ -53,7 +52,6 @@ func pluginApp(t *testing.T) *zip.App {
 	if err := Mount(app); err != nil {
 		t.Fatal(err)
 	}
-	app.Prepare()
 	return app
 }
 
@@ -77,7 +75,7 @@ func call(t *testing.T, app *zip.App, method, path, body string) reply {
 	}
 	// Fiber's in-memory Test does not follow redirects, so a 308 is OBSERVED here
 	// rather than silently resolved — the hop itself is what this file is about.
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

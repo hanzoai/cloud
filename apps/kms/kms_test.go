@@ -334,7 +334,7 @@ func do(t *testing.T, app *zip.App, method, path, org, body string, admin bool, 
 	if admin {
 		req.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

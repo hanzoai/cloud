@@ -37,7 +37,7 @@ func resolve(t *testing.T, headers map[string]string) (string, bool) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("Test request: %v", err)
 	}
 	return got, ok
@@ -170,7 +170,7 @@ func TestLedger_TracksBillingOrg(t *testing.T) {
 		for k, v := range h {
 			req.Header.Set(k, v)
 		}
-		if _, err := app.Fiber().Test(req); err != nil {
+		if _, err := app.Test(req); err != nil {
 			t.Fatalf("Test request: %v", err)
 		}
 		want := billing

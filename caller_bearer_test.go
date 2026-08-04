@@ -23,7 +23,7 @@ func TestCallerBearer(t *testing.T) {
 		if setup != nil {
 			setup(req)
 		}
-		res, err := app.Fiber().Test(req)
+		res, err := app.Test(req)
 		if err != nil {
 			t.Fatal(err)
 		}

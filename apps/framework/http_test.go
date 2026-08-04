@@ -45,7 +45,7 @@ func call(t *testing.T, app *zip.App, method, path, org, user string, admin bool
 	if admin {
 		req.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -219,7 +219,7 @@ func TestForgedPrincipalRefused(t *testing.T) {
 		}
 		req.Header.Set("X-Org-Id", "victim") // forged; equals a real tenant
 		// deliberately NO X-User-Id — the anonymous-forge signature.
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("forged %s %s: %v", method, path, err)
 		}

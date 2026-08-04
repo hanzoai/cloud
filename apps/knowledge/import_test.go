@@ -19,7 +19,7 @@ func reqRaw(t *testing.T, app *zip.App, path, org string, body []byte) (int, []b
 	hr.Header.Set("Content-Type", "application/octet-stream")
 	hr.Header.Set("X-Org-Id", org)
 	hr.Header.Set("X-User-Id", "u_"+org)
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
 	}

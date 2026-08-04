@@ -48,14 +48,13 @@ import (
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/wallets"
 	"github.com/hanzoai/cloud/apps/x402"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -224,7 +223,7 @@ func childReq(app *zip.App, method, path, org, body string) (int, []byte, error)
 	hr.Header.Set("Content-Type", "application/json")
 	hr.Header.Set("X-Org-Id", org)
 	hr.Header.Set("X-User-Id", "u_"+org)
-	resp, err := app.Fiber().Test(hr, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(hr, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		return 0, nil, err
 	}
@@ -393,7 +392,7 @@ func (f *fleet) call(org, tool, proof string) (int, []byte, http.Header) {
 	if proof != "" {
 		hr.Header.Set(x402.HeaderProof, proof)
 	}
-	resp, err := f.app.Fiber().Test(hr, fiber.TestConfig{Timeout: 0})
+	resp, err := f.app.Test(hr, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		f.t.Fatalf("tools/call: %v", err)
 	}

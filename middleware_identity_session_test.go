@@ -48,7 +48,7 @@ func TestSessionBridgeSameOrigin(t *testing.T) {
 		if mutate != nil {
 			mutate(req)
 		}
-		if _, err := app.Fiber().Test(req); err != nil {
+		if _, err := app.Test(req); err != nil {
 			t.Fatalf("%s: test request: %v", name, err)
 		}
 		if verdict != want {

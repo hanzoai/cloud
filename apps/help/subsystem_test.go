@@ -61,7 +61,7 @@ func anon(t *testing.T, app *zip.App, method, path string, body any, headers map
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -76,7 +76,7 @@ func anonRaw(t *testing.T, app *zip.App, method, path string, body []byte) (int,
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

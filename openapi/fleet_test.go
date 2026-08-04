@@ -46,7 +46,7 @@ func TestMountFleetServesTheCompositionIncludingItself(t *testing.T) {
 		return openapi.Subsets([]string{"ads", "crm"}, func(a string) []byte { return subset(t, "/v1/"+a) })
 	})
 
-	resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, openapi.Path, nil))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, openapi.Path, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestMountFleetReportsAFailedCompositionRatherThanAnEmptyDocument(t *testing
 		return openapi.Subsets([]string{"ghost"}, func(string) []byte { return nil })
 	})
 
-	resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, openapi.Path, nil))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, openapi.Path, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

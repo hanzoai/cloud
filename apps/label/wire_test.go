@@ -18,7 +18,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -162,7 +161,7 @@ func req(t *testing.T, app *zip.App, method, path, org, user, body string) (int,
 	if user != "" {
 		r.Header.Set("X-User-Id", user)
 	}
-	resp, err := app.Fiber().Test(r, fiber.TestConfig{Timeout: fiberTimeout(t)})
+	resp, err := app.Test(r, zip.TestConfig{Timeout: fiberTimeout(t)})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

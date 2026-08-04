@@ -18,7 +18,6 @@ import (
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -110,7 +109,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body 
 		hr.Header.Set("X-User-IsAdmin", "true")
 	}
 	// Generous ceiling — the fiber default is 1s, which flakes under machine load.
-	resp, err := app.Fiber().Test(hr, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(hr, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -586,7 +585,7 @@ func TestMount(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown() })
 	// A no-principal GET is refused 403 (proves the route is bound + gated).
 	r := httptest.NewRequest(http.MethodGet, "/v1/referrals", nil)
-	resp, err := app.Fiber().Test(r, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(r, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

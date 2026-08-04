@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -98,7 +97,7 @@ func do(t *testing.T, app *zip.App, method, path, org, user, project string, bod
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 10 * time.Second})
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 10 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

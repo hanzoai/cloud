@@ -15,13 +15,12 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
 // testCfg gives a request room to open the encrypted per-org memory on a loaded
 // box; fiber's 1s default trips on the first cold open, not on the handler.
-var testCfg = fiber.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true}
+var testCfg = zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true}
 
 // ---- harness ----
 
@@ -114,7 +113,7 @@ func call(t *testing.T, app *zip.App, method, path, org string, body any) (int, 
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

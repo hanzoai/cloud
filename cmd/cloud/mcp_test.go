@@ -25,7 +25,7 @@ func doMethod(t *testing.T, app *zip.App, method, path, body string) (int, strin
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
@@ -59,7 +59,6 @@ func app308(t *testing.T) *zip.App {
 	if err := webui.Mount(app); err != nil {
 		t.Skipf("console embed unavailable in this build: %v", err)
 	}
-	app.Prepare()
 	return app
 }
 

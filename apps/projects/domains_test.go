@@ -98,7 +98,7 @@ func TestOperatorVouchIsVerbatimEndToEnd(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("bind %q for %q: %v", host, org, err)
 		}

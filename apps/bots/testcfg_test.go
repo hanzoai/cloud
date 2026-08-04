@@ -1,9 +1,8 @@
 package bots
 
 import (
+	"github.com/zap-proto/zip"
 	"time"
-
-	"github.com/zap-proto/fiber/v3"
 )
 
 // testCfg replaces fiber's Test() default of Timeout: 1s (fiber/v3@v3.2.1
@@ -13,4 +12,4 @@ import (
 // for reasons unrelated to what it guards teaches nothing, and a tenant-isolation
 // guard that is a coin flip is worse than none. The generous bound still fails a
 // genuine hang.
-var testCfg = fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}
+var testCfg = zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}

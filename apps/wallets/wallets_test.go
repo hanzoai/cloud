@@ -86,7 +86,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, [
 		hr.Header.Set("X-Org-Id", org)
 		hr.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

@@ -46,7 +46,7 @@ func TestMiddlewareCustomDomainServed(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "http://yadota.tech/", nil)
 	req.Header.Set("X-Org-Id", "attacker-org") // must be ignored
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestMiddlewareCustomDomainUnboundPassthrough(t *testing.T) {
 	defer SetResolver(nil)
 	app := newTestApp(selfServer())
 	req := httptest.NewRequest("GET", "http://unbound.tech/", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestMiddlewareSelfHostNeverResolved(t *testing.T) {
 	app := newTestApp(selfServer())
 	for _, host := range []string{"api.hanzo.ai", "console.hanzo.ai", "cloud.hanzo.ai", "hanzo.ai"} {
 		req := httptest.NewRequest("GET", "http://"+host+"/v1/anything", nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("test %s: %v", host, err)
 		}
@@ -111,7 +111,7 @@ func TestMiddlewareCustomDomainNotLivePassthrough(t *testing.T) {
 	defer SetResolver(nil)
 	app := newTestApp(selfServer())
 	req := httptest.NewRequest("GET", "http://yadota.tech/", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}

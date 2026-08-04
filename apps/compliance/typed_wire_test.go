@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/openapi"
@@ -19,7 +18,7 @@ import (
 // decoded JSON that do() hands back.
 func doRaw(t *testing.T, app *zip.App, rq *http.Request) *http.Response {
 	t.Helper()
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", rq.Method, rq.URL.Path, err)
 	}

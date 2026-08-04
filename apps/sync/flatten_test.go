@@ -20,12 +20,12 @@ import (
 // to the real commercemid.ErrorHandlerJSON (ErrorJSON writes c.Bytes(500, …)); kept
 // dependency-light so the guard pins the invariant, not a commerce version.
 func installV1Flatten(app *zip.App) {
-	app.Group("/v1").Use(func(c *zip.Ctx) error {
+	app.Group("/v1").Use(zip.H(func(c *zip.Ctx) error {
 		if err := c.Next(); err != nil {
 			return c.Bytes(http.StatusInternalServerError, []byte(`{"error":"flattened"}`))
 		}
 		return nil
-	})
+	}))
 }
 
 // mountSyncUnderFlatten mounts sync BEHIND the /v1 flatten filter, reproducing the

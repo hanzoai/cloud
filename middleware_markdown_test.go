@@ -42,7 +42,7 @@ func mdRequest(t *testing.T, app *zip.App, target string, headers map[string]str
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestMarkdown_ErrorStaysJSON(t *testing.T) {
 
 func TestMarkdown_VaryHeaderSet(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/code/search", nil)
-	resp, err := mdTestApp(nil).Fiber().Test(req)
+	resp, err := mdTestApp(nil).Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}

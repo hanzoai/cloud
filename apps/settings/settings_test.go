@@ -70,7 +70,7 @@ func (k *fakeKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) { 
 // send drives a hand-built request (auth headers set by the caller).
 func send(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	t.Helper()
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", req.Method, req.URL.Path, err)
 	}

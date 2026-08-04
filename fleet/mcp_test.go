@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/fleet"
-	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -108,7 +107,6 @@ func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 		}
 		return k.addr, nil
 	})
-	h.Prepare()
 	return h
 }
 
@@ -120,7 +118,7 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := h.Fiber().Test(req, fiber.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
+	resp, err := h.Test(req, zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("POST /v1/mcp: %v", err)
 	}

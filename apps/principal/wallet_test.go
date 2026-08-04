@@ -26,7 +26,7 @@ func wallet(t *testing.T, headers map[string]string) (ledger, acct string, ok bo
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("wallet probe: %v", err)
 	}

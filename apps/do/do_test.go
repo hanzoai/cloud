@@ -11,14 +11,13 @@ import (
 	"time"
 
 	"github.com/digitalocean/godo"
-	"github.com/zap-proto/fiber/v3"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
-var testCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
+var testCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
 // ── fakes: an in-memory DigitalOcean account shared across all orgs ──────────
 //
@@ -124,7 +123,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, [
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(rq, testCfg)
+	resp, err := app.Test(rq, testCfg)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -265,7 +264,7 @@ func TestForgePathRefused(t *testing.T) {
 	routes(app2, s)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/vpcs", nil)
 	rq.Header.Set("X-Org-Id", "victim") // forged org, no validated user
-	resp, err := app2.Fiber().Test(rq, testCfg)
+	resp, err := app2.Test(rq, testCfg)
 	if err != nil {
 		t.Fatalf("forge test: %v", err)
 	}

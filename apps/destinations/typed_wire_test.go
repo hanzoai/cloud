@@ -72,7 +72,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, admin bool, body a
 	if admin {
 		req.Header.Set("X-User-IsOrgAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

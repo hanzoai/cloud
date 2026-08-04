@@ -169,7 +169,7 @@ func TestSendAnswersTwoShapes(t *testing.T) {
 		rq.Header.Set("Content-Type", "application/json")
 		rq.Header.Set("X-Org-Id", "acme")
 		rq.Header.Set("X-User-Id", "u_acme")
-		resp, err := app2.Fiber().Test(rq)
+		resp, err := app2.Test(rq)
 		if err != nil {
 			t.Fatalf("send: %v", err)
 		}

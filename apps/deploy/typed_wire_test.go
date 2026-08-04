@@ -38,7 +38,7 @@ func probe(t *testing.T, s *cloud.Service[state], req *http.Request) (int, strin
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", req.Method, req.URL.Path, err)
 	}
@@ -133,7 +133,7 @@ func TestRefusalIsA403AndANavigationIsBounced(t *testing.T) {
 		nav.Header.Set("Sec-Fetch-Dest", "document")
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
 		routes(app, s)
-		resp, err := app.Fiber().Test(nav)
+		resp, err := app.Test(nav)
 		if err != nil {
 			t.Fatalf("GET %s (navigation): %v", path, err)
 		}

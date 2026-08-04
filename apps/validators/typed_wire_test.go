@@ -67,7 +67,7 @@ func send(t *testing.T, app *zip.App, method, path, org string, body string) (in
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

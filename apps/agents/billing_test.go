@@ -252,7 +252,7 @@ func TestRunRequiresValidatedPrincipal(t *testing.T) {
 	// A raw run request carrying ONLY X-Org-Id (no X-User-Id) must be 403.
 	req := httptest.NewRequest(http.MethodPost, "/v1/agents/a/run", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged/unvalidated org, no principal
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

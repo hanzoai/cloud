@@ -42,7 +42,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -445,7 +445,7 @@ func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 		req.Header.Set("X-Org-Id", "acme")
 		req.Header.Set("X-User-Id", "u_admin")
 		req.Header.Set("X-User-IsAdmin", "true")
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("admin patch: %v", err)
 		}

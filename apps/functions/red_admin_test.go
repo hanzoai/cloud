@@ -27,7 +27,7 @@ func doAdmin(t *testing.T, app *zip.App, method, path string, body any) (int, []
 	}
 	req.Header.Set("X-User-Id", "u_admin") // validated principal; empty org still 403 (no admin bucket)
 	req.Header.Set("X-User-IsAdmin", "true")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

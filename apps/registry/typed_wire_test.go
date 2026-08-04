@@ -95,9 +95,9 @@ func (f *fakeRegistry) serve(t *testing.T) (reg, realm string) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"token": "tok-" + strings.Join(r.URL.Query()["scope"], "+"),
+			"token":        "tok-" + strings.Join(r.URL.Query()["scope"], "+"),
 			"access_token": "tok-" + strings.Join(r.URL.Query()["scope"], "+"),
-			"expires_in": 900,
+			"expires_in":   900,
 		})
 	}))
 	t.Cleanup(realmSrv.Close)
@@ -238,7 +238,7 @@ func do(t *testing.T, app *zip.App, method, path, user, org, body string) (int, 
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test(%s %s): %v", method, path, err)
 	}

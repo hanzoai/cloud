@@ -110,7 +110,7 @@ func doReq(t *testing.T, e *testEnv, method, path, org string, admin bool, body 
 	if admin {
 		rq.Header.Set("X-User-IsOrgAdmin", "true")
 	}
-	resp, err := e.app.Fiber().Test(rq)
+	resp, err := e.app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

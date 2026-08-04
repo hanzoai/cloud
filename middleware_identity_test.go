@@ -116,7 +116,7 @@ func probe(t *testing.T, app *zip.App, mutate func(*http.Request)) {
 	if mutate != nil {
 		mutate(req)
 	}
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("Test request: %v", err)
 	}
 }
@@ -786,7 +786,7 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 			gotAdmin, gotOrgAdmin, gotOrg = "", "", ""
 			req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 			tc.mutate(req)
-			resp, err := app.Fiber().Test(req)
+			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("probe: %v", err)
 			}

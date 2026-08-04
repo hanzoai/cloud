@@ -130,7 +130,7 @@ func TestBalance_SubjectIsTheGateSubject(t *testing.T) {
 			if tc.userName != "" {
 				req.Header.Set("X-User-Name", tc.userName)
 			}
-			resp, err := app.Fiber().Test(req)
+			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("Test: %v", err)
 			}
@@ -251,7 +251,7 @@ func TestBalance_ReportsTheAccountItRead(t *testing.T) {
 			if tc.userName != "" {
 				req.Header.Set("X-User-Name", tc.userName)
 			}
-			resp, err := app.Fiber().Test(req)
+			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("Test: %v", err)
 			}

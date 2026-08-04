@@ -57,7 +57,7 @@ func postKeyed(t *testing.T, app *zip.App, path, host, body string, hdr map[stri
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST %s: %v", path, err)
 	}

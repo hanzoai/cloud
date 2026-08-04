@@ -36,7 +36,7 @@ func slackPost(t *testing.T, app *zip.App, path, secret, contentType, body strin
 	rq.Header.Set("X-Slack-Request-Timestamp", ts)
 	rq.Header.Set("X-Slack-Signature", slackSign(secret, ts, body))
 	rq.Header.Set("Content-Type", contentType)
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test %s: %v", path, err)
 	}
@@ -233,7 +233,7 @@ func TestSlackEventsHMAC(t *testing.T) {
 	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/events", strings.NewReader(body))
 	rq.Header.Set("X-Slack-Signature", "v0=deadbeef")
 	rq.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(time.Now().Unix(), 10))
-	resp, _ := app.Fiber().Test(rq)
+	resp, _ := app.Test(rq)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("bad signature want 401, got %d", resp.StatusCode)
@@ -241,7 +241,7 @@ func TestSlackEventsHMAC(t *testing.T) {
 
 	// A missing signature is refused 401.
 	rq2 := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/events", strings.NewReader(body))
-	resp2, _ := app.Fiber().Test(rq2)
+	resp2, _ := app.Test(rq2)
 	_ = resp2.Body.Close()
 	if resp2.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("missing signature want 401, got %d", resp2.StatusCode)
@@ -252,7 +252,7 @@ func TestSlackEventsHMAC(t *testing.T) {
 	rq3 := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/events", strings.NewReader(body))
 	rq3.Header.Set("X-Slack-Request-Timestamp", oldTs)
 	rq3.Header.Set("X-Slack-Signature", slackSign("sig-secret-1", oldTs, body))
-	resp3, _ := app.Fiber().Test(rq3)
+	resp3, _ := app.Test(rq3)
 	_ = resp3.Body.Close()
 	if resp3.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("stale timestamp want 401, got %d", resp3.StatusCode)
@@ -363,7 +363,7 @@ func TestSlackLinkLeg1SetsCookieAndRedirects(t *testing.T) {
 
 	entry, _ := signSlackLink(mounted.State.stateKey, "TACME", "Uacme", 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 	// (b) A MISMATCHED init cookie → refused.
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link/slack?code=c&state="+url.QueryEscape(ss), nil)
 	rq.Header.Set("Cookie", slackInitCookie+"=WRONG-NONCE")
-	resp, _ := app.Fiber().Test(rq)
+	resp, _ := app.Test(rq)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("transplant with a MISMATCHED init cookie want 400, got %d", resp.StatusCode)
@@ -479,7 +479,7 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 	ss, _ := signSlackSubject(mounted.State.stateKey, nonce, 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link/slack?code=usercode-acme&state="+url.QueryEscape(ss), nil)
 	rq.Header.Set("Cookie", slackInitCookie+"="+nonce)
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -522,7 +522,7 @@ func TestSlackRoutePrecedence(t *testing.T) {
 	// NOT the /:provider GET handler (which would 200 a provider JSON view / 403).
 	entry, _ := signSlackLink(mounted.State.stateKey, "TACME", "Uacme", 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

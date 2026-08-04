@@ -64,7 +64,7 @@ func TestGrantIdempotencyKeyBindsTheSubject(t *testing.T) {
 		})
 		req := httptest.NewRequest("GET", "/k", nil)
 		req.Header.Set("Idempotency-Key", "one-nonce")
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("key probe: %v", err)
 		}

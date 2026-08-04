@@ -78,7 +78,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body 
 	if admin {
 		hr.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

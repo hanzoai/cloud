@@ -65,10 +65,10 @@ func servePlaneRules(t *testing.T, rules map[string][]plane.ScopeRule, calls *at
 func coresidentRateApp(t *testing.T, entries *atomic.Int32) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{ErrorHandler: ErrorHandler})
-	app.Use(func(c *zip.Ctx) error {
+	app.Use(zip.H(func(c *zip.Ctx) error {
 		entries.Add(1)
 		return c.Next()
-	})
+	}))
 	app.Use(ScopeRateLimit(mustClient(t, transport.PlaceholderBase, false), nil))
 	app.Post("/v1/agent/run", func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})

@@ -161,7 +161,7 @@ func TestClientIP_OverARealRequest(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Add("X-Forwarded-For", "1.2.3.4")
 	req.Header.Add("X-Forwarded-For", "203.0.113.9, 10.0.0.6")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatal(err)
 	}
 	if got != "203.0.113.9" {
@@ -171,7 +171,7 @@ func TestClientIP_OverARealRequest(t *testing.T) {
 	// And a request with no chain at all is an in-cluster caller: no address, so
 	// the edge limiter leaves it alone.
 	req = httptest.NewRequest(http.MethodGet, "/probe", nil)
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatal(err)
 	}
 	if got != "" {

@@ -75,7 +75,7 @@ func fleetDoAs(t *testing.T, app *zip.App, method, path, user, org string, orgAd
 	if superAdmin {
 		req.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

@@ -29,15 +29,14 @@ import (
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/wallets"
 	"github.com/hanzoai/cloud/apps/x402"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -188,7 +187,7 @@ func (m *market) req(method, path, org, proof, body string) (int, []byte, http.H
 	if proof != "" {
 		hr.Header.Set(x402.HeaderProof, proof)
 	}
-	resp, err := m.app.Fiber().Test(hr, fiber.TestConfig{Timeout: 0})
+	resp, err := m.app.Test(hr, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		m.t.Fatalf("Test %s %s: %v", method, path, err)
 	}

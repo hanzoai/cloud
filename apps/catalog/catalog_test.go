@@ -46,7 +46,7 @@ func do(t *testing.T, app *zip.App, method, url, body string, hdr map[string]str
 	for k, v := range hdr {
 		r.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(r)
+	resp, err := app.Test(r)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, url, err)
 	}

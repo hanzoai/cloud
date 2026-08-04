@@ -72,7 +72,7 @@ func TestTracingMiddleware_EmitsServerSpan(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/v1/models", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestTracingMiddleware_PropagatesContext(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/v1/agents/run", nil)
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
 
@@ -156,7 +156,7 @@ func TestTracingMiddleware_ErrorStatus(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/v1/boom", nil)
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
 	spans := sr.Ended()
@@ -180,7 +180,7 @@ func TestTracingMiddleware_SkipsNoise(t *testing.T) {
 	app.Get("/", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
 
 	for _, p := range []string{"/v1/agents/health", "/healthz", "/"} {
-		if _, err := app.Fiber().Test(httptest.NewRequest("GET", p, nil)); err != nil {
+		if _, err := app.Test(httptest.NewRequest("GET", p, nil)); err != nil {
 			t.Fatalf("app.Test %s: %v", p, err)
 		}
 	}

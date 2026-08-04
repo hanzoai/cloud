@@ -172,7 +172,7 @@ func TestGraphRefusesWithoutPrincipal(t *testing.T) {
 
 	hr := httptest.NewRequest(http.MethodGet, "/v1/kb/graph", nil)
 	hr.Header.Set("X-Org-Id", "victim") // forged org, no validated principal
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}

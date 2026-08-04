@@ -19,7 +19,7 @@ require (
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.11
+	github.com/hanzoai/iam v1.34.12
 	github.com/hanzoai/kafka v1.3.1
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
@@ -45,7 +45,7 @@ require (
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/http v0.3.1
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.23.0
+	github.com/zap-proto/zip v1.24.1
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2

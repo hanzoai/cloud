@@ -108,7 +108,7 @@ func TestDenyResource_SpendCapDistinct402(t *testing.T) {
 	for _, tc := range cases {
 		app := zip.New(zip.Config{})
 		app.Post("/v1/x", func(c *zip.Ctx) error { return DenyResource(c, tc.err) })
-		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodPost, "/v1/x", nil))
+		resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/v1/x", nil))
 		if err != nil {
 			t.Fatalf("%s: Test: %v", tc.name, err)
 		}
@@ -141,7 +141,7 @@ func rateReq(t *testing.T, app *zip.App, org, project string) *http.Response {
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test request: %v", err)
 	}
