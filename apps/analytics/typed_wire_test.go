@@ -40,6 +40,12 @@ var untypedByDesign = map[string]string{
 		"{status,code,error} and drops the report. Writing the body from inside the op does not escape " +
 		"it either — a nil Out is stamped cmp.Or(op.Status, 204) over whatever was written.",
 
+	"GET /v1/event.js": "the tag is an ASSET, not an operation: its body is JavaScript and zip renders " +
+		"a typed Out as JSON, so there is no Out that can carry it. It also answers 304 with an empty " +
+		"body on a matching If-None-Match — WithStatus refuses a non-2xx and a nil Out is stamped " +
+		"cmp.Or(op.Status, 204) — and the caller is a <script src>, which reads no schema, no MCP tool " +
+		"and no SDK method.",
+
 	"POST /v1/event": canonWireReason,
 	"POST /v1/event/{project}/envelope": "the Sentry error wire on the one event door: the body is a " +
 		"raw Sentry envelope stream and the credential is a DSN key the o11y consumer verifies itself " +
