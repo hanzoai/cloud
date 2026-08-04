@@ -47,11 +47,13 @@ func TestPolicy_GoingLiveSurvivesTheRollout(t *testing.T) {
 		t.Fatalf("newPlane: %v", err)
 	}
 	holdFolds(t, p1)
-	st, _, ver1, err := p1.appetite(k, 0.02, 0.10, true /* live */, "u_"+orgA)
+	ver1, err := p1.appetite(k, 0.02, 0.10, true /* live */, "u_"+orgA)
 	if err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
-	if st.Config.Shadow {
+	if st, _, err := p1.state(k); err != nil {
+		t.Fatalf("state: %v", err)
+	} else if st.Config.Shadow {
 		t.Fatalf("the call did not take the model live at all: shadow=%v", st.Config.Shadow)
 	}
 	if ver1 != 1 {
@@ -113,7 +115,7 @@ func TestPolicy_EveryScoreCitesTheRegimeItWasDecidedUnder(t *testing.T) {
 	}
 
 	// State one, and the next score cites it.
-	code, body = req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA,
+	code, body = req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
 		`{"review":0.02,"sample":0.10,"live":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("appetite = %d %s", code, body)
@@ -128,7 +130,7 @@ func TestPolicy_EveryScoreCitesTheRegimeItWasDecidedUnder(t *testing.T) {
 
 	// Restate it DIFFERENTLY, and the citation moves with it — which is the whole
 	// point: the earlier decision above is still attributable to version 1.
-	code, body = req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA,
+	code, body = req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
 		`{"review":0.05,"sample":0.20,"live":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("second appetite = %d %s", code, body)
@@ -227,11 +229,11 @@ func TestPolicy_HistoryIsPerTenantOverTheWire(t *testing.T) {
 		`{"review":0.02,"sample":0.10,"live":true}`,
 		`{"review":0.04,"sample":0.20,"live":true}`,
 	} {
-		if code, body := req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA, spec); code != http.StatusOK {
+		if code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, spec); code != http.StatusOK {
 			t.Fatalf("orgA appetite = %d %s", code, body)
 		}
 	}
-	if code, body := req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgB, "u_"+orgB,
+	if code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgB, "u_"+orgB,
 		`{"review":0.01,"sample":0.05,"live":false}`); code != http.StatusOK {
 		t.Fatalf("orgB appetite = %d %s", code, body)
 	}
@@ -507,7 +509,7 @@ func TestPolicy_ARegimePredatingTheRecordIsAdopted(t *testing.T) {
 		t.Fatalf("newPlane: %v", err)
 	}
 	holdFolds(t, p1)
-	if _, _, _, err := p1.appetite(k, 0.03, 0.15, true, "u_"+orgA); err != nil {
+	if _, err := p1.appetite(k, 0.03, 0.15, true, "u_"+orgA); err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
 	sh, err := p1.for_(k)
@@ -667,7 +669,7 @@ func TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing(t *testin
 	app := mountBilled(t, &ledger{available: 1_000_000})
 
 	// A regime the contract admits, so there is something in force to protect.
-	if code, body := req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA,
+	if code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
 		`{"review":0.02,"sample":0.10,"live":true}`); code != http.StatusOK {
 		t.Fatalf("the admissible regime was refused %d %s — the test would prove nothing", code, body)
 	}
@@ -687,7 +689,7 @@ func TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing(t *testin
 		{"a negative sample rate", `{"review":0.02,"sample":-0.1,"live":true}`},
 		{"a sample rate above one", `{"review":0.02,"sample":1.5,"live":true}`},
 	} {
-		code, body := req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA, bad.body)
+		code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, bad.body)
 		if code != http.StatusBadRequest {
 			t.Fatalf("%s: PUT %s answered %d %s, want 400 — the published contract is enforced by "+
 				"nothing", bad.what, bad.body, code, body)
