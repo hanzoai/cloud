@@ -392,6 +392,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		// on a nil interface conversion and answered 500. A tier is org state, and
 		// the org has to be resolved before it can be read.
 		{"/v1/billing/tier", commercebilling.GetTier},
+		// The wire top-up rail: the serving BRAND's receiving bank details
+		// (host→brand, org row hydrated from KMS /tenants/<brand>/wire) with the
+		// caller's billing key rendered into the payment reference — which is why
+		// it belongs on THIS chain: the reference is payer attribution, and an
+		// unpinned caller would be an unattributable wire. Nothing mints here;
+		// settlement is the admin wire/credit verb on bank receipt.
+		{"/v1/billing/wire", commercebilling.GetWireInstructions},
+		// The custody rail's live capability list (chains + tokens straight from
+		// the MPC processor) — the pay SPA renders its asset picker from this.
+		{"/v1/billing/crypto/options", commercebilling.GetCryptoOptions},
+		// A caller-scoped crypto deposit intent read (pending → confirming →
+		// succeeded); a foreign intent id answers 404.
+		{"/v1/billing/crypto/deposit/:id", commercebilling.GetCryptoDeposit},
 	}
 	for _, r := range billingRead {
 		app.Get(r.path,
@@ -401,6 +414,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			r.h,
 		)
 	}
+
+	// POST /v1/billing/crypto/deposit — mint a per-payer MPC custody deposit
+	// address (commerce thirdparty/mpc → the hanzo-mpc signer fleet's /keygen).
+	// Same chain as the reads: the credited payer is the PINNED caller subject,
+	// never a body value, and the handler reuses the payer's open intent so a
+	// refresh cannot spray keygens. No balance moves here — the chain watcher
+	// credits on real confirmations.
+	app.Post("/v1/billing/crypto/deposit",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.CreateCryptoDeposit,
+	)
 
 	// The PORTAL payment-method pair — the address the BILLING app proxies to.
 	//
