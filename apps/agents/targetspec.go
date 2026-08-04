@@ -146,6 +146,80 @@ func clampF01(f float64) float64 {
 	return f
 }
 
+// Need is what a job requires OF a machine, written in the SAME vocabulary a machine
+// advertises. It is the other half of Spec: Spec says what a machine has, Need says
+// what a job wants, and Satisfies is the ONE place the two meet.
+//
+// THERE IS NO VENDOR FIELD, AND THAT IS THE POINT. `resourcesPerNode.limits.
+// "nvidia.com/gpu"` is not a requirement, it is one vendor's name for a requirement —
+// baking it into the scheduler contract is what made a GPU job unroutable to an AMD or
+// Apple machine that could have run it. A job needs ACCELERATORS with enough memory;
+// which vendor satisfies that is the machine's business, and hanzo-kernel lowers one
+// kernel source to CUDA/ROCm/Vulkan/Metal precisely so the job never has to care.
+// Re-adding a vendor here would reintroduce the hardcode as a value, so it stays out:
+// a requirement no advertised capability can express is not a requirement.
+//
+// The zero Need is "anything will do" — every field is a floor that only constrains
+// when set, so an unrelated caller is never forced to describe a machine it does not
+// care about.
+type Need struct {
+	GPUs   int    `json:"gpus,omitempty"`   // accelerators required
+	VRAM   int64  `json:"vram,omitempty"`   // bytes each accelerator must address
+	CPUs   int    `json:"cpus,omitempty"`   // logical cores
+	Memory int64  `json:"memory,omitempty"` // host RAM bytes
+	OS     string `json:"os,omitempty"`     // linux | darwin | windows
+	Arch   string `json:"arch,omitempty"`   // amd64 | arm64 | ...
+}
+
+// IsZero reports a Need that constrains nothing.
+func (n Need) IsZero() bool {
+	return n.GPUs == 0 && n.VRAM == 0 && n.CPUs == 0 && n.Memory == 0 && n.OS == "" && n.Arch == ""
+}
+
+// Satisfies reports whether this machine's advertised capability meets a job's Need.
+// It is a pure function of two values — no clock, no store, no vendor table — so the
+// dispatch gate, a scheduler and a UI preview all get the same answer from the same
+// rule, and a test can state a fleet as data.
+//
+// UNKNOWN IS NOT ENOUGH. A machine that advertises VRAM 0 does not satisfy a VRAM
+// floor: 0 means "the probe could not tell", and admitting it would route a 70B job
+// to a machine that cannot hold it. This is deliberately fail-closed, and it is why
+// the probe reporting truthful accelerator memory matters — on a unified-memory
+// machine (Apple Silicon, an NVIDIA GB10, an AMD APU) nvidia-smi/system_profiler/lspci
+// report no discrete VRAM, so such a box advertises 0 and is refused by any VRAM floor
+// until it advertises the memory its accelerator can actually address.
+func (s Spec) Satisfies(n Need) bool {
+	if n.CPUs > 0 && s.CPUs < n.CPUs {
+		return false
+	}
+	if n.Memory > 0 && s.Memory < n.Memory {
+		return false
+	}
+	if n.OS != "" && !strings.EqualFold(strings.TrimSpace(s.OS), strings.TrimSpace(n.OS)) {
+		return false
+	}
+	if n.Arch != "" && !strings.EqualFold(strings.TrimSpace(s.Arch), strings.TrimSpace(n.Arch)) {
+		return false
+	}
+	// Accelerators: a VRAM floor implies at least one, so "vram only" is not a silent
+	// no-op on a machine with no GPU at all.
+	want := n.GPUs
+	if want == 0 && n.VRAM > 0 {
+		want = 1
+	}
+	if want == 0 {
+		return true
+	}
+	fit := 0
+	for _, g := range s.GPUs {
+		if n.VRAM > 0 && g.Memory < n.VRAM {
+			continue // 0 (unknown) never clears a floor
+		}
+		fit++
+	}
+	return fit >= want
+}
+
 // encodeSpec/decodeSpec + encodeMetrics/decodeMetrics are the column codecs. An empty
 // value encodes to "" (a NULL-equivalent the column defaults to), and a malformed
 // stored blob decodes to the zero value rather than failing a whole target read.
