@@ -59,16 +59,30 @@ func TestMountSitesInstallsTheResolver(t *testing.T) {
 	}
 }
 
-// list() must drop blanks: a trailing comma or an empty var otherwise yields one
-// EMPTY reserved label, and an empty label matches the apex itself.
-func TestListDropsBlanks(t *testing.T) {
-	t.Setenv("X", "")
-	if got := list("X"); len(got) != 0 {
-		t.Errorf("list(empty) = %v, want none", got)
+// The blank-dropping env split this file used to own moved to apps/sites with the
+// rest of the resolution (TestConfigFromEnvDropsBlanks).
+
+// This binary must not resolve the site config for itself. It did — with its own
+// spelling of the first-party keys and its own (empty) defaults — so the policy in
+// force depended on whether a request reached the router or a per-app child. Same
+// shape as the wiring test above: the defect is a call site, so the call site is
+// what is pinned.
+func TestSitesConfigIsNotResolvedHere(t *testing.T) {
+	src, err := os.ReadFile("sites.go")
+	if err != nil {
+		t.Fatalf("read sites.go: %v", err)
 	}
-	t.Setenv("X", "stg, www ,")
-	if got := list("X"); len(got) != 2 || got[0] != "stg" || got[1] != "www" {
-		t.Errorf("list = %v, want [stg www]", got)
+	body := string(src)
+	if strings.Contains(body, "sites.Config{") {
+		t.Error("this binary builds a sites.Config of its own — apps/sites.ConfigFromEnv is the ONE resolution, or the edge and the children drift apart again")
 	}
-	_ = os.Unsetenv("X")
+	if !strings.Contains(body, "sites.ConfigFromEnv(") {
+		t.Error("mountSites no longer reads the shared resolution")
+	}
+	// The keys themselves belong to apps/sites. A CLOUD_SITES_* literal here is a
+	// second spelling waiting to happen — the FIRST_PARTY/FIRSTPARTY split was
+	// exactly that.
+	if strings.Contains(body, "CLOUD_SITES_") {
+		t.Error("a CLOUD_SITES_* key is spelled in this binary; the env contract lives in apps/sites/env.go")
+	}
 }

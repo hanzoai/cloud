@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/zap-proto/zip"
 
@@ -25,21 +23,19 @@ import (
 // and that still holds. apps/sites is a leaf (zip + s3, never the root package),
 // and the cross-app call is made HERE with zip.DialApp — the same door wake.go
 // uses to publish one op without reaching for cloud.Plane().
+// The config is resolved by apps/sites itself (sites.ConfigFromEnv), not spelled
+// out again here. This binary and cloud.Listen both mount this middleware, and
+// when each read the environment for itself they disagreed: two spellings of the
+// first-party keys and two sets of defaults, so the policy in force depended on
+// which process the request reached. The domain argument is empty because the
+// router has already published its --domain flag as CLOUD_DOMAIN (main.go,
+// forward) before anything reads it.
 func mountSites(app *zip.App) {
-	cfg := sites.Config{
-		Apex:            env("CLOUD_SITES_APEX", "hanzo.app"),
-		Reserved:        list("CLOUD_SITES_RESERVED"),
-		SelfDomains:     list("CLOUD_SITES_SELF_DOMAINS"),
-		FirstPartyApex:  env("CLOUD_SITES_FIRST_PARTY_APEX", ""),
-		FirstPartySites: list("CLOUD_SITES_FIRST_PARTY"),
-		FirstPartyOrg:   env("CLOUD_SITES_FIRST_PARTY_ORG", ""),
-	}
-
 	// The project store belongs to `projects`, in another process, so resolution
 	// is a plane call.
 	sites.SetFallbackResolver(planeResolver{})
 
-	app.Use(sites.New(cfg, app.Logger()).Middleware())
+	app.Use(sites.New(sites.ConfigFromEnv(""), app.Logger()).Middleware())
 }
 
 // planeResolver answers "which published site is this host?" by asking the app
@@ -71,24 +67,4 @@ func ask(ctx context.Context, op string, in *sites.PlaneSiteIn) (sites.Site, boo
 	}
 	s, ok := sites.SiteOf(out)
 	return s, ok, nil
-}
-
-func env(k, def string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		return v
-	}
-	return def
-}
-
-// list splits a comma-separated env var, dropping blanks so a trailing comma or
-// an empty value yields no entries rather than one empty label.
-func list(k string) []string {
-	raw := strings.Split(os.Getenv(k), ",")
-	out := make([]string, 0, len(raw))
-	for _, v := range raw {
-		if v = strings.TrimSpace(v); v != "" {
-			out = append(out, v)
-		}
-	}
-	return out
 }

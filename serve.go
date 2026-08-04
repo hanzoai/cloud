@@ -292,7 +292,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// the registry projects.Mount writes is nil here. Co-resident still wins with
 	// no hop — currentResolver prefers the in-process one.
 	sites.SetFallbackResolver(planeSites{})
-	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved, SelfDomains: cfg.SitesSelfDomains, FirstPartyApex: cfg.SitesFirstPartyApex, FirstPartySites: cfg.SitesFirstPartySites, FirstPartyOrg: cfg.SitesFirstPartyOrg}, deps.Logger).Middleware())
+	app.Use(sites.New(sites.ConfigFromEnv(cfg.Domain), deps.Logger).Middleware())
 
 	// Edge policy — the "gateway role" cloud absorbs to serve the public
 	// api.hanzo.ai edge directly (no KrakenD gateway hop). Runs BEFORE identity by
