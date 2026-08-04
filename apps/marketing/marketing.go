@@ -175,7 +175,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// The bridge FIRST: fiber runs middleware in registration order, so one
 	// installed after these leaves would never run — and every org-scoped op below
 	// resolves its tenant through it. Bounded to marketing's own subtree.
-	app.Group("/v1/marketing").Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 
 	zip.Get(zapp, "/v1/marketing/summary", o.summary)
 
