@@ -150,6 +150,17 @@ var Apps = []App{
 	// means a separate per-tenant file, so no second process ever opens the
 	// decision plane's single-writer store.
 	{Name: "label", Prefixes: []string{"/v1/risk/labels"}},
+	// reference is the LOOKUP DATA a decision consults and cannot derive:
+	// disposable-email domains, datacentre and Tor ranges, issuer prefixes, and how
+	// current the designation lists the screening engine holds are. Same address
+	// rule as label, for the same reason — openapi.Product reads the product off
+	// the first /v1 segment, and these six operations are the risk product's, not
+	// the KServe model-SERVING product's. An earlier cut said /v1/ml/reference,
+	// which would have filed them into a live product with four paths and
+	// different customers on it.
+	//
+	// It also precedes risk, whose prefix is the bare /v1/risk.
+	{Name: "reference", Prefixes: []string{"/v1/risk/reference"}},
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
 	{Name: "risk", Prefixes: []string{"/v1/risk"}},
