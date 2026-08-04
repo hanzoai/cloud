@@ -85,7 +85,7 @@ func TestEveryPluginNameIsInTheManifest(t *testing.T) {
 		known[a.Name] = true
 	}
 	// Not every plugin/ dir is a fleet app — some are one-shot CLI tools (smoke,
-	// gen-app-cmds, kmsreseal, migrate-pg-to-sqlite). Rather than hardcode which,
+	// gen-app-cmds, kmsreseal). Rather than hardcode which,
 	// DERIVE it: an app serves requests, so it calls cloud.Listen. A tool does not.
 	// A name list here would need editing every time a tool is added, and would
 	// eventually be wrong in the direction that hides a real app.
