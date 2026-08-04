@@ -7,10 +7,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/internal/fqdn"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -42,7 +44,7 @@ type caller struct {
 // What is under test is unchanged either way: cloud.Bridge parking the request,
 // siteOf resolving the tenant from it, bindDomains deciding. That is the production
 // chain, at the production paths.
-func domainsApp(t *testing.T, s *cloud.Service[state]) func(c caller, slug, host string) (int, projectsDomain) {
+func domainApp(t *testing.T, s *cloud.Service[state]) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: s.Log})
 	app.Use(cloud.Bridge(), cloud.DenyEnvelope())
@@ -50,20 +52,36 @@ func domainsApp(t *testing.T, s *cloud.Service[state]) func(c caller, slug, host
 	o := ops{s: s}
 	zip.Post(r, "/v1/projects/:slug/domains", o.bindDomains)
 	zip.Get(r, "/v1/projects/:slug/domains", o.listDomains)
+	zip.Post(r, "/v1/projects/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(r, "/v1/projects/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+	return app
+}
+
+// identify puts one caller's minted identity on a request. Both bits are stripped
+// on ingress and re-injected only for a verified principal, so setting them here
+// models a token IAM signed, not a forgery — that path is closed upstream and is
+// middleware_identity_test.go's subject.
+func identify(req *http.Request, c caller) {
+	req.Header.Set("X-Org-Id", c.org)
+	req.Header.Set("X-User-Id", "u-"+c.org) // a validated principal (org() gates on it)
+	if c.superAdmin {
+		req.Header.Set("X-User-IsAdmin", "true")
+	}
+	if c.orgAdmin {
+		req.Header.Set("X-User-IsOrgAdmin", "true")
+	}
+}
+
+func domainsApp(t *testing.T, s *cloud.Service[state]) func(c caller, slug, host string) (int, projectsDomain) {
+	t.Helper()
+	app := domainApp(t, s)
 
 	return func(c caller, slug, host string) (int, projectsDomain) {
 		t.Helper()
 		body, _ := json.Marshal(projectsDomainsBind{Domains: []string{host}})
 		req := httptest.NewRequest(http.MethodPost, "/v1/projects/"+slug+"/domains", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Org-Id", c.org)
-		req.Header.Set("X-User-Id", "u-"+c.org) // a validated principal (org() gates on it)
-		if c.superAdmin {
-			req.Header.Set("X-User-IsAdmin", "true")
-		}
-		if c.orgAdmin {
-			req.Header.Set("X-User-IsOrgAdmin", "true")
-		}
+		identify(req, c)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("bind %q for %+v: %v", host, c, err)
@@ -402,5 +420,160 @@ func TestUnbindHostReleasesOnlyOurOwn(t *testing.T) {
 	}
 	if err := s.BindHost(ctx, "yadota.tech", "acme", "acme", 300); err != nil {
 		t.Fatalf("released host must be claimable again, got %v", err)
+	}
+}
+
+// fakeDNS answers the ownership challenge from a fixed table, so verification is
+// deterministic and never touches the network.
+type fakeDNS map[string][]string
+
+func (f fakeDNS) LookupTXT(_ context.Context, name string) ([]string, error) {
+	if txt, ok := f[name]; ok {
+		return txt, nil
+	}
+	return nil, errors.New("no such host")
+}
+
+// TestReleaseOnlyAddressesNamesBindCouldHaveMade is the subdomain-takeover
+// regression. Bind and release must agree on what a hostname IS, and they did not:
+// bind required fqdn.Valid, release required only non-empty.
+//
+// site_hosts also holds each project's BARE SLUG — the structural row deploy.go
+// binds so `<slug>.<apex>` serves — and a bare label is not Valid, so release
+// accepted a row bind could never re-create. The domains panel renders it like any
+// other claim, as a live `https://<slug>`, so a tenant deleting the odd-looking
+// entry drops its OWN subdomain irrecoverably: resolution falls back to
+// ResolveUniqueLiveSlug, which refuses once two live projects share the slug, and
+// the next such tenant to deploy takes the freed row and the subdomain for good.
+func TestReleaseOnlyAddressesNamesBindCouldHaveMade(t *testing.T) {
+	ctx := context.Background()
+	log := luxlog.New("test")
+	store := newTestStore(t)
+	svc := &cloud.Service[state]{
+		Base:  cloud.Base{Log: log},
+		State: state{apex: "hanzo.app", store: store, cf: sites.NewPurger(log)},
+	}
+	app := domainApp(t, svc)
+	if err := store.CreateProject(ctx, mkProject("acme", "acme", "Acme")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// The structural row onPublish binds: the bare slug, serving acme.hanzo.app.
+	if err := store.BindHost(ctx, "acme", "acme", "acme", 100); err != nil {
+		t.Fatalf("bind slug host: %v", err)
+	}
+
+	release := func(host string) int {
+		t.Helper()
+		// Escaped, so a hostile value is what the ROUTE decodes rather than what the
+		// test harness refuses to build a URL from.
+		req := httptest.NewRequest(http.MethodDelete, "/v1/projects/acme/domains/"+url.PathEscape(host), nil)
+		identify(req, caller{org: "acme", orgAdmin: true})
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("release %q: %v", host, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	// A bare label is not a hostname this surface can address — bind would refuse
+	// it, so release must too.
+	if code := release("acme"); code != http.StatusBadRequest {
+		t.Errorf("release of the bare slug = %d, want 400", code)
+	}
+	if _, err := store.ResolveHost(ctx, "acme"); err != nil {
+		t.Fatal("the site's own subdomain row was deleted through the domains API — " +
+			"the domains panel offers this row with a delete control, and nothing in " +
+			"that API can put it back")
+	}
+	// Neither is anything else Valid refuses.
+	for _, h := range []string{"", "  ", "not a host", "http://acme.example", "acme.example:8080"} {
+		if code := release(h); code == http.StatusNoContent {
+			t.Errorf("release accepted %q — release and bind must take the same shape", h)
+		}
+	}
+	// A REAL custom domain still releases, which is the call's whole job.
+	if err := store.BindHost(ctx, "acme.example", "acme", "acme", 100); err != nil {
+		t.Fatalf("bind custom: %v", err)
+	}
+	if code := release("acme.example"); code != http.StatusNoContent {
+		t.Fatalf("release of a real custom domain = %d, want 204", code)
+	}
+	if _, err := store.ResolveHost(ctx, "acme.example"); err == nil {
+		t.Error("a released custom domain still holds its row")
+	}
+}
+
+// TestVerifyDomainPromotesOnlyOnProof drives the verify HANDLER, which had no test
+// at all: Store.VerifyHost was covered and fqdn.Verify was covered, but the handler
+// that joins them — the already-verified early return, the token read from the ROW
+// rather than the request, and the promotion itself — was not. Nothing pinned that
+// this surface actually requires the proof.
+func TestVerifyDomainPromotesOnlyOnProof(t *testing.T) {
+	ctx := context.Background()
+	log := luxlog.New("test")
+	store := newTestStore(t)
+	dns := fakeDNS{}
+	svc := &cloud.Service[state]{
+		Base:  cloud.Base{Log: log},
+		State: state{apex: "hanzo.app", store: store, cf: sites.NewPurger(log), resolver: dns},
+	}
+	app := domainApp(t, svc)
+	if err := store.CreateProject(ctx, mkProject("acme", "acme", "Acme")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	who := caller{org: "acme", orgAdmin: true}
+	verify := func(host string) (int, projectsDomain) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/v1/projects/acme/domains/"+host+"/verify", nil)
+		identify(req, who)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("verify %q: %v", host, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var v projectsDomain
+		_ = json.NewDecoder(resp.Body).Decode(&v)
+		return resp.StatusCode, v
+	}
+
+	// An org admin binds a customer domain: pending, with a challenge to publish.
+	bind := domainsApp(t, svc)
+	code, v := bind(who, "acme", "shop.acme.example")
+	if code != http.StatusOK || v.Verified {
+		t.Fatalf("bind = %d %+v, want a pending claim", code, v)
+	}
+	claim, err := store.HostClaimFor(ctx, "shop.acme.example", "acme", "acme")
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+
+	// No record published yet: an honest still-pending, never a promotion.
+	if code, v := verify("shop.acme.example"); code != http.StatusOK || v.Verified {
+		t.Fatalf("verify with no DNS = %d %+v, want 200 pending", code, v)
+	}
+	// A record with the WRONG token proves nothing.
+	dns[fqdn.Challenge("shop.acme.example")] = []string{"not-the-token"}
+	if _, v := verify("shop.acme.example"); v.Verified {
+		t.Fatal("a TXT record with the wrong token promoted the host")
+	}
+	// The token is read from the ROW, so publishing the real one promotes.
+	dns[fqdn.Challenge("shop.acme.example")] = []string{claim.Token}
+	if code, v := verify("shop.acme.example"); code != http.StatusOK || !v.Verified || v.Status != "live" {
+		t.Fatalf("verify with the published token = %d %+v, want live", code, v)
+	}
+	// Idempotent, and the re-check does not need DNS any more.
+	delete(dns, fqdn.Challenge("shop.acme.example"))
+	if _, v := verify("shop.acme.example"); !v.Verified {
+		t.Fatal("an already-verified host was walked back to pending")
+	}
+	// A host this site never claimed is a 404, not a promotion — and a name the
+	// surface cannot address is refused before any lookup happens.
+	if code, _ := verify("never.claimed.example"); code != http.StatusNotFound {
+		t.Errorf("verify of an unclaimed host = %d, want 404", code)
+	}
+	if code, _ := verify("acme"); code != http.StatusBadRequest {
+		t.Errorf("verify of a bare label = %d, want 400", code)
 	}
 }
