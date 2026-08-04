@@ -24809,6 +24809,7 @@ components:
     o11y.O11yLogRecordsOut:
       properties:
         results:
+          description: Results are the records, newest first.
           items:
             additionalProperties: {}
             type: object
@@ -25010,6 +25011,7 @@ components:
     o11y.O11yMetricList:
       properties:
         metrics:
+          description: Metrics are the metrics, with their metadata.
           items:
             $ref: '#/components/schemas/o11y.O11yMetricSummary'
           type: array
@@ -25018,7 +25020,9 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/o11y.O11yMetricList'
+          description: Data holds the metrics.
         status:
+          description: Status is "success".
           type: string
       type: object
     o11y.O11yMetricMetadata:
@@ -25230,16 +25234,22 @@ components:
     o11y.O11yMetricSummary:
       properties:
         description:
+          description: Description describes the metric.
           type: string
         isMonotonic:
+          description: IsMonotonic marks a sum that only ever increases.
           type: boolean
         metricName:
+          description: MetricName is the metric's name.
           type: string
         temporality:
+          description: Temporality is delta or cumulative.
           type: string
         type:
+          description: Type is the metric type, e.g. gauge, sum, histogram.
           type: string
         unit:
+          description: Unit is the metric's unit.
           type: string
       type: object
     o11y.O11yMetricTreemap:
@@ -30505,38 +30515,6 @@ components:
         totalPages:
           description: TotalPages is ceil(totalItems/limit), at least 1.
           type: integer
-      type: object
-    o11y.logLine:
-      properties:
-        body:
-          type: string
-        severity:
-          description: INFO | WARN | ERROR | ...
-          type: string
-        source:
-          description: '"infra" (stdout) | "request" (org request log)'
-          type: string
-        ts:
-          description: RFC3339 (UTC)
-          type: string
-        tsNano:
-          description: nanosecond cursor
-          type: integer
-      type: object
-    o11y.logsResponse:
-      properties:
-        lines:
-          items:
-            $ref: '#/components/schemas/o11y.logLine'
-          type: array
-        nextCursor:
-          description: pass back as ?sinceNs for the next tail poll
-          type: integer
-        product:
-          type: string
-        view:
-          description: '"infra" (admin) | "request" (per-org)'
-          type: string
       type: object
     o11y.metricsResponse:
       properties:
@@ -76860,43 +76838,33 @@ paths:
   /v1/o11y/logs:
     get:
       description: |-
-        Returns a page of one product's logs for the caller's org. A
-        normal caller sees its OWN request stream, derived from org-tagged spans; a
-        validated platform SuperAdmin sees the product's raw infra stdout stream
-        instead. Poll for a live tail by passing the previous response's nextCursor
-        back as sinceNs. A well-formed product with no backing workload answers an
-        empty page rather than an error; a malformed slug is a 400.
+        Returns the most recent log records in the query window, newest
+        first — each record an open object carrying its nanosecond timestamp and
+        whatever fields the record was ingested with.
+
+        Callers need the viewer role; the runtime's own gate enforces it.
       operationId: get_v1_o11y_logs
       parameters:
-      - description: |-
-          Product is the console product slug whose logs to read, e.g. "kms".
-          Required.
-        example: kms
-        in: query
-        name: product
-        required: false
-        schema:
-          type: string
-      - description: |-
-          SinceNs is the nanosecond cursor from a previous response's nextCursor.
-          Absent (0) reads the last `window` seconds instead.
-        in: query
-        name: sinceNs
-        required: false
-        schema:
-          type: integer
-      - description: |-
-          Window is how many seconds back to read when there is no cursor.
-          Default 900, capped at 86400.
-        in: query
-        name: window
-        required: false
-        schema:
-          type: integer
-      - description: Limit caps the returned lines. Default 200, capped at 1000.
-        example: 200
+      - description: Limit caps how many records come back. Zero means the default
+          of 100.
         in: query
         name: limit
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          TimestampStart is the start of the window as a nanosecond epoch. Zero
+          means fifteen minutes before the end.
+        in: query
+        name: timestampStart
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          TimestampEnd is the end of the window as a nanosecond epoch. Zero means
+          now.
+        in: query
+        name: timestampEnd
         required: false
         schema:
           type: integer
@@ -76905,9 +76873,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/o11y.logsResponse'
+                $ref: '#/components/schemas/o11y.O11yLogRecordsOut'
           description: ok
-      summary: Returns a page of one product's logs for the caller's org.
+      summary: Returns the most recent log records in the query window, newest first
+        — each record an open object carrying its nanosecond timestamp and whatever
+        fields the record was ingested with.
       tags:
       - o11y
       x-app: o11y
@@ -77724,48 +77694,50 @@ paths:
   /v1/o11y/metrics:
     get:
       description: |-
-        Returns one product's RED series — request rate, errors, p50
-        and p95 latency — for the caller's org, plus that org's LLM usage rollup over
-        the same window. The series come from org-tagged request spans, so a tenant
-        only ever aggregates its own traffic; a validated platform SuperAdmin sees the
-        whole product's RED, while usage stays the caller's own org either way. A
-        well-formed product with no backing workload answers empty series; a malformed
-        slug is a 400.
-      operationId: get_v1_o11y_metrics
+        Lists the distinct metric names seen in a time range, each with
+        its description, type, unit, temporality and monotonicity.
+      operationId: ListMetrics
       parameters:
-      - description: Product is the console product slug to read, e.g. "kms". Required.
-        example: kms
+      - description: Start is the start of the window as a Unix timestamp in milliseconds.
         in: query
-        name: product
+        name: start
+        required: false
+        schema:
+          type: integer
+      - description: End is the end of the window as a Unix timestamp in milliseconds.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: integer
+      - description: Limit caps how many metrics come back; unset means 100, at most
+          5000.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - description: SearchText narrows the page to metric names containing it.
+        in: query
+        name: searchText
         required: false
         schema:
           type: string
-      - description: Range is the window in seconds. Default 3600, capped at 604800
-          (7d).
-        example: 3600
+      - description: Source narrows the page by ingestion source.
         in: query
-        name: range
+        name: source
         required: false
         schema:
-          type: integer
-      - description: |-
-          StepSec is the bucket width in seconds, clamped to [30, 3600]. Absent
-          picks ~60 buckets across the range.
-        in: query
-        name: stepSec
-        required: false
-        schema:
-          type: integer
+          type: string
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/o11y.metricsResponse'
+                $ref: '#/components/schemas/o11y.O11yMetricListOut'
           description: ok
-      summary: Returns one product's RED series — request rate, errors, p50 and p95
-        latency — for the caller's org, plus that org's LLM usage rollup over the
-        same window.
+      summary: Lists the distinct metric names seen in a time range, each with its
+        description, type, unit, temporality and monotonicity.
       tags:
       - o11y
       x-app: o11y
@@ -78860,6 +78832,54 @@ paths:
       tags:
       - o11y
       x-app: o11y
+  /v1/o11y/product/metrics:
+    get:
+      description: |-
+        Returns one product's RED series — request rate, errors, p50
+        and p95 latency — for the caller's org, plus that org's LLM usage rollup over
+        the same window. The series come from org-tagged request spans, so a tenant
+        only ever aggregates its own traffic; a validated platform SuperAdmin sees the
+        whole product's RED, while usage stays the caller's own org either way. A
+        well-formed product with no backing workload answers empty series; a malformed
+        slug is a 400.
+      operationId: get_v1_o11y_product_metrics
+      parameters:
+      - description: Product is the console product slug to read, e.g. "kms". Required.
+        example: kms
+        in: query
+        name: product
+        required: false
+        schema:
+          type: string
+      - description: Range is the window in seconds. Default 3600, capped at 604800
+          (7d).
+        example: 3600
+        in: query
+        name: range
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          StepSec is the bucket width in seconds, clamped to [30, 3600]. Absent
+          picks ~60 buckets across the range.
+        in: query
+        name: stepSec
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.metricsResponse'
+          description: ok
+      summary: Returns one product's RED series — request rate, errors, p50 and p95
+        latency — for the caller's org, plus that org's LLM usage rollup over the
+        same window.
+      tags:
+      - o11y
+      x-app: o11y
   /v1/o11y/public/dashboards/{id}:
     get:
       description: |-
@@ -79148,18 +79168,6 @@ paths:
           description: ok
       summary: Evaluates one instant PromQL query against the org's metrics and returns
         the result at a single point in time.
-      tags:
-      - o11y
-      x-app: o11y
-    post:
-      description: |-
-        Runs the console's composite builder query and answers the engine's own response untouched — body, status and headers ride through both ways, because the shape here is the query engine's, not this layer's.
-
-        This flat path is the ONE canonical public address for the builder query, and pinning it server-side is the point: the version-less alias resolves to the engine's highest version, which rejects the v3-shaped composite payload the console speaks. So the engine version is resolved INSIDE the handler and the client never names one — a caller that spells a version into the path is coupling itself to an internal detail that is free to move.
-
-        Requires a validated principal, and the tenant is the principal's own org, pinned server-side from the validated claim; there is no org selector in the payload or the query string that could widen it. Before the runtime is initialized this answers 503 rather than an empty result.
-      operationId: post_v1_o11y_query
-      summary: Run one builder query against the caller's telemetry
       tags:
       - o11y
       x-app: o11y

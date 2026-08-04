@@ -37,23 +37,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":3600}`),
 	})
-	zip.Describe("GET /v1/o11y/logs", zip.Doc{
-		Description: "Returns a page of one product's logs for the caller's org. A\nnormal caller sees its OWN request stream, derived from org-tagged spans; a\nvalidated platform SuperAdmin sees the product's raw infra stdout stream\ninstead. Poll for a live tail by passing the previous response's nextCursor\nback as sinceNs. A well-formed product with no backing workload answers an\nempty page rather than an error; a malformed slug is a 400.",
-		Fields: map[string]string{
-			"logLine.severity":        "INFO | WARN | ERROR | ...",
-			"logLine.source":          "\"infra\" (stdout) | \"request\" (org request log)",
-			"logLine.ts":              "RFC3339 (UTC)",
-			"logLine.tsNano":          "nanosecond cursor",
-			"logsIn.limit":            "Limit caps the returned lines. Default 200, capped at 1000.",
-			"logsIn.product":          "Product is the console product slug whose logs to read, e.g. \"kms\".\nRequired.",
-			"logsIn.sinceNs":          "SinceNs is the nanosecond cursor from a previous response's nextCursor.\nAbsent (0) reads the last `window` seconds instead.",
-			"logsIn.window":           "Window is how many seconds back to read when there is no cursor.\nDefault 900, capped at 86400.",
-			"logsResponse.nextCursor": "pass back as ?sinceNs for the next tail poll",
-			"logsResponse.view":       "\"infra\" (admin) | \"request\" (per-org)",
-		},
-		Example: json.RawMessage(`{"product":"kms","limit":200}`),
-	})
-	zip.Describe("GET /v1/o11y/metrics", zip.Doc{
+	zip.Describe("GET /v1/o11y/product/metrics", zip.Doc{
 		Description: "Returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window. The series come from org-tagged request spans, so a tenant\nonly ever aggregates its own traffic; a validated platform SuperAdmin sees the\nwhole product's RED, while usage stays the caller's own org either way. A\nwell-formed product with no backing workload answers empty series; a malformed\nslug is a 400.",
 		Fields: map[string]string{
 			"metricsIn.product":     "Product is the console product slug to read, e.g. \"kms\". Required.",
