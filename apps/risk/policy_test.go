@@ -30,7 +30,7 @@ import (
 // anything. The regime used to live on the same row as the learned state, whose
 // writer correctly declines to write when there is no learned mass — so the call
 // answered 200, reported live, and wrote nothing. This binary deploys Recreate at
-// ONE replica, so the next rollout rebuilt from defaultConfig (shadow) and the
+// ONE replica, so the next rollout rebuilt from the default regime (shadow) and the
 // model decided nothing. No error, no log, nothing to alert on: a model silently
 // disarmed, which is the one state that must never be reachable quietly.
 //

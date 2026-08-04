@@ -55,13 +55,23 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 	// The resident must hold the WRAPPER, because the wrapper is where the bound
 	// is counted; holding the bare store back would put the eviction out of sight
 	// again.
+	//
+	// The MODEL is named by its seam and not by one family's store: a resident holds a
+	// [detector], so the assertion is that per-tenant model state lives on the resident
+	// whatever family it belongs to. A plane field of that type would be exactly as
+	// shared as a plane field of the store type was, which is why the type above still
+	// names the store — that is the field a regression would reintroduce.
 	onResident := map[reflect.Type]bool{
-		reflect.TypeOf(&rings{}):         true,
-		reflect.TypeOf(&anomaly.Store{}): true,
+		reflect.TypeOf(&rings{}):                true,
+		reflect.TypeOf((*detector)(nil)).Elem(): true,
 	}
 	pt := reflect.TypeOf(plane{})
 	for i := 0; i < pt.NumField(); i++ {
 		f := pt.Field(i)
+		if f.Type == reflect.TypeOf((*detector)(nil)).Elem() {
+			t.Errorf("plane.%s holds a model for the whole process — one organisation's volume then "+
+				"evicts another's, silently. Per-tenant state belongs on the resident.", f.Name)
+		}
 		if what, shared := tenantState[f.Type]; shared {
 			t.Errorf("plane.%s holds %s for the whole process — one organisation's volume then evicts another's, "+
 				"silently. Per-tenant state belongs on the resident.", f.Name, what)
