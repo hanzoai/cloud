@@ -1,7 +1,7 @@
 package ml
 
 // Integration tests proving the per-org billing gate is wired into the compute
-// create path (/v1/train/jobs etc.): an unfunded org cannot run free GPU compute
+// create path (POST /v1/ml/models): an unfunded org cannot run free GPU compute
 // (402 before any k8s object is created), and a funded org is charged on its OWN
 // org ledger. The metering client's default org is "hanzo", so "billed acme"
 // also proves the caller org — not the default — is charged.
@@ -78,12 +78,12 @@ func newBilledMLService(t *testing.T, commerceURL string) *cloud.Service[state] 
 	}
 }
 
-func postTrainJob(t *testing.T, s *cloud.Service[state], org string) *http.Response {
+func postModel(t *testing.T, s *cloud.Service[state], org string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/train/jobs", create(s, jobKind))
-	body := `{"name":"job1","spec":{"runtime":"torch"}}`
-	req, _ := http.NewRequest("POST", "/v1/train/jobs", strings.NewReader(body))
+	app.Post("/v1/ml/models", create(s, modelKind))
+	body := `{"name":"model1","spec":{"predictor":{"model":{"modelFormat":{"name":"sklearn"}}}}}`
+	req, _ := http.NewRequest("POST", "/v1/ml/models", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
@@ -103,7 +103,7 @@ func TestComputeCreate_RefusesUnfundedOrg(t *testing.T) {
 	bd := &billDouble{available: 0}
 	s := newBilledMLService(t, bd.start(t))
 
-	resp := postTrainJob(t, s, "acme")
+	resp := postModel(t, s, "acme")
 	if resp.StatusCode != http.StatusPaymentRequired {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 402", resp.StatusCode, body)
@@ -117,13 +117,13 @@ func TestComputeCreate_RefusesUnfundedOrg(t *testing.T) {
 	}
 }
 
-// Funded org → 201, TrainJob created, and the CALLER org (acme, not the default
+// Funded org → 201, InferenceService created, and the CALLER org (acme, not the default
 // hanzo) is debited the compute fee under provider "compute".
 func TestComputeCreate_AllowsAndDebitsCallerOrg(t *testing.T) {
 	bd := &billDouble{available: 100000}
 	s := newBilledMLService(t, bd.start(t))
 
-	resp := postTrainJob(t, s, "acme")
+	resp := postModel(t, s, "acme")
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)

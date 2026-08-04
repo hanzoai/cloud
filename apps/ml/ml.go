@@ -1,25 +1,28 @@
-// Package ml is model serving and training: deploy a model behind an endpoint,
-// run a training job, tune it with experiments.
+// Package ml is model serving: deploy a model behind an endpoint and call it.
 //
-// The /v1/ml/* and /v1/train/* routes are a thin, tenant-scoped bridge that
-// turns three Kubeflow-family CustomResources into a small REST API. No ML
-// logic is reimplemented here — the operators
-// (kserve, trainer, katib) own reconciliation; this subsystem only translates
-// REST <-> the Kubernetes API and enforces tenant isolation.
+// The /v1/ml/* routes are a thin, tenant-scoped bridge that turns ONE kserve
+// CustomResource into a small REST API. No ML logic is reimplemented here —
+// kserve owns reconciliation; this subsystem only translates REST <-> the
+// Kubernetes API and enforces tenant isolation.
 //
-// Three resources, one CRUD shape each (kserve names are internal/opaque — the
+// One resource, one CRUD shape (kserve names are internal/opaque — the
 // user-facing model catalog lives in the hub, never here, so no upstream model
 // identity is ever introduced by this layer):
 //
-//	/v1/ml/models           InferenceService  serving.kserve.io/v1beta1
-//	/v1/train/jobs          TrainJob          trainer.kubeflow.org/v1alpha1
-//	/v1/train/experiments   Experiment        kubeflow.org/v1beta1   (katib)
+//	/v1/ml/models   InferenceService   serving.kserve.io/v1beta1
 //
-// Plus two leaf surfaces: POST /v1/ml/models/{name}/predict proxies the request
+// Plus one leaf surface: POST /v1/ml/models/{name}/predict proxies the request
 // body to the model's kserve v2 data plane (/v2/models/{name}/infer at the
-// InferenceService's cluster-internal address), and
-// GET /v1/train/experiments/{name}/trials lists the katib Trials owned by an
-// experiment.
+// InferenceService's cluster-internal address).
+//
+// TRAINING IS NOT HERE. A /v1/train/* facade over the Kubeflow trainer
+// (TrainJob) and katib (Experiment/Trial) CRDs used to sit beside this, and it
+// is deleted: those CRDs are not served by the cluster, no caller ever created
+// either resource, and the katib facade could not have worked at all (katib's
+// admission webhook requires a namespace label this subsystem never wrote).
+// Per-org model-shape SEARCH is /v1/risk/search, which runs natively in the
+// org's own sandbox; fine-tuning is the hanzoai/ai broker at /v1/finetune/*.
+// One door each — a second, degraded door is worse than none.
 //
 // Tenancy: every request is scoped to the gateway-minted org (X-Org-Id / c.Org())
 // narrowed by the org SUB-SCOPE (X-Project-Id / principal.Project), and lands in a
@@ -74,17 +77,13 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// GroupVersionResources for the three managed CRDs (+ trials and core
-// namespaces). These are the single source of truth for the wire identity of
-// each resource; a typo here silently breaks every call, so they are asserted
-// in the tests.
+// GroupVersionResources for the managed CRD (+ the cluster-scoped runtime).
+// These are the single source of truth for the wire identity of each resource; a
+// typo here silently breaks every call, so they are asserted in the tests.
 var (
-	isvcGVR       = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1beta1", Resource: "inferenceservices"}
-	trainjobGVR   = schema.GroupVersionResource{Group: "trainer.kubeflow.org", Version: "v1alpha1", Resource: "trainjobs"}
-	experimentGVR = schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1beta1", Resource: "experiments"}
-	trialGVR      = schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1beta1", Resource: "trials"}
+	isvcGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1beta1", Resource: "inferenceservices"}
 	// runtimeGVR is the CLUSTER-SCOPED ClusterServingRuntime — the thing an
-	// InferenceService actually runs ON. It is not a fourth managed resource: this
+	// InferenceService actually runs ON. It is not a second managed resource: this
 	// subsystem never creates or reads one on a tenant's behalf (a tenant names a
 	// runtime in its own spec, or kserve matches one by model format). It is here
 	// because the serving plane's CAPACITY is a fact only this coordinate answers,
@@ -100,18 +99,13 @@ type resourceKind struct {
 	kind       string
 }
 
-var (
-	modelKind = resourceKind{isvcGVR, "serving.kserve.io/v1beta1", "InferenceService"}
-	jobKind   = resourceKind{trainjobGVR, "trainer.kubeflow.org/v1alpha1", "TrainJob"}
-	expKind   = resourceKind{experimentGVR, "kubeflow.org/v1beta1", "Experiment"}
-)
+var modelKind = resourceKind{isvcGVR, "serving.kserve.io/v1beta1", "InferenceService"}
 
 const (
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "hanzo-cloud"
 	orgLabel       = "hanzo.ai/org"
 	projectLabel   = "hanzo.ai/project" // org SUB-SCOPE; stamped only for a non-default project
-	katibExpLabel  = "katib.kubeflow.org/experiment"
 	nsPrefix       = "ml-"
 	predictBodyCap = 32 << 20 // 32 MiB ceiling on a predictor response read
 	predictTimeout = 5 * time.Minute
@@ -138,11 +132,11 @@ var projectRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
 // computeFeeEnvPrefix is the operator knob for the per-create compute fee. The
 // effective fee is cloud.ResourceFeeCents(computeFeeEnvPrefix, kind): a per-kind
-// override (e.g. CLOUD_COMPUTE_FEE_CENTS_TRAINJOB=…) wins over the global
+// override (e.g. CLOUD_COMPUTE_FEE_CENTS_INFERENCESERVICE=…) wins over the global
 // CLOUD_COMPUTE_FEE_CENTS, else the $1.00 default. Set a kind to 0 to make it
 // free (and therefore un-gated).
 //
-// This is the create/submission fee. A TrainJob's ongoing GPU-hour cost
+// This is the create/deploy fee. A served model's ongoing GPU-hour cost
 // (hanzoai/pricing infrastructure.compute centsPerHour) is billed by REUSING
 // s.State.bill.Meter with a runtime-derived amount from a future usage watcher — never
 // fabricated here.
@@ -164,7 +158,7 @@ type state struct {
 	fleet *fleet.Registry
 }
 
-// Mount wires the /v1/ml/* and /v1/train/* surfaces onto app per HIP-0106. The
+// Mount wires the /v1/ml/* surface onto app per HIP-0106. The
 // "compute"-product meter, the k8s client bring-up and the shared fleet registry
 // make this a direct construction (cloud.NewBase), not cloud.Mount.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -181,7 +175,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	if dyn, err := newDynamic(); err != nil {
 		s.State.initErr = err.Error()
-		s.Log.Warn("kubernetes client unavailable; ml/train endpoints will fail closed", "err", err)
+		s.Log.Warn("kubernetes client unavailable; ml endpoints will fail closed", "err", err)
 	} else {
 		s.State.dyn = dyn
 	}
@@ -190,7 +184,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s.State.fleet = fleet.New(deps.Brand, s.Log)
 
 	mount(s, app)
-	s.Log.Info("ml/train surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env, "billing", s.State.bill.Enabled())
+	s.Log.Info("ml surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env, "billing", s.State.bill.Enabled())
 	return nil
 }
 
@@ -201,13 +195,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // exercise the ROUTES, instead of asserting a wire that depends on whether the
 // box running the suite happens to have a kubeconfig.
 func mount(s *cloud.Service[state], app cloud.Router) {
-	// TWO groups, one per top-level noun this subsystem owns, so each op's path is
-	// its group's prefix composed with its leaf — the identity every projection
+	// ONE group, for the one top-level noun this subsystem owns, so each op's path
+	// is the group's prefix composed with its leaf — the identity every projection
 	// keys on, and the composition cmd/zipdoc resolves the same way (zip v1.18.3+),
 	// which is what carries the prose in typed.go to the document and the MCP tool
 	// list.
 	//
-	// cloud.Bridge FIRST on each group: a typed op receives only a context, so the
+	// cloud.Bridge FIRST on the group: a typed op receives only a context, so the
 	// request its tenant seam reads (tenantFrom — the org SUB-SCOPE and
 	// platform-admin-ness live in headers principal.OrgFrom does not carry) has to
 	// be parked there. fiber runs middleware in registration order, so this must
@@ -219,9 +213,7 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// costs the doc comments below, silently, in both the document and the MCP tool
 	// list.
 	gml := app.Group("/v1/ml")
-	gtrain := app.Group("/v1/train")
 	gml.Use(cloud.Bridge())
-	gtrain.Use(cloud.Bridge())
 	o := ops{s: s}
 
 	// Models (kserve InferenceService).
@@ -243,41 +235,24 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// bytes and Content-Type are returned unchanged, which no typed Out can carry.
 	gml.Post("/models/:name/predict", cloud.Handle(s, predict))
 
-	// Training jobs (trainer TrainJob).
-	zip.Get(gtrain, "/jobs", o.listJobs)
-	gtrain.Post("/jobs", create(s, jobKind)) // untyped by design — see /v1/ml/models
-	zip.Get(gtrain, "/jobs/:name", o.getJob)
-	zip.Delete(gtrain, "/jobs/:name", o.deleteJob)
-
-	// Experiments + trials (katib).
-	zip.Get(gtrain, "/experiments", o.listExperiments)
-	gtrain.Post("/experiments", create(s, expKind)) // untyped by design — see /v1/ml/models
-	zip.Get(gtrain, "/experiments/:name", o.getExperiment)
-	zip.Delete(gtrain, "/experiments/:name", o.deleteExperiment)
-	zip.Get(gtrain, "/experiments/:name/trials", o.listTrials)
-
 	// Real-probe health. The subsystem registers with cloud.HealthOwner, so
-	// serve.go skips its generic auto-health and these two own the probes,
-	// reporting ACTUAL k8s reachability + CRD presence.
+	// serve.go skips its generic auto-health and this owns the probe, reporting
+	// ACTUAL k8s reachability + CRD presence.
 	//
-	// UNTYPED BY DESIGN — both answer 503 carrying the degraded REPORT as their
-	// body (status/k8s/error/crds + the serving plane's runtime count), which is the
+	// UNTYPED BY DESIGN — it answers 503 carrying the degraded REPORT as its body
+	// (status/k8s/error/crds + the serving plane's runtime count), which is the
 	// point of a real probe. A typed op can only reach a non-2xx by returning an
 	// error, and zip renders that as its own envelope, dropping the report.
-	//
-	// Only SERVING has a capacity fact: a model needs a runtime to run on, while a
-	// TrainJob and an Experiment carry their own images and need none.
 	gml.Get("/health", health(s, "ml", runtimeGVR, isvcGVR))
-	gtrain.Get("/health", health(s, "train", schema.GroupVersionResource{}, trainjobGVR, experimentGVR))
 }
 
-// The prose for the seven routes above that are untyped BY DESIGN. Their reasons
+// The prose for the four routes above that are untyped BY DESIGN. Their reasons
 // are stated at each registration, and they share one consequence: zipdoc lifts
 // prose from a typed handler's doc comment, and none of these is one — so without
 // a Describe each publishes an operationId and nothing else. Declared beside the
 // wire facts they belong to.
 func init() {
-	// --- creates: the three that carry the in-band billing denial ---
+	// --- create: the one that carries the in-band billing denial ---
 	openapi.Describe("/v1/ml/models", http.MethodPost,
 		"Deploy an inference model",
 		"Deploys a model into the caller's own tenant namespace and answers the created "+
@@ -295,35 +270,6 @@ func init() {
 			"field — and the mapping is injective in both, so two tenants can never land in "+
 			"one namespace. An unvalidated caller is refused before any of that. The name must "+
 			"be a DNS-1123 label; a name already taken in the tenant's namespace is a 409.")
-	openapi.Describe("/v1/train/jobs", http.MethodPost,
-		"Submit a training job",
-		"Submits a training job into the caller's own tenant namespace and answers the "+
-			"created resource, 201. The spec is the Kubeflow TrainJob spec, relayed as given, "+
-			"so the trainer's full surface is reachable without this layer modelling it.\n\n"+
-			"THE BALANCE GATE RUNS FIRST, before the namespace or the job is created, and it "+
-			"fails CLOSED — an unreachable commerce refuses rather than admits. That is what "+
-			"keeps an unfunded org from starting GPU compute. The refusal carries the fleet's "+
-			"nested error body, which is why this route is not a typed op. On success the "+
-			"submission fee is debited from the caller org's own ledger, asynchronously and "+
-			"best-effort.\n\n"+
-			"Submitting is not finishing: the answer is the job as accepted, not a result — "+
-			"poll the job read for status. The tenant namespace comes from the validated org "+
-			"and project, never from a field; an unvalidated caller is refused. The name must "+
-			"be a DNS-1123 label, and a name already in use is a 409.")
-	openapi.Describe("/v1/train/experiments", http.MethodPost,
-		"Start a hyperparameter-tuning experiment",
-		"Starts a katib hyperparameter search in the caller's own tenant namespace and "+
-			"answers the created Experiment, 201. The spec is katib's own, relayed as given, "+
-			"so the whole search-algorithm surface is available without this layer enumerating "+
-			"it.\n\n"+
-			"One experiment fans out into many Trials, and each trial is real compute — so the "+
-			"BALANCE GATE RUNS FIRST, before anything is created, and fails CLOSED when "+
-			"commerce cannot be reached. The refusal carries the fleet's nested error body, "+
-			"which is why this is not a typed op. The submission fee is debited from the "+
-			"caller org's own ledger on success, asynchronously and best-effort.\n\n"+
-			"The trials the search creates are read through the experiment's own trials list. "+
-			"Tenant namespace from the validated org and project, never a field; an "+
-			"unvalidated caller is refused. DNS-1123 name, and a duplicate is a 409.")
 
 	// --- the verbatim merge patch ---
 	openapi.Describe("/v1/ml/models/:name", http.MethodPatch,
@@ -359,7 +305,7 @@ func init() {
 			"another tenant owns is simply a 404. The predictor's response body is read up to "+
 			"a fixed ceiling.")
 
-	// --- the two real probes ---
+	// --- the real probe ---
 	openapi.Describe("/v1/ml/health", http.MethodGet,
 		"Whether model serving can actually work right now",
 		"Reports whether the model-serving plane is genuinely usable: that the Kubernetes "+
@@ -379,26 +325,14 @@ func init() {
 			"It answers about the cluster, not about a tenant, so it takes no org and reveals "+
 			"no tenant data. A cluster with no kserve CRD reports degraded honestly rather "+
 			"than failing later at the first deploy.")
-	openapi.Describe("/v1/train/health", http.MethodGet,
-		"Whether training and tuning can actually work right now",
-		"Reports whether the training plane is genuinely usable: that the Kubernetes API "+
-			"answers, and that BOTH the TrainJob and the Experiment CRDs are served by this "+
-			"cluster. A live check, not a flag read back.\n\n"+
-			"200 only when all of it checks out; otherwise 503 carrying the per-CRD report and "+
-			"the real error. That body is why this is not a typed op — the error envelope a "+
-			"typed refusal renders would drop it.\n\n"+
-			"It names each CRD separately on purpose: a cluster can serve training but not "+
-			"tuning, and the difference decides whether a job submission or only an experiment "+
-			"will fail. Answers about the cluster, not a tenant, so it takes no org and reveals "+
-			"no tenant data.")
 }
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 //
-// list, get, delete and the trials leaf are TYPED ops — see typed.go. What
-// remains here is the three routes whose wire a typed op cannot state: create
-// (the in-band billing denial) and patch (the verbatim merge patch), plus the
-// predict proxy and the two real health probes below.
+// list, get and delete are TYPED ops — see typed.go. What remains here is the
+// routes whose wire a typed op cannot state: create (the in-band billing denial)
+// and patch (the verbatim merge patch), plus the predict proxy and the real
+// health probe below.
 
 func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
@@ -715,7 +649,7 @@ func k8sErr(s *cloud.Service[state], k resourceKind, op string, err error) error
 // mlTokenFileEnv names a mounted `cloud-ml` ServiceAccount token. When it is set
 // (and readable) the ML control plane authenticates to the API server as the
 // dedicated cloud-ml identity — decomplected from the pod's own cloud-api SA — so
-// ML's KServe/Kubeflow cluster reach is never inherited by the product-API path
+// ML's KServe cluster reach is never inherited by the product-API path
 // (least privilege; blast-radius separation). See universe
 // infra/k8s/cloud/ml-rbac.yaml (the cloud-ml ClusterRoleBinding grants the
 // cloud-ml ServiceAccount its ML cluster role).

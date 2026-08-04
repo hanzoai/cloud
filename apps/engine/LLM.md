@@ -78,7 +78,7 @@ family 404s on the live router and is absent from the document):
 
 - clusters — the cluster plane: /v1/clusters (apps/visor) merges managed
   clusters with the BYO fleet registry (apps/fleet).
-- jobs — /v1/train/jobs (apps/ml, TrainJob CRD); the engine runs no job queue.
+- jobs — /v1/finetune/jobs (the hanzoai/ai broker); the engine runs no job queue.
 - ray — no Ray operator backs the fleet; the engine is a single process.
 - pipelines — no backend; the engine executes inference, not DAGs.
 - gpus — fleet-wide inventory needs the cluster plane; the engine's own host

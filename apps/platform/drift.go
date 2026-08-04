@@ -3,8 +3,8 @@
 // binary. It is the Go port of the standalone Dokploy-based platform's
 // build→deploy lifecycle (pkg/platform/src/services/ci/deploy-executor.ts +
 // services/apps/inventory.ts + db/schema/apps-drift.ts), collapsed into an
-// in-process cloud subsystem exactly like clients/ml is the k8s bridge for the
-// Kubeflow CRDs.
+// in-process cloud subsystem exactly like apps/ml is the k8s bridge for the
+// kserve InferenceService CRD.
 //
 // The deploy mechanism is the SAME one the operator already reconciles: a
 // merge-patch of the operator `Service` CR's `.spec.image`. No second deployer
