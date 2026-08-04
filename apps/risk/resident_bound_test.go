@@ -1,13 +1,22 @@
 package risk
 
 // resident_bound_test.go — the resident bound has an OPERATING POINT, and it is
-// guarded.
+// held as ONE property rather than as four separate ones.
 //
-// THE DEFECT THIS HOLDS SHUT is not a number, it is that nothing held the
-// mechanism at all: `evict` could be made to return nil unconditionally — the
-// bound fully disarmed, residents growing without limit — and the whole suite
-// stayed green. The bound is what keeps 64 × (8 MiB of rings + its model) inside
-// the deployment's 9 GiB GOMEMLIMIT, on a binary that runs at ONE replica with
+// WHAT THIS ADDS OVER [TestEviction_IsCountedOnTheProbe] AND
+// [TestEviction_WritesTheVictimsStateDownFirst], WHICH ALREADY EXIST. Measured,
+// not assumed: each of the three mutations that disarm this bound is killed by
+// that pair too, so this is not a gap closure and is not claimed as one. It is
+// kept for two differences that only show up under load rather than at one
+// sample. The pair checks the count once, just past the bound; this drives
+// maxResident+8 organisations and asserts SERVED and BOUNDED at EVERY step, so a
+// bound that holds for one arrival and not for the ninth is caught. And the
+// pair's lossless leg can `t.Skip` itself when the victim happens to still be
+// resident, which is a leg that can stop testing without anyone noticing; this
+// one has no such exit.
+//
+// The bound is what keeps 64 × (8 MiB of rings + its model) inside the
+// deployment's 9 GiB GOMEMLIMIT, on a binary that runs at ONE replica with
 // Recreate, so disarming it is an OOM and an OOM is a total outage.
 //
 // A bigger constant is not the fix and never was. The operating point is FOUR
