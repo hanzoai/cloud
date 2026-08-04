@@ -168,6 +168,10 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleUser, Content: req.Prompt},
 		},
+		// The ceiling the prepaid gate RESERVED. Sending it is what makes the
+		// reservation binding: without it the provider picks its own limit and
+		// can return a completion nobody paid for.
+		MaxTokens: req.MaxTokens,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -227,6 +231,9 @@ func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit fu
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleUser, Content: req.Prompt},
 		},
+		// Same ceiling the gate reserved — streaming must not be a way to buy
+		// more completion than was paid for.
+		MaxTokens:     req.MaxTokens,
 		StreamOptions: &openai.StreamOptions{IncludeUsage: true},
 	})
 	if err != nil {

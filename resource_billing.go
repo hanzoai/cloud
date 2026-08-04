@@ -175,9 +175,27 @@ func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, req
 // richly. Like Meter it is fire-and-forget on a background context and a no-op
 // when billing is unconfigured or AmountCents<=0. kind is for the failure log.
 func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
+	rm.meterUsage(org, kind, u, nil)
+}
+
+// meterUsage is MeterUsage with the one thing a RESERVATION needs and a
+// fire-and-forget caller does not: posted, run once the debit has reached the
+// ledger (or failed to).
+//
+// A hold cannot be released when the call returns — the debit is still in flight
+// then, so the next gate would read a balance that still contains money already
+// spent, which is the very window the reservation exists to close. The only
+// moment that is true is inside the recording goroutine, so that is where the
+// release is handed. posted runs on EVERY exit, including the ones that record
+// nothing: a hold released late is a customer locked out of their own balance.
+func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted func()) {
+	if posted == nil {
+		posted = func() {}
+	}
 	// Same defensive line as Gate: never-constructed records nothing and never
 	// panics; no-local-ledger asks the peer.
 	if rm == nil || rm.m == nil {
+		posted()
 		return
 	}
 	// Ask the VALUE what it is worth, never the wire fields. Usage carries three
@@ -188,6 +206,7 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	// no row. Record itself has always guarded on the resolved value, so this line
 	// was the one place the fleet disagreed with itself about what money is.
 	if amt := u.Money(); amt.IsZero() || amt.IsNeg() {
+		posted()
 		return
 	}
 	// OWN THE STRINGS BEFORE THEY OUTLIVE THE REQUEST. Both paths below hand this
@@ -200,7 +219,7 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	// to remember. See [metering.Usage.Clone].
 	u = u.Clone()
 	if !rm.Enabled() {
-		rm.meterPeer(org, kind, u)
+		rm.meterPeer(org, kind, u, posted)
 		return
 	}
 	u.User = org // per-ORG billing: ledger keyed on the org slug.
@@ -219,6 +238,7 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	}
 	m, log, env := rm.m, rm.log, rm.env
 	go func() {
+		defer posted() // the hold ends where the money lands, not where the call returned.
 		if _, err := m.Record(context.Background(), u); err != nil && log != nil {
 			log.Error("resource debit failed (resource created, not billed)",
 				"org", org, "kind", kind, "provider", u.Provider,
