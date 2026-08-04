@@ -265,38 +265,28 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	req.Image = strings.TrimSpace(req.Image)
 
 	// Release self-publishes the platform's own image (compute version → build →
-	// smoke → tag → notify).
+	// smoke → tag → notify), and that is PLATFORM authority, not the authority an
+	// ordinary build takes. The two lanes part company here and nowhere else.
 	//
-	// IAM DECIDES IT AND NOTHING ELSE DOES, and the authority it takes is the SAME
-	// one an ordinary build takes: admin of an org that OWNS the registry namespace
-	// being published to. Releasing ghcr.io/hanzoai/cloud is admin of the org that
-	// owns `hanzoai` — a lux admin is refused, exactly as they are refused an
-	// ordinary push to ghcr.io/hanzoai/*.
+	// An ordinary build below publishes ONE tenant's artifact into the namespace
+	// that tenant owns, so the caller's own org bounds it (imageInOrgRegistry) and
+	// admin of that org is the right role. A release publishes releaseImage —
+	// ghcr.io/hanzoai/cloud, the binary every service in every org runs — so what it
+	// lands is OURS, on everyone, at the next reconcile. No property of the caller's
+	// own org can admit an act with that reach, which is why the gate is mayRelease
+	// (release.go) and reads cloud.Super alone.
 	//
-	// It used to demand platform SUDO, and that was a category error. SuperAdmin is
-	// the CROSS-TENANT scope — the authority to act in an org you do not belong to.
-	// Publishing your own org's artifact is not cross-tenant, so requiring the
-	// broadest scope in the system for it did not make the operation safer; it made
-	// releasing impossible for the engineers who own the artifact, while the only
-	// identities that could were the ones trusted with every other tenant's data.
-	// Conflating "privileged" with "cross-tenant" is the same error that let an
-	// org-role bit be read as platform authority.
+	// The whole decision is that one call, including the MACHINE path: cloud.Super
+	// requires a validated principal and PLATFORM_BUILD_CALLBACK_TOKEN mints none,
+	// so a leaked build token still enqueues an ordinary build and still cannot cut
+	// a release — one expression, not a second rule standing beside it.
 	//
-	// The namespace is taken from the CONSTANT releaseImage, never from the request:
+	// The image is taken from the CONSTANT releaseImage, never from the request:
 	// launchRelease publishes releaseImage regardless of what req.Image says, so
-	// binding on the request would be a check against a value the caller chooses.
+	// reading the request here would decide against a value the caller chooses.
 	if req.Release {
-		if viaToken && !principal.IsSuperAdmin(c) {
-			return zip.ErrForbidden("the platform build token may enqueue a build but may not cut a release; IAM is the only authority for it")
-		}
-		if !principal.IsSuperAdmin(c) {
-			org, ok := principal.Org(c)
-			if !ok || !imageInOrgRegistry(releaseImage, org) {
-				return zip.ErrForbidden("cutting this release requires admin of the org that owns " + releaseImage)
-			}
-			if !principal.IsOrgAdmin(c) {
-				return zip.ErrForbidden("cutting a release requires an org admin")
-			}
+		if err := mayRelease(c); err != nil {
+			return err
 		}
 		return startRelease(s, c, req)
 	}
