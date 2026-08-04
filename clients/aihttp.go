@@ -93,12 +93,31 @@ const aiHTTPTimeout = 120 * time.Second
 // go-openai client's Authorization header. Callers log the base URL and default
 // model, never the key.
 func AIHTTPAt(baseURL, apiKey, defaultModel string) types.AIClient {
+	return AIHTTPOn(baseURL, apiKey, defaultModel, nil)
+}
+
+// AIHTTPOn is AIHTTPAt with the TRANSPORT stated separately from the address —
+// the same client, the same OpenAI-compatible wire, reached a different way.
+//
+// It exists because `ai` is a plugin of this same binary running as its own
+// process, and its routes ride its unix socket exactly as they ride the public
+// listener ("ZAP over a unix socket is simply the address the caller dialed").
+// A sibling can therefore speak the ordinary wire to a peer WITHOUT leaving the
+// host: no ingress, no Cloudflare, no public address, and no token minted to
+// authenticate to our own deployment.
+//
+// rt nil ⇒ the default transport, so AIHTTPAt is unchanged. When rt dials a
+// fixed socket the base URL's HOST is inert — it names the peer for logs and
+// error text, and the path prefix still matters.
+func AIHTTPOn(baseURL, apiKey, defaultModel string, rt http.RoundTripper) types.AIClient {
 	base := strings.TrimRight(baseURL, "/")
+	hc := &http.Client{Timeout: aiHTTPTimeout, Transport: rt}
 	cfg := openai.DefaultConfig(apiKey)
 	cfg.BaseURL = base
+	cfg.HTTPClient = hc
 	return &httpAI{
 		client:       openai.NewClientWithConfig(cfg),
-		http:         &http.Client{Timeout: aiHTTPTimeout},
+		http:         hc,
 		baseURL:      base,
 		apiKey:       apiKey,
 		defaultModel: defaultModel,
@@ -123,6 +142,15 @@ func AIHTTPAt(baseURL, apiKey, defaultModel string) types.AIClient {
 // non-empty; here it is empty, so the sole auth header is the fresh Bearer the
 // oauth2 transport injects on every request.
 func AIHTTPM2M(baseURL, tokenURL, clientID, clientSecret, defaultModel string) types.AIClient {
+	return AIHTTPM2MOn(baseURL, tokenURL, clientID, clientSecret, defaultModel, nil)
+}
+
+// AIHTTPM2MOn is AIHTTPM2M with the TRANSPORT stated separately from the
+// address, for the same reason AIHTTPOn exists: the inference wire can reach a
+// peer over its own socket instead of the public listener. Only the INFERENCE
+// leg rides rt — the token exchange keeps the default transport, because IAM is
+// a different peer and naming it is a separate question.
+func AIHTTPM2MOn(baseURL, tokenURL, clientID, clientSecret, defaultModel string, rt http.RoundTripper) types.AIClient {
 	cc := &clientcredentials.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -132,8 +160,13 @@ func AIHTTPM2M(baseURL, tokenURL, clientID, clientSecret, defaultModel string) t
 		AuthStyle: oauth2.AuthStyleInParams,
 	}
 	base := strings.TrimRight(baseURL, "/")
-	authed := cc.Client(context.Background()) // caches + auto-refreshes the M2M token
-	cfg := openai.DefaultConfig("")           // empty authToken → go-openai adds no header
+	// The oauth2 client mints over the DEFAULT transport (IAM is its own peer) and
+	// carries the Bearer onto rt for the inference call itself.
+	authed := cc.Client(context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Timeout: aiHTTPTimeout}))
+	if rt != nil {
+		authed.Transport = &oauth2.Transport{Source: cc.TokenSource(context.Background()), Base: rt}
+	}
+	cfg := openai.DefaultConfig("") // empty authToken → go-openai adds no header
 	cfg.BaseURL = base
 	cfg.HTTPClient = authed
 	return &httpAI{
