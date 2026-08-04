@@ -34,65 +34,71 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/wallets"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
 
 const (
-	// DefaultNetwork / DefaultChainID pin the challenge's settlement network when
-	// neither the resource's Terms nor the operator config names one. Default to
-	// the Hanzo L1 (its EVM chainID == its network id), matching wallets.
-	DefaultNetwork = "hanzo"
-	DefaultChainID = 36963
+	// DefaultNetwork pins the challenge's settlement network when neither the
+	// resource's Terms nor the operator config names one. It is CAIP-2 and it names
+	// the Hanzo L1 (whose EVM chain id IS its network id), matching wallets.
+	DefaultNetwork = "eip155:36963"
 
-	// DefaultTokenDecimals is USDC's precision (the smallest-unit scale the client
-	// signs over). Operators override per token via CLOUD_X402_TOKEN_DECIMALS.
-	DefaultTokenDecimals = 6
+	// DefaultAssetName / DefaultAssetVersion are the EIP-712 domain fields of the
+	// settlement asset. USDC uses ("USD Coin", "2"); operators pin them per asset in
+	// Config, and whatever they are, the CHALLENGE states them so the client signs
+	// over exactly the domain this rail verifies against.
+	DefaultAssetName    = "USD Coin"
+	DefaultAssetVersion = "2"
+
+	// DefaultAssetDecimals is USDC's precision (the atomic-unit scale the client
+	// signs over). Operators override per asset via CLOUD_X402_ASSET_DECIMALS.
+	DefaultAssetDecimals = 6
 
 	// providerLabel is the commerce "provider"/"service" label x402 spend records
 	// under, so pay-per-use appears in billing/usage attributable to this surface.
 	providerLabel = "x402"
 )
 
-// Config is the operator-pinned x402 settlement config. Token + its EIP-712 domain
-// (name/version/decimals) MUST match the token the client signs against, or every
+// Config is the operator-pinned x402 settlement config. Asset + its EIP-712 domain
+// (name/version/decimals) MUST match the asset the client signs against, or every
 // signature fails to recover. Values are read from env in Mount; tests inject
 // Config directly.
 type Config struct {
-	Token         string // ERC-3009 token contract (EIP-712 verifyingContract)
-	TokenName     string // EIP-712 domain name (default "USD Coin")
-	TokenVersion  string // EIP-712 domain version (default "2")
-	TokenDecimals int    // token smallest-unit scale (default 6)
-	Network       string // settlement network label (default "hanzo")
-	ChainID       int64  // settlement chain id (default 36963)
-	ValidFor      int64  // authorization validity window, seconds (default 300)
+	Asset         string // EIP-3009 token contract (EIP-712 verifyingContract)
+	AssetName     string // EIP-712 domain name (default "USD Coin")
+	AssetVersion  string // EIP-712 domain version (default "2")
+	AssetDecimals int    // asset atomic-unit scale (default 6)
+	Network       string // CAIP-2 settlement network (default "eip155:36963")
+	MaxTimeout    int64  // advertised maxTimeoutSeconds (default 300)
 }
 
-func (c Config) tokenName() string {
-	if c.TokenName != "" {
-		return c.TokenName
+func (c Config) assetName() string {
+	if c.AssetName != "" {
+		return c.AssetName
 	}
-	return DefaultTokenName
+	return DefaultAssetName
 }
-func (c Config) tokenVersion() string {
-	if c.TokenVersion != "" {
-		return c.TokenVersion
+func (c Config) assetVersion() string {
+	if c.AssetVersion != "" {
+		return c.AssetVersion
 	}
-	return DefaultTokenVersion
+	return DefaultAssetVersion
 }
-func (c Config) tokenDecimals() int {
-	if c.TokenDecimals > 0 {
-		return c.TokenDecimals
+func (c Config) assetDecimals() int {
+	if c.AssetDecimals > 0 {
+		return c.AssetDecimals
 	}
-	return DefaultTokenDecimals
+	return DefaultAssetDecimals
 }
 
 // Terms are a priced resource's payment terms: the price and the wallet that
@@ -102,9 +108,8 @@ type Terms struct {
 	Amount            money.Amount // exact 18-dp USD price
 	RecipientOrg      string       // the recipient wallet's org
 	RecipientWalletID string       // the wallet that receives payment
-	Token             string       // optional per-resource token override
-	Network           string       // optional per-resource network override
-	ChainID           int64        // optional per-resource chain override
+	Asset             string       // optional per-resource asset override
+	Network           string       // optional per-resource CAIP-2 network override
 }
 
 // Registry resolves a resource's payment Terms. ok=false means the resource is
@@ -168,8 +173,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 	routes(app, s)
 	exposeSettle(s)
-	s.Log.Info("x402 mounted", "network", s.State.cfg.Network, "chainId", s.State.cfg.ChainID,
-		"token", s.State.cfg.Token != "", "meter", s.State.meter != nil && s.State.meter.Enabled())
+	// Finish anything the last process left in doubt. A settlement claimed but not
+	// completed is money owed in one direction or the other, and a restart is the
+	// one moment we know no request is still holding it.
+	if n, err := Reconcile(context.Background(), 0); err != nil {
+		s.Log.Error("x402: startup reconcile failed", "err", err)
+	} else if n > 0 {
+		s.Log.Info("x402: startup reconcile completed settlements", "count", n)
+	}
+	s.Log.Info("x402 mounted", "network", s.State.cfg.Network,
+		"asset", s.State.cfg.Asset != "", "meter", s.State.meter != nil && s.State.meter.Enabled())
 	return nil
 }
 
@@ -196,9 +209,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // an HTTP response. BOTH are fail-closed: a caller that gets either must refuse the
 // call, never serve it. A price that cannot be enforced is not a free price.
 var (
-	// ErrPaymentRequired — the caller has not paid: no proof, an authorization that
-	// does not verify, or a replayed nonce. The CHALLENGE is on the response's
-	// X-Payment-Required header, so a client can pay and retry.
+	// ErrPaymentRequired — the caller has not paid: no payment, an authorization
+	// that does not verify, or a replayed nonce. The CHALLENGE is on the response's
+	// PAYMENT-REQUIRED header, so a client can pay and retry.
 	ErrPaymentRequired = errors.New("x402: payment required")
 	// ErrUnavailable — payment could not be enforced at all: x402 is not mounted in
 	// this process, the price table or the recipient wallet did not resolve, the
@@ -245,9 +258,9 @@ func Enforce() zip.Handler {
 		if !priced {
 			return c.Next() // the TABLE says this route is free — an answer, not a silence
 		}
-		g := run(s, c.Context(), principal.Ledger(c), c.Header(HeaderProof), c.Path(), terms)
+		g := run(s, c.Context(), principal.Ledger(c), c.Header(HeaderPaymentSignature), c.Path(), terms)
 		if g.receipt != nil {
-			served(s, c.Context(), c, g.receipt)
+			served(s, c.Context(), c, g)
 			return c.Next()
 		}
 		return refuse(c, g)
@@ -263,9 +276,9 @@ func Enforce() zip.Handler {
 // (the CLI's LocalInvoke) still runs. A PRICED one always needs the request, because
 // the payer is the attested principal on it and the proof rides its headers.
 //
-// Unpaid → the challenge is written to the response's X-Payment-Required header and
+// Unpaid → the challenge is written to the response's PAYMENT-REQUIRED header and
 // ErrPaymentRequired is returned, so the caller refuses 402 and the client can pay
-// and retry. Paid → settled exactly once, the receipt is on X-Payment-Receipt, nil.
+// and retry. Paid → settled exactly once, the settlement is on PAYMENT-RESPONSE, nil.
 func Settle(ctx context.Context, resource string) error {
 	// FREE FIRST, before anything is required of the world. A caller that offers
 	// every call to this seam — which is the only way a gate and a settlement cannot
@@ -283,17 +296,17 @@ func Settle(ctx context.Context, resource string) error {
 		return fmt.Errorf("%w: x402 is not mounted in this process", ErrUnavailable)
 	}
 	c, _ := cloud.Request(ctx) // nil off the HTTP path; run refuses a PRICED resource there
-	var payer, proof string
+	var payer, payment string
 	if c != nil {
-		payer, proof = principal.Ledger(c), c.Header(HeaderProof)
+		payer, payment = principal.Ledger(c), c.Header(HeaderPaymentSignature)
 	}
-	g := run(s, ctx, payer, proof, resource, terms)
+	g := run(s, ctx, payer, payment, resource, terms)
 	if g.receipt != nil {
-		served(s, ctx, c, g.receipt)
+		served(s, ctx, c, g)
 		return nil
 	}
-	if c != nil && g.req != nil {
-		c.SetHeader(HeaderRequirements, marshalHeader(*g.req))
+	if c != nil {
+		writeRefusal(c, g)
 	}
 	if g.status == http.StatusPaymentRequired {
 		return fmt.Errorf("%w: %s (%s)", ErrPaymentRequired, g.msg, g.code)
@@ -334,12 +347,52 @@ func priceOf(ctx context.Context, resource string) (Terms, bool, error) {
 // (status + code + msg, carrying req when there is a challenge to advertise). It
 // exists so the flow is decided once and rendered twice — as a response by Enforce,
 // as an error by Settle — with no second copy of the policy.
+//
+// The wire renderings both hang off it: [gate.required] is the PaymentRequired a
+// 402 advertises, [gate.settlement] is the SettlementResponse every answered
+// request carries. Neither is stored, because a rendering that is stored is a
+// rendering that can disagree with the outcome it renders.
 type gate struct {
-	receipt *Receipt
-	req     *PaymentRequirements
-	status  int
-	code    string
-	msg     string
+	receipt  *Receipt
+	req      *PaymentRequirements
+	resource string
+	payer    string // payer ADDRESS, when a payload named one
+	status   int
+	code     string
+	msg      string
+}
+
+// required renders the 402 challenge: the resource, and every way it may be paid
+// for. The `accepts` array is where multi-asset pricing would arrive; this rail
+// quotes exactly one way to pay, so it holds exactly one.
+func (g gate) required() *PaymentRequired {
+	if g.req == nil {
+		return nil
+	}
+	return &PaymentRequired{
+		X402Version: Version,
+		Error:       g.msg,
+		Resource:    ResourceInfo{URL: g.resource},
+		Accepts:     []PaymentRequirements{*g.req},
+	}
+}
+
+// settlement renders the SettlementResponse. The spec requires one on the FAILURE
+// leg too, which is why this is defined for a refusal and not only for a receipt:
+// a client that cannot tell "your signature was bad" from "our ledger is down"
+// cannot decide whether retrying the same authorization is worth anything.
+func (g gate) settlement() SettlementResponse {
+	if g.receipt != nil {
+		return SettlementResponse{
+			Success: true, Payer: g.receipt.From, Transaction: g.receipt.settledTx(),
+			Network: g.receipt.Network, Amount: g.receipt.Amount,
+		}
+	}
+	s := SettlementResponse{Success: false, ErrorReason: g.code, Payer: g.payer}
+	if g.req != nil {
+		s.Network = g.req.Network
+	}
+	return s
 }
 
 // run is THE x402 enforcement for one PRICED resource: unpaid → challenge; paid →
@@ -353,10 +406,10 @@ type gate struct {
 // internal call made by the process that does hold one. An empty payer is the same
 // refusal in all three — nobody to charge — whether that is an anonymous request or
 // no request at all.
-func run(s *cloud.Service[state], ctx context.Context, payer, proofHdr, resource string, terms Terms) gate {
+func run(s *cloud.Service[state], ctx context.Context, payer, paymentHdr, resource string, terms Terms) gate {
 	// Ledger settlement debits an ORG ledger, so a validated payer is required.
 	if payer == "" {
-		return gate{status: http.StatusForbidden, code: "unbillable", msg: "sign in"}
+		return gate{resource: resource, status: http.StatusForbidden, code: reasonUnbillable, msg: "sign in"}
 	}
 
 	// Resolve the recipient wallet the marketplace named (org-scoped in wallets, so
@@ -365,48 +418,70 @@ func run(s *cloud.Service[state], ctx context.Context, payer, proofHdr, resource
 	if !ok {
 		s.Log.Error("x402: recipient wallet unresolved",
 			"resource", resource, "recipientOrg", terms.RecipientOrg, "wallet", terms.RecipientWalletID)
-		return gate{status: http.StatusServiceUnavailable, code: "payee_unavailable",
+		return gate{resource: resource, status: http.StatusServiceUnavailable, code: reasonPayee,
 			msg: "resource recipient wallet is not resolvable"}
 	}
 
-	req := requirements(s.State.cfg, resource, terms, target.Address)
-
-	// CHALLENGE: no proof yet → 402 with the payment requirements.
-	proofHdr = strings.TrimSpace(proofHdr)
-	if proofHdr == "" {
-		return challenge(req, "payment_required", "payment required for "+resource)
-	}
-
-	// VERIFY the submitted proof against the requirements.
-	proof, err := ParseProof(proofHdr)
+	req, err := requirements(s.State.cfg, terms, target.Address)
 	if err != nil {
-		return challenge(req, "invalid_payment", err.Error())
+		// A challenge we cannot even STATE is a misconfigured rail, not a refusal the
+		// client can answer: it would be quoting a network no signature can be made
+		// against. Fail closed and name it.
+		s.Log.Error("x402: cannot state payment requirements", "resource", resource, "err", err)
+		return gate{resource: resource, status: http.StatusServiceUnavailable,
+			code: reasonOf(err), msg: err.Error()}
 	}
-	if err := Verify(req, *proof, s.State.cfg.tokenName(), s.State.cfg.tokenVersion(), nowUnix()); err != nil {
-		return challenge(req, "payment_invalid", err.Error())
+
+	// CHALLENGE: no payment yet → 402 with the payment requirements.
+	paymentHdr = strings.TrimSpace(paymentHdr)
+	if paymentHdr == "" {
+		return challenge(req, resource, reasonRequired, "payment required for "+resource)
+	}
+
+	// VERIFY the submitted payload against the requirements. Everything checked here
+	// is true or false forever; the TIME WINDOW is checked in settle, where it can
+	// be told apart from an authorization we already accepted (see settle).
+	pay, err := ParsePayment(paymentHdr)
+	if err != nil {
+		return challenge(req, resource, reasonOf(err), err.Error())
+	}
+	g := challenge(req, resource, "", "")
+	g.payer = pay.Payload.Authorization.From
+	if err := Verify(req, *pay); err != nil {
+		g.code, g.msg = reasonOf(err), err.Error()
+		return g
 	}
 
 	// SETTLE once (replay-safe).
-	receipt, replay, err := settle(s, ctx, req, *proof, terms, target, payer)
+	receipt, err := settle(s, ctx, req, *pay, terms, target, payer, resource)
 	if err != nil {
+		var replay *replayed
+		if errors.As(err, &replay) {
+			g.code, g.msg = reasonReplay, err.Error()
+			return g
+		}
+		var inv *Invalid
+		if errors.As(err, &inv) { // an expired authorization with nothing to resume
+			g.code, g.msg = inv.Reason, inv.Detail
+			return g
+		}
 		s.Log.Error("x402: settlement failed", "resource", resource, "payer", payer, "err", err)
-		return unavailable() // settlement backend down → never serve unpaid
+		u := unavailable() // settlement backend down → never serve unpaid
+		u.req, u.resource, u.payer = &req, resource, g.payer
+		return u
 	}
-	if replay {
-		return challenge(req, "nonce_replayed", "payment nonce already used")
-	}
-	return gate{receipt: receipt}
+	return gate{receipt: receipt, resource: resource, payer: receipt.From}
 }
 
 // challenge is a 402 that tells the client exactly what to pay. Every 402 carries
 // the requirements, not just the first: a client whose authorization expired or
 // replayed can re-sign from the refusal alone.
-func challenge(req PaymentRequirements, code, msg string) gate {
-	return gate{req: &req, status: http.StatusPaymentRequired, code: code, msg: msg}
+func challenge(req PaymentRequirements, resource, code, msg string) gate {
+	return gate{req: &req, resource: resource, status: http.StatusPaymentRequired, code: code, msg: msg}
 }
 
 func unavailable() gate {
-	return gate{status: http.StatusServiceUnavailable, code: "x402_unavailable",
+	return gate{status: http.StatusServiceUnavailable, code: reasonUnavailable,
 		msg: "payment settlement temporarily unavailable"}
 }
 
@@ -416,71 +491,146 @@ func unavailable() gate {
 // a payment rail that is not here. The reason is named so the failure reads as a
 // deployment fact in the log rather than a mystery 503.
 func unenforceable(why string) gate {
-	return gate{status: http.StatusServiceUnavailable, code: "x402_unenforceable",
+	return gate{status: http.StatusServiceUnavailable, code: reasonUnenforceable,
 		msg: "payment cannot be enforced for this resource: " + why}
 }
 
-// served records a settled payment: the audit row and the receipt header the
-// response carries back. One place, so Enforce and Settle cannot drift on it.
-func served(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, r *Receipt) {
-	emitAudit(s, ctx, r)
+// served records a settled payment: the audit row and the PAYMENT-RESPONSE header
+// the answer carries back. One place, so Enforce and Settle cannot drift on it.
+func served(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, g gate) {
+	emitAudit(s, ctx, g.receipt)
 	if c != nil {
-		c.SetHeader(HeaderReceipt, marshalHeader(r))
+		c.SetHeader(HeaderPaymentResponse, EncodeHeader(g.settlement()))
 	}
 }
 
-// refuse writes the x402 refusal: the challenge on the X-Payment-Required header AND
-// in the body's `accepts`, so a client reading either can pay and retry.
+// writeRefusal puts the x402 refusal on the RESPONSE HEADERS: the challenge on
+// PAYMENT-REQUIRED so a client can pay and retry, and the SettlementResponse on
+// PAYMENT-RESPONSE, which the spec requires on the failure leg too.
+//
+// It is separate from [refuse] because the tool plane's caller writes the headers
+// onto a response whose BODY is its own — the payment failed, but the thing being
+// answered is a tool call, not an x402 request.
+func writeRefusal(c *zip.Ctx, g gate) {
+	if req := g.required(); req != nil {
+		c.SetHeader(HeaderPaymentRequired, EncodeHeader(req))
+	}
+	c.SetHeader(HeaderPaymentResponse, EncodeHeader(g.settlement()))
+}
+
+// refuse writes the x402 refusal: the headers, AND the challenge in the body's
+// `accepts`, so a client reading either can pay and retry. The body is a server
+// implementation concern in x402 v2 (all protocol information is in the headers),
+// so what is in it mirrors them rather than inventing a second contract.
 func refuse(c *zip.Ctx, g gate) error {
+	writeRefusal(c, g)
 	body := payErr(g.code, g.msg)
-	if g.req != nil {
-		c.SetHeader(HeaderRequirements, marshalHeader(*g.req))
-		body["accepts"] = *g.req
+	if req := g.required(); req != nil {
+		body["accepts"] = req.Accepts
+		body["x402Version"] = req.X402Version
 	}
 	return c.JSON(g.status, body)
 }
+
+// replayed is a nonce reused for terms it was not signed for.
+type replayed struct{ id string }
+
+func (e *replayed) Error() string { return "payment nonce already used: " + e.id }
 
 // settle enforces settle-once and performs the ledger settlement.
 //
 // Dedup + settle-once: the settlement id is DETERMINISTIC in (From, Nonce), so a
 // re-submitted authorization maps to the same row. A found row with MATCHING terms
-// is an idempotent retry (return the receipt, do NOT re-charge); a found row with
-// DIFFERENT terms is nonce reuse across resources → replay. When absent, settle
-// FIRST (idempotent on the id at the ledger) then record — so a settle failure
-// never leaves a spent-but-unpaid nonce that would serve free on retry.
-func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirements, proof Proof,
-	terms Terms, target wallets.PaymentTarget, payerOrg string) (*Receipt, bool, error) {
+// is the same settlement; a found row with DIFFERENT terms is nonce reuse across
+// resources → replay.
+//
+// CLAIM BEFORE THE MONEY MOVES. The row is written FIRST, unsettled, and only then
+// is money moved against it. That ordering is the whole recovery story:
+//
+//   - A crash or a failure at ANY point after the claim leaves a durable record of
+//     a settlement in flight, keyed on the same id both money writes are idempotent
+//     on. Nothing is ever moved that nothing names.
+//   - The old order — move, then record — could lose the record after the money
+//     moved, and then a retry re-derived the same id, found no row, and moved it
+//     again. Idempotency at commerce is what stopped that from double-charging,
+//     which means the invariant was being held one layer away from where it was
+//     stated.
+//
+// AND THE WINDOW GATES ACCEPTANCE, NOT COMPLETION. [InWindow] is checked only when
+// there is no claim yet. Once a claim exists, this authorization WAS valid when we
+// took it, and validBefore has no further say: EIP-3009's window bounds when a
+// transfer may be submitted, not how long the submission takes to finish. That one
+// distinction is what removes the money-loss the previous implementation documented
+// and left in place — a payer whose debit landed and whose credit did not could
+// only recover by re-presenting a signature that expired 300 seconds later, so a
+// client that gave up for five minutes was permanently debited with nothing served.
+// Now the same client is served whenever it comes back, and [Reconcile] finishes
+// the settlement even if it never does.
+func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirements, pay PaymentPayload,
+	terms Terms, target wallets.PaymentTarget, payerOrg, resource string) (*Receipt, error) {
 
-	id := settlementID(proof.From, proof.Nonce)
+	a := pay.Payload.Authorization
+	id := settlementID(a.From, a.Nonce)
 	st := &Settlement{
-		ID: id, PayerOrg: payerOrg, From: proof.From, Nonce: proof.Nonce,
-		Resource: req.Resource, Payee: req.Payee, PayeeOrg: target.Org,
-		Amount: terms.Amount.AttoString(), SettledVia: "ledger", CreatedAt: nowUnix(),
+		ID: id, PayerOrg: payerOrg, From: a.From, Nonce: a.Nonce,
+		Resource: resource, Payee: req.PayTo, PayeeOrg: target.Org,
+		PayeeSubject: target.Subject, Amount: terms.Amount.AttoString(),
+		Network: req.Network, SettledVia: "ledger", CreatedAt: nowUnix(),
 	}
 
-	if ex, found, err := s.State.store.get(ctx, id); err != nil {
-		return nil, false, err
-	} else if found {
-		if sameTerms(ex, st) {
-			return receiptOf(ex), false, nil // idempotent retry
-		}
-		return nil, true, nil // nonce reused for different terms → replay
-	}
-
-	if err := settleLedger(s, ctx, st, target.Subject, terms.Amount); err != nil {
-		return nil, false, err
-	}
-	recorded, existing, err := s.State.store.record(ctx, st)
+	claim, err := claimOf(ctx, s.State.store, st)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	if !recorded { // lost a concurrent race; settlement was idempotent
-		if existing != nil && sameTerms(existing, st) {
-			return receiptOf(existing), false, nil
+	if claim == nil {
+		// No claim yet, so this authorization is being ACCEPTED now — and that is the
+		// one moment its time window has anything to say.
+		if err := InWindow(a, nowUnix()); err != nil {
+			return nil, err
 		}
-		return nil, true, nil
+		claimed, existing, err := s.State.store.claim(ctx, st)
+		if err != nil {
+			return nil, err
+		}
+		if !claimed { // lost a concurrent race — the winner's row is the claim
+			if existing == nil || !sameTerms(existing, st) {
+				return nil, &replayed{id: id}
+			}
+			claim = existing
+		} else {
+			claim = st
+		}
 	}
-	return receiptOf(st), false, nil
+	if claim.Settled {
+		return receiptOf(claim), nil // already paid for — serve it again, charge nothing
+	}
+	if err := settleLedger(s, ctx, claim, terms.Amount); err != nil {
+		return nil, err
+	}
+	if err := s.State.store.markSettled(ctx, claim.ID, claim.TxHash); err != nil {
+		// The money moved and the row still says otherwise. Nothing is served, and
+		// that is recoverable rather than lost: the claim is durable, both money
+		// writes are idempotent on its id, and the next attempt — the client's, or
+		// Reconcile's — re-runs them for free and marks it.
+		s.Log.Error("x402: settled but not marked — reconcile by id", "id", claim.ID, "err", err)
+		return nil, err
+	}
+	claim.Settled = true
+	return receiptOf(claim), nil
+}
+
+// claimOf reads the existing claim for a settlement, or nil when there is none.
+// A row whose terms differ is not this settlement at all — it is the SAME nonce
+// spent on something else, which is a replay and can never become valid.
+func claimOf(ctx context.Context, st *store, want *Settlement) (*Settlement, error) {
+	ex, found, err := st.get(ctx, want.ID)
+	if err != nil || !found {
+		return nil, err
+	}
+	if !sameTerms(ex, want) {
+		return nil, &replayed{id: want.ID}
+	}
+	return ex, nil
 }
 
 // settleLedger is the LIVE settlement backend: it debits the payer's org through
@@ -502,48 +652,77 @@ func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirement
 // fleet neither backend is here: both halves cross the plane, to the same peer, and
 // a debit that lands means that peer is up for the credit that follows.
 //
-// A credit that fails ANYWAY is not compensated, and that is the deliberate answer.
-// Both writes are idempotent on the settlement id, and no row is recorded and no
-// receipt issued unless both landed — so the resource is refused and the client's
-// retry, carrying the same authorization, re-runs both and completes the settlement
-// exactly once. A reversing entry would look safer and be worse: the failure that
-// makes it necessary is usually a TIMEOUT, and a timeout does not mean the credit
-// did not commit — so the compensation would refund a payer who was correctly
-// charged while the seller kept the money, minting the difference out of a slow
-// socket. An unretried debit is a number the log names with the id both sides are
-// keyed on. Minted money is a number nobody can find.
-func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, payeeSubject string, amount money.Amount) error {
+// A credit that fails ANYWAY is not compensated, and that is still the deliberate
+// answer: the failure that makes compensation necessary is usually a TIMEOUT, and a
+// timeout does not mean the credit did not commit — so a reversing entry would
+// refund a payer who was correctly charged while the seller kept the money, minting
+// the difference out of a slow socket.
+//
+// What HAS changed is that not-compensating is no longer the same as not-recovering.
+// Both writes are idempotent on the settlement id and the CLAIM is already durable
+// before either runs (settle), so an incomplete settlement is a row that names
+// exactly what is owed and to whom. Retrying it is free and converges — from the
+// client whenever it returns, with no expiry to beat, and from [Reconcile] when it
+// never does. An unretried debit used to be a number the log named and nobody
+// swept; it is now a row the sweep finishes.
+func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, amount money.Amount) error {
 	if st.PayeeOrg == "" {
 		return errors.New("x402: no payee org to credit")
 	}
 	if err := debitPayer(s, ctx, st, amount); err != nil {
 		return err
 	}
-	if err := creditPayee(ctx, st, payeeSubject, amount); err != nil {
-		// The payer's side landed and the payee's did not. Nothing is served and no
-		// receipt is issued, so the settlement has not HAPPENED — but the debit has.
-		//
-		// The client's retry completes it: the same authorization yields the same id,
-		// both writes are idempotent on it, and the second attempt credits and serves.
-		// That recovery is NOT unconditional, and this is the part to fix rather than
-		// forget: the authorization carries validBefore (DefaultValidFor, 300s), so a
-		// client that gives up for five minutes can never complete this settlement,
-		// and the buyer is permanently down the money with nothing served. The same
-		// shape follows a store.record failure after both sides landed.
-		//
-		// So it is left RECONCILABLE and the sweep is named rather than implied. The
-		// debit is keyed RequestID = the settlement id in commerce's usage rows; the
-		// settlement store is keyed on the same id. The sweep is therefore exactly:
-		// every usage row with provider "x402" whose RequestID has no settlements row,
-		// older than the validity window — complete it (credit the payee, record the
-		// row) or credit the payer back. It needs a cross-process reader of both
-		// stores and a schedule, which is its own piece of work, not a line here.
-		s.Log.Error("x402: payer debited, payee credit failed — settlement incomplete, reconcile by id",
+	if err := creditPayee(ctx, st, amount); err != nil {
+		s.Log.Error("x402: payer debited, payee credit failed — settlement incomplete, reconcilable by id",
 			"id", st.ID, "payer", st.PayerOrg, "payeeOrg", st.PayeeOrg,
 			"amount", amount.String(), "err", err)
 		return err
 	}
 	return nil
+}
+
+// Reconcile finishes every settlement that was CLAIMED but never completed — the
+// in-doubt window of any two-process money movement, made recoverable by the claim
+// being written before the money moves.
+//
+// It is exactly the sweep the previous implementation described and did not have,
+// and claiming first is what made it cheap: it reads THIS store's own unsettled
+// rows rather than needing a cross-process reader of commerce's usage rows to
+// discover which debits had no settlement. Every row carries the payer, the payee
+// and the amount, and both money writes are idempotent on its id — so replaying
+// them either completes the settlement or costs nothing, and no signature is
+// involved, which is why an expired authorization cannot block it.
+//
+// olderThan skips rows still on a live request's path, so the sweep never races the
+// flow that owns them. Mount runs it once at startup; it is safe to run at any time
+// and any number of times.
+func Reconcile(ctx context.Context, olderThan time.Duration) (completed int, err error) {
+	s := mounted
+	if s == nil {
+		return 0, nil
+	}
+	pending, err := s.State.store.pending(ctx, nowUnix()-int64(olderThan.Seconds()))
+	if err != nil {
+		return 0, err
+	}
+	for _, st := range pending {
+		amount, perr := money.ParseInt(st.Amount)
+		if perr != nil {
+			s.Log.Error("x402: reconcile: unreadable amount", "id", st.ID, "err", perr)
+			continue
+		}
+		if serr := settleLedger(s, ctx, st, amount); serr != nil {
+			s.Log.Error("x402: reconcile: still incomplete", "id", st.ID, "err", serr)
+			continue
+		}
+		if merr := s.State.store.markSettled(ctx, st.ID, st.TxHash); merr != nil {
+			s.Log.Error("x402: reconcile: settled but not marked", "id", st.ID, "err", merr)
+			continue
+		}
+		completed++
+		s.Log.Info("x402: reconcile: settlement completed", "id", st.ID, "payer", st.PayerOrg)
+	}
+	return completed, nil
 }
 
 // debitPayer moves the buyer's half. The metering spine when it is configured here
@@ -563,22 +742,23 @@ func debitPayer(s *cloud.Service[state], ctx context.Context, st *Settlement, am
 
 // creditPayee moves the seller's half, into the ledger of the org that published
 // the listing — never one the buyer named.
-func creditPayee(ctx context.Context, st *Settlement, payeeSubject string, amount money.Amount) error {
+func creditPayee(ctx context.Context, st *Settlement, amount money.Amount) error {
 	if fin := finance.Current(); fin != nil {
 		_, err := fin.Deposit(ctx, types.DepositInput{
-			Org: st.PayeeOrg, Subject: payeeSubject, Amount: amount, Currency: "usd",
+			Org: st.PayeeOrg, Subject: st.PayeeSubject, Amount: amount, Currency: "usd",
 			Ref: st.ID, Notes: "x402:" + st.Resource, Tags: "x402",
 		})
 		return err
 	}
-	return creditPeer(st.PayeeOrg, payeeSubject, amount, st.ID, "x402:"+st.Resource)
+	return creditPeer(st.PayeeOrg, st.PayeeSubject, amount, st.ID, "x402:"+st.Resource)
 }
 
 // settlementRef addresses one settlement by the id its receipt carries.
 type settlementRef struct {
 	// ID is the settlement id from the URL — the deterministic keccak(from|nonce)
 	// key an x402 receipt is issued under (the `id` field of a Receipt, and the
-	// value of the X-Payment-Response header a paid request answers with).
+	// `transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid
+	// request answers with).
 	ID string `json:"id"`
 }
 
@@ -625,26 +805,32 @@ func payerOf(ctx context.Context) string {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-// requirements builds the 402 challenge from config + the resource's terms.
-func requirements(cfg Config, resource string, terms Terms, payee string) PaymentRequirements {
+// requirements builds the ONE way this rail accepts payment for a resource, from
+// config + the resource's terms. The network is validated here rather than at the
+// point of signing, so a misconfigured chain is a mount-time-shaped failure a log
+// names once instead of a signature mismatch every client hits forever.
+func requirements(cfg Config, terms Terms, payee string) (PaymentRequirements, error) {
 	network := firstNonEmpty(terms.Network, cfg.Network, DefaultNetwork)
-	token := firstNonEmpty(terms.Token, cfg.Token)
-	chainID := terms.ChainID
-	if chainID == 0 {
-		chainID = cfg.ChainID
+	if _, err := ChainID(network); err != nil {
+		return PaymentRequirements{}, err
 	}
-	if chainID == 0 {
-		chainID = DefaultChainID
-	}
-	validFor := cfg.ValidFor
-	if validFor <= 0 {
-		validFor = DefaultValidFor
+	maxTimeout := cfg.MaxTimeout
+	if maxTimeout <= 0 {
+		maxTimeout = DefaultMaxTimeoutSeconds
 	}
 	return PaymentRequirements{
-		Version: Version, Scheme: Scheme, Resource: resource, Network: network,
-		ChainID: chainID, Token: token, Payee: payee,
-		Amount: tokenUnits(terms.Amount, cfg.tokenDecimals()), ValidFor: validFor,
-	}
+		Scheme:            SchemeExact,
+		Network:           network,
+		Amount:            atomicUnits(terms.Amount, cfg.assetDecimals()),
+		Asset:             firstNonEmpty(terms.Asset, cfg.Asset),
+		PayTo:             payee,
+		MaxTimeoutSeconds: maxTimeout,
+		Extra: &Extra{
+			AssetTransferMethod: TransferEIP3009,
+			Name:                cfg.assetName(),
+			Version:             cfg.assetVersion(),
+		},
+	}, nil
 }
 
 // settlementID is the deterministic settle-once key: keccak(from|nonce). Stable
@@ -655,10 +841,10 @@ func settlementID(from, nonce string) string {
 	return "x402_" + hex.EncodeToString(h[:])
 }
 
-// tokenUnits converts an exact 18-dp USD amount to the token's smallest unit
+// atomicUnits converts an exact 18-dp USD amount to the asset's atomic unit
 // (e.g. USDC 6-dp) for the challenge the client signs. The LEDGER settlement uses
 // the exact money.Amount, so no precision is lost where money actually moves.
-func tokenUnits(amount money.Amount, decimals int) string {
+func atomicUnits(amount money.Amount, decimals int) string {
 	i := amount.Atto() // 18-dp magnitude
 	if decimals >= money.Decimals {
 		return i.String()
@@ -672,7 +858,8 @@ func tokenUnits(amount money.Amount, decimals int) string {
 // something else, which is a replay and is refused.
 //
 // PayerOrg is part of the identity and not an afterthought. Without it a captured
-// X-Payment header is a bearer token across tenants: org B replays org A's proof,
+// PAYMENT-SIGNATURE header is a bearer token across tenants: org B replays org A's
+// payload,
 // the id matches, every other field matches because they describe the same purchase,
 // and B is served the priced tool having paid nothing while A's receipt is handed
 // back. The payer is who the settlement was FOR, so a different payer is a different
@@ -688,8 +875,20 @@ func receiptOf(st *Settlement) *Receipt {
 	return &Receipt{
 		ID: st.ID, Resource: st.Resource, Payer: st.PayerOrg, From: st.From,
 		Payee: st.Payee, PayeeOrg: st.PayeeOrg, Amount: amt.String(), Nonce: st.Nonce,
-		SettledVia: st.SettledVia, TxHash: st.TxHash, SettledAt: st.CreatedAt,
+		Network: st.Network, SettledVia: st.SettledVia, TxHash: st.TxHash,
+		SettledAt: st.CreatedAt,
 	}
+}
+
+// settledTx is what the SettlementResponse's `transaction` reports: the chain's
+// hash when the authorization was broadcast, and the settlement id when it was
+// settled on the ledger. One field, one meaning — the handle that finds this
+// settlement again on whichever rail settled it.
+func (r *Receipt) settledTx() string {
+	if r.TxHash != "" {
+		return r.TxHash
+	}
+	return r.ID
 }
 
 func emitAudit(s *cloud.Service[state], ctx context.Context, r *Receipt) {
@@ -724,13 +923,12 @@ func firstNonEmpty(vs ...string) string {
 
 func configFromEnv() Config {
 	return Config{
-		Token:         strings.TrimSpace(os.Getenv("CLOUD_X402_TOKEN")),
-		TokenName:     strings.TrimSpace(os.Getenv("CLOUD_X402_TOKEN_NAME")),
-		TokenVersion:  strings.TrimSpace(os.Getenv("CLOUD_X402_TOKEN_VERSION")),
-		TokenDecimals: envInt("CLOUD_X402_TOKEN_DECIMALS", DefaultTokenDecimals),
+		Asset:         strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET")),
+		AssetName:     strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_NAME")),
+		AssetVersion:  strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_VERSION")),
+		AssetDecimals: envInt("CLOUD_X402_ASSET_DECIMALS", DefaultAssetDecimals),
 		Network:       firstNonEmpty(os.Getenv("CLOUD_X402_NETWORK"), DefaultNetwork),
-		ChainID:       int64(envInt("CLOUD_X402_CHAIN_ID", DefaultChainID)),
-		ValidFor:      int64(envInt("CLOUD_X402_VALID_FOR", DefaultValidFor)),
+		MaxTimeout:    int64(envInt("CLOUD_X402_MAX_TIMEOUT_SECONDS", DefaultMaxTimeoutSeconds)),
 	}
 }
 

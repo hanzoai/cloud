@@ -157,16 +157,22 @@ const (
 const HostApp = "host"
 
 // The three x402 wire headers, in the leaf because the settlement now crosses a
-// process boundary: the process holding the REQUEST — where the proof arrives
+// process boundary: the process holding the REQUEST — where the payment arrives
 // and the challenge must be written — is not the process holding the RAIL. Both
 // ends read the names from here rather than one importing the other's subsystem.
+//
+// These are the x402 PROTOCOL VERSION 2 names, and they carry BASE64-ENCODED JSON
+// (specs/transports-v2/http.md). The v1 spellings — X-PAYMENT, X-PAYMENT-RESPONSE
+// — are gone rather than aliased: a header a client may send under either name is
+// two wires, and the one the server forgot to read is the one where a payer pays
+// and is never served.
 const (
-	// HeaderRequirements carries the PaymentRequirements on a 402 response.
-	HeaderRequirements = "X-Payment-Required"
-	// HeaderProof carries the client's signed authorization on the retry.
-	HeaderProof = "X-Payment"
-	// HeaderReceipt carries the settlement receipt on a served (2xx) response.
-	HeaderReceipt = "X-Payment-Receipt"
+	// HeaderPaymentRequired carries the base64 PaymentRequired on a 402 response.
+	HeaderPaymentRequired = "PAYMENT-REQUIRED"
+	// HeaderPaymentSignature carries the client's base64 PaymentPayload on the retry.
+	HeaderPaymentSignature = "PAYMENT-SIGNATURE"
+	// HeaderPaymentResponse carries the base64 SettlementResponse on the answer.
+	HeaderPaymentResponse = "PAYMENT-RESPONSE"
 )
 
 // toolResourcePrefix namespaces a TOOL as an x402 resource. x402 resources are
@@ -544,18 +550,18 @@ type Activities struct {
 
 // SettleIn enforces payment for one resource on behalf of the CALLING tenant.
 //
-// Proof is the client's signed authorization, verbatim off the request's
-// X-Payment header. It travels as a field because the process that holds the
-// request is not the one that holds the rail, and there is no second place a
-// payer's proof could come from: the caller does not mint it and cannot alter it
-// without invalidating the signature it is checked against.
+// Payment is the client's signed PaymentPayload, verbatim off the request's
+// PAYMENT-SIGNATURE header (base64, undecoded). It travels as a field because the
+// process that holds the request is not the one that holds the rail, and there is
+// no second place a payer's payment could come from: the caller does not mint it
+// and cannot alter it without invalidating the signature it is checked against.
 //
 // There is no amount and no payee here, deliberately. What a resource costs and
 // who is paid are the price table's, resolved by the rail; a caller that could
 // state them could buy a $1 tool for a cent or redirect the credit.
 type SettleIn struct {
 	Resource string `json:"resource" validate:"required"`
-	Proof    string `json:"proof,omitempty"`
+	Payment  string `json:"payment,omitempty"`
 }
 
 // Settled is ONE enforcement outcome, carried as data rather than as a transport
@@ -569,8 +575,8 @@ type SettleIn struct {
 type Settled struct {
 	OK        bool   `json:"ok"`
 	Free      bool   `json:"free,omitempty"`
-	Receipt   string `json:"receipt,omitempty"`   // the X-Payment-Receipt header value
-	Challenge string `json:"challenge,omitempty"` // the X-Payment-Required header value
+	Response  string `json:"response,omitempty"`  // the PAYMENT-RESPONSE header value
+	Challenge string `json:"challenge,omitempty"` // the PAYMENT-REQUIRED header value
 	Status    int    `json:"status,omitempty"`    // the refusal's status: 402, 403 or 503
 	Code      string `json:"code,omitempty"`
 	Reason    string `json:"reason,omitempty"`
@@ -588,14 +594,18 @@ type PriceIn struct {
 // RecipientOrg is on the REPLY and not on the request: it is a property of the
 // listing — its publisher — never a claim by whoever is buying. That is the whole
 // reason a buyer cannot redirect a credit.
+//
+// Network is CAIP-2 ("eip155:8453") and there is no chain id beside it, because
+// the chain id is READ OUT of the network rather than carried twice. Two fields
+// for one fact is one fact that can disagree with itself, and the disagreement
+// lands in an EIP-712 domain no client can reproduce.
 type Priced struct {
 	Priced            bool   `json:"priced"`
 	Amount            Money  `json:"amount"`
 	RecipientOrg      string `json:"recipientOrg,omitempty"`
 	RecipientWalletID string `json:"recipientWalletId,omitempty"`
-	Token             string `json:"token,omitempty"`
+	Asset             string `json:"asset,omitempty"`
 	Network           string `json:"network,omitempty"`
-	ChainID           int64  `json:"chainId,omitempty"`
 }
 
 // ---- wallets.payee — who is paid -------------------------------------------
