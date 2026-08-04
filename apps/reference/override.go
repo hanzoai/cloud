@@ -16,8 +16,10 @@ package reference
 // tenant field, so a caller cannot even NAME another organisation. The
 // namespace is minted from the validated principal and from nothing else.
 //
-// THE BOUND IS PER TENANT. An organisation may hold maxOverrides entries per
-// set, and the write past that is refused. A shared cap would let one
+// THE BOUND IS PER TENANT, AND IT IS IN BYTES. An organisation may occupy
+// ownBudget on the shared volume; maxOverrides is that budget divided by what a
+// row actually costs, so the count IS the byte bound rather than a number
+// standing next to one. The write past it is refused. A shared cap would let one
 // organisation's list quietly evict another's; a per-tenant cap means a tenant
 // can only ever degrade itself.
 
@@ -29,17 +31,43 @@ import (
 	"time"
 )
 
-// maxOverrides is how many entries one organisation may hold in one set.
-const maxOverrides = 10_000
+// ownBudget is THE per-organisation bound, and it is in BYTES because bytes are
+// the dimension that binds: every org's SQLite file sits on the ONE volume this
+// deployment mounts, and what that volume runs out of is space, not rows.
+//
+// It is the PRIMARY figure and [maxOverrides] is its quotient. The other way
+// round — a chosen row count with a byte figure computed beside it — is how the
+// ceiling came to understate the truth by 1.69x: the count was picked, the
+// per-row cost was asserted rather than measured, and nothing compared either to
+// a real store.
+const ownBudget = 128 << 20 // 128 MiB
+
+// rowBytes is what ONE worst-case override costs on a real store: every column
+// at its own bound, the implicit index over the primary key, page slack and the
+// encryption. It is MEASURED and then published here, in that order —
+// [TestOneOrgsOverridesCostWhatTheyArePublishedToCost] fills a real store with
+// worst-case rows and fails if one costs more than this.
+//
+// The measurement is 1,952 bytes; 2,048 leaves a page of room for a schema that
+// gains a bounded column before the figure has to be restated.
+const rowBytes = 2048
+
+// maxOverrides is how many entries one organisation may hold in one set, and it
+// is DERIVED: the budget divided by what a row costs, across the sets the
+// catalog publishes. Adding a set lowers it, which is the honest consequence —
+// the alternative is a per-set count that quietly multiplies into more volume
+// every time the catalog grows.
+func maxOverrides() int { return ownBudget / (len(Catalog()) * rowBytes) }
 
 // maxActor bounds, IN BYTES, the writer recorded on a row.
 //
-// It is a term of [row], and [row] is what [ownVolume] is computed from, so
-// leaving it unbounded left the published per-organisation ceiling stating a
-// figure nothing held to: the writer is [actor]'s reading of the X-User-Id the
-// request carries, so it was a caller-sized value stored [maxOverrides] times in
-// every set the catalog publishes, on the ONE volume every organisation's file
-// sits on. A count over caller-sized values is not a byte bound.
+// It is a term of [stated], and leaving it unbounded meant the widest row a
+// caller could write had no width at all: the writer is [actor]'s reading of the
+// X-User-Id the request carries, so it was a caller-sized value stored
+// [maxOverrides] times in every set the catalog publishes, on the ONE volume
+// every organisation's file sits on. A count over caller-sized values is not a
+// byte bound, so neither [rowBytes] nor anything derived from it meant anything
+// until this bound existed.
 //
 // The bound is at the store door rather than at the wire op because the row is
 // what the budget is about: bounded where a row is written, it holds for every
@@ -52,25 +80,18 @@ const maxActor = 128
 // writer is a BAD REQUEST, because it is a value that arrived on this call.
 var errActor = errors.New("the writer on this row is past its bound")
 
-// row bounds ONE stored override in bytes: the three bounded strings plus the
-// verdict and the timestamp, generously rounded up. Every term is DERIVED from
-// the bound the door enforces — a term written down independently here is a
-// ceiling that stops tracking the thing it is a ceiling on.
-const row = maxKey + maxNote + maxActor
+// stated is the sum of the bounded terms one row carries on the wire. It is NOT
+// what a row costs on disk — [rowBytes] is, and it is larger, because a store
+// adds an index, page slack and encryption to the bytes a caller sent. Keeping
+// both, named apart, is what stops the wire figure from being mistaken for the
+// storage figure again.
+const stated = maxKey + maxNote + maxActor
 
-// ownVolume is what one organisation may occupy on the shared volume: rows per
-// set, times the sets the catalog publishes, times [row].
-//
-// It is COMPUTED rather than asserted, because the three constants that decide
-// it live in three files and the product is the thing that actually matters —
-// every org's SQLite file sits on the ONE volume this deployment mounts, so a
-// per-tenant bound is only a tenant-isolation property once somebody can say
-// what it comes to. Adding a set moves it, which is the point.
-//
-// TestTheVolumeOneOrgMayOccupyIsStated pins the figure, so raising any of the
-// three is an act with the consequence next to it rather than a side effect
-// three files away.
-func ownVolume() int64 { return int64(maxOverrides) * int64(len(Catalog())) * row }
+// ownVolume is what one organisation may actually occupy: the derived count,
+// times the sets, times the measured row cost. By construction it is at or under
+// [ownBudget] — the count is that division — so this is a restatement of the
+// budget and never a second, disagreeing figure.
+func ownVolume() int64 { return int64(maxOverrides()) * int64(len(Catalog())) * rowBytes }
 
 // The two verdicts an override can carry. An override is a DECISION, unlike a
 // baseline entry, which carries facts and leaves the decision to policy — the
@@ -168,8 +189,8 @@ func (o *overrides) put(set string, in []ReferenceOverride, by string, now time.
 			fresh++
 		}
 	}
-	if held+fresh > maxOverrides {
-		return 0, fmt.Errorf("this org already holds %d overrides in %q and the bound is %d", held, set, maxOverrides)
+	if held+fresh > maxOverrides() {
+		return 0, fmt.Errorf("this org already holds %d overrides in %q and the bound is %d", held, set, maxOverrides())
 	}
 
 	stamp := now.UTC().Format(time.RFC3339)

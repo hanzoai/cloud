@@ -1005,19 +1005,34 @@ func TestAPublisherCannotRedirectThePlaneInwards(t *testing.T) {
 // other risk tracks kept landing in — one shared store with a fleet-wide cap,
 // where a tenant degrades its neighbours. It is only a tenancy property once
 // somebody can say what it comes to: every org's SQLite file sits on the ONE
-// volume this deployment mounts, and the figure is the product of three
-// constants in three files.
+// volume this deployment mounts.
 //
-// So the figure is pinned. Raising any of the three moves it and fails here,
-// which makes the consequence an act rather than a side effect.
+// The bound is in BYTES ([ownBudget]) and the per-set count is its QUOTIENT, so
+// this checks the division rather than a figure someone chose. What a row costs
+// is measured against a real store in
+// [TestOneOrgsOverridesCostWhatTheyArePublishedToCost]; this holds the arithmetic
+// that turns that cost into a count.
 func TestTheVolumeOneOrgMayOccupyIsStated(t *testing.T) {
-	const stated = 128 << 20 // 128 MiB, the volume one organisation may claim
-	got := ownVolume()
-	if got > stated {
-		t.Errorf("one org may now occupy %d bytes and the stated bound is %d; every org's store shares one volume, so raising rows (%d), a key (%d) or a note (%d) — or adding a set (%d now) — is a decision about the volume, not about a limit",
-			got, stated, maxOverrides, maxKey, maxNote, len(Catalog()))
+	if got := ownVolume(); got > ownBudget {
+		t.Errorf("one org may occupy %d bytes and the budget is %d; the count is supposed to BE the quotient", got, int64(ownBudget))
 	}
-	if got < stated/2 {
-		t.Errorf("one org may occupy %d bytes and the stated bound is %d; a bound twice the truth stops describing anything", got, stated)
+	// The count IS the division, not a number beside it: one more entry per set
+	// must not still fit.
+	n := maxOverrides()
+	if over := int64(n+1) * int64(len(Catalog())) * rowBytes; over <= ownBudget {
+		t.Errorf("%d entries per set is not the budget divided by the row cost — one more per set (%d bytes) still fits inside %d",
+			n, over, int64(ownBudget))
 	}
+	// And it has to leave a usable plane behind: a per-set bound under one legal
+	// write would advertise a call the door refuses.
+	if n < maxKeys {
+		t.Errorf("one org may hold %d entries per set and one resolve names %d keys; the plane is too small to use", n, maxKeys)
+	}
+	// stated is the WIRE width and rowBytes is the STORAGE cost. Conflating them is
+	// what understated the ceiling by 1.69x, so they are required to differ in the
+	// direction a store actually adds bytes.
+	if rowBytes < stated {
+		t.Errorf("rowBytes (%d) is under the bounded terms a row carries (%d); a store never stores less than it was given", rowBytes, stated)
+	}
+	t.Logf("budget %d MiB = %d entries x %d sets x %d bytes", int64(ownBudget)>>20, n, len(Catalog()), rowBytes)
 }
