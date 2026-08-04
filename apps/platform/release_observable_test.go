@@ -3,10 +3,13 @@ package platform
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
-	"os"
-	"strings"
 	"testing"
+
+	"github.com/zap-proto/zip"
 )
 
 // A release answers 202 and then runs detached, so everything the caller can
@@ -134,26 +137,96 @@ func TestAFailedBuildNeverReachesTheTag(t *testing.T) {
 	}
 }
 
-// Reading a release must never require MORE authority than starting one, or the
-// 202 hands back an id the caller cannot ask about — the gap these routes close.
-// Both sides read the same two predicates, so this holds them together.
-func TestReadingAReleaseIsNotStricterThanCuttingOne(t *testing.T) {
-	src, err := os.ReadFile("release.go")
-	if err != nil {
-		t.Fatalf("read release.go: %v", err)
+// getRunnerAs GETs a path as a VALIDATED IAM principal, setting the identity
+// headers SanitizeIdentity mints from a signature-verified JWT. It is the GET
+// counterpart of postRunnerAs (runner_test.go) and sets exactly the same four.
+func getRunnerAs(t *testing.T, app *zip.App, path, user, org string, orgAdmin, superAdmin bool) (int, []byte) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if user != "" {
+		req.Header.Set("X-User-Id", user)
 	}
-	gate, err := os.ReadFile("runner.go")
-	if err != nil {
-		t.Fatalf("read runner.go: %v", err)
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
 	}
-	// The cut admits platform sudo OR the owning org's admin; the read must admit
-	// the same two, not sudo alone.
-	for _, need := range []string{"principal.IsSuperAdmin", "principal.IsOrgAdmin", "imageInOrgRegistry"} {
-		if !strings.Contains(string(src), need) {
-			t.Errorf("the release read does not consider %s, which the cut does", need)
-		}
-		if !strings.Contains(string(gate), need) {
-			t.Errorf("fixture: the cut no longer uses %s", need)
-		}
+	if orgAdmin {
+		req.Header.Set("X-User-IsOrgAdmin", "true")
+	}
+	if superAdmin {
+		req.Header.Set("X-User-IsAdmin", "true")
+	}
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test GET %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// ONE AUTHORITY, THREE DOORS. Cutting a release, listing releases and reading one
+// by id ask the same question — may this caller act on the platform's own release?
+// — so they take one answer from one function (mayRelease). This drives all three
+// over the role axis and asserts they agree principal for principal, which is what
+// makes "the 202 hands back an id the caller can ask about" true by construction
+// rather than by a comment asking two files to stay in step.
+//
+// It replaces a test that read runner.go and release.go as TEXT and asserted both
+// mentioned the same predicate NAMES. Spelling was all it could ever see: it was
+// green while both surfaces contradicted the published contract, and it would have
+// stayed green had the two admitted different callers under the same names.
+//
+// The seams are stubbed to 500, so an admitted cut fails INSIDE the pipeline (502)
+// and a refused one never makes an outbound call — every case is hermetic, and
+// "not 403" is exactly "the gate let it through".
+func TestReleaseSurfacesTakeOneAuthority(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	defer swapAPIBase(srv.URL)()
+	defer swapRegistryBase(srv.URL)()
+
+	for _, tc := range []struct {
+		name                 string
+		user, org            string
+		orgAdmin, superAdmin bool
+		admitted             bool
+	}{
+		// The legitimate actor, pinned on every door: a release must stay CUTTABLE
+		// and readable, or this is a change that merely disables the path.
+		{"SuperAdmin", "root-uuid", "admin", false, true, true},
+		// The brand org owns `hanzoai` and IS the deployment's own org — the caller
+		// the old gate admitted, and the whole point of the change.
+		{"brand-org admin", "e7d7-uuid", "hanzo", true, false, false},
+		{"foreign-org admin", "lux-uuid", "lux", true, false, false},
+		{"plain member of the brand org", "member-uuid", "hanzo", false, false, false},
+		{"no principal at all", "", "", false, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := runnerApp(t)
+			cut, cutBody := postRunnerAs(t, app, tc.user, tc.org, tc.orgAdmin, tc.superAdmin, map[string]any{
+				"repo": "https://github.com/hanzoai/cloud", "release": true,
+				"image": "ghcr.io/hanzoai/cloud:v1"})
+			releasing.Store(false)
+			list, listBody := getRunnerAs(t, app, "/v1/runner/releases", tc.user, tc.org, tc.orgAdmin, tc.superAdmin)
+			one, oneBody := getRunnerAs(t, app, "/v1/runner/releases/no-such-id", tc.user, tc.org, tc.orgAdmin, tc.superAdmin)
+
+			for _, door := range []struct {
+				what string
+				code int
+				body []byte
+			}{
+				{"cutting a release", cut, cutBody},
+				{"listing releases", list, listBody},
+				{"reading one release", one, oneBody},
+			} {
+				if admitted := door.code != http.StatusForbidden; admitted != tc.admitted {
+					t.Errorf("%s: admitted=%v, want %v (HTTP %d — %s)",
+						door.what, admitted, tc.admitted, door.code, door.body)
+				}
+			}
+		})
 	}
 }
