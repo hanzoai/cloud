@@ -27,6 +27,17 @@
         "tags": [
           "search"
         ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "description": "Authorization carries the surface's bearer key (`Bearer \u003ckey\u003e`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -48,6 +59,17 @@
         "description": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
         "tags": [
           "search"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "description": "Authorization carries the surface's bearer key (`Bearer \u003ckey\u003e`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -71,6 +93,17 @@
         "tags": [
           "vector"
         ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "description": "Authorization carries the surface's bearer key (`Bearer \u003ckey\u003e`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -92,6 +125,17 @@
         "description": "Totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
         "tags": [
           "vector"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "description": "Authorization carries the surface's bearer key (`Bearer \u003ckey\u003e`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
