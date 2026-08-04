@@ -27,7 +27,7 @@ func doRaw(t *testing.T, app *zip.App, path, user, org string) (*http.Response, 
 	if org != "" {
 		rq.Header.Set("X-Org-Id", org)
 	}
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test GET %s: %v", path, err)
 	}

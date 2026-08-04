@@ -46,7 +46,7 @@ func scopeReq(method, path, org string) *http.Request {
 
 func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	t.Helper()
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", req.Method, req.URL.Path, err)
 	}
@@ -214,7 +214,7 @@ func TestRoutePrecedence_ScopedWinsOverWildcard(t *testing.T) {
 		"/v1/o11y/status?product=kms",
 	} {
 		req := scopeReq("GET", path, "acme")
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Test %s: %v", path, err)
 		}

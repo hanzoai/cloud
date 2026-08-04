@@ -42,7 +42,7 @@ func postRunner(t *testing.T, app *zip.App, token string, body any) (int, []byte
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST /v1/runner: %v", err)
 	}
@@ -79,7 +79,7 @@ func postRunnerAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superA
 	if superAdmin {
 		req.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST /v1/runner (IAM): %v", err)
 	}

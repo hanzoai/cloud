@@ -61,7 +61,7 @@ func TestAskWebModeDispatch(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "acme")
 	req.Header.Set("X-User-Id", "u-acme")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("web ask: %v", err)
 	}

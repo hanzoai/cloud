@@ -33,7 +33,7 @@ func TestCommerceErrorScope(t *testing.T) {
 
 	probe := func(path string) (int, string) {
 		req := httptest.NewRequest("GET", path, nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}

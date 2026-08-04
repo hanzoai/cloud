@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -62,7 +61,7 @@ func drive(t *testing.T, app *zip.App, method, path, org, user string, body any)
 	if user != "" {
 		rq.Header.Set("X-User-Id", user)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: usageTestTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: usageTestTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

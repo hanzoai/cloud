@@ -29,7 +29,7 @@ func TestTypedPlanIsUncacheable(t *testing.T) {
 	for k, v := range bearerFor(t, gateAcct, gateOrg) {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestTypedDeleteBlobIsEmpty204(t *testing.T) {
 	for k, v := range bearerFor(t, gateAcct, gateOrg) {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

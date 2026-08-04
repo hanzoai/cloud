@@ -93,7 +93,7 @@ func TestMiddlewareCarvesExactlyTheInstalledSet(t *testing.T) {
 	app := newTestApp(testServer())
 
 	carved := func(p string) bool {
-		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
+		resp, err := app.Test(postReq("yadota.hanzo.app", p, beaconBody))
 		if err != nil {
 			t.Fatalf("POST %s: %v", p, err)
 		}
@@ -142,7 +142,7 @@ func TestMiddlewareAnalyticsCarveReadLensPostNotHijacked(t *testing.T) {
 	app := newTestApp(testServer())
 
 	for _, p := range []string{"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top", "/v1/analytics/health"} {
-		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
+		resp, err := app.Test(postReq("yadota.hanzo.app", p, beaconBody))
 		if err != nil {
 			t.Fatalf("POST %s: %v", p, err)
 		}
@@ -168,7 +168,7 @@ func TestMiddlewareAnalyticsCarveSlugHost(t *testing.T) {
 	app := newTestApp(testServer())
 
 	for _, p := range carvePaths {
-		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
+		resp, err := app.Test(postReq("yadota.hanzo.app", p, beaconBody))
 		if err != nil {
 			t.Fatalf("POST %s: %v", p, err)
 		}
@@ -201,7 +201,7 @@ func TestMiddlewareAnalyticsCarveCustomDomain(t *testing.T) {
 	defer SetAnalyticsHost(nil)
 	app := newTestApp(selfServer())
 
-	resp, err := app.Fiber().Test(postReq("yadota.tech", "/v1/event", beaconBody))
+	resp, err := app.Test(postReq("yadota.tech", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestMiddlewareAnalyticsCarveGetServesStatic(t *testing.T) {
 	// Every installed door, plus a read lens (which must stay out on any verb).
 	for _, p := range append(append([]string{}, carvePaths...), "/v1/analytics/overview") {
 		req := httptest.NewRequest(http.MethodGet, "http://yadota.hanzo.app"+p, nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("GET %s: %v", p, err)
 		}
@@ -272,7 +272,7 @@ func TestMiddlewareBaseCarveStillWins(t *testing.T) {
 	app := newTestApp(testServer())
 
 	req := httptest.NewRequest(http.MethodGet, "http://yadota.hanzo.app/v1/base/collections", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET /v1/base: %v", err)
 	}
@@ -296,7 +296,7 @@ func TestMiddlewareAnalyticsCarveNonSiteHostUnaffected(t *testing.T) {
 	defer SetAnalyticsHost(nil)
 	app := newTestApp(selfServer())
 
-	resp, err := app.Fiber().Test(postReq("api.hanzo.ai", "/v1/event", beaconBody))
+	resp, err := app.Test(postReq("api.hanzo.ai", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestMiddlewareAnalyticsCarveNonLive405(t *testing.T) {
 	defer SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
-	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/event", beaconBody))
+	resp, err := app.Test(postReq("yadota.hanzo.app", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestMiddlewareNilHandlerIsNotADoor(t *testing.T) {
 	app := newTestApp(testServer())
 
 	for _, p := range carvePaths {
-		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
+		resp, err := app.Test(postReq("yadota.hanzo.app", p, beaconBody))
 		if err != nil {
 			t.Fatalf("POST %s: %v", p, err)
 		}
@@ -373,7 +373,7 @@ func TestMiddlewareNoAnalyticsHandlerIs405(t *testing.T) {
 	SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
-	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/event", beaconBody))
+	resp, err := app.Test(postReq("yadota.hanzo.app", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}

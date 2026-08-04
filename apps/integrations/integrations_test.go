@@ -85,7 +85,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) httpRes
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -501,7 +501,7 @@ func TestIntegrationsDisconnectNoPrincipal403(t *testing.T) {
 	// send the header directly to simulate the bearer-less restore path).
 	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/disconnect", nil)
 	rq.Header.Set("X-Org-Id", "acme") // forged org, no X-User-Id
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}

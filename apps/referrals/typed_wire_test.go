@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/openapi"
@@ -150,7 +149,7 @@ func rawPost(t *testing.T, app *zip.App, path, org string, admin bool, body stri
 	if admin {
 		rq.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
 	}

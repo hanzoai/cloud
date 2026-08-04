@@ -134,7 +134,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		// no sanitizer, so inject it directly (empty org → no user → the 403 path).
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

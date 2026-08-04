@@ -33,7 +33,6 @@ func doorApp(t *testing.T) *zip.App {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
-	app.Prepare()
 	return app
 }
 

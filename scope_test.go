@@ -28,7 +28,7 @@ func get(t *testing.T, app *zip.App, path string) int {
 	if err != nil {
 		t.Fatalf("NewRequest %s: %v", path, err)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s: %v", path, err)
 	}
@@ -61,7 +61,7 @@ func TestScopeConfinesUseToTheSubsystem(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
 		{Name: "guard", Mount: func(r cloud.Router, _ cloud.Deps) error {
-			r.Use(deny)
+			r.Use(zip.H(deny))
 			r.Get("/v1/guard/whoami", pong)
 			return nil
 		}},
@@ -90,7 +90,7 @@ func TestScopeHonoursDeclaredPrefixes(t *testing.T) {
 	err := mountAll(t, app, []cloud.Plugin{
 		{Name: "identity", Prefixes: []string{"/v1/identity", "/login/oauth"},
 			Mount: func(r cloud.Router, _ cloud.Deps) error {
-				r.Use(deny)
+				r.Use(zip.H(deny))
 				r.Get("/v1/identity/me", pong)
 				r.Get("/login/oauth/authorize", pong)
 				return nil
@@ -168,7 +168,7 @@ func TestAppIsTheOnlyAppWideDoor(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
 		{Name: "edge", App: func(a *zip.App, _ cloud.Deps) error {
-			a.Use(deny)
+			a.Use(zip.H(deny))
 			return nil
 		}},
 		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
@@ -191,14 +191,14 @@ func TestAppIsTheOnlyAppWideDoor(t *testing.T) {
 // verbatim: same names, same count, no filtering by the subsystem's own prefixes.
 func TestScopedRouterReportsHostPlugins(t *testing.T) {
 	app := newApp()
-	if err := app.Add(zip.Load(
-		zip.Plugin{Name: "remote", Addr: "127.0.0.1:1"}, "/v1/remote", "/v1/legacy",
-	)); err != nil {
-		t.Fatalf("Add(Load): %v", err)
+	leaf, err := zip.Load(zip.Plugin{Name: "remote", Addr: "127.0.0.1:1"}, "/v1/remote", "/v1/legacy")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
+	app.Use(leaf)
 
 	var seen []zip.Status
-	err := mountAll(t, app, []cloud.Plugin{
+	err = mountAll(t, app, []cloud.Plugin{
 		{Name: "board", Mount: func(r cloud.Router, _ cloud.Deps) error {
 			seen = r.Plugins() // a scope, not the bare app
 			return nil

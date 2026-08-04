@@ -43,7 +43,7 @@ func TestMountedRoutesAreReachable(t *testing.T) {
 	} {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req, _ := http.NewRequest(tc.method, "http://x"+tc.path, nil)
-			resp, err := app.Fiber().Test(req)
+			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("Test: %v", err)
 			}

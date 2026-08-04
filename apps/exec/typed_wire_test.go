@@ -10,7 +10,6 @@ import (
 	"time"
 
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
@@ -300,7 +299,7 @@ func (u *echoUpstream) call(t *testing.T, app *zip.App, method, path, ctype, bod
 	if ctype != "" {
 		rq.Header.Set("Content-Type", ctype)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

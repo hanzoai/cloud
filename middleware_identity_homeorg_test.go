@@ -64,7 +64,7 @@ func orgFor(t *testing.T, claims idClaims, selected string) (org string, admin b
 	if selected != "" {
 		req.Header.Set("X-Org-Id", selected)
 	}
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
 	return org, admin

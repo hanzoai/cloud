@@ -48,7 +48,7 @@ func get(t *testing.T, app *zip.App, path, bearer string) (int, []byte) {
 	if bearer != "" {
 		rq.Header.Set("Authorization", "Bearer "+bearer)
 	}
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}

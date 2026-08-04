@@ -12,13 +12,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	fiber "github.com/zap-proto/fiber/v3"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	fiber "github.com/zap-proto/fiber/v3"
 )
 
 // booksMetricsPath is the books domain's grounded read the contributor replays. It is the ONE

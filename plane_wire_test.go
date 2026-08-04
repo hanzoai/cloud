@@ -20,10 +20,10 @@ func TestPlaneWireCarriesNoFieldNames(t *testing.T) {
 
 	var seen []byte
 	app := zip.New(zip.Config{AppName: "probe"})
-	app.Use(func(c *zip.Ctx) error {
+	app.Use(zip.H(func(c *zip.Ctx) error {
 		seen = append([]byte(nil), c.Body()...)
 		return c.Next()
-	})
+	}))
 	zip.Post[plane.BalanceIn, plane.Balance](app, "/probe/balance",
 		func(context.Context, *plane.BalanceIn) (*plane.Balance, error) {
 			return &plane.Balance{Amount: plane.Money{Decimal: "50.00", Currency: "USD"}}, nil

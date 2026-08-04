@@ -23,8 +23,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // billServer is a minimal commerce double: it returns a fixed balance and records
@@ -130,7 +130,7 @@ func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.R
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test invoke: %v", err)
 	}

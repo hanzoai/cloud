@@ -374,7 +374,7 @@ func submitStatus(app *zip.App, org, doctype, name string) int {
 	req := httptest.NewRequest(http.MethodPost, "/v1/framework/"+doctype+"/"+name+"/submit", nil)
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set("X-User-Id", "u_"+org)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		return -1
 	}
@@ -448,7 +448,7 @@ func reqAs(t *testing.T, app *zip.App, method, path, org, user string, body any)
 	}
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set("X-User-Id", user) // the validated-principal signal
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

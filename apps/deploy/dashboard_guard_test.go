@@ -37,7 +37,7 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 	}
 	for _, r := range guarded {
 		// WITHOUT admin → 403 (the guard, fail-closed).
-		resp, err := app.Fiber().Test(httptest.NewRequest(r.method, r.path, nil))
+		resp, err := app.Test(httptest.NewRequest(r.method, r.path, nil))
 		if err != nil {
 			t.Fatalf("%s %s: %v", r.method, r.path, err)
 		}
@@ -49,7 +49,7 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 		// WITH admin → the guard passes (handler may 200/404/503, never the guard's 403).
 		req := httptest.NewRequest(r.method, r.path, nil)
 		req.Header.Set("X-User-IsAdmin", "true")
-		resp2, err := app.Fiber().Test(req)
+		resp2, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s %s admin: %v", r.method, r.path, err)
 		}
@@ -61,7 +61,7 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 	}
 
 	// The health probe is DELIBERATELY public (liveness without a JWT) — never 403.
-	resp, err := app.Fiber().Test(httptest.NewRequest("GET", "/v1/deploy/health", nil))
+	resp, err := app.Test(httptest.NewRequest("GET", "/v1/deploy/health", nil))
 	if err != nil {
 		t.Fatalf("health: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 		{"GET", "/v1/deploy/callback"},
 		{"POST", "/v1/deploy/logout"},
 	} {
-		resp, err := app.Fiber().Test(httptest.NewRequest(r.method, r.path, nil))
+		resp, err := app.Test(httptest.NewRequest(r.method, r.path, nil))
 		if err != nil {
 			t.Fatalf("%s %s: %v", r.method, r.path, err)
 		}
@@ -92,7 +92,7 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 
 	// Logout must NOT be reachable as a GET: it changes state, and a cross-site
 	// top-level navigation carries a SameSite=Lax cookie.
-	resp, err = app.Fiber().Test(httptest.NewRequest("GET", "/v1/deploy/logout", nil))
+	resp, err = app.Test(httptest.NewRequest("GET", "/v1/deploy/logout", nil))
 	if err != nil {
 		t.Fatalf("GET logout: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestUserInfoIsPublicBootstrap(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, fakeService())
 
-	resp, err := app.Fiber().Test(httptest.NewRequest("GET", "/v1/deploy/session/userinfo", nil))
+	resp, err := app.Test(httptest.NewRequest("GET", "/v1/deploy/session/userinfo", nil))
 	if err != nil {
 		t.Fatalf("userinfo: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestUserInfoIsPublicBootstrap(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/deploy/session/userinfo", nil)
 	req.Header.Set("X-User-IsAdmin", "true")
 	req.Header.Set("X-User-Id", "cto")
-	resp2, err := app.Fiber().Test(req)
+	resp2, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("admin userinfo: %v", err)
 	}

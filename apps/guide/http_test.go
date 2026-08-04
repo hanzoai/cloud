@@ -3,14 +3,13 @@ package guide
 import (
 	"context"
 	"encoding/json"
+	"github.com/zap-proto/zip"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
-
-	fiber "github.com/zap-proto/fiber/v3"
 )
 
 // TestStepViewCarriesJourneyStep pins the stepView projection: every JourneyStep
@@ -354,7 +353,7 @@ func TestDoStreamsSSE(t *testing.T) {
 			for k, v := range tc.header {
 				rq.Header.Set(k, v)
 			}
-			resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+			resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
 			if err != nil {
 				t.Fatalf("Test POST %s: %v", tc.path, err)
 			}

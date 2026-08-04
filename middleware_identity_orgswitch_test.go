@@ -66,7 +66,7 @@ func walletProbe(t *testing.T, claims idClaims, selected string) (billOrg, billU
 	if selected != "" {
 		req.Header.Set("X-Org-Id", selected)
 	}
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
 	<-done
@@ -290,7 +290,7 @@ func TestAnonymousRoutesAreUntouched(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			resp, err := app.Fiber().Test(req)
+			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("Test request: %v", err)
 			}
@@ -326,7 +326,7 @@ func TestAnonymousGrantsNoPrincipal(t *testing.T) {
 	req.Header.Set("X-Org-Id", "victim")
 	req.Header.Set("X-User-Id", "u-forged")
 	req.Header.Set("X-User-IsAdmin", "true")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("Test request: %v", err)
 	}
 	if gotUser != "" {
@@ -392,7 +392,7 @@ func TestHomeOrgHeaderSurvivesSwitch(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/anchor", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("X-Org-Id", "acme")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("Test request: %v", err)
 	}
 	if gotOwner != "hanzo" {

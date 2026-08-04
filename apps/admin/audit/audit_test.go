@@ -212,7 +212,7 @@ func TestAdminAudit_VerifyWithoutStore(t *testing.T) {
 	for k, v := range superAdmin {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}

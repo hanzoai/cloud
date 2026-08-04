@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -40,7 +39,7 @@ func get(t *testing.T, app *zip.App, target, host string) (int, []byte, http.Hea
 	if host != "" {
 		req.Host = host
 	}
-	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("test %s: %v", target, err)
 	}

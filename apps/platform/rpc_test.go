@@ -132,7 +132,7 @@ func observeAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superAdmi
 	if superAdmin {
 		req.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}

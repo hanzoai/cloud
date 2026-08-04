@@ -23,11 +23,10 @@ import (
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/valyala/fasthttp"
-	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
-var testCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
+var testCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
 // asOrg carries the org identity a go-git client sends. Tests run
 // sequentially, so a single guarded value + a globally-installed
@@ -95,7 +94,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -205,7 +204,7 @@ func TestInfoRefsAdvertisement(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/git/acme/adv.git/info/refs?service=git-upload-pack", nil)
 	req.Header.Set("X-Org-Id", "acme")
 	req.Header.Set("X-User-Id", "u_acme")
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("info/refs: %v", err)
 	}
@@ -224,7 +223,7 @@ func TestInfoRefsAdvertisement(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/v1/git/acme/adv.git/info/refs?service=bogus", nil)
 	req.Header.Set("X-Org-Id", "acme")
 	req.Header.Set("X-User-Id", "u_acme")
-	resp, _ = app.Fiber().Test(req, testCfg)
+	resp, _ = app.Test(req, testCfg)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bogus service want 400, got %d", resp.StatusCode)
 	}

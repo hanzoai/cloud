@@ -55,7 +55,7 @@ func call(t *testing.T, app *zip.App, path, user, org string) (int, []audit.Wire
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test GET %s: %v", path, err)
 	}

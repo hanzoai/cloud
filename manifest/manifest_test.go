@@ -40,9 +40,12 @@ func TestAppsMountWithoutConflict(t *testing.T) {
 			t.Errorf("%s: no prefixes; zip.Load refuses a plugin with nothing to answer", a.Name)
 			continue
 		}
-		if err := zip.Load(zip.Plugin{Name: a.Name, Addr: "127.0.0.1:1"}, a.Prefixes...)(app); err != nil {
+		leaf, err := zip.Load(zip.Plugin{Name: a.Name, Addr: "127.0.0.1:1"}, a.Prefixes...)
+		if err != nil {
 			t.Errorf("%s: %v", a.Name, err)
+			continue
 		}
+		app.Use(leaf)
 	}
 }
 

@@ -19,7 +19,7 @@ func TestRouterSemantics(t *testing.T) {
 		defer func() { panicked = recover() }()
 		app := zip.New(zip.Config{})
 		register(app)
-		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, path, nil))
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {
 			t.Fatalf("probe %s: %v", path, err)
 		}

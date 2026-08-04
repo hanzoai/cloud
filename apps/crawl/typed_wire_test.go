@@ -27,7 +27,7 @@ func post(t *testing.T, app *zip.App, path, body string) (int, string) {
 	rq := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	rq.Header.Set("Content-Type", "application/json")
 	rq.Header.Set("X-API-Key", "test-service-key")
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
 	}

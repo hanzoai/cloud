@@ -80,7 +80,7 @@ func as(req *http.Request, org, user, bearer string) *http.Request {
 
 func do(t *testing.T, app *zip.App, req *http.Request) (*http.Response, string) {
 	t.Helper()
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}

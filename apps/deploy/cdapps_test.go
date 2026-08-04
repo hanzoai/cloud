@@ -30,7 +30,7 @@ func listApplicationsAs(t *testing.T, s *cloud.Service[state], headers map[strin
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}

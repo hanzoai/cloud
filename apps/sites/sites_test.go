@@ -253,7 +253,7 @@ func TestMiddlewarePassthroughForNonSiteHosts(t *testing.T) {
 	app := newTestApp(testServer())
 	for _, host := range []string{"api.hanzo.ai", "console.hanzo.ai", "hanzo.app", "www.hanzo.app"} {
 		req := httptest.NewRequest("GET", "http://"+host+"/anything", nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("test %s: %v", host, err)
 		}
@@ -277,7 +277,7 @@ func TestMiddlewareTenantKeyedByHostNotPath(t *testing.T) {
 	// Attacker-controlled headers that must be ignored by the site server.
 	req.Header.Set("X-Org-Id", "attacker-org")
 	req.Header.Set("X-Forwarded-Host", "otherorg.evil.hanzo.app")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestMiddlewareNoResolverIs404(t *testing.T) {
 	SetResolver(nil)
 	app := newTestApp(testServer())
 	req := httptest.NewRequest("GET", "http://mysite.hanzo.app/", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -392,7 +392,7 @@ func TestReservedHostNeverServes(t *testing.T) {
 	app := newTestApp(testServer())
 	for _, host := range []string{"api.hanzo.app", "admin.hanzo.app", "login.hanzo.app", "wallet.hanzo.app", "www.hanzo.app"} {
 		req := httptest.NewRequest("GET", "http://"+host+"/", nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("test %s: %v", host, err)
 		}
@@ -410,7 +410,7 @@ func TestSiteRejectsNonGet(t *testing.T) {
 	app := newTestApp(testServer())
 	for _, m := range []string{"POST", "PUT", "DELETE", "PATCH"} {
 		req := httptest.NewRequest(m, "http://mysite.hanzo.app/", nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("test %s: %v", m, err)
 		}
@@ -622,7 +622,7 @@ func TestMiddlewareResolvesFromForwardedHostWhenParsedHostIsEmpty(t *testing.T) 
 	// string cannot be used to express "no parsed host" — measured, not assumed.
 	req := httptest.NewRequest("GET", "http://localhost/index.html", nil)
 	req.Header.Set("X-Forwarded-Host", "quest.hanzo.app")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -645,7 +645,7 @@ func TestMiddlewareForwardedHostNeverOverridesARealHost(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "http://victim.hanzo.app/index.html", nil)
 	req.Header.Set("X-Forwarded-Host", "attacker.hanzo.app")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("test: %v", err)
 	}
 	if got := fr.slugs(); len(got) != 1 || got[0] != "victim" {
@@ -668,7 +668,7 @@ func TestFallbackResolverServesWhenProjectsIsElsewhere(t *testing.T) {
 	app := newTestApp(testServer())
 
 	req := httptest.NewRequest("GET", "http://quest.hanzo.app/index.html", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -691,7 +691,7 @@ func TestInProcessResolverWinsOverTheFallback(t *testing.T) {
 	app := newTestApp(testServer())
 
 	req := httptest.NewRequest("GET", "http://quest.hanzo.app/index.html", nil)
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("test: %v", err)
 	}
 	if len(inproc.slugs()) != 1 {

@@ -25,7 +25,6 @@ import (
 	"time"
 
 	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/fiber/v3"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -33,7 +32,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-var httpCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
+var httpCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
 const brand = "hanzo"
 
@@ -123,7 +122,7 @@ func vouched(t *testing.T, app *zip.App, method, path, org, by string, body any)
 	if by != "" {
 		rq.Header.Set(cloud.HeaderUserBrand, by)
 	}
-	resp, err := app.Fiber().Test(rq, httpCfg)
+	resp, err := app.Test(rq, httpCfg)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

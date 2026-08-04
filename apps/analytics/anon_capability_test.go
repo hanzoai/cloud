@@ -69,7 +69,7 @@ func postHostBody(t *testing.T, app *zip.App, host, path, body string) (int, []b
 	req := httptest.NewRequest(http.MethodPost, "http://"+host+path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Host = host
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST %s%s: %v", host, path, err)
 	}

@@ -69,7 +69,7 @@ func TestAutoRoutingBillsAsResolvedModel(t *testing.T) {
 	req.Header.Set("X-User-Id", "alice")
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test request: %v", err)
 	}
