@@ -23,13 +23,14 @@
 //  2. A new org signs up via the link → the console posts POST /v1/affiliates/
 //     attribute with the code → we record referred_org↔affiliate (first-touch,
 //     one per referred org, self-attribution blocked).
-//  3. The ACCRUAL SWEEP (POST /v1/admin/affiliates/sweep, the cron path; also lazy
+//  3. The ACCRUAL SWEEP (POST /v1/admin/affiliates/sweep, SuperAdmin; also lazy
 //     on the affiliate's own dashboard read) folds over each affiliate's referred
 //     orgs: commission = the referred org's metered spend THIS PERIOD × the rate,
 //     accrued into the affiliate's balance as an affiliate_event. The accrual is
 //     LATCHED at-most-once per (affiliate, referred_org, period) — a re-run in the
 //     same period never double-accrues, mirroring the referral credit latch.
-//  4. Staff PAY OUT accrued commission (POST /v1/admin/affiliates/:id/payout):
+//  4. Staff RECORD a payout of accrued commission (POST /v1/admin/affiliates/:id/payout,
+//     record-only — a human settles it):
 //     a "credits" method issues a commerce grant into the affiliate's wallet; cash
 //     methods (wire/paypal/…) are record-only. A payout can never exceed pending
 //     (accrued − paid), guarded atomically.
@@ -42,7 +43,7 @@
 //	GET  /v1/admin/affiliates                  (SuperAdmin) every affiliate + a summary
 //	POST /v1/admin/affiliates/:id/approve      (SuperAdmin) approve + mint the code
 //	POST /v1/admin/affiliates/:id/suspend      (SuperAdmin) suspend
-//	POST /v1/admin/affiliates/:id/payout       (SuperAdmin) record a payout (credits → grant; cash → record-only)
+//	POST /v1/admin/affiliates/:id/payout       (SuperAdmin) RECORD a payout (record-only; a human settles it)
 //	POST /v1/admin/affiliates/sweep            (SuperAdmin) accrue commission for every referred org this period
 //
 // serve.go auto-registers GET /v1/affiliates/health.
@@ -66,7 +67,6 @@ import (
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/treasury"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -501,17 +501,6 @@ func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 
-	// Lazy accrual sweep for MY referred orgs (bounded, best-effort — a commerce
-	// hiccup never fails the page; it simply accrues on the next sweep).
-	if a.Status == StatusApproved {
-		if _, _, serr := sweepAffiliate(s, ctx, a); serr != nil {
-			s.Log.Warn("affiliates: lazy sweep failed", "affiliate", a.ID, "err", serr)
-		}
-		if refreshed, rerr := s.State.store.GetByID(ctx, a.ID); rerr == nil {
-			a = refreshed // pick up any accrual the lazy sweep just latched
-		}
-	}
-
 	referred, err := s.State.store.CountReferrals(ctx, a.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
@@ -570,15 +559,6 @@ func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
-	}
-
-	if a.Status == StatusApproved {
-		if _, _, serr := sweepAffiliate(s, ctx, a); serr != nil {
-			s.Log.Warn("affiliates: lazy sweep failed", "affiliate", a.ID, "err", serr)
-		}
-		if refreshed, rerr := s.State.store.GetByID(ctx, a.ID); rerr == nil {
-			a = refreshed
-		}
 	}
 
 	downline, err := s.State.store.DownlineByLevel(ctx, a.Org, maxDepth)
@@ -970,41 +950,6 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 
-	// BACK the payout against the platform reserve fund (double-entry
-	// fund→payout:affiliate, idempotent by payout id). This is the SECOND guard: a
-	// payout must not exceed EITHER the affiliate's pending commission (above) OR the
-	// funded reserve (here). Not backed → VOID the pending reservation (restore it)
-	// and refuse honestly — the platform has not reserved capital for this payout.
-	backed, _, berr := treasury.Reserve(ctx, treasury.ProgramAffiliate, "payout:"+payoutID,
-		fmt.Sprintf("Affiliate commission payout (%s)", a.Code), body.AmountCents)
-	if berr != nil || !backed {
-		if verr := s.State.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
-			s.Log.Error("affiliates: void after unbacked payout failed", "payout", payoutID, "err", verr)
-		}
-		if berr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
-		}
-		reserve, _ := treasury.ReserveCents(ctx)
-		return zip.Errorf(http.StatusPaymentRequired,
-			"treasury reserve insufficient to back this payout (%d cents available); replenish via /v1/admin/treasury/sweep or seed", reserve)
-	}
-
-	// A credits payout issues the actual grant AFTER both reservations. The
-	// reservations are the safety authority (at-most-pending AND at-most-reserve); a
-	// grant failure is logged loud (never silent) so an operator reconciles from the
-	// payout row + audit.
-	if method == methodCredits {
-		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
-			fmt.Sprintf("Affiliate commission payout (%s)", a.Code), grantTag, "payout:"+payoutID)
-		if gerr != nil {
-			s.Log.Error("affiliates: credits payout grant failed (reserved against pending; not retried)",
-				"affiliate", a.ID, "payout", payoutID, "err", gerr)
-		} else if serr := s.State.store.SetPayoutTxn(ctx, payoutID, txn); serr != nil {
-			s.Log.Error("affiliates: record payout txn failed", "payout", payoutID, "err", serr)
-		}
-		payout.Txn = txn
-	}
-
 	after, _ := s.State.store.GetByID(ctx, a.ID)
 	emitAudit(s, ctx, "affiliate.payout", after, map[string]any{
 		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
@@ -1109,53 +1054,6 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 		}
 	}
 	return created, nil
-}
-
-// sweepAffiliate refreshes ONE affiliate's accrual for the dashboard read: it walks
-// DOWN the affiliate's referredBy subtree to maxDepth and accrues this period's
-// commission from each downline source at that source's level, latched at-most-once.
-// It is the per-affiliate mirror of the source-centric admin sweep (same latch key,
-// so the two never double-accrue). Returns (sources checked, accruals created).
-func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (checked, created int, err error) {
-	if a.Status != StatusApproved {
-		return 0, 0, nil
-	}
-	downline, err := s.State.store.DownlineByLevel(ctx, a.Org, maxDepth)
-	if err != nil {
-		return 0, 0, err
-	}
-	period := periodKey(time.Now())
-	now := time.Now().Unix()
-	for src, level := range downline {
-		checked++
-		spend, serr := s.State.commerce.spendCents(ctx, src, orgSubject(src))
-		if serr != nil {
-			s.Log.Warn("affiliates: spend read failed", "affiliate", a.ID, "source", src, "err", serr)
-			continue
-		}
-		margin := marginOf(spend, affiliateMarginBps())
-		commission := margin * levelRateBps(level, a) / bpsDenom
-		if commission <= 0 {
-			continue
-		}
-		accrualID, gerr := genID("aca")
-		if gerr != nil {
-			continue
-		}
-		moved, lerr := s.State.store.Accrue(ctx, accrualID, a.ID, src, period, level, spend, margin, commission, now)
-		if lerr != nil {
-			s.Log.Warn("affiliates: accrual failed", "affiliate", a.ID, "source", src, "err", lerr)
-			continue
-		}
-		if moved {
-			created++
-			emitAudit(s, ctx, "affiliate.accrue", a, map[string]any{
-				"sourceOrg": src, "period": period, "level": level,
-				"spendCents": spend, "marginCents": margin, "commissionCents": commission,
-			})
-		}
-	}
-	return checked, created, nil
 }
 
 // ── audit ─────────────────────────────────────────────────────────────────────
