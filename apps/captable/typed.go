@@ -14,7 +14,7 @@ package captable
 //     {success,message,errors} for a validation failure, 404/409
 //     {success,message}, and the top-level catch's 500. A typed op's error path
 //     renders zip's {status,code,error} instead, which would drop the `errors`
-//     list a client renders. bundleErr + bundleEnvelope below close that: the
+//     list a client renders. goja.BundleErr + goja.Envelope close that: the
 //     op returns the bundle's status and BYTES, and the group middleware writes
 //     them back verbatim. So a reachable non-2xx is no longer a reason to stay
 //     untyped.
@@ -32,7 +32,7 @@ package captable
 // So the typed ops BELOW are the routes with NO REQUEST BODY: the eleven
 // org-scoped collection reads, the one round detail read, and the five deletes.
 // A bodyless route has nothing to coerce — its whole input is one path segment —
-// so its In is faithful by construction and its answer relays through bundleErr.
+// so its In is faithful by construction and its answer relays through goja.BundleErr.
 //
 // The three body-carrying routes that ARE typed live in writes.go: `optString`
 // leniency is carried, not narrowed, by a verbatim scalar, which is what a
@@ -58,7 +58,6 @@ package captable
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -91,32 +90,6 @@ func tenantOf(ctx context.Context) (string, error) {
 // the org IS the address and there is no parameter to bind.
 type noInput struct{}
 
-// bundleErr is the bundle's OWN non-2xx answer, carried as a Go error so a typed
-// op can return it. The bundle authors envelopes cloud has no vocabulary for —
-// 400 {success,message,errors}, 404/409 {success,message}, and the top-level
-// catch's 500 — and zip's error path renders {status,code,error}, which has
-// nowhere to put the `errors` list a client renders. So the op returns the bundle's
-// status and its BYTES, and bundleEnvelope writes them back untouched.
-//
-// It is not an escape from typing. The op still declares its In and its Out, so
-// the document, the MCP tool, the CLI command and the SDK method all exist; what
-// it declines to do is invent a SECOND vocabulary for failures the bundle already
-// has words for.
-type bundleErr struct {
-	status int
-	body   []byte
-	msg    string
-}
-
-func (e *bundleErr) Error() string { return e.msg }
-
-// Unwrap gives the error a status and a message OFF the HTTP path, where there is
-// no response to write bytes into: an MCP tools/call and an in-process CLI invoke
-// run op.invoke without passing through bundleEnvelope, so zip's own error handler
-// renders this instead — the bundle's status and message in zip's envelope, rather
-// than a blanket 500 that loses both.
-func (e *bundleErr) Unwrap() error { return &zip.HTTPError{Status: e.status, Msg: e.msg} }
-
 // bundleMessage is the human sentence in a bundle envelope, for the Error() string
 // an off-HTTP caller sees. A validation failure appends its list, because "Validation
 // failed" alone tells a caller nothing. A body that is not an envelope falls back to
@@ -138,28 +111,9 @@ func bundleMessage(status int, body []byte) string {
 	return "captable dispatch failed"
 }
 
-// bundleEnvelope writes a bundleErr back to the client VERBATIM: the bundle's own
-// status, its own bytes, under the bare `application/json` the untyped relay beside
-// it sends. Anything else propagates unchanged.
-//
-// It is installed on the /v1/captable group BEFORE the ops it serves — fiber runs
-// middleware in registration order, so one installed after its leaves never runs —
-// and it is the ONE place a typed captable op answers with prose the bundle wrote.
-func bundleEnvelope() zip.Handler {
-	return func(c *zip.Ctx) error {
-		err := c.Continue()
-		var be *bundleErr
-		if errors.As(err, &be) {
-			c.SetHeader("Content-Type", "application/json")
-			return c.Bytes(be.status, be.body)
-		}
-		return err
-	}
-}
-
 // call is the ONE response path for every typed captable op: resolve the tenant,
 // run the bundle route on that tenant's store, and decode a 2xx body into out. A
-// non-2xx is the BUNDLE's answer and comes back as a bundleErr, so the client gets
+// non-2xx is the BUNDLE's answer and comes back as a goja.BundleErr, so the client gets
 // the same bytes under the same status the untyped relay wrote.
 //
 // Only a failure of the HOST itself — the engine never ran, or it answered
@@ -177,7 +131,7 @@ func (o ops) call(ctx context.Context, route string, params map[string]string, o
 // body-carrying writes in writes.go, which resolve the tenant on their own path
 // (a write refuses an oversized body between the two). It runs the bundle route
 // on the tenant's store and decodes the answer, so there is ONE place that turns
-// a bundle response into either an out value or a bundleErr.
+// a bundle response into either an out value or a goja.BundleErr.
 func (o ops) run(ctx context.Context, org, route string, params map[string]string, body any, out any) error {
 	resp, err := o.s.State.host.Dispatch(ctx, org, goja.BaseRequest{Route: route, Params: params, Body: body})
 	if err != nil {
@@ -185,7 +139,7 @@ func (o ops) run(ctx context.Context, org, route string, params map[string]strin
 		return zip.Errorf(http.StatusInternalServerError, "captable dispatch failed")
 	}
 	if resp.Status/100 != 2 {
-		return &bundleErr{status: resp.Status, body: resp.Body, msg: bundleMessage(resp.Status, resp.Body)}
+		return &goja.BundleErr{Status: resp.Status, Body: resp.Body, Msg: bundleMessage(resp.Status, resp.Body)}
 	}
 	if err := json.Unmarshal(resp.Body, out); err != nil {
 		o.s.Log.Error("captable response decode failed", "route", route, "err", err)
@@ -823,7 +777,7 @@ func (o ops) getSummary(ctx context.Context, _ *noInput) (*captableSummary, erro
 // also why they are typed while the creates are not: there is no body to coerce.
 //
 // Every one answers the same {"success":true} the bundle writes, and refuses
-// through bundleErr — 404 {success,message} for an id this org does not hold, and
+// through goja.BundleErr — 404 {success,message} for an id this org does not hold, and
 // for a stakeholder also 400 {success,message,errors} when the holder still holds
 // equity. The bytes are the bundle's own either way.
 
