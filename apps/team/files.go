@@ -23,7 +23,6 @@ package team
 //     independent layers; every denial is a 404 (no member/existence oracle).
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
