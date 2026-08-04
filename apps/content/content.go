@@ -92,7 +92,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document,
 // the MCP tool list and the generated SDK — Go drops comments at compile time.
-// Run by `make openapi` and by this app's own `make -C apps/content openapi`.
+// Run by `make describe` and by this app's own `make -C apps/content openapi`.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
