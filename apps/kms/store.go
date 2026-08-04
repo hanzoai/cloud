@@ -213,9 +213,89 @@ func (s *secretStore) get(path, name, env string) (*kmsstore.Secret, error) {
 	return sec, nil
 }
 
+// findQuery names what an enumeration asks for. The zero value asks for
+// everything the store holds.
+//
+//	Path  subtree ROOT, recursive: "deploy" reaches "deploy/ci" and never
+//	      "deployfoo". Empty = every path.
+//	Env   exact. Empty = EVERY environment — there is deliberately no default,
+//	      because env is part of a secret's coordinate and silently choosing one
+//	      reports an empty store while another env holds every record.
+type findQuery struct {
+	Path string
+	Env  string
+}
+
+// find returns the metadata (never ciphertext) of every secret matching q.
+//
+// It is separate from [secretStore.list] on purpose. list answers "what is at
+// EXACTLY this coordinate", which is the question the credential broker asks to
+// scope an app (kms.Client.Names) — widening THAT to a subtree would hand an app
+// its sub-paths' credentials too. find answers "what does this store hold",
+// which is the question an audit, a rotation, or a migration asks. Two
+// questions, two methods; neither can silently answer the other.
+//
+// Without it the store could not be enumerated at all: `WHERE path=? AND env=?`
+// with an empty path matches only the root, and an unset env was silently
+// filled in, so a populated store answered `total: 0` — indistinguishable from
+// an empty one, and the reason a live secret was read as missing during an
+// 18-hour outage.
+func (s *secretStore) find(q findQuery) ([]*kmsstore.Secret, error) {
+	// The store file is chosen by path, so an enumeration is always scoped to
+	// one org's store — a caller cannot widen its way into another tenant's.
+	db, err := s.dbFor(q.Path, false)
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, nil // org has no store file yet → no secrets
+	}
+
+	where := []string{"1=1"}
+	args := []any{}
+	if q.Path != "" {
+		// The subtree root itself, plus everything beneath it. LIKE's wildcards
+		// are escaped so a path containing '%' or '_' matches literally and
+		// cannot broaden its own scope.
+		where = append(where, `(path = ? OR path LIKE ? ESCAPE '\')`)
+		args = append(args, q.Path, likeLiteral(q.Path)+`/%`)
+	}
+	if q.Env != "" {
+		where = append(where, "env = ?")
+		args = append(args, q.Env)
+	}
+
+	rows, err := db.Query(
+		`SELECT path, env, name, scheme, key_handle, policy_id FROM kms_secrets
+		 WHERE `+strings.Join(where, " AND ")+` ORDER BY path, env, name`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("kms: find secrets: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*kmsstore.Secret
+	for rows.Next() {
+		sec := &kmsstore.Secret{}
+		if err := rows.Scan(&sec.Path, &sec.Env, &sec.Name, &sec.Scheme, &sec.KeyHandle, &sec.PolicyID); err != nil {
+			return nil, fmt.Errorf("kms: scan secret: %w", err)
+		}
+		out = append(out, sec)
+	}
+	return out, rows.Err()
+}
+
+// likeLiteral escapes the three characters LIKE treats as syntax so a path is
+// matched as the literal string it is.
+func likeLiteral(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
 // list returns the metadata (never ciphertext) of the secrets at EXACTLY (path,
 // env) — the same exact-coordinate listing the ZapDB prefix scan did (it never
 // recursed into sub-paths). Nothing sensitive is decrypted.
+//
+// This is the credential broker's question; see [secretStore.find] for the
+// store-wide one.
 func (s *secretStore) list(path, env string) ([]*kmsstore.Secret, error) {
 	db, err := s.dbFor(path, false)
 	if err != nil {
