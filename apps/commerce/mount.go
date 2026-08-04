@@ -476,6 +476,32 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		accountclient.PinBillingSubject(),
 		commercebilling.DetachPaymentMethod,
 	)
+	// SAVING a card completes the family, and it had no owner at all: a customer
+	// could list saved cards and delete one, but never add one. The billing app's
+	// POST /v1/billing/methods forwards to commerce's /v1/billing/methods — an
+	// address commerce does NOT serve co-resident and which the in-cluster
+	// `commerce` Service resolves back to THESE pods, so the forward re-enters the
+	// forwarder. It never got the chance to: CLOUD_COMMERCE_HTTP_URL is unset, so
+	// the proxy is unconfigured and every saved-card call — GET and POST alike —
+	// answers 501 "billing is not configured". The whole feature is dark in
+	// production, which is why nothing can bill a monthly plan to a card on file.
+	//
+	// Co-resident on the portal face is the fix the GET and DELETE already model:
+	// no HTTP hop, so nothing can self-dispatch, and the same gate applies.
+	// commerce's CreatePaymentMethod vaults the Square nonce (providerRef) as a
+	// reusable card-on-file and stores the billing address with it — that vaulted
+	// card is what a subscription renewal charges later.
+	//
+	// PinBillingSubject is load-bearing on a WRITE, not decoration: this handler
+	// reads its subject from the BODY (customerId), and the pin overwrites the
+	// subject keys there while preserving card/type/sourceId — so a caller can
+	// only ever attach a card to its OWN account, whatever the body claims.
+	app.Post("/v1/billing/portal/methods",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.CreatePaymentMethod,
+	)
 
 	// GET /v1/billing/alerts/authorize — the per-request per-scope spend-CAP
 	// VERDICT the request-edge metering gate consumes (clients/metering scopeAuthorize,
