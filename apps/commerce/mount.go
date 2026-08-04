@@ -387,11 +387,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		// It gave nothing away; it silently served every PAYING customer the most
 		// restrictive tier in the table.
 		//
-		// It belongs on THIS chain and not the bare public one plans uses: GetTier
-		// opens with middleware.GetOrganization, so without the IAM leg it panicked
-		// on a nil interface conversion and answered 500. A tier is org state, and
-		// the org has to be resolved before it can be read.
-		{"/v1/billing/tier", commercebilling.GetTier},
 		// The wire top-up rail: the serving BRAND's receiving bank details
 		// (host→brand, org row hydrated from KMS /tenants/<brand>/wire) with the
 		// caller's billing key rendered into the payment reference — which is why
@@ -414,6 +409,35 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			r.h,
 		)
 	}
+
+	// GET /v1/billing/tier — the per-key rate-limit tier the ai router reads on
+	// every request (hanzoai/ai routers/ratelimit.go commerceTierLookup).
+	//
+	// It gets its OWN chain because its caller is a SERVICE, not a person, and the
+	// two resolve an org by different doors. IAMTokenRequired resolves one only
+	// from a gateway-validated user identity — ownerID AND X-User-Id AND email —
+	// and deliberately falls through on a bare X-Org-Id, because admitting on that
+	// alone once let an off-gateway caller name any victim org. The router sends
+	// exactly that: a service bearer plus X-Org-Id and no user. So it arrived with
+	// a nil org, GetTier's type assertion panicked, and every lookup answered 500.
+	//
+	// TokenRequired is the door for a caller that IS a credential: it verifies the
+	// service token FIRST and only then calls ensureIAMOrg, which resolves the
+	// header. Credential before trust, so nothing is admitted on a header alone —
+	// the same reason the catalog CRUD and the recharge poke above each carry
+	// their own TokenRequired rather than riding an IAM chain.
+	//
+	// Fixing the panic alone was not enough and it is worth saying why: the router
+	// maps ANY non-2xx to TierZenFree, so a refusal downgrades a paying customer
+	// exactly like the crash did — 60 rpm against 500 for pro — silently, with no
+	// error anywhere the customer or we would see. The tier has to RESOLVE, not
+	// merely stop crashing.
+	app.Get("/v1/billing/tier",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		commercemid.TokenRequired(),
+		commercebilling.GetTier,
+	)
 
 	// POST /v1/billing/crypto/deposit — mint a per-payer MPC custody deposit
 	// address (commerce thirdparty/mpc → the hanzo-mpc signer fleet's /keygen).
