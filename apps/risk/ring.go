@@ -187,9 +187,14 @@ type rings struct {
 	order *list.List
 	// live is the store's own key count as of the last [rings.reconcile].
 	live int
-	// lost is how many of this tenant's own subjects these aggregates have had to
-	// forget to stay inside their bound.
+	// lost is how many of this tenant's own subjects the CENSUS has had to forget to
+	// stay inside its bound.
 	lost int64
+	// shed is how many of this tenant's subjects the STORE has dropped that the
+	// census still lists — the per-shard eviction a flat count cannot see. It is a
+	// high-water mark, set by [rings.reconcile]; see there for why the census misses
+	// it and why it does not fall back.
+	shed int
 }
 
 // strain is one tenant's aggregate pressure, in the two numbers that matter and
@@ -254,24 +259,50 @@ func (r *rings) census(id string) {
 	r.seen[id] = r.order.PushBack(id)
 }
 
-// reconcile reads the store's live key count. Call it once per batch and never
-// per event: it locks every shard.
+// reconcile reads the store's live key count and, with it, how many of this
+// tenant's subjects the STORE has dropped that the census still lists. Call it
+// once per batch and never per event: it locks every shard.
+//
+// THIS IS WHERE THE QUIET HALF OF THE BOUND BECOMES VISIBLE. velocity applies its
+// cap PER SHARD — MaxKeys/shards+1, five keys against a census ceiling of 320 —
+// and subjects hash unevenly, so a shard fills long before the total does and the
+// store drops that shard's least-recently-used key. The census is a flat count and
+// sees none of it: measured, 200 subjects in leaves the store holding 198 with the
+// census reporting nothing forgotten and not saturated. Two of that organisation's
+// own subjects read as "has done nothing", score as unremarkable, and raise
+// nothing.
+//
+// The census and the store are fed from the same key set, one apiece per subject,
+// so a store holding FEWER than the census lists holds exactly the difference in
+// dropped subjects. Both numbers are read under r.mu so they describe one moment;
+// read apart, a concurrent record between them shows up as a loss that did not
+// happen.
+//
+// It is a HIGH-WATER MARK because forgetting is not undone: the subject is gone
+// and stays gone until it is active again. A gauge that fell back to zero as the
+// shard refilled would report a control switching itself on and off.
 func (r *rings) reconcile() {
-	live := r.vel.Keys()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.live = live
+	r.live = r.vel.Keys()
+	if short := r.order.Len() - r.live; short > r.shed {
+		r.shed = short
+	}
 }
 
 // strain reports this tenant's aggregate pressure.
+//
+// Forgotten is the census's own evictions PLUS the store's, because they are
+// different subjects lost to the same bound and an operator acting on the number
+// needs all of them.
 func (r *rings) strain() strain {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return strain{
 		Subjects:  r.live,
 		Bound:     ringKeyCeiling,
-		Forgotten: r.lost,
-		Saturated: r.lost > 0 || r.order.Len() >= ringKeyCeiling,
+		Forgotten: r.lost + int64(r.shed),
+		Saturated: r.lost > 0 || r.shed > 0 || r.order.Len() >= ringKeyCeiling,
 	}
 }
 

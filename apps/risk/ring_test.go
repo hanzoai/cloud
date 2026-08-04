@@ -161,12 +161,12 @@ func TestRings_SurviveARolloutExactly(t *testing.T) {
 	first := planeAt(t, dir)
 	teach(t, first, k, evs)
 	before := velocitySnapshot(t, first, k, evs)
-	if err := first.close(); err != nil {
+	if err := first.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	after := velocitySnapshot(t, second, k, evs)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("a rollout changed this organisation's aggregates.\nbefore: %v\nafter:  %v\n"+
@@ -501,12 +501,12 @@ func TestWarm_FoldsAHistoryOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
-	if err := first.close(); err != nil { // writes the snapshot AND its watermark
+	if err := first.close(context.Background()); err != nil { // writes the snapshot AND its watermark
 		t.Fatalf("close: %v", err)
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	again := second.fold(context.Background(), k)
 	if again.Folded != 0 {
@@ -594,13 +594,13 @@ func TestEvent_DefaultIdsDoNotCollideInOneSecond(t *testing.T) {
 		t.Fatalf("%d events for one subject inside one second left %d row(s) on the record — "+
 			"the rest are dropped, and the aggregates are a projection of this record", n, held)
 	}
-	if err := p.close(); err != nil {
+	if err := p.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	// And the rollout: the replay must find all of them.
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	if _, _, replayed, err := second.rebuild(k); err != nil || replayed != n {
 		t.Fatalf("a rollout replayed %d of %d events (err %v) — that subject's velocity reads %d "+
