@@ -256,3 +256,42 @@ func TestConcurrentCallsCannotEachSpendTheWholeBalance(t *testing.T) {
 }
 
 func usd(micros int64) string { return fmt.Sprintf("$%.4f", float64(micros)/1e6) }
+
+// A 1M-CONTEXT MODEL IS NOT CAPPED BY A CONSTANT.
+//
+// The ceiling a chat is reserved against is a property of the MODEL, resolved
+// from the catalog. This is the regression that keeps recurring in this estate:
+// ai/model's name-matching table gave deepseek-v4-pro 16384 and 402'd every long
+// prompt, and glm-5.2 dead-ended /compact on a stale 16K fallback. A constant
+// here would reintroduce it on the billing path — reserving 32k for a model that
+// can emit 1M, and under-reserving by ~30x.
+func TestCeilingComesFromTheModelNotAConstant(t *testing.T) {
+	t.Cleanup(func() { SetCompletionCeiling(nil) })
+	SetCompletionCeiling(func(model string) int {
+		if model == "glm-5.2" {
+			return 1_000_000
+		}
+		return 0 // undeclared → the floor
+	})
+
+	big := atMost(&types.ChatRequest{Model: "glm-5.2", Prompt: "hi"})
+	if big < 1_000_000 {
+		t.Errorf("glm-5.2 reserved %d tokens, want >= 1M — a 1M model was capped by a constant", big)
+	}
+	small := atMost(&types.ChatRequest{Model: "unknown", Prompt: "hi"})
+	if small >= 1_000_000 {
+		t.Errorf("an undeclared model reserved %d tokens; it must take the floor, not another model's ceiling", small)
+	}
+	if small != EstTokens("hi")+defaultMaxCompletionTokens {
+		t.Errorf("undeclared model reserved %d, want prompt+floor(%d)", small, defaultMaxCompletionTokens)
+	}
+	// The caller's own MaxTokens always wins over the catalog: it is their stated
+	// intent, and it is the only value ever sent upstream.
+	req := &types.ChatRequest{Model: "glm-5.2", Prompt: "hi", MaxTokens: 500}
+	if got := atMost(req); got != EstTokens("hi")+500 {
+		t.Errorf("caller MaxTokens=500 reserved %d, want prompt+500", got)
+	}
+	if req.MaxTokens != 500 {
+		t.Errorf("atMost mutated the caller's MaxTokens to %d — a ceiling we synthesize must never reach the wire", req.MaxTokens)
+	}
+}
