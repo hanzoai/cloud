@@ -50,10 +50,11 @@ type Response struct {
 // package Registering the bodies and Describing the prose of one operation is
 // two halves of one declaration, not a clash.
 type registration struct {
-	req      reflect.Type
-	alts     []reflect.Type
-	resp     reflect.Type
-	declared bool // the body half is present (Register ran)
+	req       reflect.Type
+	alts      []reflect.Type
+	resp      reflect.Type
+	respBytes string // non-JSON response media type ([Bytes]); empty ⇒ resp is JSON
+	declared  bool   // the body half is present (Register ran)
 
 	summary     string
 	description string
@@ -86,12 +87,22 @@ var (
 // binary, which is what this renders — the honest declaration a Go struct cannot
 // make, since no struct describes a file.
 //
-// It is a REQUEST-only value: a response that is bytes is a different fact this
-// generator has no route needing yet, and inventing the second half before
-// anything asks for it is how one seam becomes two.
+// It is the REQUEST half; [Bytes] is the response half, which states its media
+// type because a served asset has one.
 type Binary struct{}
 
 var binaryReq = reflect.TypeOf(Binary{})
+
+// Bytes is the RESPONSE declaration for a body that is not JSON: an asset the
+// caller loads rather than decodes. Type is the media type the handler actually
+// sets, because a document that says application/json over JavaScript is a
+// document that lies to whoever generates against it.
+//
+//	openapi.Register("/v1/event.js", "GET", nil, openapi.Bytes{Type: "application/javascript"})
+//
+// Empty Type means opaque bytes (application/octet-stream). Like [Binary] it
+// names no component: an asset has no fields.
+type Bytes struct{ Type string }
 
 // OneOf is the request declaration for a body whose wire is POLYMORPHIC: one path
 // that accepts several unrelated JSON shapes, all decoded by the same handler.
@@ -127,6 +138,15 @@ var oneOfReq = reflect.TypeOf(OneOf{})
 func Register(path, method string, req, resp any) {
 	key := opKey{method: strings.ToUpper(method), path: path}
 	half := registration{req: reflect.TypeOf(req), resp: reflect.TypeOf(resp), declared: true}
+	if b, asset := resp.(Bytes); asset {
+		// The media type IS the declaration; Bytes itself names no component, so
+		// the reflected type is dropped rather than published as a schema.
+		half.resp = nil
+		half.respBytes = b.Type
+		if half.respBytes == "" {
+			half.respBytes = "application/octet-stream"
+		}
+	}
 	if alts, poly := req.(OneOf); poly {
 		if len(alts) == 0 {
 			panic(fmt.Sprintf("openapi: empty OneOf for %s %s — a polymorphic body has alternatives", key.method, path))
@@ -142,7 +162,7 @@ func Register(path, method string, req, resp any) {
 	if reg.declared {
 		panic(fmt.Sprintf("openapi: duplicate Register for %s %s", key.method, key.path))
 	}
-	reg.req, reg.alts, reg.resp, reg.declared = half.req, half.alts, half.resp, true
+	reg.req, reg.alts, reg.resp, reg.respBytes, reg.declared = half.req, half.alts, half.resp, half.respBytes, true
 	registry[key] = reg
 }
 
@@ -286,6 +306,16 @@ func (r *registration) apply(op *Operation, c *components) error {
 			return fmt.Errorf("%s request: %w", op.OperationID, err)
 		}
 		op.RequestBody = &RequestBody{Content: map[string]Media{"application/json": {Schema: s}}}
+	}
+	if r.respBytes != "" {
+		// An asset, declared inline under the media type the handler sets: no
+		// fields to name, so no component — the response mirror of binaryReq.
+		op.Responses = map[string]*Response{
+			"2XX": {Description: "Success", Content: map[string]Media{
+				r.respBytes: {Schema: &Schema{Type: "string", Format: "binary"}},
+			}},
+		}
+		return nil
 	}
 	if r.resp != nil {
 		s, err := schemaOf(r.resp, c)
