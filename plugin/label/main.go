@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/label"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the label app.
@@ -24,6 +25,7 @@ import (
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "label",
+		Prefixes: manifest.PrefixesFor("label"),
 		Price:    cloud.Free,
 		Mount:    label.Mount,
 		Shutdown: cloud.CtxShutdown(label.Shutdown),
