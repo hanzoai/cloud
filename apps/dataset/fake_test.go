@@ -209,51 +209,88 @@ var termRe = regexp.MustCompile(`^([a-z_]+) (=|>=|<) \?$`)
 // the share.
 var sampleRe = regexp.MustCompile(`^cityHash64\(\?, subject\) % (\d+) < \?$`)
 
+// sizeRe is the row-size bound — [representable]. It consumes one argument, and
+// the fake EVALUATES it: a store that ignored it would hand back the oversized
+// subjects the plane believes it excluded, so every byte-bound test below would
+// pass with the bound deleted. That is the exact failure mode a fixture is for.
+var sizeRe = regexp.MustCompile(`^length\(subject_kind\) \+ length\(subject\) <= \?$`)
+
+// sizeCol is the synthetic column the size bound reads. The source readers put the
+// subject identity's byte length in the row under this name, so the bound is
+// evaluated by the same generic [match] as every other conjunct rather than by a
+// special case that could drift from it.
+const sizeCol = "__subject_bytes__"
+
+// pred is a parsed WHERE clause: its conjuncts, the arguments THEY were parsed
+// against, how many of those were consumed, and the seeded sample if one is present.
+//
+// args is deliberately not the caller's whole argument list. A driver binds `?`
+// POSITIONALLY across the entire statement, so a statement carrying placeholders
+// in its SELECT list — the census, whose aggregates are conditional — offsets
+// every WHERE argument. The fake has to do the same or it would compare `org = ?`
+// against the first aggregate's bound and match nothing.
+type pred struct {
+	terms  []term
+	args   []any
+	used   int
+	seed   string
+	shared int
+}
+
 // where extracts the conjuncts and the arguments they consume. It FAILS on a
 // conjunct it does not recognise rather than skipping it — a skipped predicate is
 // a predicate that was never tested.
-func where(s string, args []any) ([]term, int, string, int, error) {
+func where(s string, args []any) (pred, error) {
 	i := strings.Index(s, " WHERE ")
 	if i < 0 {
-		return nil, 0, "", 0, nil
+		return pred{args: args, shared: shareDenominator}, nil
 	}
+	// Every placeholder BEFORE the WHERE belongs to the SELECT list, and consumed
+	// its argument there.
+	lead := strings.Count(s[:i], "?")
+	if lead > len(args) {
+		return pred{}, fmt.Errorf("fake store: %d placeholders precede the WHERE but only %d arguments were bound", lead, len(args))
+	}
+	p := pred{args: args[lead:], shared: shareDenominator}
 	rest := s[i+len(" WHERE "):]
 	for _, stop := range []string{" GROUP BY ", " ORDER BY ", " LIMIT "} {
 		if j := strings.Index(rest, stop); j >= 0 {
 			rest = rest[:j]
 		}
 	}
-	var (
-		out    []term
-		used   int
-		seed   string
-		shared = shareDenominator
-	)
 	for _, part := range strings.Split(rest, " AND ") {
 		part = strings.TrimSpace(part)
 		if m := termRe.FindStringSubmatch(part); m != nil {
-			out = append(out, term{col: m[1], op: m[2]})
-			used++
+			p.terms = append(p.terms, term{col: m[1], op: m[2]})
+			p.used++
+			continue
+		}
+		if sizeRe.MatchString(part) {
+			p.terms = append(p.terms, term{col: sizeCol, op: "<="})
+			p.used++
 			continue
 		}
 		if sampleRe.MatchString(part) {
-			if used+1 >= len(args) {
-				return nil, 0, "", 0, fmt.Errorf("fake store: the sample predicate has no arguments")
+			if p.used+1 >= len(p.args) {
+				return pred{}, fmt.Errorf("fake store: the sample predicate has no arguments")
 			}
-			seed = fmt.Sprint(args[used])
-			shared = int(asFloat(args[used+1]))
-			used += 2
+			p.seed = fmt.Sprint(p.args[p.used])
+			p.shared = int(asFloat(p.args[p.used+1]))
+			p.used += 2
 			continue
 		}
-		return nil, 0, "", 0, fmt.Errorf("fake store: unrecognised predicate %q", part)
+		return pred{}, fmt.Errorf("fake store: unrecognised predicate %q", part)
 	}
-	return out, used, seed, shared, nil
+	return p, nil
 }
 
 // match evaluates the conjuncts against one row.
-func match(terms []term, args []any, row map[string]any) bool {
-	for i, t := range terms {
-		got, want := row[t.col], args[i]
+func match(p pred, row map[string]any) bool {
+	for i, t := range p.terms {
+		if i >= len(p.args) {
+			return false
+		}
+		got, want := row[t.col], p.args[i]
 		switch t.op {
 		case "=":
 			if fmt.Sprint(got) != fmt.Sprint(want) {
@@ -265,6 +302,10 @@ func match(terms []term, args []any, row map[string]any) bool {
 			}
 		case "<":
 			if geq(got, want) {
+				return false
+			}
+		case "<=":
+			if asFloat(got) > asFloat(want) {
 				return false
 			}
 		}
@@ -289,9 +330,11 @@ func render(v any) string {
 
 func asFloat(v any) float64 { return number(v) }
 
-// tail reads the trailing LIMIT / OFFSET arguments a statement declared.
-func tail(s string, args []any, used int) (limit, offset int) {
+// tail reads the trailing LIMIT / OFFSET arguments a statement declared. They are
+// read from the predicate's own argument slice, after what the conjuncts consumed.
+func tail(s string, p pred) (limit, offset int) {
 	limit, offset = -1, 0
+	args, used := p.args, p.used
 	if strings.Contains(s, " LIMIT ? OFFSET ?") {
 		if used+1 < len(args) {
 			limit, offset = int(asFloat(args[used])), int(asFloat(args[used+1]))
@@ -317,7 +360,7 @@ func tail(s string, args []any, used int) (limit, offset int) {
 // the engine behaviour a published version's immutability rests on, so it is
 // reproduced here rather than assumed.
 func (f *fake) readManifest(s string, args []any) ([]map[string]any, error) {
-	terms, used, _, _, err := where(s, args)
+	p, err := where(s, args)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +384,7 @@ func (f *fake) readManifest(s string, args []any) ([]map[string]any, error) {
 	out := []map[string]any{}
 	for _, key := range order {
 		r := best[key]
-		if f.leak || match(terms, args, r) {
+		if f.leak || match(p, r) {
 			out = append(out, r)
 		}
 	}
@@ -370,25 +413,25 @@ func (f *fake) readManifest(s string, args []any) ([]map[string]any, error) {
 		}
 		out = kept
 	}
-	if limit, _ := tail(s, args, used); limit >= 0 && len(out) > limit {
+	if limit, _ := tail(s, p); limit >= 0 && len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil
 }
 
 func (f *fake) readRows(s string, args []any) ([]map[string]any, error) {
-	terms, used, _, _, err := where(s, args)
+	p, err := where(s, args)
 	if err != nil {
 		return nil, err
 	}
 	out := []map[string]any{}
 	for _, r := range f.rows {
-		if f.leak || match(terms, args, r) {
+		if f.leak || match(p, r) {
 			out = append(out, r)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return fmt.Sprint(out[i]["id"]) < fmt.Sprint(out[j]["id"]) })
-	limit, offset := tail(s, args, used)
+	limit, offset := tail(s, p)
 	if offset > len(out) {
 		return []map[string]any{}, nil
 	}
@@ -402,26 +445,42 @@ func (f *fake) readRows(s string, args []any) ([]map[string]any, error) {
 // readSource serves both shapes the plane reads from the source: the census
 // aggregate and the grouped fact read.
 func (f *fake) readSource(s string, args []any) ([]map[string]any, error) {
-	terms, used, seed, shared, err := where(s, args)
+	p, err := where(s, args)
 	if err != nil {
 		return nil, err
 	}
+	// sizeCol is what [representable] reads. It is computed here, from the row, so
+	// the fake evaluates the real byte length rather than trusting the plane.
 	var kept []featRow
 	for _, r := range f.feature {
-		row := map[string]any{"org": r.Org, "subject_kind": r.Kind, "subject": r.Subject, "bucket": r.Bucket}
-		if !match(terms, args, row) {
+		row := map[string]any{
+			"org": r.Org, "subject_kind": r.Kind, "subject": r.Subject, "bucket": r.Bucket,
+			sizeCol: len(r.Kind) + len(r.Subject),
+		}
+		if !match(p, row) {
 			continue
 		}
-		if shared < shareDenominator && bucketOf(seed, r.Subject) >= shared {
+		if p.shared < shareDenominator && bucketOf(p.seed, r.Subject) >= p.shared {
 			continue
 		}
 		kept = append(kept, r)
 	}
 	if strings.Contains(s, "uniqExact") {
+		// THE CENSUS, whose aggregates are CONDITIONAL: the size bound sits inside them
+		// rather than in the WHERE, because the count of what the bound EXCLUDES is one
+		// of the things being measured. The fake honours that split — it evaluates the
+		// same predicate per aggregate — so a census that stopped conditioning, or
+		// stopped counting the excluded, changes what these tests see.
+		fits := func(r featRow) bool { return len(r.Kind)+len(r.Subject) <= maxSubjectBytes }
 		seen := map[string]bool{}
 		subjects := map[string]bool{}
+		oversize := map[string]bool{}
 		var first, last time.Time
 		for _, r := range kept {
+			if !fits(r) {
+				oversize[r.Kind+"\x00"+r.Subject] = true
+				continue
+			}
 			seen[r.Kind+"\x00"+r.Subject+"\x00"+r.Bucket.String()] = true
 			subjects[r.Kind+"\x00"+r.Subject] = true
 			if first.IsZero() || r.Bucket.Before(first) {
@@ -433,7 +492,8 @@ func (f *fake) readSource(s string, args []any) ([]map[string]any, error) {
 		}
 		return []map[string]any{{
 			"rows": uint64(len(seen)), "subjects": uint64(len(subjects)),
-			"first": first, "last": last,
+			"oversize": uint64(len(oversize)),
+			"first":    first, "last": last,
 		}}, nil
 	}
 
@@ -454,7 +514,7 @@ func (f *fake) readSource(s string, args []any) ([]map[string]any, error) {
 		}
 		out = append(out, row)
 	}
-	if limit, _ := tail(s, args, used); limit >= 0 && len(out) > limit {
+	if limit, _ := tail(s, p); limit >= 0 && len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil

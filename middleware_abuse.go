@@ -15,7 +15,7 @@ package cloud
 //
 // WHERE IT SITS, and why exactly there (serve.go):
 //
-//	SanitizeIdentity → AuditTrail → ScopeRateLimit → AbuseGate → StarterGrant → BillingGate
+//	SanitizeIdentity → AuditTrail → ScopeRateLimit → AbuseGate → BillingGate
 //
 //   - AFTER SanitizeIdentity, so the org it scopes to is the validated one and
 //     the credential class it reads cannot be forged.

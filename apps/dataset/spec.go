@@ -104,12 +104,39 @@ const (
 	// as "no rows" and is indistinguishable from a quiet tenant.
 	minWindow = time.Minute
 
-	// maxRows caps one materialisation. The rows are held in this process to
-	// assign the splits and compute the digest — the two things that CANNOT be
-	// done in the store without duplicating the definition of a split — so the cap
-	// is a memory bound as well as a scan bound: 200k rows of ten float64s plus a
-	// subject key is tens of megabytes, which one queued job at a time can afford.
+	// maxRows caps HOW MANY rows one materialisation holds. The rows are held in
+	// this process to assign the splits and compute the digest — the two things
+	// that CANNOT be done in the store without duplicating the definition of a
+	// split — so a count on its own is a scan bound and NOTHING ELSE. What bounds
+	// the memory is this count times [maxRowBytes], and that product is a bound
+	// only because [maxSubjectBytes] exists.
 	maxRows = 200_000
+
+	// maxSubjectBytes bounds the ONE caller-sized value a row carries: the subject
+	// identity, `subject_kind` + `subject`.
+	//
+	// A COUNT OVER CALLER-SIZED VALUES IS NOT A BOUND. Every other part of a row is
+	// fixed by this package — the kind comes from a closed set, the coordinates are
+	// at most len(dims) float64s, the instant is an instant. The subject is not: the
+	// rollup that writes the source lifts it from `distinct_id`, `session_id` and
+	// `user_id`, which arrive on /v1/event from the caller. `distinct_id` is capped
+	// at 256 bytes on the anonymous lane and REPLACED by the token's own subject on
+	// the signed one, but `session_id` — which the `session` rollup files as a
+	// subject verbatim — is capped nowhere. So "200k rows is tens of megabytes" and
+	// "eight jobs is a few hundred megabytes" were arithmetic over an unknown, and
+	// one tenant's traffic decided the real number.
+	//
+	// 256 bytes is what the identified lane already states for a subject, for the
+	// reason that carries over unchanged: a minted id is a uuid (36 bytes), the
+	// value is KEYED — uniqExact over it is the whole point of the surface — and
+	// something longer is not an id. With the bound in place, count times max IS the
+	// byte bound, which is the only form in which either number means anything.
+	//
+	// It is enforced ONCE, at [representable], on the way OUT of the source and
+	// therefore on the way IN to this process and to the rows table. There is no
+	// second spelling downstream: every row this plane holds, writes or returns came
+	// through that predicate.
+	maxSubjectBytes = 256
 
 	// maxHorizon bounds the maturity wait. A year is past every dispute window
 	// that exists; beyond it the horizon is excluding data for no reason anybody
@@ -127,6 +154,36 @@ const (
 	// interpolated, so this is a size limit and not a safety one.
 	maxSeed = 128
 )
+
+// The BYTE bounds, every one of them DERIVED. A byte ceiling written down beside a
+// count is two numbers nothing keeps in agreement, and the one that was wrong here
+// was always the byte one. These are computed from [maxSubjectBytes] and len(dims),
+// so raising either moves them and no comment goes stale.
+//
+// They are vars and not consts only because len(dims) is a slice length. Nothing
+// assigns them; [TestTheByteBoundIsDerivedFromTheValueBound] pins the arithmetic.
+var (
+	// maxRowBytes is one row's ceiling: its subject identity, its coordinates, and
+	// the fixed remainder (the derived id, the instant, the split). It is what makes
+	// every count below convertible into a size.
+	maxRowBytes = maxSubjectBytes + 8*len(dims) + fixedRowBytes
+
+	// maxResidentBytes is what ONE materialisation can hold in this process, and
+	// maxProcessBytes is what all [maxJobs] of them can hold at once. This is the
+	// claim that used to be a guess.
+	maxResidentBytes = maxRows * maxRowBytes
+	maxProcessBytes  = maxJobs * maxResidentBytes
+
+	// maxPageBytes is the largest export response. The rows table holds only
+	// subjects that passed [representable] on the way in, so the page count times
+	// the row ceiling bounds the body — no second check on the read path.
+	maxPageBytes = page * maxRowBytes
+)
+
+// fixedRowBytes is the part of a row this package fixes: a 64-hex derived id, an
+// RFC-3339 instant, a split name, and the JSON punctuation around them. Rounded up;
+// it is a ceiling, not a measurement.
+const fixedRowBytes = 192
 
 // name is what a dataset may be called: lower-case, digits and single hyphens,
 // starting with a letter. It is BOUND everywhere it is used — including in the
