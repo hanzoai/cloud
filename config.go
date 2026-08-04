@@ -174,8 +174,8 @@ type Config struct {
 	// ELSEWHERE (the shared Traefik ingress `cors-allow-all` fronting api.hanzo.ai)
 	// and cloud emits NO CORS headers — set CLOUD_CORS_ORIGINS only on a direct
 	// DO-LB→cloud edge, so exactly one layer answers CORS (never both → duplicate
-	// ACAO breaks the browser). Reads CLOUD_CORS_ORIGINS, then GATEWAY_CORS_ORIGINS
-	// (shared with the gateway so both trust boundaries agree on one list).
+	// ACAO breaks the browser). Read from CLOUD_CORS_ORIGINS — one name, so a
+	// deployment cannot half-configure the allowlist under a second spelling.
 	CORSOrigins []string
 
 	// EdgeRateEnabled turns on the per-client-IP edge flood cap that runs BEFORE
@@ -432,7 +432,7 @@ func LoadConfig() *Config {
 	// Edge policy (middleware_edge.go). CORS default OFF (ingress owns it on the
 	// recommended rollout — see Config.CORSOrigins); the per-IP flood cap default
 	// ON at gateway-parity 100/1s so a protection is never dropped silently.
-	cfg.CORSOrigins = splitTrim(getenv("CLOUD_CORS_ORIGINS", os.Getenv("GATEWAY_CORS_ORIGINS")))
+	cfg.CORSOrigins = splitTrim(getenv("CLOUD_CORS_ORIGINS", ""))
 	cfg.EdgeRateEnabled = getenvBoolDefault("CLOUD_EDGE_RATELIMIT", true)
 	cfg.EdgeRatePerIP = getenvInt("CLOUD_EDGE_RATELIMIT_PER_IP", 100)
 	cfg.EdgeRateWindowSec = getenvInt("CLOUD_EDGE_RATELIMIT_WINDOW_SEC", 1)
