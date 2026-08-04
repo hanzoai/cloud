@@ -534,8 +534,8 @@ type riskLabelEvent struct {
 type riskResolveOut struct {
 	// Now and Horizon echo the observation this answer was computed under. A
 	// resolved label without them is a claim nobody can check.
-	Now     string       `json:"now"`
-	Horizon int          `json:"horizon"`
+	Now     string         `json:"now"`
+	Horizon int            `json:"horizon"`
 	Labels  []riskResolved `json:"labels"`
 	// Unmatured is how many named events had not aged past the horizon. They are
 	// not unlabelled — they are not yet ASKABLE, and a supervised training set
