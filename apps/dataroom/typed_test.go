@@ -12,8 +12,12 @@ package dataroom
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
@@ -321,6 +325,72 @@ func TestRefusalKeepsTheDataRoomsOwnEnvelope(t *testing.T) {
 	}
 }
 
+// TestAgentOpensADataRoomOverMCP is the demo itself, driven the way the AGENT
+// will drive it: through tools/call, where there is NO URL. The arguments object
+// is the whole input and zip passes it as the body with a NIL path map, so an op
+// whose address reaches it only from the path is addressable over REST and
+// nowhere else — every test above would stay green and the agent would get
+// not-found. Three of these ops carry an id, so this is the failure this file
+// exists to make impossible.
+func TestAgentOpensADataRoomOverMCP(t *testing.T) {
+	app, _ := mountMCPApp(t)
+	const org = "acme"
+
+	// Open a room.
+	text, isErr := toolsCall(t, app, org, "v1.dataroom.post_datarooms",
+		`{"name":"Acme Series A","description":"Diligence"}`)
+	if isErr {
+		t.Fatalf("an agent cannot open a data room over MCP: %s", text)
+	}
+	roomID := idFrom(t, text, "dataroom")
+	if roomID == "" {
+		t.Fatalf("opening a room over MCP answered no id: %s", text)
+	}
+
+	// Grant a party access, naming the room by ARGUMENT alone.
+	text, isErr = toolsCall(t, app, org, "v1.dataroom.post_links",
+		`{"dataroomId":"`+roomID+`","allowList":["partner@sequoiacap.com"],"name":"Sequoia"}`)
+	if isErr {
+		t.Fatalf("an agent cannot grant access over MCP: %s", text)
+	}
+	if !strings.Contains(text, "partner@sequoiacap.com") {
+		t.Fatalf("the access control did not survive the agent's call: %s", text)
+	}
+
+	// Read the room back by id — the path-bound op, addressed through arguments.
+	text, isErr = toolsCall(t, app, org, "v1.dataroom.get_datarooms_id", `{"id":"`+roomID+`"}`)
+	if isErr {
+		t.Fatalf("an agent cannot read a room by id over MCP — the In does not receive "+
+			"id from the arguments object, so the REST wire survived and this did not: %s", text)
+	}
+	if !strings.Contains(text, "Acme Series A") {
+		t.Fatalf("reading the room over MCP did not return it: %s", text)
+	}
+	// Without the address the SAME tool must not resolve a room, or "found" above
+	// proves nothing.
+	if _, isErr := toolsCall(t, app, org, "v1.dataroom.get_datarooms_id", `{}`); !isErr {
+		t.Fatal("reading a room with no id must not resolve one — the discriminator is dead")
+	}
+
+	// And the room is listed.
+	text, isErr = toolsCall(t, app, org, "v1.dataroom.get_datarooms", `{}`)
+	if isErr || !strings.Contains(text, roomID) {
+		t.Fatalf("the agent's room is not in the list it reads back: %s", text)
+	}
+}
+
+// idFrom pulls {"<key>":{"id":…}} out of a tools/call result payload.
+func idFrom(t *testing.T, text, key string) string {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(text), &m); err != nil {
+		t.Fatalf("tools/call result is not JSON: %v (%s)", err, text)
+	}
+	inner, _ := m[key].(map[string]any)
+	id, _ := inner["id"].(string)
+	return id
+}
+
 // --- helpers ---------------------------------------------------------------
 
 func names(m map[string]map[string]any) []string {
@@ -348,4 +418,39 @@ func jsonUpload(t *testing.T, app *zip.App, org, name string, raw []byte) (int, 
 func jsonEqualBytes(t *testing.T, a, b []byte) bool {
 	t.Helper()
 	return string(a) == string(b)
+}
+
+// toolsCall invokes op through zip's MCP endpoint with args as the tools/call
+// arguments object — the WHOLE input over this transport — and returns the
+// result text and whether MCP reported an error.
+func toolsCall(t *testing.T, app *zip.App, org, op, args string) (string, bool) {
+	t.Helper()
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + op + `","arguments":` + args + `}}`
+	rq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	rq.Header.Set("Content-Type", "application/json")
+	if org != "" {
+		rq.Header.Set("X-Org-Id", org)
+		rq.Header.Set("X-User-Id", "u_"+org)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("tools/call %s: %v", op, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var env struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("tools/call %s: %v (%s)", op, err, raw)
+	}
+	if len(env.Result.Content) == 0 {
+		t.Fatalf("tools/call %s returned no content: %s", op, raw)
+	}
+	return env.Result.Content[0].Text, env.Result.IsError
 }
