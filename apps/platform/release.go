@@ -6,11 +6,27 @@
 //	a git tag v<X.Y.Z> exists  ⇔  an image ghcr.io/hanzoai/cloud:v<X.Y.Z> was
 //	pushed AND booted to "listening" in the smoke test.
 //
-// The tag is a RECEIPT for a proven image, minted only AFTER a successful push +
-// smoke — never a trigger for a build that might fail. The order is inverted from
-// the old tag-triggers-build design (which left phantom tags with no image behind
-// them → ImagePullBackOff): main push → compute version → build → smoke → tag →
-// pin, so any failure fails BEFORE the tag and leaves no receipt.
+// The tag is CLAIMED FIRST, and that is the load-bearing detail. The order is
+// main push → claim version → build → smoke → verify claim → pin.
+//
+// It used to be … → build → smoke → MINT tag → pin, on the reasoning that a tag
+// should be a receipt for a proven image rather than a trigger for a build that
+// might fail. That reasoning is right about what a tag MEANS and wrong about what
+// a version IS. A version is a shared, exclusive resource: this lane and
+// .hanzo/workflows/cicd.yml both publish ghcr.io/hanzoai/cloud, both computed
+// max+1 by READING the registry, and a read reserves nothing. Both then pushed —
+// and a ghcr tag is MUTABLE, so the second push replaced the first's bytes under
+// a name the first believed it owned (v1.801.361 at 04:40:53, v1.801.410 at
+// 08:17:12, the replacement carrying no revision label at all). The loser learned
+// this at the tag step, three quarters of the way through, having already
+// corrupted the winner's image — which the winner went on to smoke, pin and ship.
+//
+// Creating refs/tags/v<N> is the only operation available here that the server
+// performs as a COMPARE-AND-SWAP, so it is the only thing that can allocate.
+// Claiming first costs a hole in the numbering when a build fails — a tag with no
+// image — and that is the cheap direction: a hole is inert and visible (pin.sh
+// refuses a tag that does not resolve), while a reused number is invisible and
+// serves the wrong bytes.
 //
 // The whole pipeline is four injectable seams (releasePlan) run in strict order
 // (run), so the ordering invariant is enforced by construction and unit-tested
@@ -157,9 +173,9 @@ func (s releaseStep) String() string {
 
 // releasePlan is the release as four seams. run executes them in strict order and
 // STOPS at the first failure, returning the highest step that fully succeeded. The
-// invariant enforced by construction: the tag seam is reached ONLY after build AND
-// smoke returned nil, so a git tag can never exist without a built, pushed and
-// smoke-passed image; the pin moves only after the tag is minted.
+// invariant enforced by construction: the pin is reached ONLY after build, smoke
+// AND the tag verification returned nil, so nothing can go live that did not
+// build, boot, and still hold the version it was allocated.
 type releasePlan struct {
 	build func(context.Context) error
 	smoke func(context.Context) error
@@ -318,9 +334,9 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 	if err != nil {
 		return "", "", zip.Errorf(http.StatusBadGateway, "resolve %s: %v", ref, err)
 	}
-	version, err := computeReleaseVersion(s, ctx, releaseRepoSlug)
+	version, err := claimReleaseVersion(s, ctx, releaseRepoSlug, sha)
 	if err != nil {
-		return "", "", zip.Errorf(http.StatusBadGateway, "compute release version: %v", err)
+		return "", "", zip.Errorf(http.StatusBadGateway, "claim release version: %v", err)
 	}
 	tag := "v" + version
 	image := releaseImage + ":" + tag
@@ -466,6 +482,91 @@ func computeReleaseVersion(s *cloud.Service[state], ctx context.Context, repo st
 		return "", fmt.Errorf("list published image tags: %w", err)
 	}
 	return nextVersion(git, published, releaseFloor)
+}
+
+// claimReleaseVersion allocates the next version AND takes ownership of it in one
+// act, before anything is built.
+//
+// computeReleaseVersion alone cannot allocate anything. It READS two tag universes
+// and returns max+1, and a read reserves nothing: two lanes reading the same
+// registry seconds apart both get the same answer, and both believe it is theirs.
+// This lane and .hanzo/workflows/cicd.yml are exactly those two lanes — both
+// publish ghcr.io/hanzoai/cloud, both computed max+1, and both then pushed. A ghcr
+// tag is MUTABLE, so the second push REPLACED the first's bytes under a name the
+// first had already been told it owned: v1.801.361 at 04:40:53, v1.801.410 at
+// 08:17:12. The loser only found out at the tag step, three quarters of the way
+// through a pipeline, long after it had overwritten the winner's image — which the
+// winner went on to smoke, pin and ship.
+//
+// Creating refs/tags/v<N> is the one operation available here that the server
+// performs as a COMPARE-AND-SWAP: 201 if the ref did not exist, 422 if it did,
+// decided under GitHub's lock rather than in our head. So the claim is the
+// allocation. A number that cannot be claimed was never ours to build.
+//
+// The retry bumps the patch LOCALLY rather than re-running computeReleaseVersion.
+// A freshly claimed-but-unbuilt tag is invisible to both of that function's
+// sources — it has no image yet, and gitTags reads only the first 100 of ~1700
+// tags — so recomputing would return the same number, collide again, and burn all
+// ten attempts without ever advancing. Counting up from the number we already have
+// always terminates.
+func claimReleaseVersion(s *cloud.Service[state], ctx context.Context, repo, sha string) (string, error) {
+	tok := ghToken()
+	if tok == "" {
+		return "", fmt.Errorf("no GH_PAT configured — a version cannot be claimed, and an unclaimed version must not be built")
+	}
+	start, err := computeReleaseVersion(s, ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	return claimFrom(s, ctx, repo, sha, start)
+}
+
+// claimFrom is the exclusive-allocation loop, separated from how the starting
+// number was discovered. computeReleaseVersion reads the registry and the git tag
+// list — the world — while this walks upward taking the first number the server
+// will grant. Splitting them is what lets the RACE be tested at all: the
+// behaviour worth proving is "two commits never hold one version", and that has
+// nothing to do with where counting began.
+func claimFrom(s *cloud.Service[state], ctx context.Context, repo, sha, start string) (string, error) {
+	tok := ghToken()
+	if tok == "" {
+		return "", fmt.Errorf("no GH_PAT configured — a version cannot be claimed, and an unclaimed version must not be built")
+	}
+	v, ok := parseSemver(start)
+	if !ok {
+		return "", fmt.Errorf("computed version %q is not semver", start)
+	}
+	for attempt := 0; attempt < 10; attempt++ {
+		version := v.String()
+		tag := "v" + version
+		code, err := githubJSON(s, ctx, http.MethodPost, "/repos/"+repo+"/git/refs", tok,
+			map[string]string{"ref": "refs/tags/" + tag, "sha": sha}, nil)
+		if err != nil {
+			return "", fmt.Errorf("claim %s: %w", tag, err)
+		}
+		if code == http.StatusCreated {
+			s.Log.Info("release version claimed before build (compare-and-swap)", "repo", repo, "tag", tag, "sha", sha)
+			return version, nil
+		}
+		if code != http.StatusUnprocessableEntity {
+			return "", fmt.Errorf("claim %s: status %d", tag, code)
+		}
+		// Held. By this same commit — a re-run of a release that already claimed
+		// its number — or by a different one, which is a genuine collision and
+		// means the number belongs to somebody else.
+		var ref struct {
+			Object struct {
+				SHA string `json:"sha"`
+			} `json:"object"`
+		}
+		if _, gerr := githubJSON(s, ctx, http.MethodGet, "/repos/"+repo+"/git/ref/tags/"+tag, tok, nil, &ref); gerr == nil && ref.Object.SHA == sha {
+			s.Log.Info("release version already claimed at this commit — resuming", "repo", repo, "tag", tag, "sha", sha)
+			return version, nil
+		}
+		s.Log.Info("release version is held by another commit — taking the next", "repo", repo, "tag", tag, "heldBy", ref.Object.SHA)
+		v.patch++
+	}
+	return "", fmt.Errorf("could not claim a version in 10 attempts starting at %s", start)
 }
 
 func gitTags(s *cloud.Service[state], ctx context.Context, repo string) ([]string, error) {
@@ -637,23 +738,33 @@ func isHex40(s string) bool {
 // pass, so the tag is a RECEIPT for a proven image, never a build trigger. A 422 (ref
 // already exists) is surfaced as a collision, exactly release.yml's guard against
 // minting a number a concurrent run already took.
+// tagRelease no longer MINTS the tag — claimReleaseVersion did that before the
+// build, because minting it here was the bug. A tag created at the end is a
+// receipt for work already done; a tag created at the start is a RESERVATION, and
+// only the second one prevents a second lane from spending the same number. What
+// is left at this position is the assertion that the reservation still stands, and
+// still names this commit, before the pin makes it production's problem.
 func tagRelease(s *cloud.Service[state], ctx context.Context, repo, sha, tag string) error {
 	tok := ghToken()
 	if tok == "" {
-		return fmt.Errorf("no GH_PAT configured for tag receipt")
+		return fmt.Errorf("no GH_PAT configured to verify the tag receipt")
 	}
-	code, err := githubJSON(s, ctx, http.MethodPost, "/repos/"+repo+"/git/refs", tok,
-		map[string]string{"ref": "refs/tags/" + tag, "sha": sha}, nil)
+	var ref struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	code, err := githubJSON(s, ctx, http.MethodGet, "/repos/"+repo+"/git/ref/tags/"+tag, tok, nil, &ref)
 	if err != nil {
-		return err
+		return fmt.Errorf("read tag %s: %w", tag, err)
 	}
-	if code == http.StatusUnprocessableEntity {
-		return fmt.Errorf("tag %s already exists (collision)", tag)
+	if code != http.StatusOK {
+		return fmt.Errorf("tag %s was claimed by this release but reads back status %d — refusing to pin a release whose receipt is gone", tag, code)
 	}
-	if code != http.StatusCreated {
-		return fmt.Errorf("create tag %s: status %d", tag, code)
+	if ref.Object.SHA != sha {
+		return fmt.Errorf("tag %s now names %s, not %s — the claim was overwritten; nothing may be pinned", tag, ref.Object.SHA, sha)
 	}
-	s.Log.Info("release tag minted (receipt for a pushed, smoke-passed image)", "repo", repo, "tag", tag, "sha", sha)
+	s.Log.Info("release tag verified (claimed before build, still names this commit)", "repo", repo, "tag", tag, "sha", sha)
 	return nil
 }
 
