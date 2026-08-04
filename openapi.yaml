@@ -34063,6 +34063,14 @@ components:
             recording what it WOULD have alerted on, and changing no outcome. Shadow is
             the default for a new tenant.
           type: boolean
+        policy:
+          description: |-
+            Policy is the version of the decision regime this model is deciding under,
+            from your organisation's own policy history (GET /v1/risk/policy). Every
+            score cites it, so it is the join between a past decision and the appetite
+            that produced its threshold. Zero means no regime has ever been stated and
+            the default posture — shadow — is in force.
+          type: integer
         realised:
           description: |-
             Realised is the share that actually was. Reading it beside Stated is what
@@ -34149,6 +34157,68 @@ components:
         unit:
           description: Unit is how to read the numbers below.
           type: string
+      type: object
+    riskPolicyOut:
+      properties:
+        changes:
+          description: |-
+            Changes is how many DISTINCT regimes may be adopted per Window. A restatement
+            identical to the regime in force mints no version and is not counted against
+            it.
+          type: integer
+        disposed:
+          description: |-
+            Disposed is how many versions retention has taken. It is NOT a silence: a
+            history bounded on disk must say what it no longer holds, because a decision
+            citing a disposed version can no longer be reconstructed from this record.
+          type: integer
+        history:
+          description: History is the retained versions, newest first.
+          items:
+            $ref: '#/components/schemas/riskPolicyVersion'
+          type: array
+        retained:
+          description: |-
+            Retained is how many versions this organisation's history holds at most,
+            derived from the byte budget its rows are a multiple of.
+          type: integer
+        version:
+          description: |-
+            Version is the version in force — the one every score currently cites. Zero
+            means no regime has ever been stated and the default posture, shadow, is in
+            force.
+          type: integer
+        window:
+          description: Window is the period Changes is measured over.
+          type: string
+      type: object
+    riskPolicyVersion:
+      properties:
+        at:
+          description: At is when it entered force, RFC 3339, from the server clock.
+          type: string
+        by:
+          description: |-
+            By is the identity that stated it, stamped server-side from the validated
+            principal at the moment it entered force.
+          type: string
+        live:
+          description: Live is whether the model was permitted to change an outcome
+            under it.
+          type: boolean
+        review:
+          description: |-
+            Review is the share of the stream the regime states may be examined. The
+            threshold in force is derived from it, which is why a decision is only
+            defensible against the version that produced it.
+          type: number
+        sample:
+          description: Sample is the share of below-the-line events the regime retains
+            for review.
+          type: number
+        version:
+          description: Version names this regime in this organisation's history.
+          type: integer
       type: object
     riskResolveIn:
       properties:
@@ -34290,6 +34360,14 @@ components:
             Cut is the threshold in force, derived from the stated appetite as a
             quantile of the scores actually observed rather than fixed at a number.
           type: number
+        policy:
+          description: |-
+            Policy is the version of your organisation's decision regime this verdict
+            was reached under, from its own policy history (GET /v1/risk/policy). Cut is
+            derived from the appetite that version states, so it is the record that makes
+            this decision reconstructible after the appetite is restated. Zero means no
+            regime has ever been stated and the default posture — shadow — was in force.
+          type: integer
         refusal:
           description: Refusal names why the model declined, when it did.
           type: string
@@ -87553,6 +87631,36 @@ paths:
                 $ref: '#/components/schemas/riskLearnOut'
           description: ok
       summary: Teach your organisation's own model from its own events
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/policy:
+    get:
+      description: |-
+        Policy reports the caller organisation's own decision-regime history: every
+        distinct regime it has adopted, which version is in force, and what retention
+        has taken.
+
+        WHY IT EXISTS. Every score cites the version it was decided under
+        ([riskScoreOut.Policy]), and the threshold that score was measured against is
+        derived from the appetite that version states. Restate the appetite and, without
+        this record, every earlier decision becomes unreconstructible — the cut it was
+        judged by no longer exists anywhere. An adverse decision that cannot be
+        explained against the policy in force when it was taken cannot be defended.
+
+        It covers ONE organisation. The history is on that organisation's own shelf, so
+        another's versions are not filtered out of the answer — they are not in the file
+        the answer is read from.
+      operationId: riskPolicy
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskPolicyOut'
+          description: ok
+      summary: Your organisation's decision-regime history, and which version is in
+        force
       tags:
       - risk
       x-app: risk

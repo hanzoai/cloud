@@ -157,6 +157,10 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 		zip.WithOperationID("riskRestore"),
 		zip.WithSummary("Install previously pinned state into your organisation's model"),
 		zip.WithTags("risk"))
+	zip.Get(g, "/policy", o.policy,
+		zip.WithOperationID("riskPolicy"),
+		zip.WithSummary("Your organisation's decision-regime history, and which version is in force"),
+		zip.WithTags("risk"))
 	zip.Get(g, "/features", o.features,
 		zip.WithOperationID("riskFeatures"),
 		zip.WithSummary("The feature catalogue: what the model reads, and what your surface carries"),
