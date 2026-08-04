@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/graph"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the graph app.
@@ -17,9 +18,13 @@ import (
 // `graph openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "graph",
-		Price: cloud.Free,
-		Mount: graph.Mount,
+		Name: "graph",
+		// Declared: undeclared falls back to /v1/graph, which this app does not
+		// serve — the scope then guards a path with no routes and zip refuses to
+		// compose (see plugin/account/main.go).
+		Prefixes: manifest.PrefixesFor("graph"),
+		Price:    cloud.Free,
+		Mount:    graph.Mount,
 	}}, []string{"graph"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
