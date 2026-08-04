@@ -68,6 +68,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/apps/tenant"
 	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -174,7 +175,7 @@ func Shutdown() error {
 // file, and the identity that asserted. All three come from the same validated
 // principal, resolved once.
 type scope struct {
-	tenant cloud.Tenant
+	tenant tenant.Key
 	// ns names the record plane this request writes. It travels with the scope so
 	// the ship names the same file the write went to — a ship that re-derived the
 	// name from anything else would be a second answer to "which file is this".
@@ -196,15 +197,16 @@ func tenantOf(ctx context.Context, s *cloud.Service[*state]) (scope, *store, err
 	if !ok {
 		return scope{}, nil, zip.ErrForbidden("no validated principal")
 	}
-	t, err := cloud.Qualify(s.State.brand, org)
+	// ONE MINT, and it is [tenant.Of]. The key this plane writes is the same key
+	// apps/dataset writes and apps/risk reads, so a second spelling of it here
+	// would be two planes disagreeing about whose a row is — which is the defect
+	// with the sign flipped, and it is silent. The mint canonicalises the brand
+	// half and refuses one no registry vouches for; a local Qualify did neither,
+	// so a deployment started with CLOUD_BRAND=Hanzo would have filed `Hanzo/acme`
+	// against a reader asking for `hanzo/acme`.
+	t, err := tenant.Of(ctx, s.State.brand)
 	if err != nil {
 		return scope{}, nil, err
-	}
-	// The mint's own shape check, asserted at the boundary rather than assumed.
-	// A regression here is the whole product: this key is the columnar partition,
-	// the sort prefix and the join term at once.
-	if !cloud.Qualified(s.State.brand, t) {
-		return scope{}, nil, zip.ErrForbidden("the tenant key is not qualified")
 	}
 	// THE ORG IS THE GRAIN, AND THE PROJECT IS NOT.
 	//

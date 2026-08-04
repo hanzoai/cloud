@@ -63,8 +63,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/tenant"
 )
 
 // columnar is the pair of statements that reach the derived copy: the write and
@@ -72,8 +72,8 @@ import (
 // aimed at the same world — a suite that could stub one and leave the other
 // pointed at a real warehouse would be proving something nobody deploys.
 type columnar struct {
-	send  func(context.Context, cloud.Tenant, []Fact) error
-	sweep func(context.Context, cloud.Tenant, []string) error
+	send  func(context.Context, tenant.Key, []Fact) error
+	sweep func(context.Context, tenant.Key, []string) error
 }
 
 // warehouse is the real thing: the process's one warehouse connection.
@@ -126,7 +126,7 @@ func ensure(ctx context.Context) error {
 // The tenant key is bound, never interpolated, and it is the caller's MINTED key
 // — the only value in this file that names a tenant, and one no request body can
 // carry.
-func mirror(ctx context.Context, t cloud.Tenant, facts []Fact) error {
+func mirror(ctx context.Context, t tenant.Key, facts []Fact) error {
 	if len(facts) == 0 {
 		return nil
 	}
@@ -171,7 +171,7 @@ const maxPending = 100 * drain
 // catch-up from becoming every other tenant's latency. It reports what it SENT
 // as well, because moving the cursor is a write to the tenant's file and the
 // caller owes that file a ship before it acknowledges anything.
-func deliver(ctx context.Context, t cloud.Tenant, st *store, c columnar) (sent, pending int, err error) {
+func deliver(ctx context.Context, t tenant.Key, st *store, c columnar) (sent, pending int, err error) {
 	at, err := st.mark(ctx)
 	if err != nil {
 		return 0, 0, err
@@ -199,7 +199,7 @@ func deliver(ctx context.Context, t cloud.Tenant, st *store, c columnar) (sent, 
 // bindings are inspectable without a warehouse — the tenant key leading every
 // row is the property worth pinning, and it is not one a test can see through
 // a connection that is down.
-func insert(t cloud.Tenant, facts []Fact) (string, []any) {
+func insert(t tenant.Key, facts []Fact) (string, []any) {
 	const width = 12
 	values := make([]string, 0, len(facts))
 	args := make([]any, 0, len(facts)*width)
@@ -240,7 +240,7 @@ VALUES ` + strings.Join(values, ","), args
 // record, so a chunk that failed leaves rows the record still names and the next
 // call identifies and deletes them again. Retrying a DELETE that already ran
 // costs nothing.
-func purge(ctx context.Context, t cloud.Tenant, ids []string) error {
+func purge(ctx context.Context, t tenant.Key, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -265,7 +265,7 @@ const purgeChunk = 2000
 // deletion builds the disposal. Separate from purge for the same reason insert
 // is separate from mirror: the two bound predicates are the whole safety
 // argument and a test must be able to read them.
-func deletion(t cloud.Tenant, ids []string) (string, []any) {
+func deletion(t tenant.Key, ids []string) (string, []any) {
 	holes := make([]string, len(ids))
 	args := make([]any, 0, len(ids)+1)
 	args = append(args, t.String())

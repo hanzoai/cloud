@@ -38,14 +38,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/tenant"
 )
 
 // live returns the tenant keys for one run, or skips. The org carries the run's
 // nanosecond so a second run cannot read the first one's rows and conclude
 // something about a statement it did not execute.
-func live(t *testing.T) (cloud.Tenant, cloud.Tenant) {
+func live(t *testing.T) (tenant.Key, tenant.Key) {
 	t.Helper()
 	if os.Getenv("DATASTORE_ADDR") == "" {
 		t.Skip("no DATASTORE_ADDR: the columnar half is unverified in this run")
@@ -59,13 +59,13 @@ func live(t *testing.T) (cloud.Tenant, cloud.Tenant) {
 		t.Fatalf("DATASTORE_ADDR is set but the warehouse never became reachable: %v", err)
 	}
 	stamp := time.Now().UnixNano()
-	mine, err := cloud.Qualify("hanzo", fmt.Sprintf("live%d", stamp))
+	mine, err := tenant.Mint("hanzo", fmt.Sprintf("live%d", stamp))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A NEIGHBOUR whose org slug differs only by brand — the exact pair a
 	// single-word tenant key would collapse.
-	theirs, err := cloud.Qualify("zoo", fmt.Sprintf("live%d", stamp))
+	theirs, err := tenant.Mint("zoo", fmt.Sprintf("live%d", stamp))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func row(t *testing.T, subject string, at, seen time.Time, d Disposition, src So
 }
 
 // resolvedAt runs the published contract at one horizon and returns the rows.
-func resolvedAt(t *testing.T, tn cloud.Tenant, from, to time.Time, days int, now time.Time) []map[string]any {
+func resolvedAt(t *testing.T, tn tenant.Key, from, to time.Time, days int, now time.Time) []map[string]any {
 	t.Helper()
 	h := int64(days) * 24 * 3600
 	rows, err := datastore.Query(t.Context(), ResolvedSQL(), tn.String(), from, to, h, h, now)
