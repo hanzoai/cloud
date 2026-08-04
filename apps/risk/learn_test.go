@@ -234,7 +234,7 @@ func TestAppetite_IsPerOrganisationAndShadowIsTheDefault(t *testing.T) {
 		t.Fatal("a brand-new model is LIVE — shadow must be the default, or a model nobody reviewed can refuse a payment")
 	}
 
-	if _, _, _, err := p.appetite(a, 0.05, 0.01, true, "u_"+orgA); err != nil {
+	if _, err := p.appetite(a, 0.05, 0.01, true, "u_"+orgA); err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
 	sa, _, _ := p.state(a)
@@ -257,10 +257,13 @@ func TestAppetite_KeepsWhatWasLearned(t *testing.T) {
 	teach(t, p, k, stream(400, time.Now().UTC().Add(-4*time.Hour)))
 	before, _, _ := p.state(k)
 
-	after, _, _, err := p.appetite(k, 0.02, 0.001, false, "u_"+orgA)
-	if err != nil {
+	if _, err := p.appetite(k, 0.02, 0.001, false, "u_"+orgA); err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
+	// READ THE MODEL FOR THE MODEL. A policy write answers the version it enacted
+	// and nothing about the learned state, so what the state is comes from the one
+	// place that owns it.
+	after, _, _ := p.state(k)
 	if after.Learned != before.Learned {
 		t.Fatalf("restating the appetite unlearned %d events", before.Learned-after.Learned)
 	}

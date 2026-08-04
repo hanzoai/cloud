@@ -120,10 +120,10 @@ in its own `plugin/<name>/main.go`.
 Same artifact; different startup configuration:
 
 ```bash
-cloud --enable=iam,base,kms,commerce,ai,gateway,o11y --brand=hanzo  --domain=hanzo.ai
-cloud --enable=iam,base,kms,commerce,ai,gateway,o11y --brand=osage  --domain=osage.cloud
-cloud --enable=iam,base,kms,commerce,ai,gateway,o11y --brand=lux    --domain=lux.cloud
-cloud --enable=iam,base,kms,commerce,ai,gateway,o11y --brand=zoo    --domain=zoo.cloud
+cloud --brand=hanzo  --domain=hanzo.ai
+cloud --brand=osage  --domain=osage.cloud
+cloud --brand=lux    --domain=lux.cloud
+cloud --brand=zoo    --domain=zoo.cloud
 ```
 
 ## Architecture
