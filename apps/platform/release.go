@@ -52,7 +52,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -831,7 +830,7 @@ func githubJSON(s *cloud.Service[state], ctx context.Context, method, path, toke
 // SuperAdmin-only, like cutting one: a release names the commits and versions of
 // the platform itself.
 func listSelfReleases(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := mayReadReleases(c); err != nil {
+	if err := mayRelease(c); err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": Releases()})
@@ -841,7 +840,7 @@ func listSelfReleases(s *cloud.Service[state], c *zip.Ctx) error {
 // is unknown OR has aged out of the in-memory record — the honest answer either
 // way, since this process cannot distinguish them.
 func getSelfRelease(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := mayReadReleases(c); err != nil {
+	if err := mayRelease(c); err != nil {
 		return err
 	}
 	st, ok := ReleaseByID(c.Param("id"))
@@ -851,16 +850,35 @@ func getSelfRelease(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, st)
 }
 
-// mayReadReleases mirrors the release GATE (runner.go): platform sudo, or admin of
-// the org that owns the published image. One rule, so the answer to "may I read
-// this?" can never be narrower than "may I have started it?".
-func mayReadReleases(c *zip.Ctx) error {
-	if principal.IsSuperAdmin(c) {
-		return nil
-	}
-	org, ok := principal.Org(c)
-	if !ok || !imageInOrgRegistry(releaseImage, org) || !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("reading releases requires admin of the org that owns " + releaseImage)
+// mayRelease is the ONE authority question this surface asks: may this caller act
+// on the platform's own release? Cutting one (runner.go) and reading one (above)
+// take the same answer from the same function, so the 202 can never hand back an id
+// its caller may not ask about, and the two can never drift.
+//
+// THE SCOPE IS cloud.Super, and nothing is conjoined to it. releaseImage is
+// ghcr.io/hanzoai/cloud — the binary every service in every org runs — so a release
+// is an act against SHARED platform state: the tag it publishes is what iam, kms,
+// gateway and every customer app roll onto at the next reconcile, in every tenant.
+// That is what cloud.Super names (gate.go), and SuperAdmin ⟺ `owner == "admin"` is
+// the one platform predicate the estate gates on.
+//
+// OWNING THE REGISTRY NAMESPACE IS NOT THAT PREDICATE. imageInOrgRegistry bounds an
+// ordinary push (runner.go) precisely because a push lands ONE tenant's artifact in
+// the namespace that tenant owns; a release lands OURS on everyone, so no property
+// of the caller's own org can be what admits it. Nor is the org-scoped `isAdmin`
+// bit a weaker spelling of platform authority: it is SELF-SERVICE — an org's own
+// admin sets it on a member of THEIR org — so admitting "admin of the org that owns
+// hanzoai" delegated the fleet's binary to whoever the `hanzo` tenant enrols, an
+// authority the platform does not administer. A gate whose far side can enrol its
+// own callers is not a gate.
+//
+// Validated is part of cloud.Super, which is what refuses the MACHINE path in the
+// same expression rather than a second one: PLATFORM_BUILD_CALLBACK_TOKEN mints no
+// principal, so a leaked build token may enqueue an ordinary build and can never
+// cut a release.
+func mayRelease(c *zip.Ctx) error {
+	if !cloud.Super.Admits(cloud.AuthorityOf(c)) {
+		return zip.ErrForbidden("a release of " + releaseImage + " requires SuperAdmin")
 	}
 	return nil
 }
