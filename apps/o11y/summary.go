@@ -144,12 +144,17 @@ type noArgs struct{}
 // mountSummary registers the public status face. It is a TYPED op so the one
 // registry every projection reads (OpenAPI, MCP, the CLI) carries it — this is a
 // published contract other people's clients call, and a raw route would be
-// invisible to all three. The bridge goes on its own prefix FIRST: fiber runs
-// middleware in registration order, so one installed after the leaf never runs,
-// and the handler needs the request to brand per Host and to set Cache-Control.
+// invisible to all three.
+//
+// The bridge this handler needs — it brands per Host and sets Cache-Control off
+// the request — is the app-wide one [mount] installs before calling this, so
+// there is none here. There used to be, on a.Group("/v1/summary"), and it was
+// the same defect twice over: the leaf below registers on the APP at the group's
+// own address rather than beneath the group, so the group wrapped nothing, and a
+// group that declares middleware and owns no leaf is a refused program. One
+// install, at the one scope that covers every noun this subsystem answers on.
 func mountSummary(a *zip.App, deps cloud.Deps) {
 	deploymentBrand = deps.Brand
-	a.Group("/v1/summary").Use(cloud.Bridge())
 	zip.Get(a, "/v1/summary", handleSummary)
 }
 
