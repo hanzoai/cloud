@@ -57,6 +57,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/base"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
@@ -147,6 +148,15 @@ type projectsProject struct {
 	// site posts form/forum/data submissions to under /v1/base.
 	Analytics bool   `json:"analytics"`
 	Space     string `json:"space,omitempty"`
+	// Key is the project's publishable ingest key, minted at create. It is the
+	// value the injected beacon carries and the ONE thing that attributes this
+	// site's events; the static-builder reads it beside analytics.
+	//
+	// Publishable means it belongs in a page's source: it names a write scope and
+	// mints no principal, so it is returned in full rather than masked. Masking it
+	// would only mean every caller needed a second endpoint to get the thing the
+	// page already ships.
+	Key string `json:"key,omitempty"`
 	// ForkedFrom is the parent this project was forked from ("<org>/<slug>" of a
 	// published project, or a catalog template slug) — the attribution edge a
 	// gallery credits.
@@ -175,7 +185,7 @@ func toProject(p Project) projectsProject {
 		Repo:      projectsRepo{URL: p.RepoURL, Branch: p.RepoBranch, Provider: p.RepoProvider},
 		Framework: p.Framework, Status: p.Status, LiveURL: p.LiveURL, Bucket: p.Bucket,
 		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
-		Analytics: p.Analytics, Space: p.SpaceId,
+		Analytics: p.Analytics, Space: p.SpaceId, Key: p.Key,
 		ForkedFrom: p.ForkedFrom,
 		Visibility: p.Visibility, Hidden: p.Hidden, HiddenReason: p.HiddenReason,
 		Upstream: p.Upstream, License: p.License,
@@ -268,6 +278,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// co-resident takes the in-process answer with no hop, split takes the plane.
 	setResolverForPlane(siteResolver{store: store})
 	exposeSites()
+
+	// The ingest door's key→project resolver, on both paths for the same reason.
+	// This is the whole of "a site with no project stops recording": the door asks
+	// this store which project a beacon's key names, and a key nothing holds is a
+	// refusal.
+	analytics.SetKeyResolver(keyResolver{store: store})
+	setKeyResolverForPlane(keyResolver{store: store})
+	exposeKeys()
 
 	// Register the store as a project-ownership resolver for the identity trust
 	// boundary (cloud.SanitizeIdentity), so a forged cross-org X-Project-Id is
@@ -590,7 +608,9 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	// /v1/sites) applies the wired-by-default subsystems: analytics ON unless the
 	// caller opted out, and the project's Base data-space namespace. Pure, so the
 	// defaults are set deterministically before persist.
-	setProjectDefaults(&p, body.Analytics)
+	if err := setProjectDefaults(&p, body.Analytics); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
 	if err := s.State.store.CreateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errConflict) {
 			return nil, zip.ErrConflict("project slug already exists in this org")
@@ -609,15 +629,28 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 }
 
 // setProjectDefaults applies the wired-by-default project settings to a NEW
-// project: analytics ON unless the caller opted out (analytics:false), and the
-// Base data-space namespace ("<org>/<slug>" — the app's namespace/repoId
-// convention, same layout as the S3 sitePrefix). Pure (no I/O), so it is the ONE
-// deterministic place defaults are decided; every create path funnels through it
-// via createProject. Default-ON but overridable: a nil analytics ⇒ ON, an
-// explicit false ⇒ off.
-func setProjectDefaults(p *Project, analytics *bool) {
+// project: analytics ON unless the caller opted out (analytics:false), the Base
+// data-space namespace ("<org>/<slug>" — the app's namespace/repoId convention,
+// same layout as the S3 sitePrefix), and the publishable ingest key. It is the ONE
+// place defaults are decided; every create path funnels through it via
+// createProject. Default-ON but overridable: a nil analytics ⇒ ON, an explicit
+// false ⇒ off.
+//
+// THE KEY IS MINTED HERE, WITH THE PROJECT, AND NOWHERE ELSE. That is what makes
+// analytics zero-config: a site is created and its beacon already has the one
+// credential that attributes it, so nothing downstream has to remember to ask for
+// one. Minting is the single non-deterministic step (crypto/rand) and the reason
+// this returns an error at all — a project that could not get a key must not be
+// created, because it would be a site that silently records nothing.
+func setProjectDefaults(p *Project, analytics *bool) error {
 	p.Analytics = analytics == nil || *analytics
 	p.SpaceId = sitePrefix(p.Org, p.Slug)
+	key, err := mintKey()
+	if err != nil {
+		return err
+	}
+	p.Key = key
+	return nil
 }
 
 // provisionSpace best-effort-provisions a new project's Base data space (the

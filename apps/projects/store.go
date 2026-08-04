@@ -109,6 +109,17 @@ type Project struct {
 	// no opt-in. Mutable via update (read-modify-write); immutable columns are
 	// org/slug/id/created_at.
 	Analytics bool
+	// Key is the project's publishable ingest key (pk-…) — the ONE thing that
+	// attributes this site's beacons. Minted at create, immutable, and the value
+	// the injected beacon carries; ResolveKey reads it back to answer which
+	// (org, project) a write belongs to. Delete the project and the key resolves
+	// to nothing, which is how "no site ⇒ no recording" is structural rather than
+	// a policy someone has to remember.
+	//
+	// It is publishable in the same sense IAM's pk- is: it names a write scope and
+	// mints no principal (cloud.IsPublishableKey keeps it off the identity path),
+	// so shipping it in a page's source is what it is FOR.
+	Key string
 	// SpaceId is the project's Base data space — the "<org>/<slug>" namespace under
 	// which its deployed site's form/forum/data submissions live in Hanzo Base
 	// (/v1/base). Set once at create (the app's namespace/repoId convention);
@@ -329,6 +340,10 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		// default: it says nothing, rather than asserting the work is ours.
 		`ALTER TABLE projects ADD COLUMN upstream TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE projects ADD COLUMN license TEXT NOT NULL DEFAULT ''`,
+		// key is the project's publishable ingest key. It backfills EMPTY and is
+		// then minted per row by backfillKeys below, because a shared default would
+		// be one key for every tenant — the column default cannot be the credential.
+		`ALTER TABLE projects ADD COLUMN key TEXT NOT NULL DEFAULT ''`,
 		// Every site_hosts row that exists when this migration runs is ALREADY
 		// SERVING, so the default must be 'verified'. Defaulting to 'pending'
 		// would take every live custom domain and subdomain off the air the
@@ -351,13 +366,63 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		!strings.Contains(err.Error(), "no such column") {
 		return fmt.Errorf("migrate drop official: %w", err)
 	}
+	if err := s.backfillKeys(); err != nil {
+		return err
+	}
+	// Unique over the keys that EXIST. A partial index is what makes this
+	// expressible at all: '' is the pre-backfill state and would collide with
+	// itself on a plain UNIQUE, so the constraint names the invariant that
+	// matters — one project per issued key — and says nothing about rows that
+	// have none. Created after the backfill so it never has to tolerate one.
+	if _, err := s.db.Exec(
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_projects_key ON projects(key) WHERE key != ''`); err != nil {
+		return fmt.Errorf("migrate index key: %w", err)
+	}
+	return nil
+}
+
+// backfillKeys mints a key for every project that predates the column. Without it
+// every site published before this migration ingests nothing: its beacon resolves
+// to no project and is refused, which is the correct answer to a missing key and
+// the wrong answer to a live site. Forward-only and idempotent — a row with a key
+// is never revisited, so re-running it cannot rotate a credential already serving.
+func (s *Store) backfillKeys() error {
+	rows, err := s.db.Query(`SELECT id FROM projects WHERE key = ''`)
+	if err != nil {
+		return fmt.Errorf("migrate backfill keys: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("migrate backfill keys: scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("migrate backfill keys: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("migrate backfill keys: close: %w", err)
+	}
+	for _, id := range ids {
+		key, err := mintKey()
+		if err != nil {
+			return fmt.Errorf("migrate backfill keys: %w", err)
+		}
+		if _, err := s.db.Exec(`UPDATE projects SET key=? WHERE id=? AND key=''`, key, id); err != nil {
+			return fmt.Errorf("migrate backfill keys: update: %w", err)
+		}
+	}
 	return nil
 }
 
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,visibility,hidden,hidden_reason,upstream,license`
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,visibility,hidden,hidden_reason,upstream,license,key`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
@@ -366,7 +431,7 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
 		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt,
 		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Visibility, &p.Hidden, &p.HiddenReason,
-		&p.Upstream, &p.License)
+		&p.Upstream, &p.License, &p.Key)
 	return p, err
 }
 
@@ -374,13 +439,13 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
 		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
 		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt,
 		p.Analytics, p.SpaceId, p.ForkedFrom, p.Visibility, p.Hidden, p.HiddenReason,
-		p.Upstream, p.License)
+		p.Upstream, p.License, p.Key)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -400,6 +465,28 @@ func (s *Store) GetProject(ctx context.Context, org, slug string) (Project, erro
 	}
 	if err != nil {
 		return Project{}, fmt.Errorf("get project: %w", err)
+	}
+	return p, nil
+}
+
+// ResolveKey returns the project holding this publishable ingest key, or
+// errNotFound. It is the whole of ingest attribution: the key names the project,
+// the project names the org, and a key no project holds resolves to nothing.
+//
+// An empty key is refused before the query rather than by it. Every pre-backfill
+// row stored ” and the partial index deliberately permits duplicates there, so a
+// blank lookup is the one input that could match rows it has no relationship to.
+func (s *Store) ResolveKey(ctx context.Context, key string) (Project, error) {
+	if strings.TrimSpace(key) == "" {
+		return Project{}, errNotFound
+	}
+	row := s.db.QueryRowContext(ctx, `SELECT `+projectCols+` FROM projects WHERE key=?`, key)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve key: %w", err)
 	}
 	return p, nil
 }

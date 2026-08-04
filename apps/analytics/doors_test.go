@@ -22,12 +22,8 @@ import (
 
 // doors_test.go — the ingest SURFACE is one set, and these are its proofs.
 //
-// Three things used to answer "what is an ingest door" independently: the route
-// table, sites' analyticsPaths literal, and a path switch inside the carve. They
-// disagreed — /v1/tracker and /v1/ingest were routed doors sites did not name, so the
-// same beacon was admitted on an API host and 405'd on a site host. doors (event.go)
-// is now the only answer and both surfaces derive from it; the tests below hold that
-// shut from both ends.
+// doors (event.go) is the only answer to "what is an ingest door"; the router derives
+// from it, and the tests below hold that shut.
 //
 // Every gate assertion here is QUANTIFIED OVER doors rather than written against a
 // path list, so a door added tomorrow inherits the whole contract instead of needing
@@ -84,8 +80,7 @@ func sameWire(a, b decode) bool { return samePtr(a, b) }
 //     named them, has no importer left in the fleet.
 //
 // /v1/tracker is retired FROM THIS PACKAGE only, and this list is scoped to this
-// package's two surfaces (its own router and the carve it hands sites). The path
-// itself belongs to the tracker product, which owns the prefix in the app manifest
+// package's own router. The path itself belongs to the tracker product, which owns the prefix in the app manifest
 // and keeps serving /v1/tracker/projects/… — analytics squatting the bare path is
 // precisely what ends here. mountApp mounts analytics alone, so a 404 in this
 // harness is the honest statement that ANALYTICS no longer answers there.
@@ -96,28 +91,6 @@ var retiredDoors = []string{
 	// /capture reach it through the ingress rewrite, so no caller moved.
 	"/v1/insights/e",
 	"/v1/analytics", "/v1/analytics/batch", "/v1/tracker",
-}
-
-// notDoors are paths that must never ingest: the read lenses, near-miss spellings, and
-// the neighbouring subsystem's route. They are the paired negative for every positive
-// below — widen the door lookup to a prefix, or give it a default case, and these go
-// red.
-//
-// The last row is the deliberate strictness. c.Path() is the RAW request target —
-// zip returns Fiber's path verbatim and nothing upstream unescapes or normalizes it
-// (see resolveKey in clients/sites) — and the carve matches it BYTE-EXACTLY. So an
-// encoded or denormalized spelling of a real door misses the carve and is served as
-// static, even where Fiber's own router would still reach the door (POST /v1/event/
-// routes on an API host and does not carve on a site host). That asymmetry is chosen,
-// not overlooked: the carve hands a request a tenant derived from a Host, so it admits
-// only the exact strings it was given, and every near-miss fails to the static serve.
-// Normalizing here to match the router would widen a security-relevant exact set to
-// chase a routing convenience — the same mistake as the prefix match this set replaced.
-var notDoors = []string{
-	"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top",
-	"/v1/analytics/health", "/v1/analytics/anything", "/v1/analytics/batch/extra",
-	"/v1/eventx", "/v1/insights/e/extra", "/v1/insights/events", "/v1/tracker/projects",
-	"/v1/%65vent", "/v1/event/", "//v1/event", "/v1/./event", "/v1/x/../event",
 }
 
 func doorPaths() []string {
@@ -216,10 +189,9 @@ func TestWritePathSeamsDefaultToTheRealThing(t *testing.T) {
 	}
 }
 
-// tenants returns the org of every fact committed — the fact the site-host lane
-// and the anonymous lane must disagree about, and the only place that disagreement
-// is visible. The wide row died with hanzo.events, so the fact's own envelope is
-// where the tenant stamp is read now.
+// tenants returns the org of every fact committed — the only place the tenant a lane
+// actually wrote is visible. The wide row died with hanzo.events, so the fact's own
+// envelope is where the tenant stamp is read now.
 func (w *warehouse) tenants(t *testing.T) []string {
 	t.Helper()
 	out := make([]string, 0, len(w.facts))
@@ -261,7 +233,7 @@ func sameSet(a, b []string) bool {
 }
 
 // admittedWire returns the body, from cands, that THIS door's own wire decodes into
-// exactly one event the anonymous lane ADMITS. Picking the body through the door's
+// exactly one event the PROJECTION admits. Picking the body through the door's
 // real decoder + the real projection is what lets every test below quantify over
 // doors without a per-wire lookup table beside it — the thing whose duplication
 // caused the drift in the first place.
@@ -276,12 +248,12 @@ func admittedWire(t *testing.T, d door, cands ...string) string {
 			return b
 		}
 	}
-	t.Fatalf("no candidate body is admitted by the anonymous lane on door %s", d.path)
+	t.Fatalf("no candidate body is admitted by the projection on door %s", d.path)
 	return ""
 }
 
-// droppedWire is the twin: exactly one decoded event that the anonymous lane REFUSES
-// (a commerce/custom kind), which is what proves capability rather than reachability.
+// droppedWire is the twin: exactly one decoded event the PROJECTION refuses (a
+// commerce/custom kind), which is what proves capability rather than reachability.
 func droppedWire(t *testing.T, d door, cands ...string) string {
 	t.Helper()
 	for _, b := range cands {
@@ -293,7 +265,7 @@ func droppedWire(t *testing.T, d door, cands ...string) string {
 			return b
 		}
 	}
-	t.Fatalf("no candidate body is dropped by the anonymous lane on door %s", d.path)
+	t.Fatalf("no candidate body is dropped by the projection on door %s", d.path)
 	return ""
 }
 
@@ -383,15 +355,9 @@ func TestIngestSurfaceIsExactlyTheContract(t *testing.T) {
 // that reaches the ROW. Without it, source could be pinned in the table and dropped on
 // the way to the warehouse and both halves would still look right.
 //
-// It quantifies over doors × HANDLERS, because a door has two of them and they stamp
-// $source independently: ingest (the API host, via handle) and anon (the site host,
-// which calls publicIngest directly). Driving only the ingest half left the anon half
-// free to stamp a CONSTANT, and $source is precisely the signal the alias sunset is
-// decided on — the documented rule is that a door may be retired when its $source
-// volume reaches zero, so an anon lane that stamped 'event' for every door would read
-// as "/v1/tracker is dead" while site-host callers were still beaconing it. The
-// sunset is a delete-the-route decision made on this column; it has to be true on
-// EVERY lane that writes it, not just the one a test happened to drive.
+// $source is the signal the alias sunset is decided on — a door may be retired when
+// its volume reaches zero — so the value declared in the table has to be the value
+// that reaches the column.
 func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	for _, d := range doors {
@@ -401,106 +367,28 @@ func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 			t.Fatalf("door %s = %d (%s), want 200 (written to the fake warehouse)", d.path, code, body)
 		}
 		if got := w.sources(t); len(got) != 1 || got[0] != d.source {
-			t.Errorf("door %s ingest lane wrote $source %v, want [%s]", d.path, got, d.source)
-		}
-
-		w = fakeWarehouse(t)
-		site := carveApp(t, "hanzo")
-		if code := postHost(t, site, "yadota.hanzo.app", d.path, pageviewFor(t, d), nil); code != http.StatusOK {
-			t.Fatalf("site-host door %s = %d, want 200 (admitted and written)", d.path, code)
-		}
-		if got := w.sources(t); len(got) != 1 || got[0] != d.source {
-			t.Errorf("door %s anon lane wrote $source %v, want [%s] — the sunset metric must name "+
-				"the door the beacon actually arrived through, on this lane too", d.path, got, d.source)
+			t.Errorf("door %s wrote $source %v, want [%s]", d.path, got, d.source)
 		}
 	}
 }
 
-// ── the site-host lane, which is the one that derives a tenant from a Host ───
+// ── the tenant is the credential's, and a beacon without one writes nothing ──
 
-// TestSiteHostLaneWritesTheResolvedSiteOrg is the tenant proof for the carve, and the
-// reason the warehouse seam exists. Every declared door, POSTed to a LIVE site host,
-// must write rows under the RESOLVED Site.Org — not the reserved public tenant, and
-// not the org the request claims in a header or body.
-//
-// Paired failures, all of which used to pass unnoticed because the pipeline stopped at
-// the readiness gate and every case answered 503: pass publicTenant instead of org and
-// a customer's own site analytics land in a partition they cannot read; honour the
-// caller's X-Org-Id and a stranger writes into any org they can name.
-func TestSiteHostLaneWritesTheResolvedSiteOrg(t *testing.T) {
-	tightenPublicRate(t, 1_000_000, 1_000_000)
-	for _, d := range doors {
-		w := fakeWarehouse(t)
-		app := carveApp(t, "hanzo")
-		if code := postHost(t, app, "yadota.hanzo.app", d.path, pageviewFor(t, d),
-			map[string]string{"X-Org-Id": "attacker", "X-User-Id": "attacker-user"}); code != http.StatusOK {
-			t.Fatalf("site-host door %s = %d, want 200 (admitted and written)", d.path, code)
-		}
-		got := w.tenants(t)
-		if len(got) != 1 || got[0] != "hanzo" {
-			t.Errorf("site-host door %s wrote tenants %v, want [hanzo] — the carve must file a "+
-				"beacon under the RESOLVED Site.Org", d.path, got)
-		}
-		for _, g := range got {
-			if g == publicTenant {
-				t.Errorf("site-host door %s filed the site's own beacon under %q, where its owner "+
-					"cannot read it", d.path, publicTenant)
-			}
-			if g == "attacker" {
-				t.Errorf("site-host door %s took the tenant from the caller's header", d.path)
-			}
-		}
-	}
-}
-
-// TestSiteHostLaneNeverConsultsHandle: on a site host the anonymous lane is reached
-// DIRECTLY, and it has to be. sites.Middleware runs before the identity boundary, so
-// X-User-Id / X-Org-Id there are still raw client headers that nothing has validated —
-// exactly the shape SanitizeIdentity would have minted for a real bearer.
-//
-// So a request carrying them must still be PROJECTED. If door.anon consulted handle,
-// those headers would resolve a principal and buy full capability, and the commerce
-// payload would become a row under whatever org the caller named. The assertion is on
-// the ROW, not the status: with a warehouse in place "admitted" is a 200 too, so a
-// status check alone cannot tell the two lanes apart.
-func TestSiteHostLaneNeverConsultsHandle(t *testing.T) {
-	tightenPublicRate(t, 1_000_000, 1_000_000)
-	for _, d := range doors {
-		w := fakeWarehouse(t)
-		app := carveApp(t, "hanzo")
-		code := postHost(t, app, "yadota.hanzo.app", d.path, commerceFor(t, d),
-			map[string]string{"X-User-Id": "user-dave", "X-Org-Id": "acme"})
-		// 401: the projection refused the whole payload, which is the point — had the
-		// carve consulted handle, those raw headers would have bought full capability
-		// and the batch would have reached the write core (503) and been STORED.
-		if code != http.StatusUnauthorized {
-			t.Fatalf("site-host door %s with raw identity headers = %d, want 401", d.path, code)
-		}
-		if got := w.tenants(t); len(got) != 0 {
-			t.Errorf("site-host door %s STORED a commerce payload under %v — the site-host lane "+
-				"consulted handle, so unvalidated headers bought full capability", d.path, got)
-		}
-	}
-}
-
-// TestApiHostAnonymousLaneWritesThePublicTenant is the other half of the tenant pair:
-// on an API host a credential-less caller is the RESERVED public tenant, whatever Host
-// it used. Together with the site-host test above, this is what makes each lane's
-// tenant a checked fact rather than a comment — one must be $public and the other must
-// not, so a change that collapses them fails on one side or the other.
-func TestApiHostAnonymousLaneWritesThePublicTenant(t *testing.T) {
+// TestApiHostAnonymousWritesNothing: a credential-less caller is REFUSED on every
+// door, whatever Host it used, and reaches the warehouse not at all. There is no
+// reserved tenant to fall back to — a row lands in the org a credential named or it
+// does not land.
+func TestApiHostAnonymousWritesNothing(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	for _, d := range doors {
 		for _, host := range []string{"api.hanzo.ai", "hanzo.ai"} {
 			w := fakeWarehouse(t)
 			app := mountApp(t)
-			if code, body := doHost(t, app, d.path, "", "", host, pageviewFor(t, d)); code != http.StatusOK {
-				t.Fatalf("anonymous door %s on %q = %d (%s), want 200", d.path, host, code, body)
-			}
-			got := w.tenants(t)
-			if len(got) != 1 || got[0] != publicTenant {
-				t.Errorf("anonymous door %s on host %q wrote tenants %v, want [%s] — no Host names a tenant",
-					d.path, host, got, publicTenant)
+			code, body := doHost(t, app, d.path, "", "", host, pageviewFor(t, d))
+			refusedAnon(t, "anonymous door "+d.path+" on host "+host, code, body)
+			if got := w.tenants(t); len(got) != 0 {
+				t.Errorf("anonymous door %s on host %q wrote tenants %v, want none — a beacon "+
+					"nobody can attribute must not reach the warehouse", d.path, host, got)
 			}
 		}
 	}
@@ -536,13 +424,13 @@ func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 }
 
 // TestEveryDoorIsRoutedAndAdmits is the positive half on the API host: each declared
-// door actually exists (never 404) and reaches the write core for an admissible
-// anonymous event (503, no datastore in the harness).
+// door actually exists (never 404) and, for a credential that resolves, reaches the
+// write core (503, no datastore in the harness).
 func TestEveryDoorIsRoutedAndAdmits(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
 	for _, d := range doors {
-		code, body := doHost(t, app, d.path, "", "", "api.hanzo.ai", pageviewFor(t, d))
+		code, body := doBody(t, app, http.MethodPost, d.path, "user-dave", "acme", pageviewFor(t, d))
 		if code == http.StatusNotFound {
 			t.Errorf("door %s is declared but not routed (404)", d.path)
 			continue
@@ -553,19 +441,13 @@ func TestEveryDoorIsRoutedAndAdmits(t *testing.T) {
 	}
 }
 
-// TestRetiredDoorIsGoneFromBothSurfaces is the deletion proof, and it checks BOTH
-// surfaces because deleting a route while leaving the carve entry (or the reverse) is
-// the exact failure mode this whole change removes. A retired door must 404 on the API
-// host and fall to the static serve (405) on a site host.
-func TestRetiredDoorIsGoneFromBothSurfaces(t *testing.T) {
+// TestRetiredDoorIsGone is the deletion proof: a retired door must 404 on the API host
+// and be absent from the door table.
+func TestRetiredDoorIsGone(t *testing.T) {
 	api := mountApp(t)
-	site := carveApp(t, "hanzo")
 	for _, p := range retiredDoors {
 		if code, body := doHost(t, api, p, "", "", "api.hanzo.ai", canonPageview); code != http.StatusNotFound {
 			t.Errorf("retired door %s is still routed on the API host: %d (%s)", p, code, body)
-		}
-		if code := postHost(t, site, "yadota.hanzo.app", p, canonPageview, nil); code != http.StatusMethodNotAllowed {
-			t.Errorf("retired door %s is still carved on a site host: %d (want 405, static serve)", p, code)
 		}
 		for _, d := range doors {
 			if d.path == p {
@@ -575,54 +457,12 @@ func TestRetiredDoorIsGoneFromBothSurfaces(t *testing.T) {
 	}
 }
 
-// ── the carve set IS the door set ───────────────────────────────────────────
-
-// TestSiteHostCarvesExactlyTheDoors is the reconciliation proof. On a live site host
-// every declared door is carved to the anonymous lane under the SITE's org, and no
-// non-door is — so the routed set (pinned exactly above) and the carved set are the
-// same set. Before, they were not: /v1/tracker routed here and 405'd there.
-//
-// The negative half is the paired failure: hand sites anything other than the doors,
-// or let its lookup fall back to a default, and a notDoors path starts carving.
-func TestSiteHostCarvesExactlyTheDoors(t *testing.T) {
-	tightenPublicRate(t, 1_000_000, 1_000_000)
-	for _, d := range doors {
-		app := carveApp(t, "hanzo")
-		// A forged org on the wire must not win — the tenant is the resolved Site's.
-		if code := postHost(t, app, "yadota.hanzo.app", d.path, pageviewFor(t, d),
-			map[string]string{"X-Org-Id": "attacker"}); code != http.StatusServiceUnavailable {
-			t.Errorf("door %s on a site host = %d, want 503 (carved, ingested for the site org)", d.path, code)
-		}
-	}
-	app := carveApp(t, "hanzo")
-	for _, p := range notDoors {
-		if code := postHost(t, app, "yadota.hanzo.app", p, canonPageview, nil); code != http.StatusMethodNotAllowed {
-			t.Errorf("non-door %s carved on a site host: %d (want 405, static serve)", p, code)
-		}
-	}
-}
-
-// TestSiteHostCarveNeedsAResolvedSite: the carve is gated on a Site actually
-// resolving, not merely on the host looking like one. An unresolvable slug host falls
-// to the static serve on EVERY door — no door turns an unbacked Host into a tenant.
-func TestSiteHostCarveNeedsAResolvedSite(t *testing.T) {
-	app := carveApp(t, "hanzo") // the resolver knows only "yadota"
-	for _, d := range doors {
-		if code := postHost(t, app, "nosuchsite.hanzo.app", d.path, pageviewFor(t, d), nil); code == http.StatusServiceUnavailable {
-			t.Errorf("door %s ingested on an UNRESOLVED site host — the carve must require a resolved Site", d.path)
-		}
-	}
-}
-
 // ── the gate, quantified over every door ────────────────────────────────────
 
 // TestEveryDoorFailsClosedOnUnresolvableCredential is THE admission gate. A caller that
-// PRESENTED a credential which does not resolve is refused on every door — never
-// silently downgraded into the anonymous lane, where its events would land in a
-// partition its owner cannot read.
-//
-// Paired failure: delete handle's `if presented(c)` branch and every door answers 200
-// or 503 instead of 403, and this fails on all of them at once.
+// PRESENTED a credential which does not resolve is refused 403 on every door — never
+// downgraded, because a downgrade files a misconfigured key's events where its owner
+// cannot read them.
 func TestEveryDoorFailsClosedOnUnresolvableCredential(t *testing.T) {
 	for _, d := range doors {
 		app := mountApp(t)
@@ -639,14 +479,13 @@ func TestEveryDoorFailsClosedOnUnresolvableCredential(t *testing.T) {
 	}
 }
 
-// TestEveryDoorProjectsTheAnonymousCaller is the capability gate. With no credential
-// of any kind, on a RECOGNIZED BRAND HOST, a commerce payload must be dropped — never
-// stored, and never at full capability into a real org.
+// TestEveryDoorRefusesTheAnonymousCaller is the capability gate. With no credential of
+// any kind, on a RECOGNIZED BRAND HOST, a commerce payload is refused — never stored,
+// and never at full capability into a real org.
 //
 // 503 is the failure signal here, not the success one: it would mean the request
-// reached the write core unprojected. Paired failure: give handle a host fallback, or
-// let admitPublic see the org, and these turn 503.
-func TestEveryDoorProjectsTheAnonymousCaller(t *testing.T) {
+// reached the write core. Paired failure: give handle a host fallback and these turn 503.
+func TestEveryDoorRefusesTheAnonymousCaller(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
 	for _, d := range doors {
@@ -663,8 +502,8 @@ func TestEveryDoorProjectsTheAnonymousCaller(t *testing.T) {
 }
 
 // TestEveryDoorAdmitsAValidatedPrincipal is the "the gate is not just a wall" half: a
-// validated bearer keeps FULL capability on every door, so the commerce payload the
-// anonymous lane drops is admitted here (503 = reached the write core).
+// validated bearer keeps FULL capability on every door, so the commerce payload a
+// credential-less caller is refused for is admitted here (503 = reached the write core).
 func TestEveryDoorAdmitsAValidatedPrincipal(t *testing.T) {
 	app := mountApp(t)
 	for _, d := range doors {
