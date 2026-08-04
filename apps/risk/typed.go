@@ -958,7 +958,7 @@ func (o ops) features(ctx context.Context, in *riskCatalogIn) (*riskCatalog, err
 	// four source planes into the tenant's own surface — up to 120 bounded
 	// INSERT..SELECT statements against the single warehouse pod — and then reads
 	// the window back. It was free, and it is the most expensive read here.
-	pay, err := o.gate(ctx, "features", int(days/(24*time.Hour)))
+	pay, err := o.gate(ctx, "features", windowScreens(days))
 	if err != nil {
 		return nil, err
 	}
@@ -993,7 +993,7 @@ func (o ops) features(ctx context.Context, in *riskCatalogIn) (*riskCatalog, err
 		// METERED ANYWAY. The roll above already ran against the warehouse, and the
 		// meter's contract is what was DONE — a read that reached the surface and
 		// then could not be summarised still cost the window it rolled.
-		pay(int(days / (24 * time.Hour)))
+		pay(windowScreens(days))
 		out.Gap = err.Error()
 		out.Surface = []riskOrgFeature{}
 		return &out, nil
@@ -1015,7 +1015,7 @@ func (o ops) features(ctx context.Context, in *riskCatalogIn) (*riskCatalog, err
 	if err != nil {
 		out.gap(err)
 	}
-	pay(int(days / (24 * time.Hour)))
+	pay(windowScreens(days))
 	return &out, nil
 }
 
@@ -1076,34 +1076,23 @@ func (o ops) search(ctx context.Context, in *riskSearchIn) (*riskSearchRun, erro
 		return nil, err
 	}
 	defer leave()
-	// A search is real compute over real history, so it is GATED before any of it
-	// runs, on the caller's OWN ledger, and it fails closed: a commerce that
-	// cannot be reached refuses rather than admits. It is priced as the screens it
-	// will actually perform — every candidate over every event — so the biggest
-	// operation on this surface is not also the cheapest.
+	// A search is real compute over real history and it is GATED before any of it
+	// runs, on the caller's OWN ledger, failing closed: a commerce that cannot be
+	// reached refuses rather than admits.
 	//
-	// The gate runs where the SIZE is known: [plane.begin] measures the history
-	// first and admits the run second, so the balance check is against the work
-	// actually about to happen rather than against a flat fee that is wrong in both
-	// directions.
+	// BOTH HALVES, EACH BEFORE ITS OWN WORK. [plane.begin] prices the surface read
+	// from the window and the grid from the measured history, and meters each on
+	// what it actually did — see there for why one price would be wrong in both
+	// directions. This op hands it the seam and nothing else: the plane never
+	// reaches the request, the ledger or the rate.
 	//
-	// AND THE METER RUNS IN THE RUN, not here. This op answers 202 and the grid
-	// runs behind it; metering at accept would charge for every candidate over
+	// AND THE GRID'S METER RUNS IN THE RUN, not here. This op answers 202 and the
+	// grid runs behind it; metering at accept would charge for every candidate over
 	// every event the moment the run was ADMITTED, and a rollout — which this
 	// binary does at one replica, stopping the old pod first — cancels the run
-	// partway with the debit already taken. What is charged is what the run
-	// actually replayed, booked by [plane.begin] when the grid ends, however it
-	// ends. The gate still runs on the upper bound, which is the contract this file
-	// states: gate on what MIGHT happen, meter on what DID.
-	var pay func(int)
-	run, err := p.begin(ctx, t, days, func(events int) error {
-		var err error
-		pay, err = o.gate(ctx, "search", events*len(candidates()))
-		return err
-	}, func(screens int) {
-		if pay != nil {
-			pay(screens)
-		}
+	// partway with the debit already taken.
+	run, err := p.begin(ctx, t, days, func(kind string, n int) (func(int), error) {
+		return o.gate(ctx, kind, n)
 	})
 	if err != nil {
 		return nil, wrap(err)
@@ -1185,6 +1174,16 @@ func screenRate() int64 {
 	}
 	return n
 }
+
+// windowScreens prices a WINDOW of the warehouse: one screen per day rolled up
+// and read back. Bringing an organisation's feature surface current is up to 120
+// bounded INSERT..SELECT statements against the one warehouse pod plus a read of
+// the window, and its size is the window and nothing else.
+//
+// It is one function because two surfaces do that work — the feature catalogue
+// and a search's setup — and a unit spelled twice is a unit that eventually
+// differs in one of the places.
+func windowScreens(window time.Duration) int { return int(window / (24 * time.Hour)) }
 
 // screenMicros is what n screens cost, in micro-USD.
 func screenMicros(n int) int64 {
