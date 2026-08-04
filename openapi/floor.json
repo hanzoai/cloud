@@ -1,6 +1,6 @@
 {
-  "paths": 1691,
-  "operations": 2344,
+  "paths": 1695,
+  "operations": 2350,
   "products": {
     "admin": 87,
     "ads": 7,
@@ -141,7 +141,7 @@
     "rerank": 1,
     "research": 8,
     "responses": 1,
-    "risk": 17,
+    "risk": 23,
     "router": 40,
     "run": 1,
     "runner": 3,
