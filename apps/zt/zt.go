@@ -100,8 +100,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ztOps{s: s}
 	zapp := cloud.ZipApp(app)
 
+	// ONE bridge for the subsystem. scope gates it to the prefixes zt declares,
+	// so it reaches /v1/networks and /v1/mesh/services and nothing else — where
+	// a per-group install sat at /v1/mesh, one level ABOVE anything zt serves.
+	app.Use(cloud.Bridge())
+
 	ng := app.Group("/v1/networks")
-	ng.Use(cloud.Bridge())
 	zip.Get(zapp, "/v1/networks", o.listNetworks)
 	// The overlay's routers hang off the network they belong to, so they register on
 	// the SAME group — one Bridge, one subtree, no second top-level name. "routers" is
@@ -113,7 +117,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(ng, "/:id", o.getNetwork)
 
 	mg := app.Group("/v1/mesh")
-	mg.Use(cloud.Bridge())
 	zip.Get(mg, "/services", o.listMeshServices)
 }
 

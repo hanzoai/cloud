@@ -83,19 +83,34 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // routes registers the org-scoped audit surface.
 //
-// Bridge FIRST and noStore beside it, both installed on the subsystem's own
-// prefix BEFORE the leaf: fiber runs middleware in registration order, so one
-// installed after its route never runs. Bridge parks the validated org, which is
-// the only way a typed op — which receives a context and nothing else — can
-// resolve the tenant. Serve installs one app-wide too; nesting is harmless (the
-// inner one is what the handler sees) and this package's own tests mount on a
-// bare app with no Serve, so this install is what makes them pass.
+// Bridge FIRST and noStore beside it, both installed BEFORE the leaf: fiber runs
+// middleware in registration order, so one installed after its route never runs.
+// Bridge parks the validated org, which is the only way a typed op — which
+// receives a context and nothing else — can resolve the tenant. Serve installs
+// one app-wide too; nesting is harmless (the inner one is what the handler sees)
+// and this package's own tests mount on a bare app with no Serve, so this
+// install is what makes them pass.
 //
-// The op is declared on the App with its WHOLE path, not on the group with an
-// empty leaf: joining "/v1/audit" with "" yields "/v1/audit/", a different path
-// from the one this API has always served.
+// USE, NOT A MIDDLEWARE-CARRYING GROUP. This used to say
+// `app.Group("/v1/audit", Bridge(), noStore())`, and that is the one shape this
+// surface cannot use: the op below is declared on the App with its WHOLE path,
+// so the routes are NOT beneath the group, and a group whose subtree has no
+// routes is middleware that can never run. zip refuses to compose it (walk.go's
+// inert-middleware check) — which on a bare app turned every test in this
+// package into a panic out of app.Test.
+//
+// Use is the ONE composition verb and it says the right thing in both routers a
+// subsystem is mounted through: cloud's scope gates it to the subtrees this
+// subsystem declares (scope.Use), and a bare *zip.App treats root middleware as
+// always-live (depth 0 is exempt by construction — it is what 404 logging and
+// CORS need). The prefix is not repeated here BECAUSE scope already holds it;
+// restating it would be the second place a subsystem's subtree is written down.
+//
+// The op keeps its WHOLE path rather than moving to a group with an empty leaf:
+// joining "/v1/audit" with "" yields "/v1/audit/", a different path from the one
+// this API has always served, and one that would ship in OpenAPI and the SDK.
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
-	app.Group("/v1/audit", cloud.Bridge(), noStore())
+	app.Use(zip.H(cloud.Bridge()), zip.H(noStore()))
 	o := ops{s: s}
 	zip.Get(zapp, "/v1/audit", o.list)
 }

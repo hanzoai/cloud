@@ -144,6 +144,9 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1","status":"PENDING"}`),
 	})
+	zip.Describe("GET /v1/o11y/sessions", zip.Doc{
+		Description: "GET /v1/o11y/sessions — the flat, org-gated public path for the LLM-obs sessions\nlist (traces grouped by session.id on the gen_ai span plane). The console's\nSessionsModule reads this; session DETAIL is composed client-side from this list\n+ the traces list filtered by session, so there is no /sessions/:id backing route\n(the embedded runtime serves only the list) and none is registered here.\n\nWhy an explicit cloud route rather than only the order-70 wildcard: this pins the\npublic flat path to the runtime's internal /api/sessions route SERVER-SIDE (the\nsame discipline query.go uses for the composite query) AND enforces the tenant\ngate at the cloud boundary — an org-less caller gets a clean 403 here before the\nrequest reaches the runtime, and the org the runtime binds (gen_ai.hanzo.org_id\nfrom X-Org-Id) is the SAME validated tenant this handler refuses to proceed\nwithout. Registered by mountScope (order 69), so it precedes the wildcard.\n\nThe list query (?limit=&offset=) rides through unchanged; the runtime returns the\nllmobstypes.GettableSessions {items,offset,limit} under the {status,data} envelope\nthe console's O11yApi.sessions already unwraps.",
+	})
 	zip.Describe("GET /v1/o11y/status", zip.Doc{
 		Description: "Reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
 		Fields: map[string]string{
