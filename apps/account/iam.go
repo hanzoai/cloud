@@ -131,7 +131,8 @@ type userRow struct {
 // getUserRow resolves the user by the caller's id (the same read the move did) into
 // its authoritative (owner, name).
 func (c *iamClient) getUserRow(ctx context.Context, id string) (userRow, error) {
-	raw, err := c.getUser(ctx, id)
+	owner, name := splitID(id)
+	raw, err := c.getUser(ctx, owner, name)
 	if err != nil {
 		return userRow{}, err
 	}
@@ -386,8 +387,42 @@ func (c *iamClient) createOrganization(ctx context.Context, o iamOrg) error {
 }
 
 // getUser reads a full user row (for the move: update-user re-submits it whole).
-func (c *iamClient) getUser(ctx context.Context, id string) (json.RawMessage, error) {
-	env, err := c.do(ctx, http.MethodGet, "/v1/iam/users/get", url.Values{"id": {id}}, nil)
+// It takes owner and name SEPARATELY because that is what the endpoint wants.
+// Sending the `<owner>/<name>` composite as `id` — which this did — answers
+// `400 field "owner" is required` for EVERY id, measured against the running
+// IAM:
+//
+//	?id=hanzo/2d4d67ab-…  400 field "owner" is required
+//	?id=hanzo/z           400 field "owner" is required
+//	?owner=hanzo&name=z   200
+//
+// So no caller of this ever read a user row: the avatar write surfaced it
+// ("photo stored but the profile could not be updated"), and moveUserToOrg has
+// the same fault silently. `name` is the USERNAME — the row's own `name` field,
+// "z" — not the UUID that `sub` carries.
+// splitID splits the `<owner>/<name>` composite the callers carry into the two
+// fields IAM's user ops actually want. A bare name (a first-run, org-less user)
+// yields an empty owner, which IAM refuses with its own message rather than
+// being guessed at here.
+func splitID(id string) (owner, name string) {
+	if i := strings.IndexByte(id, '/'); i > 0 {
+		return id[:i], id[i+1:]
+	}
+	return "", id
+}
+
+func (c *iamClient) getUser(ctx context.Context, owner, name string) (json.RawMessage, error) {
+	// An org-less caller (first-run onboarding) has no owner to send, and this is
+	// the ONE read that must still be attempted for them — resolving their
+	// authoritative (owner, name) is the whole point of the call. The composite
+	// form is kept for exactly that case rather than refused here, so onboarding
+	// behaves as it always did; every caller that HAS an owner now sends the
+	// shape IAM actually accepts.
+	q := url.Values{"id": {name}}
+	if owner != "" {
+		q = url.Values{"owner": {owner}, "name": {name}}
+	}
+	env, err := c.do(ctx, http.MethodGet, "/v1/iam/users/get", q, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +442,8 @@ func (c *iamClient) getUser(ctx context.Context, id string) (json.RawMessage, er
 // optional — a partial row would blank every field it omitted, including the
 // password hash.
 func (c *iamClient) setAvatar(ctx context.Context, id, photo string) error {
-	rowRaw, err := c.getUser(ctx, id)
+	owner, name := splitID(id)
+	rowRaw, err := c.getUser(ctx, owner, name)
 	if err != nil {
 		return err
 	}
@@ -432,7 +468,8 @@ func (c *iamClient) setAvatar(ctx context.Context, id, photo string) error {
 // password travels with the row (IAM verifies against user.PasswordType first), so
 // the move never locks them out. `id` is the caller's CURRENT `<owner>/<name>`.
 func (c *iamClient) moveUserToOrg(ctx context.Context, id, slug string) error {
-	rowRaw, err := c.getUser(ctx, id)
+	owner, name := splitID(id)
+	rowRaw, err := c.getUser(ctx, owner, name)
 	if err != nil {
 		return err
 	}
