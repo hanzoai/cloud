@@ -66,6 +66,10 @@ LS = "apps/label/store.go"
 LM = "apps/label/mirror.go"
 LR = "apps/label/resolve.go"
 PL = "./apps/label/"
+RB = "resource_billing.go"
+PRB = "."
+RT = "apps/risk/typed.go"
+PR = "./apps/risk/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -562,6 +566,50 @@ MUTANTS = [
         (LT, '\t\t\t"knowable: within one rank, the assertion that became KNOWABLE latest wins',
              '\t\t\t"seen: within one rank, the assertion that became KNOWABLE latest wins')],
      "TestVocabularyPublishesTheRuleThatIsEnforced", PL),
+
+    # ── THE CALLER IS RESOLVED BEFORE THE MONEY PLANE IS ASKED ───────────────
+    #
+    # An empty org reaches Gate from any handler whose tenant check and whose
+    # principal.Ledger disagree, and both of Gate's branches then answer a
+    # question about IDENTITY in the vocabulary of MONEY: 503 "Billing
+    # temporarily unavailable" co-resident, and 400 `field "subject" is
+    # required` over the peer plane — naming a field that appears in no
+    # published request schema, so no caller can ever satisfy it.
+    ("gate: ask the money plane to price a spend for a nameless subject", [
+        (RB, '\tif org == "" {\n\t\treturn ErrNoLedger\n\t}\n', '')],
+     "TestGate_RefusesAnEmptyLedgerAsIdentityNotAsMoney|TestGate_FailOpenNeverMakesAnUnidentifiedCallerFree", PRB),
+
+    # There is deliberately NO "move the guard below fail-open" row. Fail-open
+    # lives INSIDE metering.Authorize and gatePeer, so every placement the guard
+    # could take within Gate already precedes it: the mutation is a semantic
+    # no-op and scored SURVIVED, which would have been a permanently red gate
+    # guarding nothing. The property it was meant to state — fail-open never
+    # makes an unidentified caller free — is carried by the row above, which
+    # takes TestGate_FailOpenNeverMakesAnUnidentifiedCallerFree red as well.
+
+    # denial is the ONE decision behind a refused Gate and both renderings read
+    # it, so dropping the identity case re-launders an identity refusal back
+    # into a fault of the biller for every one of Gate's callers at once.
+    ("gate: render an identity refusal as a fault of the biller", [
+        (RB, '\tif errors.Is(err, ErrNoLedger) {\n'
+             '\t\treturn http.StatusForbidden, "forbidden", ErrNoLedger.Error()\n\t}\n', '')],
+     "TestGate_RefusesAnEmptyLedgerAsIdentityNotAsMoney", PRB),
+
+    # There is deliberately NO "delete ops.gate's empty-ledger guard" row either,
+    # and its absence is the evidence that the class above is actually closed.
+    # That mutation was written and scored SURVIVED: with Gate refusing an empty
+    # org, deleting the risk-level guard still answers 403 with the same code and
+    # the same sentence, because the defect is no longer representable one layer
+    # down. What the surface guard still owns is the ENVELOPE — it refuses
+    # through zip, so /v1/risk answers the flat {status,code,error}, where the
+    # Gate path renders the money wire's nested {error:{code,message}}. When that
+    # split is settled the surface guard is pure duplication and should go.
+
+    # The positive half: a guard widened to refuse everyone makes the priced-op
+    # assertions green by never billing anyone, which is a free surface.
+    ("risk: widen the empty-ledger guard until it refuses every caller", [
+        (RT, '\tif ledger == "" {', '\tif true {')],
+     "TestPricedOps_StillReachTheMoneyPlaneForARealPrincipal", PR),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)
