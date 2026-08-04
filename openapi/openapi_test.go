@@ -68,53 +68,82 @@ func TestTranslate(t *testing.T) {
 
 // THE LOAD-BEARING FACT, pinned so a zip/fiber bump that changes it fails here.
 //
-// A duplicate registration and a middleware chain produce the SAME observable
-// route: one entry, N chained handlers. They are indistinguishable through the
-// public API — which is why this generator never reads the handler count, and
-// why "handlers > 1 means collision" is not a fleet-wide truth.
+// It just did, which is this test doing its job rather than failing at it.
 //
-// Both cases must still project to exactly ONE operation, because one pattern IS
-// one operation regardless of what is chained behind it.
-func TestMergedAndChainedAreIndistinguishableAndBothYieldOneOperation(t *testing.T) {
-	// (a) a genuine duplicate: two separate registrations of one pattern.
-	dup := newApp()
-	dup.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, "machine") })
-	dup.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, "run") })
-
-	// (b) a legitimate chain: ONE registration, middleware + terminal handler —
-	// the apps/commerce.go:151 shape.
+// The fact USED to be: a duplicate registration and a middleware chain produce
+// the SAME observable route — one entry, N chained handlers — so they are
+// indistinguishable through the public API, and therefore this generator must
+// never read the handler count and "handlers > 1 means collision" is not a
+// fleet-wide truth.
+//
+// From zip v1.24 the first half is no longer constructible: a duplicate
+// registration is REFUSED at composition time rather than merged into the
+// existing entry. The conclusion is unchanged and now rests on something
+// stronger — the generator still must not read the handler count, because a
+// count above one can ONLY be a chain now that a collision cannot reach the
+// registry at all.
+//
+// So both halves are pinned: the chain still projects to exactly one operation,
+// and the duplicate is still refused. If either moves, the generator's
+// assumption about handler counts has to be revisited, which is what this test
+// exists to force.
+func TestChainYieldsOneOperationAndDuplicateIsRefused(t *testing.T) {
+	// (a) a legitimate chain: ONE registration, middleware + terminal handler —
+	// the apps/commerce.go:151 shape. One route entry, two handlers.
 	chain := newApp()
 	chain.Get("/v1/bots",
 		func(c *zip.Ctx) error { return c.Next() },
 		func(c *zip.Ctx) error { return c.JSON(200, "run") },
 	)
 
-	dr, cr := dup.Fiber().GetRoutes(true), chain.Fiber().GetRoutes(true)
-	if len(dr) != 1 || len(cr) != 1 {
-		t.Fatalf("both shapes should be ONE route entry; dup=%d chain=%d", len(dr), len(cr))
-	}
-	if len(dr[0].Handlers) != 2 || len(cr[0].Handlers) != 2 {
-		t.Fatalf("both shapes should carry 2 chained handlers; dup=%d chain=%d — "+
-			"if this diverged, the handler count became meaningful and this package should revisit it",
-			len(dr[0].Handlers), len(cr[0].Handlers))
-	}
-
-	// Indistinguishable: same method, same path, same handler count.
-	if dr[0].Method != cr[0].Method || dr[0].Path != cr[0].Path {
-		t.Fatalf("routes differ: %v vs %v", dr[0], cr[0])
-	}
-
-	// And each projects to exactly one operation.
-	for name, app := range map[string]*zip.App{"duplicate": dup, "chain": chain} {
-		doc, err := Spec(app, Info{Title: "t", Version: "v1"})
-		if err != nil {
-			t.Fatalf("%s: Spec: %v", name, err)
-		}
-		item, ok := doc.Paths["/v1/bots"]
-		if !ok || len(item) != 1 || item["get"] == nil {
-			t.Fatalf("%s: want exactly one get operation at /v1/bots, got %v", name, doc.Paths)
+	// zip registers a GET as GET plus an automatic HEAD companion, so ONE
+	// registration is two route ENTRIES. That is not a collision and is measured
+	// here rather than assumed: the GET is what carries the chain, and the HEAD is
+	// fiber's own and is dropped from the projection below.
+	handlers := -1
+	for _, r := range chain.Fiber().GetRoutes(true) {
+		if r.Method == "GET" && r.Path == "/v1/bots" {
+			handlers = len(r.Handlers)
+			break
 		}
 	}
+	if handlers < 0 {
+		t.Fatalf("the chain registered no GET /v1/bots at all: %v", chain.Fiber().GetRoutes(true))
+	}
+	if handlers != 2 {
+		t.Fatalf("the chain should carry 2 chained handlers; got %d — if this "+
+			"diverged, the handler count became meaningful and this package should revisit it",
+			handlers)
+	}
+
+	// And it projects to exactly one operation.
+	doc, err := Spec(chain, Info{Title: "t", Version: "v1"})
+	if err != nil {
+		t.Fatalf("chain: Spec: %v", err)
+	}
+	item, ok := doc.Paths["/v1/bots"]
+	if !ok || len(item) != 1 || item["get"] == nil {
+		t.Fatalf("chain: want exactly one get operation at /v1/bots, got %v", doc.Paths)
+	}
+
+	// (b) a genuine duplicate: two separate registrations of one pattern. zip
+	// refuses to compose it, so it can never reach this generator. The refusal
+	// arrives as a panic out of the composition step (Registry, reached here
+	// through Fiber), which is why this is asserted with a recover rather than an
+	// error return.
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("zip composed a duplicate registration of GET /v1/bots — " +
+					"a collision can reach the registry again, so the generator can no " +
+					"longer assume a handler count above one is always a chain")
+			}
+		}()
+		dup := newApp()
+		dup.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, "machine") })
+		dup.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, "run") })
+		_ = dup.Fiber()
+	}()
 }
 
 // Middleware matches path prefixes and is not an operation — fiber's own
