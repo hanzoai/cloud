@@ -98,7 +98,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// cloud.Bridge, the two header-only identity facts by bridgeFacts. fiber runs
 	// middleware in registration order, so one installed after its leaves never
 	// runs; and the group bounds them to the subtree this subsystem serves.
-	g.Use(cloud.Bridge(), bridgeFacts)
+	g.Use(cloud.Bridge(), zip.H(bridgeFacts))
 
 	o := ops{s: s}
 
