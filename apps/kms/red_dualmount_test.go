@@ -35,7 +35,6 @@ func newDualApp(t *testing.T, mk string) *zip.App {
 	app := zip.New(zip.Config{Logger: deps.Logger})
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
-	app.Use(middleware.Logger(deps.Logger))
 	specs := []cloud.Plugin{
 		{Name: "kms", Mount: kms.Mount, OwnsHealth: true},
 		{Name: "admin", Mount: admin.Mount},
