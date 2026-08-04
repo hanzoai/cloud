@@ -19,7 +19,7 @@ import (
 // grant:author tag.
 type commerce interface {
 	configured() bool
-	deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags string) (txnID string, err error)
+	deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags, ref string) (txnID string, err error)
 	spendCents(ctx context.Context, org, user string) (int64, error)
 }
 
@@ -33,8 +33,8 @@ var errUnconfigured = payout.ErrUnconfigured
 type commerceSeam struct{ c *payout.Client }
 
 func (s commerceSeam) configured() bool { return s.c.Configured() }
-func (s commerceSeam) deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags string) (string, error) {
-	return s.c.Deposit(ctx, org, user, amountCents, currency, notes, tags)
+func (s commerceSeam) deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags, ref string) (string, error) {
+	return s.c.Deposit(ctx, org, user, amountCents, currency, notes, tags, ref)
 }
 func (s commerceSeam) spendCents(ctx context.Context, org, user string) (int64, error) {
 	return s.c.SpendCents(ctx, org, user)
