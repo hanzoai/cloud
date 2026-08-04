@@ -32,8 +32,8 @@ package risk
 //	   `field "subject" is required`. The caller is told to send a field that
 //	   appears nowhere in the operation's published request schema, so no caller can
 //	   ever satisfy it. Measured against api.hanzo.ai on POST /v1/risk/score,
-//	   /learn, /features, /state, /policy, /state/snapshot, /state/restore
-//	   and /search/{id} — eight of the ten declared paths.
+//	   /learn, /features, /state, /policy, /state/model (both verbs) and
+//	   /search/{id} — eight of the ten declared operations.
 //
 // Both are the same defect and both close with the same guard, which is why the
 // fix is an ordering rule and not a message.
@@ -107,8 +107,8 @@ var pricedOps = []struct{ method, path, body string }{
 	{http.MethodPost, "/v1/risk/learn", `{"events":[{"kind":"account","subject":"u_1"}]}`},
 	{http.MethodGet, "/v1/risk/state", ""},
 	{http.MethodPut, "/v1/risk/policy", `{"review":0.01,"sample":0.001}`},
-	{http.MethodPost, "/v1/risk/state/snapshot", ""},
-	{http.MethodPost, "/v1/risk/state/restore", `{"body":{"version":1}}`},
+	{http.MethodPost, "/v1/risk/state/model", ""},
+	{http.MethodPut, "/v1/risk/state/model", `{"address":"not-a-published-address"}`},
 	{http.MethodGet, "/v1/risk/features", ""},
 	{http.MethodPost, "/v1/risk/search", `{"days":7}`},
 	{http.MethodGet, "/v1/risk/search/srch_1", ""},
