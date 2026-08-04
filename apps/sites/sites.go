@@ -232,26 +232,17 @@ type Server struct {
 // (ADDING to the baked-in defaults, never removing them), so createProject and
 // BindHost enforce the exact same set the serve gate does.
 func New(cfg Config, log luxlog.Logger) *Server {
-	apex := strings.ToLower(strings.TrimSpace(cfg.Apex))
-	if apex == "" {
-		apex = "hanzo.app"
-	}
+	apex := apexOf(cfg.Apex)
+	// Publish the COMPLETE policy — the reserved labels AND the domains we run — so
+	// the claim gate refuses what the serve gate would refuse. selfOf folds the
+	// first-party apex in itself, so the published set does not depend on where in
+	// this function it is published from; see selfOf for the bug that ordering used
+	// to carry. A process that never constructs a Server derives the same policy
+	// from the same environment (reserved.go seed).
 	SetReservedExtra(cfg.Reserved)
-	// The apex is always self; add the operator-supplied self domains (deduped,
-	// normalized). This is the exclusion set the custom-domain branch consults.
-	self := []string{apex}
-	seen := map[string]bool{apex: true}
-	for _, d := range cfg.SelfDomains {
-		d = strings.ToLower(strings.TrimSpace(d))
-		if d == "" || seen[d] {
-			continue
-		}
-		seen[d] = true
-		self = append(self, d)
-	}
-	// First-party apex (internal, opt-in sites) — normalize, force it to be a self
-	// domain (a first-party site host is never a customer custom-domain candidate),
-	// and build the explicit allowlist. Empty apex or empty allowlist ⇒ disabled.
+	SetSelfDomains(selfOf(cfg))
+	// First-party apex (internal, opt-in sites) — normalize and build the explicit
+	// allowlist. Empty apex or empty owning org ⇒ disabled.
 	fpApex := strings.ToLower(strings.TrimSpace(cfg.FirstPartyApex))
 	fpOrg := strings.ToLower(strings.TrimSpace(cfg.FirstPartyOrg))
 	fpSites := map[string]bool{}
@@ -260,10 +251,6 @@ func New(cfg Config, log luxlog.Logger) *Server {
 	// host. Missing either ⇒ disabled (fail-closed) — no <label>.<fpApex> ever
 	// resolves as a site; every such host falls through to the normal pipeline.
 	if fpApex != "" && fpOrg != "" {
-		if !seen[fpApex] {
-			seen[fpApex] = true
-			self = append(self, fpApex)
-		}
 		for _, l := range cfg.FirstPartySites {
 			l = strings.ToLower(strings.TrimSpace(l))
 			if l == "" {
@@ -282,18 +269,6 @@ func New(cfg Config, log luxlog.Logger) *Server {
 	} else {
 		fpApex = "" // no owning org ⇒ never serve a first-party site (fail-closed)
 	}
-	// Publish the COMPLETE set to the shared source, so the claim gate refuses what
-	// the serve gate would refuse. Registered here, next to SetReservedExtra, for the
-	// identical reason: one source, no drift between enforcement points.
-	//
-	// AFTER the first-party apex is folded in, not before. SetSelfDomains COPIES, so
-	// a domain appended to the local slice afterwards never reaches IsSelfHost — and
-	// IsSelfHost is the one predicate that decides whether a host is ours. Published
-	// early, a first-party apex whose registrable domain was not already in
-	// SelfDomains would be absent from the set, making every non-allowlisted
-	// <label>.<fpApex> a custom-domain CANDIDATE on the apex that carries
-	// api/login/console.
-	SetSelfDomains(self)
 	return &Server{apex: apex, firstPartyApex: fpApex, firstPartySites: fpSites, firstPartyOrg: fpOrg, admin: s3admin.New(), log: log.New("subsystem", "sites")}
 }
 

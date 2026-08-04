@@ -32,12 +32,13 @@ var (
 	// globally unique; a losing bind never blocks a deploy (the site still serves
 	// at its S3 URL), it just doesn't claim the pretty host.
 	errHostTaken = errors.New("projects: site host already bound to another project")
-	// errReservedHost is returned by BindHost for a reserved label (api, admin, a
-	// brand/auth term, …). Together with the createProject reject, this makes the
-	// global site_hosts table PHYSICALLY UNABLE to hold a reserved host — so a
-	// reserved subdomain can never resolve to a project even if the ingress regex
-	// drifts. See clients/sites/reserved.go for the ONE reserved-list source.
-	errReservedHost = errors.New("projects: site host is a reserved label")
+	// errReservedHost is returned by BindHost for a name the platform holds: a
+	// reserved LABEL (api, admin, a brand/auth term, …) or a HOSTNAME at or under a
+	// domain we run (login.hanzo.ai). Together with the createProject reject, this
+	// makes the global site_hosts table PHYSICALLY UNABLE to hold one — so it can
+	// never resolve to a project even if the ingress regex drifts. See
+	// apps/sites/reserved.go (Ours) for the ONE source of both halves.
+	errReservedHost = errors.New("projects: site host is a name the platform holds")
 )
 
 // Release is an IMMUTABLE, content-addressed snapshot of a site's bytes at one
@@ -578,9 +579,16 @@ func (s *Store) ClaimHost(ctx context.Context, host, org, slug, token string, no
 }
 
 func (s *Store) bindHost(ctx context.Context, host, org, slug, status, token string, now int64) error {
-	// A reserved label may never enter site_hosts, whatever the caller — the
-	// storage invariant that makes the serve-time reserved gate a mere backstop.
-	if sites.IsReserved(host) {
+	// A name the PLATFORM holds may never enter site_hosts, whatever the caller —
+	// the storage invariant that makes the serve-time gate a mere backstop.
+	//
+	// sites.Ours, not sites.IsReserved: this argument is a bare slug on the deploy
+	// path and a full hostname on the custom-domain path, and IsReserved compares
+	// against bare LABELS, so every FQDN matched nothing and the backstop held for
+	// only half the table. `login.hanzo.ai` passed it. Ours splits on shape and
+	// answers both — and it is the SAME predicate the claim gate asks (domains.go
+	// ours), so a vouch that skips the gate still cannot write a name we hold.
+	if sites.Ours(host) {
 		return errReservedHost
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
