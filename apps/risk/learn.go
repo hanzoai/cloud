@@ -1457,6 +1457,14 @@ type report struct {
 // searchDeadline bounds one run end to end.
 const searchDeadline = 10 * time.Minute
 
+// charge is the money seam as the plane sees it: GATE n screens, and get back the
+// meter for what was actually done. It is ONE function and not a gate-and-a-book
+// pair because the two halves are one decision made twice — a bound, then its
+// outcome — and a plane that took them as two parameters could be handed a gate
+// for one thing and a meter for another. [ops.gate] is the only implementation;
+// the plane never reaches the request, the ledger or the price.
+type charge func(kind string, n int) (meter func(done int), err error)
+
 // begin accepts a search: it reads the tenant's own history NOW (so a caller
 // learns immediately whether there is anything to replay) and runs the grid in
 // the background, writing the result to the tenant's own shelf.
@@ -1465,26 +1473,60 @@ const searchDeadline = 10 * time.Minute
 // the point of the search is to answer one question about one history, and two
 // answers racing to the same shelf row is not two answers.
 //
-// admit is called ONCE, with the measured size of the run, after the history is
-// read and before any candidate is tried. That is where the caller's ledger is
-// checked, because it is the first moment the cost of the run is a number rather
-// than a guess; a refusal there aborts before the first tree is planted.
+// A SEARCH COSTS TWICE AND IS PRICED TWICE, each half before the half it prices.
+// The two are genuinely different work and a single price would be wrong in both
+// directions:
 //
-// book is called ONCE when the grid ENDS, however it ends, with the screens the
-// run actually performed — trials completed × events replayed. It is separate
-// from admit for the reason the money seam states: the gate runs on the upper
-// bound before the work, the meter runs on what was done. A run cancelled by a
-// rollout after four of sixty-four candidates is billed for four.
-func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, admit func(events int) error, book func(screens int)) (report, error) {
+//	THE SURFACE   rolling up to four source planes into this organisation's own
+//	              feature surface and reading the window back. Its size is the
+//	              WINDOW, which the caller states, so it is known before anything
+//	              runs — the same unit and the same price [ops.features] pays for
+//	              the same work.
+//	THE GRID      every candidate over every event. Its size is the measured
+//	              history, so it is known only after the surface read.
+//
+// The surface half used to run BEFORE ANY GATE AT ALL: a caller with no balance
+// drove the whole warehouse cost of a search, was refused at the very end, and
+// paid for none of it — as often as it cared to ask. Pricing the grid on its
+// upper bound instead would have closed that and priced out every small tenant,
+// because the upper bound is [maxHistory] × the grid whatever the tenant's actual
+// history holds. Two bounds, each where its own size is a number.
+//
+// price is the money seam: it GATES n screens and returns the meter for what was
+// actually DONE. Each half gates before its work and meters after it, which is
+// why the grid's meter is called when the grid ENDS however it ends — a run
+// cancelled by a rollout after four of sixty-four candidates is billed for four.
+func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, price charge) (report, error) {
 	if _, err := p.resident(t); err != nil {
 		return report{}, err
 	}
-	p.mu.Lock()
-	if held, running := p.running[t]; running {
-		p.mu.Unlock()
-		return report{}, zip.ErrConflict("a search is already running for this organisation: " + held.ID)
+	// CLAIM THE SLOT BEFORE THE EXPENSIVE WORK, atomically with the check that
+	// grants it. This used to check the slot here and SET it two warehouse
+	// operations later, which is check-then-act with the whole cost of a search
+	// setup in the window: every one of a tenant's concurrent callers passed the
+	// check, and all of them rolled the tenant's source planes and read its entire
+	// history before any of them claimed anything. Sixteen callers, sixteen full
+	// history reads, sixteen background grids, one shelf row for all of them to
+	// race — from a bound whose own comment says ONE RUN PER TENANT.
+	id := runID()
+	if err := p.claim(t, id); err != nil {
+		return report{}, err
 	}
-	p.mu.Unlock()
+	// Released on every path that does not reach the run. A claim that outlived its
+	// refusal would 409 that organisation's every later search, naming a run that
+	// never started.
+	started := false
+	defer func() {
+		if !started {
+			p.unclaim(t)
+		}
+	}()
+
+	// GATED BEFORE THE WAREHOUSE IS TOUCHED, on the window the caller stated.
+	surface, err := price("search", windowScreens(lookback))
+	if err != nil {
+		return report{}, err
+	}
 
 	// A SURFACE READ ROLLS FIRST. The fold that brought this tenant's surface
 	// current runs in the background, so a search that only waited for residency
@@ -1498,6 +1540,10 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 	}
 	end := p.now().UTC()
 	rs, err := rows(ctx, t, query{start: end.Add(-lookback), end: end, limit: maxHistory})
+	// METERED HERE, BEFORE ANY REFUSAL BELOW. The roll and the read have run by
+	// this line however they went, and the meter's contract is what was DONE — the
+	// same rule [ops.features] applies when its own read fails after its roll.
+	surface(windowScreens(lookback))
 	if err != nil {
 		return report{}, err
 	}
@@ -1508,17 +1554,14 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 	if len(hist) > maxHistory {
 		hist = hist[len(hist)-maxHistory:]
 	}
-	if admit != nil {
-		if err := admit(len(hist)); err != nil {
-			return report{}, err
-		}
+	grid, err := price("search", len(hist)*len(candidates()))
+	if err != nil {
+		return report{}, err
 	}
 
-	id := runID()
 	pending := report{ID: id, Tenant: string(t), Started: end, Events: len(hist)}
-	p.mu.Lock()
-	p.running[t] = pending
-	p.mu.Unlock()
+	p.settle(t, pending)
+	started = true
 
 	p.wg.Add(1)
 	go func() {
@@ -1528,20 +1571,50 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 		// The slot is released whatever happens. A run that panicked and left the
 		// slot held would refuse every later search for that organisation with a
 		// conflict naming a run that is not running.
-		defer func() {
-			p.mu.Lock()
-			delete(p.running, t)
-			p.mu.Unlock()
-		}()
+		defer p.unclaim(t)
 		rep := p.search(runCtx, t, id, hist)
-		if book != nil {
-			book(len(rep.Trials) * rep.Events)
-		}
+		grid(len(rep.Trials) * rep.Events)
 		if err := p.keep(t, rep); err != nil {
 			p.log.Warn("search finished but could not be saved", "tenant", string(t), "run", id, "err", err)
 		}
 	}()
 	return pending, nil
+}
+
+// claim takes this tenant's one search slot, or refuses with the run that holds
+// it. It is the CHECK AND THE ACT IN ONE ACQUISITION of p.mu, which is the whole
+// point: a search's setup rolls the tenant's source planes and reads its entire
+// history, so a slot granted by a check that acts later grants that work to every
+// concurrent caller at once.
+//
+// The slot is per TENANT, so a search running for one organisation refuses only
+// that organisation's next one — at it, that tenant is told to wait and nobody
+// else notices.
+func (p *plane) claim(t tenant, id string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if held, running := p.running[t]; running {
+		return zip.ErrConflict("a search is already running for this organisation: " + held.ID)
+	}
+	// Held with the id alone until the history is measured; [plane.settle] replaces
+	// it with the real report. A poll in that window sees a run that is genuinely
+	// in flight, which is what it is.
+	p.running[t] = report{ID: id, Tenant: string(t), Started: p.now().UTC()}
+	return nil
+}
+
+// settle publishes the measured report onto the slot this tenant already holds.
+func (p *plane) settle(t tenant, rep report) {
+	p.mu.Lock()
+	p.running[t] = rep
+	p.mu.Unlock()
+}
+
+// unclaim releases this tenant's search slot.
+func (p *plane) unclaim(t tenant) {
+	p.mu.Lock()
+	delete(p.running, t)
+	p.mu.Unlock()
 }
 
 // pending reports an in-flight run for the tenant, so a poll between accepting
@@ -1908,16 +1981,40 @@ func (p *plane) run(t tenant, id string) (*report, error) {
 
 // ── shutdown ─────────────────────────────────────────────────────────────────
 
-// close snapshots EVERY resident model and shuts the shelves.
+// drainBudget is the MOST of a shutdown window spent letting background work
+// finish. What is left is for the saves, and that split is the whole ordering
+// argument: a fold or a search that does not land re-runs from its own watermark
+// on the next boot, and a model that was not written down is gone.
+const drainBudget = 5 * time.Second
+
+// ErrDrainIncomplete says background work was still running when the shutdown
+// window ran out. It is JOINED into close's error rather than replacing it: every
+// resident model was still written down, and a fold or search cut short is a
+// separate, NAMED fact an operator can act on instead of a silence.
+var ErrDrainIncomplete = errors.New("risk: background work did not finish inside the shutdown window")
+
+// close snapshots EVERY resident model and shuts the shelves, inside the window
+// the caller gives it.
 //
 // This binary is deployed one replica at a time with the old pod stopped before
 // the new one starts, so every rollout drops every warming model and the
 // threshold it had computed. Without this, a deploy silently returns every tenant
 // to warming — and a warming model refuses to score, which reads as "clean" to
 // anything that does not check the refusal.
-func (p *plane) close() error {
+//
+// THE SAVES RUN UNCONDITIONALLY, AND NEVER BEHIND THE DRAIN. This used to be
+// `p.stop(); p.wg.Wait()` with the saves after it, which made the durable half of
+// a rollout depend on background work finishing — and it does not have to. The
+// process gets a 30-second window (serve.go) inside a 60-second grace period,
+// while ONE search finishing after cancellation writes its result to a shelf
+// whose durable Sync is bounded at durableOpTimeout — thirty seconds, the whole
+// window, on its own. So the wait outlived the window, the process was killed,
+// and not one tenant's model had been written down. Every tenant, once per
+// deploy, from one tenant's search.
+func (p *plane) close(ctx context.Context) error {
 	p.stop()
-	p.wg.Wait()
+	drained := p.drain(ctx)
+
 	p.mu.Lock()
 	all := make([]*resident, 0, len(p.res))
 	for _, r := range p.res {
@@ -1926,16 +2023,52 @@ func (p *plane) close() error {
 	p.res = map[tenant]*resident{}
 	p.mu.Unlock()
 
-	var first error
+	var errs []error
 	for _, r := range all {
-		if err := p.save(r); err != nil && first == nil {
-			first = err
+		if err := p.save(r); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	if err := p.shelf.CloseAll(); err != nil && first == nil {
-		first = err
+	if !drained {
+		// Named, and it names no tenant: how many models were written down anyway is
+		// the number that says this was a degradation and not a loss.
+		p.log.Warn("background work did not finish inside the shutdown window; every resident model was written down regardless",
+			"saved", len(all), "budget", drainBudget)
+		errs = append(errs, ErrDrainIncomplete)
 	}
-	return first
+	if err := p.shelf.CloseAll(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+// drain waits for the plane's background work, bounded by BOTH the caller's
+// shutdown window and [drainBudget], and reports whether it actually finished.
+//
+// The bound is the caller's because the caller is the only one that knows it: the
+// composition root already builds a shutdown context with the window in it and
+// hands it to every teardown hook. This used to throw that context away and wait
+// forever, which is how a bound that was already present became a hang.
+//
+// The waiter goroutine can outlive this call. That is deliberate and it is
+// bounded at one: the alternative is threading cancellation into every background
+// task purely so shutdown can observe it, and the process is on its way out.
+func (p *plane) drain(ctx context.Context) bool {
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(drainBudget)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // dataDirWritable reports whether the shelf's root can be written, which is the

@@ -69,6 +69,10 @@ PL = "./apps/label/"
 RB = "resource_billing.go"
 PRB = "."
 RT = "apps/risk/typed.go"
+OD = "orgdb.go"
+PC = "."
+RL = "apps/risk/learn.go"
+RG = "apps/risk/ring.go"
 PR = "./apps/risk/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
@@ -610,6 +614,111 @@ MUTANTS = [
     ("risk: widen the empty-ledger guard until it refuses every caller", [
         (RT, '\tif ledger == "" {', '\tif true {')],
      "TestPricedOps_StillReachTheMoneyPlaneForARealPrincipal", PR),
+
+    # ── org store lifecycle ──────────────────────────────────────────────────
+    # CloseAll was a RESET: it emptied the maps, so the next For() re-opened the
+    # file. Every caller is a Shutdown path, so a request still in flight during a
+    # rollout resurrected the store — re-hydrating and re-claiming the fence lease
+    # the SUCCESSOR pod was claiming. Two live writers for one org.
+    ("orgstore: CloseAll goes back to being a reset, not a close", [
+        (OD, '\tc.closed = true\n\tc.byNS = map[namespace.Namespace]T{}',
+             '\tc.byNS = map[namespace.Namespace]T{}')],
+     "TestOrgStoreCloseAllIsTerminal", PC),
+    ("orgstore: For stops refusing after close (the guard, not the flag)", [
+        (OD, '\tif c.closed {\n\t\tc.mu.Unlock()\n\t\treturn zero, fmt.Errorf("%w: %s/%s", ErrStoreClosed, ns, c.subsystem)\n\t}\n', '')],
+     "TestOrgStoreCloseAllIsTerminal", PC),
+    ("orgstore: the cross-org sweep stops refusing after close", [
+        (OD, '\tc.mu.Lock()\n\tshut := c.closed\n\tc.mu.Unlock()\n\tif shut {\n\t\treturn fmt.Errorf("%w: %s sweep", ErrStoreClosed, c.subsystem)\n\t}\n', '')],
+     "TestOrgStoreCloseAllIsTerminal", PC),
+
+    # ── risk: the rollout ────────────────────────────────────────────────────
+    # close() was `p.stop(); p.wg.Wait()` with every save BEHIND it. The wait was
+    # unbounded and the process gets a 30s window, while ONE search's durable Sync
+    # is bounded at 30s on its own — so the wait outlived the window, the pod was
+    # killed, and NOT ONE tenant's model had been written down. Every tenant
+    # returns to warming, and a warming model refuses to score, which reads clean.
+    ("risk: the rollout waits for background work with no bound (original)", [
+        (RL, '\tdrained := p.drain(ctx)\n', '\tp.wg.Wait()\n\tdrained := true\n')],
+     "TestRollout_", PR),
+    ("risk: the saves happen only if the drain finished", [
+        (RL, '\tvar errs []error\n\tfor _, r := range all {\n\t\tif err := p.save(r); err != nil {\n\t\t\terrs = append(errs, err)\n\t\t}\n\t}\n',
+             '\tvar errs []error\n\tif drained {\n\t\tfor _, r := range all {\n\t\t\tif err := p.save(r); err != nil {\n\t\t\t\terrs = append(errs, err)\n\t\t\t}\n\t\t}\n\t}\n')],
+     "TestRollout_", PR),
+    ("risk: the drain ignores the caller's shutdown window", [
+        (RL, '\tcase <-timer.C:\n\t\treturn false\n\tcase <-ctx.Done():\n\t\treturn false\n', '\tcase <-timer.C:\n\t\treturn false\n')],
+     "TestRollout_", PR),
+    ("risk: an incomplete drain becomes silent", [
+        (RL, '\t\terrs = append(errs, ErrDrainIncomplete)\n', '')],
+     "TestRollout_", PR),
+
+    # ── risk: the search bound ───────────────────────────────────────────────
+    # "ONE RUN PER TENANT" checked the slot and SET it two warehouse operations
+    # later. Check-then-act: 16 concurrent callers all passed the check and all
+    # rolled the tenant's source planes and read its ENTIRE history first.
+    ("risk: the search slot is claimed after the expensive work (original)", [
+        (RL, '\tid := runID()\n\tif err := p.claim(t, id); err != nil {\n\t\treturn report{}, err\n\t}\n',
+             '\tid := runID()\n\tp.mu.Lock()\n\tif held, running := p.running[t]; running {\n\t\tp.mu.Unlock()\n\t\treturn report{}, zip.ErrConflict("a search is already running for this organisation: " + held.ID)\n\t}\n\tp.mu.Unlock()\n')],
+     "TestSearch_OneTenantsConcurrencyDoesNotMultiplyTheExpensiveRead", PR),
+    # ── risk: the search pays for the surface it reads ───────────────────────
+    # The surface half — rolling up to four source planes and reading the window
+    # back — ran BEFORE ANY GATE AT ALL. A caller with no balance drove the whole
+    # warehouse cost, was refused at the very end, and paid for none of it, as
+    # often as it cared to ask. The gate has to sit above the work it prices.
+    ("risk: the surface is gated AFTER the warehouse it pays for (original)", [
+        (RL, '\tsurface, err := price("search", windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n',
+             '\tvar surface func(int)\n'),
+        (RL, '\tsurface(windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n',
+             '\tsurface, gerr := price("search", windowScreens(lookback))\n\tif gerr != nil {\n\t\treturn report{}, gerr\n\t}\n\tsurface(windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n')],
+     "TestSearch_ARefusedCallerNeverReachesTheWarehouse", PR),
+    ("risk: only the grid is priced, so the surface read is free", [
+        (RL, '\tsurface, err := price("search", windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n', ''),
+        (RL, '\tsurface(windowScreens(lookback))\n', '')],
+     "TestSearch_BothHalvesArePricedForWhatTheyAre", PR),
+
+    ("risk: a refused search never releases its claim", [
+        (RL, '\tstarted := false\n\tdefer func() {\n\t\tif !started {\n\t\t\tp.unclaim(t)\n\t\t}\n\t}()\n', '\tstarted := false\n\t_ = started\n'),
+        (RL, '\tp.settle(t, pending)\n\tstarted = true\n', '\tp.settle(t, pending)\n')],
+     "TestSearch_ARefusedRunReleasesTheSlot", PR),
+
+    # ── risk: the strain report ──────────────────────────────────────────────
+    # velocity caps PER SHARD (five keys against a census ceiling of 320), so the
+    # store drops a tenant's subjects long before the flat census notices.
+    # Measured: 200 subjects in, store holds 198, lost=0, SATURATED=false — two of
+    # that org's own subjects read as "has done nothing" and nothing said so.
+    ("risk: strain ignores the store's own shedding (original)", [
+        (RG, 'Saturated: r.lost > 0 || r.shed > 0 || r.order.Len() >= ringKeyCeiling',
+             'Saturated: r.lost > 0 || r.order.Len() >= ringKeyCeiling')],
+     "TestStrain_", PR),
+    ("risk: the forgotten COUNT ignores the store's own shedding", [
+        (RG, 'Forgotten: r.lost + int64(r.shed),', 'Forgotten: r.lost,')],
+     "TestStrain_", PR),
+    ("risk: reconcile stops measuring the store/census shortfall", [
+        (RG, '\tif short := r.order.Len() - r.live; short > r.shed {\n\t\tr.shed = short\n\t}\n', '')],
+     "TestStrain_", PR),
+    ("risk: forgetting becomes a gauge that falls back to zero", [
+        (RG, '\tif short := r.order.Len() - r.live; short > r.shed {\n\t\tr.shed = short\n\t}\n',
+             '\tr.shed = r.order.Len() - r.live\n')],
+     "TestStrain_ForgettingIsNotUndone", PR),
+
+    # ── risk: the resident bound ─────────────────────────────────────────────
+    # Nothing held this mechanism AT ALL: evict could be made to return nil
+    # unconditionally and the whole suite stayed green. It is what keeps 64 ×
+    # (8 MiB of rings + its model) inside a 9 GiB GOMEMLIMIT on a ONE-replica
+    # Recreate deployment, so disarming it is an OOM and an OOM is a total outage.
+    # Disarmed via the CONDITION, not an early return: `return nil` after the guard
+    # is unreachable code, which go vet rejects — so it would score NO-COMPILE and
+    # prove nothing. The bound that never trips is the honest mutant.
+    ("risk: the resident bound is disarmed (residents grow without limit)", [
+        (RL, 'func (p *plane) evict() *resident {\n\tif len(p.res) < maxResident {',
+             'func (p *plane) evict() *resident {\n\tif len(p.res) >= 0 {')],
+     "TestResident_TheBoundHasAnOperatingPoint", PR),
+    ("risk: past the bound the next organisation is REFUSED, not served", [
+        (RL, '\tp.mu.Lock()\n\tp.built++\n\tgone := p.evict()',
+             '\tp.mu.Lock()\n\tif len(p.res) >= maxResident {\n\t\tp.mu.Unlock()\n\t\treturn nil, zip.Errorf(429, "the plane is full")\n\t}\n\tp.built++\n\tgone := p.evict()')],
+     "TestResident_TheBoundHasAnOperatingPoint", PR),
+    ("risk: an evicted organisation is dropped without writing its state down", [
+        (RL, '\t\tif err := p.save(gone); err != nil {', '\t\tif err := error(nil); err != nil {')],
+     "TestResident_TheBoundHasAnOperatingPoint", PR),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)
@@ -635,6 +744,17 @@ def apply(edits):
 
 def score(name, edits, test, pkg):
     files = {path for path, _, _ in edits}
+    # A LEFTOVER BACKUP MEANS THE TREE IS ALREADY MUTATED. The restore is in a
+    # finally, which does not run when the process is killed — a CI timeout, a
+    # ^C — so an interrupted run leaves the mutant in the tree and the original
+    # in .mutbak. Copying over that backup then destroys the only clean copy,
+    # and the run reports ANCHOR-MISS on a tree it has silently corrupted. Refuse
+    # instead, and say how to recover.
+    for f in files:
+        bak = ROOT / (f + ".mutbak")
+        if bak.exists():
+            sys.exit(f"{f}.mutbak exists — an earlier run was interrupted and {f} is still MUTATED.\n"
+                     f"Recover the original first:  mv {bak} {ROOT / f}")
     for f in files:
         shutil.copy2(ROOT / f, ROOT / (f + ".mutbak"))
     try:
