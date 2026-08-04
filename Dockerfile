@@ -44,7 +44,7 @@
 # BUMP: when a console/skills change must reach production, move its pin here in
 # the same commit that claims it. That is what makes a cloud release
 # reproducible and makes "what console is in v1.801.N" answerable from git.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-846069c-amd64
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-9da3984-amd64
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
