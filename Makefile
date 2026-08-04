@@ -64,7 +64,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-.PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run smoke test test-fast test-cgo test-codec vet tidy docker docker-push clean e2e
+.PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run smoke test test-fast test-cgo test-codec vet tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -337,5 +337,38 @@ docker: ## Build the Docker image (uses repo Dockerfile, scratch final stage).
 docker-push: docker ## Push the Docker image to ghcr.io. Requires docker login.
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 
+# COMPOSE is the check the v1.801.425/.426 outage needed and nobody had. zip
+# refuses to compose a program whose middleware could never run, and it refuses at
+# BOOT — so fifteen plugins built, linked, passed vet and unit tests, and then
+# crash-looped in production. `go build` cannot see it; only running the binary can.
+#
+# SURVIVAL is the signal, and it is the only honest one. A compose panic is fatal,
+# so a process still alive when the timeout kills it (rc 124) composed. Grepping
+# the log for a success line does NOT work: `"message":"zip new"` is printed
+# BEFORE composition, and reading it as a pass is exactly how a broken build was
+# twice reported shipped.
+#
+# Each app gets a writable data dir and its OWN four ports. Without them it dies on
+# `mkdir /var/lib/cloud/orgs` or on binding :8080/:9653/:9090/:8081 long before it
+# reaches the router — and an early death looks like silence, which reads as a pass.
+COMPOSE_DIR ?= .compose
+compose: apps ## Prove every app binary BOOTS — the compose check `go build` cannot do.
+	@rm -rf $(COMPOSE_DIR) && mkdir -p $(COMPOSE_DIR)
+	@fail=0; port=41000; \
+	for a in $(APPS); do \
+	  d=$(COMPOSE_DIR)/$$a; mkdir -p $$d/rt; \
+	  out=$$(CLOUD_DATA_DIR=$$d ZIP_RUNTIME_DIR=$$d/rt \
+	         CLOUD_LISTEN=:$$port CLOUD_ZAP_LISTEN=:$$((port+1)) \
+	         CLOUD_HEALTH_LISTEN=:$$((port+2)) CLOUD_ADMIN_LISTEN=:$$((port+3)) \
+	         timeout 25 ./bin/$$a 2>&1); rc=$$?; port=$$((port+10)); \
+	  if printf '%s' "$$out" | grep -q 'does not compose'; then \
+	    fail=1; echo "PANIC $$a"; printf '%s\n' "$$out" | grep -E 'zip: (the group|GET|POST|PUT|PATCH|DELETE)' | sed 's/^/    /' | head -4; \
+	  elif [ $$rc -ne 124 ]; then \
+	    fail=1; echo "DIED  $$a (rc=$$rc): $$(printf '%s' "$$out" | tail -1 | cut -c1-140)"; \
+	  fi; \
+	done; \
+	rm -rf $(COMPOSE_DIR); \
+	test $$fail -eq 0 && echo ">> compose: $(words $(APPS)) apps boot" || { echo ">> compose FAILED"; exit 1; }
+
 clean: ## Remove built artifacts.
-	rm -rf bin
+	rm -rf bin $(COMPOSE_DIR)
