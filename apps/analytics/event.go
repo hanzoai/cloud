@@ -136,6 +136,13 @@ func (e Event) toCapture() CaptureEvent {
 type admission struct {
 	org  string
 	full bool
+	// project is the site the credential named, when it named one. Only a project
+	// key can: it is minted with a project and resolves to nothing else, so this is
+	// the one attribution the server can state rather than accept. It REPLACES the
+	// caller's `product` on every admitted row (attributeProject). Empty for the
+	// org-level credentials — a bearer and an IAM key name an org and no site, and
+	// an empty project honestly says "this write names no site".
+	project string
 	// subject is the credential's OWN signed identity. It is only consulted on the
 	// reduced lane, where it REPLACES the caller-supplied distinctId — see handle. It
 	// is empty for the full-capability credentials, which are trusted to attribute
@@ -147,12 +154,10 @@ type admission struct {
 // in strict trust order:
 //
 //  1. a validated IAM bearer principal wins (its owner org), at FULL capability;
-//  2. else a presented write-only publishable key (pk_…) is HMAC-verified to its org
-//     with no IAM/DB hop (the SAME verifier publishable.go's /v1/ingest used — folded
-//     in here so a pk_ caller uses /v1/event directly), at FULL capability;
-//  3. else a presented out-of-band IAM access key (sk-…) is resolved to its org
-//     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey), at FULL capability;
-//  4. else a verified Hanzo Team workspace token — at FULL capability for a member,
+//  2. else a presented key on either carrier resolves through keyAdmission — the
+//     project that minted it (org AND site), else the org IAM issued it to — at FULL
+//     capability;
+//  3. else a verified Hanzo Team workspace token — at FULL capability for a member,
 //     and at REDUCED capability for a guest (teamTenant, team.go).
 //
 // None matches ⇒ (admission{}, false), which handle answers by refusing a presented-
@@ -173,13 +178,13 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 	// Safe only because a pk- no longer authenticates: IdentityFromRequest
 	// refuses it, so it attributes a write and never mints a reading principal.
 	if key := ingestKey(c); key != "" {
-		if org, ok := resolveKeyOrg(c.Context(), key); ok {
-			return admission{org: org, full: true}, true
+		if a, ok := keyAdmission(c, key); ok {
+			return a, true
 		}
 	}
 	if key := projectKey(c); key != "" {
-		if org, ok := resolveKeyOrg(c.Context(), key); ok {
-			return admission{org: org, full: true}, true
+		if a, ok := keyAdmission(c, key); ok {
+			return a, true
 		}
 	}
 	// A Hanzo Team workspace token (HS256 over SERVER_SECRET, org and role in the
@@ -195,6 +200,29 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 	// credential, never to whatever tab it came from.
 	if a, ok := teamTenant(c); ok {
 		return a, true
+	}
+	return admission{}, false
+}
+
+// keyAdmission resolves ONE presented key, on either carrier, to what it names.
+// Both carriers call it so they cannot drift into meaning different things by the
+// same string.
+//
+// Two issuers, and they are DISJOINT rather than a fallback chain: a project key
+// exists only in the project store and an IAM key only in IAM, so a lookup in one
+// can never shadow the other and the order costs nothing but a miss. Projects are
+// asked first because they answer a strictly narrower question — org AND site,
+// where IAM can only ever say org, having no project to scope to.
+//
+// A project key is the credential a site's own beacon carries, so it also carries
+// the property the whole change is for: it stops resolving the moment the project
+// stops existing.
+func keyAdmission(c *zip.Ctx, key string) (admission, bool) {
+	if sc, ok := resolveAttribution(c.Context(), key); ok {
+		return admission{org: sc.Org, project: sc.Project, full: true}, true
+	}
+	if org, ok := resolveKeyOrg(c.Context(), key); ok {
+		return admission{org: org, full: true}, true
 	}
 	return admission{}, false
 }
@@ -388,6 +416,28 @@ func cannotWrite(signed bool) *zip.HTTPError {
 	}
 }
 
+// cannotAttribute names why ADMISSION refused — the wall before cannotWrite's. Same
+// two-answer shape and the same reason: the caller's next move differs.
+//
+//	nothing presented ⇒ 401 ingest_key_required. The one code every client already
+//	                    branches on, so a beacon that lost its key reads the same
+//	                    whether it never had one or the projection dropped it.
+//	presented, unresolved ⇒ 403. It HAS a key; the key names no project. Minting
+//	                    another would hit the identical wall, so the fix named is the
+//	                    project, not the key.
+func cannotAttribute(presented bool) *zip.HTTPError {
+	if presented {
+		return &zip.HTTPError{
+			Status: http.StatusForbidden, Code: "ingest_key_unknown",
+			Msg: "this ingest key names no project: create one (POST /v1/projects) and send the key it mints",
+		}
+	}
+	return &zip.HTTPError{
+		Status: http.StatusUnauthorized, Code: "ingest_key_required",
+		Msg: "no event could be attributed: create a project (POST /v1/projects) and send its key as ?ingest_key= or Authorization: Bearer",
+	}
+}
+
 // ingestDecoded is the TAIL of the ingest pipeline, and the ONE place it lives: fold
 // type:'error' events (foldException) → the ONE write core (ingestEvents) → the honest
 // receipt. Every lane ends here, so "what happens to an admitted event" is written
@@ -514,42 +564,18 @@ func observeDropped(c *zip.Ctx, org, source string, unattributable, unroutable i
 	}
 }
 
-// presented reports whether the request PRESENTED an IDENTIFIABLE credential at all,
-// independent of whether it resolved. It is the discriminator between "misconfigured"
-// (refuse) and "anonymous" (project), and it names exactly the carriers eventTenant
-// consults, so the two can never disagree about what "presented" means. When
-// eventTenant learned about team tokens and this did not, they DID disagree, and the
-// result was the precise failure the team door exists to prevent: an expired team
-// token answered 200 with its rows filed under $public, a partition its org cannot
-// read.
+// presented reports whether the request PRESENTED an IDENTIFIABLE credential at
+// all, independent of whether it resolved. It picks which refusal handle answers:
+// 403 (you sent one and it is broken) or 401 (you sent none — here is what to get).
+// It names exactly the carriers eventTenant consults, so the two cannot disagree
+// about what "presented" means.
 //
-// WHY A KEY AND A TEAM TOKEN REFUSE, AND A STALE IAM BEARER DOES NOT. The asymmetry is
-// a fact about what is DECIDABLE, not a preference:
-//
-//   - an ingest key is self-identifying by PREFIX (pk-/sk-), and a team token is
-//     self-identifying by STRUCTURE (it carries an `account` claim, which an IAM token
-//     does not). For both, "the caller presented THIS kind of credential" is answerable
-//     without trusting anything, so a failure to resolve is unambiguously a
-//     misconfiguration and 403 is the honest answer.
-//   - an arbitrary `Authorization: Bearer <jwt>` is not distinguishable from a bearer
-//     minted for some other audience entirely. IdentityMiddleware already declines to
-//     401 it (validatedPrincipal returns nil rather than refusing), so treating its
-//     mere presence as "presented" here would turn every stale or foreign bearer that
-//     reaches an ingest door into a 403 — a refusal on evidence we do not have.
-//
-// So: identifiable credential that fails ⇒ 403. Unidentifiable bearer ⇒ the anonymous
-// lane, exactly as before this file learned about team tokens.
-// WHY bearerAPIKey IS HERE AND ingestKey IS NOT WIDENED. ingestKey returns only a
-// pk- so this door never SHADOWS the identity path: an sk- bearer is IAM's to
-// validate, and it arrives here already resolved (tenant ⇒ full capability) or not
-// at all. That is right, and it is not the question presented() asks. presented()
-// asks whether the caller PRESENTED an identifiable credential, and an sk-
-// bearer is identifiable by the SAME prefix authority every other carrier is judged
-// by — so a FAILED one is a misconfiguration and must refuse, exactly as the same
-// key refuses today on x-api-key. Without this it took the anonymous lane instead:
-// 200, with the caller's rows filed under $public, a partition its owner cannot
-// read. That is the precise silent-misfiling failure this function exists to
-// prevent, reached through the one carrier every Hanzo caller reaches for first.
+// A key is identifiable by PREFIX (pk-/sk-) and a team token by STRUCTURE (an
+// `account` claim an IAM token lacks), so a failure to resolve is decidably a
+// misconfiguration. An arbitrary Bearer JWT is not distinguishable from one minted
+// for another audience — IdentityMiddleware itself declines to 401 it — so it
+// reads as "presented nothing", and its caller is told to get a key rather than
+// that its key is broken.
 func presented(c *zip.Ctx) bool {
 	return ingestKey(c) != "" || projectKey(c) != "" || bearerAPIKey(c) || teamPresented(c)
 }
@@ -577,14 +603,23 @@ func bearerAPIKey(c *zip.Ctx) bool {
 // itself full capability, and a door added tomorrow inherits this decision by
 // construction rather than by remembering to copy it.
 //
-//	credential resolves     ⇒ FULL capability into THAT credential's org.
+//	credential resolves     ⇒ FULL capability into THAT credential's org, and into
+//	                          the site it named when it named one.
 //	credential presented,
 //	  does not resolve      ⇒ 403. Never downgraded: filing a misconfigured key's
-//	                          events under the public tenant would hide them in a
+//	                          events under a reserved tenant would hide them in a
 //	                          partition its owner cannot read — a silent failure worse
 //	                          than the refusal.
-//	nothing presented       ⇒ the ANONYMOUS lane (publicIngest): the projection, the
-//	                          kind allowlist, the size/rate bounds, the DNT gate.
+//	nothing presented       ⇒ 401, naming the key to get and where to put it.
+//
+// THERE IS NO ANONYMOUS LANE. A keyless beacon used to be ACCEPTED into a reserved
+// `$public` tenant and answered {"accepted":1} — an org could not read those rows,
+// so every such caller lost everything it sent while every status check it had
+// stayed green. Three first-party properties shipped keyless without one failed
+// build, and a fleet-wide outage answered 200 for two days. A 200 that discards
+// data is worse than a 4xx, so the lane is gone rather than gated: attribution is
+// the key, a project mints one at create, and a write nobody can attribute is
+// refused in the one field every client already reads.
 //
 // The first branch below is the ONLY unprojected write in this package. It is reached
 // only from here, and only with an org eventTenant resolved from a credential — which
@@ -635,12 +670,9 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 		if err != nil {
 			return zip.ErrBadRequest("malformed event payload")
 		}
-		return ingestDecoded(c, a.org, source, evs, refusal{})
+		return ingestDecoded(c, a.org, source, attributeProject(evs, a.project), refusal{})
 	}
-	if presented(c) {
-		return zip.ErrForbidden("valid bearer or a resolvable ingest key required")
-	}
-	return publicIngest(c, dec, publicTenant, source)
+	return cannotAttribute(presented(c))
 }
 
 // door is one ingest door: a PATH bound to the WIRE it speaks. Capability is not a
@@ -967,12 +999,4 @@ const sentryWire = "\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relaye
 // presented-but-unresolvable ⇒ 403; nothing ⇒ the anonymous projection.
 func (d door) ingest(_ *cloud.Service[state], c *zip.Ctx) error {
 	return handle(c, d.decode, d.source)
-}
-
-// anon is the door's SITE-HOST handler: the anonymous lane directly, with the
-// resolved Site's org as the tenant. It does not consult handle because there is
-// nothing to consult — sites.Middleware runs before the identity boundary, so no
-// credential on a site host has been validated by anything (installHostCarve).
-func (d door) anon(org string, c *zip.Ctx) error {
-	return publicIngest(c, d.decode, org, d.source)
 }

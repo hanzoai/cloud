@@ -46,7 +46,7 @@ func TestAnonCanonicalWireCarriesItsKind(t *testing.T) {
 		{"batch envelope", `{"batch":[{"type":"pageview","event":"$pageview","distinctId":"anon-1","path":"/pricing"}]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			code, body := doHost(t, app, "/v1/event", "", "", "api.hanzo.ai", tc.body)
+			code, body := postAnon(t, app, "/v1/event", tc.body, nil)
 			if code != http.StatusServiceUnavailable {
 				t.Fatalf("anonymous pageview on the %s shape = %d (%s), want 503 ADMITTED — "+
 					"all three published shapes of one wire must mean the same thing, or the "+

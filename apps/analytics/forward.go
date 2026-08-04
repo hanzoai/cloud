@@ -98,15 +98,6 @@ func fanOut(org string, evs []CaptureEvent) {
 			live = append(live, fn)
 		}
 	}
-	// The public tenant never fans out. A destination is a connection an ORG made, and
-	// this sink is handed the RAW pre-scrub event so a Conversions API can hash match
-	// keys — so forwarding an unattested event would push it into an external platform
-	// on an org's behalf. publicTenant holds no connection, so the lookup is already
-	// empty; stating it here makes that a property of the SEAM rather than a property of
-	// the destination table.
-	if org == publicTenant {
-		return
-	}
 	now := time.Now()
 	out := make([]SinkEvent, 0, len(evs))
 	for _, e := range evs {
