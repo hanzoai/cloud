@@ -26,10 +26,21 @@ func TestCommerceErrorScope(t *testing.T) {
 	sv1 := app.Group("/v1")
 	sv1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
 
-	// projects (after commerce) — typed 403; must NOT be clobbered to 500.
+	// projects (after commerce) — typed 403; must NOT be clobbered to 500. On the
+	// APP, not the group: that is the whole point of the case, a sibling subsystem
+	// whose routes are not beneath commerce's chain.
 	app.Get("/v1/projects", func(c *zip.Ctx) error { return zip.ErrForbidden("X-Org-Id required") })
-	// a commerce store route (after commerce) — typed 403; commerce envelope applies.
-	app.Get("/v1/store/current", func(c *zip.Ctx) error { return zip.ErrForbidden("store needs org") })
+	// a commerce store route — typed 403; commerce envelope applies. Registered ON
+	// THE GROUP, which is both what production does (Mount's storeV1 group) and
+	// what makes this test a valid program: zip refuses to compose a definition
+	// that declares middleware and guards no routes, because middleware with an
+	// empty subtree silently never runs. Registering commerce's own route on the
+	// app left sv1.Use guarding nothing, so from zip v1.24 on this panicked at
+	// Registry() — before any assertion here could run. The route's ADDRESS is
+	// unchanged ("/v1" + "/store/current"), so every expectation below still reads
+	// exactly as it did; what changed is that the envelope it asserts is now
+	// actually in the path of the route it asserts it on.
+	sv1.Get("/store/current", func(c *zip.Ctx) error { return zip.ErrForbidden("store needs org") })
 
 	probe := func(path string) (int, string) {
 		req := httptest.NewRequest("GET", path, nil)
