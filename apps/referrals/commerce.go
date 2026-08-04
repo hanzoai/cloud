@@ -18,7 +18,10 @@ import (
 // panel reads, indistinguishable from an admin grant except by its grant:referral tag.
 type commerce interface {
 	configured() bool
-	deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags string) (txnID string, err error)
+	// ref NAMES the event this credit pays out. Commerce requires it and guards
+	// on it, so a retried payout credits the wallet AT MOST ONCE — without it a
+	// retry and a second genuine bonus of the same amount are indistinguishable.
+	deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags, ref string) (txnID string, err error)
 	spendCents(ctx context.Context, org, user string) (int64, error)
 }
 
@@ -32,8 +35,8 @@ var errUnconfigured = payout.ErrUnconfigured
 type commerceSeam struct{ c *payout.Client }
 
 func (s commerceSeam) configured() bool { return s.c.Configured() }
-func (s commerceSeam) deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags string) (string, error) {
-	return s.c.Deposit(ctx, org, user, amountCents, currency, notes, tags)
+func (s commerceSeam) deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags, ref string) (string, error) {
+	return s.c.Deposit(ctx, org, user, amountCents, currency, notes, tags, ref)
 }
 func (s commerceSeam) spendCents(ctx context.Context, org, user string) (int64, error) {
 	return s.c.SpendCents(ctx, org, user)

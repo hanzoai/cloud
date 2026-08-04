@@ -70024,6 +70024,19 @@ paths:
       tags:
       - models
       x-app: ai
+  /v1/models/providers:
+    get:
+      description: |-
+        Public, secret-free list of the providers serving the models that
+        GET /v1/models lists — the same source, projected. Safe unauthenticated: no
+        keys, URLs, or config are returned, and it reports a SET of names, never
+        which provider serves which model.
+      operationId: get_v1_models_providers
+      summary: Public, secret-free list of the providers serving the models that GET
+        /v1/models lists — the same source, projected.
+      tags:
+      - models
+      x-app: github.com/hanzoai/ai
   /v1/mq/health:
     get:
       description: Reports whether the message plane behind this surface answers.
@@ -85085,18 +85098,6 @@ paths:
       tags:
       - prompts
       x-app: prompts
-  /v1/provider-flags:
-    get:
-      description: |-
-        Public, secret-free list of enabled Model provider NAMES. Used by
-        the pricing catalog sync to gate which providers' models are published
-        (replaces the standalone ENABLE_OPENROUTER env — one control). Safe to be
-        unauthenticated: no keys, URLs, or config are returned.
-      operationId: get_v1_provider-flags
-      summary: Public, secret-free list of enabled Model provider NAMES.
-      tags:
-      - provider-flags
-      x-app: github.com/hanzoai/ai
   /v1/pubsub/jetstream/streams:
     get:
       description: |-
@@ -94921,11 +94922,6 @@ tags:
 - description: Package prompts is your prompt library, versioned, so nothing changes
     silently.
   name: prompts
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: provider-flags
 - description: 'Package pubsub is your message bus: publish, subscribe, and durable
     streams your apps read at their own pace.'
   name: pubsub

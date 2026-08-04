@@ -554,9 +554,11 @@ func qualifyAndGrant(s *cloud.Service[state], ctx context.Context, ref Referral)
 	}
 
 	referrerTxn, rerr := grant(s, ctx, ref.ReferrerOrg, referrerBonusCents,
-		fmt.Sprintf("Referral bonus: %s qualified (code %s)", ref.RefereeOrg, ref.Code))
+		fmt.Sprintf("Referral bonus: %s qualified (code %s)", ref.RefereeOrg, ref.Code),
+		bonusRef(ref.ID, "referrer"))
 	refereeTxn, ferr := grant(s, ctx, ref.RefereeOrg, refereeBonusCents,
-		fmt.Sprintf("Referral welcome bonus (code %s)", ref.Code))
+		fmt.Sprintf("Referral welcome bonus (code %s)", ref.Code),
+		bonusRef(ref.ID, "referee"))
 	if err := s.State.store.SetTxns(ctx, ref.ID, referrerTxn, refereeTxn); err != nil {
 		s.Log.Error("referrals: record txns failed", "id", ref.ID, "err", err)
 	}
@@ -570,11 +572,18 @@ func qualifyAndGrant(s *cloud.Service[state], ctx context.Context, ref Referral)
 	return s.State.store.Get(ctx, ref.ID)
 }
 
+// bonusRef names one side of one referral's payout. A referral pays TWO wallets,
+// so the referral id alone would name both and commerce would dedupe the second
+// against the first — the referee's bonus would silently never land. Side makes
+// each credit its own event while staying stable across retries, which is what
+// at-most-once needs.
+func bonusRef(referralID, side string) string { return "referral:" + referralID + ":" + side }
+
 // grant deposits a promo credit into org's wallet (Credit/trial bucket) and
 // returns the ledger transaction id. Subject == the bare org slug, exactly the
 // wallet the balance panel reads (symmetric with admin.grantCredit).
-func grant(s *cloud.Service[state], ctx context.Context, org string, cents int64, note string) (string, error) {
-	return s.State.commerce.deposit(ctx, org, orgSubject(org), cents, grantCurrency, note, grantTag)
+func grant(s *cloud.Service[state], ctx context.Context, org string, cents int64, note, ref string) (string, error) {
+	return s.State.commerce.deposit(ctx, org, orgSubject(org), cents, grantCurrency, note, grantTag, ref)
 }
 
 // emitGrantAudit records a referral bonus in cloud's tamper-evident trail (action
