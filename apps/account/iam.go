@@ -398,6 +398,36 @@ func (c *iamClient) getUser(ctx context.Context, id string) (json.RawMessage, er
 	return env.Data, nil
 }
 
+// setAvatar records the user's profile photo URL on their IAM row. IAM is the
+// system of record for `avatar` — the console, the session claims and every other
+// surface already read it from there — so this one write is what makes a new photo
+// appear everywhere at once.
+//
+// Same whole-row re-submit as moveUserToOrg: update-user takes the entire row, so
+// it is read, ONE field is changed, and it goes back. Reading first is not
+// optional — a partial row would blank every field it omitted, including the
+// password hash.
+func (c *iamClient) setAvatar(ctx context.Context, id, photo string) error {
+	rowRaw, err := c.getUser(ctx, id)
+	if err != nil {
+		return err
+	}
+	var row map[string]any
+	if err := json.Unmarshal(rowRaw, &row); err != nil {
+		return fmt.Errorf("iam get-user: decode: %w", err)
+	}
+	row["avatar"] = photo
+	// avatarType tells IAM the photo is ours rather than a federated provider's, so
+	// a later sign-in through GitHub does not silently overwrite what the user chose.
+	row["avatarType"] = "custom"
+	body, err := json.Marshal(row)
+	if err != nil {
+		return err
+	}
+	_, err = c.do(ctx, http.MethodPost, "/v1/iam/update-user", url.Values{"id": {id}}, body)
+	return err
+}
+
 // moveUserToOrg makes the zero-org user an admin of `slug`: it re-submits the user
 // row with owner=slug + isAdmin=true (update-user takes the whole row). The user's
 // password travels with the row (IAM verifies against user.PasswordType first), so
