@@ -313,7 +313,7 @@ func init() {
 // It is installed FIRST: fiber runs middleware in registration order, so one
 // installed after its leaves never runs.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Group(dashPrefix).Use(cloud.Bridge(), bounce)
+	app.Group(dashPrefix).Use(cloud.Bridge(), zip.H(bounce))
 
 	// Liveness — public (probe-able without a JWT). It stays a RAW handler because
 	// it answers 503 carrying the SAME domain body as its 200 (status + the k8s and
