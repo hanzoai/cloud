@@ -89,7 +89,23 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("/v1/iam/users/get", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id := r.URL.Query().Get("id")
+		// IAM keys this read on owner+name, NOT on the `<owner>/<name>` composite —
+		// measured against the running service, where every `?id=` form answers
+		// 400 "field \"owner\" is required". The fake insists on the same shape so
+		// a client that regresses to `id` fails here instead of in production.
+		q := r.URL.Query()
+		owner, name := q.Get("owner"), q.Get("name")
+		id := q.Get("id")
+		if owner != "" || name != "" {
+			// The shape IAM actually accepts. A client that regresses to the
+			// `<owner>/<name>` composite for a caller that HAS an owner gets the
+			// same 400 the running service gives.
+			if owner == "" || name == "" {
+				bad(w, `field "owner" is required`)
+				return
+			}
+			id = owner + "/" + name
+		}
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if row, present := f.user[id]; present {
