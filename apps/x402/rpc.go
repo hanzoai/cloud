@@ -87,15 +87,18 @@ func (r rail) planeSettle(ctx context.Context, in *plane.SettleIn) (*plane.Settl
 		return &plane.Settled{OK: true, Free: true}, nil
 	}
 
-	g := run(r.s, ctx, cloud.Who(ctx).Org, in.Proof, resource, terms)
-	out := &plane.Settled{}
-	if g.req != nil {
-		out.Challenge = marshalHeader(*g.req)
+	g := run(r.s, ctx, cloud.Who(ctx).Org, in.Payment, resource, terms)
+	// The header VALUES cross the plane, already encoded, because the process that
+	// holds the request is the one that must write them and it does not link this
+	// package: a caller that had to re-render them would be a second encoder of the
+	// same wire, free to drift from this one.
+	out := &plane.Settled{Response: EncodeHeader(g.settlement())}
+	if req := g.required(); req != nil {
+		out.Challenge = EncodeHeader(req)
 	}
 	if g.receipt != nil {
-		served(r.s, ctx, nil, g.receipt) // no request here: the audit row, not the header
+		served(r.s, ctx, nil, g) // no request here: the audit row, not the header
 		out.OK = true
-		out.Receipt = marshalHeader(g.receipt)
 		return out, nil
 	}
 	out.Status, out.Code, out.Reason = g.status, g.code, g.msg

@@ -74,8 +74,7 @@ func (g *registry) planePrice(ctx context.Context, in *plane.PriceIn) (*plane.Pr
 		Amount:            plane.Amount(terms.Amount.Unwrap()),
 		RecipientOrg:      terms.RecipientOrg,
 		RecipientWalletID: terms.RecipientWalletID,
-		Token:             terms.Token,
+		Asset:             terms.Asset,
 		Network:           terms.Network,
-		ChainID:           terms.ChainID,
 	}, nil
 }
