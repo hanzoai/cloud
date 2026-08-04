@@ -256,6 +256,12 @@ func TestGVRs(t *testing.T) {
 			[3]string{experimentGVR.Group, experimentGVR.Version, experimentGVR.Resource}},
 		{"Trial", "kubeflow.org", "v1beta1", "trials",
 			[3]string{trialGVR.Group, trialGVR.Version, trialGVR.Resource}},
+		// v1alpha1, not the InferenceService's v1beta1 — kserve serves the runtime
+		// kinds at a different version, and reading the wrong one comes back "the
+		// server doesn't have a resource type", which the capacity clause would
+		// report as a broken probe forever.
+		{"ClusterServingRuntime", "serving.kserve.io", "v1alpha1", "clusterservingruntimes",
+			[3]string{runtimeGVR.Group, runtimeGVR.Version, runtimeGVR.Resource}},
 	}
 	for _, tc := range cases {
 		want := [3]string{tc.group, tc.ver, tc.res}
