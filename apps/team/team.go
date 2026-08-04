@@ -128,22 +128,30 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		planEnt:  plan.Entitlements,
 		degraded: degraded,
 	}
+	// Bridge FIRST, before any leaf AND before the group below: a typed op receives
+	// only a context, so the validated org reaches it by being parked there — never
+	// as an In field, which is caller-supplied and would be a cross-tenant read the
+	// caller asserted for itself. fiber runs middleware in registration order, so
+	// one installed after its leaves never runs — which is why this precedes tg
+	// rather than following it. Serve installs the same middleware for the whole
+	// binary; this one is what makes team's typed ops resolve their tenant under a
+	// BARE Mount too (the app's own tests, and any embedder that mounts without
+	// Serve). Nesting is harmless — the inner one is what the handler sees.
+	//
+	// It goes through Use, not tg.Use: middleware on a group wraps what is composed
+	// BENEATH that group, and every file here builds its OWN group from teamPrefix —
+	// the same routing subtree, a different definition — so a Bridge on this one
+	// covered only the routes registered on this one. On a scope, Use is bounded to
+	// team's declared prefixes (/v1/team and /collaborator), which is every route
+	// the subsystem answers and nothing else.
+	app.Use(cloud.Bridge())
+
 	// One /v1/team group; every route below is a child of it. Each file that
 	// declares TYPED ops builds its own group from the same teamPrefix constant —
 	// a fiber group IS its prefix, so those are the same routing subtree, and it
 	// is what lets cmd/zipdoc resolve each op's path from the file it is declared
 	// in (see bots.go).
 	tg := app.Group(teamPrefix)
-	// Bridge FIRST, before any leaf: a typed op receives only a context, so the
-	// validated org reaches it by being parked there — never as an In field,
-	// which is caller-supplied and would be a cross-tenant read the caller
-	// asserted for itself. fiber runs middleware in registration order, so one
-	// installed after its leaves never runs. Serve installs the same middleware
-	// for the whole binary; this one is what makes team's typed ops resolve their
-	// tenant under a BARE Mount too (the app's own tests, and any embedder that
-	// mounts without Serve). Nesting is harmless — the inner one is what the
-	// handler sees. Same shape apps/agents, apps/search and apps/integrations use.
-	tg.Use(cloud.Bridge())
 	acct.register(app, guard)
 
 	// The front's workspace switcher polls this statistics endpoint on the
