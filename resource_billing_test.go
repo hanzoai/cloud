@@ -12,6 +12,7 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -176,6 +177,63 @@ func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
 
 	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != metering.ErrInsufficientBalance {
 		t.Fatalf("Gate(zero balance) = %v, want ErrInsufficientBalance", err)
+	}
+}
+
+// TestGate_RefusesAnEmptyLedgerAsIdentityNotAsMoney is the ordering gate for
+// EVERY priced surface: the caller is resolved before the money plane is asked.
+//
+// An empty org reaches Gate from any handler whose tenant check and whose
+// principal.Ledger disagree — provisioning's tenant() admits an admin with no
+// org and Ledger answers "" for that same request — and before this guard both
+// of Gate's branches answered a question about IDENTITY in the vocabulary of
+// MONEY: 503 "Billing temporarily unavailable" co-resident, and over the peer
+// plane 400 `field "subject" is required`, naming a field no caller can send.
+//
+// The assertion is the DENIAL TUPLE rather than a count of commerce calls,
+// deliberately. The obvious companion — "an unidentified caller makes no call to
+// the money plane" — is NOT falsifiable here: the metering client refuses an
+// empty org inside Authorize before it issues any HTTP, so fc.balances() reads 0
+// whether the guard ran or not. It would be a test that cannot fail. What the
+// caller is TOLD does change, and that is what this pins.
+//
+// Mutation proof: delete the `org == ""` guard from [ResourceMeter.Gate] and the
+// tuple becomes (503, balance_unavailable); delete the [ErrNoLedger] case from
+// [denial] and it becomes (503, balance_unavailable) too.
+func TestGate_RefusesAnEmptyLedgerAsIdentityNotAsMoney(t *testing.T) {
+	fc := &recCommerce{balanceAvailable: 5000} // funded: a refusal can never be poverty
+	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
+
+	err := rm.Gate(t.Context(), "", "", false, "sql", 100)
+	if !errors.Is(err, ErrNoLedger) {
+		t.Fatalf("Gate(empty org) = %v, want ErrNoLedger — an empty ledger is an identity refusal", err)
+	}
+	status, code, msg := denial(err)
+	if status != http.StatusForbidden {
+		t.Errorf("denial(ErrNoLedger) status = %d, want 403 — not a fault of the biller", status)
+	}
+	if code != "forbidden" || msg != "no validated principal" {
+		t.Errorf("denial(ErrNoLedger) = (%q, %q), want (\"forbidden\", \"no validated principal\") — "+
+			"the tenant gate's own sentence, so one condition has one answer", code, msg)
+	}
+}
+
+// TestGate_FailOpenNeverMakesAnUnidentifiedCallerFree keeps the guard ABOVE the
+// money policy. Fail-open decides what to do when the LEDGER is unreachable; it
+// must never decide WHO the caller is. If the guard is ever moved below the
+// fail-open branch, an unidentified caller silently provisions for free — the
+// exact silent-degradation shape this surface must not have.
+func TestGate_FailOpenNeverMakesAnUnidentifiedCallerFree(t *testing.T) {
+	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
+	rm := meterFor(t, fc.server(t).URL, "mainnet", true) // fail-OPEN
+
+	// A named caller is let through by fail-open — that is the policy working.
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
+		t.Fatalf("Gate(named caller, fail-open, biller down) = %v, want nil", err)
+	}
+	// A nameless one is still refused, because that was never a money question.
+	if err := rm.Gate(t.Context(), "", "", false, "sql", 100); !errors.Is(err, ErrNoLedger) {
+		t.Fatalf("Gate(empty org, fail-open) = %v, want ErrNoLedger — fail-open is not an identity", err)
 	}
 }
 
