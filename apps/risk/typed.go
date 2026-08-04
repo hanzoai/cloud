@@ -1341,6 +1341,28 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	}, nil
 }
 
+// caller is the identity a policy change is recorded against.
+//
+// It comes from the VALIDATED principal on the request and never from a body: an
+// attributable record whose attribution the caller chose is not attributable. Off
+// the HTTP path there is no request and so no identity, and the honest answer is
+// the empty one — [plane.enact] refuses it rather than recording an anonymous
+// change.
+//
+// It lives HERE, beside [ops.gate], because a package reaches for the raw request
+// in ONE file or it reaches for it in as many as nobody is counting. gate already
+// reads this exact header for the meter's actor, so a second file calling
+// cloud.Request for the same fact would be the same escape hatch under a second
+// justification — which is what allowedRequestUses (typed_request_gate_test.go)
+// exists to stop. Two functions, one seam, one pin.
+func caller(ctx context.Context) string {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return ""
+	}
+	return c.User()
+}
+
 // window validates a day count and returns it as a duration. 400 days is the
 // surface's own retention, so asking for more asks for rows that do not exist.
 func window(days int) (time.Duration, error) {

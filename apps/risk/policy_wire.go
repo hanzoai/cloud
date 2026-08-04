@@ -30,27 +30,15 @@ package risk
 // named identity, kept forever after under a version. That is the value, and
 // /v1/risk/policy is what it is called.
 
+// The identity a change is recorded against is [caller], in typed.go beside the
+// gate it shares a seam with: the raw request is this package's ONE escape hatch
+// and it is held to ONE file, so a second call site here would be the same hatch
+// under a second justification.
+
 import (
 	"context"
 	"time"
-
-	"github.com/hanzoai/cloud"
 )
-
-// caller is the identity a policy change is recorded against.
-//
-// It comes from the VALIDATED principal on the request and never from a body: an
-// attributable record whose attribution the caller chose is not attributable. Off
-// the HTTP path there is no request and so no identity, and the honest answer is
-// the empty one — [plane.enact] refuses it rather than recording an anonymous
-// change.
-func caller(ctx context.Context) string {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return ""
-	}
-	return c.User()
-}
 
 // riskPolicyIn takes nothing off the wire. The whole input is the caller's
 // validated principal, which is what decides whose history is reported.
