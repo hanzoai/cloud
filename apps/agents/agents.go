@@ -334,19 +334,30 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 
 	o := agentOps{s: s}
+	// Bridge FIRST, and at the door this SUBSYSTEM is, not on one node inside it: a
+	// typed op receives only a context, so the validated org reaches it by being
+	// parked there — never as an In field, which is caller-supplied and would be a
+	// cross-tenant read the caller asserted for itself.
+	//
+	// IT IS INSTALLED ON THE ROUTER, NOT ON THE /v1/agents GROUP, because this
+	// surface is not composed under that group. A group's middleware wraps the
+	// routes in its OWN subtree, and three quarters of this surface is registered
+	// somewhere else: the collection root and the two sub-planes go on the Router by
+	// absolute path (zip.Get(zapp, "/v1/agents"), mountSessions(s, app),
+	// mountTargets(s, app)) and only /metrics, /activity and the :ref leaves are
+	// composed beneath g. So a Bridge on g parked no org for /v1/agents/targets or
+	// /v1/agents/sessions, and every op there answered 403 "X-Org-Id required" to a
+	// request that carried one. Serve installs one app-wide, which is why serving
+	// was unaffected and only the tests — which Mount onto a bare app — could see
+	// it; a gate whose absence just one door down is invisible in production is the
+	// kind that stays broken. Under Serve a scope bounds this to the prefixes the
+	// manifest declares, and under a bare Mount it is app-wide, which is what the
+	// subsystem's own door honestly is.
+	//
+	// fiber runs middleware in registration order, so it goes above every route
+	// below, group included.
+	app.Use(cloud.Bridge())
 	g := app.Group("/v1/agents")
-	// Bridge FIRST, and at the TOP of the whole surface: a typed op receives only
-	// a context, so the validated org reaches it by being parked there — never as
-	// an In field, which is caller-supplied and would be a cross-tenant read the
-	// caller asserted for itself. fiber runs middleware in registration order, so
-	// one installed further down never runs for the leaves above it: this used to
-	// sit inside mountTargets, below, which left every leaf registered before that
-	// call — this file's, mountSessions' — with no org on the context the moment
-	// they became typed ops. Serve installs one app-wide too; nesting is harmless
-	// (the inner one is what the handler sees) and the tests mount this subsystem
-	// on a bare app with no Serve, so the subsystem's own install is what makes
-	// them pass.
-	g.Use(cloud.Bridge())
 	// The root of the surface. Declared on the App with its WHOLE path, not on the
 	// group with an empty leaf: joining "/v1/agents" with "" yields "/v1/agents/",
 	// a different path from the one these two have always served.
