@@ -405,20 +405,21 @@ func doBody(t *testing.T, app *zip.App, method, path, user, org, body string) (i
 }
 
 // TestCapture_NoPrincipalGetsAnonymousLane: a credential-less POST is not refused
-// outright — it takes the anonymous lane, because admission is decided by trust level
-// rather than per door. A pageview is admitted (503, datastore down) under the
-// reserved public tenant, and everything beyond the allowlist is dropped, which is
-// what the retired alias routes used to get WRONG in the other direction: they
-// resolved a REAL brand org from the Host and admitted the lot.
-func TestCapture_NoPrincipalGetsAnonymousLane(t *testing.T) {
+// outright at the door and admitted nowhere: admission is decided by trust level
+// rather than per door, and with no credential there is no trust level to decide on.
+// The retired alias routes got this WRONG in the other direction — they resolved a
+// REAL brand org from the Host and admitted the lot.
+func TestCapture_NoPrincipalIsRefused(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
 	p := canonDoor
-	if code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
-		t.Fatalf("no-principal POST %s want 503 (anonymous lane, admitted), got %d (%s)", p, code, body)
+	for _, body := range []string{
+		`{"batch":[{"type":"pageview"}]}`,
+		`{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`,
+	} {
+		code, got := doBody(t, app, http.MethodPost, p, "", "", body)
+		refusedAnon(t, "no-principal POST "+p+" "+body, code, got)
 	}
-	code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`)
-	refusedAnon(t, "no-principal commerce POST "+p, code, body)
 }
 
 // TestCapture_ForgedOrgWithoutBearerBuysNothing: a raw X-Org-Id with no validated
@@ -498,12 +499,11 @@ func doHost(t *testing.T, app *zip.App, path, user, org, host, body string) (int
 	return resp.StatusCode, b
 }
 
-// TestCapture_HostIsNotATenant: marketing traffic on a recognized brand Host is still
-// ACCEPTED (503 — admitted, datastore down), so nothing external breaks; what changed is
-// that the Host no longer picks the TENANT. Anonymous traffic lands under the reserved
-// public tenant whatever the Host says, and an UNRECOGNIZED Host now behaves exactly
-// like a recognized one — the two used to differ (403 vs. a real brand org), which is
-// precisely how a caller-settable header ended up selecting a real partition.
+// TestCapture_HostIsNotATenant: a Host never picks a tenant, and now never admits one
+// either. A recognized brand Host, an unrecognized one and a customer's own all answer
+// the SAME 401 — the Host is not evidence of anything. It used to differ (403 vs. a
+// real brand org), which is precisely how a caller-settable header ended up selecting
+// a real partition.
 func TestCapture_HostIsNotATenant(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
@@ -518,19 +518,8 @@ func TestCapture_HostIsNotATenant(t *testing.T) {
 		{"/v1/event", "hanzo.ai", posthogPage},
 		{"/v1/event", "evil.example.com", posthogPage},
 	} {
-		if code, body := doHost(t, app, tc.path, "", "", tc.host, tc.body); code != http.StatusServiceUnavailable {
-			t.Fatalf("anonymous pageview %s on host %q want 503 (admitted), got %d (%s)", tc.path, tc.host, code, body)
+		if code, body := doHost(t, app, tc.path, "", "", tc.host, tc.body); code != http.StatusUnauthorized {
+			t.Fatalf("anonymous pageview %s on host %q want 401 (no key), got %d (%s)", tc.path, tc.host, code, body)
 		}
-	}
-}
-
-func TestCapture_PublicCaptureDisabled(t *testing.T) {
-	t.Setenv(publicCaptureEnv, "off")
-	app := mountApp(t)
-	// With public capture disabled, even a recognized brand host is refused
-	// without a validated principal.
-	code, _ := doHost(t, app, canonDoor, "", "", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`)
-	if code != http.StatusForbidden {
-		t.Fatalf("public-capture-off anonymous want 403, got %d", code)
 	}
 }
