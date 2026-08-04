@@ -138,6 +138,24 @@ func init() {
 		},
 		Example: json.RawMessage(`{"product":"kms"}`),
 	})
+	zip.Describe("GET /v1/o11y/traces", zip.Doc{
+		Description: "Lists the caller org's recent traces — one row per trace with\nits span count and wall-clock duration, most recently active first. This is\nthe trace SEARCH: it is where a trace id comes from, and the spans behind any\nrow are then read from GET /v1/o11y/traces/{traceId}. Every row belongs to the\ncaller's own org — the tenant is the validated principal, never an input, and\nthere is no administrator widening, because a trace list is a tenant's records\nrather than a rollup over them. An unreachable telemetry store answers 503\nrather than an empty page, because \"no traces\" and \"cannot see the traces\" are\ndifferent facts and only one of them is about the caller's system.",
+		Fields: map[string]string{
+			"traceRow.durationMs":    "DurationMs is End minus Start in milliseconds: the trace's wall clock,\nnot the sum of its spans, which double-counts everything concurrent.",
+			"traceRow.end":           "End is the latest span end, RFC3339 with nanoseconds, in UTC.",
+			"traceRow.numSpans":      "NumSpans is how many spans the trace carries.",
+			"traceRow.start":         "Start is the earliest span start, RFC3339 with nanoseconds, in UTC.",
+			"traceRow.traceId":       "TraceID is the trace's id — the {traceId} of the detail read.",
+			"tracesIn.limit":         "Limit is how many traces to return. Default 50, capped at 500.",
+			"tracesIn.minDurationMs": "MinDurationMs keeps only traces that lasted at least this many\nmilliseconds. Zero or absent keeps every trace in the window.",
+			"tracesIn.range":         "Range is the window in seconds, counted back from now over each trace's\nlast activity. Default 3600, capped at 604800 (7d).",
+			"tracesOut.count":        "Count is how many traces this page carries.",
+			"tracesOut.limit":        "Limit is the page cap actually applied, after clamping.",
+			"tracesOut.sinceSec":     "SinceSec is the window actually read, in seconds, after clamping.",
+			"tracesOut.traces":       "Traces are the caller org's traces, most recently active first.",
+		},
+		Example: json.RawMessage(`{"range":3600,"limit":50}`),
+	})
 	zip.Describe("GET /v1/summary", zip.Doc{
 		Description: "Reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
 		Fields: map[string]string{

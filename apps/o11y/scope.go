@@ -74,6 +74,12 @@ func mountScope(a *zip.App) {
 	// which question it answers. The module's bare /v1/o11y/metrics is the metric
 	// NAME CATALOG — a different question, so a different address.
 	zip.Get(a, productPrefix+"/metrics", handleMetrics)
+	// The org's trace LIST (traces.go), at the BARE collection address — the one
+	// address in the trace family the module leaves open. It declares the DETAIL
+	// (/traces/{traceId}), the field catalog and three per-trace projections, and
+	// every one of them needs an id this read is where you get. Claiming the
+	// collection and nothing under it is what keeps that a composition.
+	zip.Get(a, o11yPrefix+"/traces", handleTraces)
 	// Flat, org-gated LLM-obs sessions list (sessions.go): pins the runtime's
 	// /api/sessions route and refuses an org-less caller at the cloud boundary.
 	a.Get("/v1/o11y/sessions", sessionsHandler)
