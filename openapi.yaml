@@ -70925,222 +70925,6 @@ paths:
       tags:
       - ml
       x-app: ml
-  /v1/ml/reference:
-    get:
-      description: |-
-        Lists every set this plane publishes, with its version and how
-        fresh it is.
-
-        Read the Stale and Refused lists first: they are the two ways this plane can
-        be quietly wrong, and they are reported rather than inferred. A set in
-        Refused answers nothing — it has never loaded, it is held by another
-        component, or it names a source we hold no licence for.
-      operationId: mlReferenceSets
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReferenceSetsOut'
-          description: ok
-      summary: Lists every set this plane publishes, with its version and how fresh
-        it is.
-      tags:
-      - ml
-      x-app: reference
-  /v1/ml/reference/{set}:
-    delete:
-      description: |-
-        Removes one of your organisation's overrides.
-
-        It removes an entry your organisation wrote, never a baseline member: the
-        published set is not writable from here, so a removal can only ever restore
-        the baseline's own answer.
-      operationId: mlClearReference
-      parameters:
-      - example: domain
-        in: path
-        name: set
-        required: true
-        schema:
-          type: string
-      - example: partner.example
-        in: query
-        name: key
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ClearReferenceOut'
-          description: ok
-      summary: Removes one of your organisation's overrides.
-      tags:
-      - ml
-      x-app: reference
-    get:
-      description: |-
-        Reference describes one set and lists your org's overrides in it.
-
-        The set half is public data about a published list — its version, its
-        publishers, their licences and how current each one is. The overrides half is
-        yours alone: it is read from your organisation's own store, and no other
-        organisation's entries can appear in it.
-      operationId: mlReference
-      parameters:
-      - example: domain
-        in: path
-        name: set
-        required: true
-        schema:
-          type: string
-      - description: 'After pages the override listing: the last key of the previous
-          page.'
-        in: query
-        name: after
-        required: false
-        schema:
-          type: string
-      - description: 'Limit caps the override listing: default 200, maximum 1000.'
-        example: 50
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReferenceOut'
-          description: ok
-      summary: Reference describes one set and lists your org's overrides in it.
-      tags:
-      - ml
-      x-app: reference
-    put:
-      description: |-
-        Writes your organisation's own allow and deny entries over a set.
-
-        Idempotent on the key: writing the same entry twice is one entry, and writing
-        it again replaces the verdict and the note. The whole batch is one
-        transaction, so a batch that would cross the per-set bound writes nothing
-        rather than half of itself — a half-applied deny list is worse than a refused
-        one, because nobody can tell which half applied.
-
-        Your entries are held in your organisation's own store and are never visible
-        to another organisation, and they never change what any other organisation
-        sees. The shared baseline is not writable from here at all.
-      operationId: mlSetReference
-      parameters:
-      - example: domain
-        in: path
-        name: set
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              entries:
-              - key: partner.example
-                note: our reseller
-                verdict: allow
-              set: domain
-            schema:
-              $ref: '#/components/schemas/SetReferenceIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SetReferenceOut'
-          description: ok
-      summary: Writes your organisation's own allow and deny entries over a set.
-      tags:
-      - ml
-      x-app: reference
-  /v1/ml/reference/refresh:
-    post:
-      description: |-
-        Takes a new version of one set. SuperAdmin only.
-
-        It is platform work, not tenant work: it writes the shared baseline every
-        organisation reads, so it is gated to the platform's own identity. Nothing
-        here can write an organisation's overrides, and nothing an organisation sends
-        can reach this route.
-
-        Idempotent. A version is the content digest of what was taken, so refreshing
-        an unchanged publisher writes no rows and reports unchanged. Resumable: a run
-        that died half-way is continued from where it stopped rather than restarted.
-
-        A set whose source needs a licence we do not hold is refused with the reason,
-        rather than being quietly skipped.
-      operationId: mlRefreshReference
-      requestBody:
-        content:
-          application/json:
-            example:
-              set: domain
-            schema:
-              $ref: '#/components/schemas/RefreshReferenceIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RefreshReferenceOut'
-          description: ok
-      summary: Takes a new version of one set.
-      tags:
-      - ml
-      x-app: reference
-  /v1/ml/reference/resolve:
-    post:
-      description: |-
-        Looks keys up against the reference plane.
-
-        Your organisation's own overrides are consulted FIRST and win outright; the
-        shared baseline answers everything they do not cover. Every answer names the
-        version that produced it, when that version was current and whether it is
-        stale, so a decision can record exactly what it consulted.
-
-        Read Refusal before reading Hit. A set that has never loaded, one held by the
-        component that screens against it, and one whose source needs a licence we do
-        not hold all answer with a refusal — and a miss on a refusing set means
-        nothing is known, not that the key is clean.
-      operationId: mlResolveReference
-      requestBody:
-        content:
-          application/json:
-            example:
-              keys:
-              - user@tempbox.example
-              - 3.5.140.1
-              sets:
-              - domain
-              - net
-            schema:
-              $ref: '#/components/schemas/ResolveReferenceIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResolveReferenceOut'
-          description: ok
-      summary: Looks keys up against the reference plane.
-      tags:
-      - ml
-      x-app: reference
   /v1/models:
     get:
       description: |-
@@ -87772,6 +87556,222 @@ paths:
       tags:
       - risk
       x-app: risk
+  /v1/risk/reference:
+    get:
+      description: |-
+        Lists every set this plane publishes, with its version and how
+        fresh it is.
+
+        Read the Stale and Refused lists first: they are the two ways this plane can
+        be quietly wrong, and they are reported rather than inferred. A set in
+        Refused answers nothing — it has never loaded, it is held by another
+        component, or it names a source we hold no licence for.
+      operationId: riskReferenceSets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceSetsOut'
+          description: ok
+      summary: Lists every set this plane publishes, with its version and how fresh
+        it is.
+      tags:
+      - risk
+      x-app: reference
+  /v1/risk/reference/{set}:
+    delete:
+      description: |-
+        Removes one of your organisation's overrides.
+
+        It removes an entry your organisation wrote, never a baseline member: the
+        published set is not writable from here, so a removal can only ever restore
+        the baseline's own answer.
+      operationId: riskClearReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      - example: partner.example
+        in: query
+        name: key
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearReferenceOut'
+          description: ok
+      summary: Removes one of your organisation's overrides.
+      tags:
+      - risk
+      x-app: reference
+    get:
+      description: |-
+        Reference describes one set and lists your org's overrides in it.
+
+        The set half is public data about a published list — its version, its
+        publishers, their licences and how current each one is. The overrides half is
+        yours alone: it is read from your organisation's own store, and no other
+        organisation's entries can appear in it.
+      operationId: riskReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      - description: 'After pages the override listing: the last key of the previous
+          page.'
+        in: query
+        name: after
+        required: false
+        schema:
+          type: string
+      - description: 'Limit caps the override listing: default 200, maximum 1000.'
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceOut'
+          description: ok
+      summary: Reference describes one set and lists your org's overrides in it.
+      tags:
+      - risk
+      x-app: reference
+    put:
+      description: |-
+        Writes your organisation's own allow and deny entries over a set.
+
+        Idempotent on the key: writing the same entry twice is one entry, and writing
+        it again replaces the verdict and the note. The whole batch is one
+        transaction, so a batch that would cross the per-set bound writes nothing
+        rather than half of itself — a half-applied deny list is worse than a refused
+        one, because nobody can tell which half applied.
+
+        Your entries are held in your organisation's own store and are never visible
+        to another organisation, and they never change what any other organisation
+        sees. The shared baseline is not writable from here at all.
+      operationId: riskSetReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              entries:
+              - key: partner.example
+                note: our reseller
+                verdict: allow
+              set: domain
+            schema:
+              $ref: '#/components/schemas/SetReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetReferenceOut'
+          description: ok
+      summary: Writes your organisation's own allow and deny entries over a set.
+      tags:
+      - risk
+      x-app: reference
+  /v1/risk/reference/refresh:
+    post:
+      description: |-
+        Takes a new version of one set. SuperAdmin only.
+
+        It is platform work, not tenant work: it writes the shared baseline every
+        organisation reads, so it is gated to the platform's own identity. Nothing
+        here can write an organisation's overrides, and nothing an organisation sends
+        can reach this route.
+
+        Idempotent. A version is the content digest of what was taken, so refreshing
+        an unchanged publisher writes no rows and reports unchanged. Resumable: a run
+        that died half-way is continued from where it stopped rather than restarted.
+
+        A set whose source needs a licence we do not hold is refused with the reason,
+        rather than being quietly skipped.
+      operationId: riskRefreshReference
+      requestBody:
+        content:
+          application/json:
+            example:
+              set: domain
+            schema:
+              $ref: '#/components/schemas/RefreshReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshReferenceOut'
+          description: ok
+      summary: Takes a new version of one set.
+      tags:
+      - risk
+      x-app: reference
+  /v1/risk/reference/resolve:
+    post:
+      description: |-
+        Looks keys up against the reference plane.
+
+        Your organisation's own overrides are consulted FIRST and win outright; the
+        shared baseline answers everything they do not cover. Every answer names the
+        version that produced it, when that version was current and whether it is
+        stale, so a decision can record exactly what it consulted.
+
+        Read Refusal before reading Hit. A set that has never loaded, one held by the
+        component that screens against it, and one whose source needs a licence we do
+        not hold all answer with a refusal — and a miss on a refusing set means
+        nothing is known, not that the key is clean.
+      operationId: riskResolveReference
+      requestBody:
+        content:
+          application/json:
+            example:
+              keys:
+              - user@tempbox.example
+              - 3.5.140.1
+              sets:
+              - domain
+              - net
+            schema:
+              $ref: '#/components/schemas/ResolveReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveReferenceOut'
+          description: ok
+      summary: Looks keys up against the reference plane.
+      tags:
+      - risk
+      x-app: reference
   /v1/risk/score:
     post:
       description: |-
