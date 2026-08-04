@@ -32,11 +32,10 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
-// defaultIAMBase is the in-cluster IAM service; overridable by IAM_URL for other
-// environments and by tests (an httptest.Server URL). Mirrors identity.ts's IAM_URL.
-const defaultIAMBase = "http://iam.hanzo.svc.cluster.local:8000"
 
 // iamMaxBody bounds an IAM response read — these are small JSON envelopes (a key,
 // a user row, an org row), never blobs.
@@ -53,7 +52,7 @@ type iamClient struct {
 }
 
 func newIAMClient() *iamClient {
-	base := strings.TrimRight(strings.TrimSpace(getenv("IAM_URL", defaultIAMBase)), "/")
+	base := cloud.IAMBase()
 	return &iamClient{
 		base:         base,
 		clientID:     strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID")),
