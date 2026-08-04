@@ -261,14 +261,15 @@ func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
 	// two, and it is checked at the moment of arming rather than on every request
 	// because a gate that silently disarms itself is not a gate.
 	//
-	// RiskScorerInstalled reports on THIS process (risk.go), and this one is the
-	// gateway binary, which mounts gateway alone — so nothing it can observe ever
-	// installs a scorer and the refusal below is currently unconditional. That is
-	// the fail-SAFE direction, and it holds the door shut rather than opening it,
-	// but it answers "is a scorer linked here" and not the question arming asks,
-	// which is whether the risk plane can answer for the fleet. Reaching that
-	// answer is a cross-process ask (a plane op, as the obs event door does), not
-	// a wider reading of this predicate.
+	// RiskScorerInstalled reports on THIS process (risk.go), and as composed today
+	// this one is the gateway binary, which links gateway alone — so nothing it can
+	// observe installs a scorer and the refusal below is currently unconditional.
+	// That is the fail-SAFE direction, and it holds the door shut rather than
+	// opening it, but it answers "is a scorer linked here" and not the question
+	// arming asks, which is whether the risk plane can answer for the fleet.
+	// Co-residency would not close the gap either: apps/risk exports no scorer to
+	// install. Reaching the fleet answer is a cross-process ask (a plane op, as the
+	// obs event door does), not a wider reading of this predicate.
 	if orgCfg.Mode == edge.ModeLive && !cloud.RiskScorerInstalled() {
 		return nil, zip.ErrBadRequest("mode=live requires the risk scorer; none is installed in this deployment")
 	}
