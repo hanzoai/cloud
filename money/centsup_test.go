@@ -3,7 +3,7 @@ package money_test
 import (
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // CentsUp is what a cents-only GATE reads. Rounding to nearest is what lets a
