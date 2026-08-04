@@ -1237,33 +1237,22 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 		return func(int) {}, nil
 	}
 	ledger := principal.Ledger(c)
-	// NO LEDGER IS AN IDENTITY REFUSAL, AND IT IS ANSWERED HERE RATHER THAN BY THE
-	// MONEY PLANE.
+	// NO LEDGER IS AN IDENTITY REFUSAL, and [cloud.ResourceMeter.Gate] is where it
+	// is answered — above both of its branches, for every caller of the money door,
+	// as [cloud.ErrNoLedger]. [cloud.denial] renders that as 403 "no validated
+	// principal" and [cloud.DenyEnvelope] writes it in the fleet's own nested
+	// {"error":{"code","message"}}, so this surface refuses an unidentified caller
+	// in the same bytes as every other one.
 	//
-	// principal.Ledger answers "" for exactly the requests the tenant gate refuses —
-	// it composes the same Validated check — so an empty ledger means there is nobody
-	// to bill because there is nobody. Handing that to the money plane asks it to
-	// price a spend for a NAMELESS subject, and it answers with the vocabulary of
-	// money about a question of identity:
+	// This op used to hold its own copy of that rule, from before the fleet door
+	// had one. Both answered 403 with the identical sentence, so the only thing the
+	// copy still decided was the SHAPE — flat {"status","code","error"} from zip
+	// instead of the nested envelope — which made /v1/risk the one surface where a
+	// client reading error.code found nothing. Measured, both ways, on this
+	// package's own priced ops before it was removed.
 	//
-	//	co-resident ledger — metering refuses an empty org fail-closed, which is not a
-	//	   4xx, so the money wire's fallback renders 503 "Billing temporarily
-	//	   unavailable". The caller is told the biller is broken.
-	//	peer ledger (what deploys) — the gate ships AuthorizeIn{Subject:""} over the
-	//	   internal plane, commerce's own `validate:"required"` rejects it, and because
-	//	   that refusal IS a 4xx the money wire preserves it verbatim: 400 `field
-	//	   "subject" is required`. The caller is told to send a field that appears
-	//	   nowhere in this operation's published request schema, so no caller can ever
-	//	   satisfy it — a door that answers, and cannot be opened.
-	//
-	// Both were measured, the second on api.hanzo.ai across eight of the ten declared
-	// paths. The refusal is the tenant gate's OWN sentence, from the one function that
-	// owns it ([tenantOf]), because a second wording would be a second answer to one
-	// question. [ops.search] never had the defect for the one reason that it reaches
-	// [ops.admit] before it prices anything — which is the rule this makes general.
-	if ledger == "" {
-		return nil, zip.ErrForbidden("no validated principal")
-	}
+	// [TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope] is what holds
+	// the remaining answer, and it fails if this file grows a second one back.
 	project, validated := principal.ValidatedProject(c)
 	if err := o.s.Bill.Gate(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(n))); err != nil {
 		return nil, cloud.Denied(err)

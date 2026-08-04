@@ -122,8 +122,17 @@ var pricedOps = []struct{ method, path, body string }{
 // price a nameless subject; a 400 means it was asked and its far end refused the
 // empty field. Both are the money plane answering a question about identity.
 //
-// Mutation proof: delete the empty-ledger guard from [ops.gate] and every op in
-// this table reports 503 instead of 403.
+// WHERE THE RULE LIVES, since this file's own note used to name the wrong place.
+// It said "delete the empty-ledger guard from [ops.gate] and every op in this
+// table reports 503", and that stopped being true: the same refusal was fixed
+// FLEET-WIDE in [cloud.ResourceMeter.Gate], above both of its branches, as
+// [cloud.ErrNoLedger] — so deleting this app's copy left the status and the
+// sentence unchanged and only changed the envelope. The copy is gone and the fleet
+// door is the one answer; the envelope is asserted by the test below, which is the
+// half no status assertion can see.
+//
+// Mutation proof: remove the `if org == ""` refusal from [cloud.ResourceMeter.Gate]
+// and every op in this table reports 503 instead of 403.
 func TestPricedOps_ResolveTheTenantBeforeTheyAskForMoney(t *testing.T) {
 	probe.reset(true)
 	// A funded ledger, so a refusal can never be mistaken for poverty: the money is
@@ -136,12 +145,108 @@ func TestPricedOps_ResolveTheTenantBeforeTheyAskForMoney(t *testing.T) {
 				tc.method, tc.path, code, body)
 			continue
 		}
-		// The SENTENCE matters as much as the status. The app owns exactly one
-		// refusal for this condition (tenantOf) and a second wording would be a
-		// second answer to one question.
+		// The SENTENCE matters as much as the status. There is exactly one refusal
+		// for this condition (cloud.ErrNoLedger, which tenantOf's own wording matches
+		// verbatim) and a second wording would be a second answer to one question.
 		if !strings.Contains(string(body), "no validated principal") {
-			t.Errorf("%s %s refused with %s — want the tenant gate's own sentence, %q",
+			t.Errorf("%s %s refused with %s — want the one sentence for this condition, %q",
 				tc.method, tc.path, body, "no validated principal")
+		}
+	}
+}
+
+// TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope holds the SHAPE,
+// which is the half a status-and-sentence assertion cannot see — and it is the
+// half that was wrong.
+//
+// Two envelopes used to coexist on this one surface for one refusal, with the same
+// status and the same words in them. Measured, on this package's priced ops:
+//
+//	this app's own copy of the rule   403 {"status":403,"error":"no validated principal"}
+//	the fleet's money door            403 {"error":{"code":"forbidden","message":"no validated principal"}}
+//
+// The nested one is canonical because it is what the edge gate and every other
+// Hanzo surface emit, so a client that reads `error.code` reads it everywhere. The
+// flat one was zip rendering a returned error, and on /v1/risk it meant
+// `error.code` was absent from exactly one product's refusals.
+//
+// Asserted STRUCTURALLY and not by substring: both bodies contain the sentence, so
+// a substring check passes on either and is therefore no assertion about the shape
+// at all. It reads error.code, which only one of the two has.
+//
+// Mutation proof: put `if ledger == "" { return nil, zip.ErrForbidden("no
+// validated principal") }` back at the top of [ops.gate] and every op here reports
+// the flat envelope with no error.code.
+func TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope(t *testing.T) {
+	probe.reset(true)
+	app := mountBilled(t, &ledger{available: 100_000_000})
+	for _, tc := range pricedOps {
+		code, body := req(t, app, tc.method, tc.path, orgA, "", tc.body)
+		if code != http.StatusForbidden {
+			t.Errorf("%s %s = %d %s, want 403", tc.method, tc.path, code, body)
+			continue
+		}
+		var env struct {
+			Error *struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(body, &env); err != nil || env.Error == nil {
+			t.Errorf("%s %s refused with %s — want the fleet's nested {\"error\":{\"code\",\"message\"}}; "+
+				"a caller reading error.code finds nothing on this product and something on every other",
+				tc.method, tc.path, body)
+			continue
+		}
+		if env.Error.Code != "forbidden" || env.Error.Message != "no validated principal" {
+			t.Errorf("%s %s refused with code=%q message=%q, want forbidden / \"no validated principal\"",
+				tc.method, tc.path, env.Error.Code, env.Error.Message)
+		}
+	}
+}
+
+// TestPricedOps_RefuseAnUnidentifiedCallerEvenWhenTheOperatorPricesThemAtZero is
+// the hole the deletion above could have opened, closed.
+//
+// [cloud.ResourceMeter.Gate] returns EARLY when the cost is zero — before its own
+// empty-org refusal — and the price is an operator knob
+// (CLOUD_RISK_PRICE_UUSD_PER_SCREEN, and 0 is a legal value that makes the surface
+// free). So "the money door refuses an unidentified caller" is true only while
+// somebody is charged. The app's own copy of the rule used to cover that case by
+// accident, because it ran before the price was computed.
+//
+// The refusal therefore cannot live only at the money door: it lives at [tenantOf]
+// too, which every op reaches whatever it costs. Both together are why the surface
+// cannot be made anonymous by setting a price to zero.
+//
+// Mutation proof: revert [tenantOf]'s no-principal branch to
+// zip.ErrForbidden("no validated principal") and this reports the flat envelope on
+// every op; make it `return "", nil` and it reports 200 — an unidentified caller
+// served, for free, by one env var.
+func TestPricedOps_RefuseAnUnidentifiedCallerEvenWhenTheOperatorPricesThemAtZero(t *testing.T) {
+	probe.reset(true)
+	t.Setenv("CLOUD_RISK_PRICE_UUSD_PER_SCREEN", "0")
+	if screenMicros(1) != 0 {
+		t.Fatal("the price is not zero, so this test is not exercising the free path it exists for")
+	}
+	app := mountBilled(t, &ledger{available: 100_000_000})
+	for _, tc := range pricedOps {
+		code, body := req(t, app, tc.method, tc.path, orgA, "", tc.body)
+		if code != http.StatusForbidden {
+			t.Errorf("%s %s = %d %s at price zero, want 403 — a free surface is not an anonymous one",
+				tc.method, tc.path, code, body)
+			continue
+		}
+		var env struct {
+			Error *struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(body, &env); err != nil || env.Error == nil ||
+			env.Error.Code != "forbidden" || env.Error.Message != "no validated principal" {
+			t.Errorf("%s %s at price zero refused with %s — want the same nested envelope it refuses "+
+				"with when priced", tc.method, tc.path, body)
 		}
 	}
 }
