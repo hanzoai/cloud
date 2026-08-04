@@ -299,12 +299,11 @@ type riskLearnIn struct {
 
 // riskLearnOut is what the batch did.
 type riskLearnOut struct {
-	// Learned is how many events the model learned from, which is the batch, and
-	// is also what the call is metered at: one screen per event.
+	// Learned is how many of the events the model actually learned from, and is
+	// also what the call is metered at: one screen per event learned from. It is
+	// the batch minus the events already in this organisation's record, so a
+	// retried batch reports — and is charged — zero.
 	Learned int `json:"learned"`
-	// Verdicts is the model's verdict on each event, in the order given, so a
-	// caller that is both teaching and deciding needs one round trip.
-	Verdicts []riskScoreOut `json:"verdicts"`
 }
 
 // riskStateIn takes nothing off the wire. The whole input is the caller's validated
@@ -754,17 +753,31 @@ func (o ops) score(ctx context.Context, in *riskScoreIn) (*riskScoreOut, error) 
 }
 
 // Learn records a batch of events into the caller organisation's own aggregates
-// and lets its model learn from them, answering the model's verdict on each.
+// and lets its model learn from them. It answers how many it learned from.
+//
+// IT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;
+// learning is a transformation over observations; a verdict is a query against the
+// result. This op is the first two. [ops.score] is the third, it is pure, and it
+// is the ONE door to a verdict. They were one call, which meant you could not
+// record without training and could not train without being answered — and the
+// model ran twice over every event to produce a verdict the response carried and
+// no caller read.
+//
+// TO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then
+// learn: the score is then the model's opinion of an event it has not yet learned
+// from, which is the question worth asking. The other order answers for a model
+// that has already absorbed the event it is judging.
 //
 // This is the training path, and there is no job behind it: the model IS a set of
 // mass counters over half-space trees, so learning is an increment and the model
 // is current the instant the last event lands. Nothing from any other
 // organisation is in it, and nothing from this organisation leaves it.
 //
-// Events are recorded FIRST and judged after, which is deliberate: the numbers an
-// alert quotes are then the same ones an investigator sees when they look at the
-// subject, and every baseline has the event removed from it arithmetically so
-// nothing is measured against itself.
+// A RETRY IS INERT. The record deduplicates on the event id you send, and an event
+// already in it moves nothing, costs nothing and is not counted — so a client that
+// timed out can send the same batch again and its model holds what it holds.
+// Without an id of your own there is nothing to converge on: two identical bodies
+// are two events.
 //
 // Example: {"events":[{"id":"tx_9","kind":"account","subject":"u_412","nano":420000000}]}
 func (o ops) learn(ctx context.Context, in *riskLearnIn) (*riskLearnOut, error) {
@@ -795,16 +808,16 @@ func (o ops) learn(ctx context.Context, in *riskLearnIn) (*riskLearnOut, error) 
 		return nil, err
 	}
 	defer leave()
-	verdicts, err := p.learn(t, obs...)
+	learned, err := p.learn(t, obs...)
 	if err != nil {
 		return nil, wrap(err)
 	}
-	pay(len(verdicts))
-	out := riskLearnOut{Learned: len(verdicts), Verdicts: make([]riskScoreOut, 0, len(verdicts))}
-	for _, d := range verdicts {
-		out.Verdicts = append(out.Verdicts, verdict(d))
-	}
-	return &out, nil
+	// METERED ON WHAT WAS DONE, which is this app's own stated rule for the pair
+	// ([ops.gate]) and is now the truth rather than an approximation of it. The
+	// gate above still bounds the batch the caller stated, because how many of it
+	// is new is not knowable until the record has been written.
+	pay(learned)
+	return &riskLearnOut{Learned: learned}, nil
 }
 
 // State reports the caller organisation's own model: what it has learned, whether
