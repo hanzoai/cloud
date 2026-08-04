@@ -7,7 +7,7 @@ package openapi_test
 // that app's own binary from that app's own router (`<app> openapi`) — into the
 // fleet document, and requires it to equal openapi.yaml byte for byte. There is
 // no fully-mounted binary left to read: "compose the apps" and "the spec" are one
-// statement. `make openapi` writes the golden through this same weave (-weave);
+// statement. `make describe` writes the golden through this same weave (-weave);
 // with no flag the same weave is the check.
 //
 // What it proves is COMPOSITION and only composition: that the subsets compose
@@ -36,7 +36,7 @@ import (
 )
 
 // weaveOut writes the woven document — the fleet spec the SDK repos pull. It is
-// the SOLE writer of openapi.yaml now that the monolith is gone: `make openapi`
+// the SOLE writer of openapi.yaml now that the monolith is gone: `make describe`
 // regenerates each app's subset and then runs this with -weave to compose them
 // into the golden. Without the flag the same weave is the drift gate.
 var weaveOut = flag.String("weave", "", "write the woven document to this path (regenerate the golden)")
@@ -72,7 +72,7 @@ func fromTree(app string) []byte {
 func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 	want, err := os.ReadFile(goldenPath)
 	if err != nil {
-		t.Fatalf("read %s: %v — run `make openapi`", goldenPath, err)
+		t.Fatalf("read %s: %v — run `make describe`", goldenPath, err)
 	}
 	subsets, err := openapi.Subsets(manifest.Names(), fromTree)
 	if err != nil {
@@ -87,7 +87,7 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 	}
 
 	// THE RATCHET, before anything is written: a regeneration that publishes less
-	// than the committed floor is refused in BOTH modes, so `make openapi` cannot
+	// than the committed floor is refused in BOTH modes, so `make describe` cannot
 	// be the thing that lands a shrunken document. See openapi/floor.go.
 	was, err := openapi.ReadFloor(floorPath)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Fatalf("openapi.yaml is not the weave of its apps' subsets (%d paths woven now). A route was added, "+
 			"removed or renamed and either an app subset or the golden was not regenerated — the SDK repos pull "+
-			"this file. Run `make openapi` and commit the result.", len(woven.Paths))
+			"this file. Run `make describe` and commit the result.", len(woven.Paths))
 	}
 	t.Logf("woven %d paths / %d schemas / %d tags from %d apps — byte-identical to %s",
 		len(woven.Paths), schemaCount(woven), len(woven.Tags), len(manifest.Apps), goldenPath)
