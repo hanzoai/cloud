@@ -62,6 +62,10 @@ type market struct {
 	fin   types.FinanceClient
 	key   *ecdsa.PrivateKey // the buyer's payment key
 	payee string            // the seller's wallet id
+	// resource is what the last challenge said it was FOR. In x402 v2 the resource
+	// lives on the PaymentRequired envelope (resource.url), not on the individual
+	// PaymentRequirements, so challengeOf parks it here for the assertions below.
+	resource string
 }
 
 func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
@@ -185,7 +189,7 @@ func (m *market) req(method, path, org, proof, body string) (int, []byte, http.H
 		hr.Header.Set("X-User-Id", "u_"+org)
 	}
 	if proof != "" {
-		hr.Header.Set(x402.HeaderProof, proof)
+		hr.Header.Set(x402.HeaderPaymentSignature, proof)
 	}
 	resp, err := m.app.Test(hr, zip.TestConfig{Timeout: 0})
 	if err != nil {
@@ -234,33 +238,36 @@ func (m *market) call(org, tool, proof string) (int, []byte, http.Header) {
 }
 
 // pay signs an authorization over exactly the challenge's terms — what a compliant
-// x402 client does — and returns the X-Payment header value.
+// x402 client does — and returns the PAYMENT-SIGNATURE header value.
 func (m *market) pay(req x402.PaymentRequirements) string {
 	m.t.Helper()
 	now := time.Now().Unix()
 	nonce := make([]byte, 32)
 	_, _ = rand.Read(nonce)
-	p, err := x402.Sign(req, m.key, "0x"+hex.EncodeToString(nonce), now-60, now+300, "", "")
+	p, err := x402.Sign(req, m.key, "0x"+hex.EncodeToString(nonce), now-60, now+300)
 	if err != nil {
 		m.t.Fatalf("sign: %v", err)
 	}
-	b, _ := json.Marshal(p)
-	return string(b)
+	return x402.EncodeHeader(p)
 }
 
 // challengeOf reads the PaymentRequirements off a 402 refusal's header — the
 // canonical carrier, and the only one a typed op's error body can leave room for.
 func (m *market) challengeOf(h http.Header) x402.PaymentRequirements {
 	m.t.Helper()
-	raw := h.Get(x402.HeaderRequirements)
+	raw := h.Get(x402.HeaderPaymentRequired)
 	if raw == "" {
-		m.t.Fatalf("402 carried no %s header — a challenge a client cannot read is not a challenge", x402.HeaderRequirements)
+		m.t.Fatalf("402 carried no %s header — a challenge a client cannot read is not a challenge", x402.HeaderPaymentRequired)
 	}
-	var req x402.PaymentRequirements
-	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+	var required x402.PaymentRequired
+	if err := x402.DecodeHeader(raw, &required); err != nil {
 		m.t.Fatalf("decode challenge %q: %v", raw, err)
 	}
-	return req
+	if len(required.Accepts) != 1 {
+		m.t.Fatalf("challenge offered %d ways to pay, want 1", len(required.Accepts))
+	}
+	m.resource = required.Resource.URL
+	return required.Accepts[0]
 }
 
 // balance is the exact ledger balance of (org, subject) — never cents.
@@ -323,10 +330,10 @@ func TestPricedToolChallengedThenSettles(t *testing.T) {
 		t.Fatalf("still fails closed on an unwired charger, not an x402 challenge: %s", body)
 	}
 	req := m.challengeOf(hdr)
-	if req.Resource != plane.ToolResource(tool) {
-		t.Fatalf("challenge names %q, want the tool resource %q", req.Resource, plane.ToolResource(tool))
+	if m.resource != plane.ToolResource(tool) {
+		t.Fatalf("challenge names %q, want the tool resource %q", m.resource, plane.ToolResource(tool))
 	}
-	if req.Payee == "" {
+	if req.PayTo == "" {
 		t.Fatal("challenge names no payee address — nothing to pay")
 	}
 	// $0.0025 at USDC's 6 decimals is 2500 smallest units. A cents-typed path would
@@ -346,8 +353,8 @@ func TestPricedToolChallengedThenSettles(t *testing.T) {
 	if !bytes.Contains(body, []byte(`"ran":true`)) {
 		t.Fatalf("tool did not run after payment: %s", body)
 	}
-	if hdr.Get(x402.HeaderReceipt) == "" {
-		t.Fatalf("paid call carried no %s receipt", x402.HeaderReceipt)
+	if hdr.Get(x402.HeaderPaymentResponse) == "" {
+		t.Fatalf("paid call carried no %s receipt", x402.HeaderPaymentResponse)
 	}
 
 	debited := before.Sub(m.balance(buyer, buyer))
@@ -384,7 +391,7 @@ func TestUnpricedToolUnaffected(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("%s = %d (%s), want 200 — an unpriced tool is not for sale", tool, code, body)
 		}
-		if hdr.Get(x402.HeaderRequirements) != "" {
+		if hdr.Get(x402.HeaderPaymentRequired) != "" {
 			t.Fatalf("%s was challenged for payment it does not cost", tool)
 		}
 	}
@@ -426,8 +433,8 @@ func TestCrossOrgCreditImpossible(t *testing.T) {
 	if code == http.StatusOK {
 		t.Fatalf("a listing naming another org's wallet was SERVED: %s", body)
 	}
-	if hdr.Get(x402.HeaderRequirements) != "" {
-		t.Fatalf("an unpayable listing issued a challenge a client could satisfy: %s", hdr.Get(x402.HeaderRequirements))
+	if hdr.Get(x402.HeaderPaymentRequired) != "" {
+		t.Fatalf("an unpayable listing issued a challenge a client could satisfy: %s", hdr.Get(x402.HeaderPaymentRequired))
 	}
 	if got := m.balance(outside, victimWallet); !got.IsZero() {
 		t.Fatalf("credited %s to an org that never published anything", got.String())

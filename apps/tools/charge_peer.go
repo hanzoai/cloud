@@ -74,7 +74,7 @@ func chargePeer(ctx context.Context, tool string) error {
 	in := plane.SettleIn{Resource: plane.ToolResource(tool)}
 	call := ctx
 	if c != nil {
-		in.Proof = strings.TrimSpace(c.Header(plane.HeaderProof))
+		in.Payment = strings.TrimSpace(c.Header(plane.HeaderPaymentSignature))
 		// The payer is resolved HERE, by the one resolver that knows the rule —
 		// principal.Ledger, which folds in the SuperAdmin masquerade — and delegated
 		// as the tenant the settlement acts for. cloud.As, never cloud.For: inside a
@@ -109,16 +109,20 @@ func chargePeer(ctx context.Context, tool string) error {
 		return errors.New("tools: payment rail answered nothing")
 	}
 
-	// The challenge and the receipt are HEADERS on the response this process is
+	// The challenge and the settlement are HEADERS on the response this process is
 	// writing, so they are put back on it here — the rail had no response to write
 	// them to. A 402 whose terms never reach the client is a refusal it cannot act
 	// on, which is the exact defect this whole change exists to close.
+	//
+	// They cross the plane ALREADY ENCODED and are set verbatim: re-rendering them
+	// here would be a second encoder of the x402 wire in a package that deliberately
+	// knows nothing about it.
 	if c != nil {
 		if out.Challenge != "" {
-			c.SetHeader(plane.HeaderRequirements, out.Challenge)
+			c.SetHeader(plane.HeaderPaymentRequired, out.Challenge)
 		}
-		if out.Receipt != "" {
-			c.SetHeader(plane.HeaderReceipt, out.Receipt)
+		if out.Response != "" {
+			c.SetHeader(plane.HeaderPaymentResponse, out.Response)
 		}
 	}
 
