@@ -313,7 +313,18 @@ func init() {
 // It is installed FIRST: fiber runs middleware in registration order, so one
 // installed after its leaves never runs.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Group(dashPrefix).Use(cloud.Bridge(), zip.H(bounce))
+	// ON THE ROUTER, not on a Group(dashPrefix) of its own. This read
+	// `app.Group(dashPrefix).Use(...)`, and the routes it meant to wrap are
+	// composed under a DIFFERENT app.Group(dashPrefix) — the one dashboard.go
+	// builds. Group returns a NEW definition on every call, so those are two nodes
+	// at the same path: the middleware sat on the empty one, and NEITHER
+	// cloud.Bridge NOR bounce ever ran for a single route of this surface. Every
+	// prefix this subsystem declares is under dashPrefix (manifest/apps.go), so a
+	// scope bounds this to exactly what the group named, and the plugin binary
+	// serves nothing else — the bound is unchanged, it is now a predicate over the
+	// request rather than a place in the tree that the routes turned out not to be
+	// in.
+	app.Use(cloud.Bridge(), zip.H(bounce))
 
 	// Liveness — public (probe-able without a JWT). It stays a RAW handler because
 	// it answers 503 carrying the SAME domain body as its 200 (status + the k8s and
