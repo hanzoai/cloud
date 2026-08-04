@@ -775,10 +775,13 @@ func TestAnAcknowledgedOverrideIsDurable(t *testing.T) {
 	}
 }
 
-// TestThisAppOwnsOnlyItsOwnLeaf: /v1/ml is a SHARED parent — a model-serving
-// plane answers on /v1/ml/models and a dataset plane on /v1/ml/datasets in the
-// same process — so a middleware installed there by this app would run inside two
-// other products' request paths, decided by nothing but mount order.
+// TestThisAppOwnsOnlyItsOwnLeaf: /v1/risk is a SHARED parent — the decision plane
+// answers on /v1/risk, ground truth on /v1/risk/labels, datasets on
+// /v1/risk/datasets and this app on /v1/risk/reference, all in the same process —
+// so a middleware installed at that parent by this app would run inside three other
+// planes' request paths, decided by nothing but mount order. The neighbour probed
+// below is /v1/ml/models, a different product entirely: the assertion is that this
+// app's middleware runs on ITS OWN leaf and on no other address, foreign or sibling.
 func TestThisAppOwnsOnlyItsOwnLeaf(t *testing.T) {
 	app := mount(t)
 	var sawPrincipal bool

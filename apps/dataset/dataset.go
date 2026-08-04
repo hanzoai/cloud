@@ -1,6 +1,20 @@
-// Package dataset is the per-org dataset plane of /v1/ml: a dataset is a
+// Package dataset is the per-org dataset plane of /v1/risk: a dataset is a
 // VERSIONED, IMMUTABLE snapshot of one tenant's own event surface, and this is
 // where it is declared, materialised, described, exported and disposed of.
+//
+// THE ADDRESS IS THE PRODUCT, and that is why it is /v1/risk and not /v1/ml.
+// openapi.Product reads an operation's product off the FIRST /v1 segment of its
+// path and nothing else, so an address is a published product membership: the
+// fleet's tag list, the floor ratchet, the doc headings, every generated SDK's
+// namespace and the CLI's command tree are projections of that one segment. The
+// rows here feed the RISK model, which learns in-process from the org's own
+// events; they are not served by KServe. /v1/ml is the model-SERVING plane
+// (apps/ml: InferenceServices, /v1/ml/models, /v1/ml/models/{name}/predict) — a
+// different live product with its own consumers — so publishing seven dataset
+// operations there filed them into it, and nothing in the fleet said so: the
+// floor ratchet read `ml: 7 -> 14` as growth, because it refuses a shrink and
+// only a shrink. apps/label and apps/reference each corrected the same address
+// once; address_test.go makes it a gate here rather than a third recollection.
 //
 // WHY A DATASET IS A VALUE AND NOT A QUERY. Storing a spec and re-running it is
 // the design that guarantees irreproducibility. The source is a SummingMergeTree
@@ -35,9 +49,9 @@
 // the store, so it restarts empty and a restart loses nothing but the jobs in
 // flight — which is exactly what a plane holding the record of what a model
 // trained on must do, and exactly what a process pinned to one replica for its
-// in-memory forests cannot promise. Its surface is five leaves under /v1/ml that
-// no other app claims; zip refuses two owners for one prefix at compose time, so
-// that is checked rather than agreed.
+// in-memory forests cannot promise. Its surface is five leaves under
+// /v1/risk/datasets that no other app claims; zip refuses two owners for one
+// prefix at compose time, so that is checked rather than agreed.
 //
 // WHAT IS PER PROCESS, SAID PLAINLY. Every read, every declaration and every
 // disposal is a pure function of the store and answers identically from any
@@ -133,7 +147,7 @@ type scan struct {
 	since   time.Time
 }
 
-// Mount wires the dataset leaves of /v1/ml onto app.
+// Mount wires the dataset leaves of /v1/risk onto app.
 //
 // EVERY INHERITED CAPABILITY IS WIRED HERE, EXPLICITLY. Being embedded in cloud
 // makes each one AVAILABLE; none is automatic:
@@ -216,14 +230,14 @@ func mount(p *plane, app cloud.Router) error {
 	//
 	// app.Use installs the tenant bridge ONCE PER DECLARED PREFIX — the scope
 	// reads manifest.Apps for that — so the middleware lands exactly on
-	// /v1/ml/datasets and nowhere else. Grouping at /v1/ml to get a shorter leaf
-	// would install it across a subtree this app does not own, which is the escape
-	// the scope exists to refuse.
+	// /v1/risk/datasets and nowhere else. Grouping at /v1/risk to get a shorter leaf
+	// would install it across a subtree this app does not own — that stem is the
+	// decision plane's — which is the escape the scope exists to refuse.
 	//
 	// cloud.ZipApp recovers the typed-op registry, which the Router interface does
 	// not carry, and the ops register at ABSOLUTE paths on it. That is what keeps
-	// the published address exactly `/v1/ml/datasets` — a group root composes to
-	// `/v1/ml/datasets/`, and a trailing slash in the document is a trailing slash
+	// the published address exactly `/v1/risk/datasets` — a group root composes to
+	// `/v1/risk/datasets/`, and a trailing slash in the document is a trailing slash
 	// in every generated SDK.
 	//
 	// Bridge FIRST, before any leaf: a typed op receives only a context, and this
@@ -241,35 +255,35 @@ func mount(p *plane, app cloud.Router) error {
 	app.Use(cloud.DenyEnvelope())
 	o := ops{p: p}
 
-	zip.Post(z, "/v1/ml/datasets", o.create,
-		zip.WithOperationID("mlCreateDataset"),
+	zip.Post(z, "/v1/risk/datasets", o.create,
+		zip.WithOperationID("riskCreateDataset"),
 		zip.WithSummary("Declare the next version of a dataset"),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets", o.list,
-		zip.WithOperationID("mlDatasets"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets", o.list,
+		zip.WithOperationID("riskDatasets"),
 		zip.WithSummary("List this org's datasets"),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets/:name", o.describe,
-		zip.WithOperationID("mlDataset"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets/:name", o.describe,
+		zip.WithOperationID("riskDataset"),
 		zip.WithSummary("Describe every version of one dataset"),
-		zip.WithTags("ml"))
-	zip.Delete(z, "/v1/ml/datasets/:name", o.dispose,
-		zip.WithOperationID("mlDeleteDataset"),
+		zip.WithTags("risk"))
+	zip.Delete(z, "/v1/risk/datasets/:name", o.dispose,
+		zip.WithOperationID("riskDeleteDataset"),
 		zip.WithSummary("Dispose of one dataset and every version of it"),
-		zip.WithTags("ml"))
-	zip.Post(z, "/v1/ml/datasets/:name/materialize", o.materialize,
-		zip.WithOperationID("mlMaterializeDataset"),
+		zip.WithTags("risk"))
+	zip.Post(z, "/v1/risk/datasets/:name/materialize", o.materialize,
+		zip.WithOperationID("riskMaterializeDataset"),
 		zip.WithSummary("Materialise the declared version into immutable rows"),
 		zip.WithStatus(202),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets/:name/lineage", o.lineage,
-		zip.WithOperationID("mlDatasetLineage"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets/:name/lineage", o.lineage,
+		zip.WithOperationID("riskDatasetLineage"),
 		zip.WithSummary("Show where a version's rows came from, and whether that can still be demonstrated"),
-		zip.WithTags("ml"))
-	zip.Get(z, "/v1/ml/datasets/:name/export", o.export,
-		zip.WithOperationID("mlExportDataset"),
+		zip.WithTags("risk"))
+	zip.Get(z, "/v1/risk/datasets/:name/export", o.export,
+		zip.WithOperationID("riskExportDataset"),
 		zip.WithSummary("Read a version's rows back, one page at a time"),
-		zip.WithTags("ml"))
+		zip.WithTags("risk"))
 	return nil
 }
 
