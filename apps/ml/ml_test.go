@@ -250,12 +250,6 @@ func TestGVRs(t *testing.T) {
 	}{
 		{"InferenceService", "serving.kserve.io", "v1beta1", "inferenceservices",
 			[3]string{isvcGVR.Group, isvcGVR.Version, isvcGVR.Resource}},
-		{"TrainJob", "trainer.kubeflow.org", "v1alpha1", "trainjobs",
-			[3]string{trainjobGVR.Group, trainjobGVR.Version, trainjobGVR.Resource}},
-		{"Experiment", "kubeflow.org", "v1beta1", "experiments",
-			[3]string{experimentGVR.Group, experimentGVR.Version, experimentGVR.Resource}},
-		{"Trial", "kubeflow.org", "v1beta1", "trials",
-			[3]string{trialGVR.Group, trialGVR.Version, trialGVR.Resource}},
 		// v1alpha1, not the InferenceService's v1beta1 — kserve serves the runtime
 		// kinds at a different version, and reading the wrong one comes back "the
 		// server doesn't have a resource type", which the capacity clause would
@@ -269,14 +263,8 @@ func TestGVRs(t *testing.T) {
 			t.Errorf("%s GVR = %v, want %v", tc.name, tc.got, want)
 		}
 	}
-	// create kinds must carry apiVersion = group/version and the right kind.
+	// the create kind must carry apiVersion = group/version and the right kind.
 	if modelKind.apiVersion != "serving.kserve.io/v1beta1" || modelKind.kind != "InferenceService" {
 		t.Errorf("modelKind wrong: %+v", modelKind)
-	}
-	if jobKind.apiVersion != "trainer.kubeflow.org/v1alpha1" || jobKind.kind != "TrainJob" {
-		t.Errorf("jobKind wrong: %+v", jobKind)
-	}
-	if expKind.apiVersion != "kubeflow.org/v1beta1" || expKind.kind != "Experiment" {
-		t.Errorf("expKind wrong: %+v", expKind)
 	}
 }

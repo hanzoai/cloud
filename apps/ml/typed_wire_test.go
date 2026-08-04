@@ -1,6 +1,6 @@
 package ml
 
-// This file makes ml's typed partition a GATE instead of a paragraph. "10 of 17"
+// This file makes ml's typed partition a GATE instead of a paragraph. "3 of 7"
 // is prose, and prose cannot fail: a route added tomorrow as a raw
 // func(*zip.Ctx) error would leave the claim standing and the route invisible to
 // the document, the MCP tool list, the CLI and every generated SDK. Here the
@@ -28,24 +28,22 @@ import (
 // each with the WIRE fact that keeps it raw. A typed op is a route PLUS a registry
 // entry — the one value the OpenAPI operation, the MCP tool, the CLI command and
 // the SDK method all come from — so an operation missing from that registry is
-// invisible to all four. These seven are missing on purpose. The address is
+// invisible to all four. These four are missing on purpose. The address is
 // written the way the DOCUMENT writes it, which is the identity every projection
 // keys on.
 var untypedByDesign = map[string]string{
-	// The three creates. cloud.DenyResource renders the pre-create balance gate's
+	// The create. cloud.DenyResource renders the pre-create balance gate's
 	// refusal as the fleet's nested {"error":{"code","message"}} contract, written
 	// IN BAND with c.JSON — the same body the edge gate sends, which is the point of
 	// having one contract. A typed op's only refusal channel is a returned error,
 	// and zip renders that as the flat {"status","code","error"} HTTPError
-	// (zip@v1.18.6 ctx.go:201) — so typing these three changes the 402 body every
+	// (zip@v1.18.6 ctx.go:201) — so typing it changes the 402 body every
 	// balance-aware client already parses. Moving the gate into middleware to keep
 	// the in-band write does not help either: it would run BEFORE the body decode,
 	// so an unfunded org sending an invalid name would get 402 where it gets 400
 	// today. Distinct from multi-status (#78): the gap is a non-2xx with a DOMAIN
 	// body, not a second success code.
-	"POST /v1/ml/models":         denyWire,
-	"POST /v1/train/jobs":        denyWire,
-	"POST /v1/train/experiments": denyWire,
+	"POST /v1/ml/models": denyWire,
 
 	// An RFC 7386 JSON merge patch, handed to the Kubernetes API as the RAW request
 	// bytes (k8stypes.MergePatchType, c.Body()). A typed In must decode and
@@ -62,9 +60,8 @@ var untypedByDesign = map[string]string{
 		"returned unchanged (c.Bytes(resp.StatusCode, rb)) so a model-side error surfaces honestly — a typed " +
 		"Out is one JSON shape at one declared status and can carry none of the three.",
 
-	// The two real probes.
-	"GET /v1/ml/health":    healthWire,
-	"GET /v1/train/health": healthWire,
+	// The real probe.
+	"GET /v1/ml/health": healthWire,
 }
 
 const denyWire = "the pre-create balance gate answers 402/503 IN BAND with the fleet's nested " +
@@ -155,7 +152,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		sort.Strings(untyped)
 		t.Errorf("operation(s) with no registry entry and no reason: %s\n"+
 			"A route that is not a typed op has no schema, no prose, no MCP tool, no CLI command and no SDK "+
-			"method. Convert it (zip.Get/Post/... on the /v1/ml or /v1/train group), or add it to "+
+			"method. Convert it (zip.Get/Post/... on the /v1/ml group), or add it to "+
 			"untypedByDesign with the reason typing it would move the wire.", strings.Join(untyped, ", "))
 	}
 	// The reasons must describe operations that exist, or the list is stale prose.
@@ -170,7 +167,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
 		}
 	}
-	// The two ledgers must sum to the whole surface: 10 typed + 7 named = 17.
+	// The two ledgers must sum to the whole surface: 3 typed + 4 named = 7.
 	if got := len(typed) + len(untypedByDesign); got != len(served) {
 		t.Errorf("%d typed + %d named = %d, but ml serves %d operations",
 			len(typed), len(untypedByDesign), got, len(served))
@@ -256,7 +253,7 @@ func req(t *testing.T, app *zip.App, method, path, org, user string) (int, []byt
 // A typed op receives only a context, so the validated org reaches it through
 // cloud.Bridge and NEVER as an In field — an In field is caller-supplied, so a
 // tenant key read from one is a cross-tenant read the caller asserted for itself.
-// ml has no In field that could carry an org, and these two prove the identity
+// ml has no In field that could carry an org, and these prove the identity
 // gate is live on the typed routes: a request with no validated principal is
 // refused with the same 403 the untyped handlers give, and the refusal comes
 // BEFORE any Kubernetes reach. (Mount found no cluster here, so a request that
@@ -270,13 +267,6 @@ func TestTypedReadsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 		{http.MethodGet, "/v1/ml/models"},
 		{http.MethodGet, "/v1/ml/models/m1"},
 		{http.MethodDelete, "/v1/ml/models/m1"},
-		{http.MethodGet, "/v1/train/jobs"},
-		{http.MethodGet, "/v1/train/jobs/j1"},
-		{http.MethodDelete, "/v1/train/jobs/j1"},
-		{http.MethodGet, "/v1/train/experiments"},
-		{http.MethodGet, "/v1/train/experiments/e1"},
-		{http.MethodDelete, "/v1/train/experiments/e1"},
-		{http.MethodGet, "/v1/train/experiments/e1/trials"},
 	} {
 		// An X-Org-Id with no X-User-Id is exactly the forged-header case: the
 		// header survived ingress but no credential minted it.

@@ -48,7 +48,7 @@ var intentRefused = map[string]string{
 	// hanzoai/engine serving runtime) has never served — each family lives on
 	// the cluster plane where it is real.
 	"/v1/engine/clusters":        "GPU cluster registration is the cluster plane: /v1/clusters (apps/visor) merges managed clusters with the BYO fleet registry; the engine is the serving runtime, not a cluster manager",
-	"/v1/engine/jobs":            "training job orchestration is /v1/train/jobs (apps/ml, TrainJob CRD); the engine runs no job queue",
+	"/v1/engine/jobs":            "fine-tuning is the hanzoai/ai broker at /v1/finetune/jobs; the engine runs no job queue",
 	"/v1/engine/ray/clusters":    "no Ray operator backs the fleet; the engine is a single-process runtime, not a Ray head",
 	"/v1/engine/pipelines":       "ML pipeline orchestration has no backend behind this product; the engine executes inference, not DAGs",
 	"/v1/engine/gpus":            "fleet-wide GPU inventory needs the cluster plane; the engine reports only its own host's devices, served at /v1/engine/system",
@@ -56,9 +56,9 @@ var intentRefused = map[string]string{
 	// Product surface that exists upstream but is refused HERE: the engine
 	// deployment is ONE shared runtime with no per-org primitive, so its
 	// mutations are platform operations, not tenant ops.
-	"/v1/engine/models/unload":  "load/unload/reload/tune/requantize mutate the one shared runtime — an org-scoped route would hand each tenant every other tenant's availability; mutations wait for per-org engine instances",
-	"/v1/engine/system/doctor":  "the doctor runs load diagnostics on shared serving capacity; an org-triggered benchmark is a denial lever, not a read",
-	"/v1/engine/chat":           "inference is the fleet's ONE metered door — the OpenAI-compatible /v1 surface (apps/ai + the zen claim); a second completion door here would split billing",
+	"/v1/engine/models/unload": "load/unload/reload/tune/requantize mutate the one shared runtime — an org-scoped route would hand each tenant every other tenant's availability; mutations wait for per-org engine instances",
+	"/v1/engine/system/doctor": "the doctor runs load diagnostics on shared serving capacity; an org-triggered benchmark is a denial lever, not a read",
+	"/v1/engine/chat":          "inference is the fleet's ONE metered door — the OpenAI-compatible /v1 surface (apps/ai + the zen claim); a second completion door here would split billing",
 }
 
 // ── fake upstream: the measured engine wire ─────────────────────────────────

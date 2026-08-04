@@ -37,8 +37,6 @@ func listKinds() map[schema.GroupVersionResource]string {
 	return map[schema.GroupVersionResource]string{
 		{Version: "v1", Resource: "namespaces"}: "NamespaceList",
 		isvcGVR:                                 "InferenceServiceList",
-		trainjobGVR:                             "TrainJobList",
-		experimentGVR:                           "ExperimentList",
 		runtimeGVR:                              "ClusterServingRuntimeList",
 	}
 }
@@ -53,7 +51,7 @@ func runtimeObj(name string) *unstructured.Unstructured {
 	return u
 }
 
-// probe reads /v1/ml/health (or /v1/train/health) against a cluster holding
+// probe reads /v1/ml/health against a cluster holding
 // exactly the given objects, and returns the status code with the decoded report.
 func probe(t *testing.T, path string, objs ...runtime.Object) (int, map[string]any) {
 	t.Helper()
@@ -92,21 +90,6 @@ func TestServingHealthReportsRuntimeCapacity(t *testing.T) {
 	}
 	if got, ok := rep[runtimeGVR.Resource].(float64); !ok || got != 1 {
 		t.Fatalf("one-runtime report %v does not carry a count of 1", rep)
-	}
-}
-
-// TestTrainingHealthHasNoRuntimeClause pins that capacity is the SERVING plane's
-// fact alone. A TrainJob and an Experiment carry their own images, so the same
-// cluster that fails the serving probe must pass the training one — otherwise the
-// clause is not a capacity check, it is a second way to fail every probe.
-func TestTrainingHealthHasNoRuntimeClause(t *testing.T) {
-	code, rep := probe(t, "/v1/train/health")
-	if code != http.StatusOK {
-		t.Fatalf("GET /v1/train/health with zero serving runtimes = %d %v, want 200: "+
-			"training does not run on a serving runtime", code, rep)
-	}
-	if _, present := rep[runtimeGVR.Resource]; present {
-		t.Fatalf("training report %v carries a serving-runtime count it has no fact about", rep)
 	}
 }
 

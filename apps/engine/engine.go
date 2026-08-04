@@ -24,7 +24,7 @@
 // reachability lens. Each op is proven against a live hanzo-server backend
 // (live_test.go re-proves the loop on demand). Cluster/job/Ray/pipeline
 // intent stays refused — those live on the cluster plane (/v1/clusters,
-// /v1/ml, /v1/train) where they are real — and the ledger is a measured gate
+// /v1/ml) where they are real — and the ledger is a measured gate
 // (typed_wire_test.go intentRefused), not a comment.
 //
 // INFERENCE IS NOT HERE. The fleet's ONE inference door is the OpenAI-

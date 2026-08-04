@@ -736,10 +736,6 @@ MUTANTS = [
         (ML, '\t\t\t\tres[capacity.Resource], allOK = err.Error(), false',
              '\t\t\t\tres[capacity.Resource], allOK = 0, false')],
      "TestServingHealthSeparatesAnUnreadableRuntimeListFromAnEmptyOne", PML),
-    ("ml: capacity is asked of TRAINING too, which runs on no serving runtime", [
-        (ML, '\tgtrain.Get("/health", health(s, "train", schema.GroupVersionResource{}, trainjobGVR, experimentGVR))',
-             '\tgtrain.Get("/health", health(s, "train", runtimeGVR, trainjobGVR, experimentGVR))')],
-     "TestTrainingHealthHasNoRuntimeClause", PML),
     ("ml: the runtime coordinate is read at the InferenceService's version", [
         (ML, 'runtimeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1alpha1", Resource: "clusterservingruntimes"}',
              'runtimeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1beta1", Resource: "clusterservingruntimes"}')],
