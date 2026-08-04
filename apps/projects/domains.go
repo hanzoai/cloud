@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -15,42 +14,6 @@ import (
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
-
-// operatorOrgsFromEnv builds the set of orgs whose ADMINS may bind a custom domain
-// WITHOUT proving ownership (besides a SuperAdmin): CLOUD_PLATFORM_OPERATOR_ORGS
-// (comma-separated) when set, else the deployment's own brand org. The brand org is
-// the platform operator and manages customer DNS on their behalf, so its admin's
-// bind IS the vouch. Every other org self-serves through the DNS challenge below.
-//
-// The SET names an org; it never names an authority. Naming an org here is the
-// DEPLOYMENT's grant of a capability to that tenant, and who inside that tenant may
-// exercise it is IAM's answer, not this file's — see vouches, which requires both.
-//
-// Each entry is the VERBATIM validated IAM owner, trimmed and nothing else —
-// the SAME value setDomains looks the caller up by (org → principal.Org, which
-// returns the owner verbatim; see projects.go org()). Both halves of one
-// comparison must be the same value: this set was folded through the old
-// sanitizeOrg (lowercase + non-alnum→'-' + truncate-32) while the lookup stayed
-// verbatim, so configuring "Acme" wrote the key "acme" and handed a DIFFERENT
-// tenant — whoever's real IAM owner is "acme" — the operator's DNS-proof bypass,
-// while the genuine "Acme" silently lost its own ("team.a" → "team-a" likewise).
-// A fold applied to one side of a comparison is not a normalization, it is a
-// collision, and here the collision IS a cross-tenant privilege grant.
-func operatorOrgsFromEnv(brand string) map[string]bool {
-	out := map[string]bool{}
-	if raw := strings.TrimSpace(os.Getenv("CLOUD_PLATFORM_OPERATOR_ORGS")); raw != "" {
-		for _, o := range strings.Split(raw, ",") {
-			if o := strings.TrimSpace(o); o != "" {
-				out[o] = true
-			}
-		}
-		return out
-	}
-	if b := strings.TrimSpace(brand); b != "" {
-		out[b] = true
-	}
-	return out
-}
 
 // Hostname syntax, canonical form, the challenge name, the token and the
 // ownership check all come from internal/fqdn — the same rules and the same
@@ -96,41 +59,37 @@ func ours(s *cloud.Service[state], host string) bool {
 // refusal (ours) does not apply. It is the whole of the authority question this
 // surface asks, so it is one function and the gate below reads as one word.
 //
-// TWO GRANTS, BOTH ADMIN-SCOPED, and membership is neither.
+// ONE GRANT: SuperAdmin — the caller is a member of the reserved `admin` org
+// (owner == "admin"). Cross-tenant by construction, so it vouches in ANY org: this
+// is the operator switched into a customer's org to bind the domain it manages DNS
+// for, which is how a customer domain is onboarded.
 //
-//	SuperAdmin              platform sudo — the caller is a member of the reserved
-//	                        `admin` org (owner == admin, principal.IsSuperAdmin).
-//	                        Cross-tenant by construction, so it vouches in ANY org:
-//	                        this is the operator onboarding a customer's domain
-//	                        while switched into that customer's org.
-//	operator-org ADMIN      the deployment named this org an operator
-//	                        (CLOUD_PLATFORM_OPERATOR_ORGS, else the brand) AND IAM
-//	                        says the caller ADMINISTERS it (principal.IsOrgAdmin).
+// Skipping the ownership proof is PLATFORM authority, so it takes the platform
+// predicate and no other. SuperAdmin ⟺ `owner == "admin"` is the one predicate the
+// whole estate gates on; anything else admitted here is a second, weaker spelling
+// of platform authority, and a second spelling is the escalation.
 //
-// The second grant is a CONJUNCTION of two independently administered facts — a
-// capability the deployment grants to an org, and the role IAM grants inside it —
-// and that is exactly what it used to be missing. It read `operatorOrgs[org]`
-// alone: bare MEMBERSHIP of the brand org, which every deployment has by default
-// (brand.Default = "hanzo"), so every staff account regardless of role, plus anyone
-// a brand-org admin ever invited, could bind `login.example-bank.com` live with no
-// DNS-01 proof — serving attacker content at any custom-domain customer whose DNS
-// already points at our edge, and denying the name to its rightful owner forever
-// (a verified row is first-come and global; the real owner gets 409).
+// The org-scoped IAM admin bit is NOT a second spelling of it, however the org is
+// chosen. `isAdmin` is SELF-SERVICE — an org's own admin sets it on a member of
+// THEIR org — so admitting "admin of org X" here makes the gate reachable by
+// anything X's admins can already do to their own membership, and X's admins are
+// not the platform. Naming the org in config does not fix that: config can grant a
+// capability TO a tenant, but the tenant still decides who inside it holds the
+// role, so the deployment ends up delegating a proof bypass to an authority it does
+// not administer. A gate whose far side can enrol its own callers is not a gate.
 //
-// Membership is not an admin scope and the two must never be conjoined: that
-// conflation IS the privilege escalation. The org term is asked of the EFFECTIVE
-// org — the same value SanitizeIdentity keys X-User-IsOrgAdmin on — so the pair
-// reads "admin OF this operator org" and never "admin of some org I switched out
-// of". Both bits are stripped on ingress and re-minted only from validated claims,
-// so neither is forgeable.
+// The stakes are why the bar is the top one: a vouched bind takes the name
+// FIRST-COME and GLOBAL and starts routing at once, so it both serves attacker
+// content at any custom-domain customer whose DNS already points at our edge and
+// denies the name to its rightful owner for good (the real owner then gets 409).
 //
-// FAIL-SECURE either way: if an issuer stops signing the org role, IsOrgAdmin goes
-// false and the operator-org grant degrades to a PENDING claim carrying the DNS
-// challenge — the same self-service path every other tenant takes. Nothing opens,
-// and SuperAdmin onboarding is untouched because it never depended on that claim.
-func vouches(c *zip.Ctx, operatorOrgs map[string]bool, org string) bool {
-	return principal.IsSuperAdmin(c) || (operatorOrgs[org] && principal.IsOrgAdmin(c))
-}
+// FAIL-SECURE: every other caller — including an admin of the deployment's own
+// brand org — self-serves, and its bind is a PENDING claim carrying the DNS
+// challenge. Nothing opens on a claim that has not been proven, and an issuer that
+// stops signing the admin-org membership takes the vouch away rather than granting
+// one. The bit is stripped on ingress and re-minted only from validated claims, so
+// it is not forgeable.
+func vouches(c *zip.Ctx) bool { return principal.IsSuperAdmin(c) }
 
 // projectsDomain is one row of a site's domains panel.
 //
@@ -212,13 +171,13 @@ type projectsBoundDomains struct {
 // BindDomains attaches one or more CUSTOM public hostnames to this org's site.
 //
 // Binding a host you do not own would let you shadow it at the edge, so which
-// outcome you get depends on whether ownership is already established: a caller
-// vouches (a SuperAdmin, or an ADMIN of a platform-operator org — which manages
-// customer DNS, so its admin's bind IS the vouch) and binds VERIFIED immediately;
-// every other caller, INCLUDING a plain member of an operator org, has the host
-// CLAIMED as pending and gets the DNS challenge back in `bound[].records`. A
-// pending claim HOLDS the name so nobody else can take it, but it does not route
-// until POST .../domains/{host}/verify proves control.
+// outcome you get depends on whether ownership is already established: a SuperAdmin
+// vouches (the operator manages the customer's DNS, so its bind IS the proof) and
+// binds VERIFIED immediately; every other caller, INCLUDING an admin of the
+// deployment's own brand org, has the host CLAIMED as pending and gets the DNS
+// challenge back in `bound[].records`. A pending claim HOLDS the name so nobody
+// else can take it, but it does not route until POST .../domains/{host}/verify
+// proves control.
 //
 // A hostname we operate is refused to a non-vouched caller (those are assigned
 // by the platform, never claimed), a host another site already holds is a 409,
@@ -243,7 +202,7 @@ func (o ops) bindDomains(ctx context.Context, in *projectsDomainsBind) (*project
 	if len(in.Domains) == 0 {
 		return nil, zip.ErrBadRequest("no domains to bind")
 	}
-	vouched := vouches(c, s.State.operatorOrgs, org)
+	vouched := vouches(c)
 	now := time.Now().Unix()
 	target := publicHost(s, p.Slug)
 
