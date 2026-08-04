@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/metering"
-	cloudmoney "github.com/hanzoai/cloud/apps/money"
+	cloudmoney "github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/decimal"
 	hmoney "github.com/hanzoai/money"
 	"github.com/hanzoai/zen"
