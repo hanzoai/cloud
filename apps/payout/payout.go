@@ -54,6 +54,12 @@ type Commerce interface {
 // caller records an honest failure rather than reporting a phantom grant.
 var ErrUnconfigured = errors.New("payout: commerce endpoint not configured")
 
+// ErrNoRef is a money-in call that did not name the event it pays out. It is
+// refused HERE rather than at commerce so the failure names the caller's missing
+// value, not an HTTP status — and so a payout can never reach the ledger without
+// the reference that makes a retry safe.
+var ErrNoRef = errors.New("payout: deposit needs a ref naming the event it pays out")
+
 // Client is the production commerce binding (COMMERCE_SERVICE_TOKEN S2S).
 type Client struct {
 	base  string
@@ -76,9 +82,17 @@ func (c *Client) Configured() bool { return c != nil && c.base != "" && c.token 
 // Deposit posts POST /v1/billing/deposit — the ONE money-in primitive (identical
 // to admin.grantCredit's deposit). Commerce's EdgeAuth pins the body `user` to the
 // X-Org-Id subject, so a payout can never be mis-targeted to another wallet.
-func (c *Client) Deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags string) (string, error) {
+//
+// ref NAMES the event this credit pays out — the payout row's own id. Commerce
+// requires it and guards on it, so a retried payout credits the wallet AT MOST
+// ONCE. It is not optional: without it a retry and a second genuine payout of the
+// same amount are indistinguishable, and every caller here retries.
+func (c *Client) Deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags, ref string) (string, error) {
 	if !c.Configured() {
 		return "", ErrUnconfigured
+	}
+	if strings.TrimSpace(ref) == "" {
+		return "", ErrNoRef
 	}
 	if currency == "" {
 		currency = "usd"
@@ -93,7 +107,7 @@ func (c *Client) Deposit(ctx context.Context, org, user string, amountCents int6
 	if err != nil {
 		return "", err
 	}
-	raw, err := c.do(ctx, http.MethodPost, "/v1/billing/deposit", nil, org, body)
+	raw, err := c.post(ctx, "/v1/billing/deposit", org, body, ref)
 	if err != nil {
 		return "", err
 	}
@@ -129,7 +143,18 @@ func (c *Client) SpendCents(ctx context.Context, org, user string) (int64, error
 
 // do performs one admin-S2S commerce request. X-Org-Id=<org> is the per-org
 // namespace selector commerce's EdgeAuth trusts only behind the service token.
+// post is do for a money move: same transport, plus the idempotency key that
+// makes the move exactly-once. Kept beside do rather than folded into it because
+// only a WRITE carries a reference — a read has no event to name.
+func (c *Client) post(ctx context.Context, path, org string, body []byte, ref string) ([]byte, error) {
+	return c.doWithKey(ctx, http.MethodPost, path, nil, org, body, ref)
+}
+
 func (c *Client) do(ctx context.Context, method, path string, q url.Values, org string, body []byte) ([]byte, error) {
+	return c.doWithKey(ctx, method, path, q, org, body, "")
+}
+
+func (c *Client) doWithKey(ctx context.Context, method, path string, q url.Values, org string, body []byte, ref string) ([]byte, error) {
 	u := c.base + path
 	if enc := q.Encode(); enc != "" {
 		u += "?" + enc
@@ -151,6 +176,9 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, org 
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+	}
+	if ref != "" {
+		req.Header.Set("X-Idempotency-Key", ref)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
