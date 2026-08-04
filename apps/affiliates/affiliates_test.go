@@ -399,9 +399,9 @@ func TestSweepAccruesSpendTimesRateIdempotent(t *testing.T) {
 	}
 }
 
-// TestLazyAccrualOnAffiliateRead proves the affiliate's OWN GET /v1/affiliates runs
-// the accrual sweep for its referred orgs (self-updating dashboard).
-func TestLazyAccrualOnAffiliateRead(t *testing.T) {
+// TestAffiliateReadGrantsNothing is the inverse of the lazy sweep that used to live
+// here: GET /v1/affiliates is a PURE READ. Only the admin POST accrues.
+func TestAffiliateReadGrantsNothing(t *testing.T) {
 	app, s, fc := mount(t)
 	_, codeA := applyAndApprove(t, app, s, "orgA", "acme", "")
 	req(t, app, http.MethodPost, "/v1/affiliates/attribute", "orgB", false, map[string]any{"code": codeA})
@@ -429,16 +429,24 @@ func TestLazyAccrualOnAffiliateRead(t *testing.T) {
 	if v.Link != "https://hanzo.ai/?aff="+codeA {
 		t.Fatalf("link = %q", v.Link)
 	}
-	want := share(5000, defaultRateBps) // margin × rate
-	if v.ReferredCount != 1 || v.AccruedCents != want || v.PendingCents != want {
-		t.Fatalf("lazy accrual not reflected: %+v (want accrued %d)", v, want)
+	if v.ReferredCount != 1 || v.AccruedCents != 0 || v.PendingCents != 0 {
+		t.Fatalf("a GET accrued: %+v (want 0/0)", v)
+	}
+	if fc.depositCount() != 0 {
+		t.Fatalf("a GET deposited %d time(s); want 0", fc.depositCount())
+	}
+	// Not vacuous: the same state accrues the moment a human asks.
+	req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
+	a, _ := s.State.store.GetByOrg(context.Background(), "orgA")
+	if want := share(5000, defaultRateBps); a.AccruedCents != want {
+		t.Fatalf("admin sweep accrued %d, want %d", a.AccruedCents, want)
 	}
 }
 
-// TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard: a credits payout issues
-// exactly ONE commerce grant + moves paid; a cash payout is record-only; a payout
-// can never exceed pending.
-func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
+// TestPayoutIsRecordOnlyAndPendingGuard: a payout RECORDS a disbursement and moves
+// paid — for every method, credits included. It issues no grant and touches no wallet;
+// a human settles the recorded row. A payout can never exceed pending.
+func TestPayoutIsRecordOnlyAndPendingGuard(t *testing.T) {
 	app, s, fc := mount(t)
 	ctx := context.Background()
 	idA, codeA := applyAndApprove(t, app, s, "orgA", "acme", "")
@@ -455,16 +463,13 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 		t.Fatalf("over-pending payout want 400, got %d", st)
 	}
 
-	// Credits payout of 1200c → ONE grant into orgA's wallet, paid moves.
+	// Credits payout of 1200c → RECORDED, paid moves, wallet untouched.
 	st, body := req(t, app, http.MethodPost, "/v1/admin/affiliates/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1200, "method": "credits", "reference": "ledger-1"})
 	if st != http.StatusOK {
 		t.Fatalf("credits payout want 200, got %d (%s)", st, body)
 	}
-	if fc.bal("orgA") != 1200 {
-		t.Fatalf("affiliate wallet = %d, want 1200 (the credits payout)", fc.bal("orgA"))
-	}
-	if fc.depositCount() != 1 {
-		t.Fatalf("deposit count = %d, want 1 (one grant)", fc.depositCount())
+	if fc.bal("orgA") != 0 || fc.depositCount() != 0 {
+		t.Fatalf("a credits payout MOVED money: bal=%d deposits=%d, want 0/0 (record-only)", fc.bal("orgA"), fc.depositCount())
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != 1200 || a.PendingCents() != 800 {
@@ -478,20 +483,17 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 		Txn         string `json:"txn"`
 	}
 	_ = json.Unmarshal(pd["payout"], &payout)
-	if payout.AmountCents != 1200 || payout.Method != "credits" || payout.Txn == "" {
-		t.Fatalf("payout view wrong: %+v", payout)
+	if payout.AmountCents != 1200 || payout.Method != "credits" || payout.Txn != "" {
+		t.Fatalf("payout view wrong: %+v (txn must be empty — nothing settled)", payout)
 	}
 
-	// Cash payout of the remaining 800c via wire → RECORD-ONLY (no new grant).
+	// Cash payout of the remaining 800c via wire → recorded the same way.
 	st, body = req(t, app, http.MethodPost, "/v1/admin/affiliates/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 800, "method": "wire", "reference": "wire-xyz"})
 	if st != http.StatusOK {
 		t.Fatalf("cash payout want 200, got %d (%s)", st, body)
 	}
-	if fc.depositCount() != 1 {
-		t.Fatalf("cash payout issued a grant: deposit count = %d, want 1", fc.depositCount())
-	}
-	if fc.bal("orgA") != 1200 {
-		t.Fatalf("cash payout moved the wallet: bal = %d, want 1200", fc.bal("orgA"))
+	if fc.depositCount() != 0 || fc.bal("orgA") != 0 {
+		t.Fatalf("cash payout moved money: deposits=%d bal=%d, want 0/0", fc.depositCount(), fc.bal("orgA"))
 	}
 	a, _ = s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != 2000 || a.PendingCents() != 0 {
@@ -791,9 +793,9 @@ func TestAffiliatesMeSurface(t *testing.T) {
 	if v.Levels[1].Level != 2 || v.Levels[1].RateBps != defaultL2RateBps || v.Levels[1].DownlineCount != 1 {
 		t.Fatalf("L2 row wrong: %+v", v.Levels[1])
 	}
-	// A earns L2 on orgC's $100 spend = 5% of the 40% margin (lazy sweep from the read).
-	if v.AccruedCents != share(10000, defaultL2RateBps) {
-		t.Fatalf("A accrued via /me = %d, want %d", v.AccruedCents, share(10000, defaultL2RateBps))
+	// /me is a PURE READ: it reports the downline but accrues nothing.
+	if v.AccruedCents != 0 {
+		t.Fatalf("GET /me accrued %d, want 0", v.AccruedCents)
 	}
 }
 

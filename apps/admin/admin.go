@@ -144,11 +144,6 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	zip.Get(z, "/v1/admin/money", o.Money, op("adminMoney"))
 	zip.Post(z, "/v1/admin/sync", syncNow, op("adminSync"))
 
-	// Credit — the ONE admin mint surface (SuperAdmin only). Thin, audited relay
-	// to commerce's mint-gated POST /v1/billing/credits; commerce is the sole
-	// ledger. See credits.go.
-	zip.Post(z, "/v1/admin/credits", o.createCredit, op("adminCreateCredit"))
-
 	// Product analytics — org-scoped (SuperAdmin: all-orgs; org admin: their own org).
 	zip.Get(z, "/v1/admin/analytics", o.analytics, op("adminAnalytics"))
 	// Bases — the tenant Base-instance panel, org-scoped (bases.go).
