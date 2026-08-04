@@ -332,7 +332,7 @@ func (s spec) columns() []string {
 // `now` is passed rather than read so the horizon arithmetic is testable, which
 // is the whole of R1: a maturity rule that cannot be tested is a maturity rule
 // nobody has checked.
-func normalize(in mlDatasetSpec, now time.Time) (spec, error) {
+func normalize(in riskDatasetSpec, now time.Time) (spec, error) {
 	var s spec
 
 	s.Name = strings.ToLower(strings.TrimSpace(in.Name))
