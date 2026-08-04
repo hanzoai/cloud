@@ -29,6 +29,16 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
+	"apps/dataset/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
+		"establishes who is asking. The TENANT is resolved through apps/tenant, which reads " +
+		"principal.OrgFrom and nothing else; the request is needed for the other half, which is a " +
+		"different value on purpose: the BILLING identity. Materialising and tracing a lineage are " +
+		"priced acts, and the gate + debit need the ledger (principal.Ledger), the validated project " +
+		"sub-scope (principal.ValidatedProject — two facts, the project and whether a CLAIM backs it), " +
+		"the acting user for the register's `by` column, and the request id + client IP the debit is " +
+		"attributed with. None of those are the org and none can be an In field — a caller that could " +
+		"name its own ledger would bill another org. ONE function, which every op asks; it fails closed " +
+		"off the HTTP path, where there is no principal and so no tenant to act for.",
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
@@ -204,6 +214,10 @@ var allowedRequestUses = map[string]string{
 		"TestTheLedgerSelectorStaysOnTheURLForBodyWrites (apps/books/wire_test.go) is that measurement " +
 		"and goes red the day it moves. ONE function, which every body-carrying op asks, reading " +
 		"through the same sandboxQuery the untyped handlers beside them use; LIVE off the HTTP path.",
+	"apps/catalog/catalog.go": "browse — the published corpus is read as PublicOrg by everyone, " +
+		"signed in or not, so the tenant is re-pointed for the index Ask while the caller's authority " +
+		"travels whole. cloud.As needs the request to do that; cloud.For alone drops the caller and the " +
+		"public browse 500s with \"index: no org on the call\".",
 	"apps/books/ask.go": "narrateAsk — the payer for the ONE grounded completion an Ask narrates with. " +
 		"The bill lands on principal.Ledger, the SELECTED billing org, which a SuperAdmin masquerade " +
 		"moves off the effective org — so principal.OrgFrom would charge the org being INSPECTED for a " +
@@ -362,6 +376,15 @@ var allowedRequestUses = map[string]string{
 		"principal.OrgFrom and never through the request. Off the HTTP path it answers " +
 		"principal.DefaultProject — the whole-org view, which is the honest answer where there is no " +
 		"request rather than a refusal.",
+	"apps/label/label.go": "actor — WHO asserted, on a record that can be the input to an adverse " +
+		"action. It is the pair <home org>/<user>: principal.Owner (X-User-Owner, the identity anchor) " +
+		"and c.User() (X-User-Id), NEITHER of which principal.OrgFrom carries — it carries the " +
+		"EFFECTIVE org, and for a platform SuperAdmin acting inside a customer's tenant the home and " +
+		"the effective org differ, which is exactly the case an adverse-action audit most needs to see. " +
+		"Neither may be an In field: an attributable record whose attribution the caller chose is not " +
+		"attributable. ONE function, asked from the one tenantOf every op goes through, which resolves " +
+		"the TENANT with principal.OrgFrom and never through the request. Fails closed off the HTTP " +
+		"path: no request, no attested asserter, no write.",
 	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
 		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +

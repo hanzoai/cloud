@@ -44,7 +44,7 @@ var Apps = []App{
 	// the bare "/v1" remainder, which serves none of them.
 	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
-	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/keys", "/v1/orgs"}},
+	{Name: "account", Prefixes: []string{"/v1/avatar", "/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/keys", "/v1/orgs"}},
 	// The three root /.well-known documents are named EXACTLY, one prefix each, and
 	// naming them at all is new: OIDC discovery and JWKS live at the ISSUER root by
 	// spec (RFC 8414 / OIDC Discovery 1.0), so before iam was grafted the only thing
@@ -59,7 +59,11 @@ var Apps = []App{
 	// the outward projection of the fleet health probes o11y already runs. It has
 	// to be listed here or the host never routes it to this app and it falls to
 	// commerce's bare "/v1", which does not serve it.
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/summary"}, Eager: true},
+	// /ws/query_progress is the websocket form of the query-progress read. It sits
+	// outside /v1/o11y because the Upgrade handshake is a transport concern, so no
+	// other prefix here reaches it: unlisted, the fleet published the address and
+	// routed it nowhere.
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/summary", "/ws/query_progress"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole
@@ -74,7 +78,7 @@ var Apps = []App{
 	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
 	// app states its fail-closed set once (apps/commerce/mount.go); this row states
 	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/credits", "/v1/billing/recharge", "/v1/billing/invoices", "/v1/billing/settings", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/mode", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/deposits", "/v1/commerce/tenant", "/v1/commerce/webhooks", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
+	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/credits", "/v1/billing/recharge", "/v1/billing/invoices", "/v1/billing/settings", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/mode", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/deposits", "/v1/commerce/tenant", "/v1/commerce/webhooks", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
@@ -112,13 +116,6 @@ var Apps = []App{
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models", "/v1/train/experiments", "/v1/train/health", "/v1/train/jobs"}},
-	// The reference plane is a leaf UNDER /v1/ml and disjoint from ml's own two
-	// leaves, so longest-prefix separates them and neither row moves — the same
-	// pair /v1/vector and /v1/vector/collections already are. It is a row of its
-	// own rather than a prefix on ml's because it is a different app: ml serves
-	// inference and training, this serves the lookup data a decision consults, and
-	// they share no state.
-	{Name: "reference", Prefixes: []string{"/v1/ml/reference"}},
 	// risk owns /v1/risk OUTRIGHT — the per-organisation model plane that decides
 	// AND learns. It shares no prefix with the row above: `ml` is model SERVING
 	// (InferenceServices, predict) and it is live with customers on it, so the two
@@ -131,9 +128,52 @@ var Apps = []App{
 	// counters and answer one question two ways — with no error and no log. One
 	// owner of the state, one row.
 	//
+	// label is the GROUND-TRUTH plane: what turned out to be fraud, who said so,
+	// and when they could first have said it. It addresses under /v1/risk because
+	// the ADDRESS IS THE PRODUCT — openapi.Product reads an operation's product
+	// tag off the first /v1 segment and nothing else — and ground truth is part of
+	// the risk product, not of the KServe model-SERVING product the row above
+	// carries. An earlier cut of this row said /v1/ml/labels, which is the same
+	// mistake the row above already records having made: it would have filed seven
+	// compliance operations into a live product with four paths and different
+	// customers on it.
+	//
+	// IT MUST PRECEDE risk, whose prefix is the bare /v1/risk: the router takes the
+	// first prefix that matches, so the more specific address is registered first
+	// or every label op lands on the decision plane. TestSpecificPrefixesPrecede
+	// pins it, so the constraint is a test rather than a comment.
+	//
+	// It is its own subsystem rather than a leaf of the decision plane because its
+	// WRITERS are mostly not that plane — commerce adjudicates the dispute, the
+	// compliance face closes the case, an analyst files the review — and its record
+	// is a compliance record with a retention clock of its own. A separate row also
+	// means a separate per-tenant file, so no second process ever opens the
+	// decision plane's single-writer store.
+	{Name: "label", Prefixes: []string{"/v1/risk/labels"}},
+	// reference is the LOOKUP DATA a decision consults and cannot derive:
+	// disposable-email domains, datacentre and Tor ranges, issuer prefixes, and how
+	// current the designation lists the screening engine holds are. Same address
+	// rule as label, for the same reason — openapi.Product reads the product off
+	// the first /v1 segment, and these six operations are the risk product's, not
+	// the KServe model-SERVING product's. An earlier cut said /v1/ml/reference,
+	// which would have filed them into a live product with four paths and
+	// different customers on it.
+	//
+	// It also precedes risk, whose prefix is the bare /v1/risk.
+	{Name: "reference", Prefixes: []string{"/v1/risk/reference"}},
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
 	{Name: "risk", Prefixes: []string{"/v1/risk"}},
+	// The dataset plane sits BESIDE ml under /v1/ml rather than inside it, because
+	// the two share a face and nothing else. ml is a Kubernetes CRD bridge whose
+	// tenant boundary is a per-org NAMESPACE and whose failure domain is the
+	// cluster; this is a warehouse-backed record plane whose tenant boundary is a
+	// qualified `<brand>/<org>` KEY and whose failure domain is the columnar store.
+	// One package holding two tenancy models is the shape a privilege bug grows in,
+	// so they are two rows claiming two disjoint sets of leaves — and zip refuses
+	// two owners for one prefix at compose time, which checks it rather than
+	// trusting it.
+	{Name: "dataset", Prefixes: []string{"/v1/ml/datasets"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},

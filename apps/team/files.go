@@ -23,7 +23,6 @@ package team
 //     independent layers; every denial is a 404 (no member/existence oracle).
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -34,6 +33,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/magic"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 )
@@ -230,7 +230,7 @@ func (s *filesService) download(c *zip.Ctx) error {
 	// nosniff on EVERY response so the browser never re-sniffs the declared type.
 	c.SetHeader("X-Content-Type-Options", "nosniff")
 	c.SetHeader("Cache-Control", "private, max-age=31536000, immutable")
-	if img := imageType(data); img != "" {
+	if img := magic.Type(data); img != "" {
 		// Recognized raster image → serve inline with its true (byte-derived) type.
 		c.SetHeader("Content-Type", img)
 	} else {
@@ -300,26 +300,6 @@ func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, erro
 // uuid — seg() is the last-line traversal guard on it).
 func blobKey(org, workspace, blobID string) string {
 	return "team/blobs/" + seg(org) + "/" + seg(workspace) + "/" + seg(blobID)
-}
-
-// imageType returns the canonical MIME type of a recognized raster image from its
-// MAGIC BYTES, or "" for anything else. This is the ALLOW-LIST (Red F-B): only
-// image/png|jpeg|gif|webp are ever served inline, and only when the STORED bytes
-// actually are that image — a mislabeled/crafted upload (SVG, HTML, XHTML, …)
-// falls through to "" and is served inert. Deterministic; no reliance on the
-// client filename or Go's evolving sniff table.
-func imageType(data []byte) string {
-	switch {
-	case len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}):
-		return "image/png"
-	case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
-		return "image/jpeg"
-	case len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a"):
-		return "image/gif"
-	case len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
-		return "image/webp"
-	}
-	return ""
 }
 
 // safeFilename reduces a client filename to a header-safe download name: only

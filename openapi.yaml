@@ -17915,6 +17915,268 @@ components:
             stripped.
           type: string
       type: object
+    mlDataset:
+      properties:
+        at:
+          description: At is when this version last changed state, and By who.
+          type: string
+        by:
+          type: string
+        counts:
+          $ref: '#/components/schemas/mlSplitCounts'
+          description: Counts is how the rows fall across the splits.
+        digest:
+          description: |-
+            Digest fingerprints the SPEC and the ROWS together. Two materialisations of
+            one spec agree on it or the plane says they do not.
+          type: string
+        name:
+          description: Name and Version identify the version.
+          type: string
+        oversize:
+          description: |-
+            Oversize is how many of the window's subjects this version could NOT carry
+            because their subject identity exceeds the plane's per-subject byte bound.
+
+            It is on the wire, not only in a log, because it is the one degradation a
+            caller cannot otherwise detect: the rows that are here look complete, and a
+            dataset silently missing a population is a model silently blind to it.
+            Non-zero does not make a version invalid — it makes it a version whose
+            coverage is STATED. Zero is the normal case and omits.
+          type: integer
+        refusal:
+          description: Refusal names why there are no bytes, when there are none.
+          type: string
+        running:
+          description: |-
+            Running is true while THIS process is materialising the version. A version
+            that is `materializing` and not running was started by a process that is
+            gone — two states the register cannot tell apart, because a register cannot
+            know which processes are alive.
+          type: boolean
+        share:
+          description: |-
+            Share is the fraction of the window's subjects admitted, in thousandths.
+            1000 means the whole window fitted under the cap; anything less means the
+            version is a reproducible sample and says by how much.
+          type: integer
+        spec:
+          $ref: '#/components/schemas/mlDatasetSpec'
+          description: Spec is the bound query this version was built from, exactly
+            as recorded.
+        status:
+          description: |-
+            Status is declared, materializing, ready or refused. Only `ready` has bytes,
+            and `ready` is terminal: a published version is never rewritten.
+          type: string
+        truncated:
+          description: |-
+            Truncated is true when the row cap bound before the window ran out. The
+            trailing subject is dropped whole when that happens, because half a subject
+            on one side of a split is exactly the leak the grouping prevents.
+          type: boolean
+        version:
+          type: integer
+      type: object
+    mlDatasetList:
+      properties:
+        items:
+          description: |-
+            Items is one entry per dataset, carrying its newest version. Never null: an
+            org that has declared nothing gets an empty array.
+          items:
+            $ref: '#/components/schemas/mlDataset'
+          type: array
+      type: object
+    mlDatasetRow:
+      properties:
+        at:
+          description: At is the row's instant.
+          type: string
+        id:
+          description: |-
+            ID names the row forever. It is DERIVED from the row's own subject and
+            instant, not allocated, so two materialisations of the same fact agree on it
+            without coordinating.
+          type: string
+        kind:
+          description: Kind and Subject name whose row this is.
+          type: string
+        point:
+          description: Point is the coordinates, in the order the version's spec names
+            its dims.
+          items:
+            type: number
+          type: array
+        split:
+          description: Split is train, val or test.
+          type: string
+        subject:
+          type: string
+      type: object
+    mlDatasetRows:
+      properties:
+        dataset:
+          type: string
+        digest:
+          description: |-
+            Digest is the version's fingerprint. An exported page that did not carry it
+            would be bytes with no way to say which dataset they are.
+          type: string
+        dims:
+          description: Dims names what each coordinate of Point means, in Point's
+            own order.
+          items:
+            type: string
+          type: array
+        limit:
+          type: integer
+        offset:
+          description: |-
+            Offset and Limit are the page actually served, which may be smaller than the
+            one asked for.
+          type: integer
+        rows:
+          description: Rows is the page. Never null.
+          items:
+            $ref: '#/components/schemas/mlDatasetRow'
+          type: array
+        version:
+          type: integer
+      type: object
+    mlDatasetSpec:
+      properties:
+        cuts:
+          description: |-
+            Cuts are the two RFC 3339 instants dividing train | val | test. Omit them to
+            take 70% and 85% of the window by time. Splitting is TEMPORAL and then
+            grouped by subject — a random split puts one device on both sides of the
+            line and the model memorises the entity instead of the behaviour.
+          items:
+            type: string
+          type: array
+        dims:
+          description: |-
+            Dims are the coordinates to carry, by published name. Empty takes the whole
+            surface. They are stored in the plane's own order, never the order given, so
+            two requests naming the same dims produce identical rows.
+          items:
+            type: string
+          type: array
+        from:
+          description: |-
+            From and To bound the event window, half-open, RFC 3339. The window may not
+            be longer than the source's own retention: past that, its older half is
+            already gone and the dataset would silently be shorter than it says.
+          type: string
+        horizon:
+          description: |-
+            Horizon is how many days a row must have aged before it may be admitted. It
+            is what keeps a fact that was not yet knowable at scoring time out of a
+            training set: a chargeback lands 30 to 120 days after the transaction it
+            condemns, so 120 for the payment lane and 14 for signup abuse. Zero admits
+            the whole window and is honest only where the outcome is immediate.
+          type: integer
+        kind:
+          description: |-
+            Kind narrows to one subject kind — person, session or account. Empty takes
+            every kind.
+          type: string
+        name:
+          description: |-
+            Name identifies the dataset across its versions: lower-case letters, digits
+            and hyphens, starting with a letter.
+          type: string
+        rows:
+          description: Rows caps the materialisation. Zero takes the plane's own bound.
+          type: integer
+        seed:
+          description: |-
+            Seed decides WHICH subjects are admitted when the window holds more rows
+            than the cap allows. It is recorded on the version, so a capped dataset is
+            reproducible rather than being whichever rows the store returned first.
+            Omit it to seed from the dataset's name.
+          type: string
+        to:
+          type: string
+      type: object
+    mlDatasetVersions:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/mlDataset'
+          type: array
+        name:
+          type: string
+      type: object
+    mlDisposal:
+      properties:
+        dataset:
+          type: string
+        rows:
+          type: integer
+        versions:
+          description: |-
+            Versions is how many versions went, and Rows how many rows they held between
+            them, as the register recorded them.
+          type: integer
+      type: object
+    mlLineage:
+      properties:
+        dataset:
+          type: string
+        digest:
+          description: |-
+            Digest is the version's fingerprint, repeated here so a lineage answer is
+            self-contained.
+          type: string
+        from:
+          description: |-
+            From and To are the window actually read — To is the window's end pulled
+            back by the maturity horizon, which is usually earlier than the spec's.
+          type: string
+        holds:
+          description: |-
+            Holds is what the source holds for the same window NOW. The difference
+            between it and Rows is the whole of the reproducibility claim.
+          type: integer
+        oversize:
+          description: |-
+            Oversize is how many subjects the window held that were too large to
+            represent when this version was built. It is part of the fingerprint, so it
+            is part of what "reproducible" is measured over.
+          type: integer
+        refusal:
+          type: string
+        reproducible:
+          description: |-
+            Reproducible is true when the source still holds what this version was built
+            from. Refusal says why not, when it is false.
+          type: boolean
+        retention:
+          description: |-
+            Retention is the source's own expiry rule as the store reports it, read at
+            materialisation time rather than assumed. A source whose retention is
+            shorter than this window cannot re-derive it.
+          type: string
+        rows:
+          description: |-
+            Rows and Subjects are what the source held for that window at
+            materialisation time.
+          type: integer
+        share:
+          description: Share is the fraction of subjects admitted, in thousandths.
+          type: integer
+        source:
+          description: Source is the plane the rows were derived from.
+          type: string
+        subjects:
+          type: integer
+        to:
+          type: string
+        version:
+          type: integer
+      type: object
     mlResource:
       properties:
         createdAt:
@@ -17948,6 +18210,36 @@ components:
           items:
             $ref: '#/components/schemas/mlResource'
           type: array
+      type: object
+    mlSplitCounts:
+      properties:
+        judged:
+          description: |-
+            Judged is how many rows carry a disposition. It is zero until a label plane
+            writes one, and reporting it plainly is what lets a model plane refuse to
+            rank rather than name a winner it cannot justify.
+          type: integer
+        productive:
+          description: |-
+            Productive and Unproductive are the two judged classes, so the imbalance is
+            visible before anyone trains on it.
+          type: integer
+        rows:
+          type: integer
+        subjects:
+          description: |-
+            Subjects is how many distinct subjects the rows belong to. Every row of one
+            subject is in ONE split, so this is the real sample size — the row count
+            flatters it whenever a subject is active.
+          type: integer
+        test:
+          type: integer
+        train:
+          type: integer
+        unproductive:
+          type: integer
+        val:
+          type: integer
       type: object
     mlTrials:
       properties:
@@ -33244,6 +33536,61 @@ components:
             coordinate at its neutral value — the counterfactual itself.
           type: number
       type: object
+    riskDisposeIn:
+      properties:
+        before:
+          description: |-
+            Before disposes of assertions WRITTEN before this instant, RFC 3339. It is
+            measured against the server clock at the write and not against the event
+            or observation times, both of which the asserting caller supplies — a
+            tenant that could back-date could delete a compliance record on demand.
+          type: string
+      type: object
+    riskDisposeOut:
+      properties:
+        before:
+          type: string
+        disposed:
+          description: |-
+            Disposed is how many whole records were removed. Records are disposed of
+            whole, never redacted: a partially-erased compliance record is one nobody
+            can attest to.
+          type: integer
+        held:
+          description: |-
+            Held is how many records inside the boundary were kept under litigation
+            hold.
+          type: integer
+        oldest:
+          type: string
+        remaining:
+          description: |-
+            Remaining is how many disposable records are still older than the
+            boundary. A sweep is bounded per call, so a non-zero value here means call
+            again rather than that something failed.
+          type: integer
+        restored:
+          description: |-
+            Restored is how many records this sweep had already removed from the derived
+            columnar copy and then did NOT dispose of, because a litigation hold arrived
+            between the identify and the delete — and which were therefore written back
+            to the derived copy before this answered.
+
+            It is a NAMED state and not a silent repair. The copy is swept before the
+            record so nothing is orphaned in the warehouse, which means a record the
+            delete declines to remove is one the warehouse has already lost, with its
+            seq behind the delivery cursor and no retry that can reach it. Non-zero here
+            says the collision happened and was repaired; a non-zero that keeps
+            recurring says retention and hold are racing on the same records, which is
+            worth an operator's attention rather than a debug line.
+          type: integer
+        total:
+          description: |-
+            Total and Oldest describe what the tenant still holds afterwards, so a
+            disposal that removed nothing is distinguishable from a tenant that had
+            nothing.
+          type: integer
+      type: object
     riskEvent:
       properties:
         at:
@@ -33287,6 +33634,341 @@ components:
         subject:
           description: Subject is the identifier on that kind.
           type: string
+      type: object
+    riskHoldIn:
+      properties:
+        hold:
+          description: |-
+            Hold is the state to put them in: true places the hold, false releases it.
+            One op both ways, because a hold that can be placed and not released pins a
+            compliance record past every retention boundary with nothing able to let it
+            go — and an operator who cannot release a hold stops placing them.
+          type: boolean
+        ids:
+          description: |-
+            IDs are the content digests of the records, as returned by the write and
+            by the read. They name records in THIS tenant's plane; an id belonging to
+            anybody else names nothing here, because the statement runs against this
+            tenant's own file and there is no other file it could reach.
+          items:
+            type: string
+          type: array
+      type: object
+    riskHoldOut:
+      properties:
+        changed:
+          description: |-
+            Changed is how many records moved into that state. A record already in it
+            is not counted and is not an error: the op is idempotent, so a retry after
+            a network failure is safe.
+          type: integer
+        held:
+          description: |-
+            Held is how many records this tenant is now holding, at any age. Retention
+            never disposes of one.
+          type: integer
+        hold:
+          description: Hold echoes the state asked for.
+          type: boolean
+        missing:
+          description: |-
+            Missing is how many of the named ids this tenant does not hold. It is
+            reported rather than refused, so a sweep over a list that includes disposed
+            records still places every hold it can — but it is REPORTED, because a hold
+            that silently did nothing is a compliance control that lies.
+          type: integer
+      type: object
+    riskLabelCoverage:
+      properties:
+        contested:
+          description: |-
+            Contested is how many matured events have two visible assertions that
+            disagree. It is the number that says whether the precedence rule is
+            load-bearing or decorative, and it is the one to watch after wiring a new
+            source.
+          type: integer
+        events:
+          type: integer
+        explore:
+          description: |-
+            Explore is the share of judged events whose winning assertion came from
+            the below-the-line sample. A blocked transaction never produces a
+            chargeback, so a training set with no exploration in it is a description of
+            the incumbent block list rather than of the world — and a champion measured
+            on it is measured on whether it agrees with the incumbent.
+          type: number
+        facts:
+          description: |-
+            Facts is how many assertions the window holds; Events is how many distinct
+            judged events they cover. The two differ by exactly the corroboration and
+            the conflict in the plane.
+          type: integer
+        from:
+          type: string
+        horizon:
+          type: integer
+        judged:
+          description: |-
+            Judged is how many MATURED events resolve, at their own as-of, to
+            something other than unjudged.
+          type: integer
+        matured:
+          description: |-
+            Matured is how many of those events have aged past the horizon and may
+            therefore be admitted to a supervised set at all. It counts every matured
+            event, judged or not — it is the DENOMINATOR an operator divides Judged by,
+            and a denominator that excluded the unjudged would read 1.0 on a plane with
+            one label in it.
+          type: integer
+        pending:
+          description: |-
+            Pending is how many of this tenant's assertions the DERIVED columnar copy is
+            not known to hold yet. Every count above is folded from the record, so they
+            are right regardless — but a materialiser that joins in the warehouse while
+            this is non-zero is joining against an incomplete answer key, and a missing
+            fraud label is indistinguishable from an honest customer. It is reported at
+            the training gate because that is where somebody is deciding whether the
+            ground truth is good enough to fit on. Counted under a cap, so it saturates
+            rather than costing a full scan on every read.
+          type: integer
+        productive:
+          type: integer
+        sources:
+          description: |-
+            Sources breaks the judged events down by the source that WON, so a plane
+            that looks labelled because one noisy source dominates is visible as such.
+          items:
+            $ref: '#/components/schemas/riskSourceCoverage'
+          type: array
+        to:
+          type: string
+        unlabelled:
+          description: |-
+            Unlabelled is how many MATURED events had no assertion knowable by their
+            own as-of — including every assertion that arrived after that instant. It
+            is the field that says WHY judged is low: a tenant whose ground truth was
+            filed long after the events it judges reads matured=n, judged=0,
+            unlabelled=n, which is diagnosable, rather than a bare zero, which is not.
+          type: integer
+        unmatured:
+          description: |-
+            Unmatured is how many events in the window have NOT aged past the horizon.
+            They are not unlabelled — they are not yet askable, and a supervised set
+            must exclude them rather than treat them as negatives. Matured + Unmatured
+            is Events.
+          type: integer
+        unproductive:
+          type: integer
+      type: object
+    riskLabelEvent:
+      properties:
+        at:
+          type: string
+        kind:
+          type: string
+        subject:
+          type: string
+      type: object
+    riskLabelFact:
+      properties:
+        at:
+          description: At is when the judged event happened, RFC 3339.
+          type: string
+        confidence:
+          description: |-
+            Confidence in [0,1]. A processor chargeback is 1; an analyst's hunch is
+            not. It breaks a tie WITHIN a precedence rank and can never lift a weak
+            source above a strong one — otherwise every caller would send 1.
+
+            A litigation hold is NOT a field here. It is a fact about the record and
+            not about the world, so it is not part of what was asserted, it is not in
+            the content digest, and it has its own op — which is also the only way one
+            can be released. Carried here it was silently a no-op on any record that
+            already existed: the digest was the same, the insert was ignored, and the
+            caller was told `duplicate` while the hold it asked for was never placed.
+          type: number
+        disposition:
+          description: |-
+            Disposition is productive, unproductive, or empty for an explicit
+            unjudged — the AML engine's own vocabulary, verbatim.
+          type: string
+        evidence:
+          description: |-
+            Evidence points at the record this conclusion came from: a dispute id, a
+            case id, a decision id. Required, because a label with no evidence cannot
+            be defended when the adverse action it fed is challenged.
+          type: string
+        kind:
+          description: |-
+            Kind is what the subject is: account, agent, merchant, payout, person,
+            session or transaction. Closed, because a typo in an open field would shard
+            a tenant's labels into a partition nothing reads and nothing would say so.
+          type: string
+        seen:
+          description: |-
+            Seen is when this assertion became KNOWABLE, RFC 3339. It is required and
+            it is not At: a chargeback lands 30 to 120 days after the transaction it
+            judges, and a training set joined on At alone knows the future. Everything
+            this plane does to prevent leakage is computed from Seen.
+          type: string
+        source:
+          description: |-
+            Source is who asserted: chargeoff, dispute, case, refund, review or
+            sample. It is the primary term of the precedence rule, so it is closed —
+            an unknown source has no rank and a conflict with it could not be resolved.
+          type: string
+        subject:
+          description: Subject identifies the thing being judged, in the tenant's
+            own namespace.
+          type: string
+      type: object
+    riskLabelIn:
+      properties:
+        labels:
+          description: |-
+            Labels is the batch. Each member is judged on its own: one refusal does
+            not discard the rest, because a webhook redelivering five disputes must
+            not lose four of them to one malformed fifth.
+          items:
+            $ref: '#/components/schemas/riskLabelFact'
+          type: array
+      type: object
+    riskLabelOut:
+      properties:
+        duplicate:
+          type: integer
+        mirror:
+          description: |-
+            Mirror names why the columnar copy did not take this batch, when it did
+            not. The record is already durable in the tenant's own store by then — the
+            warehouse copy exists to make a training join cheap, and its absence is a
+            gap in that join, never a lost label.
+          type: string
+        pending:
+          description: |-
+            Pending is how many assertions the derived copy is still to take. Every
+            write attempt carries the backlog forward as well as its own batch, so a
+            warehouse that was unreachable closes its gap on the next write rather than
+            leaving a hole in a training join nothing would report. It is counted under
+            a cap and saturates there: zero means caught up, and a large number means a
+            backlog to work through rather than an inventory to reconcile.
+          type: integer
+        recorded:
+          type: integer
+        refused:
+          type: integer
+        results:
+          description: |-
+            Results is per fact, in the order sent, so a caller can retry exactly the
+            members that were refused and can log the content digest of the ones that
+            landed.
+          items:
+            $ref: '#/components/schemas/riskLabelResult'
+          type: array
+      type: object
+    riskLabelRecord:
+      properties:
+        at:
+          type: string
+        by:
+          description: By is the identity that asserted, stamped server-side at the
+            write.
+          type: string
+        confidence:
+          type: number
+        disposition:
+          type: string
+        evidence:
+          type: string
+        hold:
+          type: boolean
+        id:
+          type: string
+        kind:
+          type: string
+        knowable:
+          description: |-
+            Knowable is when THIS PLANE could first have answered with the assertion:
+            the later of Seen and the server clock at the write, derived server-side.
+            It is the instant the leakage guard compares, so it is published beside the
+            claim it was derived from — an answer whose rule nobody can see is one
+            nobody can check.
+          type: string
+        seen:
+          description: |-
+            Seen is when the FILER said the assertion became knowable. It is
+            provenance: it is recorded and published, and it decides nothing.
+          type: string
+        source:
+          type: string
+        subject:
+          type: string
+        wrote:
+          description: |-
+            Wrote is the server clock at the write. It is the only time on the record
+            the tenant did not supply, and it is what retention measures against.
+          type: string
+      type: object
+    riskLabelResult:
+      properties:
+        id:
+          description: |-
+            ID is the content digest of the assertion — the id a redelivery of the
+            same fact resolves to.
+          type: string
+        refusal:
+          description: Refusal states what was wrong, for the refused.
+          type: string
+        status:
+          description: Status is recorded, duplicate or refused.
+          type: string
+      type: object
+    riskLabelVocabulary:
+      properties:
+        dispositions:
+          items:
+            type: string
+          type: array
+        kinds:
+          description: |-
+            Kinds, Dispositions and Sources are the closed vocabularies. A value
+            outside them is refused at the door.
+          items:
+            type: string
+          type: array
+        precedence:
+          description: |-
+            Precedence is the sources in the order that resolves a conflict, strongest
+            first. It is DERIVED from the same declaration the resolver reads, so the
+            published order is the enforced order and cannot drift from it.
+          items:
+            type: string
+          type: array
+        retention:
+          description: |-
+            Retention is the platform floor in days: no tenant may dispose of a label
+            younger than this, because a label can be the input to an adverse action.
+          type: integer
+        rule:
+          description: |-
+            Rule states the tie-breaks below rank, in order, so a caller reading a
+            contested resolution can reproduce it.
+          items:
+            type: string
+          type: array
+      type: object
+    riskLabelsOut:
+      properties:
+        count:
+          description: |-
+            Count is how many this page holds. It is not a total: a total over an
+            unbounded append-only log is a full scan of a single-writer file.
+          type: integer
+        labels:
+          description: Labels is the page, newest event first.
+          items:
+            $ref: '#/components/schemas/riskLabelRecord'
+          type: array
       type: object
     riskLearnIn:
       properties:
@@ -33466,6 +34148,108 @@ components:
           type: string
         unit:
           description: Unit is how to read the numbers below.
+          type: string
+      type: object
+    riskResolveIn:
+      properties:
+        horizon:
+          description: |-
+            Horizon is how many days an event must age before it may be resolved at
+            all, and it is the whole of the no-leakage rule. 120 for the payment lane
+            (past the Visa and Mastercard dispute windows), 14 for signup abuse.
+            Unstated takes 120.
+          type: integer
+        now:
+          description: |-
+            Now moves the observation instant BACKWARDS, RFC 3339. It exists so a
+            BACKTEST can resolve labels as the plane stood at a past moment; without it,
+            every backtest would score a model against knowledge that arrived after the
+            decision it is being scored on. An instant after the server clock is
+            refused: a backtest resolves the past, and a future one would declare
+            unmatured events matured and hand a training set negatives for rows whose
+            chargeback has not had time to arrive.
+          type: string
+        subjects:
+          description: |-
+            Subjects are the exact events being judged. Each carries its own event
+            time, because the as-of that keeps the future out is derived from that
+            instant plus the horizon — one as-of over a whole batch would give a
+            January row six extra months of hindsight.
+
+            One entry per DISTINCT (kind, subject, at): naming an event twice answers
+            once, because an event resolved twice would list its own winner as a
+            contrary claim and would hand a materialiser duplicate training rows.
+          items:
+            $ref: '#/components/schemas/riskLabelEvent'
+          type: array
+      type: object
+    riskResolveOut:
+      properties:
+        horizon:
+          type: integer
+        labels:
+          items:
+            $ref: '#/components/schemas/riskResolved'
+          type: array
+        now:
+          description: |-
+            Now and Horizon echo the observation this answer was computed under. A
+            resolved label without them is a claim nobody can check.
+          type: string
+        unlabelled:
+          description: |-
+            Unlabelled is how many matured events had no assertion knowable by their
+            own as-of. That is the ordinary state of most traffic and it is reported
+            rather than answered as unproductive: manufacturing negatives is how a
+            fraud model comes to describe the incumbent block list.
+          type: integer
+        unmatured:
+          description: |-
+            Unmatured is how many named events had not aged past the horizon. They are
+            not unlabelled — they are not yet ASKABLE, and a supervised training set
+            must exclude them rather than treat them as negatives.
+          type: integer
+      type: object
+    riskResolved:
+      properties:
+        asOf:
+          description: |-
+            AsOf is the instant this answer was true at: the event time plus the
+            horizon. Nothing seen after it was visible to this resolution.
+          type: string
+        at:
+          type: string
+        by:
+          type: string
+        confidence:
+          type: number
+        conflicts:
+          description: |-
+            Conflicts is every other visible assertion, strongest first, whole. They
+            are kept and returned rather than dropped, so an adverse action can show
+            that the plane knew of a contrary claim and say why it lost. They are
+            horizon-filtered exactly like the winner: an assertion that was not
+            knowable yet cannot even be named here, because naming it would leak its
+            existence into a past decision.
+          items:
+            $ref: '#/components/schemas/riskLabelRecord'
+          type: array
+        contested:
+          description: |-
+            Contested is true when a visible assertion claimed a DIFFERENT disposition.
+            Two sources agreeing is corroboration, not conflict.
+          type: boolean
+        disposition:
+          type: string
+        evidence:
+          type: string
+        id:
+          type: string
+        kind:
+          type: string
+        source:
+          type: string
+        subject:
           type: string
       type: object
     riskRestoreIn:
@@ -33669,6 +34453,20 @@ components:
             Tenant is whose state this is. A snapshot naming another organisation is
             refused on restore.
           type: string
+      type: object
+    riskSourceCoverage:
+      properties:
+        facts:
+          description: |-
+            Facts is how many assertions this source filed; Won is how many judged
+            events it was the assertion in force for. A source with many facts and few
+            wins is one that is being outranked, which is worth knowing before
+            concluding it is wired correctly.
+          type: integer
+        source:
+          type: string
+        won:
+          type: integer
       type: object
     riskSurface:
       properties:
@@ -46483,6 +47281,46 @@ paths:
       tags:
       - automations
       x-app: automations
+  /v1/avatar:
+    post:
+      description: |-
+        Stores one image as the signed-in user's profile photo and answers the URL it is served from, which is also written to the user's IAM record — so every surface that already renders `avatar` picks it up with no further call.
+
+        The body is a multipart form with a `file` part. The format is decided by the BYTES, never the filename or the part's Content-Type: png, jpeg, gif and webp are accepted and everything else is refused with 415, so an SVG cannot be stored as a picture and later served as a program. Over 8 MiB is 413; empty is 400.
+
+        The photo is addressed by the sha256 of its bytes, so setting a new one yields a new URL rather than a stale cache of the old face. The caller is taken from the validated identity ONLY — there is no way to name a different subject — so this always sets your own photo, and a caller with no organization yet is refused.
+      operationId: post_v1_avatar
+      summary: Set your profile photo
+      tags:
+      - avatar
+      x-app: account
+  /v1/avatar/{org}/{user}/{digest}:
+    get:
+      description: |-
+        Streams a profile photo's raw BYTES. This is the address stored on the user's IAM record and rendered directly by an `<img>`, so it takes no credentials — the 64-hex content digest in the path is the capability, and it can only be produced by someone who already has the image.
+
+        The Content-Type is derived from the stored bytes and the response carries nosniff, so only a real raster image is ever served and only under its true type. Anything else — a miss, a malformed path, an object that is not an image — is one 404, and a hit caches for a year because the address is the content.
+      operationId: get_v1_avatar_by_org_by_user_by_digest
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: user
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: digest
+        required: true
+        schema:
+          type: string
+      summary: Fetch a profile photo
+      tags:
+      - avatar
+      x-app: account
   /v1/balancers:
     get:
       description: |-
@@ -69681,6 +70519,278 @@ paths:
       tags:
       - metrics
       x-app: metrics
+  /v1/ml/datasets:
+    get:
+      description: |-
+        Datasets lists this org's datasets, each with its newest version. An org that
+        has declared none gets an empty list; a store that cannot be reached gets a
+        refusal, never an empty list, because the two read identically and only one of
+        them is true.
+      operationId: mlDatasets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDatasetList'
+          description: ok
+      summary: List this org's datasets
+      tags:
+      - ml
+      x-app: dataset
+    post:
+      description: |-
+        Declares the next version of a dataset from a bound query over
+        this org's own feature surface.
+
+        It mints a VERSION and writes no rows: a version is declared, then materialised
+        once, then never rewritten. Version numbers are monotone and never reused, so
+        "version 3 of signups" means one thing forever — which is the whole reason a
+        model can cite one.
+
+        The window is bounded by the source's retention, the horizon by a year, the
+        rows by the plane's cap, and the number of datasets and versions per org by
+        their own limits. Every refusal names which bound it hit.
+      operationId: mlCreateDataset
+      requestBody:
+        content:
+          application/json:
+            example:
+              from: "2026-01-01T00:00:00Z"
+              horizon: 14
+              kind: person
+              name: signups
+              to: "2026-04-01T00:00:00Z"
+            schema:
+              $ref: '#/components/schemas/mlDatasetSpec'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDataset'
+          description: ok
+      summary: Declare the next version of a dataset
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}:
+    delete:
+      description: |-
+        Disposes of one dataset and every version of it: the rows are
+        dropped and the register is marked with what went.
+
+        This is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:
+        a table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is
+        the opposite of a retention decision belonging to the tenant whose records they
+        are. The drop is a partition drop on (org, dataset), so the tenant is the first
+        component of the thing being dropped and a disposal cannot be spelled across one.
+
+        The BYTES are what goes. The register keeps one `disposed` row per version — the
+        name, the number, the spec, the digest and who disposed of it when — for two
+        reasons: a retention obligation is answered by a record of the deletion, not by
+        silence; and version numbers must stay monotone, so that after `orders` is
+        disposed of and declared again the next version is 4 and not 1. A number that
+        could be reused would make every citation of `orders v3` ambiguous forever.
+
+        It is not reversible and there is no soft state in between. A version a model
+        cited has no rows once this returns, and every read of it says so.
+      operationId: mlDeleteDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDisposal'
+          description: ok
+      summary: Dispose of one dataset and every version of it
+      tags:
+      - ml
+      x-app: dataset
+    get:
+      description: |-
+        Dataset describes every version of one dataset, newest first — the whole
+        history, because the point of a version is that the older ones are still there
+        and a model fitted last quarter cites one of them.
+
+        A name this org does not own answers 404, exactly as an unknown name does, so a
+        probe learns nothing about another tenant's datasets.
+      operationId: mlDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDatasetVersions'
+          description: ok
+      summary: Describe every version of one dataset
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}/export:
+    get:
+      description: |-
+        Reads a published version's rows back, one bounded page at a
+        time, in the version's own stable row order.
+
+        Only a published version can be exported. Rows written by an attempt that never
+        completed are inert — no register row names them — and they are disposed of with
+        the dataset.
+      operationId: mlExportDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Version is the version to read. Zero takes the newest published
+          one.
+        example: 1
+        in: query
+        name: version
+        required: false
+        schema:
+          type: integer
+      - description: Split narrows to train, val or test. Empty reads every split.
+        example: train
+        in: query
+        name: split
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Offset is where the page starts, in the version's own row order (by id,
+          which is derived from the row and therefore stable forever).
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          Limit is how many rows to return. Zero and anything above the plane's bound
+          take the bound.
+        example: 500
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDatasetRows'
+          description: ok
+      summary: Read a version's rows back, one page at a time
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}/lineage:
+    get:
+      description: |-
+        Shows where a version's rows came from and whether that can
+        still be demonstrated.
+
+        The answer is MEASURED, not recalled: the plane asks the source the same
+        bounded question again and compares it to the fingerprint taken when the
+        version was built. Anything but exact agreement is reported as drift — the
+        source is fed by a rollup that runs behind the events, so "it holds more now"
+        is the ordinary case and it means re-running the spec would not reproduce this
+        version. An admitted gap is actionable; an unfalsifiable claim is not.
+
+        IT IS A PRICED, BOUNDED READ, because it is the same statement a
+        materialisation is charged for: an exact distinct-count over up to 400 days of
+        this org's feature surface. It takes the org's ONE source-scan slot, so a
+        tenant looping it spends one scan and not a thousand; it counts against the
+        plane's ceiling, so the fleet's warehouse is bounded too; and it runs under
+        this plane's own deadline rather than the caller's patience.
+      operationId: mlDatasetLineage
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Version is the version to trace. Zero takes the newest published
+          one.
+        example: 1
+        in: query
+        name: version
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlLineage'
+          description: ok
+      summary: Show where a version's rows came from, and whether that can still be
+        demonstrated
+      tags:
+      - ml
+      x-app: dataset
+  /v1/ml/datasets/{name}/materialize:
+    post:
+      description: |-
+        Builds the declared version into immutable rows and answers
+        202 as soon as the attempt is on record.
+
+        It never holds the request open for the work: a materialisation is a bounded
+        warehouse scan, and letting an HTTP client's timeout be a data plane's timeout
+        is how one tenant's retry loop becomes everyone's outage. ONE materialisation
+        runs per org at a time; a second is refused rather than queued, because a queue
+        admits the same work later and the honest answer to "again" while one is
+        running is that one is running.
+
+        Only a DECLARED version is admitted. A published version is immutable, and a
+        version whose earlier attempt did not complete is never re-attempted — that
+        would union two runs' rows under one number and make the digest a lie. In both
+        cases the answer is to declare a new version, which is what a second run over a
+        moving source honestly is.
+      operationId: mlMaterializeDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlDataset'
+          description: accepted
+      summary: Materialise the declared version into immutable rows
+      tags:
+      - ml
+      x-app: dataset
   /v1/ml/health:
     get:
       description: |-
@@ -70099,6 +71209,19 @@ paths:
       tags:
       - models
       x-app: ai
+  /v1/models/providers:
+    get:
+      description: |-
+        Public, secret-free list of the providers serving the models that
+        GET /v1/models lists — the same source, projected. Safe unauthenticated: no
+        keys, URLs, or config are returned, and it reports a SET of names, never
+        which provider serves which model.
+      operationId: get_v1_models_providers
+      summary: Public, secret-free list of the providers serving the models that GET
+        /v1/models lists — the same source, projected.
+      tags:
+      - models
+      x-app: github.com/hanzoai/ai
   /v1/mq/health:
     get:
       description: Reports whether the message plane behind this surface answers.
@@ -85160,18 +86283,6 @@ paths:
       tags:
       - prompts
       x-app: prompts
-  /v1/provider-flags:
-    get:
-      description: |-
-        Public, secret-free list of enabled Model provider NAMES. Used by
-        the pricing catalog sync to gate which providers' models are published
-        (replaces the standalone ENABLE_OPENROUTER env — one control). Safe to be
-        unauthenticated: no keys, URLs, or config are returned.
-      operationId: get_v1_provider-flags
-      summary: Public, secret-free list of enabled Model provider NAMES.
-      tags:
-      - provider-flags
-      x-app: github.com/hanzoai/ai
   /v1/pubsub/jetstream/streams:
     get:
       description: |-
@@ -86354,6 +87465,274 @@ paths:
       tags:
       - risk
       x-app: risk
+  /v1/risk/labels:
+    get:
+      description: |-
+        Reads the assertions this tenant has recorded, newest event first.
+
+        It reads the RECORD — the tenant's own store — and not the columnar copy, so
+        what it returns is what would be produced in an audit. Narrow it by entity, by
+        asserter, or by event window.
+      operationId: riskLabels
+      parameters:
+      - description: Kind and Subject narrow to one entity.
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: subject
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Source narrows to one asserter — the read that answers "what has commerce
+          told us", separately from "what has an analyst told us".
+        in: query
+        name: source
+        required: false
+        schema:
+          type: string
+      - description: From and To bound the EVENT time, half-open, RFC 3339.
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: to
+        required: false
+        schema:
+          type: string
+      - description: Limit caps the page. Out of range takes the plane's own bound.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskLabelsOut'
+          description: ok
+      summary: Read the assertions this tenant has recorded
+      tags:
+      - risk
+      x-app: label
+    post:
+      description: |-
+        Records a batch of ground truth against the entities it judges.
+
+        Each assertion carries TWO times — when the judged event happened, and when
+        the assertion became knowable — and both are required. The second is what
+        keeps a chargeback that landed in June out of a model that had to decide in
+        February.
+
+        It is idempotent on the CONTENT of an assertion, so a webhook that redelivers
+        is safe. It never overwrites: a source that corrects itself later files a NEW
+        assertion, which wins from the moment it became knowable and leaves every
+        earlier observation instant seeing exactly what it saw.
+
+        The asserter is stamped from the validated credential and is not a body field.
+      operationId: riskLabel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskLabelIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskLabelOut'
+          description: ok
+      summary: Assert ground truth about events
+      tags:
+      - risk
+      x-app: label
+  /v1/risk/labels/coverage:
+    get:
+      description: |-
+        Reports how much of a window has matured and how much of that is
+        judged, per source.
+
+        It is the gate on training. A supervised fit over a window whose judged count
+        is near zero produces a number, and the number is meaningless; this op is what
+        lets that be stated before the fit rather than discovered after it.
+
+        It reads the RECORD plane and folds every assertion at that event's OWN as-of,
+        so the counts obey exactly the leakage rule a materialisation would. It counts
+        only what was ASSERTED: what share of the whole event STREAM carries a label is
+        a question about the feature plane's denominator and is not answerable here.
+      operationId: riskLabelCoverage
+      parameters:
+      - description: |-
+          From and To bound the EVENT window, half-open, RFC 3339.
+
+          Unstated, the window is the 90 days ENDING where maturity begins — `to` is
+          the horizon ago, not now. A default window running to now under a default
+          horizon could not contain one matured event, so every count below it would
+          be zero however much ground truth the tenant held.
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: to
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Horizon is the maturity horizon in days the coverage is measured under.
+          Unstated takes 120. It also moves the default window, which ends where
+          maturity begins.
+        in: query
+        name: horizon
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskLabelCoverage'
+          description: ok
+      summary: How much of the window has matured, and how much of that is judged
+      tags:
+      - risk
+      x-app: label
+  /v1/risk/labels/dispose:
+    post:
+      description: |-
+        Applies this tenant's retention, and only this tenant's.
+
+        It is bounded three ways, each a compliance property rather than a
+        convenience. It refuses a boundary younger than the platform floor, because a
+        label can be the input to an adverse action and five years is what the
+        retention ledger holds such a record for. It never touches a record under
+        litigation hold. And it disposes of whole records rather than redacting
+        fields.
+
+        It removes the derived columnar copy BEFORE the record, and refuses the whole
+        disposal if the warehouse cannot be reached. The other order would leave rows
+        in the warehouse that nothing can identify any more, which is a disposal that
+        did not happen and says it did.
+      operationId: riskDisposeLabels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskDisposeIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDisposeOut'
+          description: ok
+      summary: Dispose of this tenant's expired assertions, whole records only
+      tags:
+      - risk
+      x-app: label
+  /v1/risk/labels/hold:
+    post:
+      description: |-
+        Places or releases a litigation hold on named records.
+
+        A hold is a fact about the RECORD, not about the world: it says retention may
+        not dispose of this row, and it asserts nothing about what happened. So it is
+        not a field on an assertion and it is not folded into the content digest —
+        carried there it was silently a no-op on any record that already existed, since
+        re-filing the same assertion with a hold flag produced the same digest, the
+        insert was ignored, and the caller was answered `duplicate` while the hold it
+        asked for was never placed. This op is the one way a hold moves, in either
+        direction, and the move is written to the audit log.
+
+        Every named id is this tenant's or is nothing. The statement runs against the
+        tenant's own file, which holds no other tenant's rows and has no column that
+        could name one.
+      operationId: riskHoldLabels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskHoldIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskHoldOut'
+          description: ok
+      summary: Place or release a litigation hold on named records
+      tags:
+      - risk
+      x-app: label
+  /v1/risk/labels/resolve:
+    post:
+      description: |-
+        Answers, for each named event, which assertion was in force AS OF that
+        event's own horizon — and what disagreed with it.
+
+        This is the join surface: the dataset materialiser calls it to attach ground
+        truth to training rows, and the evaluator calls it to score a past decision
+        against what was knowable when the decision had to be made. One mechanism for
+        both, so a model can never be trained under one leakage rule and scored under
+        another.
+
+        Three answers are distinct and all three are honest: a resolved label, an
+        event that has not matured, and a matured event nobody has judged. The last is
+        never reported as unproductive.
+      operationId: riskResolveLabels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskResolveIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskResolveOut'
+          description: ok
+      summary: Resolve the label in force for named events, as of each event's own
+        horizon
+      tags:
+      - risk
+      x-app: label
+  /v1/risk/labels/vocabulary:
+    get:
+      description: |-
+        Publishes the closed vocabularies and the precedence rule that
+        resolves a conflict between two sources.
+
+        A precedence rule nobody can read is a rule nobody can audit or dispute, and
+        the whole defensibility of a contested label rests on being able to say why
+        one assertion beat another. The order returned here is derived from the same
+        declaration the resolver reads — it is not a description of it.
+      operationId: riskLabelVocabulary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskLabelVocabulary'
+          description: ok
+      summary: The closed vocabularies and the precedence rule that resolves a conflict
+      tags:
+      - risk
+      x-app: label
   /v1/risk/learn:
     post:
       description: |-
@@ -94618,6 +95997,9 @@ tags:
 - description: Package automations is workflows that run themselves, on a schedule
     or a webhook.
   name: automations
+- description: 'Package account is your own account: API keys you mint and revoke,
+    org onboarding, and wallet top-up.'
+  name: avatar
 - description: Package do is the org-scoped private-network surface — /v1/vpcs and
     /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
   name: balancers
@@ -94993,11 +96375,6 @@ tags:
 - description: Package prompts is your prompt library, versioned, so nothing changes
     silently.
   name: prompts
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: provider-flags
 - description: 'Package pubsub is your message bus: publish, subscribe, and durable
     streams your apps read at their own pace.'
   name: pubsub

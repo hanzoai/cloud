@@ -75,7 +75,7 @@ const (
 // Set is one published reference set: what it holds, how fresh it has to be, and
 // where its entries lawfully come from.
 type Set struct {
-	// Name is the address: /v1/ml/reference/<name>. One word, lower case.
+	// Name is the address: /v1/risk/reference/<name>. One word, lower case.
 	Name string
 	// Kind decides what an empty set means and whether membership is held here.
 	Kind Kind

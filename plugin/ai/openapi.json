@@ -72,9 +72,6 @@
       "name": "process-speech-to-text"
     },
     {
-      "name": "provider-flags"
-    },
-    {
       "name": "query"
     },
     {
@@ -4490,6 +4487,17 @@
         ]
       }
     },
+    "/v1/models/providers": {
+      "get": {
+        "operationId": "get_v1_models_providers",
+        "summary": "Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected.",
+        "description": "Public, secret-free list of the providers serving the models that\nGET /v1/models lists — the same source, projected. Safe unauthenticated: no\nkeys, URLs, or config are returned, and it reports a SET of names, never\nwhich provider serves which model.",
+        "tags": [
+          "models"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
     "/v1/models/{model}/access": {
       "get": {
         "operationId": "get_v1_models_by_model_access",
@@ -4665,17 +4673,6 @@
         "description": "Convert speech to text",
         "tags": [
           "process-speech-to-text"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/provider-flags": {
-      "get": {
-        "operationId": "get_v1_provider-flags",
-        "summary": "Public, secret-free list of enabled Model provider NAMES.",
-        "description": "Public, secret-free list of enabled Model provider NAMES. Used by\nthe pricing catalog sync to gate which providers' models are published\n(replaces the standalone ENABLE_OPENROUTER env — one control). Safe to be\nunauthenticated: no keys, URLs, or config are returned.",
-        "tags": [
-          "provider-flags"
         ],
         "x-app": "github.com/hanzoai/ai"
       }

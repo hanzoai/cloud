@@ -272,6 +272,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// reads it per request.
 	sites.SetResolver(siteResolver{store: store})
 
+	// ...and publish the SAME resolver on the internal plane, because in
+	// production the edge is never in this process (the pod boots ~25 single-app
+	// processes, so the registry above is nil wherever it is read). Keep both:
+	// co-resident takes the in-process answer with no hop, split takes the plane.
+	setResolverForPlane(siteResolver{store: store})
+	exposeSites()
+
 	// Register the store as a project-ownership resolver for the identity trust
 	// boundary (cloud.SanitizeIdentity), so a forged cross-org X-Project-Id is
 	// refused before any subsystem reads it. Same inversion as sites.SetResolver —
