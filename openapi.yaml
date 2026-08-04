@@ -90713,6 +90713,18 @@ paths:
         createdAt falls back to now and lastIndexedAt to null when the index list is
         unavailable.
       operationId: get_v1_search_indexes
+      parameters:
+      - description: |-
+          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
+          key is accepted too. Search and vector are two surfaces with two keys.
+          It is not `validate:"required"` on purpose: requireKey answers absence
+          itself, so an unconfigured surface 503s and a missing bearer 401s — a
+          validation refusal would rewrite both statuses.
+        in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -90735,6 +90747,18 @@ paths:
         derivable from the index and this surface reports the honest zero instead of a
         fabricated number. An unreachable Meilisearch answers 200 with all zeros.
       operationId: get_v1_search_stats
+      parameters:
+      - description: |-
+          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
+          key is accepted too. Search and vector are two surfaces with two keys.
+          It is not `validate:"required"` on purpose: requireKey answers absence
+          itself, so an unconfigured surface 503s and a missing bearer 401s — a
+          validation refusal would rewrite both statuses.
+        in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -95753,6 +95777,18 @@ paths:
         itself keeps its name and defaults (dimension 0, cosine) rather than blanking
         the whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.
       operationId: get_v1_vector_collections
+      parameters:
+      - description: |-
+          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
+          key is accepted too. Search and vector are two surfaces with two keys.
+          It is not `validate:"required"` on purpose: requireKey answers absence
+          itself, so an unconfigured surface 503s and a missing bearer 401s — a
+          validation refusal would rewrite both statuses.
+        in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -95773,6 +95809,18 @@ paths:
         GET /v1/vector/collections returns, so the two panels can never disagree. An
         unreachable Qdrant answers 200 with all zeros rather than an error.
       operationId: get_v1_vector_stats
+      parameters:
+      - description: |-
+          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
+          key is accepted too. Search and vector are two surfaces with two keys.
+          It is not `validate:"required"` on purpose: requireKey answers absence
+          itself, so an unconfigured surface 503s and a missing bearer 401s — a
+          validation refusal would rewrite both statuses.
+        in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
