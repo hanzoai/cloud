@@ -39,7 +39,7 @@ func ask(t *testing.T, app *zip.App, url, hostHeader string) waitlistModeView {
 	if hostHeader != "" {
 		req.Host = hostHeader
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s: %v", url, err)
 	}

@@ -27,7 +27,7 @@ func ctxWith(t *testing.T, headers map[string]string, fn func(c *zip.Ctx)) {
 	for k, v := range headers {
 		hr.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}

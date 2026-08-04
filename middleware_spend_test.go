@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/finance"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -114,7 +114,7 @@ func call(t *testing.T, app *zip.App, method, path string, hdr map[string]string
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

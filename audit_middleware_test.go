@@ -82,7 +82,7 @@ func asUser(req *http.Request) {
 
 func mustTest(t *testing.T, app *zip.App, req *http.Request) *http.Response {
 	t.Helper()
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", req.Method, req.URL.Path, err)
 	}

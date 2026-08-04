@@ -37,7 +37,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -251,7 +251,7 @@ func TestRed_NoPrincipalForgedOrgRefused(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, p, nil)
 		req.Header.Set("X-Org-Id", "victim") // forged; equals the seeded tenant's org
 		// deliberately NO X-User-Id — the anonymous-forge signature.
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("forged GET %s: %v", p, err)
 		}
@@ -268,7 +268,7 @@ func TestRed_NoPrincipalForgedOrgRefused(t *testing.T) {
 		req := httptest.NewRequest(method, path, body)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Org-Id", "victim") // forged; deliberately NO X-User-Id
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("forged %s %s: %v", method, path, err)
 		}

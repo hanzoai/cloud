@@ -12,14 +12,13 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
 // botTestCfg replaces fiber's Test() default of a 1s WALL-CLOCK deadline on an
 // in-process request: under load a correct handler blows it and the test reports
 // an i/o timeout, which teaches nothing. The generous bound still fails a hang.
-var botTestCfg = fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}
+var botTestCfg = zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}
 
 // mountBot builds the surface over a registry the test controls, through the same
 // routes() the binary calls — so what a test drives is the code that ships.
@@ -56,7 +55,7 @@ func botCall(t *testing.T, app *zip.App, method, path, org string, body any) (in
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req, botTestCfg)
+	resp, err := app.Test(req, botTestCfg)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -138,7 +137,7 @@ func TestNodeRoutesRefuseAnUnvalidatedCaller(t *testing.T) {
 	// A forged org with NO validated user is the same refusal.
 	req := httptest.NewRequest(http.MethodGet, "/v1/bot/nodes", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged; no X-User-Id
-	resp, err := app.Fiber().Test(req, botTestCfg)
+	resp, err := app.Test(req, botTestCfg)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -241,7 +241,7 @@ func req(t *testing.T, app *zip.App, method, path, org, user string) (int, []byt
 	if user != "" {
 		r.Header.Set("X-User-Id", user)
 	}
-	resp, err := app.Fiber().Test(r)
+	resp, err := app.Test(r)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

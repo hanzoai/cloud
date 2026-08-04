@@ -57,7 +57,7 @@ func TestSummaryReflectsAllowlistedBrandOrigin(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
 	req.Header.Set("Origin", "https://insights.hanzo.ai")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestSummaryAnswersPreflight(t *testing.T) {
 	req := httptest.NewRequest(http.MethodOptions, "/v1/summary", nil)
 	req.Header.Set("Origin", "https://insights.hanzo.ai")
 	req.Header.Set("Access-Control-Request-Method", "GET")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestSummaryGivesUnknownOriginNoCORS(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
 	req.Header.Set("Origin", "https://evil.example")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestSummaryEmitsNothingWhenAllowlistEmpty(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
 	req.Header.Set("Origin", "https://insights.hanzo.ai")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestChainStripsClientSuppliedAuthority(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
 	req.Header.Set("X-User-Id", "u-forged")
 	req.Header.Set("X-User-IsAdmin", "true")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("test: %v", err)
 	}
 	if seen.user != "" {

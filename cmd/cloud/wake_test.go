@@ -74,14 +74,15 @@ func router(t *testing.T, name string) {
 	cloud.ResetPlane()
 
 	app := zip.New(zip.Config{AppName: "cloud", Logger: luxlog.New("test")})
-	err := app.Add(zip.Load(zip.Plugin{
+	leaf, err := zip.Load(zip.Plugin{
 		Name: name, Path: os.Args[0], Lazy: true,
 		Env:   []string{wakeChildEnv + "=" + name, "ZIP_RUNTIME_DIR=" + os.Getenv("ZIP_RUNTIME_DIR")},
 		Start: 60 * time.Second,
-	}, "/v1/"+name))
+	}, "/v1/"+name)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	app.Use(leaf)
 	t.Cleanup(func() { _ = app.Shutdown() })
 
 	// Called exactly as run() calls it: no handle, torn down by the app's own

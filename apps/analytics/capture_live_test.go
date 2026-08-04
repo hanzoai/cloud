@@ -233,7 +233,7 @@ func livePost(t *testing.T, app *zip.App, path, user, org, body string) (int, []
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-User-Id", user)
 	req.Header.Set("X-Org-Id", org)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST %s: %v", path, err)
 	}
@@ -264,7 +264,7 @@ func TestLiveAnonymousCapture(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, canonDoor, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Host = "hanzo.ai" // brand host buys NOTHING; the row lands under $public
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("anon POST: %v", err)
 	}

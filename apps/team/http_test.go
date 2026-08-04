@@ -64,7 +64,7 @@ func call(t *testing.T, app *zip.App, method, path string, headers map[string]st
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -79,7 +79,7 @@ func call(t *testing.T, app *zip.App, method, path string, headers map[string]st
 func authStartRedirectURI(t *testing.T, app *zip.App, host string) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "http://"+host+"/v1/team/account/auth/openid", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("authStart Test: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestOAuthStateRoundTrip(t *testing.T) {
 	app := mountTeam(t)
 
 	req := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid?navigateUrl=/inbox", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("authStart: %v", err)
 	}
@@ -475,7 +475,7 @@ func TestOAuthStateRoundTrip(t *testing.T) {
 	// Callback with a MISMATCHED state (cookie present) → bounced, never exchanged.
 	cb := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=x&state=forged", nil)
 	cb.AddCookie(&http.Cookie{Name: stateCookie, Value: flow})
-	resp2, err := app.Fiber().Test(cb)
+	resp2, err := app.Test(cb)
 	if err != nil {
 		t.Fatalf("callback: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestOAuthStateRoundTrip(t *testing.T) {
 
 	// Callback with NO flow cookie → same refusal.
 	cb2 := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=x&state="+state, nil)
-	resp3, err := app.Fiber().Test(cb2)
+	resp3, err := app.Test(cb2)
 	if err != nil {
 		t.Fatalf("callback (no cookie): %v", err)
 	}
@@ -529,7 +529,7 @@ func TestCallbackVerifiesOwner(t *testing.T) {
 		g.register(app, func(h zip.Handler) zip.Handler { return h })
 		cb := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=ok&state=aaaa", nil)
 		cb.AddCookie(&http.Cookie{Name: stateCookie, Value: "aaaa|"})
-		resp, err := app.Fiber().Test(cb)
+		resp, err := app.Test(cb)
 		if err != nil {
 			t.Fatal(err)
 		}

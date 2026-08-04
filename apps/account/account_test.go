@@ -40,7 +40,7 @@ type fakeIAM struct {
 	// rows is every row update-user was asked to write, whole. movedTo keeps only
 	// the owner, which is all the onboarding move needed; the profile photo is a
 	// different field of the same write, so the row itself is what a test must see.
-	rows []map[string]any
+	rows        []map[string]any
 	createdOrgs []map[string]any
 	failAddOrg  bool // when true, add-organization answers status!=ok
 	failMintKey bool
@@ -286,7 +286,7 @@ func callH(t *testing.T, app *zip.App, method, path string, headers map[string]s
 			req.Header.Set(k, v)
 		}
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -314,7 +314,7 @@ func call(t *testing.T, app *zip.App, method, path, user, org, body string) (int
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -566,7 +566,7 @@ func TestKeys_DirectBearerPath_MintsByUsernameNotUUID(t *testing.T) {
 	req.Header.Set("X-User-Id", uuid)  // direct-path stamp: the subject UUID
 	req.Header.Set("X-User-Name", "z") // direct-path stamp: the IAM username
 	req.Header.Set("X-Org-Id", "hanzo")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

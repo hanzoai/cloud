@@ -118,7 +118,7 @@ func call(t *testing.T, app *zip.App, method, path, org string) (int, []byte) {
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestListRefusesForgedOrgWithoutValidatedPrincipal(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/bots", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged: no X-User-Id
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

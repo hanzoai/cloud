@@ -63,7 +63,7 @@ func postRaw(t *testing.T, app *zip.App, path, org string, raw []byte) (int, []b
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set("X-User-Id", "u-"+org)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST %s: %v", path, err)
 	}

@@ -48,7 +48,7 @@ func postBody(t *testing.T, app *zip.App, path, body, auth string) (int, Capture
 	if auth != "" {
 		req.Header.Set("Authorization", "Bearer "+auth)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
 	}
@@ -440,7 +440,7 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
-	resp, err := probe.Fiber().Test(req)
+	resp, err := probe.Test(req)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -629,7 +629,7 @@ func runTenant(t *testing.T, headers map[string]string, fn func(*zip.Ctx) (admis
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := probe.Fiber().Test(req)
+	resp, err := probe.Test(req)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -671,7 +671,7 @@ func teamPresented2(t *testing.T, bearer string) bool {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader("[]"))
 	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, _ := probe.Fiber().Test(req)
+	resp, _ := probe.Test(req)
 	defer func() { _ = resp.Body.Close() }()
 	return got
 }

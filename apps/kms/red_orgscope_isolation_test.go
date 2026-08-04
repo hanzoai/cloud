@@ -142,7 +142,7 @@ func isoGet(t *testing.T, app *zip.App, what, path, token string, hdr map[string
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s: GET %s: %v", what, path, err)
 	}
@@ -491,7 +491,7 @@ func TestRedIso_F_WriteListDeleteAreScopedToo(t *testing.T) {
 		for k, v := range hdr {
 			req.Header.Set(k, v)
 		}
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s: %v", what, err)
 		}
@@ -543,7 +543,7 @@ func TestRedIso_F_WriteListDeleteAreScopedToo(t *testing.T) {
 		t.Helper()
 		req := httptest.NewRequest("DELETE", p, nil)
 		req.Header.Set("Authorization", "Bearer "+acme)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s: %v", what, err)
 		}

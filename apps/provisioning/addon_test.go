@@ -30,7 +30,7 @@ func postCreateInstance(t *testing.T, s *cloud.Service[state], kind, org, name, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set("X-User-Id", "u-"+org) // validated principal
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

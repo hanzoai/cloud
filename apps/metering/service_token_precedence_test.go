@@ -73,7 +73,7 @@ func TestInProcMeteringDispatch_ServiceTokenAuthPath(t *testing.T) {
 	finance.Publish(nil)
 
 	eng := zip.New(zip.Config{DisableStartupMessage: true})
-	eng.Use(stampIAMForS2S)
+	eng.Use(zip.H(stampIAMForS2S))
 	grp := eng.Group("/v1/billing")
 	grp.Use(commercemid.RequestContext(), commercemid.TokenRequired(permission.Admin)) // the money group: /balance, /tier, /usage
 	grp.Get("/balance", func(c *zip.Ctx) error {

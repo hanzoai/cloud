@@ -91,7 +91,7 @@ func getBearerHdr(t *testing.T, app *zip.App, path, token string, hdr map[string
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}

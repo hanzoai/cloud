@@ -40,7 +40,7 @@ func askRaw(t *testing.T, app *zip.App, body string, hdr map[string]string) *htt
 	for k, v := range hdr {
 		rq.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("POST /v1/ask: %v", err)
 	}

@@ -71,7 +71,7 @@ func TestCredentialVerbsAreRefused(t *testing.T) {
 		body := `{"method":"` + verb + `","params":{"email":"ada@acme.io","password":"` + testPassword + `"}}`
 		req := httptest.NewRequest(http.MethodPost, "http://hanzo.team/v1/team/account", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s: %v", verb, err)
 		}
@@ -119,7 +119,7 @@ func TestUnknownMethodDoesNotEchoUnbounded(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://hanzo.team/v1/team/account",
 		strings.NewReader(`{"method":"`+huge+`"}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("unknown method: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestAuthStartProviderHint(t *testing.T) {
 	}
 	for _, tc := range cases {
 		req := httptest.NewRequest(http.MethodGet, "http://hanzo.team"+tc.path, nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.path, err)
 		}

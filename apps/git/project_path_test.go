@@ -34,7 +34,7 @@ func doScoped(t *testing.T, app *zip.App, method, path, org, project string, bod
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -218,7 +218,7 @@ func TestProjectSegmentIsTraversalSafe(t *testing.T) {
 		req := httptest.NewRequest("GET", "/v1/git/acme/"+bad+"/code.git/info/refs?service=git-upload-pack", nil)
 		req.Header.Set("X-Org-Id", "acme")
 		req.Header.Set("X-User-Id", "u_acme")
-		resp, err := app.Fiber().Test(req, testCfg)
+		resp, err := app.Test(req, testCfg)
 		if err != nil {
 			continue // the router rejected the shape outright, which is also a refusal
 		}

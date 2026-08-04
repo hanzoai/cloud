@@ -38,7 +38,7 @@ func postHook(t *testing.T, app *zip.App, headers map[string]string, body []byte
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test POST /v1/git/webhook: %v", err)
 	}
