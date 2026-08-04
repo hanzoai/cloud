@@ -328,30 +328,33 @@ makes a 100+-service binary cheap: an app nobody calls costs a route entry and a
 struct, not a process. The generator stamps `Eager` onto every manifest row from
 this one map.
 
-### The S3 plugin lane: `hanzo.yml binaries:` → `binaries.json` → verified fetch
+### The release index: `CLOUD_PLUGINS` → `binaries.json` → verified fetch
 
-`hanzo.yml` declares ONE entry for the whole fleet (hanzo.yml:32-35): `name:
-cloud`, `main: ./cmd/cloud`, both linux platforms. That is deliberate and it is
-the same fact the ladder rests on — every app resolves to the multi-call binary
-with a different `--enable`, so the index names it once: 195 MiB published against
-4520 MiB for a binary per app. `bucket: plugins` (hanzo.yml:41) publishes to
-hanzoai/s3, NOT a GitHub release: artifacts and the `binaries.json` naming them
-land under `<bucket>/<repo>/<tag>/`, so `CLOUD_PLUGINS` is one immutable URL per
-tag and 400 MiB a release never touches a storage quota we do not own.
+**The image IS the distribution, and there is no `binaries:` lane.** The
+Dockerfile builds the light host plus one binary per manifest app into `/plugins`
+beside it, and the host resolves each plugin as a file on disk
+(`manifest.App.Plugin`). `hanzo.yml` says so where a lane would otherwise go, and
+gives the reason: 112 per-app entries would blow the artifact lane's 16-binary
+bound, and its `out:`-glob names every file with one recipe name, which the
+per-app/per-arch index in `manifest/release.go` cannot read.
 
-This lane is NOT a second builder of the cloud image. The image's `/cloud` is
-cgo + libsqlcipher; a plugin runs on whatever base its host happens to be, so the
-published binary is the static one (hanzo.yml:23-26).
+`CLOUD_PLUGINS` (manifest/release.go:21) is the OPT-IN runtime path for a
+plugin-less host: point it at a `binaries.json` index and each app resolves to a
+published artifact instead of a sibling file. **Nothing publishes such an index
+today** — it is a supported input with no producer, kept for a host that ships
+without `/plugins`, not a second way the default deployment gets its bits.
 
 - **No digest, no trust.** `fetch` drops any index entry missing `url` or
   `sha256` (manifest/release.go:82), and `remote` returns a `zip.Plugin` with
   both `URL` and `Sum` set (release.go:113-119). zip verifies before `chmod`, so
   fetching code stays safe to execute, and it caches BY DIGEST — restart and
   rollback touch no network.
-- **A dedicated index entry beats the multi-call baseline**, same order as on
-  disk: `remote` looks up `name/os/arch` first and only falls back to
-  `MultiCall/os/arch` with `--enable` (release.go:103-107). Pinned by
-  `TestRemote_DedicatedBeatsMultiCall` (manifest/release_test.go:177).
+- **One rung, and no multi-call fallback.** `remote` looks up exactly
+  `name/os/arch` (release.go:102), so one index serves a mixed-arch fleet and an
+  app absent from it does NOT borrow another artifact — a stale `cloud` entry
+  cannot make `dns` resolve. The binary IS the app, carrying no `--enable`.
+  Pinned by `TestRemote_NoMultiCallFallback` and
+  `TestRemote_DedicatedCarriesNoArgs` (manifest/release_test.go:162,174).
 - **`fetch` caches SUCCESS for the life of the process, and that is a
   cache-invalidation contract, not an optimisation** (release.go:43-59). A hundred-plus apps
   resolving through here must not become a request each. Failure is deliberately
