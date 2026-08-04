@@ -18,6 +18,7 @@ import (
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "experiments",
+		OwnsHealth: true,
 		Price:    cloud.Free,
 		Mount:    experiments.Mount,
 		Shutdown: cloud.CtxShutdown(experiments.Shutdown),
