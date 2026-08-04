@@ -34,7 +34,15 @@ import (
 // generated SDK method come from — so an operation missing from that registry is
 // invisible to all four. Nothing is missing today; an addition here needs the wire
 // fact that makes typing it impossible, not a preference.
-var untypedByDesign = map[string]string{}
+var untypedByDesign = map[string]string{
+	// The profile-photo pair (avatar.go). Both are raw by a property of the WIRE, not
+	// by preference: the upload's request is a multipart form, where op.invoke
+	// unmarshals JSON before the handler runs; and the read's response is the image's
+	// BYTES under a Content-Type derived from those bytes, where a typed dispatch ends
+	// in c.JSON under one declared 2xx. Neither is a shape an In/Out can carry.
+	"POST /v1/avatar": "multipart upload: the request body is a form, not JSON",
+	"GET /v1/avatar/{org}/{user}/{digest}": "raw image bytes under a byte-derived Content-Type, not a JSON envelope",
+}
 
 // accountOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed
