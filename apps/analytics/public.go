@@ -37,10 +37,8 @@
 //     argument list that cannot express the alternative.
 //   - TENANT is the DOOR's, and admitPublic cannot influence it: the projection takes
 //     no *zip.Ctx and no org at all, so no header, query, or body field reaches
-//     attribution. There are exactly two anonymous tenants, both server-side:
-//     publicTenant (the compile-time constant every /v1 door passes) and the resolved
-//     Site's org on a published-site host, which is the SAME host-derived tenant the
-//     file plane and the Base carve already serve that host's bytes under.
+//     attribution. The org is the reduced principal's own, resolved from the
+//     credential it presented — a caller that proves no org reaches no lane at all.
 //   - WHAT MAY BE STORED is ONE rule: THE SERVER NAMES THE ROW. An anonymous event is
 //     admitted only when its stored name comes from THIS FILE and not from the caller's
 //     bytes (publicName). That is what keeps the anonymous name space closed — an
@@ -534,8 +532,8 @@ func publicException(kind string, e *Exception) *Exception {
 }
 
 // anonymousSubject is the namespace an UNATTESTED subject is stored under, and maxSubject
-// bounds one. The '$' is the same reserved marker publicTenant carries and holds by the
-// same argument: an identified subject is an IAM subject or the app's own person id, and
+// bounds one. The '$' is a reserved marker, and it holds by this argument: an identified
+// subject is an IAM subject or the app's own person id, and
 // neither is spelled with a leading '$', so a namespaced id lies outside the identified
 // space and cannot collide with a person a real org knows.
 //
@@ -573,9 +571,8 @@ func publicSubject(id string) string {
 // the decoded batch: it returns the events that may be stored and how many were
 // dropped. It decides WHAT, never WHERE — it takes no *zip.Ctx AND no org, so neither
 // a request field nor a caller argument can reach attribution through it. Where an
-// anonymous row lands is the DOOR's decision (publicIngest's org), and the doors pass
-// only server-side values: the publicTenant constant, or the org the site resolver
-// returned for the request's host.
+// a projected row lands is the DOOR's decision (publicIngest's org), and the door passes
+// only a server-side value: the org the presented credential resolved to.
 //
 // Each admitted event is REBUILT from the allowlisted fields rather than edited, so a
 // field this function does not name cannot reach the row. Every caller-controlled
@@ -644,9 +641,8 @@ func attribute(evs []CaptureEvent, subject string) []CaptureEvent {
 // write core. dec is the door's wire; source stays the door's origin tag.
 //
 // org is where this lane's PROJECTED rows land, and it is the caller's ONLY influence
-// over the outcome. It is always a server-side value — publicTenant from handle, or a
-// resolved Site.Org from the published-site host — because the two callers are the only
-// two, and neither reads it from the request:
+// over the outcome. It is always a server-side value — the org the reduced principal's
+// credential resolved to — never read from the request:
 //
 //   - handle reaches here only when the caller presented no credential at all; a
 //     presented-but-unresolvable key is refused there rather than downgraded.
