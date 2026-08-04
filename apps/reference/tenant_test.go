@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -599,6 +600,92 @@ func TestAnOverrideCannotFillTheVolumeEveryOrgSharesOn(t *testing.T) {
 	}
 }
 
+// store opens ONE organisation's real override store — the same encrypted
+// per-org file the wire writes through, without the wire — for the properties
+// that are about what a row COSTS rather than about who may write one.
+func store(t *testing.T, org string) *overrides {
+	t.Helper()
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}
+	st := cloud.NewOrgStore[*overrides](cloud.NewBase(deps, subsystem), subsystem, openOverrides)
+	t.Cleanup(func() { _ = st.CloseAll() })
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		t.Fatalf("namespace: %v", err)
+	}
+	own, err := st.For(ns)
+	if err != nil {
+		t.Fatalf("open %s: %v", org, err)
+	}
+	return own
+}
+
+// bytesOnDisk is what this organisation's file actually occupies.
+func bytesOnDisk(t *testing.T, o *overrides) int64 {
+	t.Helper()
+	var pages, size int64
+	if err := o.db.QueryRow(`PRAGMA page_count`).Scan(&pages); err != nil {
+		t.Fatalf("page_count: %v", err)
+	}
+	if err := o.db.QueryRow(`PRAGMA page_size`).Scan(&size); err != nil {
+		t.Fatalf("page_size: %v", err)
+	}
+	return pages * size
+}
+
+// TestOneOrgsOverridesCostWhatTheyArePublishedToCost is the half that makes the
+// ceiling true rather than merely arithmetic.
+//
+// [ownBudget] divided by [rowBytes] is what a tenant may hold, so rowBytes has
+// to be what a row COSTS and not what it carries. It was neither: the figure was
+// the sum of the bounded wire terms (1,152 bytes), while a real worst-case row
+// measured 1,952 — an index, page slack and the encryption the wire figure knows
+// nothing about — so the published per-organisation ceiling understated the
+// truth by 1.69x on the ONE volume every organisation's store shares.
+//
+// So it is MEASURED. This fills a real store with the widest rows the door
+// admits and fails if one costs more than the figure the count is divided from.
+func TestOneOrgsOverridesCostWhatTheyArePublishedToCost(t *testing.T) {
+	own := store(t, "acme")
+
+	// The worst row this door admits: every term at its own bound, in the set
+	// whose name is longest.
+	widest := ""
+	for _, s := range Catalog() {
+		if len(s.Name) > len(widest) {
+			widest = s.Name
+		}
+	}
+	note, by := strings.Repeat("n", maxNote), strings.Repeat("u", maxActor)
+
+	const sample = 300
+	before := bytesOnDisk(t, own)
+	batch := make([]ReferenceOverride, 0, sample)
+	for i := 0; i < sample; i++ {
+		tail := fmt.Sprintf("%06d.ex", i)
+		batch = append(batch, ReferenceOverride{
+			Key:     strings.Repeat("k", maxKey-len(tail)) + tail,
+			Verdict: Deny,
+			Note:    note,
+		})
+	}
+	if _, err := own.put(widest, batch, by, time.Now()); err != nil {
+		t.Fatalf("the widest legal batch was refused: %v", err)
+	}
+	per := (bytesOnDisk(t, own) - before) / sample
+	if per > rowBytes {
+		t.Fatalf("a worst-case override costs %d bytes on a real store and the published figure is %d — "+
+			"so the %d MiB one organisation may hold is understated by %.2fx, on the one volume every "+
+			"organisation's store shares", per, rowBytes, int64(ownBudget)>>20, float64(per)/float64(rowBytes))
+	}
+	// A figure far above the truth is its own defect: it would cut the count a
+	// tenant may hold for no reason anyone can point at.
+	if per < rowBytes/2 {
+		t.Errorf("a worst-case row costs %d bytes and the published figure is %d; a figure twice the truth stops describing anything", per, rowBytes)
+	}
+	t.Logf("measured: worst-case row %d bytes, published %d, ceiling %d entries x %d sets = %d MiB",
+		per, rowBytes, maxOverrides(), len(Catalog()), ownVolume()>>20)
+}
+
 // TestTheWriterOnARowIsBoundedLikeEveryOtherTerm.
 //
 // [ownVolume] is the per-organisation ceiling, and it is the product of
@@ -642,10 +729,11 @@ func TestTheWriterOnARowIsBoundedLikeEveryOtherTerm(t *testing.T) {
 		t.Fatalf("a writer AT the %d-byte bound answered %d, want 200", maxActor, code)
 	}
 
-	// row is DERIVED from the three bounds, so the ceiling tracks them.
-	if row != maxKey+maxNote+maxActor {
-		t.Errorf("row = %d but its terms sum to %d — a term written down independently stops tracking the bound it names",
-			row, maxKey+maxNote+maxActor)
+	// stated is DERIVED from the three bounds, so the widest row the wire admits
+	// tracks them instead of being written down beside them.
+	if stated != maxKey+maxNote+maxActor {
+		t.Errorf("stated = %d but its terms sum to %d — a term written down independently stops tracking the bound it names",
+			stated, maxKey+maxNote+maxActor)
 	}
 }
 
