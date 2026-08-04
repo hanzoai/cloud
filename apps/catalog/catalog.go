@@ -60,6 +60,7 @@ import (
 	"github.com/hanzoai/cloud/apps/index"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/projects"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -269,9 +270,6 @@ func loop(b cloud.Base) {
 //
 // Example: {"origin":"template","language":"typescript","forkable":"true","limit":"20"}
 func (o ops) browse(ctx context.Context, in *browseQuery) (*catalogPage, error) {
-	if !index.Ready() {
-		return nil, zip.Errorf(http.StatusServiceUnavailable, "catalog: index not mounted")
-	}
 	q := strings.TrimSpace(in.Q)
 	rows, err := read(ctx, PublicOrg, q, "public")
 	if err != nil {
@@ -298,7 +296,7 @@ func (o ops) browse(ctx context.Context, in *browseQuery) (*catalogPage, error) 
 
 // read pulls one corpus out of the index and stamps its scope.
 func read(ctx context.Context, org, q, scope string) ([]Entry, error) {
-	raw, err := index.Query(ctx, org, uid, q, scan, 0)
+	raw, err := lexical(ctx, org, q)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
 	}
@@ -312,6 +310,35 @@ func read(ctx context.Context, org, q, scope string) ([]Entry, error) {
 		out = append(out, e)
 	}
 	return out, nil
+}
+
+// lexical reads the corpus out of the index, wherever the index happens to be.
+//
+// IN-PROCESS FIRST, then the plane. Both legs are real: a fused binary that
+// mounted both apps has the index right here and a call over the wire would be
+// a pointless hop, while the deployed fleet runs one process per app and the
+// in-process global is nil for good.
+//
+// This used to be `index.Query` alone, guarded by `index.Ready()` — and since
+// Ready() answers "is the index in THIS binary", the guard was false forever
+// once catalog and index became separate plugin rows. Every /v1/catalog request
+// answered 503 "index not mounted", which is what hanzo.app's Community page
+// rendered as "ERROR: CATALOG: 503": a page that drew perfectly and listed
+// nothing, on a fleet where nothing was actually down.
+func lexical(ctx context.Context, org, q string) ([]json.RawMessage, error) {
+	if index.Ready() {
+		return index.Query(ctx, org, uid, q, scan, 0)
+	}
+	out, err := cloud.Ask[plane.IndexQueryIn, plane.IndexQueryOut](
+		cloud.For(ctx, org), "index", plane.IndexQuery,
+		&plane.IndexQueryIn{UID: uid, Q: q, Limit: scan})
+	if err != nil {
+		return nil, err
+	}
+	if out == nil {
+		return nil, nil
+	}
+	return out.Rows, nil
 }
 
 // filter applies the exact-match browse axes. An absent param is not a filter.

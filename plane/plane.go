@@ -36,6 +36,7 @@
 package plane
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,19 @@ const (
 	// them, so visor read its own empty engine and reported an online GPU as no
 	// fleet at all. The engine is asked, not opened, like the ledger above.
 	TasksActivities = "tasks_activities"
+
+	// The lexical index's read, across the process boundary. Same shape of bug as
+	// the engine above, and it shipped as a 503 nobody could act on: `catalog`
+	// guards its browse on index.Ready(), which reports whether the index is
+	// mounted IN THIS BINARY — true when everything was one fused process, false
+	// the moment catalog and index became two plugin rows. So /v1/catalog answered
+	// {"status":503,"error":"catalog: index not mounted"} on every request, and
+	// hanzo.app's Community page rendered "ERROR: CATALOG: 503".
+	//
+	// The index is asked, not opened: its store is one encrypted SQLite with a
+	// single writer, so a second process opening the same file to read it is the
+	// collision, not the fix.
+	IndexQuery = "index_query"
 
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
@@ -479,6 +493,29 @@ type ReserveIn struct {
 // Reserved reports what was held.
 type Reserved struct {
 	Amount Money `json:"amount"`
+}
+
+// ---- index.query — the lexical index, from another process ----------------
+
+// IndexQueryIn names one index and one query. The ORG is the caller's, never an
+// argument, exactly like every other op here — so a caller can only ever search
+// its own corpus, and the public catalog is reached by asking AS the public org.
+type IndexQueryIn struct {
+	// UID is the index within the org (catalog rows all live in one).
+	UID string `json:"uid" validate:"required"`
+	// Q is the lexical query. Empty is a browse — every row, not none.
+	Q string `json:"q,omitempty"`
+	// Limit bounds the page; Offset walks it.
+	Limit  int `json:"limit,omitempty"`
+	Offset int `json:"offset,omitempty"`
+}
+
+// IndexQueryOut is the matching documents, as the index's OWN JSON relayed
+// verbatim — the same reasoning as Activities.Rows: a struct here would be a
+// second copy of a type this package does not own, free to drift from the one
+// that produced the bytes.
+type IndexQueryOut struct {
+	Rows []json.RawMessage `json:"rows"`
 }
 
 // ---- tasks.activities — the durable engine, one page at a time -------------
