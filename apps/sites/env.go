@@ -27,26 +27,37 @@ func ConfigFromEnv(domain string) Config {
 	if domain = strings.TrimSpace(domain); domain == "" {
 		domain = env("CLOUD_DOMAIN", "api.hanzo.ai")
 	}
-	self := list("CLOUD_SITES_SELF_DOMAINS")
-	if len(self) == 0 {
-		self = defaultSelfDomains(apex, domain)
-	}
 	return Config{
 		Apex: apex,
 		// Operator EXTRAS only. The baked-in denylist (reserved.go) is the floor and
 		// is not expressible here: trimming this var can never un-reserve a label.
-		Reserved:        list("CLOUD_SITES_RESERVED"),
-		SelfDomains:     self,
+		Reserved: list("CLOUD_SITES_RESERVED"),
+		// Operator EXTRAS only, for the same reason and by the same rule. These
+		// names decide whether a host is OURS — the sole unconditional gate on the
+		// site_hosts table (projects Store.bindHost asks sites.Ours) and the serve
+		// gate's self-host exclusion. Drop one and every `<label>.<that domain>`
+		// becomes a tenant's to claim: a first-come row on `api.hanzo.ai` that
+		// denies our own host to us for good, which is verbatim the defect
+		// SetSelfDomains exists to close.
+		//
+		// The list used to WIN OUTRIGHT over the derived set, so an operator adding
+		// a vanity domain silently subtracted the brand domain — and nothing would
+		// have noticed, because hanzo.ai reaches this set by DERIVATION from
+		// CLOUD_DOMAIN and no deployment states it. A set whose job is to deny must
+		// not be expressible as a replacement.
+		SelfDomains:     append(selfFloor(apex, domain), list("CLOUD_SITES_SELF_DOMAINS")...),
 		FirstPartyApex:  env("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
 		FirstPartySites: list("CLOUD_SITES_FIRSTPARTY", "cd", "flow", "gallery"),
 		FirstPartyOrg:   env("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
 	}
 }
 
-// defaultSelfDomains derives OUR self domains from the sites apex and the primary
-// API domain: hanzo.app plus the registrable domain of api.hanzo.ai (hanzo.ai).
-// An explicit CLOUD_SITES_SELF_DOMAINS wins outright.
-func defaultSelfDomains(apex, domain string) []string {
+// selfFloor derives the self domains this deployment ALWAYS holds, from the sites
+// apex and the primary API domain: hanzo.app plus the registrable domain of
+// api.hanzo.ai (hanzo.ai). It is a floor, not a default — config adds to it and can
+// never subtract from it, exactly as CLOUD_SITES_RESERVED only ever adds to
+// baseReserved (reserved.go).
+func selfFloor(apex, domain string) []string {
 	out := make([]string, 0, 3)
 	seen := map[string]bool{}
 	add := func(d string) {
