@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/credz"
+	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/role"
 )
 
@@ -105,18 +106,11 @@ type Config struct {
 	// (Go duration, default 25s).
 	ReaderRetryBudget time.Duration
 
-	// WriterLease, when true (CLOUD_WRITER_LEASE), makes a Writer take an
-	// exclusive fcntl lease on {DataDir}/.writer.lock BEFORE opening the RWO
-	// stores and release it LAST at shutdown (after every store is closed). This
-	// serializes a surge/overlap roll (RollingUpdate maxUnavailable:1 +
-	// same-node podAffinity) so the new writer opens the exclusive-lock ZapDB/
-	// audit stores only after the old one released them — never a double-open.
-	// Default OFF, so an unset variable is byte-identical to today's Recreate
-	// single-writer (which never overlaps and needs no lease). With per-pod RWO
-	// PVCs (the sharded StatefulSet below) the lease is pod-local and never
-	// contends across peers, so it stays OFF there — the shard router, not the
-	// lease, is the cross-pod single-writer guarantee.
-	WriterLease bool
+	// The writer lease is NOT a field here. CLOUD_WRITER_LEASE has exactly one
+	// reader — internal/writerlease — because the answer depends on something a
+	// Config cannot see: this process's position in the pod's process tree. A
+	// bool parsed here would be true in every one of a pod's processes alike,
+	// which is precisely the reading that took api.hanzo.ai down on 2026-08-04.
 
 	// ShardPeers is the CLOUD_PEERS membership list ("id@addr,id2@addr2") of the
 	// horizontal-scale StatefulSet: the full, STABLE set of writer pods (each a
@@ -354,7 +348,6 @@ func LoadConfig() *Config {
 		DataDir:           DataDir(),
 		WriterURL:         strings.TrimRight(getenv("CLOUD_WRITER_URL", ""), "/"),
 		ReaderRetryBudget: getenvDuration("CLOUD_READER_RETRY_BUDGET", 25*time.Second),
-		WriterLease:       getenvBool("CLOUD_WRITER_LEASE"),
 		ShardPeers:        getenv("CLOUD_PEERS", ""),
 		ShardSelf:         firstNonEmptyStr(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
 		PeerSelector:      getenv("CLOUD_PEER_SELECTOR", ""),
@@ -466,14 +459,18 @@ func getenv(key, dflt string) string {
 }
 
 // DefaultDataDir is the on-disk data root when CLOUD_DATA_DIR is unset.
-const DefaultDataDir = "/var/lib/cloud"
+const DefaultDataDir = datadir.Default
 
 // DataDir resolves the data root from the environment. It is exported and split
 // out of LoadConfig because credz.Boot must find the same directory BEFORE
 // LoadConfig runs — the credential broker's socket lives there, and the
 // credentials have to be installed before anything reads config or opens a store.
-// One definition, so the two resolutions cannot drift.
-func DataDir() string { return getenv("CLOUD_DATA_DIR", DefaultDataDir) }
+//
+// The rule itself lives in internal/datadir because the ROUTER needs it too, and
+// the router cannot link this package. It takes the pod's writer lease on a file
+// under this root before it spawns the children that open stores under it, so
+// the two must resolve the same directory or the lock guards nothing.
+func DataDir() string { return datadir.Resolve() }
 
 // rootKeyRef resolves the root key credz holds. credz.Boot moves it out of the
 // environment (so no spawned child inherits it) and into memory, which makes

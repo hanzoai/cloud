@@ -17,12 +17,12 @@ func TestParse(t *testing.T) {
 		{"primary", Writer, true}, // invalid → Writer + error
 	}
 	for _, c := range cases {
-		got, err := parse(c.raw)
+		got, err := Parse(c.raw)
 		if (err != nil) != c.wantErr {
-			t.Errorf("parse(%q): err=%v wantErr=%v", c.raw, err, c.wantErr)
+			t.Errorf("Parse(%q): err=%v wantErr=%v", c.raw, err, c.wantErr)
 		}
 		if got != c.want {
-			t.Errorf("parse(%q)=%q want %q", c.raw, got, c.want)
+			t.Errorf("Parse(%q)=%q want %q", c.raw, got, c.want)
 		}
 	}
 }
@@ -40,7 +40,7 @@ func TestPredicates(t *testing.T) {
 // reader (which could demote the real writer) — it yields Writer + an error the
 // caller is expected to fail closed on.
 func TestInvalidDefaultsSafe(t *testing.T) {
-	got, err := parse("garbage")
+	got, err := Parse("garbage")
 	if err == nil {
 		t.Fatal("expected error for invalid role")
 	}
