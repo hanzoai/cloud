@@ -9,7 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
-	credit "github.com/hanzoai/cloud/apps/money"
+	credit "github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )

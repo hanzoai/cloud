@@ -26,14 +26,12 @@ services:
       HANZO_DOMAIN: ${HANZO_DOMAIN:-api.hanzo.local}
       HANZO_DATA_DIR: /var/lib/cloud
       HANZO_IAM_ISSUER: ${HANZO_IAM_ISSUER:-https://iam.hanzo.id}
-      # Subsystem enable list (empty = all). Match what your tenant needs.
       HANZO_ENABLE: ${HANZO_ENABLE:-iam,base,kms,gateway,o11y}
     command:
       - "--brand=${HANZO_BRAND:-hanzo}"
       - "--domain=${HANZO_DOMAIN:-api.hanzo.local}"
       - "--data-dir=/var/lib/cloud"
       - "--iam-issuer=${HANZO_IAM_ISSUER:-https://iam.hanzo.id}"
-      - "--enable=${HANZO_ENABLE:-iam,base,kms,gateway,o11y}"
     volumes:
       - cloud-data:/var/lib/cloud
     healthcheck:

@@ -1096,6 +1096,23 @@ components:
         symbol:
           type: string
       type: object
+    ClearReferenceOut:
+      properties:
+        cleared:
+          description: |-
+            Cleared is false when your org held no such override — which is not an
+            error, it is the honest answer to a removal that had nothing to remove.
+          type: boolean
+        key:
+          description: Key is the entry named.
+          type: string
+        overrides:
+          description: Overrides is how many your org still holds in this set.
+          type: integer
+        set:
+          description: Set is the set cleared in.
+          type: string
+      type: object
     ClipBody:
       properties:
         bytes:
@@ -4563,28 +4580,22 @@ components:
         instrument:
           description: |-
             Instrument identifies the payment method. It is the anti-farming key: one
-            redemption per instrument, fleet-wide.
+            redemption per instrument, fleet-wide, and it is REQUIRED — an absent
+            instrument is refused, never waved through.
           type: string
-        plan:
-          description: 'Plan is the plan being redeemed against: pro, max or team.'
-          type: string
-        seats:
-          description: |-
-            Seats is the Team seat count; 0 means 1. Seats beyond the promo's
-            teamSeatCap bill at list.
-          type: integer
       type: object
     RedeemResult:
       properties:
         alreadyRedeemed:
           description: |-
             AlreadyRedeemed is true when this org had already taken the promo and the
-            call was an idempotent replay — nothing was credited a second time.
+            call was an idempotent replay.
           type: boolean
         chargeCents:
           description: |-
             ChargeCents is what month one costs after the discount, DiscountCents the
-            credit that produced it.
+            discount that produced it. Both are quoted figures against the org's
+            derived plan — NOTHING WAS CREDITED and no wallet moved.
           type: integer
         discountCents:
           type: integer
@@ -4596,23 +4607,384 @@ components:
         code:
           description: Code is the promo redeemed.
           type: string
-        creditCents:
+        discountCents:
           description: |-
-            CreditCents is the discount value credited to the org's wallet — the promo
-            is realized as a NON-CASH credit, not a subscription coupon.
+            DiscountCents is the month-one discount this redemption CLAIMS, in USD
+            cents. It is a recorded figure, NOT a balance: nothing was credited and no
+            wallet moved. An admin granting against this claim is what would make it
+            money, and that decision happens on the admin surface, not here.
           type: integer
-        creditEntryId:
-          description: CreditEntryID is the finance ledger entry that credit landed
-            in.
-          type: string
         plan:
-          description: Plan and Seats are what was redeemed against.
+          description: |-
+            Plan and Seats are what was redeemed against. Both are DERIVED server-side
+            — Plan from the org's live paid subscription, Seats from claimSeats — and
+            neither is ever read from the request.
           type: string
         redeemedAt:
           description: RedeemedAt is unix seconds.
           type: integer
         seats:
           type: integer
+      type: object
+    ReferenceAnswer:
+      properties:
+        age:
+          description: Age is how old that is, as a duration.
+          type: string
+        asOf:
+          description: AsOf is when the oldest contributing publisher was current,
+            RFC 3339.
+          type: string
+        from:
+          description: From is override or baseline — which plane answered.
+          type: string
+        hit:
+          description: |-
+            Hit is whether the key is a member. It is meaningful ONLY when Refusal is
+            empty: false with a refusal means the set could not be consulted, which is
+            not the same as the key being clean.
+          type: boolean
+        key:
+          description: Key is the key as asked.
+          type: string
+        matched:
+          description: |-
+            Matched is the member that covered the key, which for a domain or a network
+            is the enclosing entry rather than the key itself.
+          type: string
+        refusal:
+          description: |-
+            Refusal is why the set could not be consulted, when it could not: never
+            loaded, held elsewhere, or a source we hold no licence for. Non-empty means
+            Hit must not be read as an answer.
+          type: string
+        score:
+          description: Score is the published risk weight where the source expresses
+            one.
+          type: number
+        set:
+          description: Set is the set consulted.
+          type: string
+        stale:
+          description: |-
+            Stale is whether the set is past its freshness bound. A stale set still
+            answers — yesterday's list beats none — and this is how a decision knows it
+            leaned on one.
+          type: boolean
+        value:
+          additionalProperties:
+            type: string
+          description: |-
+            Value is what the publisher says about the member — class, operator,
+            scheme, region.
+          type: object
+        verdict:
+          description: |-
+            Verdict is the tenant's own allow or deny, present only for an override.
+            The baseline never carries one: it states facts and leaves the decision to
+            the caller's policy.
+          type: string
+        version:
+          description: |-
+            Version is the exact baseline version consulted, composed of each
+            contributing publisher and its content digest. It is what makes a decision
+            reproducible: an auditor takes this string and knows precisely what was
+            consulted.
+          type: string
+      type: object
+    ReferenceOut:
+      properties:
+        next:
+          description: Next is the key to page from, empty when this is the last page.
+          type: string
+        overrides:
+          description: |-
+            Overrides is YOUR org's entries over that baseline, in key order. They are
+            held in your organisation's own store and are not visible to any other.
+          items:
+            $ref: '#/components/schemas/ReferenceOverride'
+          type: array
+        set:
+          $ref: '#/components/schemas/ReferenceSet'
+          description: 'Set is the published set: its version, its freshness and its
+            sources.'
+      type: object
+    ReferenceOverride:
+      properties:
+        at:
+          description: At is when it was written, RFC 3339.
+          type: string
+        by:
+          description: By is who wrote it.
+          type: string
+        key:
+          description: Key is the member this organisation is speaking about.
+          type: string
+        note:
+          description: Note is why, in the operator's own words. Optional, and bounded.
+          type: string
+        verdict:
+          description: Verdict is allow or deny.
+          type: string
+      type: object
+    ReferenceOverrideIn:
+      properties:
+        key:
+          description: |-
+            Key is the member: a domain, a CIDR or address, an issuer prefix, a
+            device digest. It is matched the same way the baseline is, so a deny on
+            tempbox.example also covers mail.tempbox.example.
+          type: string
+        note:
+          description: Note is why, in your own words. Optional, bounded to 512 bytes.
+          type: string
+        verdict:
+          description: |-
+            Verdict is allow or deny, and nothing else. An override is a decision —
+            unlike a baseline entry, which states facts and leaves the decision to your
+            policy — because your organisation is the only party entitled to say "for
+            us, this one is fine".
+          type: string
+      type: object
+    ReferenceReceipt:
+      properties:
+        asOf:
+          description: |-
+            AsOf is when the load happened, RFC 3339. Absent is dated on arrival, which
+            can only make the list look older than it is.
+          type: string
+        keys:
+          description: |-
+            Keys is how many designations that load carried. Zero from a publisher who
+            designates somebody is a failed load wearing a successful one's clothes,
+            and belongs in Refusal instead.
+          type: integer
+        refusal:
+          description: Refusal is why the load failed, when it did.
+          type: string
+        source:
+          description: Source is the publisher this receipt is for.
+          type: string
+        version:
+          description: |-
+            Version is the digest of what that publisher supplied, so a refresh that
+            changed nothing can be told from a refresh that did not run.
+          type: string
+      type: object
+    ReferenceSet:
+      properties:
+        age:
+          description: Age is how long ago that was.
+          type: string
+        asOf:
+          description: |-
+            AsOf is when the OLDEST contributing publisher was current, RFC 3339. The
+            oldest and not the newest: a set is exactly as fresh as its weakest source.
+          type: string
+        keys:
+          description: Keys is how many members the baseline carries.
+          type: integer
+        kind:
+          description: |-
+            Kind is how the baseline comes to exist: fetch (downloaded from a
+            publisher), local (computed here), attest (held by the component that
+            screens against it, freshness reported), or seam (declared and NOT held,
+            because the source needs a licence we do not have).
+          type: string
+        match:
+          description: 'Match is how a key is tested: exact, domain, net, digits,
+            pattern or range.'
+          type: string
+        maxAge:
+          description: MaxAge is how old this set may be before it is stale.
+          type: string
+        overrides:
+          description: Overrides is how many entries YOUR org has laid over this baseline.
+          type: integer
+        refusal:
+          description: |-
+            Refusal names why the set cannot be relied on, when it cannot: never
+            loaded, held elsewhere, or a licence we do not hold. Non-empty means a
+            lookup against this set will not answer, rather than answering clean.
+          type: string
+        set:
+          description: Set is the name this set is addressed by.
+          type: string
+        sources:
+          description: Sources is each contributing publisher, its licence and its
+            own freshness.
+          items:
+            $ref: '#/components/schemas/ReferenceSource'
+          type: array
+        stale:
+          description: |-
+            Stale is whether it is past that bound. A stale set still answers and says
+            so, because yesterday's list beats none.
+          type: boolean
+        version:
+          description: |-
+            Version is the exact baseline consulted — every contributing publisher and
+            its content digest. A decision records this and an auditor resolves it back.
+          type: string
+        what:
+          description: What the set holds, in one sentence.
+          type: string
+      type: object
+    ReferenceSetsOut:
+      properties:
+        refused:
+          description: |-
+            Refused names the sets that cannot be consulted at all. A key checked
+            against one of these is UNKNOWN, not clean.
+          items:
+            type: string
+          type: array
+        sets:
+          description: Sets is the whole catalog, in a stable order.
+          items:
+            $ref: '#/components/schemas/ReferenceSet'
+          type: array
+        stale:
+          description: Stale names the sets past their freshness bound — the list
+            to alarm on.
+          items:
+            type: string
+          type: array
+      type: object
+    ReferenceSource:
+      properties:
+        asOf:
+          description: AsOf is when this publisher was current, RFC 3339.
+          type: string
+        basis:
+          description: |-
+            Basis is the KIND of permission this publisher's data reaches you under:
+            licence (an explicit grant), registry (the registry of record publishing for
+            anyone to consult), operator (an operator's own machine-readable statement
+            about its own network, published for third parties to filter by — not a
+            licence, and not claimed as one), own (computed here), or none (nothing
+            reaches you: the membership is held by the component that screens against
+            it). It is on the wire so the licence position is an audit you can run.
+          type: string
+        keys:
+          description: Keys is how many members this publisher contributed.
+          type: integer
+        origin:
+          description: Origin is exactly where it was taken from, so it can be taken
+            again.
+          type: string
+        refusal:
+          description: |-
+            Refusal is why this publisher's last take failed, if it did. The set keeps
+            its previous version of this source and ages out visibly rather than
+            silently shrinking.
+          type: string
+        source:
+          description: Source is the publisher.
+          type: string
+        terms:
+          description: |-
+            Terms is the CITATION that basis points at — the licence identifier, the
+            registry, or the operator publication. A source with no stated terms is not
+            in the catalog.
+          type: string
+        version:
+          description: |-
+            Version is the content digest of what this publisher last supplied. Two
+            refreshes that agree on it took the same data.
+          type: string
+      type: object
+    ReferenceTaken:
+      properties:
+        keys:
+          description: Keys is how many members it carries.
+          type: integer
+        refusal:
+          description: |-
+            Refusal is why this publisher contributed nothing, if it did not. The set
+            keeps its previous version of this source rather than shrinking.
+          type: string
+        resumed:
+          description: |-
+            Resumed is true when this run continued a version a previous run left
+            half-landed.
+          type: boolean
+        source:
+          description: Source is the publisher.
+          type: string
+        unchanged:
+          description: |-
+            Unchanged is true when the publisher's data was byte-for-byte the set we
+            already held.
+          type: boolean
+        version:
+          description: Version is the content digest that landed.
+          type: string
+        wrote:
+          description: |-
+            Wrote is how many rows this run actually wrote. Zero with Unchanged means
+            the publisher served the same set again.
+          type: integer
+      type: object
+    ReferenceVersion:
+      properties:
+        asOf:
+          description: AsOf is when the oldest of them was current, RFC 3339.
+          type: string
+        refusal:
+          description: Refusal is why it could not be consulted, when it could not.
+          type: string
+        set:
+          description: Set is the set.
+          type: string
+        stale:
+          description: Stale is whether it is past its freshness bound.
+          type: boolean
+        version:
+          description: Version is every contributing publisher and its content digest.
+          type: string
+      type: object
+    RefreshReferenceIn:
+      properties:
+        force:
+          description: |-
+            Force accepts a take whose size moved past the change bound. A publisher
+            serving a tenth or ten times its previous list is refused by default and the
+            previous version is left standing; this is the operator saying the change is
+            real. It cannot make an empty, truncated or unparseable take land — those are
+            errors, not magnitudes.
+          type: boolean
+        receipts:
+          description: |-
+            Receipts are supplied by the component that holds the membership, for a set
+            of kind attest. They are refused on any other kind, and a set of kind attest
+            is refused without them: this plane never invents a freshness it did not
+            observe.
+          items:
+            $ref: '#/components/schemas/ReferenceReceipt'
+          type: array
+        set:
+          description: Set is the set to refresh.
+          type: string
+      type: object
+    RefreshReferenceOut:
+      properties:
+        set:
+          description: Set is the set refreshed.
+          type: string
+        stale:
+          description: |-
+            Stale is whether it is STILL past its freshness bound after the refresh,
+            which is what a publisher that has stopped answering looks like.
+          type: boolean
+        took:
+          description: Took is what each publisher contributed.
+          items:
+            $ref: '#/components/schemas/ReferenceTaken'
+          type: array
+        version:
+          description: Version is the set's new composed version.
+          type: string
       type: object
     Registration:
       properties:
@@ -4692,6 +5064,55 @@ components:
           type: string
         projects:
           type: integer
+      type: object
+    ResolveReferenceIn:
+      properties:
+        keys:
+          description: |-
+            Keys are the values to look up, at most 100 per call: email addresses or
+            domains, IP addresses, card prefixes, user-agent strings, autonomous system
+            numbers, device digests.
+          items:
+            type: string
+          type: array
+        sets:
+          description: |-
+            Sets narrows which sets to consult. Empty consults every set whose matcher
+            can read the keys given.
+          items:
+            type: string
+          type: array
+      type: object
+    ResolveReferenceOut:
+      properties:
+        answers:
+          description: Answers is one entry per (set, key) consulted.
+          items:
+            $ref: '#/components/schemas/ReferenceAnswer'
+          type: array
+        consulted:
+          description: |-
+            Consulted names the version of every set that took part, so a decision can
+            record precisely what it leaned on. Record this with the decision: it is
+            what makes the decision reproducible a year later.
+          items:
+            $ref: '#/components/schemas/ReferenceVersion'
+          type: array
+        refused:
+          description: |-
+            Refused names the consulted sets that could not answer at all. A key that
+            missed in one of these is UNKNOWN, not clean.
+          items:
+            type: string
+          type: array
+        stale:
+          description: |-
+            Stale names the consulted sets past their freshness bound. Staleness is
+            itself a risk signal — a decision taken against a three-week-old list is a
+            weaker decision, and this is how it knows.
+          items:
+            type: string
+          type: array
       type: object
     Result:
       properties:
@@ -5299,6 +5720,26 @@ components:
           type: string
         waitlistMode:
           type: boolean
+      type: object
+    SetReferenceIn:
+      properties:
+        entries:
+          description: Entries are the overrides to write, up to 1000 per call.
+          items:
+            $ref: '#/components/schemas/ReferenceOverrideIn'
+          type: array
+      type: object
+    SetReferenceOut:
+      properties:
+        overrides:
+          description: Overrides is how many your org now holds in this set.
+          type: integer
+        set:
+          description: Set is the set written in.
+          type: string
+        written:
+          description: Written is how many entries this call wrote.
+          type: integer
       type: object
     SharePolicy:
       properties:
@@ -7140,7 +7581,7 @@ components:
     adminBonusDirectory:
       properties:
         referrals:
-          description: Referrals is every referral in the ledger, both orgs exposed.
+          description: Referrals is every referral in the directory, both orgs exposed.
           items:
             $ref: '#/components/schemas/adminReferralView'
           type: array
@@ -7275,11 +7716,6 @@ components:
         createdAt:
           description: CreatedAt is when the referral was recorded, as a Unix timestamp.
           type: integer
-        creditedAt:
-          description: |-
-            CreditedAt is when the bonuses were latched and granted, as a Unix
-            timestamp; 0 until they are.
-          type: integer
         id:
           description: ID is the referral's handle.
           type: string
@@ -7288,36 +7724,14 @@ components:
             QualifiedAt is when the referee first made metered spend, as a Unix
             timestamp; 0 while still pending.
           type: integer
-        refereeGrantCents:
-          description: |-
-            RefereeGrantCents is what the referee was granted, in USD cents; 0 until the
-            referral is credited.
-          type: integer
         refereeOrg:
           description: RefereeOrg is the org that signed up with it.
           type: string
-        refereeTxn:
-          description: |-
-            RefereeTxn is the commerce ledger transaction that carried the referee's
-            grant, omitted until one exists.
-          type: string
-        referrerGrantCents:
-          description: |-
-            ReferrerGrantCents is what the referrer was granted, in USD cents; 0 until
-            the referral is credited.
-          type: integer
         referrerOrg:
           description: ReferrerOrg is the org whose code was used.
           type: string
-        referrerTxn:
-          description: |-
-            ReferrerTxn is the commerce ledger transaction that carried the referrer's
-            grant, omitted until one exists.
-          type: string
         status:
-          description: |-
-            Status is the referral's lifecycle state: "signup", "qualified" or
-            "credited".
+          description: 'Status is the referral''s lifecycle state: "signup" or "qualified".'
           type: string
       type: object
     adminReportData:
@@ -7350,22 +7764,14 @@ components:
       type: object
     adminSummary:
       properties:
-        credited:
-          description: Credited is how many have paid both bonuses.
-          type: integer
-        grantedCents:
-          description: |-
-            GrantedCents is the promo credit granted across BOTH sides of every
-            referral, in USD cents — the program's total liability to date.
-          type: integer
         qualified:
-          description: Qualified is how many have qualified but are not yet credited.
+          description: Qualified is how many referees have made metered spend.
           type: integer
         signup:
           description: Signup is how many are recorded but not yet qualified.
           type: integer
         total:
-          description: Total is every referral in the ledger.
+          description: Total is every referral in the directory.
           type: integer
       type: object
     advanceIn:
@@ -17469,268 +17875,6 @@ components:
             stripped.
           type: string
       type: object
-    mlDataset:
-      properties:
-        at:
-          description: At is when this version last changed state, and By who.
-          type: string
-        by:
-          type: string
-        counts:
-          $ref: '#/components/schemas/mlSplitCounts'
-          description: Counts is how the rows fall across the splits.
-        digest:
-          description: |-
-            Digest fingerprints the SPEC and the ROWS together. Two materialisations of
-            one spec agree on it or the plane says they do not.
-          type: string
-        name:
-          description: Name and Version identify the version.
-          type: string
-        oversize:
-          description: |-
-            Oversize is how many of the window's subjects this version could NOT carry
-            because their subject identity exceeds the plane's per-subject byte bound.
-
-            It is on the wire, not only in a log, because it is the one degradation a
-            caller cannot otherwise detect: the rows that are here look complete, and a
-            dataset silently missing a population is a model silently blind to it.
-            Non-zero does not make a version invalid — it makes it a version whose
-            coverage is STATED. Zero is the normal case and omits.
-          type: integer
-        refusal:
-          description: Refusal names why there are no bytes, when there are none.
-          type: string
-        running:
-          description: |-
-            Running is true while THIS process is materialising the version. A version
-            that is `materializing` and not running was started by a process that is
-            gone — two states the register cannot tell apart, because a register cannot
-            know which processes are alive.
-          type: boolean
-        share:
-          description: |-
-            Share is the fraction of the window's subjects admitted, in thousandths.
-            1000 means the whole window fitted under the cap; anything less means the
-            version is a reproducible sample and says by how much.
-          type: integer
-        spec:
-          $ref: '#/components/schemas/mlDatasetSpec'
-          description: Spec is the bound query this version was built from, exactly
-            as recorded.
-        status:
-          description: |-
-            Status is declared, materializing, ready or refused. Only `ready` has bytes,
-            and `ready` is terminal: a published version is never rewritten.
-          type: string
-        truncated:
-          description: |-
-            Truncated is true when the row cap bound before the window ran out. The
-            trailing subject is dropped whole when that happens, because half a subject
-            on one side of a split is exactly the leak the grouping prevents.
-          type: boolean
-        version:
-          type: integer
-      type: object
-    mlDatasetList:
-      properties:
-        items:
-          description: |-
-            Items is one entry per dataset, carrying its newest version. Never null: an
-            org that has declared nothing gets an empty array.
-          items:
-            $ref: '#/components/schemas/mlDataset'
-          type: array
-      type: object
-    mlDatasetRow:
-      properties:
-        at:
-          description: At is the row's instant.
-          type: string
-        id:
-          description: |-
-            ID names the row forever. It is DERIVED from the row's own subject and
-            instant, not allocated, so two materialisations of the same fact agree on it
-            without coordinating.
-          type: string
-        kind:
-          description: Kind and Subject name whose row this is.
-          type: string
-        point:
-          description: Point is the coordinates, in the order the version's spec names
-            its dims.
-          items:
-            type: number
-          type: array
-        split:
-          description: Split is train, val or test.
-          type: string
-        subject:
-          type: string
-      type: object
-    mlDatasetRows:
-      properties:
-        dataset:
-          type: string
-        digest:
-          description: |-
-            Digest is the version's fingerprint. An exported page that did not carry it
-            would be bytes with no way to say which dataset they are.
-          type: string
-        dims:
-          description: Dims names what each coordinate of Point means, in Point's
-            own order.
-          items:
-            type: string
-          type: array
-        limit:
-          type: integer
-        offset:
-          description: |-
-            Offset and Limit are the page actually served, which may be smaller than the
-            one asked for.
-          type: integer
-        rows:
-          description: Rows is the page. Never null.
-          items:
-            $ref: '#/components/schemas/mlDatasetRow'
-          type: array
-        version:
-          type: integer
-      type: object
-    mlDatasetSpec:
-      properties:
-        cuts:
-          description: |-
-            Cuts are the two RFC 3339 instants dividing train | val | test. Omit them to
-            take 70% and 85% of the window by time. Splitting is TEMPORAL and then
-            grouped by subject — a random split puts one device on both sides of the
-            line and the model memorises the entity instead of the behaviour.
-          items:
-            type: string
-          type: array
-        dims:
-          description: |-
-            Dims are the coordinates to carry, by published name. Empty takes the whole
-            surface. They are stored in the plane's own order, never the order given, so
-            two requests naming the same dims produce identical rows.
-          items:
-            type: string
-          type: array
-        from:
-          description: |-
-            From and To bound the event window, half-open, RFC 3339. The window may not
-            be longer than the source's own retention: past that, its older half is
-            already gone and the dataset would silently be shorter than it says.
-          type: string
-        horizon:
-          description: |-
-            Horizon is how many days a row must have aged before it may be admitted. It
-            is what keeps a fact that was not yet knowable at scoring time out of a
-            training set: a chargeback lands 30 to 120 days after the transaction it
-            condemns, so 120 for the payment lane and 14 for signup abuse. Zero admits
-            the whole window and is honest only where the outcome is immediate.
-          type: integer
-        kind:
-          description: |-
-            Kind narrows to one subject kind — person, session or account. Empty takes
-            every kind.
-          type: string
-        name:
-          description: |-
-            Name identifies the dataset across its versions: lower-case letters, digits
-            and hyphens, starting with a letter.
-          type: string
-        rows:
-          description: Rows caps the materialisation. Zero takes the plane's own bound.
-          type: integer
-        seed:
-          description: |-
-            Seed decides WHICH subjects are admitted when the window holds more rows
-            than the cap allows. It is recorded on the version, so a capped dataset is
-            reproducible rather than being whichever rows the store returned first.
-            Omit it to seed from the dataset's name.
-          type: string
-        to:
-          type: string
-      type: object
-    mlDatasetVersions:
-      properties:
-        items:
-          items:
-            $ref: '#/components/schemas/mlDataset'
-          type: array
-        name:
-          type: string
-      type: object
-    mlDisposal:
-      properties:
-        dataset:
-          type: string
-        rows:
-          type: integer
-        versions:
-          description: |-
-            Versions is how many versions went, and Rows how many rows they held between
-            them, as the register recorded them.
-          type: integer
-      type: object
-    mlLineage:
-      properties:
-        dataset:
-          type: string
-        digest:
-          description: |-
-            Digest is the version's fingerprint, repeated here so a lineage answer is
-            self-contained.
-          type: string
-        from:
-          description: |-
-            From and To are the window actually read — To is the window's end pulled
-            back by the maturity horizon, which is usually earlier than the spec's.
-          type: string
-        holds:
-          description: |-
-            Holds is what the source holds for the same window NOW. The difference
-            between it and Rows is the whole of the reproducibility claim.
-          type: integer
-        oversize:
-          description: |-
-            Oversize is how many subjects the window held that were too large to
-            represent when this version was built. It is part of the fingerprint, so it
-            is part of what "reproducible" is measured over.
-          type: integer
-        refusal:
-          type: string
-        reproducible:
-          description: |-
-            Reproducible is true when the source still holds what this version was built
-            from. Refusal says why not, when it is false.
-          type: boolean
-        retention:
-          description: |-
-            Retention is the source's own expiry rule as the store reports it, read at
-            materialisation time rather than assumed. A source whose retention is
-            shorter than this window cannot re-derive it.
-          type: string
-        rows:
-          description: |-
-            Rows and Subjects are what the source held for that window at
-            materialisation time.
-          type: integer
-        share:
-          description: Share is the fraction of subjects admitted, in thousandths.
-          type: integer
-        source:
-          description: Source is the plane the rows were derived from.
-          type: string
-        subjects:
-          type: integer
-        to:
-          type: string
-        version:
-          type: integer
-      type: object
     mlResource:
       properties:
         createdAt:
@@ -17764,36 +17908,6 @@ components:
           items:
             $ref: '#/components/schemas/mlResource'
           type: array
-      type: object
-    mlSplitCounts:
-      properties:
-        judged:
-          description: |-
-            Judged is how many rows carry a disposition. It is zero until a label plane
-            writes one, and reporting it plainly is what lets a model plane refuse to
-            rank rather than name a winner it cannot justify.
-          type: integer
-        productive:
-          description: |-
-            Productive and Unproductive are the two judged classes, so the imbalance is
-            visible before anyone trains on it.
-          type: integer
-        rows:
-          type: integer
-        subjects:
-          description: |-
-            Subjects is how many distinct subjects the rows belong to. Every row of one
-            subject is in ONE split, so this is the real sample size — the row count
-            flatters it whenever a subject is active.
-          type: integer
-        test:
-          type: integer
-        train:
-          type: integer
-        unproductive:
-          type: integer
-        val:
-          type: integer
       type: object
     mlTrials:
       properties:
@@ -17939,16 +18053,6 @@ components:
         createdAt:
           description: CreatedAt is when the referral was recorded, as a Unix timestamp.
           type: integer
-        creditedAt:
-          description: |-
-            CreditedAt is when the bonuses were latched and granted, as a Unix
-            timestamp; 0 until they are. It is the at-most-once latch.
-          type: integer
-        creditsCents:
-          description: |-
-            CreditsCents is what I earned from this referral, in USD cents. It is 0
-            until the referee qualifies.
-          type: integer
         id:
           description: ID is the referral's handle.
           type: string
@@ -17962,8 +18066,8 @@ components:
           type: string
         status:
           description: |-
-            Status is the referral's lifecycle state: "signup" until the referee
-            makes metered spend, then "qualified", then "credited".
+            Status is the referral's lifecycle state: "signup" until the referee makes
+            metered spend, then "qualified".
           type: string
       type: object
     myReferrals:
@@ -17976,29 +18080,15 @@ components:
         counts:
           $ref: '#/components/schemas/statusCounts'
           description: Counts tallies this org's referrals by status.
-        creditsEarnedCents:
-          description: |-
-            CreditsEarnedCents is the total promo credit this org has earned as the
-            REFERRER, in USD cents.
-          type: integer
         link:
           description: Link is the shareable signup link carrying the code, on the
             brand's own host.
           type: string
-        refereeBonusCents:
-          description: RefereeBonusCents is what a referee is granted on qualification,
-            in USD cents.
-          type: integer
         referrals:
           description: Referrals is one row per org that signed up with this code.
           items:
             $ref: '#/components/schemas/myReferralView'
           type: array
-        referrerBonusCents:
-          description: |-
-            ReferrerBonusCents is what the referrer is granted when a referee qualifies,
-            in USD cents.
-          type: integer
       type: object
     namespaceCreateIn:
       properties:
@@ -33090,6 +33180,212 @@ components:
             coordinate at its neutral value — the counterfactual itself.
           type: number
       type: object
+    riskDataset:
+      properties:
+        at:
+          description: At is when this version last changed state, and By who.
+          type: string
+        by:
+          type: string
+        counts:
+          $ref: '#/components/schemas/riskSplitCounts'
+          description: Counts is how the rows fall across the splits.
+        digest:
+          description: |-
+            Digest fingerprints the SPEC and the ROWS together. Two materialisations of
+            one spec agree on it or the plane says they do not.
+          type: string
+        name:
+          description: Name and Version identify the version.
+          type: string
+        oversize:
+          description: |-
+            Oversize is how many of the window's subjects this version could NOT carry
+            because their subject identity exceeds the plane's per-subject byte bound.
+
+            It is on the wire, not only in a log, because it is the one degradation a
+            caller cannot otherwise detect: the rows that are here look complete, and a
+            dataset silently missing a population is a model silently blind to it.
+            Non-zero does not make a version invalid — it makes it a version whose
+            coverage is STATED. Zero is the normal case and omits.
+          type: integer
+        refusal:
+          description: Refusal names why there are no bytes, when there are none.
+          type: string
+        running:
+          description: |-
+            Running is true while THIS process is materialising the version. A version
+            that is `materializing` and not running was started by a process that is
+            gone — two states the register cannot tell apart, because a register cannot
+            know which processes are alive.
+          type: boolean
+        share:
+          description: |-
+            Share is the fraction of the window's subjects admitted, in thousandths.
+            1000 means the whole window fitted under the cap; anything less means the
+            version is a reproducible sample and says by how much.
+          type: integer
+        spec:
+          $ref: '#/components/schemas/riskDatasetSpec'
+          description: Spec is the bound query this version was built from, exactly
+            as recorded.
+        status:
+          description: |-
+            Status is declared, materializing, ready or refused. Only `ready` has bytes,
+            and `ready` is terminal: a published version is never rewritten.
+          type: string
+        truncated:
+          description: |-
+            Truncated is true when the row cap bound before the window ran out. The
+            trailing subject is dropped whole when that happens, because half a subject
+            on one side of a split is exactly the leak the grouping prevents.
+          type: boolean
+        version:
+          type: integer
+      type: object
+    riskDatasetDisposal:
+      properties:
+        dataset:
+          type: string
+        rows:
+          type: integer
+        versions:
+          description: |-
+            Versions is how many versions went, and Rows how many rows they held between
+            them, as the register recorded them.
+          type: integer
+      type: object
+    riskDatasetList:
+      properties:
+        items:
+          description: |-
+            Items is one entry per dataset, carrying its newest version. Never null: an
+            org that has declared nothing gets an empty array.
+          items:
+            $ref: '#/components/schemas/riskDataset'
+          type: array
+      type: object
+    riskDatasetRow:
+      properties:
+        at:
+          description: At is the row's instant.
+          type: string
+        id:
+          description: |-
+            ID names the row forever. It is DERIVED from the row's own subject and
+            instant, not allocated, so two materialisations of the same fact agree on it
+            without coordinating.
+          type: string
+        kind:
+          description: Kind and Subject name whose row this is.
+          type: string
+        point:
+          description: Point is the coordinates, in the order the version's spec names
+            its dims.
+          items:
+            type: number
+          type: array
+        split:
+          description: Split is train, val or test.
+          type: string
+        subject:
+          type: string
+      type: object
+    riskDatasetRows:
+      properties:
+        dataset:
+          type: string
+        digest:
+          description: |-
+            Digest is the version's fingerprint. An exported page that did not carry it
+            would be bytes with no way to say which dataset they are.
+          type: string
+        dims:
+          description: Dims names what each coordinate of Point means, in Point's
+            own order.
+          items:
+            type: string
+          type: array
+        limit:
+          type: integer
+        offset:
+          description: |-
+            Offset and Limit are the page actually served, which may be smaller than the
+            one asked for.
+          type: integer
+        rows:
+          description: Rows is the page. Never null.
+          items:
+            $ref: '#/components/schemas/riskDatasetRow'
+          type: array
+        version:
+          type: integer
+      type: object
+    riskDatasetSpec:
+      properties:
+        cuts:
+          description: |-
+            Cuts are the two RFC 3339 instants dividing train | val | test. Omit them to
+            take 70% and 85% of the window by time. Splitting is TEMPORAL and then
+            grouped by subject — a random split puts one device on both sides of the
+            line and the model memorises the entity instead of the behaviour.
+          items:
+            type: string
+          type: array
+        dims:
+          description: |-
+            Dims are the coordinates to carry, by published name. Empty takes the whole
+            surface. They are stored in the plane's own order, never the order given, so
+            two requests naming the same dims produce identical rows.
+          items:
+            type: string
+          type: array
+        from:
+          description: |-
+            From and To bound the event window, half-open, RFC 3339. The window may not
+            be longer than the source's own retention: past that, its older half is
+            already gone and the dataset would silently be shorter than it says.
+          type: string
+        horizon:
+          description: |-
+            Horizon is how many days a row must have aged before it may be admitted. It
+            is what keeps a fact that was not yet knowable at scoring time out of a
+            training set: a chargeback lands 30 to 120 days after the transaction it
+            condemns, so 120 for the payment lane and 14 for signup abuse. Zero admits
+            the whole window and is honest only where the outcome is immediate.
+          type: integer
+        kind:
+          description: |-
+            Kind narrows to one subject kind — person, session or account. Empty takes
+            every kind.
+          type: string
+        name:
+          description: |-
+            Name identifies the dataset across its versions: lower-case letters, digits
+            and hyphens, starting with a letter.
+          type: string
+        rows:
+          description: Rows caps the materialisation. Zero takes the plane's own bound.
+          type: integer
+        seed:
+          description: |-
+            Seed decides WHICH subjects are admitted when the window holds more rows
+            than the cap allows. It is recorded on the version, so a capped dataset is
+            reproducible rather than being whichever rows the store returned first.
+            Omit it to seed from the dataset's name.
+          type: string
+        to:
+          type: string
+      type: object
+    riskDatasetVersions:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/riskDataset'
+          type: array
+        name:
+          type: string
+      type: object
     riskDisposeIn:
       properties:
         before:
@@ -33538,16 +33834,67 @@ components:
       properties:
         learned:
           description: |-
-            Learned is how many events the model learned from, which is the batch, and
-            is also what the call is metered at: one screen per event.
+            Learned is how many of the events the model actually learned from, and is
+            also what the call is metered at: one screen per event learned from. It is
+            the batch minus the events already in this organisation's record, so a
+            retried batch reports — and is charged — zero.
           type: integer
-        verdicts:
+      type: object
+    riskLineage:
+      properties:
+        dataset:
+          type: string
+        digest:
           description: |-
-            Verdicts is the model's verdict on each event, in the order given, so a
-            caller that is both teaching and deciding needs one round trip.
-          items:
-            $ref: '#/components/schemas/riskScoreOut'
-          type: array
+            Digest is the version's fingerprint, repeated here so a lineage answer is
+            self-contained.
+          type: string
+        from:
+          description: |-
+            From and To are the window actually read — To is the window's end pulled
+            back by the maturity horizon, which is usually earlier than the spec's.
+          type: string
+        holds:
+          description: |-
+            Holds is what the source holds for the same window NOW. The difference
+            between it and Rows is the whole of the reproducibility claim.
+          type: integer
+        oversize:
+          description: |-
+            Oversize is how many subjects the window held that were too large to
+            represent when this version was built. It is part of the fingerprint, so it
+            is part of what "reproducible" is measured over.
+          type: integer
+        refusal:
+          type: string
+        reproducible:
+          description: |-
+            Reproducible is true when the source still holds what this version was built
+            from. Refusal says why not, when it is false.
+          type: boolean
+        retention:
+          description: |-
+            Retention is the source's own expiry rule as the store reports it, read at
+            materialisation time rather than assumed. A source whose retention is
+            shorter than this window cannot re-derive it.
+          type: string
+        rows:
+          description: |-
+            Rows and Subjects are what the source held for that window at
+            materialisation time.
+          type: integer
+        share:
+          description: Share is the fraction of subjects admitted, in thousandths.
+          type: integer
+        source:
+          description: Source is the plane the rows were derived from.
+          type: string
+        subjects:
+          type: integer
+        to:
+          type: string
+        version:
+          type: integer
       type: object
     riskModelFeature:
       properties:
@@ -33608,6 +33955,25 @@ components:
             Cut is the threshold in force, derived from Stated as a quantile of the
             scores actually observed.
           type: number
+        descends:
+          description: |-
+            Descends is the published value the working model grew out of: the newest one
+            whose mass count it has reached or passed. Empty when nothing has been
+            published yet.
+
+            It is DERIVED from the count and never stored, so an instant rollback is right
+            for free — adopting an older value moves the count backward and this answers
+            with that older value, where a stored pointer would be a second fact to keep
+            in step. Read with Learned it is also the DRIFT: this model is Descends plus
+            however many events the two counts differ by.
+          type: string
+        disposed:
+          description: |-
+            Disposed is how many published values retention has taken. It is DERIVED from
+            the lowest surviving sequence, so it cannot drift from what it describes, and
+            it is reported because a retention that binds is a fact an operator must be
+            able to read rather than a silence.
+          type: integer
         learned:
           description: Learned is how many events the model has learned from.
           type: integer
@@ -33617,6 +33983,14 @@ components:
             recording what it WOULD have alerted on, and changing no outcome. Shadow is
             the default for a new tenant.
           type: boolean
+        policy:
+          description: |-
+            Policy is the version of the decision regime this model is deciding under,
+            from your organisation's own policy history (GET /v1/risk/policy). Every
+            score cites it, so it is the join between a past decision and the appetite
+            that produced its threshold. Zero means no regime has ever been stated and
+            the default posture — shadow — is in force.
+          type: integer
         realised:
           description: |-
             Realised is the share that actually was. Reading it beside Stated is what
@@ -33661,12 +34035,63 @@ components:
             echoed so a reader can see the answer is its own and not a parameter it
             passed.
           type: string
+        values:
+          description: |-
+            Values is your organisation's own published model values, newest first —
+            every state it deliberately named, each addressed by its own content and
+            immutable. This is what POST /v1/risk/state/restore names, so it is reported
+            HERE rather than behind an address of its own: they are part of what a review
+            of one model reads, and a list of names is a few hundred bytes.
+
+            The working model is NOT in it. Publication is a boundary somebody marked; the
+            state between two boundaries is in-process counters, and calling those a value
+            would be a claim about reproducibility that nothing could honour.
+          items:
+            $ref: '#/components/schemas/riskModelValue'
+          type: array
         warm:
           description: |-
             Warm is whether that is enough for the model to have an opinion at all.
             Below it the model declines to score, which is an ordinary state and is not
             a clean bill of health.
           type: boolean
+      type: object
+    riskModelValue:
+      properties:
+        address:
+          description: |-
+            Address names this value by its own content: the model's shape, the geometry
+            seed, its position in the window, its threshold, its masses as IEEE-754 bits
+            and the fold watermark behind them. Nothing else — no clock, no counter and
+            deliberately NOT the organisation, so an identical model has one name and a
+            name is never an authority. Holding another organisation's address resolves
+            nothing.
+          type: string
+        at:
+          description: |-
+            At is when it was published, RFC 3339, on the server clock. You do not supply
+            it: a record whose date the audited party chose is not a record.
+          type: string
+        learned:
+          description: Learned is how many events are behind the masses.
+          type: integer
+        sequence:
+          description: |-
+            Sequence is this value's place in YOUR organisation's own history, from 1 and
+            contiguous until retention disposes of the oldest.
+          type: integer
+        shape:
+          description: |-
+            Shape is the model space the masses are only meaningful against: the feature
+            inventory in order and the detector's geometry parameters.
+          type: string
+        warmed:
+          description: |-
+            Warmed is how far your own event surface had been folded in when this value
+            was published, RFC 3339. It is part of the address because two models with
+            identical masses reached by different routes disagree about what is left to
+            fold, and one of them will re-teach history the other will not.
+          type: string
       type: object
     riskOrgFeature:
       properties:
@@ -33703,6 +34128,68 @@ components:
         unit:
           description: Unit is how to read the numbers below.
           type: string
+      type: object
+    riskPolicyOut:
+      properties:
+        changes:
+          description: |-
+            Changes is how many DISTINCT regimes may be adopted per Window. A restatement
+            identical to the regime in force mints no version and is not counted against
+            it.
+          type: integer
+        disposed:
+          description: |-
+            Disposed is how many versions retention has taken. It is NOT a silence: a
+            history bounded on disk must say what it no longer holds, because a decision
+            citing a disposed version can no longer be reconstructed from this record.
+          type: integer
+        history:
+          description: History is the retained versions, newest first.
+          items:
+            $ref: '#/components/schemas/riskPolicyVersion'
+          type: array
+        retained:
+          description: |-
+            Retained is how many versions this organisation's history holds at most,
+            derived from the byte budget its rows are a multiple of.
+          type: integer
+        version:
+          description: |-
+            Version is the version in force — the one every score currently cites. Zero
+            means no regime has ever been stated and the default posture, shadow, is in
+            force.
+          type: integer
+        window:
+          description: Window is the period Changes is measured over.
+          type: string
+      type: object
+    riskPolicyVersion:
+      properties:
+        at:
+          description: At is when it entered force, RFC 3339, from the server clock.
+          type: string
+        by:
+          description: |-
+            By is the identity that stated it, stamped server-side from the validated
+            principal at the moment it entered force.
+          type: string
+        live:
+          description: Live is whether the model was permitted to change an outcome
+            under it.
+          type: boolean
+        review:
+          description: |-
+            Review is the share of the stream the regime states may be examined. The
+            threshold in force is derived from it, which is why a decision is only
+            defensible against the version that produced it.
+          type: number
+        sample:
+          description: Sample is the share of below-the-line events the regime retains
+            for review.
+          type: number
+        version:
+          description: Version names this regime in this organisation's history.
+          type: integer
       type: object
     riskResolveIn:
       properties:
@@ -33808,12 +34295,13 @@ components:
       type: object
     riskRestoreIn:
       properties:
-        body:
-          $ref: '#/components/schemas/riskSnapshotBody'
+        address:
           description: |-
-            Body is a snapshot this organisation took. One naming another organisation
-            is refused: it is that organisation's learned behaviour, and installing it
-            would put one tenant's activity inside another's model.
+            Address is one of YOUR organisation's own published values (GET
+            /v1/risk/state reports them). An address your organisation has not published
+            is NOT FOUND — including one another organisation published, because an
+            address names a value and never authorises reading it.
+          type: string
       type: object
     riskScoreIn:
       properties:
@@ -33844,6 +34332,14 @@ components:
             Cut is the threshold in force, derived from the stated appetite as a
             quantile of the scores actually observed rather than fixed at a number.
           type: number
+        policy:
+          description: |-
+            Policy is the version of your organisation's decision regime this verdict
+            was reached under, from its own policy history (GET /v1/risk/policy). Cut is
+            derived from the appetite that version states, so it is the record that makes
+            this decision reconstructible after the appetite is restated. Zero means no
+            regime has ever been stated and the default posture — shadow — was in force.
+          type: integer
         refusal:
           description: Refusal names why the model declined, when it did.
           type: string
@@ -33865,6 +34361,22 @@ components:
             learning and recording what it WOULD have alerted on, and changing no
             outcome. It is the default for a model no one has reviewed yet.
           type: boolean
+        shape:
+          description: |-
+            Shape is the model space this verdict was reached in: your organisation's
+            feature inventory in order and the detector's geometry parameters. It is what
+            pins an adverse decision to a model — a score is only meaningful against the
+            shape that produced it, and without this the only answer to "which model
+            decided this" was "the one that was running", which is not an answer.
+
+            It names the SPACE, not the learned state, and that is deliberate. The masses
+            at the instant of a score are in-process counters somewhere between two
+            published values, so citing a published address here would claim that value
+            produced this score — true only for the score taken the instant after a
+            publication. This, the policy version and the event's own time are what IS
+            true, and the published history's clock (GET /v1/risk/state) brackets the
+            decision between two named values from there.
+          type: string
         values:
           description: |-
             Values is every coordinate, including the ones that contributed nothing, so
@@ -33930,83 +34442,22 @@ components:
           description: ID addresses the run. Read the result back with it.
           type: string
       type: object
-    riskSnapshotBody:
-      properties:
-        cur:
-          description: Cur is the open window's masses, per tree.
-          items:
-            items:
-              type: number
-            type: array
-          type: array
-        cut:
-          description: Cut is the alert threshold that was in force.
-          type: number
-        hist:
-          description: Hist is the score distribution the threshold is cut from.
-          items:
-            type: number
-          type: array
-        learned:
-          description: |-
-            Learned is how many events are behind the masses, and Seen how far into the
-            open reference window they are.
-          type: integer
-        ref:
-          description: |-
-            Ref is the reference window's masses, per tree; Cur is the open window's.
-            A region's mass is the sum of its two halves — an array that fails that
-            invariant was not produced by this algorithm and is refused.
-          items:
-            items:
-              type: number
-            type: array
-          type: array
-        seed:
-          description: |-
-            Seed is what the tree geometry is generated FROM. Carrying the seed rather
-            than the trees is what keeps the state from describing where the regions
-            are.
-          type: integer
-        seen:
-          description: Seen is the position within the open window.
-          type: integer
-        shape:
-          description: |-
-            Shape is the model identity this state is only meaningful against: the
-            feature inventory in order and the detector's geometry parameters.
-          type: string
-        tenant:
-          description: |-
-            Tenant is the organisation the state belongs to. A restore under any other
-            organisation is refused.
-          type: string
-        version:
-          description: |-
-            Version is the layout of the state. State from another version is rejected
-            rather than reinterpreted.
-          type: integer
-      type: object
     riskSnapshotOut:
       properties:
-        body:
-          $ref: '#/components/schemas/riskSnapshotBody'
+        minted:
           description: |-
-            Body is the state itself: the masses and the seed, never the geometry.
-            Geometry is a pure function of the seed, so it is regenerated on restore and
-            cannot be supplied — which removes the sharpest edge a persisted model has,
-            state that describes WHERE the regions are rather than only how full.
-        learned:
-          description: Learned is how many events are behind it.
-          type: integer
-        shape:
-          description: Shape is the model identity the state is only meaningful against.
-          type: string
+            Minted is false when your model was ALREADY published under this name and
+            nothing was written. Publication is idempotent on the value itself, which is
+            what a content address is for — publishing at every boundary costs nothing
+            rather than being the cheapest way to fill a disk.
+          type: boolean
         tenant:
-          description: |-
-            Tenant is whose state this is. A snapshot naming another organisation is
-            refused on restore.
+          description: Tenant is whose history it entered.
           type: string
+        value:
+          $ref: '#/components/schemas/riskModelValue'
+          description: 'Value is the published value: its name and what it is, never
+            its masses.'
       type: object
     riskSourceCoverage:
       properties:
@@ -34020,6 +34471,36 @@ components:
         source:
           type: string
         won:
+          type: integer
+      type: object
+    riskSplitCounts:
+      properties:
+        judged:
+          description: |-
+            Judged is how many rows carry a disposition. It is zero until a label plane
+            writes one, and reporting it plainly is what lets a model plane refuse to
+            rank rather than name a winner it cannot justify.
+          type: integer
+        productive:
+          description: |-
+            Productive and Unproductive are the two judged classes, so the imbalance is
+            visible before anyone trains on it.
+          type: integer
+        rows:
+          type: integer
+        subjects:
+          description: |-
+            Subjects is how many distinct subjects the rows belong to. Every row of one
+            subject is in ONE split, so this is the real sample size — the row count
+            flatters it whenever a subject is active.
+          type: integer
+        test:
+          type: integer
+        train:
+          type: integer
+        unproductive:
+          type: integer
+        val:
           type: integer
       type: object
     riskSurface:
@@ -35317,11 +35798,8 @@ components:
       type: object
     statusCounts:
       properties:
-        credited:
-          description: Credited is how many referrals have paid both bonuses.
-          type: integer
         qualified:
-          description: Qualified is how many referees have spent but are not yet credited.
+          description: Qualified is how many referees have made metered spend.
           type: integer
         signup:
           description: Signup is how many referees have signed up but not yet spent.
@@ -35887,10 +36365,9 @@ components:
       type: object
     sweepResult:
       properties:
-        credited:
-          description: |-
-            Credited is how many of those referrals qualified on this pass and were
-            granted their bonuses.
+        qualified:
+          description: Qualified is how many of those referrals qualified on this
+            pass.
           type: integer
         swept:
           description: Swept is how many pending referrals were checked.
@@ -40523,13 +41000,13 @@ paths:
   /v1/admin/referrals/bonuses:
     get:
       description: |-
-        Returns every one-time referral bonus in the ledger with a fleet summary.
+        Returns every referral edge in the directory with a fleet summary.
 
-        SuperAdmin only, fail-closed. This is the ONE-TIME BONUS ledger — who referred
-        whom, what each side was granted and which ledger transactions carried it. The
-        cross-tenant referral ANALYTICS board (top referrers, conversion, multi-level
-        accrual liability) is a different surface, GET /v1/admin/referrals, owned by the
-        affiliates subsystem over the shared attribution spine.
+        SuperAdmin only, fail-closed. This is the ATTRIBUTION directory — who referred
+        whom and whether that referee became a customer. It carries no amounts because
+        this package issues none. The cross-tenant referral ANALYTICS board (top
+        referrers, conversion) is a different surface, GET /v1/admin/referrals, owned by
+        the affiliates subsystem over the shared attribution spine.
       operationId: get_v1_admin_referrals_bonuses
       parameters:
       - description: |-
@@ -40550,25 +41027,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/adminBonusesEnvelope'
           description: ok
-      summary: Returns every one-time referral bonus in the ledger with a fleet summary.
+      summary: Returns every referral edge in the directory with a fleet summary.
       tags:
       - admin
       x-app: referrals
   /v1/admin/referrals/sweep:
     post:
       description: |-
-        Qualify-checks every pending referral and grants the ones that now qualify.
+        Qualify-checks every pending referral and advances the ones that now qualify.
 
-        SuperAdmin only, fail-closed. This is the cron path: a referee QUALIFIES once
-        they have made metered spend — the honest signal that they actually used the
-        product rather than merely claiming a welcome grant — and qualifying grants the
-        referrer and the referee their bonuses in one latched step.
+        SuperAdmin only, fail-closed. This is the cron path, and the ONLY path that
+        advances a referral: a referee QUALIFIES once they have made metered spend — the
+        honest signal that they actually used the product rather than merely signing up.
 
-        The grant is backed against the platform reserve fund before it is latched, so
-        an empty fund leaves the referral honestly pending rather than minting unbacked
-        credit, and the latch makes it at-most-once: this sweep, a concurrent sweep and
-        the lazy check on GET /v1/referrals can never double-pay. One pass is bounded,
-        so a large backlog drains over several runs instead of wedging one request.
+        Qualifying moves NO money. It records that an attribution became a real customer;
+        what is owed for that is an affiliate payable in commerce, settled by wire or to a
+        connected wallet. One pass is bounded, so a large backlog drains over several runs
+        instead of wedging one request, and the latch makes the transition at-most-once
+        under a concurrent sweep.
 
         It reads nothing from the caller — the counters it returns are the whole result.
       operationId: post_v1_admin_referrals_sweep
@@ -40579,7 +41055,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/sweepEnvelope'
           description: ok
-      summary: Qualify-checks every pending referral and grants the ones that now
+      summary: Qualify-checks every pending referral and advances the ones that now
         qualify.
       tags:
       - admin
@@ -47378,6 +47854,32 @@ paths:
         schema:
           type: string
       summary: Undo a pending cancellation and keep the subscription running
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/tier:
+    get:
+      description: 'Answers one subject''s resolved tier — name, display name, agent
+        ceiling and allowed models — with the balance that admits their next metered
+        call: prepaidAvailable, creditsRemaining, dailyRemaining and the effectiveAvailable
+        those fold into. The ai router reads it per request to pick that caller''s
+        rate-limit tier. It sits on the org-resolving chain because a tier is org
+        state, and the subject keys are pinned to the validated caller before the
+        handler runs, so a browser read is always the caller''s own; user is required,
+        which only a service-to-service caller can omit and be refused 400 for. The
+        tier is an upstream tier claim, or an explicit tier override, when either
+        is present — that is the service-to-service contract — and is otherwise DERIVED
+        from the org''s active and trialing subscriptions, the highest one winning,
+        its paid-ness read from the plan catalog by slug rather than from the subscription''s
+        own stored copy. The rule to get right is effectiveAvailable and not prepaidAvailable:
+        granted credits spend too, credits first, so an account funded only by a grant
+        reads zero prepaid while holding real spendable credit — and with the daily
+        term zero on every tier there is no free allowance behind it, so a zero-balance
+        account is gated. A subscription-store error answers 500 rather than downgrading
+        to free, so a transient failure never reports a paid subscriber as unsubscribed.'
+      operationId: get_v1_billing_tier
+      summary: The subject's plan tier and the balance a metered call is admitted
+        on
       tags:
       - billing
       x-app: commerce
@@ -69075,13 +69577,22 @@ paths:
   /v1/marketing/promos/{code}/redeem:
     post:
       description: |-
-        Redeems the promo for the caller's org, crediting the discount
-        value to its wallet through the finance ledger. Three guards run under one
-        lock so the cap cannot be raced past: the fleet-wide redemption cap, one
-        redemption per org, and one per payment instrument.
+        Records the caller org's claim on a promo. NOTHING IS CREDITED:
+        the redemption is a row, and credit into an org is an admin decision made on
+        the admin surface against an auditable ledger.
+
+        The plan is DERIVED from the org's live ACTIVE/TRIALING paid subscription and
+        can never be named by the caller — an org with no qualifying subscription is
+        refused, and so is one whose subscription cannot be read. The seat count is
+        the single-seat floor (claimSeats), so the recorded figure has no input that
+        can inflate it.
+
+        Guards run under one lock so the cap cannot be raced past: the fleet-wide
+        redemption cap, one redemption per org, one per payment instrument (REQUIRED),
+        and the per-redemption ceiling.
 
         It is IDEMPOTENT: an org that already redeemed gets its original redemption
-        back with alreadyRedeemed true and is not credited twice.
+        back with alreadyRedeemed true.
       operationId: post_v1_marketing_promos_code_redeem
       parameters:
       - description: Code is the promo code from the path.
@@ -69097,8 +69608,6 @@ paths:
             example:
               code: first1000
               instrument: pm_1QxYz2AbCdEf
-              plan: pro
-              seats: 1
             schema:
               $ref: '#/components/schemas/RedeemInput'
         required: true
@@ -69109,8 +69618,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/RedeemResult'
           description: ok
-      summary: Redeems the promo for the caller's org, crediting the discount value
-        to its wallet through the finance ledger.
+      summary: Records the caller org's claim on a promo.
       tags:
       - marketing
       x-app: marketing
@@ -70023,284 +70531,14 @@ paths:
       tags:
       - metrics
       x-app: metrics
-  /v1/ml/datasets:
-    get:
-      description: |-
-        Datasets lists this org's datasets, each with its newest version. An org that
-        has declared none gets an empty list; a store that cannot be reached gets a
-        refusal, never an empty list, because the two read identically and only one of
-        them is true.
-      operationId: mlDatasets
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlDatasetList'
-          description: ok
-      summary: List this org's datasets
-      tags:
-      - ml
-      x-app: dataset
-    post:
-      description: |-
-        Declares the next version of a dataset from a bound query over
-        this org's own feature surface.
-
-        It mints a VERSION and writes no rows: a version is declared, then materialised
-        once, then never rewritten. Version numbers are monotone and never reused, so
-        "version 3 of signups" means one thing forever — which is the whole reason a
-        model can cite one.
-
-        The window is bounded by the source's retention, the horizon by a year, the
-        rows by the plane's cap, and the number of datasets and versions per org by
-        their own limits. Every refusal names which bound it hit.
-      operationId: mlCreateDataset
-      requestBody:
-        content:
-          application/json:
-            example:
-              from: "2026-01-01T00:00:00Z"
-              horizon: 14
-              kind: person
-              name: signups
-              to: "2026-04-01T00:00:00Z"
-            schema:
-              $ref: '#/components/schemas/mlDatasetSpec'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlDataset'
-          description: ok
-      summary: Declare the next version of a dataset
-      tags:
-      - ml
-      x-app: dataset
-  /v1/ml/datasets/{name}:
-    delete:
-      description: |-
-        Disposes of one dataset and every version of it: the rows are
-        dropped and the register is marked with what went.
-
-        This is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:
-        a table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is
-        the opposite of a retention decision belonging to the tenant whose records they
-        are. The drop is a partition drop on (org, dataset), so the tenant is the first
-        component of the thing being dropped and a disposal cannot be spelled across one.
-
-        The BYTES are what goes. The register keeps one `disposed` row per version — the
-        name, the number, the spec, the digest and who disposed of it when — for two
-        reasons: a retention obligation is answered by a record of the deletion, not by
-        silence; and version numbers must stay monotone, so that after `orders` is
-        disposed of and declared again the next version is 4 and not 1. A number that
-        could be reused would make every citation of `orders v3` ambiguous forever.
-
-        It is not reversible and there is no soft state in between. A version a model
-        cited has no rows once this returns, and every read of it says so.
-      operationId: mlDeleteDataset
-      parameters:
-      - description: Name is the dataset, from the path.
-        example: signups
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlDisposal'
-          description: ok
-      summary: Dispose of one dataset and every version of it
-      tags:
-      - ml
-      x-app: dataset
-    get:
-      description: |-
-        Dataset describes every version of one dataset, newest first — the whole
-        history, because the point of a version is that the older ones are still there
-        and a model fitted last quarter cites one of them.
-
-        A name this org does not own answers 404, exactly as an unknown name does, so a
-        probe learns nothing about another tenant's datasets.
-      operationId: mlDataset
-      parameters:
-      - description: Name is the dataset, from the path.
-        example: signups
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlDatasetVersions'
-          description: ok
-      summary: Describe every version of one dataset
-      tags:
-      - ml
-      x-app: dataset
-  /v1/ml/datasets/{name}/export:
-    get:
-      description: |-
-        Reads a published version's rows back, one bounded page at a
-        time, in the version's own stable row order.
-
-        Only a published version can be exported. Rows written by an attempt that never
-        completed are inert — no register row names them — and they are disposed of with
-        the dataset.
-      operationId: mlExportDataset
-      parameters:
-      - description: Name is the dataset, from the path.
-        example: signups
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - description: Version is the version to read. Zero takes the newest published
-          one.
-        example: 1
-        in: query
-        name: version
-        required: false
-        schema:
-          type: integer
-      - description: Split narrows to train, val or test. Empty reads every split.
-        example: train
-        in: query
-        name: split
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Offset is where the page starts, in the version's own row order (by id,
-          which is derived from the row and therefore stable forever).
-        in: query
-        name: offset
-        required: false
-        schema:
-          type: integer
-      - description: |-
-          Limit is how many rows to return. Zero and anything above the plane's bound
-          take the bound.
-        example: 500
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlDatasetRows'
-          description: ok
-      summary: Read a version's rows back, one page at a time
-      tags:
-      - ml
-      x-app: dataset
-  /v1/ml/datasets/{name}/lineage:
-    get:
-      description: |-
-        Shows where a version's rows came from and whether that can
-        still be demonstrated.
-
-        The answer is MEASURED, not recalled: the plane asks the source the same
-        bounded question again and compares it to the fingerprint taken when the
-        version was built. Anything but exact agreement is reported as drift — the
-        source is fed by a rollup that runs behind the events, so "it holds more now"
-        is the ordinary case and it means re-running the spec would not reproduce this
-        version. An admitted gap is actionable; an unfalsifiable claim is not.
-
-        IT IS A PRICED, BOUNDED READ, because it is the same statement a
-        materialisation is charged for: an exact distinct-count over up to 400 days of
-        this org's feature surface. It takes the org's ONE source-scan slot, so a
-        tenant looping it spends one scan and not a thousand; it counts against the
-        plane's ceiling, so the fleet's warehouse is bounded too; and it runs under
-        this plane's own deadline rather than the caller's patience.
-      operationId: mlDatasetLineage
-      parameters:
-      - description: Name is the dataset, from the path.
-        example: signups
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - description: Version is the version to trace. Zero takes the newest published
-          one.
-        example: 1
-        in: query
-        name: version
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlLineage'
-          description: ok
-      summary: Show where a version's rows came from, and whether that can still be
-        demonstrated
-      tags:
-      - ml
-      x-app: dataset
-  /v1/ml/datasets/{name}/materialize:
-    post:
-      description: |-
-        Builds the declared version into immutable rows and answers
-        202 as soon as the attempt is on record.
-
-        It never holds the request open for the work: a materialisation is a bounded
-        warehouse scan, and letting an HTTP client's timeout be a data plane's timeout
-        is how one tenant's retry loop becomes everyone's outage. ONE materialisation
-        runs per org at a time; a second is refused rather than queued, because a queue
-        admits the same work later and the honest answer to "again" while one is
-        running is that one is running.
-
-        Only a DECLARED version is admitted. A published version is immutable, and a
-        version whose earlier attempt did not complete is never re-attempted — that
-        would union two runs' rows under one number and make the digest a lie. In both
-        cases the answer is to declare a new version, which is what a second run over a
-        moving source honestly is.
-      operationId: mlMaterializeDataset
-      parameters:
-      - description: Name is the dataset, from the path.
-        example: signups
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "202":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlDataset'
-          description: accepted
-      summary: Materialise the declared version into immutable rows
-      tags:
-      - ml
-      x-app: dataset
   /v1/ml/health:
     get:
       description: |-
-        Reports whether the model-serving plane is genuinely usable: that the Kubernetes API answers, and that the InferenceService CRD is actually served by this cluster. It is a REAL probe, not status theatre — it makes a live call rather than reporting a flag set at boot.
+        Reports whether the model-serving plane is genuinely usable: that the Kubernetes API answers, that the InferenceService CRD is actually served by this cluster, and that the cluster holds at least one serving runtime to run a model ON. It is a REAL probe, not status theatre — it makes a live call rather than reporting a flag set at boot.
 
         200 only when everything checks out. Otherwise 503 CARRYING THE REPORT — which component failed, and the real error — and that body is the reason this is not a typed op: a typed op reaches a non-2xx by returning an error, and the envelope that produces would drop exactly the detail the probe exists to deliver.
+
+        The runtime count is reported as its own field and is a SEPARATE fact from the CRD being served: a cluster with the CRD but no runtime accepts a deploy and then never schedules it, so reporting only the CRD would answer 200 while every model hangs. A runtime list this service cannot read reports the read error instead of a count, because a missing grant is a broken probe and not an empty cluster.
 
         It answers about the cluster, not about a tenant, so it takes no org and reveals no tenant data. A cluster with no kserve CRD reports degraded honestly rather than failing later at the first deploy.
       operationId: get_v1_ml_health
@@ -86201,15 +86439,15 @@ paths:
         Returns the caller's referral code, share link and the referrals they have made.
 
         The code is a stable, deterministic function of the org, so the link in this
-        response is the same one every time. Each row carries the referee, its status and
-        the credit this org earned from it; creditsEarnedCents is their sum.
+        response is the same one every time. Each row carries the referee and the status
+        of that attribution.
 
-        The read is self-updating: before listing, it runs the qualify check over this
-        org's still-pending referees, so a referee who has since made metered spend is
-        credited by the act of the referrer loading their page. That check is
-        best-effort and bounded — a commerce hiccup leaves the referral pending for the
-        next check rather than failing the page — and the grant is latched at-most-once,
-        so this path and the admin sweep can never double-pay.
+        IT IS A PURE READ. It advances no referral, grants nothing and deposits nothing
+        — a GET reports state, it never changes it. Qualification is the admin sweep's
+        job (POST /v1/admin/referrals/sweep). The one row this handler can write is the
+        caller's OWN code-directory entry (EnsureCode), which materialises a value
+        deriveCode already computes deterministically from the org id so the code has an
+        O(1) reverse lookup; it carries no money, no referral state and no other tenant.
       operationId: get_v1_referrals
       responses:
         "200":
@@ -86236,9 +86474,10 @@ paths:
         call returns the referral already on file with created=false and 200, where the
         first call answers 201.
 
-        Recording a referral grants nothing. Both bonuses are granted later, when the
-        referee actually makes metered spend — see GET /v1/referrals and
-        POST /v1/admin/referrals/sweep.
+        Recording a referral grants nothing, and neither does anything downstream of it:
+        the edge later advances to qualified when the referee makes metered spend
+        (POST /v1/admin/referrals/sweep), and that is the end of it. No credit is ever
+        issued from this package.
       operationId: post_v1_referrals_claim
       requestBody:
         content:
@@ -86699,6 +86938,278 @@ paths:
       tags:
       - responses
       x-app: github.com/hanzoai/ai
+  /v1/risk/datasets:
+    get:
+      description: |-
+        Datasets lists this org's datasets, each with its newest version. An org that
+        has declared none gets an empty list; a store that cannot be reached gets a
+        refusal, never an empty list, because the two read identically and only one of
+        them is true.
+      operationId: riskDatasets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDatasetList'
+          description: ok
+      summary: List this org's datasets
+      tags:
+      - risk
+      x-app: dataset
+    post:
+      description: |-
+        Declares the next version of a dataset from a bound query over
+        this org's own feature surface.
+
+        It mints a VERSION and writes no rows: a version is declared, then materialised
+        once, then never rewritten. Version numbers are monotone and never reused, so
+        "version 3 of signups" means one thing forever — which is the whole reason a
+        model can cite one.
+
+        The window is bounded by the source's retention, the horizon by a year, the
+        rows by the plane's cap, and the number of datasets and versions per org by
+        their own limits. Every refusal names which bound it hit.
+      operationId: riskCreateDataset
+      requestBody:
+        content:
+          application/json:
+            example:
+              from: "2026-01-01T00:00:00Z"
+              horizon: 14
+              kind: person
+              name: signups
+              to: "2026-04-01T00:00:00Z"
+            schema:
+              $ref: '#/components/schemas/riskDatasetSpec'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDataset'
+          description: ok
+      summary: Declare the next version of a dataset
+      tags:
+      - risk
+      x-app: dataset
+  /v1/risk/datasets/{name}:
+    delete:
+      description: |-
+        Disposes of one dataset and every version of it: the rows are
+        dropped and the register is marked with what went.
+
+        This is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:
+        a table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is
+        the opposite of a retention decision belonging to the tenant whose records they
+        are. The drop is a partition drop on (org, dataset), so the tenant is the first
+        component of the thing being dropped and a disposal cannot be spelled across one.
+
+        The BYTES are what goes. The register keeps one `disposed` row per version — the
+        name, the number, the spec, the digest and who disposed of it when — for two
+        reasons: a retention obligation is answered by a record of the deletion, not by
+        silence; and version numbers must stay monotone, so that after `orders` is
+        disposed of and declared again the next version is 4 and not 1. A number that
+        could be reused would make every citation of `orders v3` ambiguous forever.
+
+        It is not reversible and there is no soft state in between. A version a model
+        cited has no rows once this returns, and every read of it says so.
+      operationId: riskDeleteDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDatasetDisposal'
+          description: ok
+      summary: Dispose of one dataset and every version of it
+      tags:
+      - risk
+      x-app: dataset
+    get:
+      description: |-
+        Dataset describes every version of one dataset, newest first — the whole
+        history, because the point of a version is that the older ones are still there
+        and a model fitted last quarter cites one of them.
+
+        A name this org does not own answers 404, exactly as an unknown name does, so a
+        probe learns nothing about another tenant's datasets.
+      operationId: riskDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDatasetVersions'
+          description: ok
+      summary: Describe every version of one dataset
+      tags:
+      - risk
+      x-app: dataset
+  /v1/risk/datasets/{name}/export:
+    get:
+      description: |-
+        Reads a published version's rows back, one bounded page at a
+        time, in the version's own stable row order.
+
+        Only a published version can be exported. Rows written by an attempt that never
+        completed are inert — no register row names them — and they are disposed of with
+        the dataset.
+      operationId: riskExportDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Version is the version to read. Zero takes the newest published
+          one.
+        example: 1
+        in: query
+        name: version
+        required: false
+        schema:
+          type: integer
+      - description: Split narrows to train, val or test. Empty reads every split.
+        example: train
+        in: query
+        name: split
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Offset is where the page starts, in the version's own row order (by id,
+          which is derived from the row and therefore stable forever).
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          Limit is how many rows to return. Zero and anything above the plane's bound
+          take the bound.
+        example: 500
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDatasetRows'
+          description: ok
+      summary: Read a version's rows back, one page at a time
+      tags:
+      - risk
+      x-app: dataset
+  /v1/risk/datasets/{name}/lineage:
+    get:
+      description: |-
+        Shows where a version's rows came from and whether that can
+        still be demonstrated.
+
+        The answer is MEASURED, not recalled: the plane asks the source the same
+        bounded question again and compares it to the fingerprint taken when the
+        version was built. Anything but exact agreement is reported as drift — the
+        source is fed by a rollup that runs behind the events, so "it holds more now"
+        is the ordinary case and it means re-running the spec would not reproduce this
+        version. An admitted gap is actionable; an unfalsifiable claim is not.
+
+        IT IS A PRICED, BOUNDED READ, because it is the same statement a
+        materialisation is charged for: an exact distinct-count over up to 400 days of
+        this org's feature surface. It takes the org's ONE source-scan slot, so a
+        tenant looping it spends one scan and not a thousand; it counts against the
+        plane's ceiling, so the fleet's warehouse is bounded too; and it runs under
+        this plane's own deadline rather than the caller's patience.
+      operationId: riskDatasetLineage
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Version is the version to trace. Zero takes the newest published
+          one.
+        example: 1
+        in: query
+        name: version
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskLineage'
+          description: ok
+      summary: Show where a version's rows came from, and whether that can still be
+        demonstrated
+      tags:
+      - risk
+      x-app: dataset
+  /v1/risk/datasets/{name}/materialize:
+    post:
+      description: |-
+        Builds the declared version into immutable rows and answers
+        202 as soon as the attempt is on record.
+
+        It never holds the request open for the work: a materialisation is a bounded
+        warehouse scan, and letting an HTTP client's timeout be a data plane's timeout
+        is how one tenant's retry loop becomes everyone's outage. ONE materialisation
+        runs per org at a time; a second is refused rather than queued, because a queue
+        admits the same work later and the honest answer to "again" while one is
+        running is that one is running.
+
+        Only a DECLARED version is admitted. A published version is immutable, and a
+        version whose earlier attempt did not complete is never re-attempted — that
+        would union two runs' rows under one number and make the digest a lie. In both
+        cases the answer is to declare a new version, which is what a second run over a
+        moving source honestly is.
+      operationId: riskMaterializeDataset
+      parameters:
+      - description: Name is the dataset, from the path.
+        example: signups
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDataset'
+          description: accepted
+      summary: Materialise the declared version into immutable rows
+      tags:
+      - risk
+      x-app: dataset
   /v1/risk/features:
     get:
       description: |-
@@ -87025,17 +87536,31 @@ paths:
     post:
       description: |-
         Learn records a batch of events into the caller organisation's own aggregates
-        and lets its model learn from them, answering the model's verdict on each.
+        and lets its model learn from them. It answers how many it learned from.
+
+        IT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;
+        learning is a transformation over observations; a verdict is a query against the
+        result. This op is the first two. [ops.score] is the third, it is pure, and it
+        is the ONE door to a verdict. They were one call, which meant you could not
+        record without training and could not train without being answered — and the
+        model ran twice over every event to produce a verdict the response carried and
+        no caller read.
+
+        TO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then
+        learn: the score is then the model's opinion of an event it has not yet learned
+        from, which is the question worth asking. The other order answers for a model
+        that has already absorbed the event it is judging.
 
         This is the training path, and there is no job behind it: the model IS a set of
         mass counters over half-space trees, so learning is an increment and the model
         is current the instant the last event lands. Nothing from any other
         organisation is in it, and nothing from this organisation leaves it.
 
-        Events are recorded FIRST and judged after, which is deliberate: the numbers an
-        alert quotes are then the same ones an investigator sees when they look at the
-        subject, and every baseline has the event removed from it arithmetically so
-        nothing is measured against itself.
+        A RETRY IS INERT. The record deduplicates on the event id you send, and an event
+        already in it moves nothing, costs nothing and is not counted — so a client that
+        timed out can send the same batch again and its model holds what it holds.
+        Without an id of your own there is nothing to converge on: two identical bodies
+        are two events.
       operationId: riskLearn
       requestBody:
         content:
@@ -87060,6 +87585,301 @@ paths:
       tags:
       - risk
       x-app: risk
+  /v1/risk/policy:
+    get:
+      description: |-
+        Policy reports the caller organisation's own decision-regime history: every
+        distinct regime it has adopted, which version is in force, and what retention
+        has taken.
+
+        WHY IT EXISTS. Every score cites the version it was decided under
+        ([riskScoreOut.Policy]), and the threshold that score was measured against is
+        derived from the appetite that version states. Restate the appetite and, without
+        this record, every earlier decision becomes unreconstructible — the cut it was
+        judged by no longer exists anywhere. An adverse decision that cannot be
+        explained against the policy in force when it was taken cannot be defended.
+
+        It covers ONE organisation. The history is on that organisation's own shelf, so
+        another's versions are not filtered out of the answer — they are not in the file
+        the answer is read from.
+      operationId: riskPolicy
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskPolicyOut'
+          description: ok
+      summary: Your organisation's decision-regime history, and which version is in
+        force
+      tags:
+      - risk
+      x-app: risk
+    put:
+      description: |-
+        States the decision regime the caller organisation's model decides
+        under: how much of its own stream may be sent for examination, how much of the
+        rest is sampled to measure what was missed, and whether the model may change an
+        outcome at all.
+
+        The appetite is the decision a model is not permitted to make for itself: its
+        output is a probability, so how likely it is to MISS something is a matter of
+        policy that has to be stated, measured and reviewed rather than absorbed into a
+        constant. The alert threshold is derived from it as a quantile of the scores
+        actually observed, which is what keeps its meaning as the distribution drifts.
+
+        It is DURABLE BEFORE IT IS IN FORCE. The regime is recorded as a new version on
+        the organisation's own shelf before anything in memory moves, so a policy that
+        cannot be written down is refused rather than answered from state the next
+        rollout would silently undo.
+
+        A RESTATEMENT OF THE REGIME IN FORCE MINTS NOTHING and answers the version
+        already in force. Compare the version you receive with the version you had:
+        unchanged means the numbers were the same, which is why there is no flag for it.
+
+        Learned state survives the change. The model's identity covers its SHAPE — the
+        inventory and the geometry — and not its appetite, so restating policy unlearns
+        nothing. It also does not REPORT the learned state: what the model is is read
+        from the model.
+      operationId: riskSetPolicy
+      requestBody:
+        content:
+          application/json:
+            example:
+              live: false
+              review: 0.01
+              sample: 0.001
+            schema:
+              $ref: '#/components/schemas/riskAppetiteIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskPolicyOut'
+          description: ok
+      summary: 'State the decision regime: the appetite, the sample, and whether the
+        model is live'
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/reference:
+    get:
+      description: |-
+        Lists every set this plane publishes, with its version and how
+        fresh it is.
+
+        Read the Stale and Refused lists first: they are the two ways this plane can
+        be quietly wrong, and they are reported rather than inferred. A set in
+        Refused answers nothing — it has never loaded, it is held by another
+        component, or it names a source we hold no licence for.
+      operationId: riskReferenceSets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceSetsOut'
+          description: ok
+      summary: Lists every set this plane publishes, with its version and how fresh
+        it is.
+      tags:
+      - risk
+      x-app: reference
+  /v1/risk/reference/{set}:
+    delete:
+      description: |-
+        Removes one of your organisation's overrides.
+
+        It removes an entry your organisation wrote, never a baseline member: the
+        published set is not writable from here, so a removal can only ever restore
+        the baseline's own answer.
+      operationId: riskClearReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      - example: partner.example
+        in: query
+        name: key
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearReferenceOut'
+          description: ok
+      summary: Removes one of your organisation's overrides.
+      tags:
+      - risk
+      x-app: reference
+    get:
+      description: |-
+        Reference describes one set and lists your org's overrides in it.
+
+        The set half is public data about a published list — its version, its
+        publishers, their licences and how current each one is. The overrides half is
+        yours alone: it is read from your organisation's own store, and no other
+        organisation's entries can appear in it.
+      operationId: riskReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      - description: 'After pages the override listing: the last key of the previous
+          page.'
+        in: query
+        name: after
+        required: false
+        schema:
+          type: string
+      - description: 'Limit caps the override listing: default 200, maximum 1000.'
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceOut'
+          description: ok
+      summary: Reference describes one set and lists your org's overrides in it.
+      tags:
+      - risk
+      x-app: reference
+    put:
+      description: |-
+        Writes your organisation's own allow and deny entries over a set.
+
+        Idempotent on the key: writing the same entry twice is one entry, and writing
+        it again replaces the verdict and the note. The whole batch is one
+        transaction, so a batch that would cross the per-set bound writes nothing
+        rather than half of itself — a half-applied deny list is worse than a refused
+        one, because nobody can tell which half applied.
+
+        Your entries are held in your organisation's own store and are never visible
+        to another organisation, and they never change what any other organisation
+        sees. The shared baseline is not writable from here at all.
+      operationId: riskSetReference
+      parameters:
+      - example: domain
+        in: path
+        name: set
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              entries:
+              - key: partner.example
+                note: our reseller
+                verdict: allow
+              set: domain
+            schema:
+              $ref: '#/components/schemas/SetReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetReferenceOut'
+          description: ok
+      summary: Writes your organisation's own allow and deny entries over a set.
+      tags:
+      - risk
+      x-app: reference
+  /v1/risk/reference/refresh:
+    post:
+      description: |-
+        Takes a new version of one set. SuperAdmin only.
+
+        It is platform work, not tenant work: it writes the shared baseline every
+        organisation reads, so it is gated to the platform's own identity. Nothing
+        here can write an organisation's overrides, and nothing an organisation sends
+        can reach this route.
+
+        Idempotent. A version is the content digest of what was taken, so refreshing
+        an unchanged publisher writes no rows and reports unchanged. Resumable: a run
+        that died half-way is continued from where it stopped rather than restarted.
+
+        A set whose source needs a licence we do not hold is refused with the reason,
+        rather than being quietly skipped.
+      operationId: riskRefreshReference
+      requestBody:
+        content:
+          application/json:
+            example:
+              set: domain
+            schema:
+              $ref: '#/components/schemas/RefreshReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshReferenceOut'
+          description: ok
+      summary: Takes a new version of one set.
+      tags:
+      - risk
+      x-app: reference
+  /v1/risk/reference/resolve:
+    post:
+      description: |-
+        Looks keys up against the reference plane.
+
+        Your organisation's own overrides are consulted FIRST and win outright; the
+        shared baseline answers everything they do not cover. Every answer names the
+        version that produced it, when that version was current and whether it is
+        stale, so a decision can record exactly what it consulted.
+
+        Read Refusal before reading Hit. A set that has never loaded, one held by the
+        component that screens against it, and one whose source needs a licence we do
+        not hold all answer with a refusal — and a miss on a refusing set means
+        nothing is known, not that the key is clean.
+      operationId: riskResolveReference
+      requestBody:
+        content:
+          application/json:
+            example:
+              keys:
+              - user@tempbox.example
+              - 3.5.140.1
+              sets:
+              - domain
+              - net
+            schema:
+              $ref: '#/components/schemas/ResolveReferenceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveReferenceOut'
+          description: ok
+      summary: Looks keys up against the reference plane.
+      tags:
+      - risk
+      x-app: reference
   /v1/risk/score:
     post:
       description: |-
@@ -87186,56 +88006,23 @@ paths:
       tags:
       - risk
       x-app: risk
-  /v1/risk/state/appetite:
-    put:
-      description: |-
-        Restates how much of the stream the caller organisation's model may
-        send for examination, and whether it is live.
-
-        The appetite is the decision a model is not permitted to make for itself: its
-        output is a probability, so how likely it is to MISS something is a matter of
-        policy that has to be stated, measured and reviewed rather than absorbed into a
-        constant. The alert threshold is then derived from it as a quantile of the
-        scores actually observed, which is what keeps its meaning as the distribution
-        drifts.
-
-        Learned state survives the change. The model's identity covers its SHAPE — the
-        inventory and the geometry — and not its appetite, so restating policy unlearns
-        nothing.
-      operationId: riskSetAppetite
-      requestBody:
-        content:
-          application/json:
-            example:
-              live: false
-              review: 0.01
-              sample: 0.001
-            schema:
-              $ref: '#/components/schemas/riskAppetiteIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/riskModelState'
-          description: ok
-      summary: Restate the risk appetite, and whether the model is live
-      tags:
-      - risk
-      x-app: risk
   /v1/risk/state/restore:
     post:
       description: |-
-        Restore installs previously pinned state into the caller organisation's model,
-        replacing whatever it holds.
+        Restore puts one of your organisation's OWN PUBLISHED VALUES back in force, by
+        name — which is what an instant rollback is, and what promoting a challenger is.
 
-        A snapshot naming another organisation is REFUSED. The engine checks the shape,
-        the version and the mass invariant — an array that fails the invariant was not
-        produced by this algorithm — but it does not check whose state it is, because
-        in its own deployment the caller IS the tenant. Here the caller is a request,
-        so the check is made here: another organisation's learned state inside this
-        model is that organisation's activity, disclosed.
+        IT TAKES AN ADDRESS AND NEVER STATE. The masses are read from your own store, so
+        nothing about your model has to be held by whatever is making this call. That
+        closes the sharpest edge the previous shape had: a body of counters is something
+        a caller can COMPOSE, and a region filled until activity inside it reads as
+        ordinary is a model that has been shaped rather than learned. The engine's mass
+        invariant was the only thing standing between a composed body and the model; with
+        an address there is no body to compose.
+
+        An address your organisation has not published is NOT FOUND. That includes one
+        another organisation published, and it is not a lookup that failed: the store is
+        per organisation and the address is a name, never an authority.
       operationId: riskRestore
       requestBody:
         content:
@@ -87257,13 +88044,23 @@ paths:
   /v1/risk/state/snapshot:
     post:
       description: |-
-        Snapshot pins the caller organisation's learned state so a decision taken today
-        can be reproduced tomorrow.
+        Snapshot publishes your organisation's model as a NAMED VALUE, so a decision
+        taken today can be reconstructed tomorrow and a change made today can be undone.
 
-        It carries the masses and the seed and never the geometry: geometry is a pure
-        function of the seed, so it is regenerated on restore and cannot be supplied.
-        That removes the sharpest edge a persisted model has — state that says where
-        the regions are rather than only how full they are.
+        It answers with a NAME and not with the state. The masses stay on your
+        organisation's own encrypted store and are referred to by an address computed
+        from their own content: the shape, the geometry seed, the position in the window,
+        the threshold, the masses themselves as IEEE-754 bits, and the fold watermark
+        behind them. That is what makes the value nameable without making the caller its
+        custodian.
+
+        IT IS IDEMPOTENT ON THE VALUE. A model that has not changed publishes to the name
+        it already has and mints nothing, reporting minted=false — so publishing at every
+        boundary that matters is free. Ten values are retained per organisation, bounded
+        in BYTES rather than in rows, and the oldest is disposed of past that.
+
+        A model that has learned nothing is refused: planted is not learned, and a value
+        that reproduces nothing is not a value.
       operationId: riskSnapshot
       responses:
         "201":
@@ -95681,8 +96478,8 @@ tags:
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
     cannot INSTALL.
   name: rag
-- description: Package referrals is credit for both sides when someone you refer actually
-    spends.
+- description: 'Package referrals is referral ATTRIBUTION: who referred whom, and
+    whether that referee ever became a real customer.'
   name: referrals
 - description: 'Package registry is your container and package registry: push images,
     pull them back, see what you store.'

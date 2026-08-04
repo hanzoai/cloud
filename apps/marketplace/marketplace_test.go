@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/tools"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.

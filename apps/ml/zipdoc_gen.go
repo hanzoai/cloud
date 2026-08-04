@@ -31,7 +31,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"finetune-1"}`),
 	})
 	zip.Describe("GET /v1/ml/health", zip.Doc{
-		Description: "Is a REAL probe: it verifies the API server is reachable and that the\nsubsystem's CRDs are served, and reports the actual state. 200 only when\neverything is ok; 503 + the real reason otherwise (never status-theater).",
+		Description: "Is a REAL probe: it verifies the API server is reachable, that the\nsubsystem's CRDs are served, and — where the plane has one — that it holds the\nCAPACITY to run what it accepts. 200 only when everything is ok; 503 + the real\nreason otherwise (never status-theater).\n\n`capacity` names a cluster-scoped resource this plane needs at least ONE of, or\nis the zero GVR for a plane with no such fact. A served CRD is not capacity:\nkserve admits an InferenceService whose model format no ClusterServingRuntime\nsupports and simply never schedules it, so a probe that reads only \"is the CRD\nserved\" answers 200 while every deploy hangs. Purging the last runtime is a\nlegitimate operator act; doing it INVISIBLY is what this clause forbids.",
 	})
 	zip.Describe("GET /v1/ml/models", zip.Doc{
 		Description: "Lists the inference models deployed in the caller's org. Each entry\ncarries the model's name, when Kubernetes admitted it, and kserve's live status\n— the spec is on the single-model read. An org that has deployed nothing gets\nan empty list.",
@@ -89,7 +89,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"sweep-1"}`),
 	})
 	zip.Describe("GET /v1/train/health", zip.Doc{
-		Description: "Is a REAL probe: it verifies the API server is reachable and that the\nsubsystem's CRDs are served, and reports the actual state. 200 only when\neverything is ok; 503 + the real reason otherwise (never status-theater).",
+		Description: "Is a REAL probe: it verifies the API server is reachable, that the\nsubsystem's CRDs are served, and — where the plane has one — that it holds the\nCAPACITY to run what it accepts. 200 only when everything is ok; 503 + the real\nreason otherwise (never status-theater).\n\n`capacity` names a cluster-scoped resource this plane needs at least ONE of, or\nis the zero GVR for a plane with no such fact. A served CRD is not capacity:\nkserve admits an InferenceService whose model format no ClusterServingRuntime\nsupports and simply never schedules it, so a probe that reads only \"is the CRD\nserved\" answers 200 while every deploy hangs. Purging the last runtime is a\nlegitimate operator act; doing it INVISIBLY is what this clause forbids.",
 	})
 	zip.Describe("GET /v1/train/jobs", zip.Doc{
 		Description: "Lists the training jobs in the caller's org. Each entry carries the\njob's name, when Kubernetes admitted it, and the trainer operator's live status\n— the spec is on the single-job read.",

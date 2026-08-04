@@ -65,6 +65,13 @@ var allowedRequestUses = map[string]string{
 		"modeled as an In field, because zip binds an In field from the BODY too and this route has never " +
 		"accepted an account there. authWrite fails closed off the HTTP path: no request, no attested " +
 		"caller, no mutation.",
+	"apps/reference/reference.go": "actor / the refresh gate — two facts beyond the org, both identity. " +
+		"An override is an adverse-action input (it is why a signup was refused), so the row records the " +
+		"validated user id who wrote it, which principal.OrgFrom does not carry; and refreshing the shared " +
+		"baseline every org reads is platform work, gated on the SuperAdmin claim (X-User-IsAdmin), which " +
+		"must never become an In field a caller could assert for itself. The TENANT is resolved with " +
+		"principal.OrgFrom (nsOf, right beside them) and never through the request, so no read or write is " +
+		"scoped by anything the request carries.",
 	"apps/provisioning/typed.go": "tenantOf — the provisioning control plane ALLOCATES and DESTROYS real " +
 		"backend resources, and its tenant is not the org principal.OrgFrom carries. Two facts differ, both " +
 		"live: the org is folded through namespace.Sanitize (the slug every physical name, S3 " +
