@@ -164,8 +164,8 @@ func surface(f *fake, org string, subjects, per int) {
 // to nothing so the window is admitted in full. The window ends just past the
 // last bucket so the derived cuts (70% and 85% of the window by time) fall INSIDE
 // the data and all three splits are populated.
-func declared(name string) mlDatasetSpec {
-	return mlDatasetSpec{
+func declared(name string) riskDatasetSpec {
+	return riskDatasetSpec{
 		Name:    name,
 		Kind:    kindPerson,
 		From:    origin0.Add(-time.Hour).Format(time.RFC3339),
@@ -177,15 +177,15 @@ func declared(name string) mlDatasetSpec {
 
 // settled waits for a materialisation to reach a terminal state, then returns the
 // version as `describe` reports it.
-func settled(t *testing.T, app *zip.App, org, name string) mlDataset {
+func settled(t *testing.T, app *zip.App, org, name string) riskDataset {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/"+name, org, nil)
+		code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/"+name, org, nil)
 		if code != http.StatusOK {
 			t.Fatalf("describe %s: %d (%s)", name, code, body)
 		}
-		var v mlDatasetVersions
+		var v riskDatasetVersions
 		if err := json.Unmarshal(body, &v); err != nil {
 			t.Fatalf("describe %s: %v", name, err)
 		}
@@ -204,12 +204,12 @@ func settled(t *testing.T, app *zip.App, org, name string) mlDataset {
 }
 
 // build declares and materialises one dataset, and returns the settled version.
-func build(t *testing.T, app *zip.App, org string, in mlDatasetSpec) mlDataset {
+func build(t *testing.T, app *zip.App, org string, in riskDatasetSpec) riskDataset {
 	t.Helper()
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", org, in); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", org, in); code != http.StatusOK {
 		t.Fatalf("declare: %d (%s)", code, body)
 	}
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets/"+in.Name+"/materialize", org, nil); code != http.StatusAccepted {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets/"+in.Name+"/materialize", org, nil); code != http.StatusAccepted {
 		t.Fatalf("materialize: want 202, got %d (%s)", code, body)
 	}
 	return settled(t, app, org, in.Name)
@@ -245,11 +245,11 @@ func TestForeignOrgSeesNothing(t *testing.T) {
 
 	// A list is only ever this org's.
 	for _, org := range []string{"acme", "globex"} {
-		code, body := do(t, app, http.MethodGet, "/v1/ml/datasets", org, nil)
+		code, body := do(t, app, http.MethodGet, "/v1/risk/datasets", org, nil)
 		if code != http.StatusOK {
 			t.Fatalf("list %s: %d (%s)", org, code, body)
 		}
-		var list mlDatasetList
+		var list riskDatasetList
 		if err := json.Unmarshal(body, &list); err != nil {
 			t.Fatal(err)
 		}
@@ -259,11 +259,11 @@ func TestForeignOrgSeesNothing(t *testing.T) {
 	}
 
 	// An export never crosses. acme's rows are all acme's subjects.
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/shared/export?limit=1000", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/shared/export?limit=1000", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("export: %d (%s)", code, body)
 	}
-	var page mlDatasetRows
+	var page riskDatasetRows
 	if err := json.Unmarshal(body, &page); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestForeignOrgSeesNothing(t *testing.T) {
 
 	// A disposal is per tenant: acme drops its own and globex still has its own,
 	// with every row intact.
-	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/shared", "acme", nil); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodDelete, "/v1/risk/datasets/shared", "acme", nil); code != http.StatusOK {
 		t.Fatalf("dispose: %d (%s)", code, body)
 	}
 	// acme's BYTES are gone and its RECORD remains: the version reads `disposed`
@@ -287,10 +287,10 @@ func TestForeignOrgSeesNothing(t *testing.T) {
 	if got := describe(t, app, "acme", "shared"); got.Items[0].Status != statusDisposed {
 		t.Fatalf("acme's disposed dataset reads %q", got.Items[0].Status)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/ml/datasets/shared/export", "acme", nil); code != http.StatusConflict {
+	if code, _ := do(t, app, http.MethodGet, "/v1/risk/datasets/shared/export", "acme", nil); code != http.StatusConflict {
 		t.Fatalf("acme exported a disposed dataset: %d", code)
 	}
-	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/shared/export?limit=1000", "globex", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/risk/datasets/shared/export?limit=1000", "globex", nil)
 	if code != http.StatusOK {
 		t.Fatalf("globex export after acme's disposal: %d (%s)", code, body)
 	}
@@ -311,13 +311,13 @@ func TestNoPrincipalReachesNothing(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodPost, "/v1/ml/datasets", declared("x")},
-		{http.MethodGet, "/v1/ml/datasets", nil},
-		{http.MethodGet, "/v1/ml/datasets/x", nil},
-		{http.MethodPost, "/v1/ml/datasets/x/materialize", nil},
-		{http.MethodGet, "/v1/ml/datasets/x/lineage", nil},
-		{http.MethodGet, "/v1/ml/datasets/x/export", nil},
-		{http.MethodDelete, "/v1/ml/datasets/x", nil},
+		{http.MethodPost, "/v1/risk/datasets", declared("x")},
+		{http.MethodGet, "/v1/risk/datasets", nil},
+		{http.MethodGet, "/v1/risk/datasets/x", nil},
+		{http.MethodPost, "/v1/risk/datasets/x/materialize", nil},
+		{http.MethodGet, "/v1/risk/datasets/x/lineage", nil},
+		{http.MethodGet, "/v1/risk/datasets/x/export", nil},
+		{http.MethodDelete, "/v1/risk/datasets/x", nil},
 	} {
 		code, body := do(t, app, tc.method, tc.path, "", tc.body)
 		if code != http.StatusForbidden {
@@ -334,7 +334,7 @@ func TestNoPrincipalReachesNothing(t *testing.T) {
 // are not an organisation's.
 func TestTheAnonymousLaneIsNotATenant(t *testing.T) {
 	app := mountHTTP(t, newPlane(&fake{}))
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets", tenant.Public, nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets", tenant.Public, nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("the anonymous lane reached the plane: %d (%s)", code, body)
 	}
@@ -458,7 +458,7 @@ func TestAPublishedVersionCannotBeMutated(t *testing.T) {
 	}
 
 	// The door refuses a second materialisation of a published version.
-	code, body := do(t, app, http.MethodPost, "/v1/ml/datasets/d/materialize", "one", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/risk/datasets/d/materialize", "one", nil)
 	if code != http.StatusConflict {
 		t.Fatalf("re-materialising a published version: want 409, got %d (%s)", code, body)
 	}
@@ -514,7 +514,7 @@ func TestAnIncompleteAttemptIsNeverReadable(t *testing.T) {
 	p := newPlane(f)
 	app := mountHTTP(t, p)
 
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", declared("d")); code != http.StatusOK {
 		t.Fatalf("declare: %d (%s)", code, body)
 	}
 	// The attempt is recorded, and then the process dies — which is exactly the
@@ -529,14 +529,14 @@ func TestAnIncompleteAttemptIsNeverReadable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, body := do(t, app, http.MethodPost, "/v1/ml/datasets/d/materialize", "one", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/risk/datasets/d/materialize", "one", nil)
 	if code != http.StatusConflict {
 		t.Fatalf("re-attempting an incomplete version: want 409, got %d (%s)", code, body)
 	}
 	if !strings.Contains(string(body), "did not complete") {
 		t.Fatalf("the refusal does not name the state: %s", body)
 	}
-	if code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/d/export", "one", nil); code != http.StatusConflict {
+	if code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/d/export", "one", nil); code != http.StatusConflict {
 		t.Fatalf("exporting an unpublished version: want 409, got %d (%s)", code, body)
 	}
 }
@@ -575,7 +575,7 @@ func TestARestartChangesNothing(t *testing.T) {
 func TestAnUnreachableStoreRefusesRatherThanAnswersEmpty(t *testing.T) {
 	f := &fake{down: true}
 	app := mountHTTP(t, newPlane(f))
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets", "one", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets", "one", nil)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("want 503 from a dead store, got %d (%s)", code, body)
 	}
@@ -595,12 +595,12 @@ func TestTheStoresOwnWordsNeverReachTheCaller(t *testing.T) {
 	app := mountHTTP(t, newPlane(f))
 
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/v1/ml/datasets"},
-		{http.MethodGet, "/v1/ml/datasets/d"},
-		{http.MethodGet, "/v1/ml/datasets/d/export"},
-		{http.MethodGet, "/v1/ml/datasets/d/lineage"},
-		{http.MethodDelete, "/v1/ml/datasets/d"},
-		{http.MethodPost, "/v1/ml/datasets/d/materialize"},
+		{http.MethodGet, "/v1/risk/datasets"},
+		{http.MethodGet, "/v1/risk/datasets/d"},
+		{http.MethodGet, "/v1/risk/datasets/d/export"},
+		{http.MethodGet, "/v1/risk/datasets/d/lineage"},
+		{http.MethodDelete, "/v1/risk/datasets/d"},
+		{http.MethodPost, "/v1/risk/datasets/d/materialize"},
 	} {
 		code, body := do(t, app, tc.method, tc.path, "one", nil)
 		if code == http.StatusOK {
@@ -613,7 +613,7 @@ func TestTheStoresOwnWordsNeverReachTheCaller(t *testing.T) {
 		}
 	}
 	// A declare fails the same way, and writes nothing.
-	code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d"))
+	code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", declared("d"))
 	if code == http.StatusOK || strings.Contains(string(body), "clickhouse") {
 		t.Fatalf("declare over a failing store: %d (%s)", code, body)
 	}
@@ -640,7 +640,7 @@ func TestARowFromAnotherTenantIsRefusedNotFiltered(t *testing.T) {
 	f.leak = true
 	f.mu.Unlock()
 
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets", "acme", nil)
 	if code == http.StatusOK {
 		t.Fatalf("acme was served globex's register: %s", body)
 	}
@@ -682,7 +682,7 @@ func TestTheHorizonExcludesTheImmatureTail(t *testing.T) {
 	}
 	app := mountHTTP(t, newPlane(f))
 
-	in := mlDatasetSpec{
+	in := riskDatasetSpec{
 		Name: "mature", Kind: kindPerson,
 		From:    now.Add(-(days + 1) * 24 * time.Hour).Format(time.RFC3339),
 		To:      now.Add(time.Hour).Format(time.RFC3339),
@@ -712,11 +712,11 @@ func TestTheHorizonExcludesTheImmatureTail(t *testing.T) {
 func TestAWindowYoungerThanItsHorizonIsRefusedAtTheDoor(t *testing.T) {
 	app := mountHTTP(t, newPlane(&fake{}))
 	now := time.Now().UTC()
-	in := mlDatasetSpec{
+	in := riskDatasetSpec{
 		Name: "young", From: now.Add(-2 * time.Hour).Format(time.RFC3339),
 		To: now.Format(time.RFC3339), Horizon: 30,
 	}
-	code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", in)
+	code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", in)
 	if code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d (%s)", code, body)
 	}
@@ -781,14 +781,14 @@ func TestOneMaterializationPerOrg(t *testing.T) {
 	p := newPlane(f)
 	app := mountHTTP(t, p)
 
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", declared("d")); code != http.StatusOK {
 		t.Fatalf("declare: %d (%s)", code, body)
 	}
 	// Hold the slot the way a running job does, then ask again.
 	if _, err := p.claim(mustKey("one"), "d", 1); err != nil {
 		t.Fatalf("the slot was already held: %v", err)
 	}
-	code, body := do(t, app, http.MethodPost, "/v1/ml/datasets/d/materialize", "one", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/risk/datasets/d/materialize", "one", nil)
 	if code != http.StatusConflict {
 		t.Fatalf("a second materialisation: want 409, got %d (%s)", code, body)
 	}
@@ -826,10 +826,10 @@ func TestTheProcessIsBoundedAcrossTenantsToo(t *testing.T) {
 	// A tenant holding no slot of its own still cannot start one: the resource it
 	// would spend is the plane's, not its own.
 	surface(f, "late", 3, 3)
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "late", declared("d")); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "late", declared("d")); code != http.StatusOK {
 		t.Fatalf("declare: %d (%s)", code, body)
 	}
-	code, body := do(t, app, http.MethodPost, "/v1/ml/datasets/d/materialize", "late", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/risk/datasets/d/materialize", "late", nil)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("a full plane: want 503, got %d (%s)", code, body)
 	}
@@ -842,7 +842,7 @@ func TestTheProcessIsBoundedAcrossTenantsToo(t *testing.T) {
 	// would have left this caller a version it could never build, and the ceiling
 	// would destroy work rather than defer it.
 	p.release(mustKey("org00"))
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets/d/materialize", "late", nil); code != http.StatusAccepted {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets/d/materialize", "late", nil); code != http.StatusAccepted {
 		t.Fatalf("materialising once the plane freed: want 202, got %d (%s)", code, body)
 	}
 	got := settled(t, app, "late", "d")
@@ -861,14 +861,14 @@ func TestADeadStoreIsNeverReportedAsTheCallersMistake(t *testing.T) {
 	app := mountHTTP(t, newPlane(f))
 	build(t, app, "one", declared("d"))
 
-	if code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/d/export?split=holdout", "one", nil); code != http.StatusBadRequest {
+	if code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/d/export?split=holdout", "one", nil); code != http.StatusBadRequest {
 		t.Fatalf("an unknown split: want 400, got %d (%s)", code, body)
 	}
 
 	f.mu.Lock()
 	f.down = true
 	f.mu.Unlock()
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/d/export?split=train", "one", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/d/export?split=train", "one", nil)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("an export over a dead store: want 503, got %d (%s)", code, body)
 	}
@@ -946,7 +946,7 @@ func TestLineageIsAdmittedLikeTheScanItIs(t *testing.T) {
 		t.Fatalf("the slot was already held: %v", err)
 	}
 	f.forget()
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/d/lineage", "one", nil)
 	if code != http.StatusConflict {
 		t.Fatalf("a second concurrent scan: want 409, got %d (%s)", code, body)
 	}
@@ -967,7 +967,7 @@ func TestLineageIsAdmittedLikeTheScanItIs(t *testing.T) {
 			t.Fatalf("filling slot %d: %v", i, err)
 		}
 	}
-	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/risk/datasets/d/lineage", "one", nil)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("a full plane: want 503, got %d (%s)", code, body)
 	}
@@ -981,7 +981,7 @@ func TestLineageIsAdmittedLikeTheScanItIs(t *testing.T) {
 	l.gate = metering.ErrInsufficientBalance
 	l.mu.Unlock()
 	f.forget()
-	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/risk/datasets/d/lineage", "one", nil)
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("an unfunded lineage: want 402, got %d (%s)", code, body)
 	}
@@ -1011,7 +1011,7 @@ func TestTheBillersOwnWordsNeverReachTheCaller(t *testing.T) {
 	l.mu.Lock()
 	l.gate = nil
 	l.mu.Unlock()
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", declared("d")); code != http.StatusOK {
 		t.Fatalf("declare: %d (%s)", code, body)
 	}
 	l.mu.Lock()
@@ -1024,8 +1024,8 @@ func TestTheBillersOwnWordsNeverReachTheCaller(t *testing.T) {
 		path   string
 		body   any
 	}{
-		{"materialize", http.MethodPost, "/v1/ml/datasets/d/materialize", nil},
-		{"create", http.MethodPost, "/v1/ml/datasets", declared("other")},
+		{"materialize", http.MethodPost, "/v1/risk/datasets/d/materialize", nil},
+		{"create", http.MethodPost, "/v1/risk/datasets", declared("other")},
 	} {
 		code, body := do(t, app, probe.method, probe.path, "one", probe.body)
 		if strings.Contains(string(body), "10.43.7.19") || strings.Contains(string(body), "commerce") {
@@ -1052,7 +1052,7 @@ func TestADeclarationIsGatedTooEvenThoughItIsFree(t *testing.T) {
 	twin(f, "one")
 	l := &ledger{}
 	app := mountHTTP(t, newPlaneBilled(f, l))
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", declared("d")); code != http.StatusOK {
 		t.Fatalf("declare: %d (%s)", code, body)
 	}
 	l.mu.Lock()
@@ -1079,7 +1079,7 @@ func TestATimedOutJobRecordsWhyItTimedOut(t *testing.T) {
 	twin(f, "one")
 	p := newPlane(f)
 	app := mountHTTP(t, p)
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", declared("d")); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", declared("d")); code != http.StatusOK {
 		t.Fatalf("declare: %d (%s)", code, body)
 	}
 	e, ok, err := p.latest(context.Background(), mustKey("one"), "d")
@@ -1135,7 +1135,7 @@ func TestAVersionNumberIsNeverReusedAcrossADisposal(t *testing.T) {
 		t.Fatalf("version 3 does not carry its own digest")
 	}
 
-	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/orders", "one", nil); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodDelete, "/v1/risk/datasets/orders", "one", nil); code != http.StatusOK {
 		t.Fatalf("dispose: %d (%s)", code, body)
 	}
 	// Every version reads disposed, and the record of each is still there — the
@@ -1149,7 +1149,7 @@ func TestAVersionNumberIsNeverReusedAcrossADisposal(t *testing.T) {
 			t.Fatalf("version %d reads %q after a disposal", v.Version, v.Status)
 		}
 	}
-	if code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/orders/export", "one", nil); code != http.StatusConflict {
+	if code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/orders/export", "one", nil); code != http.StatusConflict {
 		t.Fatalf("a disposed dataset still exports: %d (%s)", code, body)
 	}
 	f.mu.Lock()
@@ -1179,12 +1179,12 @@ func TestADisposalIsIdempotent(t *testing.T) {
 	app := mountHTTP(t, newPlane(f))
 	build(t, app, "one", declared("orders"))
 
-	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/orders", "one", nil); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodDelete, "/v1/risk/datasets/orders", "one", nil); code != http.StatusOK {
 		t.Fatalf("dispose: %d (%s)", code, body)
 	}
 	when := describeVersion(t, app, "one", "orders", 1).At
 	time.Sleep(1100 * time.Millisecond) // the register's instant has one-second resolution
-	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/orders", "one", nil); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodDelete, "/v1/risk/datasets/orders", "one", nil); code != http.StatusOK {
 		t.Fatalf("a repeat disposal: %d (%s)", code, body)
 	}
 	if again := describeVersion(t, app, "one", "orders", 1).At; again != when {
@@ -1254,19 +1254,19 @@ func TestATokenFromAnotherBrandIsNotThisBrandsTenant(t *testing.T) {
 	app := mountHTTP(t, newPlane(f))
 
 	// This deployment's own brand vouched: served.
-	if code, body := vouched(t, app, http.MethodGet, "/v1/ml/datasets", "one", brand, nil); code != http.StatusOK {
+	if code, body := vouched(t, app, http.MethodGet, "/v1/risk/datasets", "one", brand, nil); code != http.StatusOK {
 		t.Fatalf("this brand's own principal was refused: %d (%s)", code, body)
 	}
 	// Another brand's IAM vouched: refused, and refused before any statement.
 	f.forget()
-	code, body := vouched(t, app, http.MethodGet, "/v1/ml/datasets", "one", "lux", nil)
+	code, body := vouched(t, app, http.MethodGet, "/v1/risk/datasets", "one", "lux", nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("a lux-issued principal read a hanzo tenant: %d (%s)", code, body)
 	}
 	for _, c := range f.seen() {
 		t.Fatalf("a cross-brand caller reached the store: %s", c.Stmt)
 	}
-	if code, body := vouched(t, app, http.MethodPost, "/v1/ml/datasets", "one", "lux", declared("d")); code != http.StatusForbidden {
+	if code, body := vouched(t, app, http.MethodPost, "/v1/risk/datasets", "one", "lux", declared("d")); code != http.StatusForbidden {
 		t.Fatalf("a lux-issued principal declared into a hanzo tenant: %d (%s)", code, body)
 	}
 }
@@ -1304,13 +1304,13 @@ func mustKey(org string) tenant.Key {
 	return k
 }
 
-func exported(t *testing.T, app *zip.App, org, name string) []mlDatasetRow {
+func exported(t *testing.T, app *zip.App, org, name string) []riskDatasetRow {
 	t.Helper()
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/"+name+"/export?limit=5000", org, nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/"+name+"/export?limit=5000", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("export %s: %d (%s)", name, code, body)
 	}
-	var page mlDatasetRows
+	var page riskDatasetRows
 	if err := json.Unmarshal(body, &page); err != nil {
 		t.Fatalf("export %s: %v", name, err)
 	}
@@ -1318,13 +1318,13 @@ func exported(t *testing.T, app *zip.App, org, name string) []mlDatasetRow {
 }
 
 // describe reads a dataset's whole version history, newest first.
-func describe(t *testing.T, app *zip.App, org, name string) mlDatasetVersions {
+func describe(t *testing.T, app *zip.App, org, name string) riskDatasetVersions {
 	t.Helper()
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/"+name, org, nil)
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/"+name, org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("describe %s: %d (%s)", name, code, body)
 	}
-	var v mlDatasetVersions
+	var v riskDatasetVersions
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatal(err)
 	}
@@ -1334,7 +1334,7 @@ func describe(t *testing.T, app *zip.App, org, name string) mlDatasetVersions {
 	return v
 }
 
-func describeVersion(t *testing.T, app *zip.App, org, name string, version int) mlDataset {
+func describeVersion(t *testing.T, app *zip.App, org, name string, version int) riskDataset {
 	t.Helper()
 	v := describe(t, app, org, name)
 	for _, e := range v.Items {
@@ -1343,24 +1343,24 @@ func describeVersion(t *testing.T, app *zip.App, org, name string, version int) 
 		}
 	}
 	t.Fatalf("version %d of %s is not in the description", version, name)
-	return mlDataset{}
+	return riskDataset{}
 }
 
-func lineageOf(t *testing.T, app *zip.App, org, name string, version int) mlLineage {
+func lineageOf(t *testing.T, app *zip.App, org, name string, version int) riskLineage {
 	t.Helper()
 	code, body := do(t, app, http.MethodGet,
-		fmt.Sprintf("/v1/ml/datasets/%s/lineage?version=%d", name, version), org, nil)
+		fmt.Sprintf("/v1/risk/datasets/%s/lineage?version=%d", name, version), org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("lineage %s: %d (%s)", name, code, body)
 	}
-	var out mlLineage
+	var out riskLineage
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatal(err)
 	}
 	return out
 }
 
-func subjectsOf(rows []mlDatasetRow) map[string]bool {
+func subjectsOf(rows []riskDatasetRow) map[string]bool {
 	out := map[string]bool{}
 	for _, r := range rows {
 		out[r.Subject] = true
@@ -1453,8 +1453,8 @@ func TestAnUnrepresentableSubjectIsExcludedAndCounted(t *testing.T) {
 	}
 
 	// 4. READABLE WHERE AN OPERATOR LOOKS, and part of what "reproducible" means.
-	var lin mlLineage
-	code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	var lin riskLineage
+	code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/d/lineage", "one", nil)
 	if code != http.StatusOK {
 		t.Fatalf("lineage: %d (%s)", code, body)
 	}
@@ -1476,11 +1476,11 @@ func TestAnUnrepresentableSubjectIsExcludedAndCounted(t *testing.T) {
 		Bucket: origin0.Add(time.Hour),
 		Value:  map[string]float64{"events": 1},
 	})
-	code, body = do(t, app, http.MethodGet, "/v1/ml/datasets/d/lineage", "one", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/risk/datasets/d/lineage", "one", nil)
 	if code != http.StatusOK {
 		t.Fatalf("lineage: %d (%s)", code, body)
 	}
-	lin = mlLineage{}
+	lin = riskLineage{}
 	if err := json.Unmarshal(body, &lin); err != nil {
 		t.Fatalf("lineage: %v", err)
 	}

@@ -819,7 +819,7 @@ func TestEveryOp_IsGatedOnTheCallersOwnBalance(t *testing.T) {
 		{http.MethodPost, "/v1/risk/score", `{"event":{"id":"e1","kind":"account","subject":"u_1"}}`},
 		{http.MethodPost, "/v1/risk/learn", `{"events":[{"id":"e1","kind":"account","subject":"u_1"}]}`},
 		{http.MethodGet, "/v1/risk/state", ""},
-		{http.MethodPut, "/v1/risk/state/appetite", `{"review":0.01,"sample":0.001}`},
+		{http.MethodPut, "/v1/risk/policy", `{"review":0.01,"sample":0.001}`},
 		{http.MethodPost, "/v1/risk/state/snapshot", ""},
 		{http.MethodPost, "/v1/risk/state/restore", `{"body":{"version":1}}`},
 		{http.MethodGet, "/v1/risk/policy", ""},

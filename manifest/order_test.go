@@ -3,8 +3,13 @@ package manifest
 import "testing"
 
 // frozen is the EXACT subsystem sequence the fleet mounts — one name per app, in
-// mount order, which IS the routing order (the host loads them in this order and
-// the router takes the first prefix that matches). It descends from the
+// the order the host loads them. That order decides a route only between EQUAL
+// patterns (ai before zen, below): NESTED static prefixes resolve by SPECIFICITY,
+// so /v1/risk/labels reaches label whether or not the bare /v1/risk was registered
+// first, and the app a path reaches is pinned by the router oracle
+// (TestEveryServedPathReachesTheAppThatServesIt) rather than by this sequence.
+//
+// It descends from the
 // pre-refactor init()-registry sequence (captured empirically on origin/main
 // @c504d2b and carried through apps.Wire()); apps.Wire() is gone and manifest.Apps
 // is now the hand-authored source, so the freeze lives HERE.

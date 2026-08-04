@@ -395,16 +395,16 @@ func readOrigin(s string) (origin, error) {
 // source that now starts later has expired its older rows; one that now starts
 // EARLIER has been backfilled. Both mean the window no longer holds what this
 // version was built from, and only the first was noticed before.
-func (p *plane) lineage(ctx context.Context, a scan, e entry) (mlLineage, error) {
+func (p *plane) lineage(ctx context.Context, a scan, e entry) (riskLineage, error) {
 	o, err := readOrigin(e.Source)
 	if err != nil {
-		return mlLineage{}, err
+		return riskLineage{}, err
 	}
 	s, err := e.Spec.spec()
 	if err != nil {
-		return mlLineage{}, err
+		return riskLineage{}, err
 	}
-	out := mlLineage{
+	out := riskLineage{
 		Dataset:   e.Name,
 		Version:   e.Version,
 		Source:    o.Table,
@@ -420,11 +420,11 @@ func (p *plane) lineage(ctx context.Context, a scan, e entry) (mlLineage, error)
 
 	until, err := instant("to", o.To)
 	if err != nil {
-		return mlLineage{}, err
+		return riskLineage{}, err
 	}
 	now, err := p.census(ctx, a, s, until)
 	if err != nil {
-		return mlLineage{}, err
+		return riskLineage{}, err
 	}
 	out.Holds = now.Rows
 	out.Refusal = drift(o, now)
