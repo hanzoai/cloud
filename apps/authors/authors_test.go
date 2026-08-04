@@ -40,7 +40,7 @@ func newFakeCommerce() *fakeCommerce {
 
 func (f *fakeCommerce) configured() bool { return true }
 
-func (f *fakeCommerce) deposit(_ context.Context, org, _ string, amountCents int64, _, _, _ string) (string, error) {
+func (f *fakeCommerce) deposit(_ context.Context, org, _ string, amountCents int64, _, _, _, ref string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failDep {
