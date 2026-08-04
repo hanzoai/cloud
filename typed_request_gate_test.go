@@ -218,6 +218,14 @@ var allowedRequestUses = map[string]string{
 		"signed in or not, so the tenant is re-pointed for the index Ask while the caller's authority " +
 		"travels whole. cloud.As needs the request to do that; cloud.For alone drops the caller and the " +
 		"public browse 500s with \"index: no org on the call\".",
+	"apps/risk/policy_wire.go": "caller — the validated principal's identity on an " +
+		"attributable policy record. It reads c.User(), which no ctx helper answers: OrgFrom gives " +
+		"the tenant, not WHO changed the appetite bounds. Off the HTTP path it returns empty and " +
+		"plane.enact refuses, so a change is never recorded anonymously.",
+	"apps/commerce/invoices.go": "eventsFrom/kmsFrom — two request-scoped side channels " +
+		"carried in c.Locals(), which no ctx helper exposes. Both are OPTIONAL by design: a missing " +
+		"analytics collector must never fail a money move, and a missing KMS client is the dev/test " +
+		"posture where credentials come from the environment. Off the HTTP path both answer nil.",
 	"apps/books/ask.go": "narrateAsk — the payer for the ONE grounded completion an Ask narrates with. " +
 		"The bill lands on principal.Ledger, the SELECTED billing org, which a SuperAdmin masquerade " +
 		"moves off the effective org — so principal.OrgFrom would charge the org being INSPECTED for a " +
