@@ -113,7 +113,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // the round detail read and the five deletes (typed.go, whose whole input is one
 // path segment), plus the three writes whose bodies are made only of fields the
 // bundle reads as strings (writes.go). Every one relays the bundle's own refusal
-// bytes through bundleErr.
+// bytes through goja.BundleErr.
 //
 // ELEVEN body-carrying writes stay untyped relays, and the reason is the REQUEST,
 // not the response. The bundle validates with COERCING helpers
@@ -133,9 +133,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// is harmless (the inner one is what the handler sees).
 	g.Use(cloud.Bridge())
 	// Then the bundle's own envelope: a typed op that must answer the bundle's
-	// 400/404/409/500 returns a bundleErr, and this writes those bytes back
+	// 400/404/409/500 returns a goja.BundleErr, and this writes those bytes back
 	// verbatim. Also before the leaves, for the same registration-order reason.
-	g.Use(bundleEnvelope())
+	g.Use(goja.Envelope())
 
 	// ---- the typed ops (typed.go carries the models and the prose) ----
 	//
