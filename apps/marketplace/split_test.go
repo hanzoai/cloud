@@ -48,7 +48,7 @@ import (
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/wallets"
 	"github.com/hanzoai/cloud/apps/x402"

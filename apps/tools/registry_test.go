@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // fakeProvider is a test source: a fixed tool list and a dispatch that echoes which

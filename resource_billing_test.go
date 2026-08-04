@@ -25,7 +25,7 @@ import (
 	"unsafe"
 
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
