@@ -7,7 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,40 +22,27 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// fakeCommerce is an in-memory commerce ledger: it records deposits per org (the
-// wallet balance) and lets a test SET a referee's metered spend (the qualify
-// signal). It is the money-seam stand-in that lets the tests PROVE both balances
-// move on a qualifying referral — without a live commerce deployment.
+// fakeCommerce is an in-memory stand-in for the ONE question this package asks the
+// money plane: how much has this org spent? It cannot deposit, because the seam it
+// implements cannot deposit.
 type fakeCommerce struct {
-	mu       sync.Mutex
-	balance  map[string]int64 // org → deposited cents (the wallet)
-	spend    map[string]int64 // org → metered spend cents (qualify signal)
-	deposits int              // total deposit calls (idempotency proof)
-	failDep  bool             // when true, deposit errors (to exercise the at-most-once log path)
-	seq      int
+	mu     sync.Mutex
+	spend  map[string]int64 // org → metered spend cents (qualify signal)
+	reads  int              // spendCents calls (proves the sweep did the work)
+	failOn string           // org whose spend read errors, to exercise "stays pending"
 }
 
-func newFakeCommerce() *fakeCommerce {
-	return &fakeCommerce{balance: map[string]int64{}, spend: map[string]int64{}}
-}
+func newFakeCommerce() *fakeCommerce { return &fakeCommerce{spend: map[string]int64{}} }
 
 func (f *fakeCommerce) configured() bool { return true }
-
-func (f *fakeCommerce) deposit(_ context.Context, org, _ string, amountCents int64, _, _, _ string) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.failDep {
-		return "", errUnconfigured
-	}
-	f.balance[org] += amountCents
-	f.deposits++
-	f.seq++
-	return "txn_test_" + org + "_" + strconv.Itoa(f.seq), nil
-}
 
 func (f *fakeCommerce) spendCents(_ context.Context, org, _ string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.reads++
+	if org == f.failOn {
+		return 0, errUnconfigured
+	}
 	return f.spend[org], nil
 }
 
@@ -64,39 +52,41 @@ func (f *fakeCommerce) setSpend(org string, cents int64) {
 	f.spend[org] = cents
 }
 
-func (f *fakeCommerce) bal(org string) int64 {
+func (f *fakeCommerce) readCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.balance[org]
+	return f.reads
 }
 
-func (f *fakeCommerce) depositCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.deposits
-}
-
-// mount builds a referrals app backed by a fresh store + the injected fake
-// commerce, returning the app and the fake for assertions.
+// mount builds a referrals app backed by a fresh store + the injected commerce
+// seam, returning the app and the fake for assertions.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
+	t.Helper()
+	fc := newFakeCommerce()
+	app, s := mountWith(t, fc)
+	return app, s, fc
+}
+
+// mountWith is mount over an arbitrary commerce seam, so a test can drive the real
+// payout client at a stub server instead of the in-memory fake.
+func mountWith(t *testing.T, c commerce) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
 	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	fc := newFakeCommerce()
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}, "referrals"),
 		State: state{
 			store:    store,
-			commerce: fc,
+			commerce: c,
 			linkBase: "https://hanzo.ai",
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
-	return app, s, fc
+	return app, s
 }
 
 // req drives one HTTP request. org sets a VALIDATED principal (X-Org-Id +
@@ -234,93 +224,249 @@ func TestClaimSelfAndIdempotent(t *testing.T) {
 	}
 }
 
-// TestQualifyGrantsBothSidesOnceAndBalancesMove is the CORE proof: a referee that
-// qualifies (metered spend) triggers a DOUBLE grant — referrer +$10, referee +$5 —
-// and the grant is at-most-once (a re-sweep never double-pays). Balances are
-// asserted through the (fake) commerce ledger, exactly the balance API a live
-// proof reads.
-func TestQualifyGrantsBothSidesOnceAndBalancesMove(t *testing.T) {
-	app, s, fc := mount(t)
-	ctx := context.Background()
-	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
+// ── the P0 proofs: a GET grants nothing and changes nothing ──────────────────
 
-	// orgB signs up via orgA's code.
-	if code, _ := req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode}); code != http.StatusCreated {
-		t.Fatalf("claim want 201, got %d", code)
-	}
-
-	// Not yet qualified (no spend): an admin sweep grants NOTHING; balances stay 0.
-	code, body := req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
-	if code != http.StatusOK {
-		t.Fatalf("sweep want 200, got %d (%s)", code, body)
-	}
-	if got := credited(body); got != 0 {
-		t.Fatalf("pre-qualify sweep credited=%d, want 0", got)
-	}
-	if fc.bal("orgA") != 0 || fc.bal("orgB") != 0 || fc.depositCount() != 0 {
-		t.Fatalf("pre-qualify balances moved: A=%d B=%d deposits=%d", fc.bal("orgA"), fc.bal("orgB"), fc.depositCount())
-	}
-
-	// orgB makes metered spend → now qualifies.
-	fc.setSpend("orgB", 42)
-
-	// Sweep → BOTH balances move: A +$10 (1000c), B +$5 (500c). Exactly 2 deposits.
-	code, body = req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
-	if code != http.StatusOK {
-		t.Fatalf("qualify sweep want 200, got %d (%s)", code, body)
-	}
-	if got := credited(body); got != 1 {
-		t.Fatalf("qualify sweep credited=%d, want 1", got)
-	}
-	if fc.bal("orgA") != referrerBonusCents {
-		t.Fatalf("referrer balance = %d, want %d", fc.bal("orgA"), referrerBonusCents)
-	}
-	if fc.bal("orgB") != refereeBonusCents {
-		t.Fatalf("referee balance = %d, want %d", fc.bal("orgB"), refereeBonusCents)
-	}
-	if fc.depositCount() != 2 {
-		t.Fatalf("deposit count = %d, want 2 (one per side)", fc.depositCount())
-	}
-
-	// IDEMPOTENT: a re-sweep + a referrer page load must NOT grant again.
-	req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
-	req(t, app, http.MethodGet, "/v1/referrals", "orgA", false, nil) // lazy check re-runs
-	if fc.bal("orgA") != referrerBonusCents || fc.bal("orgB") != refereeBonusCents {
-		t.Fatalf("double-grant! A=%d B=%d", fc.bal("orgA"), fc.bal("orgB"))
-	}
-	if fc.depositCount() != 2 {
-		t.Fatalf("idempotency broken: deposit count = %d, want 2", fc.depositCount())
-	}
-}
-
-// TestLazyQualifyOnReferrerRead proves the referrer's own GET /v1/referrals runs
-// the qualify check (self-updating page) — no admin sweep needed — and the view
-// reports the earned credit + credited status.
-func TestLazyQualifyOnReferrerRead(t *testing.T) {
+// TestGetIsPureReadAndAdvancesNothing is THE regression test for the live defect
+// this package shipped: GET /v1/referrals ran a "lazy qualify sweep" that reached
+// a deposit, so merely LOADING the referrals page minted platform credit.
+//
+// It sets up the exact state that used to mint — a claimed referral whose referee
+// HAS metered spend, i.e. one that qualifies — then loads the page as the referrer
+// and asserts the referral is untouched: still signup, qualifiedAt still 0. The GET
+// is a report, not a transition.
+func TestGetIsPureReadAndAdvancesNothing(t *testing.T) {
 	app, s, fc := mount(t)
 	ctx := context.Background()
 	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
 	req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode})
-	fc.setSpend("orgB", 7) // qualifies
+	fc.setSpend("orgB", 5000) // orgB WOULD qualify — this is the minting precondition
 
-	// orgA loads their referrals page → the lazy check grants both sides.
+	before, err := s.State.store.getByReferee(ctx, "orgB")
+	if err != nil {
+		t.Fatalf("getByReferee: %v", err)
+	}
+
+	// Load the page repeatedly — the old code granted on every load.
+	for i := 0; i < 3; i++ {
+		code, body := req(t, app, http.MethodGet, "/v1/referrals", "orgA", false, nil)
+		if code != http.StatusOK {
+			t.Fatalf("GET /v1/referrals want 200, got %d (%s)", code, body)
+		}
+	}
+
+	after, err := s.State.store.getByReferee(ctx, "orgB")
+	if err != nil {
+		t.Fatalf("getByReferee: %v", err)
+	}
+	if after.Status != StatusSignup {
+		t.Fatalf("GET advanced the referral: status %q → %q (a read must not transition state)", before.Status, after.Status)
+	}
+	if after.QualifiedAt != 0 {
+		t.Fatalf("GET set qualifiedAt=%d — a read must not write", after.QualifiedAt)
+	}
+	if after != before {
+		t.Fatalf("GET mutated the referral row:\n before %+v\n after  %+v", before, after)
+	}
+	// The read never even ASKS the money plane: no qualify check, so no spend read.
+	if n := fc.readCount(); n != 0 {
+		t.Fatalf("GET made %d commerce read(s); a pure read touches the money plane 0 times", n)
+	}
+
+	// And the capability is not lost — it moved to the gated write. One admin sweep
+	// qualifies it, which is the ONLY door.
+	if code, body := req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil); code != http.StatusOK {
+		t.Fatalf("sweep want 200, got %d (%s)", code, body)
+	}
+	swept, _ := s.State.store.getByReferee(ctx, "orgB")
+	if swept.Status != StatusQualified || swept.QualifiedAt == 0 {
+		t.Fatalf("admin sweep did not qualify: %+v", swept)
+	}
+}
+
+// TestLedgerReceivesZeroDeposits proves the absence of the mint at the WIRE, not
+// at an interface a test could fake into agreement: the service is bound to the
+// REAL payout client, pointed at a stub commerce that fails the test if anything
+// ever posts to a money-in endpoint.
+//
+// It then drives every route on the surface, in the state that used to pay out.
+// The only request commerce may see is the read-only usage rollup.
+func TestLedgerReceivesZeroDeposits(t *testing.T) {
+	var mu sync.Mutex
+	var hits []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits = append(hits, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+
+		// ANY write to the money plane is the bug. Fail loudly rather than 500 and
+		// let a swallowed error look like success.
+		if r.Method != http.MethodGet {
+			t.Errorf("commerce received a WRITE the referrals surface must never make: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if strings.Contains(r.URL.Path, "deposit") || strings.Contains(r.URL.Path, "credit") {
+			t.Errorf("commerce received a money-in call: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		// The qualify signal: orgB has spent.
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"consumedCents":4242}`))
+	}))
+	defer srv.Close()
+
+	app, s := mountWith(t, newCommerceClient(srv.URL, "test-service-token"))
+	ctx := context.Background()
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
+
+	// Exercise the whole surface in the qualifying state.
+	req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode})
+	req(t, app, http.MethodGet, "/v1/referrals", "orgA", false, nil)
+	req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
+	req(t, app, http.MethodGet, "/v1/referrals", "orgA", false, nil)
+	req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
+	req(t, app, http.MethodGet, "/v1/admin/referrals/bonuses", "admin", true, nil)
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, h := range hits {
+		if !strings.HasPrefix(h, "GET /v1/billing/usage/rollup") {
+			t.Fatalf("unexpected commerce call %q — the only call this surface may make is the usage rollup (all hits: %v)", h, hits)
+		}
+	}
+	// The referral did qualify over that run, so the surface was genuinely exercised
+	// in the state that used to pay — the zero above is not a vacuous zero.
+	ref, err := s.State.store.getByReferee(ctx, "orgB")
+	if err != nil {
+		t.Fatalf("getByReferee: %v", err)
+	}
+	if ref.Status != StatusQualified {
+		t.Fatalf("referral never qualified (%+v) — the no-deposit proof would be vacuous", ref)
+	}
+}
+
+// TestCommerceSeamIsReadOnly pins the SHAPE of the money seam. The mint existed
+// because the seam carried a deposit method; with no write method on the interface,
+// reviving the mint cannot be a one-line call — it has to start by re-declaring the
+// capability here, in front of a test that says no.
+func TestCommerceSeamIsReadOnly(t *testing.T) {
+	typ := reflect.TypeOf((*commerce)(nil)).Elem()
+	banned := []string{"deposit", "credit", "grant", "mint", "transfer", "refund", "charge", "payout"}
+	for i := 0; i < typ.NumMethod(); i++ {
+		name := strings.ToLower(typ.Method(i).Name)
+		for _, b := range banned {
+			if strings.Contains(name, b) {
+				t.Fatalf("commerce seam grew a money-moving method %q — referrals issues no credit; a referral reward is an affiliate payable in commerce, settled by wire or wallet", typ.Method(i).Name)
+			}
+		}
+	}
+	// And it is exactly the read it claims to be.
+	if got := typ.NumMethod(); got != 2 {
+		t.Fatalf("commerce seam has %d methods, want 2 (configured, spendCents)", got)
+	}
+}
+
+// TestWriteMethodsRequireOrg proves the gate is scoped by SAFE METHOD rather than
+// by naming POST. The predecessor waved through everything that was not POST, which
+// is the reasoning that let a GET reach a deposit; a verb this package does not even
+// serve must still be refused without a principal, never silently allowed.
+func TestWriteMethodsRequireOrg(t *testing.T) {
+	app, _, _ := mount(t)
+	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		code, _ := req(t, app, m, "/v1/referrals/claim", "", false, map[string]any{"code": "ZZZZZZZZ"})
+		if code == http.StatusOK || code == http.StatusCreated {
+			t.Fatalf("%s with no principal was allowed (got %d)", m, code)
+		}
+	}
+	// GET stays open to the gate (its handler does its own 403) so health probes work.
+	if code, _ := req(t, app, http.MethodGet, "/v1/referrals", "", false, nil); code != http.StatusForbidden {
+		t.Fatalf("no-principal GET want 403 from the handler, got %d", code)
+	}
+}
+
+// ── qualification (the surviving capability) ─────────────────────────────────
+
+// TestSweepQualifiesOnceAndIsIdempotent: the admin sweep advances a referee that
+// has spent, exactly once, and a re-sweep is a no-op.
+func TestSweepQualifiesOnceAndIsIdempotent(t *testing.T) {
+	app, s, fc := mount(t)
+	ctx := context.Background()
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
+
+	if code, _ := req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode}); code != http.StatusCreated {
+		t.Fatalf("claim want 201, got %d", code)
+	}
+
+	// No spend yet → sweep qualifies nothing.
+	code, body := req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
+	if code != http.StatusOK {
+		t.Fatalf("sweep want 200, got %d (%s)", code, body)
+	}
+	if got := qualifiedCount(body); got != 0 {
+		t.Fatalf("pre-spend sweep qualified=%d, want 0", got)
+	}
+
+	// orgB makes metered spend → now qualifies.
+	fc.setSpend("orgB", 42)
+	code, body = req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
+	if code != http.StatusOK {
+		t.Fatalf("qualify sweep want 200, got %d (%s)", code, body)
+	}
+	if got := qualifiedCount(body); got != 1 {
+		t.Fatalf("qualify sweep qualified=%d, want 1", got)
+	}
+	first, _ := s.State.store.getByReferee(ctx, "orgB")
+	if first.Status != StatusQualified || first.QualifiedAt == 0 {
+		t.Fatalf("not qualified: %+v", first)
+	}
+
+	// Re-sweep: already qualified, so it is no longer pending and nothing moves.
+	_, body = req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
+	if got := qualifiedCount(body); got != 0 {
+		t.Fatalf("re-sweep qualified=%d, want 0 (at-most-once)", got)
+	}
+	again, _ := s.State.store.getByReferee(ctx, "orgB")
+	if again != first {
+		t.Fatalf("re-sweep mutated the row:\n first %+v\n again %+v", first, again)
+	}
+}
+
+// TestQualifyStaysPendingOnCommerceError: a money-plane hiccup leaves the referral
+// honestly pending rather than qualifying it on a failed read.
+func TestQualifyStaysPendingOnCommerceError(t *testing.T) {
+	app, s, fc := mount(t)
+	ctx := context.Background()
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
+	req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode})
+	fc.setSpend("orgB", 99)
+	fc.failOn = "orgB"
+
+	if code, _ := req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil); code != http.StatusOK {
+		t.Fatalf("sweep want 200")
+	}
+	ref, _ := s.State.store.getByReferee(ctx, "orgB")
+	if ref.Status != StatusSignup {
+		t.Fatalf("commerce error qualified the referral anyway: %+v", ref)
+	}
+}
+
+// TestMyReferralsView: the customer read reports code, link and attribution — and
+// carries no money field, because there is no money.
+func TestMyReferralsView(t *testing.T) {
+	app, s, fc := mount(t)
+	ctx := context.Background()
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
+	req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode})
+	fc.setSpend("orgB", 7)
+	req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
+
 	code, body := req(t, app, http.MethodGet, "/v1/referrals", "orgA", false, nil)
 	if code != http.StatusOK {
 		t.Fatalf("GET /v1/referrals want 200, got %d (%s)", code, body)
 	}
-	var view struct {
-		Code               string `json:"code"`
-		Link               string `json:"link"`
-		CreditsEarnedCents int64  `json:"creditsEarnedCents"`
-		Counts             struct {
-			Total, Credited int
-		} `json:"counts"`
-		Referrals []struct {
-			Referee      string `json:"referee"`
-			Status       string `json:"status"`
-			CreditsCents int64  `json:"creditsCents"`
-		} `json:"referrals"`
-	}
+	var view myReferrals
 	if err := json.Unmarshal(body, &view); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
@@ -330,24 +476,22 @@ func TestLazyQualifyOnReferrerRead(t *testing.T) {
 	if view.Link != "https://hanzo.ai/?ref="+aCode {
 		t.Fatalf("link = %q", view.Link)
 	}
-	if view.CreditsEarnedCents != referrerBonusCents {
-		t.Fatalf("creditsEarned = %d, want %d", view.CreditsEarnedCents, referrerBonusCents)
+	if view.Counts.Total != 1 || view.Counts.Qualified != 1 {
+		t.Fatalf("counts = %+v, want total=1 qualified=1", view.Counts)
 	}
-	if view.Counts.Credited != 1 || len(view.Referrals) != 1 || view.Referrals[0].Status != StatusCredited {
-		t.Fatalf("view not credited: %+v", view)
+	if len(view.Referrals) != 1 || view.Referrals[0].Status != StatusQualified {
+		t.Fatalf("rows = %+v", view.Referrals)
 	}
-	if view.Referrals[0].CreditsCents != referrerBonusCents {
-		t.Fatalf("row credits = %d, want %d", view.Referrals[0].CreditsCents, referrerBonusCents)
+	if view.Referrals[0].Referee != "orgB" {
+		t.Fatalf("referee = %q, want orgB", view.Referrals[0].Referee)
 	}
-	// Balances moved (via commerce).
-	if fc.bal("orgA") != referrerBonusCents || fc.bal("orgB") != refereeBonusCents {
-		t.Fatalf("balances: A=%d B=%d", fc.bal("orgA"), fc.bal("orgB"))
-	}
+	// No credit vocabulary survives on the wire.
+	assertNoMoneyKeys(t, body)
 	_ = ctx
 }
 
 // TestAdminGateAndDirectory: /v1/admin/referrals/bonuses is SuperAdmin fail-closed,
-// and exposes both orgs + a summary.
+// and exposes both orgs + a summary with no amounts.
 func TestAdminGateAndDirectory(t *testing.T) {
 	app, s, fc := mount(t)
 	ctx := context.Background()
@@ -383,24 +527,42 @@ func TestAdminGateAndDirectory(t *testing.T) {
 		t.Fatalf("admin referrals len = %d, want 1", len(out.Referrals))
 	}
 	r0 := out.Referrals[0]
-	if r0.ReferrerOrg != "orgA" || r0.RefereeOrg != "orgB" || r0.Status != StatusCredited {
+	if r0.ReferrerOrg != "orgA" || r0.RefereeOrg != "orgB" || r0.Status != StatusQualified {
 		t.Fatalf("admin row wrong: %+v", r0)
 	}
-	if out.Summary.Total != 1 || out.Summary.Credited != 1 || out.Summary.GrantedCents != referrerBonusCents+refereeBonusCents {
+	if out.Summary.Total != 1 || out.Summary.Qualified != 1 {
 		t.Fatalf("summary wrong: %+v", out.Summary)
+	}
+	assertNoMoneyKeys(t, body)
+	_ = ctx
+}
+
+// assertNoMoneyKeys fails if a response carries any credit/grant vocabulary. The
+// old wire advertised bonus amounts and granted cents; a field that can only ever
+// report zero is a lie about what this surface does, so none may survive.
+func assertNoMoneyKeys(t *testing.T, body []byte) {
+	t.Helper()
+	for _, k := range []string{
+		"creditsEarnedCents", "creditsCents", "referrerBonusCents", "refereeBonusCents",
+		"referrerGrantCents", "refereeGrantCents", "grantedCents", "referrerTxn", "refereeTxn",
+		"creditedAt", "credited",
+	} {
+		if bytes.Contains(body, []byte(`"`+k+`"`)) {
+			t.Fatalf("response still carries credit vocabulary %q: %s", k, body)
+		}
 	}
 }
 
-// credited pulls the "credited" count out of an ENVELOPED sweep response
-// ({status,msg,data:{swept,credited}}).
-func credited(body []byte) int {
+// qualifiedCount pulls the "qualified" count out of an ENVELOPED sweep response
+// ({status,msg,data:{swept,qualified}}).
+func qualifiedCount(body []byte) int {
 	var out struct {
 		Data struct {
-			Credited int `json:"credited"`
+			Qualified int `json:"qualified"`
 		} `json:"data"`
 	}
 	_ = json.Unmarshal(body, &out)
-	return out.Data.Credited
+	return out.Data.Qualified
 }
 
 // lower is a tiny helper (avoid importing strings just for the test).
