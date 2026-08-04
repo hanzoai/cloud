@@ -701,3 +701,52 @@ func TestInProcessResolverWinsOverTheFallback(t *testing.T) {
 		t.Errorf("fallback was consulted %d times; the in-process store must win", n)
 	}
 }
+
+// TestForwardedHostNeverOverridesOurOwnHost is the host-confusion regression.
+//
+// requestHost used to decide "is the parsed host real" by asking "is it a host we
+// would SERVE" — siteSlug, else customCandidate. The gap between those two
+// questions is exactly OUR OWN domains: `login.hanzo.ai` names no site, and
+// customCandidate excludes it BY DESIGN (IsSelfHost), so neither arm fired and the
+// client-supplied X-Forwarded-Host won. A request addressed to our auth apex then
+// resolved and served whatever custom domain the header named — a tenant's content
+// under our hostname, needing no site_hosts row on hanzo.ai at all.
+//
+// The two tests that look like they pinned this (TestMiddlewareTenantKeyedByHostNotPath,
+// TestMiddlewareForwardedHostNeverOverridesARealHost) both send a host that IS a
+// site, so the early return fired and the header was never read. They proved the
+// property only in the case where it already held.
+func TestForwardedHostNeverOverridesOurOwnHost(t *testing.T) {
+	fr := &fakeResolver{found: false}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	// hanzo.ai is OURS here, exactly as ConfigFromEnv derives it in production.
+	s := New(Config{Apex: "hanzo.app", SelfDomains: []string{"hanzo.ai"}}, luxlog.New("test"))
+	t.Cleanup(func() { SetSelfDomains(nil) })
+	app := newTestApp(s)
+
+	for _, host := range []string{"login.hanzo.ai", "api.hanzo.ai", "hanzo.ai"} {
+		fr.reset()
+		req := httptest.NewRequest("GET", "http://"+host+"/index.html", nil)
+		req.Header.Set("X-Forwarded-Host", "attacker.example")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+		if got := fr.slugs(); len(got) != 0 {
+			t.Errorf("%s: the binding resolver was asked about %v — a client header "+
+				"overrode a host WE operate, so a request addressed to our own name "+
+				"would serve a tenant's site", host, got)
+		}
+		if resp.Header.Get("X-Sentinel") != "hit" {
+			t.Errorf("%s: did not reach the normal API pipeline", host)
+		}
+	}
+}
+
+// reset clears the recorded calls so one fake can serve a table of cases.
+func (f *fakeResolver) reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls, f.orgCalls = nil, nil
+}

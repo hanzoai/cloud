@@ -182,3 +182,59 @@ func TestRegistrableDomain(t *testing.T) {
 		}
 	}
 }
+
+// TestSelfDomainsAreAFloorNotADefault: CLOUD_SITES_SELF_DOMAINS ADDS to the
+// domains we always hold; it can never subtract one.
+//
+// It used to WIN OUTRIGHT — `if len(self) == 0 { self = defaultSelfDomains(...) }`
+// — so an operator adding a vanity domain silently removed the derived ones. That
+// set is the SOLE unconditional gate on the site_hosts table (projects
+// Store.bindHost asks sites.Ours) and the serve gate's self-host exclusion, so
+// dropping hanzo.ai makes every `<label>.hanzo.ai` a tenant's to claim: a
+// first-come row on `api.hanzo.ai` denies our own production host to us for good,
+// which is verbatim the defect SetSelfDomains was added to close.
+//
+// Nothing would have caught it in review either, because hanzo.ai reaches the set
+// by DERIVATION from CLOUD_DOMAIN — no deployment states it, so no deployment
+// diff would show it leaving. The reserved LABELS already have exactly this floor
+// (reserved.go: "trimming the env only ever ADDS ... never subtracts"); this is
+// the same rule on the half that guards the more dangerous decision.
+func TestSelfDomainsAreAFloorNotADefault(t *testing.T) {
+	prodEnv(t)
+	// The operator adds a vanity domain, meaning to ADD.
+	t.Setenv("CLOUD_SITES_SELF_DOMAINS", "vanity.example")
+	got := selfOf(ConfigFromEnv(""))
+	self := map[string]bool{}
+	for _, d := range got {
+		self[d] = true
+	}
+	for _, floor := range []string{"hanzo.app", "hanzo.ai"} {
+		if !self[floor] {
+			t.Errorf("%q left the self-domain set when the operator added a vanity "+
+				"domain (%v) — every <label>.%s is now a tenant's to claim, and a "+
+				"first-come row on it denies us our own host", floor, got, floor)
+		}
+	}
+	if !self["vanity.example"] {
+		t.Errorf("the operator's own addition was dropped: %v", got)
+	}
+	// The floor survives even when the first-party apex — the OTHER source of
+	// hanzo.ai — is pointed elsewhere. One source going away must not take it.
+	t.Setenv("CLOUD_SITES_FIRSTPARTY_APEX", "elsewhere.example")
+	self = map[string]bool{}
+	for _, d := range selfOf(ConfigFromEnv("")) {
+		self[d] = true
+	}
+	if !self["hanzo.ai"] {
+		t.Error("hanzo.ai held only via the first-party apex — it must come from the floor")
+	}
+	// And the derived floor still tracks the deployment's own domain.
+	t.Setenv("CLOUD_DOMAIN", "api.lux.network")
+	self = map[string]bool{}
+	for _, d := range selfOf(ConfigFromEnv("")) {
+		self[d] = true
+	}
+	if !self["lux.network"] {
+		t.Error("the deployment's own registrable domain is not in its self-domain set")
+	}
+}
