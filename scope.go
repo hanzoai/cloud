@@ -119,21 +119,58 @@ func newScope(app *zip.App, name string, prefixes []string) *scope {
 // "/v1/kms" owns "/v1/kms/auth" and does not own "/v1/kmsx".
 func (s *scope) owns(path string) bool {
 	for _, p := range s.prefixes {
-		if path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/") {
+		if under(path, p) {
 			return true
 		}
 	}
 	return false
 }
 
-// Use installs the middleware once per declared prefix. On a bare app this is the
-// app-wide door; here it is the subsystem's own subtrees and nothing else.
+// Use installs the subsystem's middleware so it runs for the subsystem's own
+// subtrees and nothing else.
+//
+// IT IS INSTALLED ONCE, AT THE ROOT, AND GATED BY PATH — not once per prefix.
+// The per-prefix form (s.app.Group(p).Use(...)) is what took nine plugins down:
+// Group(p) creates a NODE at p, while the subsystem's routes are registered
+// through whatever router IT used — scope.Get delegates straight to s.app, so
+// they land on the ROOT node. Same paths, different nodes. zip >= 1.23 checks
+// the subtree OF THE NODE THE MIDDLEWARE IS ON, finds it empty, and refuses to
+// compose a program whose middleware could never run:
+//
+//	panic: the group "/v1/avatar" declares middleware at scope.go
+//	       and no routes anywhere beneath it
+//
+// Declaring prefixes did not fix it — it only moved the panic from /v1/account
+// to /v1/avatar — because the mismatch is the NODE, not the prefix list.
+//
+// The root always has routes, so nothing is empty; `owns` then does what the
+// per-prefix node was there to do, and does it on the request rather than on the
+// tree. Confinement is unchanged and still tested: a neighbour's path fails
+// `owns` and the handler is skipped.
 func (s *scope) Use(cs ...zip.Component) zip.Router {
-	var last zip.Router
-	for _, p := range s.prefixes {
-		last = s.app.Group(p).Use(cs...)
+	out := make([]zip.Component, 0, len(cs))
+	for _, c := range cs {
+		h, ok := c.(zip.Handler)
+		if !ok {
+			// A composed *App, not a wrapping handler: there is nothing to gate on
+			// a per-request basis, so it keeps the subtree form it always had.
+			for _, p := range s.prefixes {
+				s.app.Group(p).Use(c)
+			}
+			continue
+		}
+		inner := h
+		out = append(out, zip.H(func(ctx *zip.Ctx) error {
+			if !s.owns(ctx.Path()) {
+				return ctx.Continue()
+			}
+			return inner(ctx)
+		}))
 	}
-	return last
+	if len(out) == 0 {
+		return s.app
+	}
+	return s.app.Use(out...)
 }
 
 // Group passes straight through when it carries no middleware — a bare group is
@@ -141,11 +178,36 @@ func (s *scope) Use(cs ...zip.Component) zip.Router {
 // prefix must be one the subsystem owns; if it is not, the group is created
 // WITHOUT the middleware and the escape is recorded for MountAll to fail on.
 func (s *scope) Group(prefix string, handlers ...zip.Handler) zip.Router {
-	if len(handlers) == 0 || s.owns(prefix) {
-		return s.app.Group(prefix, handlers...)
+	if len(handlers) == 0 {
+		return s.app.Group(prefix) // a bare group is just a path prefix
 	}
-	*s.escaped = append(*s.escaped, prefix)
+	if !s.owns(prefix) {
+		*s.escaped = append(*s.escaped, prefix)
+		return s.app.Group(prefix)
+	}
+	// Gated at the root by path, for the same reason Use is: a group node
+	// carrying middleware is empty whenever the routes beneath it were
+	// registered through a different router — which is exactly what scope.Get
+	// does — and zip refuses to compose that. The gate is the prefix itself, so
+	// the middleware still runs for this subtree and nothing else.
+	wrapped := make([]zip.Component, 0, len(handlers))
+	for _, h := range handlers {
+		inner := h
+		wrapped = append(wrapped, zip.H(func(ctx *zip.Ctx) error {
+			if !under(ctx.Path(), prefix) {
+				return ctx.Continue()
+			}
+			return inner(ctx)
+		}))
+	}
+	s.app.Use(wrapped...)
 	return s.app.Group(prefix)
+}
+
+// under reports whether path is p or lives inside it. Shared by the two gates so
+// "inside my subtree" has ONE meaning.
+func under(path, p string) bool {
+	return path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/")
 }
 
 func (s *scope) Get(p string, h ...zip.Handler) zip.Router     { return s.app.Get(p, h...) }
