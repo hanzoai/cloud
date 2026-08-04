@@ -2,6 +2,7 @@ package integrations
 
 import (
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -181,5 +182,51 @@ func TestResolveStateKey(t *testing.T) {
 		if len(k) < minStateKeyLen {
 			t.Fatalf("fallback key must be >=%d bytes, got %d", minStateKeyLen, len(k))
 		}
+	}
+}
+
+// A rejected state must stay ONE opaque failure to the caller while carrying the
+// precise reason for the log. The distinction that matters most in production is
+// "signed by a different key" (a restart with no operator key, so every in-flight
+// flow breaks) versus "expired" (the user simply took too long) — they look
+// identical in the browser and demand opposite responses from an operator.
+func TestVerifyCauseSeparatesWrongKeyFromExpiry(t *testing.T) {
+	signer := testService()
+	tok, err := sign(signer, "acme", "slack", "n")
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	// A DIFFERENT process: same code, its own randomly generated key.
+	other := testService()
+	other.State.stateKey = resolveStateKey("", nil)
+
+	_, err = verify(other, tok, "slack")
+	if !errors.Is(err, errBadState) {
+		t.Fatalf("a foreign-key state must still fail as errBadState, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "signature mismatch") {
+		t.Fatalf("cause must name the key mismatch, got %q", err)
+	}
+	if !strings.Contains(err.Error(), stateKeyEnv) {
+		t.Fatalf("cause must point at the env var that fixes it, got %q", err)
+	}
+
+	// Expiry is a different cause entirely, and must not read as a key problem.
+	defer func(d time.Duration) { stateTTL = d }(stateTTL)
+	stateTTL = -time.Second
+	expired, err := sign(signer, "acme", "slack", "n")
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	_, err = verify(signer, expired, "slack")
+	if !errors.Is(err, errBadState) {
+		t.Fatalf("expired state must fail as errBadState, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("cause must say expired, got %q", err)
+	}
+	if strings.Contains(err.Error(), "signature mismatch") {
+		t.Fatalf("expiry must not be reported as a key mismatch, got %q", err)
 	}
 }

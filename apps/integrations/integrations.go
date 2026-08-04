@@ -1191,25 +1191,29 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	pid := providerParam(c)
 	p, ok := orgProvider(s, pid)
 	if !ok {
-		return failRedirect(s, c, pid, "unknown provider")
+		return failRedirect(s, c, pid, "unknown provider", nil)
 	}
 
 	payload, err := verify(s, c.Query("state"), p.ID)
 	if err != nil {
-		return failRedirect(s, c, p.ID, "invalid state")
+		return failRedirect(s, c, p.ID, "invalid state", err)
 	}
 	// Consume the single-use nonce, bound to (org,provider). Burned BEFORE the
 	// exchange so one state = one attempt: a replay (or a slow-flow retry) finds
 	// zero rows and fails here, never double-exchanging.
 	consumed, err := s.State.store.ConsumeNonce(c.Context(), payload.Nonce, payload.Org, p.ID)
 	if err != nil {
-		return failRedirect(s, c, p.ID, "state error")
+		return failRedirect(s, c, p.ID, "state error", err)
 	}
 	if !consumed {
-		return failRedirect(s, c, p.ID, "state already used or expired")
+		return failRedirect(s, c, p.ID, "state already used or expired",
+			fmt.Errorf("org %s: nonce not present (replayed, or GC'd after %s)", payload.Org, stateTTL))
 	}
 	if e := strings.TrimSpace(c.Query("error")); e != "" {
-		return failRedirect(s, c, p.ID, "authorization denied")
+		// The provider's own refusal text, bounded: it is remote input on a public
+		// route, so it is logged at a fixed width and never reflected to the browser.
+		return failRedirect(s, c, p.ID, "authorization denied",
+			fmt.Errorf("org %s: provider reported %q", payload.Org, truncate(e, 200)))
 	}
 	code := strings.TrimSpace(c.Query("code"))
 	if code == "" {
@@ -1220,22 +1224,23 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 		code = strings.TrimSpace(c.Query("installation_id"))
 	}
 	if code == "" {
-		return failRedirect(s, c, p.ID, "missing authorization code")
+		return failRedirect(s, c, p.ID, "missing authorization code",
+			fmt.Errorf("org %s: neither code nor installation_id present", payload.Org))
 	}
 	if len(code) > maxCodeLen {
-		return failRedirect(s, c, p.ID, "authorization code too large")
+		return failRedirect(s, c, p.ID, "authorization code too large",
+			fmt.Errorf("org %s: %d bytes exceeds %d", payload.Org, len(code), maxCodeLen))
 	}
 	if !p.Configured() {
-		return failRedirect(s, c, p.ID, "provider not configured")
+		return failRedirect(s, c, p.ID, "provider not configured", nil)
 	}
 	if !kmsReady(s) {
-		return failRedirect(s, c, p.ID, "secret store unavailable")
+		return failRedirect(s, c, p.ID, "secret store unavailable", nil)
 	}
 
 	res, err := p.Exchange(c.Context(), p.Creds(), redirectURI(s, p), code)
 	if err != nil || res == nil {
-		s.Log.Warn("oauth exchange failed", "provider", p.ID, "org", payload.Org, "err", err)
-		return failRedirect(s, c, p.ID, "token exchange failed")
+		return failRedirect(s, c, p.ID, "token exchange failed", fmt.Errorf("org %s: %w", payload.Org, err))
 	}
 	// Harden the provider-supplied NON-secret metadata at the framework ingest
 	// boundary — ONE place, every provider — before it is logged, stored, or
@@ -1246,7 +1251,7 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	// connection row, so a KMS failure leaves NO half-connected state advertising a
 	// token that was never stored.
 	if err := sealTokens(s, kmsPath(payload.Org, p.ID), res.Tokens); err != nil {
-		return failRedirect(s, c, p.ID, "secret custody failed")
+		return failRedirect(s, c, p.ID, "secret custody failed", fmt.Errorf("org %s: %w", payload.Org, err))
 	}
 	conn := Connection{
 		Org:      payload.Org,
@@ -1259,8 +1264,7 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 		Scopes:       res.Scopes,
 	}
 	if err := s.State.store.Upsert(c.Context(), conn); err != nil {
-		s.Log.Warn("connection upsert failed", "provider", p.ID, "org", payload.Org, "err", err)
-		return failRedirect(s, c, p.ID, "persist failed")
+		return failRedirect(s, c, p.ID, "persist failed", fmt.Errorf("org %s: %w", payload.Org, err))
 	}
 	s.Log.Info("integration connected", "provider", p.ID, "org", payload.Org, "account", res.AccountLabel, "externalId", res.ExternalID)
 	return successRedirect(s, c, p.ID, res.AccountLabel)
@@ -1365,8 +1369,15 @@ func successRedirect(s *cloud.Service[state], c *zip.Ctx, provider, account stri
 	return redirect(c, consoleRedirectURL(s.State.consoleURL, "connected", provider, "account", account))
 }
 
-// failRedirect 302s to {console}/integrations?error={provider}&reason=<short msg>.
-func failRedirect(s *cloud.Service[state], c *zip.Ctx, provider, reason string) error {
+// failRedirect 302s to {console}/integrations?error={provider}&reason=<short msg>,
+// and is the ONE place a failed OAuth return is recorded. reason is the opaque
+// public label the browser sees; cause (nil when reason is the whole truth) is the
+// precise internal detail, which goes ONLY to the log. Logging here rather than at
+// each call site is what makes "every failure is recorded" a property of the funnel
+// instead of a habit — a silent callback is indistinguishable from one that never
+// arrived, and that ambiguity is expensive to debug.
+func failRedirect(s *cloud.Service[state], c *zip.Ctx, provider, reason string, cause error) error {
+	s.Log.Warn("oauth callback rejected", "provider", provider, "reason", reason, "cause", cause)
 	return redirect(c, consoleRedirectURL(s.State.consoleURL, "error", provider, "reason", reason))
 }
 
