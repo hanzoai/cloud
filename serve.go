@@ -101,7 +101,17 @@ func Listen(plugins []Plugin, enable []string) error {
 	// writer never double-opens the exclusive-lock ZapDB/audit stores. Default
 	// OFF: a Recreate single-writer never overlaps and needs no lease, so an unset
 	// variable is byte-identical to today.
-	if cfg.WriterLease {
+	//
+	// ONLY THE HOST TAKES IT. The lease interlocks two POD GENERATIONS across a
+	// roll — the thing it is guarding against is a second pod on the same PVC. A
+	// plugin child is not a second pod: it is part of the writer that already
+	// holds the lease, sharing the same DataDir by design. cloud is a plugin host
+	// now, so without this test every child races the host for a single-holder
+	// lock on one inode, the losers block until the 90s fail-closed deadline,
+	// nothing binds :8000, and the pod is killed by its own liveness probe and
+	// restarted into the identical deadlock. That is a total api.hanzo.ai outage
+	// produced entirely by the safety mechanism.
+	if cfg.WriterLease && !underRouter() {
 		release, lerr := acquireWriterLease(cfg.DataDir, 90*time.Second, luxlog.New("cloud").New("subsystem", "writer-lease"))
 		if lerr != nil {
 			return fmt.Errorf("writer lease: %w", lerr)
