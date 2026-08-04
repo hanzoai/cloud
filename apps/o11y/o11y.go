@@ -721,12 +721,27 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	// the observability plane is ONE `o11y` subsystem. /v1/o11y/health is unaffected:
 	// it stays the generic always-ok route (the o11y Wire entry keeps OwnsHealth=false),
 	// registered before MountAll and thus ahead of this wildcard.
-	// Mount takes the router and nothing else: a route table is a value, and the
-	// router it registers into already carries this deployment's logger. It used
-	// to take Deps for that one field, which made github.com/hanzoai/o11y require
-	// github.com/hanzoai/cloud — a module cycle, and the reason o11y's own
-	// community binary could not link its own route declarations.
-	return o11y.Mount(a)
+	// Mount takes the router and its own options, nothing else: a route table is a
+	// value, and the router it registers into already carries this deployment's
+	// logger. It used to take Deps for that one field, which made
+	// github.com/hanzoai/o11y require github.com/hanzoai/cloud — a module cycle,
+	// and the reason o11y's own community binary could not link its own route
+	// declarations.
+	//
+	// The three claims are the addresses THIS package serves natively, declared
+	// above in mountScope. The table names every route it owns, so there is no
+	// wildcard left for a host's route to quietly win against: two declarations at
+	// one address is a refusal to compose, not a shadow. Claiming is how the host
+	// says which of them it takes — and it takes these three because its handlers
+	// are TENANT-SCOPED, resolving the caller's org and pinning the read to it,
+	// where the table's relay hands the call to the runtime with no org on it. The
+	// ordering that used to decide this decided it invisibly, and the two handlers
+	// could have drifted apart forever without anyone being told.
+	return o11y.Mount(a, o11y.Claimed(
+		"GET /v1/o11y/logs",
+		"GET /v1/o11y/metrics",
+		"POST /v1/o11y/query_range",
+	))
 }
 
 // shutdownO11y tears down the write-plane resources that hold process-lifetime
