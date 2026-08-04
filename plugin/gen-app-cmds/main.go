@@ -51,14 +51,13 @@ var pkgOf = map[string]string{
 }
 
 // notApps are the plugin/ directories that are tools, not fleet subsystems: the
-// smoke prober, this generator, and the two one-off migration utilities. They
-// are exempt from the bijection; everything ELSE under plugin/ must be a manifest
-// app. (The light host is cmd/cloud — the ONE thing under cmd/, never here.)
+// smoke prober, this generator, and the KMS re-seal migration. They are exempt
+// from the bijection; everything ELSE under plugin/ must be a manifest app. (The
+// light host is cmd/cloud — the ONE thing under cmd/, never here.)
 var notApps = map[string]bool{
-	"smoke":                true,
-	"gen-app-cmds":         true,
-	"kmsreseal":            true,
-	"migrate-pg-to-sqlite": true,
+	"smoke":        true,
+	"gen-app-cmds": true,
+	"kmsreseal":    true,
 }
 
 func main() {
