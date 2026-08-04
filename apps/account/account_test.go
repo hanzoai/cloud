@@ -37,9 +37,17 @@ type fakeIAM struct {
 	revokedFor  []string
 	revokedType []string
 	movedTo     map[string]string // id → new owner (from update-user)
+	// rows is every row update-user was asked to write, whole. movedTo keeps only
+	// the owner, which is all the onboarding move needed; the profile photo is a
+	// different field of the same write, so the row itself is what a test must see.
+	rows []map[string]any
 	createdOrgs []map[string]any
 	failAddOrg  bool // when true, add-organization answers status!=ok
 	failMintKey bool
+	// failUpdateUser models an IAM that accepts the read but refuses the write —
+	// the state where a profile photo's bytes have landed and the record pointing
+	// at them has not.
+	failUpdateUser bool
 	// ignoreKeyType models an IAM that predates the type field: it drops the
 	// parameter and mints the secret key it always did.
 	ignoreKeyType bool
@@ -199,6 +207,11 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		_ = json.Unmarshal(body, &row)
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if f.failUpdateUser {
+			bad(w, "update refused")
+			return
+		}
+		f.rows = append(f.rows, row)
 		if owner, _ := row["owner"].(string); owner != "" {
 			f.movedTo[id] = owner
 		}
