@@ -421,23 +421,6 @@ type riskSurface struct {
 	Gap string `json:"gap,omitempty"`
 }
 
-// riskAppetiteIn restates the risk appetite, which is the decision the model is not
-// permitted to make for itself.
-type riskAppetiteIn struct {
-	// Review is the share of the stream that may be sent for examination, in
-	// (0, 0.5]. The alert threshold is derived from it as a quantile of the scores
-	// actually observed, so the level is governed rather than tuned.
-	Review float64 `json:"review"`
-	// Sample is the share of below-the-line events retained for review, in
-	// [0, 1]. It is the instrument that measures what the model missed; there are
-	// no labels, so nothing else can.
-	Sample float64 `json:"sample"`
-	// Live turns the model out of shadow. It defaults to FALSE on every call, so
-	// going live is always an explicit act and never a side effect of changing a
-	// number.
-	Live bool `json:"live"`
-}
-
 // riskSnapshotIn takes nothing off the wire.
 type riskSnapshotIn struct{}
 
@@ -848,44 +831,6 @@ func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error)
 		return nil, wrap(err)
 	}
 	ver, err := p.regimeNow(t)
-	if err != nil {
-		return nil, wrap(err)
-	}
-	pay(1)
-	out := modelState(t, st, p.surface(t), agg, ver)
-	return &out, nil
-}
-
-// SetAppetite restates how much of the stream the caller organisation's model may
-// send for examination, and whether it is live.
-//
-// The appetite is the decision a model is not permitted to make for itself: its
-// output is a probability, so how likely it is to MISS something is a matter of
-// policy that has to be stated, measured and reviewed rather than absorbed into a
-// constant. The alert threshold is then derived from it as a quantile of the
-// scores actually observed, which is what keeps its meaning as the distribution
-// drifts.
-//
-// Learned state survives the change. The model's identity covers its SHAPE — the
-// inventory and the geometry — and not its appetite, so restating policy unlearns
-// nothing.
-//
-// Example: {"review":0.01,"sample":0.001,"live":false}
-func (o ops) appetite(ctx context.Context, in *riskAppetiteIn) (*riskModelState, error) {
-	// The bounds on `review` and `sample` are NOT restated here. They live in
-	// admitRegime, which every path that records a regime goes through — including
-	// the one-time adoption of a regime that predates the record — so a rule stated
-	// here as well would be a second spelling to disagree with the first.
-	pay, err := o.gate(ctx, "appetite", 1)
-	if err != nil {
-		return nil, err
-	}
-	p, t, leave, err := o.admit(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer leave()
-	st, agg, ver, err := p.appetite(t, in.Review, in.Sample, in.Live, caller(ctx))
 	if err != nil {
 		return nil, wrap(err)
 	}
