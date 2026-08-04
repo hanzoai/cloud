@@ -89,14 +89,16 @@ type state struct {
 	store *Store
 	blob  *blobStore
 	cf    *sites.Purger
-	// operatorOrgs may bind a CUSTOM domain to their sites WITHOUT proving they
-	// own it, in addition to a global admin — the platform operator (the
-	// deployment's own brand org) manages customer DNS, so its bind is the vouch.
-	// Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) overrides; default is the
-	// brand org (hanzo). Keyed by the VERBATIM validated IAM owner — the same value
-	// org() resolves, never a fold (operatorOrgsFromEnv says why). Every OTHER org
-	// self-serves: it claims the host pending and proves control with the DNS
-	// challenge (domains.go).
+	// operatorOrgs are the orgs whose ADMINS may bind a CUSTOM domain to their sites
+	// WITHOUT proving they own it, in addition to a SuperAdmin — the platform
+	// operator (the deployment's own brand org) manages customer DNS, so its admin's
+	// bind is the vouch. Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated)
+	// overrides; default is the brand org (hanzo). Keyed by the VERBATIM validated
+	// IAM owner — the same value org() resolves, never a fold (operatorOrgsFromEnv
+	// says why). Membership of one of these orgs grants NOTHING on its own: the set
+	// is one half of a conjunction whose other half is IAM's org-admin bit (see
+	// domains.go vouches). Every OTHER caller self-serves: it claims the host pending
+	// and proves control with the DNS challenge (domains.go).
 	operatorOrgs map[string]bool
 	// resolver reads the custom-domain ownership challenge (domains.go); nil ⇒ the
 	// system resolver. Tests inject a fake so verification is deterministic.

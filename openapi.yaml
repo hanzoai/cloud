@@ -83995,16 +83995,19 @@ paths:
         Attaches one or more CUSTOM public hostnames to this org's site.
 
         Binding a host you do not own would let you shadow it at the edge, so which
-        outcome you get depends on whether ownership is already established: a
-        platform admin or the platform-operator org — which manages customer DNS, so
-        its bind IS the vouch — binds VERIFIED immediately; any other org has the host
+        outcome you get depends on whether ownership is already established: a caller
+        vouches (a SuperAdmin, or an ADMIN of a platform-operator org — which manages
+        customer DNS, so its admin's bind IS the vouch) and binds VERIFIED immediately;
+        every other caller, INCLUDING a plain member of an operator org, has the host
         CLAIMED as pending and gets the DNS challenge back in `bound[].records`. A
         pending claim HOLDS the name so nobody else can take it, but it does not route
         until POST .../domains/{host}/verify proves control.
 
         A hostname we operate is refused to a non-vouched caller (those are assigned
         by the platform, never claimed), a host another site already holds is a 409,
-        and a reserved label is a 400. Claims and binds are idempotent for the same
+        and a name the platform holds is a 400 for EVERY caller — a vouch skips the
+        ownership proof, never the host table's own invariant. Claims and binds are
+        idempotent for the same
         (org, slug), and re-claiming returns the SAME token rather than invalidating a
         record the customer has already published. The edge cache-tag is flushed
         afterwards so a newly-verified host serves the current build immediately.
@@ -85387,16 +85390,19 @@ paths:
         Attaches one or more CUSTOM public hostnames to this org's site.
 
         Binding a host you do not own would let you shadow it at the edge, so which
-        outcome you get depends on whether ownership is already established: a
-        platform admin or the platform-operator org — which manages customer DNS, so
-        its bind IS the vouch — binds VERIFIED immediately; any other org has the host
+        outcome you get depends on whether ownership is already established: a caller
+        vouches (a SuperAdmin, or an ADMIN of a platform-operator org — which manages
+        customer DNS, so its admin's bind IS the vouch) and binds VERIFIED immediately;
+        every other caller, INCLUDING a plain member of an operator org, has the host
         CLAIMED as pending and gets the DNS challenge back in `bound[].records`. A
         pending claim HOLDS the name so nobody else can take it, but it does not route
         until POST .../domains/{host}/verify proves control.
 
         A hostname we operate is refused to a non-vouched caller (those are assigned
         by the platform, never claimed), a host another site already holds is a 409,
-        and a reserved label is a 400. Claims and binds are idempotent for the same
+        and a name the platform holds is a 400 for EVERY caller — a vouch skips the
+        ownership proof, never the host table's own invariant. Claims and binds are
+        idempotent for the same
         (org, slug), and re-claiming returns the SAME token rather than invalidating a
         record the customer has already published. The edge cache-tag is flushed
         afterwards so a newly-verified host serves the current build immediately.
