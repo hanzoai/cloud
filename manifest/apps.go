@@ -128,6 +128,28 @@ var Apps = []App{
 	// counters and answer one question two ways — with no error and no log. One
 	// owner of the state, one row.
 	//
+	// label is the GROUND-TRUTH plane: what turned out to be fraud, who said so,
+	// and when they could first have said it. It addresses under /v1/risk because
+	// the ADDRESS IS THE PRODUCT — openapi.Product reads an operation's product
+	// tag off the first /v1 segment and nothing else — and ground truth is part of
+	// the risk product, not of the KServe model-SERVING product the row above
+	// carries. An earlier cut of this row said /v1/ml/labels, which is the same
+	// mistake the row above already records having made: it would have filed seven
+	// compliance operations into a live product with four paths and different
+	// customers on it.
+	//
+	// IT MUST PRECEDE risk, whose prefix is the bare /v1/risk: the router takes the
+	// first prefix that matches, so the more specific address is registered first
+	// or every label op lands on the decision plane. TestSpecificPrefixesPrecede
+	// pins it, so the constraint is a test rather than a comment.
+	//
+	// It is its own subsystem rather than a leaf of the decision plane because its
+	// WRITERS are mostly not that plane — commerce adjudicates the dispute, the
+	// compliance face closes the case, an analyst files the review — and its record
+	// is a compliance record with a retention clock of its own. A separate row also
+	// means a separate per-tenant file, so no second process ever opens the
+	// decision plane's single-writer store.
+	{Name: "label", Prefixes: []string{"/v1/risk/labels"}},
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
 	{Name: "risk", Prefixes: []string{"/v1/risk"}},
