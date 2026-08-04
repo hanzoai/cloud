@@ -71,6 +71,42 @@ func TestSelfDomainsCoverTheBrandApex(t *testing.T) {
 	}
 }
 
+// The first-party apex has to reach the PUBLISHED set, not just the local slice the
+// constructor was still building.
+//
+// SetSelfDomains COPIES its argument, so publishing before the fold left the
+// first-party apex out of IsSelfHost — the one predicate that answers "is this host
+// ours". The test above cannot see it: production lists hanzo.ai in SelfDomains AND
+// as the first-party apex, so the set is right there by the first route regardless.
+// Under a config that names it only as FirstPartyApex, every non-allowlisted
+// <label>.<fpApex> became a custom-domain CANDIDATE on the apex carrying
+// api/login/console — a claim row a customer could take.
+func TestFirstPartyApexReachesThePublishedSet(t *testing.T) {
+	prodEnv(t)
+	t.Cleanup(func() { SetSelfDomains(nil) })
+
+	srv := New(Config{
+		Apex:            "hanzo.app",
+		SelfDomains:     nil, // names the first-party apex NOWHERE but FirstPartyApex
+		FirstPartyApex:  "hanzo.ai",
+		FirstPartyOrg:   "hanzo",
+		FirstPartySites: []string{"cd"},
+	}, luxlog.New("test"))
+
+	for _, h := range []string{"hanzo.ai", "api.hanzo.ai", "login.hanzo.ai"} {
+		if !IsSelfHost(h) {
+			t.Errorf("IsSelfHost(%q) = false — the first-party apex never reached the published set", h)
+		}
+		if srv.customCandidate(h) {
+			t.Errorf("customCandidate(%q) = true — a customer could bind one of our own hosts", h)
+		}
+	}
+	// The exclusion must stay narrow: a genuinely external domain is still bindable.
+	if !srv.customCandidate("yadota.tech") {
+		t.Error("customCandidate(yadota.tech) = false — real custom domains would stop resolving")
+	}
+}
+
 // The operator variable ADDS to the baked-in denylist and can never subtract from
 // it. This is why an empty CLOUD_SITES_RESERVED is not a hole: the labels an
 // attacker wants are in reserved.go, not in the environment.
