@@ -37,7 +37,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -61,8 +60,6 @@ func main() {
 
 	listen := flag.String("listen", getenv("CLOUD_LISTEN", ":8080"), "HTTP listen address")
 	zapAddr := flag.String("zap", getenv("CLOUD_ZAP_LISTEN", ":9653"), "ZAP-RPC listen address")
-	enable := flag.String("enable", os.Getenv("CLOUD_ENABLE"), "comma-separated subsystems to mount; empty mounts all")
-
 	// The operator flags helm and universe pass to the ENTRYPOINT. The host
 	// consumes none of them itself — it is a router; it opens no store and
 	// validates no token — but the per-app CHILDREN read them from the environment
@@ -83,7 +80,7 @@ func main() {
 		"CLOUD_IAM_ISSUER": *iamIssuer,
 	})
 
-	if err := run(*listen, *zapAddr, *enable); err != nil {
+	if err := run(*listen, *zapAddr); err != nil {
 		fmt.Fprintln(os.Stderr, "cloud:", err)
 		os.Exit(1)
 	}
@@ -102,7 +99,7 @@ func forward(kv map[string]string) {
 	}
 }
 
-func run(addr, zapAddr, enable string) error {
+func run(addr, zapAddr string) error {
 	// THE FLEET'S ONE AGENT DOOR is served BY THIS HOST, at POST /v1/mcp, and
 	// zip's is switched off so that exactly one handler holds the address.
 	//
@@ -126,7 +123,6 @@ func run(addr, zapAddr, enable string) error {
 	// host's own environment — both BEFORE the first Load spawns an eager child.
 	secret, rootKey := stampAndScrub()
 
-	on := enabled(enable)
 	// absent is what this host tried to mount and could not: name → why. Written
 	// only by the loops below, read only by the health route registered after
 	// them, so it is frozen before anything serves and needs no lock.
@@ -138,29 +134,20 @@ func run(addr, zapAddr, enable string) error {
 	// because the broker-first split would put the fleet's document in an order
 	// that is not the fleet's.
 	//
-	// It is the enable list applied, coresident apps included: an app that mounts
-	// as middleware on a sibling's router still SERVES its routes, so it belongs in
-	// the document even though the host claims no prefix for it.
+	// Coresident apps included: an app that mounts as middleware on a sibling's
+	// router still SERVES its routes, so it belongs in the document even though
+	// the host claims no prefix for it.
 	composed := make([]string, 0, len(manifest.Apps))
 	for _, a := range manifest.Apps {
-		if on == nil || on[a.Name] {
-			composed = append(composed, a.Name)
-		}
+		composed = append(composed, a.Name)
 	}
 
-	// The broker is a precondition, not a selection. Every child this host spawns
-	// carries a CREDZ_TOKEN, and credz refuses to fall back to a dev key once a
-	// token is present — so a child that cannot reach the broker resolves Unkeyed
-	// and fails closed at its FIRST store open, in every build. An allowlist that
-	// omits it therefore does not produce a smaller deployment; it produces one
-	// where no child can open a store, and the symptom is every eager child exiting
-	// 1 with "CLOUD_KMS_MASTER_KEY_REF is required" while the loop below silently
-	// mounts no broker at all. Refused for the same reason a name the manifest does
-	// not list is refused: the alternative is a deployment that cannot work and does
-	// not say so.
-	if on != nil && !on[launch.Broker] {
-		return fmt.Errorf("--enable omits %q, the credential broker every other child pulls its data-plane key from; add it or drop --enable", launch.Broker)
-	}
+	// THE MANIFEST IS THE APP SET. The host mounts what it was built with; there
+	// is no second list to disagree with it. The broker below is ordered first
+	// because every other child pulls its data-plane key from it, not because it
+	// was selected — a deployment that omitted it produced children that all
+	// failed at their first store open, which is why naming the set twice was
+	// never a smaller deployment, only a broken one.
 
 	// THE BROKER FIRST, and eagerly. Every other app pulls its data-plane key and
 	// its scoped credentials from it, so an app that starts before it has nothing
@@ -174,28 +161,21 @@ func run(addr, zapAddr, enable string) error {
 	// a mount MEANS is one function (mount), so the failure policy cannot drift
 	// between them.
 	for _, a := range manifest.Apps {
-		if a.Name != launch.Broker || (on != nil && !on[a.Name]) {
+		if a.Name != launch.Broker {
 			continue
 		}
 		if err := mount(app, a, true, secret, rootKey, absent); err != nil {
 			return err
 		}
-		delete(on, a.Name)
 	}
 
 	for _, a := range manifest.Apps {
-		if a.Name == launch.Broker || (on != nil && !on[a.Name]) {
+		if a.Name == launch.Broker {
 			continue
 		}
 		if err := mount(app, a, a.Eager, secret, rootKey, absent); err != nil {
 			return err
 		}
-		delete(on, a.Name)
-	}
-	// A name that matched nothing is a typo, and the symptom of tolerating one is
-	// a subsystem that is simply absent from a deployment with no error anywhere.
-	if len(on) > 0 {
-		return fmt.Errorf("--enable names %v, which the manifest does not list — run `make generate` if the app is new, else fix the name", keys(on))
 	}
 
 	// Liveness belongs to the HOST, not to any app: it must answer while every
@@ -618,28 +598,6 @@ func childEnv(app, secret, rootKey string) []string {
 
 // enabled parses the subsystem allowlist. nil means every app, which is the
 // default and the shape a full deployment runs.
-func enabled(list string) map[string]bool {
-	list = strings.TrimSpace(list)
-	if list == "" {
-		return nil
-	}
-	on := map[string]bool{}
-	for _, n := range strings.Split(list, ",") {
-		if n = strings.TrimSpace(n); n != "" {
-			on[n] = true
-		}
-	}
-	return on
-}
-
-func keys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
 
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
