@@ -17896,8 +17896,8 @@ components:
           additionalProperties:
             type: object
           description: |-
-            Status is the live status its operator owns (kserve, trainer or katib),
-            verbatim. Absent until that operator has written one.
+            Status is the live status kserve owns, verbatim. Absent until kserve has
+            written one.
           type: object
       type: object
     mlResourceList:
@@ -17905,18 +17905,6 @@ components:
         items:
           description: Items is one entry per object, newest LAST (the Kubernetes
             list order).
-          items:
-            $ref: '#/components/schemas/mlResource'
-          type: array
-      type: object
-    mlTrials:
-      properties:
-        experiment:
-          description: Experiment is the experiment the trials belong to, echoed from
-            the path.
-          type: string
-        items:
-          description: Items is one entry per Trial, in the list shape (no spec).
           items:
             $ref: '#/components/schemas/mlResource'
           type: array
@@ -93733,212 +93721,6 @@ paths:
       tags:
       - traffic
       x-app: github.com/hanzoai/ai
-  /v1/train/experiments:
-    get:
-      description: |-
-        Lists the caller org's tuning experiments. Each entry carries
-        the experiment's name, when Kubernetes admitted it, and katib's live status —
-        the spec is on the single-experiment read.
-      operationId: get_v1_train_experiments
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlResourceList'
-          description: ok
-      summary: Lists the caller org's tuning experiments.
-      tags:
-      - train
-      x-app: ml
-    post:
-      description: |-
-        Starts a katib hyperparameter search in the caller's own tenant namespace and answers the created Experiment, 201. The spec is katib's own, relayed as given, so the whole search-algorithm surface is available without this layer enumerating it.
-
-        One experiment fans out into many Trials, and each trial is real compute — so the BALANCE GATE RUNS FIRST, before anything is created, and fails CLOSED when commerce cannot be reached. The refusal carries the fleet's nested error body, which is why this is not a typed op. The submission fee is debited from the caller org's own ledger on success, asynchronously and best-effort.
-
-        The trials the search creates are read through the experiment's own trials list. Tenant namespace from the validated org and project, never a field; an unvalidated caller is refused. DNS-1123 name, and a duplicate is a 409.
-      operationId: post_v1_train_experiments
-      summary: Start a hyperparameter-tuning experiment
-      tags:
-      - train
-      x-app: ml
-  /v1/train/experiments/{name}:
-    delete:
-      description: |-
-        Deletes a hyperparameter-tuning experiment. Kubernetes
-        garbage-collects the Trials katib created under it, because they carry the
-        Experiment as their owner. Answers 204, or 404 for a name the caller's org does
-        not own.
-      operationId: delete_v1_train_experiments_name
-      parameters:
-      - description: |-
-          Name is the resource to act on, taken from the path. Lower-cased and
-          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
-        example: sweep-1
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Deletes a hyperparameter-tuning experiment.
-      tags:
-      - train
-      x-app: ml
-    get:
-      description: |-
-        Returns one hyperparameter-tuning experiment. Its spec comes with
-        it, and katib's live status, which is where the best trial found so far is
-        reported.
-      operationId: get_v1_train_experiments_name
-      parameters:
-      - description: |-
-          Name is the resource to act on, taken from the path. Lower-cased and
-          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
-        example: sweep-1
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlResource'
-          description: ok
-      summary: Returns one hyperparameter-tuning experiment.
-      tags:
-      - train
-      x-app: ml
-  /v1/train/experiments/{name}/trials:
-    get:
-      description: |-
-        Lists the katib Trials one experiment owns. The experiment is read
-        FIRST, so a name the caller's org does not own is a clean 404 rather than an
-        empty list; the Trials themselves are selected by katib's own
-        katib.kubeflow.org/experiment label within the caller's tenant namespace.
-      operationId: get_v1_train_experiments_name_trials
-      parameters:
-      - description: |-
-          Name is the resource to act on, taken from the path. Lower-cased and
-          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
-        example: sweep-1
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlTrials'
-          description: ok
-      summary: Lists the katib Trials one experiment owns.
-      tags:
-      - train
-      x-app: ml
-  /v1/train/health:
-    get:
-      description: |-
-        Reports whether the training plane is genuinely usable: that the Kubernetes API answers, and that BOTH the TrainJob and the Experiment CRDs are served by this cluster. A live check, not a flag read back.
-
-        200 only when all of it checks out; otherwise 503 carrying the per-CRD report and the real error. That body is why this is not a typed op — the error envelope a typed refusal renders would drop it.
-
-        It names each CRD separately on purpose: a cluster can serve training but not tuning, and the difference decides whether a job submission or only an experiment will fail. Answers about the cluster, not a tenant, so it takes no org and reveals no tenant data.
-      operationId: get_v1_train_health
-      summary: Whether training and tuning can actually work right now
-      tags:
-      - train
-      x-app: ml
-  /v1/train/jobs:
-    get:
-      description: |-
-        Lists the training jobs in the caller's org. Each entry carries the
-        job's name, when Kubernetes admitted it, and the trainer operator's live status
-        — the spec is on the single-job read.
-      operationId: get_v1_train_jobs
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlResourceList'
-          description: ok
-      summary: Lists the training jobs in the caller's org.
-      tags:
-      - train
-      x-app: ml
-    post:
-      description: |-
-        Submits a training job into the caller's own tenant namespace and answers the created resource, 201. The spec is the Kubeflow TrainJob spec, relayed as given, so the trainer's full surface is reachable without this layer modelling it.
-
-        THE BALANCE GATE RUNS FIRST, before the namespace or the job is created, and it fails CLOSED — an unreachable commerce refuses rather than admits. That is what keeps an unfunded org from starting GPU compute. The refusal carries the fleet's nested error body, which is why this route is not a typed op. On success the submission fee is debited from the caller org's own ledger, asynchronously and best-effort.
-
-        Submitting is not finishing: the answer is the job as accepted, not a result — poll the job read for status. The tenant namespace comes from the validated org and project, never from a field; an unvalidated caller is refused. The name must be a DNS-1123 label, and a name already in use is a 409.
-      operationId: post_v1_train_jobs
-      summary: Submit a training job
-      tags:
-      - train
-      x-app: ml
-  /v1/train/jobs/{name}:
-    delete:
-      description: |-
-        Deletes a training job. Kubernetes garbage-collects the pods the
-        trainer operator created under it, because they carry the TrainJob as their
-        owner — so deleting the job is how a run is stopped. Answers 204, or 404 for a
-        name the caller's org does not own.
-      operationId: delete_v1_train_jobs_name
-      parameters:
-      - description: |-
-          Name is the resource to act on, taken from the path. Lower-cased and
-          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
-        example: finetune-1
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Deletes a training job.
-      tags:
-      - train
-      x-app: ml
-    get:
-      description: |-
-        Returns one training job. Its spec comes with it, and the trainer
-        operator's live status, which is where a run's phase and its conditions are
-        reported.
-      operationId: get_v1_train_jobs_name
-      parameters:
-      - description: |-
-          Name is the resource to act on, taken from the path. Lower-cased and
-          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
-        example: finetune-1
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlResource'
-          description: ok
-      summary: Returns one training job.
-      tags:
-      - train
-      x-app: ml
   /v1/translate:
     post:
       description: |-
@@ -96398,8 +96180,8 @@ tags:
     cannot INSTALL.
   name: messages
 - name: metrics
-- description: 'Package ml is model serving and training: deploy a model behind an
-    endpoint, run a training job, tune it with experiments.'
+- description: 'Package ml is model serving: deploy a model behind an endpoint and
+    call it.'
   name: ml
 - description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
     /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
@@ -96579,9 +96361,6 @@ tags:
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
     cannot INSTALL.
   name: traffic
-- description: 'Package ml is model serving and training: deploy a model behind an
-    endpoint, run a training job, tune it with experiments.'
-  name: train
 - description: Package translate is text in, the same text out in the language you
     asked for.
   name: translate
