@@ -350,7 +350,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// A typed op receives only a context, so the request the ?host= default falls
 	// back to has to be parked there. Installed BEFORE the leaf — fiber runs
 	// middleware in registration order, so one installed after it never runs.
-	app.Group("/v1/flags/waitlist").Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 	zip.Get(cloud.ZipApp(app), "/v1/flags/waitlist", waitlistOps{}.mode)
 	log.Info("admission gate ready", "services", n)
 	return nil
