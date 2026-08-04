@@ -164,16 +164,32 @@ var Apps = []App{
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
 	{Name: "risk", Prefixes: []string{"/v1/risk"}},
-	// The dataset plane sits BESIDE ml under /v1/ml rather than inside it, because
-	// the two share a face and nothing else. ml is a Kubernetes CRD bridge whose
-	// tenant boundary is a per-org NAMESPACE and whose failure domain is the
-	// cluster; this is a warehouse-backed record plane whose tenant boundary is a
-	// qualified `<brand>/<org>` KEY and whose failure domain is the columnar store.
-	// One package holding two tenancy models is the shape a privilege bug grows in,
-	// so they are two rows claiming two disjoint sets of leaves — and zip refuses
-	// two owners for one prefix at compose time, which checks it rather than
-	// trusting it.
-	{Name: "dataset", Prefixes: []string{"/v1/ml/datasets"}},
+	// dataset is the RECORD of what a model was fitted on: a versioned, immutable
+	// snapshot of one tenant's own event surface. Same address rule as label and
+	// reference, for the third time — openapi.Product reads the product off the
+	// first /v1 segment, and these seven operations are the risk product's. This row
+	// said /v1/ml/datasets, which published them as part of the KServe model-SERVING
+	// plane: one prefix, two products, and `ml` counted 14 operations that were seven
+	// serving ops and seven dataset ops. The rows here feed the risk model, which
+	// learns in-process from the org's own events, and never KServe.
+	//
+	// It is its own subsystem rather than a leaf of the decision plane because it
+	// shares no state with a scorer — no in-memory model, no ring, no single-writer
+	// file — and its tenant boundary is a different value: risk holds an in-process
+	// per-org model, this holds a qualified `<brand>/<org>` KEY into a columnar
+	// store. One package holding two tenancy models is the shape a privilege bug
+	// grows in, so they are two rows claiming two disjoint sets of leaves, and zip
+	// refuses two owners for one prefix at compose time.
+	//
+	// IT DOES NOT NEED TO PRECEDE risk, and that is MEASURED, not assumed: with the
+	// bare /v1/risk registered FIRST, the live router still delivers
+	// /v1/risk/datasets here and /v1/risk/labels to label. zip resolves NESTED
+	// static prefixes by SPECIFICITY, so mount order decides only between EQUAL
+	// patterns — which is why ai-before-zen (below) is a real decision and this is
+	// not. So this row stays where it already sat: reordering a frozen mount
+	// sequence to satisfy a rule the router does not apply would be churn, and the
+	// four /v1/risk apps are contiguous either way.
+	{Name: "dataset", Prefixes: []string{"/v1/risk/datasets"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
