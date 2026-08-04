@@ -144,10 +144,6 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 		zip.WithOperationID("riskState"),
 		zip.WithSummary("Report your organisation's model: what it learned, and what it realised"),
 		zip.WithTags("risk"))
-	zip.Put(g, "/state/appetite", o.appetite,
-		zip.WithOperationID("riskSetAppetite"),
-		zip.WithSummary("Restate the risk appetite, and whether the model is live"),
-		zip.WithTags("risk"))
 	zip.Post(g, "/state/snapshot", o.snapshot,
 		zip.WithOperationID("riskSnapshot"),
 		zip.WithSummary("Pin your organisation's learned state so a decision can be reproduced"),
@@ -157,9 +153,19 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 		zip.WithOperationID("riskRestore"),
 		zip.WithSummary("Install previously pinned state into your organisation's model"),
 		zip.WithTags("risk"))
+	// ONE ADDRESS FOR THE DECISION REGIME, read and written. The write used to be
+	// PUT /v1/risk/state/appetite — a second address for the same plane, named after
+	// the mutable spot the regime happened to sit in, answering a fifteen-field
+	// report of the whole model to a call that changes three numbers. Both verbs
+	// answer riskPolicyOut now, so a caller has one shape to understand and the
+	// write's answer is exactly what the read would say next.
 	zip.Get(g, "/policy", o.policy,
 		zip.WithOperationID("riskPolicy"),
 		zip.WithSummary("Your organisation's decision-regime history, and which version is in force"),
+		zip.WithTags("risk"))
+	zip.Put(g, "/policy", o.appetite,
+		zip.WithOperationID("riskSetPolicy"),
+		zip.WithSummary("State the decision regime: the appetite, the sample, and whether the model is live"),
 		zip.WithTags("risk"))
 	zip.Get(g, "/features", o.features,
 		zip.WithOperationID("riskFeatures"),
