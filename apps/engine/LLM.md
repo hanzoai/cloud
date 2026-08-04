@@ -60,8 +60,9 @@ route onto a shared runtime hands each tenant every other tenant's
 availability. Mutations arrive when engines are per-org instances, not
 before.
 
-Config: ENGINE_UPSTREAM (default `http://engine.hanzo.svc.cluster.local:1234`
-— 1234 is `hanzo serve`'s default port), ENGINE_API_KEY (KMS-synced platform
+Config: ENGINE_UPSTREAM (default `http://engine.hanzo.svc.cluster.local:36900`
+— 36900 is the port svc/engine actually exposes; 1234 is standalone
+`hanzo serve`'s default and is right on a dev box), ENGINE_API_KEY (KMS-synced platform
 credential, rides `Authorization: Bearer` upstream; a bare `hanzo serve`
 enforces none). Upstream 401/403 → caller sees 503 (deployment fault, never a
 caller-auth bug); upstream 5xx → 502; unreachable → 503.
