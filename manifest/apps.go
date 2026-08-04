@@ -1,8 +1,9 @@
 // This file is HAND-AUTHORED. It is the SOURCE OF TRUTH for the fleet.
 //
-// Apps is every subsystem that ships as its own binary, in mount order — which
-// IS the routing order: the host loads them in this sequence and the router
-// takes the first prefix that matches. Four facts per app and no more — name,
+// Apps is every subsystem that ships as its own binary, in the order the host
+// loads them. That order is NOT what decides which app a path reaches: the router
+// resolves nested static prefixes by SPECIFICITY, and mount order breaks ties only
+// between EQUAL patterns (ai before zen, at the tail). Four facts per app and no more — name,
 // the absolute paths it answers, whether it must already be running when the
 // first request arrives, and whether the host should take traffic at all without
 // it — because that is the whole of what the light host needs to know (cmd/cloud
@@ -20,10 +21,16 @@
 // them: a row HERE (the host's view) and plugin/<name>/main.go (the app's view).
 // plugin/gen-app-cmds reads THIS list to scaffold a new app's main and to VALIDATE
 // that the two never drift — every row has a plugin/<name> serving exactly it, and
-// no plugin/<name> app-binary is missing from this list. Order is deliberate: a
-// shallower prefix registered earlier wins (account's /v1/commerce/topup/wallet
-// must precede commerce's /v1/commerce), and manifest/order_test.go freezes the
-// sequence so a reorder is a decision, never an accident.
+// no plugin/<name> app-binary is missing from this list. manifest/order_test.go
+// freezes the sequence so a reorder is a decision, never an accident — but what a
+// reorder can actually change is narrow, and this header used to overstate it: it
+// claimed account's /v1/commerce/topup/wallet "must precede" commerce's
+// /v1/commerce. Measured, it does not — registering commerce FIRST still delivers
+// /v1/commerce/topup/wallet to account, because the deeper prefix is the more
+// specific one. Which app answers a path is pinned by
+// TestEveryServedPathReachesTheAppThatServesIt (manifest/router_test.go), which
+// asks the real router built from these rows; the freeze guards the sequence, not
+// the routing.
 //
 // account no longer names anything under /v1/iam. It used to — deprecated key
 // aliases and an onboard handler sitting inside IAM's prefix — and those were
@@ -138,10 +145,20 @@ var Apps = []App{
 	// compliance operations into a live product with four paths and different
 	// customers on it.
 	//
-	// IT MUST PRECEDE risk, whose prefix is the bare /v1/risk: the router takes the
-	// first prefix that matches, so the more specific address is registered first
-	// or every label op lands on the decision plane. TestSpecificPrefixesPrecede
-	// pins it, so the constraint is a test rather than a comment.
+	// IT DOES NOT HAVE TO PRECEDE risk, whose prefix is the bare /v1/risk. This row
+	// used to say it must, that the router takes the first prefix that matches, and
+	// that TestSpecificPrefixesPrecede pinned it. No such test exists — it never
+	// did — and the rule is not the router's: with the bare /v1/risk registered
+	// FIRST and all three specific prefixes after it, the live router still delivers
+	// /v1/risk/labels here, /v1/risk/reference to reference and /v1/risk/datasets to
+	// dataset. zip resolves NESTED static prefixes by SPECIFICITY; mount order
+	// decides only between EQUAL patterns, which is what the ai-before-zen note
+	// below is actually about.
+	//
+	// What DOES hold this is TestEveryServedPathReachesTheAppThatServesIt
+	// (manifest/router_test.go): it builds the real router from these rows and asks
+	// it, per published path, which app receives the request. That is an oracle over
+	// every row at once, so no row needs a rule of its own to remember.
 	//
 	// It is its own subsystem rather than a leaf of the decision plane because its
 	// WRITERS are mostly not that plane — commerce adjudicates the dispute, the
@@ -159,7 +176,7 @@ var Apps = []App{
 	// which would have filed them into a live product with four paths and
 	// different customers on it.
 	//
-	// It also precedes risk, whose prefix is the bare /v1/risk.
+	// Its position relative to risk is likewise free — see the label row above.
 	{Name: "reference", Prefixes: []string{"/v1/risk/reference"}},
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
