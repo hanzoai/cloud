@@ -1,0 +1,215 @@
+package cloud_test
+
+import (
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+// ONE NAME, ONE PRODUCT, ONE PLACE.
+//
+// cloud/apps/<name> is plugin-mode wiring for github.com/hanzoai/<name>: the
+// product owns its functionality and ships its own standalone daemon, and the
+// app MOUNTS it into the cloud process — the way apps/iam mounts hanzoai/iam.
+// When that boundary is only a convention, functionality accretes on the cloud
+// side until the app IS the product and the OSS repo is a shell. The root's
+// IAM history is the worked example, and apps/team/token — a whole bearer
+// authority one directory over from the guards that deleted its twin — is what
+// the drift looks like when nobody counts.
+//
+// So the boundary counts itself. Every app either mounts its product or holds
+// a pin below naming which kind of debt it is, and the lists only ratchet
+// DOWN: wiring an app means deleting its pin, and a new app either arrives
+// mounted or arrives with a pin somebody wrote on purpose.
+//
+// The buckets record what existed in the working set when each pin was
+// written. A same-named repo is not proof of the same product, so an entry is
+// re-verified at its migration, never trusted from here.
+
+// mismatched apps mount a real product that carries ANOTHER name. The rule
+// wants the names equal, so each entry is a rename decision owed at migration
+// — one of the two names gives way — not a settled state.
+var mismatched = map[string]string{
+	"deploy": "cd", // gitops delivery — the product repo is hanzoai/cd (Hanzo CD)
+}
+
+// unwired apps have an upstream repo to mount and do not mount it yet: the
+// functionality is (at least partly) duplicated on the cloud side. The worst
+// bucket, and the front of the migration worklist.
+var unwired = []string{
+	"admin", "analytics", "auto", "billing", "bot", "datastore", "dns",
+	"engine", "eval", "functions", "gateway", "git", "idv", "ingress", "kms",
+	"marketing", "ml", "mpc", "platform", "research", "skills", "social",
+	"team", "usage", "visor", "world", "zt",
+}
+
+// unextracted apps have no upstream repo at all: the functionality lives only
+// here. At migration each either becomes hanzoai/<name> with the app reduced
+// to wiring, or proves it is cloud's own machinery that belongs below apps/ —
+// either way the pin comes off.
+var unextracted = []string{
+	"admission", "ads", "affiliates", "agents", "answer", "ask", "auditlog",
+	"authors", "automations", "benchmark", "blueprint", "books", "bots",
+	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
+	"code", "coding", "company", "compliance", "connectorruntime", "content",
+	"controlplane", "crawl", "crm", "cron", "dataroom", "dataset",
+	"destinations", "do", "domain", "entitlements", "erp", "esign", "exec",
+	"experiments", "finance", "fleet", "flow", "goja", "graph", "guide",
+	"help", "index", "integrations", "k8s", "knowledge", "label",
+	"leaderboard", "legal", "link", "marketplace", "meet", "membership",
+	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
+	"product", "projects", "prompts", "provisioning", "reference",
+	"referrals", "registry", "risk", "rollingcap", "runtime", "s3admin",
+	"samples", "sbom", "search", "security", "settings", "share", "sites",
+	"storage", "sync", "templates", "tenant", "tools", "tracker", "translate",
+	"treasury", "validators", "venue", "wallets", "webhooks", "websearch",
+	"x402",
+}
+
+func TestEveryAppMountsItsProduct(t *testing.T) {
+	files := appFiles(t)
+
+	pinned := map[string]string{}
+	pin := func(name, list string) {
+		if prev, dup := pinned[name]; dup {
+			t.Errorf("apps/%s is pinned twice (%s and %s) — one app, one pin", name, prev, list)
+			return
+		}
+		pinned[name] = list
+	}
+	for _, n := range unwired {
+		pin(n, "unwired")
+	}
+	for _, n := range unextracted {
+		pin(n, "unextracted")
+	}
+	for n := range mismatched {
+		pin(n, "mismatched")
+	}
+
+	tally := map[string]int{}
+	for name, ff := range files {
+		imports := map[string]bool{}
+		for _, f := range ff {
+			for _, imp := range fileImports(t, f) {
+				imports[imp] = true
+			}
+		}
+		mountsSelf := mountsProduct(imports, name)
+		list, isPinned := pinned[name]
+
+		switch {
+		case mountsSelf && isPinned:
+			t.Errorf("apps/%s mounts hanzoai/%s — remove it from %s so the pins keep describing "+
+				"the code that exists; this list only ratchets down", name, name, list)
+		case mountsSelf:
+			tally["mounted"]++
+		case !isPinned:
+			t.Errorf("apps/%s mounts no product and holds no pin.\n"+
+				"cloud/apps/<name> is plugin-mode wiring for github.com/hanzoai/<name>: build the "+
+				"functionality in the product repo — which keeps its own standalone daemon, so the OSS "+
+				"product stays forkable — and mount it here. If the product repo does not exist yet, "+
+				"create it; pinning the app instead (unwired / unextracted / mismatched, whichever is "+
+				"true) is a decision made on purpose, and the migration owes its removal.", name)
+		case list == "mismatched":
+			product := mismatched[name]
+			if !mountsProduct(imports, product) {
+				t.Errorf("apps/%s is pinned as mounting hanzoai/%s and does not import it — "+
+					"fix the pin or the app", name, product)
+			} else {
+				tally[list]++
+			}
+		default:
+			tally[list]++
+		}
+	}
+
+	for name := range pinned {
+		if _, exists := files[name]; !exists {
+			t.Errorf("pin for apps/%s, which does not exist — delete the entry", name)
+		}
+	}
+
+	var parts []string
+	for _, k := range []string{"mounted", "mismatched", "unwired", "unextracted"} {
+		parts = append(parts, k+" "+strconv.Itoa(tally[k]))
+	}
+	t.Logf("apps %d: %s", len(files), strings.Join(parts, ", "))
+}
+
+// mountsProduct reports whether the import set reaches github.com/hanzoai/<product>.
+func mountsProduct(imports map[string]bool, product string) bool {
+	root := "github.com/hanzoai/" + product
+	if imports[root] {
+		return true
+	}
+	for imp := range imports {
+		if strings.HasPrefix(imp, root+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// appFiles maps each app (immediate directory of apps/) to its non-test Go
+// files, recursively, skipping testdata and hidden/underscore directories.
+func appFiles(t *testing.T) map[string][]string {
+	t.Helper()
+	entries, err := os.ReadDir("apps")
+	if err != nil {
+		t.Fatalf("read apps/: %v", err)
+	}
+	files := map[string][]string{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		files[name] = nil
+		err := filepath.WalkDir(filepath.Join("apps", name), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if d.Name() == "testdata" || strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+				files[name] = append(files[name], filepath.ToSlash(path))
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk apps/%s: %v", name, err)
+		}
+		sort.Strings(files[name])
+	}
+	return files
+}
+
+// fileImports parses just the import block of one file.
+func fileImports(t *testing.T, path string) []string {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+	if err != nil {
+		t.Errorf("parse %s: %v", path, err)
+		return nil
+	}
+	var out []string
+	for _, spec := range f.Imports {
+		imp, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			t.Errorf("%s: import %s: %v", path, spec.Path.Value, err)
+			continue
+		}
+		out = append(out, imp)
+	}
+	return out
+}
