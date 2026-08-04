@@ -39,6 +39,14 @@ func surfaceApp(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("O11Y_PROBES", "false")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// The COMPOSER's middleware, installed at the root exactly as cloud.App does
+	// (app.go) — because since "identity is the composer's" no subsystem installs
+	// it, and MountO11y least of all: a second copy at this prefix is the install
+	// that took the surface down. Without it every typed op below answers 403 no
+	// matter what it was asked, which reads like a live outage and is only ever a
+	// harness that stopped composing the way the real process does. scopeApp
+	// (scope_test.go) already states this; surfaceApp is where it was missed.
+	app.Use(cloud.Bridge())
 	if err := MountO11y(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("MountO11y: %v", err)
 	}
