@@ -639,3 +639,76 @@ func TestPolicy_TwoBrandsShareAFileAndNotAHistory(t *testing.T) {
 		}
 	}
 }
+
+// TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing holds the ONE
+// door the appetite bounds now live behind.
+//
+// Those bounds used to be spelled twice — once at [ops.appetite] and once in
+// [admitRegime] — and collapsing them to one spelling is right. But the surviving
+// spelling had no test: [admitRegime] was made to `return nil` unconditionally and
+// the WHOLE package stayed green, so the published contract
+// (`review ∈ (0, 0.5]`, `sample ∈ [0, 1]`) was enforced by code that could be
+// deleted without a single failure. That is the same shape as a control switching
+// itself off, one layer down — the bound is present, and nothing measures it.
+//
+// It asserts BOTH halves, because a refusal that half-applies is worse than no
+// bound: the call is refused with the caller's own value named, AND the regime in
+// force is untouched — no version minted, nothing in the history, and the model
+// still deciding under what it decided under before.
+//
+// Over the WIRE and not the plane, because the wire is where the contract is
+// published and where the op's deleted copy used to answer.
+//
+// Mutation proof: make [admitRegime] `return nil` and every out-of-contract case
+// below is accepted 200; delete the `if err := admitRegime(r)` call in
+// [plane.enact] and the same.
+func TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing(t *testing.T) {
+	probe.reset(true)
+	app := mountBilled(t, &ledger{available: 1_000_000})
+
+	// A regime the contract admits, so there is something in force to protect.
+	if code, body := req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA,
+		`{"review":0.02,"sample":0.10,"live":true}`); code != http.StatusOK {
+		t.Fatalf("the admissible regime was refused %d %s — the test would prove nothing", code, body)
+	}
+	held := readPolicy(t, app, orgA)
+	if held.Version != 1 {
+		t.Fatalf("version in force is %d, want 1", held.Version)
+	}
+
+	for _, bad := range []struct {
+		what string
+		body string
+	}{
+		{"a review share of zero — no cut can be derived from it", `{"review":0,"sample":0.1,"live":true}`},
+		{"a negative review share", `{"review":-0.02,"sample":0.1,"live":true}`},
+		{"a review share past the published half", `{"review":0.51,"sample":0.1,"live":true}`},
+		{"a review share stated as a count rather than a share", `{"review":50,"sample":0.1,"live":true}`},
+		{"a negative sample rate", `{"review":0.02,"sample":-0.1,"live":true}`},
+		{"a sample rate above one", `{"review":0.02,"sample":1.5,"live":true}`},
+	} {
+		code, body := req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA, bad.body)
+		if code != http.StatusBadRequest {
+			t.Fatalf("%s: PUT %s answered %d %s, want 400 — the published contract is enforced by "+
+				"nothing", bad.what, bad.body, code, body)
+		}
+		// The refusal names the field, so a caller can act on it without reading
+		// this source.
+		if !strings.Contains(string(body), "review") && !strings.Contains(string(body), "sample") {
+			t.Fatalf("%s: the refusal names neither field: %s", bad.what, body)
+		}
+	}
+
+	// NOTHING MOVED. A refused policy change that still minted a version, or still
+	// took the model live, would be the disarm this record exists to prevent —
+	// arrived at through the door that refused.
+	after := readPolicy(t, app, orgA)
+	if after.Version != held.Version || len(after.History) != len(held.History) {
+		t.Fatalf("a refused appetite moved the record: version %d→%d, history %d→%d",
+			held.Version, after.Version, len(held.History), len(after.History))
+	}
+	if len(after.History) == 0 || after.History[0].Review != 0.02 || after.History[0].Sample != 0.10 {
+		t.Fatalf("the regime in force after six refusals is %+v, want the 0.02/0.10 it was left at",
+			after.History)
+	}
+}
