@@ -31,6 +31,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud/apps/metering"
+	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
@@ -97,6 +98,23 @@ func codeFor(code string, status int) string {
 	return ""
 }
 
+// internalFault is what a 500 says when nobody decided anything.
+//
+// The rendered body used to be err.Error() verbatim, which is how a customer's
+// first fault told them about ZapDB migrations, CLOUD_KMS_MASTER_KEY_REF,
+// http://iam.hanzo.svc and features that are "not yet implemented". None of that
+// is theirs to act on and all of it is ours to know: an undecided error is text
+// written for an operator, and putting it on the wire published our internals to
+// whoever tripped it.
+//
+// The rule is provenance, not status. An *HTTPError or a *fiber.Error was
+// CONSTRUCTED by a handler that chose a status AND a sentence — a decision the
+// seam does not second-guess, which is what keeps "Billing temporarily
+// unavailable" readable. An error that arrives having chosen neither gets this
+// sentence instead, and its detail goes to the log (ErrorHandler), keyed by the
+// X-Request-Id the response carries so support can find the one line that matters.
+const internalFault = "Something went wrong on our side. The request id in this response's X-Request-Id header identifies it to support."
+
 // mapError is the whole rule: every error to exactly one {status, code, message}.
 // Past the refusals it is zip's own behaviour, kept identical so installing this
 // changes what a REFUSAL renders as and nothing else.
@@ -116,13 +134,32 @@ func mapError(err error) *zip.HTTPError {
 	if errors.As(err, &fe) {
 		return &zip.HTTPError{Status: fe.Code, Code: codeFor("", fe.Code), Msg: fe.Message}
 	}
-	return &zip.HTTPError{Status: http.StatusInternalServerError, Msg: err.Error()}
+	// UNDECIDED: nobody chose a status, so nobody chose a sentence either. The
+	// status is the honest part and it stays; the text does not.
+	return &zip.HTTPError{Status: http.StatusInternalServerError, Msg: internalFault}
 }
+
+// faultLog is where a 5xx's detail goes now that it no longer goes to the client.
+// Package-scoped so rendering an error costs no logger construction.
+var faultLog = luxlog.New("cloud").New("subsystem", "errmap")
 
 // ErrorHandler renders any error a handler propagates. Give it to zip.Config so
 // the app has one, rather than the default that reads only *zip.HTTPError.
+//
+// It is also the ONE place a fault is recorded. Every 5xx is logged whole —
+// including the ones whose sentence DID survive to the wire, because an operator
+// wants the wrapped chain and the client only ever sees the outermost sentence —
+// with the request id that ties the log line to the response the caller holds.
 func ErrorHandler(c fiber.Ctx, err error) error {
 	he := mapError(err)
+	if he.Status >= 500 {
+		faultLog.Error("request failed",
+			"status", he.Status,
+			"method", c.Method(),
+			"path", c.Path(),
+			"request_id", c.Get("X-Request-Id"),
+			"err", err)
+	}
 	c.Status(he.Status)
 	return c.JSON(he)
 }
