@@ -30,7 +30,6 @@ import (
 	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/valyala/fasthttp"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -153,7 +152,7 @@ func TestShardRouter_OwnedServedLocally(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Set("X-Org-Id", org) // the validated, server-minted org (post-SanitizeIdentity)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -203,7 +202,7 @@ func TestShardRouter_ForwardsUnownedToOwner(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/probe?x=1", nil)
 	req.Header.Set("X-Org-Id", org)
-	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 5 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 5 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -250,7 +249,7 @@ func TestShardRouter_NoOrgServedLocally(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil) // NO X-Org-Id
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("Test: %v", err)
 	}
 	if !localHit {
@@ -281,7 +280,7 @@ func TestShardRouter_LoopGuardFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set(shardHopHeader, "cloud-2") // already forwarded once
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

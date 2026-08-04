@@ -155,7 +155,7 @@ func doAs(t *testing.T, app *zip.App, method, path, org, user string, body any) 
 	if user != "" {
 		req.Header.Set("X-User-Id", user)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

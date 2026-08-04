@@ -126,7 +126,7 @@ func getWithBearer(t *testing.T, app *zip.App, path, token string) *http.Respons
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}

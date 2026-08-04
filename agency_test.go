@@ -67,7 +67,7 @@ func TestCredentialClass_ReadsTheCredentialNotTheClient(t *testing.T) {
 			if tc.ua != "" {
 				req.Header.Set("User-Agent", tc.ua)
 			}
-			if _, err := app.Fiber().Test(req); err != nil {
+			if _, err := app.Test(req); err != nil {
 				t.Fatal(err)
 			}
 			if got != tc.want {
@@ -148,7 +148,7 @@ func TestCredentialClass_UsesTheBoundarysOwnResolution(t *testing.T) {
 			req.Header.Set("X-Org-Id", "acme")
 			req.Header.Set("X-User-Id", "u-acme")
 			tc.set(req)
-			if _, err := app.Fiber().Test(req); err != nil {
+			if _, err := app.Test(req); err != nil {
 				t.Fatal(err)
 			}
 			if class != tc.wantClass {

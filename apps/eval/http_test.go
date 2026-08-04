@@ -99,7 +99,7 @@ func newReqJSON(method, path string, body any) *http.Request {
 // send runs a hand-built request through the app and returns status + body.
 func send(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	t.Helper()
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", req.Method, req.URL.Path, err)
 	}
@@ -130,7 +130,7 @@ func doAuth(t *testing.T, app *zip.App, method, path, org, authz string, body an
 	if authz != "" {
 		req.Header.Set("Authorization", authz)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

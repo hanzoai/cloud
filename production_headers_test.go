@@ -43,7 +43,7 @@ func TestProductionHeaders_WiredWithBrandRegistry(t *testing.T) {
 	}
 	for host, want := range cases {
 		req, _ := http.NewRequest("GET", "http://"+host+"/x", nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Test(%s): %v", host, err)
 		}
@@ -69,7 +69,7 @@ func TestProductionHeaders_WiredWithBrandRegistry(t *testing.T) {
 	// A non-hanzo deployment NEVER serves "hanzo" on an unmatched Host.
 	for _, host := range []string{"weird.example.com", "localhost"} {
 		req, _ := http.NewRequest("GET", "http://"+host+"/x", nil)
-		resp, _ := app.Fiber().Test(req)
+		resp, _ := app.Test(req)
 		if resp.Header.Get("Server") == "hanzo" {
 			t.Errorf("zoo deployment leaked hanzo on Host %q", host)
 		}

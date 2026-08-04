@@ -475,7 +475,7 @@ func TestRedeemRefusesUnvalidatedPrincipal(t *testing.T) {
 		strings.NewReader(`{"instrument":"pm_1"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "victim") // no X-User-Id: nothing validated this
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test request: %v", err)
 	}

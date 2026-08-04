@@ -173,7 +173,7 @@ func TestMountFailSoftWhenEngineNil(t *testing.T) {
 		t.Fatalf("Mount: %v", err)
 	}
 	rq := httptest.NewRequest(http.MethodGet, "/v1/tasks/settings", nil)
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

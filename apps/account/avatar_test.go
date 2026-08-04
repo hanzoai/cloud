@@ -170,7 +170,7 @@ func upload(t *testing.T, app *zip.App, user, org, filename string, data []byte)
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST /v1/avatar: %v", err)
 	}
@@ -182,7 +182,7 @@ func upload(t *testing.T, app *zip.App, user, org, filename string, data []byte)
 // fetch drives the read route with NO credentials, which is how an <img> loads it.
 func fetch(t *testing.T, app *zip.App, path string) (*http.Response, []byte) {
 	t.Helper()
-	resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, path, nil))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 	if err != nil {
 		t.Fatalf("Test GET %s: %v", path, err)
 	}

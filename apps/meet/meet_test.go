@@ -105,7 +105,7 @@ func ask(t *testing.T, app *zip.App, room, id, bearer string) (int, string) {
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("POST /v1/meet/getToken: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestMintRequiresRoomAndIdentity(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/v1/meet/getToken", strings.NewReader("not json"))
 	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, _ := app.Fiber().Test(req)
+	resp, _ := app.Test(req)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("malformed body = %d, want 400", resp.StatusCode)
@@ -716,7 +716,7 @@ func TestMultipleApiKeysSelectByName(t *testing.T) {
 func TestHealthSurfacesDegradation(t *testing.T) {
 	app := mount(t, teamSecret, "", "")
 	req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET /v1/meet/health: %v", err)
 	}
@@ -740,7 +740,7 @@ func TestHealthSurfacesDegradation(t *testing.T) {
 	// Configured ⇒ 200 + ready, so the probe distinguishes.
 	ok := mount(t, teamSecret, apiKey, apiSecret)
 	req2 := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
-	resp2, _ := ok.Fiber().Test(req2)
+	resp2, _ := ok.Test(req2)
 	defer func() { _ = resp2.Body.Close() }()
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("configured health = %d, want 200", resp2.StatusCode)
@@ -762,7 +762,7 @@ func TestIdentityComesFromTheToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/meet/getToken", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -809,7 +809,7 @@ func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
 			path := keyFileWith(t, keyBody(tc.key, tc.given))
 			app := mountWithKeyFile(t, tc.team, path)
 			req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
-			resp, err := app.Fiber().Test(req)
+			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("GET: %v", err)
 			}

@@ -31,7 +31,7 @@ func getJSON(t *testing.T, s *cloud.Service[state], path string) map[string]any 
 	routes(app, s)
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("X-User-IsAdmin", "true")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}
@@ -143,7 +143,7 @@ func TestNewRoutesRequireAdmin(t *testing.T) {
 		req := httptest.NewRequest("GET", path, nil)
 		req.Header.Set("Accept", "text/event-stream")
 		req.Header.Set("Sec-Fetch-Dest", "empty")
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}

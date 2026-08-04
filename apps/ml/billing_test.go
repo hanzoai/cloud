@@ -89,7 +89,7 @@ func postModel(t *testing.T, s *cloud.Service[state], org string) *http.Response
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

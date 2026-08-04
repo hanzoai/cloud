@@ -10,14 +10,13 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/money"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -74,7 +73,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

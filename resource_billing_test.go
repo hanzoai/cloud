@@ -25,8 +25,8 @@ import (
 	"unsafe"
 
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -122,16 +122,16 @@ func payerFor(t *testing.T, headers map[string]string) string {
 	var payer string
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
-	app.Use(func(c *zip.Ctx) error {
+	app.Use(zip.H(func(c *zip.Ctx) error {
 		payer = principal.Ledger(c)
 		close(done)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
-	})
+	}))
 	req := httptest.NewRequest(http.MethodPost, "/v1/provisioning/create", nil)
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("payerFor: %v", err)
 	}
 	<-done
@@ -478,7 +478,7 @@ func TestDenyResource(t *testing.T) {
 		{"/unknown", http.StatusServiceUnavailable, `"code":"balance_unavailable"`},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Test(%s): %v", tc.path, err)
 		}

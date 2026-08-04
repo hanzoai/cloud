@@ -25,7 +25,7 @@ func req(t *testing.T, app *zip.App, method, path string, hdr map[string]string,
 	for k, v := range hdr {
 		r.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(r)
+	resp, err := app.Test(r)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

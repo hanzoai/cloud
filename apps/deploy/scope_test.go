@@ -53,7 +53,7 @@ func getAs(t *testing.T, s *cloud.Service[state], path string, headers map[strin
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}
@@ -107,7 +107,7 @@ func probeScope(t *testing.T, headers map[string]string) (scope, bool) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}

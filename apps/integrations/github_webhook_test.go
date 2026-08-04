@@ -139,7 +139,7 @@ func webhookPost(t *testing.T, app *zip.App, event, sig, org string, payload []b
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("webhook: %v", err)
 	}

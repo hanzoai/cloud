@@ -12,7 +12,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -75,7 +74,7 @@ func send(t *testing.T, app *zip.App, method, path, org string, body any, admin 
 	if admin {
 		rq.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

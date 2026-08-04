@@ -56,7 +56,7 @@ func orgScopedProbe(t *testing.T, v *identityValidator, mutate func(*http.Reques
 	if mutate != nil {
 		mutate(req)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}

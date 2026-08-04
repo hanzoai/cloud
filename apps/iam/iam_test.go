@@ -40,7 +40,7 @@ func TestMountFailClosed503(t *testing.T) {
 		"/v1/iam/.well-known/jwks",
 		"/login/oauth/authorize",
 	} {
-		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, p, nil))
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, p, nil))
 		if err != nil {
 			t.Fatalf("Test(%s): %v", p, err)
 		}

@@ -84,7 +84,7 @@ func postAuth(t *testing.T, app *zip.App, path, auth, body string) (int, []byte)
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", auth)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST %s: %v", path, err)
 	}

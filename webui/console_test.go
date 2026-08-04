@@ -15,7 +15,6 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -63,7 +62,7 @@ func do(t *testing.T, app *zip.App, method, target string, headers map[string]st
 	}
 	// Timeout: 0 disables the per-request deadline (Fiber v3), so a slow CI host
 	// never flakes these in-process router calls.
-	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("test %s %s: %v", method, target, err)
 	}

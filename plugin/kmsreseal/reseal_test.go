@@ -83,7 +83,7 @@ func (c cloudDoer) Do(r *http.Request) (*http.Response, error) {
 		r.Header.Set("X-Org-Id", org)
 		r.Header.Set("X-User-Id", "u-"+org)
 	}
-	return c.app.Fiber().Test(r)
+	return c.app.Test(r)
 }
 
 // ── fake standalone (in-memory, UNSEALED — like the live source) ─────────────────

@@ -28,7 +28,7 @@ func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[stri
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set("X-User-Id", "u_admin")
 	req.Header.Set("X-User-IsAdmin", "true")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("admin patch: %v", err)
 	}

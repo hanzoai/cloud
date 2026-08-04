@@ -23,7 +23,7 @@ func doKey(t *testing.T, app *zip.App, method, path, org, key string) (int, []by
 	if key != "" {
 		req.Header.Set(claimKeyHeader, key)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -162,7 +162,7 @@ func doKeyBody(t *testing.T, app *zip.App, method, path, org, key string, body a
 	if key != "" {
 		req.Header.Set(claimKeyHeader, key)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -283,7 +283,7 @@ func reqAs(t *testing.T, app *zip.App, method, path, org, user string, admin boo
 	if key != "" {
 		req.Header.Set(claimKeyHeader, key)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

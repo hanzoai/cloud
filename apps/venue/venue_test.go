@@ -21,7 +21,6 @@ import (
 	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/kms"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
 	// devmaster keys this test binary: cek opens nothing without a master and a
@@ -202,7 +201,7 @@ func call(t *testing.T, app *zip.App, method, path, org, project string, admin b
 	// Generous timeout: the fold does a TLS dial + node-list, which can exceed
 	// fiber's tight 1s default under CI-box load. This bounds the harness, not the
 	// handler's behavior.
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -327,8 +326,8 @@ func TestDigitalOcean_LinkDiscoversAndFolds(t *testing.T) {
 		t.Fatalf("response leaked the token: %s", res.Body)
 	}
 	var out struct {
-		Account  cloudAccountView     `json:"account"`
-		Clusters []clusterResult `json:"clusters"`
+		Account  cloudAccountView `json:"account"`
+		Clusters []clusterResult  `json:"clusters"`
 	}
 	if err := json.Unmarshal(res.Body, &out); err != nil {
 		t.Fatalf("body: %v (%s)", err, res.Body)

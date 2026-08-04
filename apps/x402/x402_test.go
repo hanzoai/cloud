@@ -18,8 +18,8 @@ import (
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
@@ -190,7 +190,7 @@ func (h *harness) req(method, path, org, proof, jsonBody string) (int, []byte, h
 	if proof != "" {
 		hr.Header.Set(HeaderProof, proof)
 	}
-	resp, err := h.app.Fiber().Test(hr)
+	resp, err := h.app.Test(hr)
 	if err != nil {
 		h.t.Fatalf("Test %s %s: %v", method, path, err)
 	}

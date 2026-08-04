@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	auditstore "github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	auditstore "github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/ha"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
@@ -53,9 +53,11 @@ func mount(t *testing.T) (*ops, func(method, path string, hdr map[string]string,
 	t.Cleanup(func() { _ = rec.Close() })
 
 	z := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := z.Add(zip.Load(zip.Plugin{Name: app, Addr: "127.0.0.1:65535"}, "/v1/"+app)); err != nil {
+	leaf, err := zip.Load(zip.Plugin{Name: app, Addr: "127.0.0.1:65535"}, "/v1/"+app)
+	if err != nil {
 		t.Fatalf("load %s: %v", app, err)
 	}
+	z.Use(leaf)
 	o := &ops{
 		z:       z,
 		audit:   rec,

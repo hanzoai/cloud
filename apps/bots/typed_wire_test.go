@@ -157,7 +157,7 @@ func post(t *testing.T, app *zip.App, path, body, org string) (int, string) {
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

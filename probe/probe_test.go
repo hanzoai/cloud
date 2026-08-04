@@ -319,12 +319,12 @@ func TestPrincipalBridgeCarriesOrg(t *testing.T) {
 	// Stands in for principal.Org(c): read the SERVER-VALIDATED value, park it on
 	// the request context. The caller cannot forge it — SanitizeIdentity strips
 	// the raw header on ingress and re-injects only from validated claims.
-	app.Use(func(c *zip.Ctx) error {
+	app.Use(zip.H(func(c *zip.Ctx) error {
 		if org := c.Header("X-Org-Id"); org != "" {
 			c.SetContext(context.WithValue(c.Context(), orgKey{}, org))
 		}
 		return c.Next()
-	})
+	}))
 
 	zip.Get[sessionKey, sessionView](app, "/v1/agents/sessions/:id",
 		func(ctx context.Context, in *sessionKey) (*sessionView, error) {

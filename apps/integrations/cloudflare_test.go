@@ -130,7 +130,7 @@ func cfReq(t *testing.T, app *zip.App, method, path, org string, admin bool, bod
 			rq.Header.Set("X-User-IsOrgAdmin", "true")
 		}
 	}
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

@@ -32,11 +32,10 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
-var wireCfg = fiber.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true}
+var wireCfg = zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true}
 
 // mountBooks brings up the real /v1/books surface over a temp DataDir: the real
 // router, the real middleware, the real stores.
@@ -67,7 +66,7 @@ func hit(t *testing.T, app *zip.App, method, path, org string, body []byte) (int
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req, wireCfg)
+	resp, err := app.Test(req, wireCfg)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

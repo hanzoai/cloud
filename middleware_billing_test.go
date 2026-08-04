@@ -92,7 +92,7 @@ func doReq(t *testing.T, app *zip.App) *http.Response {
 	req := httptest.NewRequest(http.MethodPost, "/v1/agent/run", nil)
 	req.Header.Set("X-Org-Id", "hanzo")
 	req.Header.Set("X-User-Id", "alice")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test request: %v", err)
 	}
@@ -276,13 +276,13 @@ func priceForPath(t *testing.T, p string) int64 {
 	var got int64
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
-	app.Use(func(c *zip.Ctx) error {
+	app.Use(zip.H(func(c *zip.Ctx) error {
 		got = DefaultPrice(c)
 		close(done)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
-	})
+	}))
 	req := httptest.NewRequest(http.MethodGet, p, nil)
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("Test(%q): %v", p, err)
 	}
 	<-done
@@ -308,18 +308,18 @@ func billingProbe(t *testing.T, headers map[string]string) (billingOrg, billingU
 	t.Helper()
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
-	app.Use(func(c *zip.Ctx) error {
+	app.Use(zip.H(func(c *zip.Ctx) error {
 		in := identityFromCtx(c)
 		billingOrg, billingUser = in.Org, in.User
 		dataOrg, _ = principal.Org(c)
 		close(done)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
-	})
+	}))
 	req := httptest.NewRequest(http.MethodPost, "/v1/agent/run", nil)
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("billingProbe: %v", err)
 	}
 	<-done

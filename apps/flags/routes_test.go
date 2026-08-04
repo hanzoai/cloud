@@ -19,14 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zap-proto/fiber/v3"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
-var httpCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
+var httpCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
 // mountHTTP puts the flag surface on a bare app over a temp-dir store tree.
 func mountHTTP(t *testing.T) *zip.App {
@@ -57,7 +56,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body []byte) (int,
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(rq, httpCfg)
+	resp, err := app.Test(rq, httpCfg)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

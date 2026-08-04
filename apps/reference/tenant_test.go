@@ -100,7 +100,7 @@ func callAs(t *testing.T, app *zip.App, method, path, org, user string, body any
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", user) // a validated principal (principal.Org gate)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
@@ -290,7 +290,7 @@ func TestRefreshIsPlatformWork(t *testing.T) {
 		for k, v := range hdr {
 			rq.Header.Set(k, v)
 		}
-		resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+		resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 		if err != nil {
 			t.Fatalf("refresh: %v", err)
 		}
@@ -792,7 +792,7 @@ func TestThisAppOwnsOnlyItsOwnLeaf(t *testing.T) {
 	rq := httptest.NewRequest(http.MethodGet, "/v1/ml/models", nil)
 	rq.Header.Set("X-Org-Id", "acme")
 	rq.Header.Set("X-User-Id", "u_acme")
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("neighbour: %v", err)
 	}

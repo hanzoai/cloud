@@ -32,7 +32,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -121,7 +120,7 @@ func as(t *testing.T, app *zip.App, method, path, org, user string, body any) ht
 	// Generous timeout: fiber's default Test timeout is 1 s with FailOnTimeout,
 	// and the single-flight tests intentionally hold a provider call (100-500 ms)
 	// behind the flight lock — CI load must not turn that into a flake.
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

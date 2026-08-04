@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 func mountApp(t *testing.T) *zip.App {
@@ -40,7 +40,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

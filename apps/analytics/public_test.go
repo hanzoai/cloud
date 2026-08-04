@@ -32,7 +32,7 @@ func postAnon(t *testing.T, app *zip.App, path, body string, hdr map[string]stri
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST %s: %v", path, err)
 	}
@@ -581,7 +581,7 @@ func TestAuthenticated_OptOutNotHonoredForPrincipal(t *testing.T) {
 	req.Header.Set("X-User-Id", "user-dave")
 	req.Header.Set("X-Org-Id", "acme")
 	req.Header.Set("DNT", "1")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

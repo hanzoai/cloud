@@ -142,7 +142,7 @@ func call(t *testing.T, app *zip.App, method, path, org, user string, body any) 
 	if user != "" {
 		hr.Header.Set("X-User-Id", user)
 	}
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

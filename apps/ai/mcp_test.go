@@ -47,7 +47,6 @@ func served(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{AppName: "ai", Logger: luxlog.New("aimcptest"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
 	mountMCP(app)
-	app.Prepare()
 	return app
 }
 
@@ -63,7 +62,7 @@ func rpc(t *testing.T, app *zip.App, msg, user, org string) string {
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("POST %s: %v", door, err)
 	}
@@ -125,7 +124,7 @@ func get(t *testing.T, app *zip.App, user string) (int, string) {
 		req.Header.Set("X-User-Id", user)
 		req.Header.Set("X-Org-Id", "acme")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}

@@ -36,7 +36,7 @@ func tenant(t *testing.T, headers map[string]string) zen.Tenant {
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("tenant probe: %v", err)
 	}
@@ -62,7 +62,7 @@ func walletOf(t *testing.T, headers map[string]string) principal.Wallet {
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("wallet probe: %v", err)
 	}

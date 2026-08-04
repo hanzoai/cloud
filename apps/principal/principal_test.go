@@ -29,7 +29,7 @@ func probe(t *testing.T, headers map[string]string) (org string, ok, validated b
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -125,7 +125,7 @@ func parked(t *testing.T, headers map[string]string) (org string, orgOK, validat
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("parked: %v", err)
 	}
@@ -192,7 +192,7 @@ func projectProbe(t *testing.T, headers map[string]string) string {
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("projectProbe: %v", err)
 	}
@@ -240,7 +240,7 @@ func validatedProjectProbe(t *testing.T, headers map[string]string) (string, boo
 	for h, v := range headers {
 		req.Header.Set(h, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("validatedProjectProbe: %v", err)
 	}

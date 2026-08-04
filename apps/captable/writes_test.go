@@ -41,7 +41,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -442,7 +441,6 @@ func newAppMCP(t *testing.T) *zip.App {
 	}
 	// zip installs /mcp in prepare(), which Listen would call; a Fiber().Test app
 	// never listens. Once-guarded, so calling it here is safe.
-	app.Prepare()
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app
 }
@@ -459,7 +457,7 @@ func toolsCall(t *testing.T, app *zip.App, org, op, args string) (string, bool) 
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("tools/call %s: %v", op, err)
 	}
