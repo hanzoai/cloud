@@ -3,7 +3,7 @@ package finance
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // UsageRow is one recorded usage debit — the READ twin of RecordUsage. The SAME
