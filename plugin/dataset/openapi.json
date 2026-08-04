@@ -316,6 +316,10 @@
             "description": "Name and Version identify the version.",
             "type": "string"
           },
+          "oversize": {
+            "description": "Oversize is how many of the window's subjects this version could NOT carry\nbecause their subject identity exceeds the plane's per-subject byte bound.\n\nIt is on the wire, not only in a log, because it is the one degradation a\ncaller cannot otherwise detect: the rows that are here look complete, and a\ndataset silently missing a population is a model silently blind to it.\nNon-zero does not make a version invalid — it makes it a version whose\ncoverage is STATED. Zero is the normal case and omits.",
+            "type": "integer"
+          },
           "refusal": {
             "description": "Refusal names why there are no bytes, when there are none.",
             "type": "string"
@@ -515,6 +519,10 @@
           },
           "holds": {
             "description": "Holds is what the source holds for the same window NOW. The difference\nbetween it and Rows is the whole of the reproducibility claim.",
+            "type": "integer"
+          },
+          "oversize": {
+            "description": "Oversize is how many subjects the window held that were too large to\nrepresent when this version was built. It is part of the fingerprint, so it\nis part of what \"reproducible\" is measured over.",
             "type": "integer"
           },
           "refusal": {
