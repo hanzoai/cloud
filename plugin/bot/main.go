@@ -22,11 +22,21 @@ func main() {
 		// Declared: undeclared falls back to /v1/bot, which this app does not
 		// serve — the scope then guards a path with no routes and zip refuses to
 		// compose (see plugin/account/main.go).
-		Prefixes:   manifest.PrefixesFor("bot"),
-		Price:      cloud.Free,
-		Mount:      bot.Mount,
-		Shutdown:   bot.Shutdown,
-		OwnsHealth: true,
+		Prefixes: manifest.PrefixesFor("bot"),
+		Price:    cloud.Free,
+		Mount:    bot.Mount,
+		Shutdown: bot.Shutdown,
+		// NO OwnsHealth. It said true and bot.Mount registers no health route at
+		// all, so the field's only effect — suppressing serve.go's generic
+		// GET /v1/bot/health — left this binary answering 404 there, which from
+		// outside is indistinguishable from a subsystem that was never enabled.
+		//
+		// Nothing changes in the FLEET either way: the host routes /v1/bot/health
+		// to `runtime` (whose row is the parent /v1/bot, and which forwards it to
+		// the runtime's own /health), while this app's row is the three leaves
+		// below it. The generic route is this binary's own STANDALONE liveness
+		// answer, and that is the contract HIP-0106 states. Claim the field again
+		// only alongside a real probe.
 	}}, []string{"bot"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
