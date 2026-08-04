@@ -124,6 +124,24 @@ type ops struct{ s *cloud.Service[state] }
 // untyped. Ops are declared on the GROUP, so each op's path is the group's
 // prefix composed with its leaf — the identity every projection (document,
 // MCP tool, CLI command, SDK method) keys on.
+//
+// EVERY OP STATES ITS ID AND ITS SUMMARY, because neither has a usable default.
+//
+// An operation id is the generated SDK METHOD NAME and the CLI COMMAND. Left
+// unstated, zip derives one from the path — `get_v1_engine_status` — and that
+// is what an SDK user calls and what a model reads in the MCP tool list. The
+// fleet's convention is the product prefix and the noun (the risk product's
+// thirty-one operations are `riskScore`, `riskState`, `riskDatasets`), so these
+// are `engineStatus`, `engineModels`, `engineModel`, `engineSystem`: the product
+// this operation belongs to, then what it answers.
+//
+// A summary defaults to the first sentence of the Go doc comment, and a Go doc
+// comment opens with the Go IDENTIFIER. So the published summaries read "Status
+// reports whether…", "Models lists the models…" — a Go symbol name leaking into
+// the CLI's help, the MCP tool list and every SDK's docstring. The summary is
+// written for the person CALLING it, in the imperative, and the doc comment
+// stays a Go doc comment: two audiences, two sentences, and zipdoc still lifts
+// the comment as the description.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/engine")
 	o := ops{s: s}
@@ -132,10 +150,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// principal reaches it by being parked there — never as an In field.
 	g.Use(cloud.Bridge())
 
-	zip.Get(g, "/status", o.status)
-	zip.Get(g, "/models", o.models)
-	zip.Get(g, "/model", o.model)
-	zip.Get(g, "/system", o.system)
+	zip.Get(g, "/status", o.status,
+		zip.WithOperationID("engineStatus"),
+		zip.WithSummary("Whether the serving runtime is reachable, and which build it runs"))
+	zip.Get(g, "/models", o.models,
+		zip.WithOperationID("engineModels"),
+		zip.WithSummary("List the models the serving runtime holds, with each one's load state"))
+	zip.Get(g, "/model", o.model,
+		zip.WithOperationID("engineModel"),
+		zip.WithSummary("Read one model's load state on the serving runtime"))
+	zip.Get(g, "/system", o.system,
+		zip.WithOperationID("engineSystem"),
+		zip.WithSummary("The serving host's own inventory: devices, memory and build capabilities"))
 }
 
 // ── the shapes the ops take and give ────────────────────────────────────────
