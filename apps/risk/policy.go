@@ -126,6 +126,19 @@ type decided struct {
 	// means the organisation has never stated a regime, so the verdict was reached
 	// under the default posture — a fact the score reports rather than hides.
 	Version int
+	// Shape is the model space the verdict was reached in: the feature inventory in
+	// order and the detector's geometry parameters. It travels with the verdict for
+	// exactly the reason Version does — a score is defensible only against the model
+	// that produced it, and the shape is what says which model space that was.
+	//
+	// It is the SHAPE and deliberately not an address of the learned state. The
+	// masses at the instant of a score are in-process counters somewhere between two
+	// published values (address.go), so naming a published value here would be a
+	// claim that value produced this score, which is false for every score but the
+	// one taken the instant after a publication. What IS true is stated: the space it
+	// ran in, the regime that set its cut, and the event's own time — and the value
+	// history's own clock brackets it between two values from there.
+	Shape string
 }
 
 // regimeNow is the policy version an organisation's model is deciding under,

@@ -217,6 +217,20 @@ type riskScoreOut struct {
 	// learning and recording what it WOULD have alerted on, and changing no
 	// outcome. It is the default for a model no one has reviewed yet.
 	Shadow bool `json:"shadow"`
+	// Shape is the model space this verdict was reached in: your organisation's
+	// feature inventory in order and the detector's geometry parameters. It is what
+	// pins an adverse decision to a model — a score is only meaningful against the
+	// shape that produced it, and without this the only answer to "which model
+	// decided this" was "the one that was running", which is not an answer.
+	//
+	// It names the SPACE, not the learned state, and that is deliberate. The masses
+	// at the instant of a score are in-process counters somewhere between two
+	// published values, so citing a published address here would claim that value
+	// produced this score — true only for the score taken the instant after a
+	// publication. This, the policy version and the event's own time are what IS
+	// true, and the published history's clock (GET /v1/risk/state) brackets the
+	// decision between two named values from there.
+	Shape string `json:"shape,omitempty"`
 	// Policy is the version of your organisation's decision regime this verdict
 	// was reached under, from its own policy history (GET /v1/risk/policy). Cut is
 	// derived from the appetite that version states, so it is the record that makes
@@ -367,6 +381,31 @@ type riskModelState struct {
 	// aggregates, and whether they have started forgetting subjects to stay inside
 	// their bound.
 	Aggregates riskAggregates `json:"aggregates"`
+	// Values is your organisation's own published model values, newest first —
+	// every state it deliberately named, each addressed by its own content and
+	// immutable. This is what POST /v1/risk/state/restore names, so it is reported
+	// HERE rather than behind an address of its own: they are part of what a review
+	// of one model reads, and a list of names is a few hundred bytes.
+	//
+	// The working model is NOT in it. Publication is a boundary somebody marked; the
+	// state between two boundaries is in-process counters, and calling those a value
+	// would be a claim about reproducibility that nothing could honour.
+	Values []riskModelValue `json:"values,omitempty"`
+	// Descends is the published value the working model grew out of: the newest one
+	// whose mass count it has reached or passed. Empty when nothing has been
+	// published yet.
+	//
+	// It is DERIVED from the count and never stored, so an instant rollback is right
+	// for free — adopting an older value moves the count backward and this answers
+	// with that older value, where a stored pointer would be a second fact to keep
+	// in step. Read with Learned it is also the DRIFT: this model is Descends plus
+	// however many events the two counts differ by.
+	Descends string `json:"descends,omitempty"`
+	// Disposed is how many published values retention has taken. It is DERIVED from
+	// the lowest surviving sequence, so it cannot drift from what it describes, and
+	// it is reported because a retention that binds is a fact an operator must be
+	// able to read rather than a silence.
+	Disposed int `json:"disposed,omitempty"`
 }
 
 // riskAggregates is how full this organisation's own sliding aggregates are, and
@@ -441,84 +480,61 @@ type riskAppetiteIn struct {
 // riskSnapshotIn takes nothing off the wire.
 type riskSnapshotIn struct{}
 
-// riskSnapshotOut is a pinned copy of the tenant's learned state.
-type riskSnapshotOut struct {
-	// Tenant is whose state this is. A snapshot naming another organisation is
-	// refused on restore.
-	Tenant string `json:"tenant"`
-	// Shape is the model identity the state is only meaningful against.
-	Shape string `json:"shape"`
-	// Learned is how many events are behind it.
-	Learned int64 `json:"learned"`
-	// Body is the state itself: the masses and the seed, never the geometry.
-	// Geometry is a pure function of the seed, so it is regenerated on restore and
-	// cannot be supplied — which removes the sharpest edge a persisted model has,
-	// state that describes WHERE the regions are rather than only how full.
-	Body riskSnapshotBody `json:"body"`
-}
-
-// riskSnapshotBody is one organisation's learned state on the wire.
+// riskModelValue names one of the organisation's own published model values.
 //
-// It is DECLARED HERE rather than published straight off the engine's own type,
-// for two reasons that are both about the contract. A dependency's struct tags
-// are not our API, and letting them be means an upstream rename silently changes
-// what every generated SDK sends. And the fleet's schema namespace is flat, so a
-// type called `Snapshot` is a name another app will reach for next.
-type riskSnapshotBody struct {
-	// Version is the layout of the state. State from another version is rejected
-	// rather than reinterpreted.
-	Version int `json:"version"`
-	// Shape is the model identity this state is only meaningful against: the
-	// feature inventory in order and the detector's geometry parameters.
+// IT CARRIES NO MASSES, and that is the point of it. The state itself — 466 KiB of
+// mass counters, measured — stays on the organisation's own encrypted shelf and is
+// referred to by content. What used to travel in both directions on this op and its
+// pair was that state, which made the CALLER the custodian of the organisation's
+// model: it had to hold it, transport it, and be trusted not to have shaped it. An
+// address is the whole of what a caller needs to name a value, so the state has no
+// reason to leave the store, and now does not.
+type riskModelValue struct {
+	// Address names this value by its own content: the model's shape, the geometry
+	// seed, its position in the window, its threshold, its masses as IEEE-754 bits
+	// and the fold watermark behind them. Nothing else — no clock, no counter and
+	// deliberately NOT the organisation, so an identical model has one name and a
+	// name is never an authority. Holding another organisation's address resolves
+	// nothing.
+	Address string `json:"address"`
+	// Sequence is this value's place in YOUR organisation's own history, from 1 and
+	// contiguous until retention disposes of the oldest.
+	Sequence int64 `json:"sequence"`
+	// Shape is the model space the masses are only meaningful against: the feature
+	// inventory in order and the detector's geometry parameters.
 	Shape string `json:"shape"`
-	// Tenant is the organisation the state belongs to. A restore under any other
-	// organisation is refused.
-	Tenant string `json:"tenant"`
-	// Seed is what the tree geometry is generated FROM. Carrying the seed rather
-	// than the trees is what keeps the state from describing where the regions
-	// are.
-	Seed uint64 `json:"seed"`
-	// Learned is how many events are behind the masses, and Seen how far into the
-	// open reference window they are.
+	// Learned is how many events are behind the masses.
 	Learned int64 `json:"learned"`
-	// Seen is the position within the open window.
-	Seen int `json:"seen"`
-	// Cut is the alert threshold that was in force.
-	Cut float64 `json:"cut"`
-	// Ref is the reference window's masses, per tree; Cur is the open window's.
-	// A region's mass is the sum of its two halves — an array that fails that
-	// invariant was not produced by this algorithm and is refused.
-	Ref [][]float64 `json:"ref"`
-	// Cur is the open window's masses, per tree.
-	Cur [][]float64 `json:"cur"`
-	// Hist is the score distribution the threshold is cut from.
-	Hist []float64 `json:"hist"`
+	// Warmed is how far your own event surface had been folded in when this value
+	// was published, RFC 3339. It is part of the address because two models with
+	// identical masses reached by different routes disagree about what is left to
+	// fold, and one of them will re-teach history the other will not.
+	Warmed string `json:"warmed,omitempty"`
+	// At is when it was published, RFC 3339, on the server clock. You do not supply
+	// it: a record whose date the audited party chose is not a record.
+	At string `json:"at"`
 }
 
-// snapshotBody and modelSnapshot are the two halves of one conversion, written
-// beside each other so neither can drift from the other.
-func snapshotBody(s anomaly.Snapshot) riskSnapshotBody {
-	return riskSnapshotBody{
-		Version: s.Version, Shape: s.Digest, Tenant: s.OrgID, Seed: s.Seed,
-		Learned: s.Learned, Seen: s.Seen, Cut: s.Cut,
-		Ref: s.Ref, Cur: s.Cur, Hist: s.Hist,
-	}
+// riskSnapshotOut is the value this call published, and whether it minted one.
+type riskSnapshotOut struct {
+	// Tenant is whose history it entered.
+	Tenant string `json:"tenant"`
+	// Value is the published value: its name and what it is, never its masses.
+	Value riskModelValue `json:"value"`
+	// Minted is false when your model was ALREADY published under this name and
+	// nothing was written. Publication is idempotent on the value itself, which is
+	// what a content address is for — publishing at every boundary costs nothing
+	// rather than being the cheapest way to fill a disk.
+	Minted bool `json:"minted"`
 }
 
-func modelSnapshot(b riskSnapshotBody) anomaly.Snapshot {
-	return anomaly.Snapshot{
-		Version: b.Version, Digest: b.Shape, OrgID: b.Tenant, Seed: b.Seed,
-		Learned: b.Learned, Seen: b.Seen, Cut: b.Cut,
-		Ref: b.Ref, Cur: b.Cur, Hist: b.Hist,
-	}
-}
-
-// riskRestoreIn installs previously pinned state.
+// riskRestoreIn puts one of your own published values back in force, by name.
 type riskRestoreIn struct {
-	// Body is a snapshot this organisation took. One naming another organisation
-	// is refused: it is that organisation's learned behaviour, and installing it
-	// would put one tenant's activity inside another's model.
-	Body riskSnapshotBody `json:"body"`
+	// Address is one of YOUR organisation's own published values (GET
+	// /v1/risk/state reports them). An address your organisation has not published
+	// is NOT FOUND — including one another organisation published, because an
+	// address names a value and never authorises reading it.
+	Address string `json:"address"`
 }
 
 // riskCatalogIn narrows the feature catalogue to a window of the caller's own
@@ -852,7 +868,10 @@ func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error)
 		return nil, wrap(err)
 	}
 	pay(1)
-	out := modelState(t, st, p.surface(t), agg, ver)
+	out, err := p.review(t, st, agg, ver)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	return &out, nil
 }
 
@@ -890,17 +909,30 @@ func (o ops) appetite(ctx context.Context, in *riskAppetiteIn) (*riskModelState,
 		return nil, wrap(err)
 	}
 	pay(1)
-	out := modelState(t, st, p.surface(t), agg, ver)
+	out, err := p.review(t, st, agg, ver)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	return &out, nil
 }
 
-// Snapshot pins the caller organisation's learned state so a decision taken today
-// can be reproduced tomorrow.
+// Snapshot publishes your organisation's model as a NAMED VALUE, so a decision
+// taken today can be reconstructed tomorrow and a change made today can be undone.
 //
-// It carries the masses and the seed and never the geometry: geometry is a pure
-// function of the seed, so it is regenerated on restore and cannot be supplied.
-// That removes the sharpest edge a persisted model has — state that says where
-// the regions are rather than only how full they are.
+// It answers with a NAME and not with the state. The masses stay on your
+// organisation's own encrypted store and are referred to by an address computed
+// from their own content: the shape, the geometry seed, the position in the window,
+// the threshold, the masses themselves as IEEE-754 bits, and the fold watermark
+// behind them. That is what makes the value nameable without making the caller its
+// custodian.
+//
+// IT IS IDEMPOTENT ON THE VALUE. A model that has not changed publishes to the name
+// it already has and mints nothing, reporting minted=false — so publishing at every
+// boundary that matters is free. Ten values are retained per organisation, bounded
+// in BYTES rather than in rows, and the oldest is disposed of past that.
+//
+// A model that has learned nothing is refused: planted is not learned, and a value
+// that reproduces nothing is not a value.
 func (o ops) snapshot(ctx context.Context, _ *riskSnapshotIn) (*riskSnapshotOut, error) {
 	pay, err := o.gate(ctx, "snapshot", 1)
 	if err != nil {
@@ -911,26 +943,31 @@ func (o ops) snapshot(ctx context.Context, _ *riskSnapshotIn) (*riskSnapshotOut,
 		return nil, err
 	}
 	defer leave()
-	snap, ok, err := p.pin(t)
+	v, minted, err := p.publish(t)
 	if err != nil {
 		return nil, wrap(err)
 	}
-	if !ok {
-		return nil, zip.ErrNotFound("this organisation's model has learned nothing yet, so there is no state to pin")
+	if v.Address == "" {
+		return nil, zip.ErrNotFound("this organisation's model has learned nothing yet, so there is no value to publish")
 	}
 	pay(1)
-	return &riskSnapshotOut{Tenant: string(t), Shape: snap.Digest, Learned: snap.Learned, Body: snapshotBody(snap)}, nil
+	return &riskSnapshotOut{Tenant: string(t), Value: modelValueOf(v), Minted: minted}, nil
 }
 
-// Restore installs previously pinned state into the caller organisation's model,
-// replacing whatever it holds.
+// Restore puts one of your organisation's OWN PUBLISHED VALUES back in force, by
+// name — which is what an instant rollback is, and what promoting a challenger is.
 //
-// A snapshot naming another organisation is REFUSED. The engine checks the shape,
-// the version and the mass invariant — an array that fails the invariant was not
-// produced by this algorithm — but it does not check whose state it is, because
-// in its own deployment the caller IS the tenant. Here the caller is a request,
-// so the check is made here: another organisation's learned state inside this
-// model is that organisation's activity, disclosed.
+// IT TAKES AN ADDRESS AND NEVER STATE. The masses are read from your own store, so
+// nothing about your model has to be held by whatever is making this call. That
+// closes the sharpest edge the previous shape had: a body of counters is something
+// a caller can COMPOSE, and a region filled until activity inside it reads as
+// ordinary is a model that has been shaped rather than learned. The engine's mass
+// invariant was the only thing standing between a composed body and the model; with
+// an address there is no body to compose.
+//
+// An address your organisation has not published is NOT FOUND. That includes one
+// another organisation published, and it is not a lookup that failed: the store is
+// per organisation and the address is a name, never an authority.
 func (o ops) restore(ctx context.Context, in *riskRestoreIn) (*riskModelState, error) {
 	pay, err := o.gate(ctx, "restore", 1)
 	if err != nil {
@@ -941,7 +978,15 @@ func (o ops) restore(ctx context.Context, in *riskRestoreIn) (*riskModelState, e
 		return nil, err
 	}
 	defer leave()
-	st, agg, err := p.adopt(t, modelSnapshot(in.Body))
+	// AFTER the principal is resolved, not before. A malformed body answered ahead of
+	// the identity tells an unauthenticated caller which shapes this op accepts, and
+	// it makes the refusal order depend on which field happened to be wrong. Same
+	// ordering the money plane was corrected to.
+	addr, err := admitAddress(in.Address)
+	if err != nil {
+		return nil, err
+	}
+	st, agg, err := p.adopt(t, addr)
 	if err != nil {
 		return nil, wrap(err)
 	}
@@ -950,8 +995,26 @@ func (o ops) restore(ctx context.Context, in *riskRestoreIn) (*riskModelState, e
 		return nil, wrap(err)
 	}
 	pay(1)
-	out := modelState(t, st, p.surface(t), agg, ver)
+	out, err := p.review(t, st, agg, ver)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	return &out, nil
+}
+
+// modelValueOf projects a published value onto the wire. It is the ONE direction
+// this conversion is written — there is no inverse, because nothing off the wire
+// ever becomes a value: a value is minted from the model this process holds and
+// named by its content.
+func modelValueOf(v value) riskModelValue {
+	out := riskModelValue{
+		Address: v.Address, Sequence: v.Seq, Shape: v.Shape, Learned: v.Learned,
+		At: v.At.Format(time.RFC3339),
+	}
+	if !v.Warmed.IsZero() {
+		out.Warmed = v.Warmed.Format(time.RFC3339)
+	}
+	return out
 }
 
 // Features is the feature catalogue in its two honest lenses.
@@ -1310,7 +1373,7 @@ func verdict(d decided) riskScoreOut {
 	a := d.A
 	out := riskScoreOut{
 		Scored: a.Scored, Refusal: a.Reason, Score: a.Score,
-		Cut: a.Cut, Alert: a.Alert, Shadow: a.Shadow, Policy: d.Version,
+		Cut: a.Cut, Alert: a.Alert, Shadow: a.Shadow, Policy: d.Version, Shape: d.Shape,
 	}
 	for _, c := range a.Causes {
 		out.Causes = append(out.Causes, riskCause{
@@ -1326,6 +1389,38 @@ func verdict(d decided) riskScoreOut {
 		})
 	}
 	return out
+}
+
+// review is the whole governance answer for one organisation: what its model is
+// right now, and every value it has published.
+//
+// ONE DOOR. The three ops that answer this question — reading the state, restating
+// the appetite and adopting a value — all come through here, so none of them can
+// answer it a different way. [modelState] stays a pure projection of engine state
+// beneath it; this is what adds the organisation's own history to it.
+//
+// A history that cannot be read is an ERROR and not an empty list. The shelf is the
+// same file the model was just read from, so a read that fails here is a fault, and
+// reporting "no published values" for it would be indistinguishable from an
+// organisation that has published none.
+func (p *plane) review(t tenant, st anomaly.State, agg strain, policy int) (riskModelState, error) {
+	out := modelState(t, st, p.surface(t), agg, policy)
+	vs, disposed, err := p.values(t, 0)
+	if err != nil {
+		return riskModelState{}, err
+	}
+	out.Disposed = disposed
+	for _, v := range vs {
+		out.Values = append(out.Values, modelValueOf(v))
+	}
+	d, ok, err := p.descends(t, st.Learned)
+	if err != nil {
+		return riskModelState{}, err
+	}
+	if ok {
+		out.Descends = d.Address
+	}
+	return out, nil
 }
 
 func modelState(t tenant, st anomaly.State, f fold, s strain, policy int) riskModelState {
