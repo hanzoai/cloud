@@ -38475,56 +38475,6 @@ paths:
       tags:
       - admin
       x-app: admin
-  /v1/admin/credits:
-    post:
-      description: |-
-        Mints credit for one org. It is the ONE admin mint surface, and it
-        does NOT mint in-process: it forwards the request to commerce's already-mint-gated
-        POST /v1/billing/credits, authenticated by the service token and scoped to the
-        target org, then writes one tamper-evident compliance record. Commerce stays the sole
-        credit ledger; this is a thin, audited relay so there is exactly one place credit is
-        created.
-
-        The body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field
-        it carries reaches commerce. The only two this layer reads are the target org (`org`,
-        or `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth
-        trusts, and `idempotencyKey`, which makes a double-clicked grant credit once.
-
-        A FAILED grant is audited too, with the request body attached: an attempted mint is
-        exactly as interesting to a compliance auditor as a successful one.
-      operationId: adminCreateCredit
-      requestBody:
-        content:
-          application/json:
-            example:
-              amountCents: 50000
-              idempotencyKey: grant-2026-07-27-acme
-              org: acme
-              reason: design partner credit
-            schema:
-              additionalProperties:
-                type: object
-              type: object
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                data:
-                  amountCents: 50000
-                  id: cg_01J
-                  org: acme
-                  remainingCents: 50000
-                msg: ""
-                status: ok
-              schema:
-                $ref: '#/components/schemas/rawOut'
-          description: ok
-      summary: Mints credit for one org.
-      tags:
-      - admin
-      x-app: admin
   /v1/admin/customers:
     get:
       description: |-
