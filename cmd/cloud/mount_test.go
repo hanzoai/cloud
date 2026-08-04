@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/zap-proto/zip"
@@ -258,44 +258,48 @@ func TestRequiredAbortsByName(t *testing.T) {
 	}
 }
 
-// TestAnAllowlistWithoutTheBrokerIsRefused pins the OTHER half of the outage —
-// why the child had no key at all.
+// THE MANIFEST IS THE APP SET, and nothing states it a second time.
 //
-// A child launched by this host always carries a CREDZ_TOKEN, and credz refuses
-// to fall back to a dev key once a token is present, so a deployment with no
-// broker is one where EVERY child resolves Unkeyed and dies at its first store
-// open. Reproduced exactly, with the real binaries:
+// This replaces a test that policed an --enable allowlist: it had to refuse a
+// list omitting the credential broker (every child then failed closed at its
+// first store open) and a list naming an app the manifest does not have. Both
+// failures were real — they took devnet down twice on 2026-08-02 — and both
+// were only possible because the app set was written down twice, once in the
+// binary and once in a values file. Production never set the list at all.
 //
-//	[pubsub] data-plane encryption posture: no usable key → store opens fail closed
-//	[pubsub] audit: open audit store: … cek: CLOUD_KMS_MASTER_KEY_REF is required
-//	cloud: zip: Add service 0: zip: Load(pubsub): exited before listening: exit status 1
-//
-// The host used to mount zero brokers and say nothing, so the only evidence was a
-// child complaining about an environment variable the host deliberately scrubs.
-// An allowlist that omits the broker is a misconfiguration, refused for the same
-// reason a name the manifest does not list is refused.
-func TestAnAllowlistWithoutTheBrokerIsRefused(t *testing.T) {
-	t.Setenv(launch.RootEnv, devKey)
-
-	// run returns from the guard BEFORE it loads anything or listens, which is the
-	// only reason it is callable from a test at all.
-	err := run(":0", ":0", "pubsub") // no "kms"
-	if err == nil {
-		t.Fatal("an --enable list without the credential broker was accepted: every child would fail closed at its first store open")
-	}
-	if !strings.Contains(err.Error(), launch.Broker) {
-		t.Errorf("refusal = %q, want it to name %q so the fix is obvious", err, launch.Broker)
-	}
-
-	// The negative controls are the two lists that must NOT trip it: the broker
-	// named explicitly, and the empty list production runs (nil = every app, which
-	// includes the broker). Asserted on the guard's own predicate rather than by
-	// calling run, because a run that gets past the guard mounts 112 children and
-	// blocks in Listen.
-	for _, list := range []string{"kms,pubsub", ""} {
-		if on := enabled(list); on != nil && !on[launch.Broker] {
-			t.Errorf("--enable %q would be refused as missing %q", list, launch.Broker)
+// So the guard is now structural: no source states the set again.
+func TestTheAppSetIsNotNamedTwice(t *testing.T) {
+	var offenders []string
+	err := filepath.WalkDir("..", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			if path != ".." && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		b, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		if strings.Contains(string(b), "CLOUD_ENABLE") || strings.Contains(string(b), `"enable"`) {
+			offenders = append(offenders, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	if len(offenders) > 0 {
+		t.Errorf("these name the app set a second time: %v\n"+
+			"the binary already knows which apps it was built with (manifest.Apps), and a\n"+
+			"plugin knows which one it IS (Listen sets cfg.Enable) — a deployment must not restate it",
+			offenders)
 	}
 }
 

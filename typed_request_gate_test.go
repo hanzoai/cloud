@@ -207,6 +207,10 @@ var allowedRequestUses = map[string]string{
 		"TestTheLedgerSelectorStaysOnTheURLForBodyWrites (apps/books/wire_test.go) is that measurement " +
 		"and goes red the day it moves. ONE function, which every body-carrying op asks, reading " +
 		"through the same sandboxQuery the untyped handlers beside them use; LIVE off the HTTP path.",
+	"apps/catalog/catalog.go": "browse — the published corpus is read as PublicOrg by everyone, " +
+		"signed in or not, so the tenant is re-pointed for the index Ask while the caller's authority " +
+		"travels whole. cloud.As needs the request to do that; cloud.For alone drops the caller and the " +
+		"public browse 500s with \"index: no org on the call\".",
 	"apps/books/ask.go": "narrateAsk — the payer for the ONE grounded completion an Ask narrates with. " +
 		"The bill lands on principal.Ledger, the SELECTED billing org, which a SuperAdmin masquerade " +
 		"moves off the effective org — so principal.OrgFrom would charge the org being INSPECTED for a " +
