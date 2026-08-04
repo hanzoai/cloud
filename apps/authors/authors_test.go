@@ -228,6 +228,26 @@ func connectOrg(t *testing.T, app *zip.App, s *cloud.Service[state], org, login 
 }
 
 // approve admits an author to earning via the admin route.
+// adminSweepAndPay is the HUMAN equivalent of the deleted automatic loop: the admin
+// accrual sweep, then an explicit admin payout of each approved author's pending
+// balance. Tests that assert attribution/settlement (not automation) drive this.
+func adminSweepAndPay(t *testing.T, app *zip.App, s *cloud.Service[state]) {
+	t.Helper()
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	approved, err := s.State.store.ListApproved(context.Background(), sweepLimit)
+	if err != nil {
+		t.Fatalf("list approved: %v", err)
+	}
+	for _, a := range approved {
+		cur, err := s.State.store.GetByID(context.Background(), a.ID)
+		if err != nil || cur.PendingCents() <= 0 {
+			continue
+		}
+		req(t, app, http.MethodPost, "/v1/admin/authors/"+a.ID+"/payout", "admin", true,
+			map[string]any{"amountCents": cur.PendingCents(), "method": methodCredits, "reference": "test"})
+	}
+}
+
 func approve(t *testing.T, app *zip.App, id string) {
 	t.Helper()
 	if st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+id+"/approve", "admin", true, nil); st != http.StatusOK {
@@ -502,9 +522,9 @@ func TestSweepAccruesSpendTimesShareIdempotent(t *testing.T) {
 	}
 }
 
-// TestLazyAccrualOnAuthorRead proves the author's OWN GET /v1/authors runs the accrual
-// sweep (self-updating dashboard) and surfaces the badge snippet + repos/deploys.
-func TestLazyAccrualOnAuthorRead(t *testing.T) {
+// TestAuthorReadIsPureAndSurfacesRepos proves GET /v1/authors accrues NOTHING while
+// still surfacing the badge snippet + repos/deploys. Accrual is the admin POST's job.
+func TestAuthorReadIsPureAndSurfacesRepos(t *testing.T) {
 	app, s, fc, fg := mount(t)
 	// Link the GitHub identity BEFORE connect so the author is identity-verified.
 	fg.setLinked("orgA", "acmedev", "tok_a")
@@ -539,12 +559,11 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
-	const want = 5000 * defaultShareBps / bpsDenom // 1000
 	if !v.IsAuthor || v.Status != StatusApproved || v.GithubLogin != "acmedev" || !v.Verified {
 		t.Fatalf("dashboard head wrong: %+v", v)
 	}
-	if v.AccruedCents != want || v.PendingCents != want {
-		t.Fatalf("lazy accrual not reflected: accrued=%d pending=%d, want %d", v.AccruedCents, v.PendingCents, want)
+	if v.AccruedCents != 0 || v.PendingCents != 0 {
+		t.Fatalf("a GET accrued: accrued=%d pending=%d, want 0/0", v.AccruedCents, v.PendingCents)
 	}
 	if len(v.Repos) != 1 || !v.Repos[0].Verified || v.Repos[0].BadgeMarkdown == "" {
 		t.Fatalf("repos wrong: %+v", v.Repos)
@@ -555,10 +574,10 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	_ = idA
 }
 
-// TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard: a credits payout issues
-// exactly ONE commerce grant + moves paid; a cash payout is record-only; a payout can
-// never exceed pending.
-func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
+// TestPayoutIsRecordOnlyAndPendingGuard: a payout RECORDS a disbursement and moves
+// paid — for every method, credits included. It issues no grant and touches no wallet;
+// a human settles the recorded row. A payout can never exceed pending.
+func TestPayoutIsRecordOnlyAndPendingGuard(t *testing.T) {
 	app, s, fc, fg := mount(t)
 	ctx := context.Background()
 	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
@@ -585,13 +604,13 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 		t.Fatalf("over-pending payout want 400, got %d", st)
 	}
 
-	// Credits payout of firstPay → ONE grant into orgA's wallet, paid moves.
+	// Credits payout of firstPay → RECORDED, paid moves, wallet untouched.
 	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": firstPay, "method": "credits", "reference": "ledger-1"})
 	if st != http.StatusOK {
 		t.Fatalf("credits payout want 200, got %d (%s)", st, body)
 	}
-	if fc.bal("orgA") != firstPay || fc.depositCount() != 1 {
-		t.Fatalf("credits payout wallet=%d deposits=%d, want %d/1", fc.bal("orgA"), fc.depositCount(), firstPay)
+	if fc.bal("orgA") != 0 || fc.depositCount() != 0 {
+		t.Fatalf("a credits payout MOVED money: wallet=%d deposits=%d, want 0/0 (record-only)", fc.bal("orgA"), fc.depositCount())
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != firstPay || a.PendingCents() != restPay {
@@ -604,17 +623,17 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 		Txn         string `json:"txn"`
 	}
 	_ = json.Unmarshal(pd["payout"], &payout)
-	if payout.AmountCents != firstPay || payout.Method != "credits" || payout.Txn == "" {
-		t.Fatalf("payout view wrong: %+v", payout)
+	if payout.AmountCents != firstPay || payout.Method != "credits" || payout.Txn != "" {
+		t.Fatalf("payout view wrong: %+v (txn must be empty — nothing settled)", payout)
 	}
 
-	// Cash payout of the rest via wire → RECORD-ONLY (no new grant).
+	// Cash payout of the rest via wire → recorded the same way.
 	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": restPay, "method": "wire", "reference": "wire-xyz"})
 	if st != http.StatusOK {
 		t.Fatalf("cash payout want 200, got %d", st)
 	}
-	if fc.depositCount() != 1 || fc.bal("orgA") != firstPay {
-		t.Fatalf("cash payout moved money: deposits=%d bal=%d", fc.depositCount(), fc.bal("orgA"))
+	if fc.depositCount() != 0 || fc.bal("orgA") != 0 {
+		t.Fatalf("cash payout moved money: deposits=%d bal=%d, want 0/0", fc.depositCount(), fc.bal("orgA"))
 	}
 	a, _ = s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != accrued || a.PendingCents() != 0 {
@@ -758,11 +777,12 @@ func TestGitLabVerifyAndLedger(t *testing.T) {
 	}
 }
 
-// TestAutoPayoutDrainsPendingIdempotent is the AUTOMATION proof: the scheduler's
-// sweepAndPayout accrues AND pays an approved author's pending royalty in one pass
-// (no human sweep/payout call), and a second pass in the same period pays NOTHING more
-// — the pending guard makes auto-payout at-most-once, never a double-pay.
-func TestAutoPayoutDrainsPendingIdempotent(t *testing.T) {
+// TestGetGrantsNothingAndLedgerReceivesZeroDeposits is the inverse of the automation
+// proof that used to live here: with the hourly scheduler and the lazy-sweep-on-read
+// both gone, the ONLY thing that moves money is a human POST. It drives the read
+// surface in the exact state that used to auto-pay, and proves the commerce ledger saw
+// no deposit at all.
+func TestGetGrantsNothingAndLedgerReceivesZeroDeposits(t *testing.T) {
 	app, s, fc, fg := mount(t)
 	ctx := context.Background()
 	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
@@ -771,25 +791,32 @@ func TestAutoPayoutDrainsPendingIdempotent(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
 	approve(t, app, idA)
-	fc.setSpend("orgB", 10000) // $100 × 20% → 2000c
+	fc.setSpend("orgB", 10000) // the state that used to accrue-and-pay on its own
 
-	// The automatic loop accrues AND pays in one pass — the closed money loop.
-	sweepAndPayout(s)
-	const want = 10000 * defaultShareBps / bpsDenom // 2000
+	// Read the surface repeatedly — the GET is a PURE READ.
+	for i := 0; i < 3; i++ {
+		if st, _ := req(t, app, http.MethodGet, "/v1/authors", "orgA", false, nil); st != http.StatusOK {
+			t.Fatalf("GET /v1/authors = %d, want 200", st)
+		}
+	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	if a.AccruedCents != want || a.PaidCents != want || a.PendingCents() != 0 {
-		t.Fatalf("auto loop: accrued=%d paid=%d pending=%d, want %d/%d/0", a.AccruedCents, a.PaidCents, a.PendingCents(), want, want)
+	if a.AccruedCents != 0 || a.PaidCents != 0 {
+		t.Fatalf("a GET moved money: accrued=%d paid=%d, want 0/0", a.AccruedCents, a.PaidCents)
 	}
-	// External author → the payout is a credits grant into their wallet, exactly once.
-	if fc.bal("orgA") != want || fc.depositCount() != 1 {
-		t.Fatalf("auto payout wallet=%d deposits=%d, want %d/1", fc.bal("orgA"), fc.depositCount(), want)
+	if fc.depositCount() != 0 {
+		t.Fatalf("the ledger received %d deposit(s) from a read; want 0", fc.depositCount())
 	}
-	// IDEMPOTENT: a second automatic pass (same period) accrues nothing more and pays
-	// nothing more — pending is 0, so RecordPayout's guard refuses. No double-pay.
-	sweepAndPayout(s)
+
+	// The accrual is not dead — it is just a human's POST now. It accrues, and STILL
+	// pays nothing until a human asks for the payout separately.
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
 	a, _ = s.State.store.GetByID(ctx, idA)
-	if a.PaidCents != want || a.AccruedCents != want || fc.depositCount() != 1 {
-		t.Fatalf("double auto-pay! accrued=%d paid=%d deposits=%d, want %d/%d/1", a.AccruedCents, a.PaidCents, fc.depositCount(), want, want)
+	const want = 10000 * defaultShareBps / bpsDenom // 2000
+	if a.AccruedCents != want {
+		t.Fatalf("admin sweep accrued=%d, want %d — the no-deposit proof above would be vacuous", a.AccruedCents, want)
+	}
+	if a.PaidCents != 0 || fc.depositCount() != 0 {
+		t.Fatalf("accrual paid out on its own: paid=%d deposits=%d, want 0/0", a.PaidCents, fc.depositCount())
 	}
 }
 
@@ -823,7 +850,7 @@ func TestHanzoForkRoutesToTreasury(t *testing.T) {
 
 	// orgB spends $100 → Hanzo earns 20% = 2000c, auto-paid INTO the treasury.
 	fc.setSpend("orgB", 10000)
-	sweepAndPayout(s)
+	adminSweepAndPay(t, app, s)
 	const want = 10000 * defaultShareBps / bpsDenom // 2000
 	sys, _ = s.State.store.GetByID(ctx, sys.ID)
 	if sys.AccruedCents != want || sys.PaidCents != want || sys.PendingCents() != 0 {
@@ -838,7 +865,7 @@ func TestHanzoForkRoutesToTreasury(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "hanzo", false,
 		map[string]any{"repoUrl": "hanzoai/chat-starter", "project": "proj-self"})
 	fc.setSpend("hanzo", 50000)
-	sweepAndPayout(s)
+	adminSweepAndPay(t, app, s)
 	sys, _ = s.State.store.GetByID(ctx, sys.ID)
 	if sys.AccruedCents != want {
 		t.Fatalf("self-deploy accrued to treasury: %d, want %d (self excluded)", sys.AccruedCents, want)
@@ -1083,7 +1110,7 @@ func TestSettlementIsRecordedNotInferred(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
 		map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
 	fc.setSpend("orgB", 10000)
-	sweepAndPayout(s)
+	adminSweepAndPay(t, app, s)
 	sys, err := s.State.store.GetByOrg(ctx, "hanzo")
 	if err != nil {
 		t.Fatalf("first-party author missing: %v", err)
@@ -1157,7 +1184,7 @@ func TestEnsureSystemAuthorPromotesExistingConnected(t *testing.T) {
 			t.Fatalf("maintainer author = %+v (%v), want approved — else it can never earn", a, err)
 		}
 		fc.setSpend("orgB", 10000)
-		sweepAndPayout(s)
+		adminSweepAndPay(t, app, s)
 		a, _ = s.State.store.GetByOrg(ctx, "hanzo")
 		if want := int64(10000 * defaultShareBps / bpsDenom); a.AccruedCents != want || a.PaidCents != want {
 			t.Fatalf("accrued=%d paid=%d, want %d/%d", a.AccruedCents, a.PaidCents, want, want)

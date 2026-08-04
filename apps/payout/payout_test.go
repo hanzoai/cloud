@@ -1,57 +1,12 @@
 package payout
 
 import (
-	"errors"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
-
-// TestDepositPostsGrant proves Deposit posts POST /v1/billing/deposit with the
-// service token + X-Org-Id namespace and the body the commerce ledger expects,
-// and returns the transactionId. This is the ONE money-in path the three credit
-// programs share.
-func TestDepositPostsGrant(t *testing.T) {
-	var gotOrg, gotAuth, gotPath, gotMethod string
-	var gotBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath = r.Method, r.URL.Path
-		gotOrg = r.Header.Get("X-Org-Id")
-		gotAuth = r.Header.Get("Authorization")
-		b, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(b, &gotBody)
-		_ = json.NewEncoder(w).Encode(map[string]string{"transactionId": "txn_123"})
-	}))
-	defer srv.Close()
-
-	c := NewClient(srv.URL, "svc-tok")
-	if !c.Configured() {
-		t.Fatal("client with base+token must be Configured")
-	}
-	txn, err := c.Deposit(context.Background(), "acme", "acme", 500, "", "welcome", "grant:referral", "payout:t1")
-	if err != nil {
-		t.Fatalf("Deposit: %v", err)
-	}
-	if txn != "txn_123" {
-		t.Fatalf("txn = %q, want txn_123", txn)
-	}
-	if gotMethod != http.MethodPost || gotPath != "/v1/billing/deposit" {
-		t.Fatalf("request = %s %s, want POST /v1/billing/deposit", gotMethod, gotPath)
-	}
-	if gotOrg != "acme" {
-		t.Fatalf("X-Org-Id = %q, want acme", gotOrg)
-	}
-	if gotAuth != "Bearer svc-tok" {
-		t.Fatalf("Authorization = %q, want Bearer svc-tok", gotAuth)
-	}
-	// currency defaults to usd; amount is the cents int; tag carries the program's grant class.
-	if gotBody["currency"] != "usd" || gotBody["amount"].(float64) != 500 || gotBody["tags"] != "grant:referral" {
-		t.Fatalf("body = %v, want currency=usd amount=500 tags=grant:referral", gotBody)
-	}
-}
 
 // TestSpendCentsReadsRollup proves SpendCents reads GET /v1/billing/usage/rollup
 // (the accrual base) and returns consumedCents.
@@ -85,17 +40,14 @@ func TestUnconfigured(t *testing.T) {
 	if c.Configured() {
 		t.Fatal("client with empty base/token must NOT be Configured")
 	}
-	if _, err := c.Deposit(context.Background(), "acme", "acme", 100, "usd", "", "grant:author", "payout:t2"); err != ErrUnconfigured {
-		t.Fatalf("Deposit err = %v, want ErrUnconfigured", err)
-	}
 	got, err := c.SpendCents(context.Background(), "acme", "acme")
 	if err != nil || got != 0 {
 		t.Fatalf("SpendCents = (%d, %v), want (0, nil)", got, err)
 	}
 }
 
-// TestNon2xxIsError proves a commerce 5xx surfaces as an error (the caller then
-// records a failed payout / retries), never a silent success.
+// TestNon2xxIsError proves a commerce 5xx surfaces as an error, never a silent
+// success the caller would read as a real number.
 func TestNon2xxIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
@@ -103,52 +55,22 @@ func TestNon2xxIsError(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "svc-tok")
-	if _, err := c.Deposit(context.Background(), "acme", "acme", 100, "usd", "", "grant:affiliate", "payout:t3"); err == nil {
-		t.Fatal("Deposit against a 502 must return an error")
+	if _, err := c.SpendCents(context.Background(), "acme", "acme"); err == nil {
+		t.Fatal("SpendCents against a 502 must return an error")
 	}
 }
 
-// A payout that does not NAME the event it pays out never reaches the ledger.
-//
-// Commerce requires the reference and guards on it, so this is belt-and-braces —
-// but it is refused here so the error names the caller's missing value instead of
-// arriving as an opaque status, and so a new payout path cannot quietly ship
-// without one. Every caller of this method retries; without the reference a retry
-// and a second genuine payout of the same amount are the same request.
-func TestDeposit_WithoutRef_NeverReachesCommerce(t *testing.T) {
-	var reached bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		reached = true
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"transactionId":"tx_1"}`))
-	}))
-	defer srv.Close()
-
-	c := NewClient(srv.URL, "tok")
-	if _, err := c.Deposit(context.Background(), "acme", "acme", 500, "usd", "", "grant:x", ""); !errors.Is(err, ErrNoRef) {
-		t.Fatalf("refused with %v, want ErrNoRef", err)
+// TestSeamIsReadOnly pins the SHAPE of the money seam: the three credit programs
+// minted because this client carried a Deposit, so reviving that mint must start by
+// re-declaring the capability here, in front of a test that says no.
+func TestSeamIsReadOnly(t *testing.T) {
+	var c any = NewClient("http://x", "t")
+	if _, ok := c.(interface {
+		Deposit(context.Context, string, string, int64, string, string, string, string) (string, error)
+	}); ok {
+		t.Fatal("payout.Client grew a Deposit again — this seam READS; money-in is an admin grant")
 	}
-	if reached {
-		t.Fatal("an unnamed payout reached commerce — the ledger must never see a credit that cannot be replay-guarded")
-	}
-}
-
-// The reference travels as the idempotency key commerce guards on, so a retried
-// payout credits at most once.
-func TestDeposit_RefTravelsAsTheIdempotencyKey(t *testing.T) {
-	var got string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get("X-Idempotency-Key")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"transactionId":"tx_1"}`))
-	}))
-	defer srv.Close()
-
-	c := NewClient(srv.URL, "tok")
-	if _, err := c.Deposit(context.Background(), "acme", "acme", 500, "usd", "", "grant:x", "payout:p-42"); err != nil {
-		t.Fatalf("deposit: %v", err)
-	}
-	if got != "payout:p-42" {
-		t.Fatalf("commerce saw X-Idempotency-Key=%q, want the payout ref — without it the credit is not replay-guarded", got)
+	if _, ok := c.(Commerce); !ok {
+		t.Fatal("Client must still satisfy the read seam")
 	}
 }
