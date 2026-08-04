@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/tenant"
 )
 
 // errWarehouseDown stands in for the derived copy being unreachable.
@@ -44,11 +44,11 @@ func TestAHoldPlacedDuringASweepKeepsTheRecordInBothPlanes(t *testing.T) {
 	// The seam: sweep places a litigation hold on everything it was just asked to
 	// remove, which is the exact interleaving a concurrent hold op produces.
 	c := columnar{
-		send: func(_ context.Context, _ cloud.Tenant, f []Fact) error {
+		send: func(_ context.Context, _ tenant.Key, f []Fact) error {
 			restored = append(restored, f)
 			return nil
 		},
-		sweep: func(ctx context.Context, _ cloud.Tenant, ids []string) error {
+		sweep: func(ctx context.Context, _ tenant.Key, ids []string) error {
 			swept = append(swept, ids...)
 			if _, _, err := st.setHold(ctx, ids, true); err != nil {
 				return err
@@ -128,10 +128,10 @@ func TestAHoldPlacedDuringASweepKeepsTheRecordInBothPlanes(t *testing.T) {
 func TestARepairTheDerivedCopyRefusesIsNotAcknowledged(t *testing.T) {
 	var st *store
 	c := columnar{
-		send: func(context.Context, cloud.Tenant, []Fact) error {
+		send: func(context.Context, tenant.Key, []Fact) error {
 			return errWarehouseDown
 		},
-		sweep: func(ctx context.Context, _ cloud.Tenant, ids []string) error {
+		sweep: func(ctx context.Context, _ tenant.Key, ids []string) error {
 			_, _, err := st.setHold(ctx, ids, true)
 			return err
 		},
