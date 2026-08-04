@@ -1,9 +1,6 @@
 package cloud
 
-import (
-	"sort"
-	"sync"
-)
+import "sync"
 
 // degraded.go — a subsystem that mounted FAIL-CLOSED says so out loud, in state
 // rather than only in a log line.
@@ -59,28 +56,6 @@ func Degradations() map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-// DegradedNames lists the failed subsystems, sorted so output is stable enough to
-// diff and to assert on.
-func DegradedNames() []string {
-	degradations.mu.RLock()
-	defer degradations.mu.RUnlock()
-	out := make([]string, 0, len(degradations.m))
-	for k := range degradations.m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// IsDegraded reports whether any subsystem mounted fail-closed. The release smoke
-// treats true as a HARD failure: an image whose planes are dead must not ship,
-// however healthy the process looks.
-func IsDegraded() bool {
-	degradations.mu.RLock()
-	defer degradations.mu.RUnlock()
-	return len(degradations.m) > 0
 }
 
 // resetDegradedForTest clears the registry between tests.
