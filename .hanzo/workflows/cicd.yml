@@ -282,14 +282,20 @@ jobs:
           username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Version, derived ONCE — and reused on a resume
+      - name: Claim a version — atomically, before anything is built
         id: ver
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          # The commit being released, named explicitly rather than read from
+          # GITHUB_SHA: that variable is the runner's to set, this claim is the
+          # workflow's to make, and a claim that silently reads an empty string
+          # would tag every release at the same (invalid) sha.
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          [ -n "${SHA:-}" ] || { echo "::error::no commit sha — refusing to claim a version for an unknown commit"; exit 1; }
 
           # THE DIGEST OF THE DOCUMENT, computed here and carried by every car
           # below. This is the coupler: a projection generated from any other
@@ -297,19 +303,20 @@ jobs:
           SPEC_SHA=$(sha256sum openapi.yaml | cut -d' ' -f1)
           echo "spec_sha256=$SPEC_SHA" >> "$GITHUB_OUTPUT"
 
-          # RESUME. A release that failed at a later car is re-run at the SAME
-          # sha, and must not mint a second version for one commit — that is how
-          # a tag comes to name bytes nobody smoked. If a v* tag already points
-          # here, this run IS that release: take its number and let every step
-          # below recognise its own receipt.
-          MINE=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
-          if [ -n "$MINE" ]; then
-            echo "version=${MINE#v}" >> "$GITHUB_OUTPUT"
-            echo "resumed=1" >> "$GITHUB_OUTPUT"
-            echo "resuming ${MINE} — already tagged at this commit"
-            exit 0
-          fi
-          echo "resumed=0" >> "$GITHUB_OUTPUT"
+          # RESUME IS NOT A SEPARATE PATH ANY MORE. It used to be decided here, by
+          # looking for a v* tag on HEAD and, if one existed, adopting its number
+          # and skipping the build. That reasoning depended on the tag being
+          # minted AFTER a proven image, so "tagged" implied "published". The
+          # claim below inverts that order deliberately, which makes the same
+          # check actively wrong: a tag now exists from the moment a version is
+          # claimed, so a run that died during its build would find its own tag,
+          # declare itself resumed, and ship a version whose image was never
+          # built.
+          #
+          # So resume is decided by the REGISTRY, further down, once the claim has
+          # established which number is ours: the tag says what we own, and the
+          # image says how far we got. One question each, to the system that
+          # actually knows the answer.
 
           TOKEN=$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
             "https://ghcr.io/token?scope=repository:hanzoai/cloud:pull&service=ghcr.io" | jq -r .token)
@@ -346,22 +353,111 @@ jobs:
             exit 1
           fi
 
+          # ── THE CLAIM ─────────────────────────────────────────────────────
+          #
+          # A version is not a number this run CHOSE. It is a number this run
+          # OWNS, and the owning act is creating refs/tags/v<N> at our sha.
+          # Ref creation is the ONLY operation in this pipeline the server
+          # performs as a compare-and-swap: 201 when the ref did not exist,
+          # 422 when it did, decided under the server's own lock. Everything
+          # else here — the registry probe, the tag list, the max() — is a
+          # READ, and a read cannot reserve anything.
+          #
+          # The claim used to be taken LAST, by rollout's "Tag the release",
+          # a whole ~20-minute build after the 404 probe that stood in for it.
+          # Two lanes starting inside that window both probed 404, both built,
+          # and both pushed — and A GHCR TAG IS MUTABLE, so the second push
+          # silently REPLACED the first's bytes under the same name. v1.801.361
+          # was overwritten at 04:40:53; v1.801.410 again at 08:17:12 by an
+          # image carrying no revision label. The losing lane then died at the
+          # tag step — long after it had already corrupted the winner's image,
+          # which the winner went on to pin. A check that is 20 minutes from
+          # the act it guards is not a check.
+          #
+          # Claiming FIRST inverts every one of those outcomes. The loser finds
+          # out in one HTTP call, before it has built anything, and simply takes
+          # the next number. Two commits can never hold one version, so no push
+          # can ever land on a name another lane owns, so tag -> commit is fixed
+          # before the image exists rather than asserted after it.
+          #
+          # A claim that is never built leaves a HOLE — a tag with no image.
+          # That is the correct direction to fail: a hole is visible and inert
+          # (pin.sh refuses a tag that does not resolve), whereas a reused
+          # number is invisible and serves the wrong bytes.
           IFS=. read -r MAJ MIN PAT <<<"$LAST"
-          NEXT="$MAJ.$MIN.$((PAT + 1))"
+          CLAIMED=""
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            PAT=$((PAT + 1))
+            CAND="$MAJ.$MIN.$PAT"
 
-          # 404 is the ONLY acceptable answer: anything else means the tag is
-          # taken (200) or we cannot tell (network/auth), and pushing on either
-          # risks a second digest behind an existing name.
+            # THE COMPARE-AND-SWAP.
+            CODE=$(curl -s -o /tmp/claim.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $GH_PAT" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/hanzoai/cloud/git/refs" \
+              -d "{\"ref\":\"refs/tags/v${CAND}\",\"sha\":\"${SHA}\"}")
+            if [ "$CODE" = "422" ]; then
+              # TWO DIFFERENT FAILURES SHARE THIS STATUS, and treating them alike
+              # would turn one of them into a ten-attempt loop that ends in the
+              # wrong diagnosis. "Reference already exists" is the collision this
+              # loop is for. "Object does not exist" means OUR OWN COMMIT is not
+              # on github.com — which is a live possibility, because this workflow
+              # runs on git.hanzo.ai and claims against GitHub, so a commit that
+              # reached the forge and not the mirror lands exactly here. It is not
+              # a name to skip past; it is a repo that has not been published, and
+              # the next number would fail identically.
+              WHY=$(jq -r '.message // empty' /tmp/claim.json)
+              if [ "$WHY" != "Reference already exists" ]; then
+                echo "::error::claiming v${CAND} was refused with: ${WHY:-unknown}. If this is 'Object does not exist', commit ${SHA} is on the forge but not on github.com — the release lane claims versions against GitHub, so the mirror must carry the commit first."
+                exit 1
+              fi
+              # Taken. By us, or by somebody else? The distinction is the whole
+              # difference between a resume and a collision, and it is one GET.
+              HAVE=$(curl -fsS -H "Authorization: Bearer $GH_PAT" \
+                "https://api.github.com/repos/hanzoai/cloud/git/ref/tags/v${CAND}" | jq -r '.object.sha // empty')
+              if [ "$HAVE" = "${SHA}" ]; then
+                echo "v${CAND} is already claimed at our sha — this release, resumed"
+                CLAIMED="$CAND"; break
+              fi
+              echo "v${CAND} is held by ${HAVE:-another ref} — trying the next number"
+              continue
+            fi
+            if [ "$CODE" != "201" ]; then
+              echo "::error::claiming v${CAND} returned $CODE (expected 201 or 422) — refusing to build a version this run cannot prove it owns"
+              cat /tmp/claim.json; exit 1
+            fi
+            echo "claimed v${CAND} at ${SHA}"
+            CLAIMED="$CAND"; break
+          done
+          [ -n "$CLAIMED" ] || { echo "::error::could not claim a version in 10 attempts"; exit 1; }
+          NEXT="$CLAIMED"
+
+          # WE OWN THE NAME — so anything already published under it is either
+          # our own earlier attempt or a lane that had no right to it, and those
+          # two need opposite handling. `resumed` is therefore derived from the
+          # IMAGE, not from the tag: since the claim now precedes the build, a
+          # tag at our sha no longer implies bytes exist.
+          RESUMED=0
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
             -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json' \
             "https://ghcr.io/v2/hanzoai/cloud/manifests/v$NEXT")
-          if [ "$CODE" != "404" ]; then
-            echo "::error::refusing to push v$NEXT — manifest probe returned $CODE, expected 404 (tag taken, or existence unverifiable)"
+          if [ "$CODE" = "200" ]; then
+            REV=$(bash .hanzo/scripts/image-revision.sh "hanzoai/cloud" "v$NEXT" "$TOKEN" || echo "")
+            if [ "$REV" = "${SHA}" ]; then
+              echo "v$NEXT is already published from our sha — skipping the build"
+              RESUMED=1
+            else
+              echo "::error::v$NEXT is a version this run OWNS (tag at ${SHA}) but the registry already serves bytes built from '${REV:-an unlabelled commit}'. Another lane pushed onto a name it did not hold. Nothing here may overwrite it — publish the intended bytes under a new number and delete the foreign image."
+              exit 1
+            fi
+          elif [ "$CODE" != "404" ]; then
+            echo "::error::manifest probe for v$NEXT returned $CODE — cannot tell whether the name is free"
             exit 1
           fi
 
           echo "version=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "highest seen v$LAST (registry + git tags) -> building v$NEXT (document sha256:$SPEC_SHA)"
+          echo "resumed=$RESUMED" >> "$GITHUB_OUTPUT"
+          echo "highest seen v$LAST (registry + git tags) -> v$NEXT, claimed at ${SHA} (document sha256:$SPEC_SHA)"
 
       - uses: docker/setup-buildx-action@v3
         if: steps.ver.outputs.resumed == '0'
@@ -379,8 +475,17 @@ jobs:
           # VERSION is what the binary reports as X-Api-Version. Without it the
           # ldflag falls back to the `dev` default and a released image cannot
           # say which release it is — and every car below keys off that header.
+          # REVISION is passed as a BUILD-ARG, not only as a label, because the
+          # Dockerfile declares `ARG REVISION=unknown` and stamps the label from
+          # it. A builder that sets only the outside label leaves that ARG at its
+          # default, and a builder that sets neither publishes an image whose
+          # commit is unrecoverable — which is precisely what the platform lane
+          # did for every image it ever pushed. Feeding the ARG makes the label
+          # truthful no matter which builder runs the Dockerfile, instead of
+          # truthful only in the lane that remembers to override it afterwards.
           build-args: |
             VERSION=v${{ steps.ver.outputs.version }}
+            REVISION=${{ github.sha }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=v${{ steps.ver.outputs.version }}
@@ -391,15 +496,37 @@ jobs:
       # build-push-action can exit 0 before the manifest resolves, so a green run
       # could still mean a future ImagePullBackOff. Prove it pulls BEFORE the pin
       # moves — pinning an image the registry cannot serve has no rollback path.
-      - name: Verify the pushed image resolves
+      #
+      # AND prove the bytes behind the tag are OURS. Resolving only shows that
+      # SOMETHING is there; it says nothing about whose. This is the moment the
+      # image -> commit link is established, and the moment a clobber is still
+      # cheap to catch: the claim above makes a collision impossible between two
+      # lanes that both honour it, but a lane that does not (the platform
+      # buildctl path pushed onto v1.801.410 twelve minutes after this lane did)
+      # is exactly what an invariant has to survive. Reading the revision label
+      # back off the registry — not off our own build output — is the difference
+      # between believing the push landed and knowing it did.
+      - name: Verify the pushed image resolves, and is the commit we built
+        env:
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
           img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
+          ok=0
           for i in 1 2 3 4 5 6; do
-            docker buildx imagetools inspect "$img" >/dev/null 2>&1 && { echo "resolved $img"; exit 0; }
+            docker buildx imagetools inspect "$img" >/dev/null 2>&1 && { ok=1; break; }
             sleep 5
           done
-          echo "::error::pushed image never resolved: $img"; exit 1
+          [ "$ok" = 1 ] || { echo "::error::pushed image never resolved: $img"; exit 1; }
+          echo "resolved $img"
+
+          REV=$(bash .hanzo/scripts/image-revision.sh "hanzoai/cloud" "v${{ steps.ver.outputs.version }}")
+          if [ "$REV" != "${{ github.sha }}" ]; then
+            echo "::error::${img} resolves, but the bytes behind that tag were built from '${REV:-an unlabelled commit}', not ${{ github.sha }}. Another lane pushed over the tag this run owns. Nothing downstream may pin it."
+            exit 1
+          fi
+          echo "$img is built from ${{ github.sha }} — tag, commit and image agree"
 
       # THE SMOKE GATE. Boot the image that was actually pushed and require it to
       # reach "zip listening" without a crash signature, on release.go's boot env
@@ -460,37 +587,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The receipt, minted only now: build pushed it, smoke proved it boots. A
-      # tag can therefore never name an image that did not start.
+      # THE TAG IS NOT MINTED HERE ANY MORE — it was claimed before the build, as
+      # the compare-and-swap that made this version this run's to build (see the
+      # `image` job's claim step). Minting it here was the bug: for the whole
+      # length of a build, a number was "taken" only in the sense that a lane
+      # INTENDED to take it, and two lanes intending the same number both pushed
+      # images before either reached this step. The winner's tag then named the
+      # loser's bytes, and the loser died here — after the damage.
       #
-      # 422 USED TO BE A HARD ERROR, and that is exactly what made a resume
-      # impossible: the second run of a release whose fanout failed died here
-      # instead of continuing. A 422 whose ref already points at OUR sha is this
-      # same release, already receipted — idempotent success. A 422 pointing
-      # anywhere else is a genuine collision and still fails.
-      - name: Tag the release
+      # What remains is the assertion that nothing moved underneath us. A git tag
+      # is not mutable by accident, so this is expected to be quiet; it is here
+      # because the one thing worse than a moved tag is a moved tag that shipped.
+      - name: The claimed tag still names this commit
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
-          CODE=$(curl -s -o /tmp/tag.json -w '%{http_code}' -X POST \
-            -H "Authorization: Bearer ${GH_PAT}" \
-            -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/hanzoai/cloud/git/refs" \
-            -d "{\"ref\":\"refs/tags/${TAG}\",\"sha\":\"${{ github.sha }}\"}")
-          if [ "$CODE" = "422" ]; then
-            HAVE=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
-              "https://api.github.com/repos/hanzoai/cloud/git/ref/tags/${TAG}" | jq -r '.object.sha')
-            if [ "$HAVE" = "${{ github.sha }}" ]; then
-              echo "${TAG} already names ${HAVE} — this release, resumed"; exit 0
-            fi
-            echo "::error::tag ${TAG} exists and names ${HAVE}, not ${{ github.sha }}"; cat /tmp/tag.json; exit 1
+          HAVE=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
+            "https://api.github.com/repos/hanzoai/cloud/git/ref/tags/${TAG}" | jq -r '.object.sha // empty')
+          if [ -z "$HAVE" ]; then
+            echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
           fi
-          if [ "$CODE" != "201" ]; then
-            echo "::error::create tag ${TAG}: status $CODE"; cat /tmp/tag.json; exit 1
+          if [ "$HAVE" != "${{ github.sha }}" ]; then
+            echo "::error::${TAG} now names ${HAVE}, not ${{ github.sha }} — the claim was overwritten. Nothing here may pin."; exit 1
           fi
-          echo "minted ${TAG} at ${{ github.sha }}"
+          echo "${TAG} names ${{ github.sha }}, as claimed"
 
       # THE DEPLOY. cd.hanzo.ai watches hanzoai/universe, not the registry, so an
       # image nothing points at is just bytes in ghcr.
