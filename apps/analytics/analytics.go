@@ -92,7 +92,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/sites"
 	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/types"
 	luxlog "github.com/luxfi/log"
@@ -123,11 +122,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 }
 
 // build carries no per-subsystem state — analytics reads the shared warehouse. It
-// records the informative mount line, installs the site-host ingest carve, and brings
-// up the event sink.
+// records the informative mount line and brings up the event sink.
 func build(b cloud.Base) (state, error) {
 	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
-	installHostCarve(b)
+	// The key→project resolver this door refuses without. The FALLBACK only:
+	// projects.Mount installs the in-process one when it shares this process, and
+	// currentKeyResolver prefers it.
+	SetFallbackKeyResolver(planeKeys{})
 	startSink(b.Log)
 	return state{}, nil
 }
@@ -173,51 +174,6 @@ func Shutdown(context.Context) error {
 	stopSink()
 	closeBus()
 	return nil
-}
-
-// installHostCarve wires the published-site-host beacon ingest (the twin of base's
-// sites.SetBaseHostHandler): a page served on a site host can POST its OWN analytics
-// beacon to an ingest door and have it ingested onto the event plane under the site's
-// resolved Org — the server-supplied, host-derived tenant, never a body/header claim.
-//
-// It goes STRAIGHT to the ANONYMOUS lane (publicIngest), and this is the honest
-// description of the door rather than a policy applied to it: sites.Middleware runs
-// BEFORE the identity boundary (serve.go — sites at 241, IdentityMiddleware at 267),
-// so on a site host c.User()/c.Org() are still RAW client headers and NOTHING here can
-// be vouched for. A published site is a public artifact and its beacons are anonymous
-// by construction, so they get the anonymous capability: the pageview/error allowlist
-// and the field projection (no revenue, no personId, no groupId, no property bag), the
-// 50-event / 64 KiB bounds, the per-IP and per-peer rate caps, and the DNT gate.
-//
-// The Site's org is the anonymous TENANT, so a customer's own site analytics keep
-// landing in the customer's org — the same host-derived tenant this host is already
-// trusted for when the file plane serves its bytes and the Base carve serves its data.
-// A caller wanting FULL capability presents a credential to api.hanzo.ai/v1/event,
-// which sits behind the identity boundary where a credential can actually be checked.
-//
-// Gated by the SAME already-existing flag the anonymous ingest path uses —
-// CLOUD_ANALYTICS_PUBLIC_CAPTURE (publicCaptureEnabled, default ON) — so a site
-// host accepts its own beacons out of the box, and turning public capture off also
-// removes this carve (a site host then 405s a beacon POST, unchanged). sites.Middleware
-// gates the carve on method POST and on the exact path set handed to it here, so the
-// authenticated GET read lenses are never hijacked.
-//
-// That set is doors (event.go) — the SAME list routes registers — so a site host
-// carves exactly the doors an API host routes. sites is handed each path already
-// bound to its handler, which is why it holds no path literal of its own: the map it
-// looks a beacon up in IS the dispatch, so membership and wire are one decision and
-// a door added or deleted tomorrow moves both surfaces at once.
-func installHostCarve(b cloud.Base) {
-	if !publicCaptureEnabled() {
-		b.Log.Info("analytics public-host ingest carve disabled", "flag", publicCaptureEnv)
-		return
-	}
-	carve := make(map[string]func(string, *zip.Ctx) error, len(doors))
-	for _, d := range doors {
-		carve[d.path] = d.anon
-	}
-	sites.SetAnalyticsHost(carve)
-	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv, "doors", len(carve))
 }
 
 // zipdoc lifts the doc comment off each typed op and off each field of its In and

@@ -102,7 +102,7 @@ func TestAcceptedPathIsUnchanged(t *testing.T) {
 		{"bare array", `[{"type":"pageview","event":"$pageview","distinctId":"anon-1","path":"/pricing"}]`},
 		{"batch envelope", `{"batch":[{"type":"pageview","event":"$pageview","distinctId":"anon-1"}]}`},
 	} {
-		code, body := doHost(t, app, "/v1/event", "", "", "api.hanzo.ai", tc.body)
+		code, body := postAnon(t, app, "/v1/event", tc.body, nil)
 		if code != http.StatusServiceUnavailable {
 			t.Errorf("anonymous pageview (%s) = %d (%s), want 503 ADMITTED — the fix must not "+
 				"narrow what the door accepts", tc.name, code, body)
@@ -122,7 +122,7 @@ func TestPartialBatchStillSucceeds(t *testing.T) {
 	const mixed = `{"batch":[` +
 		`{"type":"pageview","event":"$pageview","distinctId":"anon-1","path":"/pricing"},` +
 		`{"type":"event","event":"order_completed","revenue":99}]}`
-	code, body := doHost(t, app, "/v1/event", "", "", "api.hanzo.ai", mixed)
+	code, body := postAnon(t, app, "/v1/event", mixed, nil)
 	if code != http.StatusOK {
 		t.Fatalf("partial batch = %d (%s), want 200 — some events landing is a success", code, body)
 	}
@@ -138,7 +138,7 @@ func TestEmptyBodyStillSucceeds(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
 	for _, body := range []string{``, `   `, `{"batch":[]}`, `[]`} {
-		code, got := doHost(t, app, "/v1/event", "", "", "api.hanzo.ai", body)
+		code, got := postAnon(t, app, "/v1/event", body, nil)
 		if code != http.StatusOK {
 			t.Errorf("empty body %q = %d (%s), want 200 — dropping nothing is not losing anything",
 				body, code, got)
@@ -220,7 +220,7 @@ func TestDropIsVisibleToAnAlert(t *testing.T) {
 
 	roomyRate(t)
 	app := mountApp(t)
-	doHost(t, app, "/v1/event", "", "", "api.hanzo.ai", `{"event":"app.log","distinctId":"d1"}`)
+	postAnon(t, app, "/v1/event", `{"event":"app.log","distinctId":"d1"}`, nil)
 
 	var rm metricdata.ResourceMetrics
 	if err := reader.Collect(context.Background(), &rm); err != nil {
