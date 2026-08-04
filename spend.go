@@ -304,8 +304,8 @@ var meteredApps = []string{
 // The union of the manifest's declared prefixes and the /v1/<name> convention is
 // deliberate. They answer different questions — the manifest names the paths the
 // light host ROUTES to an app, the convention names the tree the app OWNS — and a
-// surface answers both: ml is routed /v1/train/jobs and also owns /v1/ml/predict,
-// which appears in neither list alone. A union can only widen coverage, and this
+// surface answers both: ml is routed /v1/ml/models and also owns
+// /v1/ml/models/{name}/predict, which appears in neither list alone. A union can only widen coverage, and this
 // gate's asymmetry is that gating too little is a leak while gating too much is an
 // outage only for paths that are NOT metered — which a union over metered apps
 // cannot reach.
