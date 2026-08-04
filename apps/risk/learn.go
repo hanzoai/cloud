@@ -1457,6 +1457,14 @@ type report struct {
 // searchDeadline bounds one run end to end.
 const searchDeadline = 10 * time.Minute
 
+// charge is the money seam as the plane sees it: GATE n screens, and get back the
+// meter for what was actually done. It is ONE function and not a gate-and-a-book
+// pair because the two halves are one decision made twice — a bound, then its
+// outcome — and a plane that took them as two parameters could be handed a gate
+// for one thing and a meter for another. [ops.gate] is the only implementation;
+// the plane never reaches the request, the ledger or the price.
+type charge func(kind string, n int) (meter func(done int), err error)
+
 // begin accepts a search: it reads the tenant's own history NOW (so a caller
 // learns immediately whether there is anything to replay) and runs the grid in
 // the background, writing the result to the tenant's own shelf.
@@ -1465,17 +1473,30 @@ const searchDeadline = 10 * time.Minute
 // the point of the search is to answer one question about one history, and two
 // answers racing to the same shelf row is not two answers.
 //
-// admit is called ONCE, with the measured size of the run, after the history is
-// read and before any candidate is tried. That is where the caller's ledger is
-// checked, because it is the first moment the cost of the run is a number rather
-// than a guess; a refusal there aborts before the first tree is planted.
+// A SEARCH COSTS TWICE AND IS PRICED TWICE, each half before the half it prices.
+// The two are genuinely different work and a single price would be wrong in both
+// directions:
 //
-// book is called ONCE when the grid ENDS, however it ends, with the screens the
-// run actually performed — trials completed × events replayed. It is separate
-// from admit for the reason the money seam states: the gate runs on the upper
-// bound before the work, the meter runs on what was done. A run cancelled by a
-// rollout after four of sixty-four candidates is billed for four.
-func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, admit func(events int) error, book func(screens int)) (report, error) {
+//	THE SURFACE   rolling up to four source planes into this organisation's own
+//	              feature surface and reading the window back. Its size is the
+//	              WINDOW, which the caller states, so it is known before anything
+//	              runs — the same unit and the same price [ops.features] pays for
+//	              the same work.
+//	THE GRID      every candidate over every event. Its size is the measured
+//	              history, so it is known only after the surface read.
+//
+// The surface half used to run BEFORE ANY GATE AT ALL: a caller with no balance
+// drove the whole warehouse cost of a search, was refused at the very end, and
+// paid for none of it — as often as it cared to ask. Pricing the grid on its
+// upper bound instead would have closed that and priced out every small tenant,
+// because the upper bound is [maxHistory] × the grid whatever the tenant's actual
+// history holds. Two bounds, each where its own size is a number.
+//
+// price is the money seam: it GATES n screens and returns the meter for what was
+// actually DONE. Each half gates before its work and meters after it, which is
+// why the grid's meter is called when the grid ENDS however it ends — a run
+// cancelled by a rollout after four of sixty-four candidates is billed for four.
+func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, price charge) (report, error) {
 	if _, err := p.resident(t); err != nil {
 		return report{}, err
 	}
@@ -1501,6 +1522,12 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 		}
 	}()
 
+	// GATED BEFORE THE WAREHOUSE IS TOUCHED, on the window the caller stated.
+	surface, err := price("search", windowScreens(lookback))
+	if err != nil {
+		return report{}, err
+	}
+
 	// A SURFACE READ ROLLS FIRST. The fold that brought this tenant's surface
 	// current runs in the background, so a search that only waited for residency
 	// would race it and answer "your history is empty" on the very first use —
@@ -1513,6 +1540,10 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 	}
 	end := p.now().UTC()
 	rs, err := rows(ctx, t, query{start: end.Add(-lookback), end: end, limit: maxHistory})
+	// METERED HERE, BEFORE ANY REFUSAL BELOW. The roll and the read have run by
+	// this line however they went, and the meter's contract is what was DONE — the
+	// same rule [ops.features] applies when its own read fails after its roll.
+	surface(windowScreens(lookback))
 	if err != nil {
 		return report{}, err
 	}
@@ -1523,10 +1554,9 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 	if len(hist) > maxHistory {
 		hist = hist[len(hist)-maxHistory:]
 	}
-	if admit != nil {
-		if err := admit(len(hist)); err != nil {
-			return report{}, err
-		}
+	grid, err := price("search", len(hist)*len(candidates()))
+	if err != nil {
+		return report{}, err
 	}
 
 	pending := report{ID: id, Tenant: string(t), Started: end, Events: len(hist)}
@@ -1543,9 +1573,7 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 		// conflict naming a run that is not running.
 		defer p.unclaim(t)
 		rep := p.search(runCtx, t, id, hist)
-		if book != nil {
-			book(len(rep.Trials) * rep.Events)
-		}
+		grid(len(rep.Trials) * rep.Events)
 		if err := p.keep(t, rep); err != nil {
 			p.log.Warn("search finished but could not be saved", "tenant", string(t), "run", id, "err", err)
 		}

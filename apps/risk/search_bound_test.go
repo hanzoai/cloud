@@ -29,6 +29,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/zap-proto/zip"
 )
 
 // historyReads counts the full-history reads a search does — the SELECT with the
@@ -75,7 +77,7 @@ func TestSearch_OneTenantsConcurrencyDoesNotMultiplyTheExpensiveRead(t *testing.
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, err := p.begin(context.Background(), k, 24*time.Hour, nil, func(int) {})
+			_, err := p.begin(context.Background(), k, 24*time.Hour, free)
 			accepted[i] = err == nil
 		}(i)
 	}
@@ -108,7 +110,7 @@ func TestSearch_ARefusedRunReleasesTheSlot(t *testing.T) {
 	k := key(t, brandA, orgA)
 
 	// Empty surface: begin refuses with "history is empty" AFTER the claim.
-	if _, err := p.begin(context.Background(), k, 24*time.Hour, nil, func(int) {}); err == nil {
+	if _, err := p.begin(context.Background(), k, 24*time.Hour, free); err == nil {
 		t.Fatal("a search over an empty history must be refused")
 	}
 	// The slot must be free again.
@@ -127,7 +129,7 @@ func TestSearch_ARefusedRunReleasesTheSlot(t *testing.T) {
 			"events": uint32(2), "spend_nano": int64(150_000_000),
 		})
 	}
-	if _, err := p.begin(context.Background(), k, 24*time.Hour, nil, func(int) {}); err != nil {
+	if _, err := p.begin(context.Background(), k, 24*time.Hour, free); err != nil {
 		t.Fatalf("after a refused search the next one must be admitted, got %v", err)
 	}
 }
@@ -149,10 +151,140 @@ func TestSearch_TheSlotIsPerTenant(t *testing.T) {
 			})
 		}
 	}
-	if _, err := p.begin(context.Background(), a, 24*time.Hour, nil, func(int) {}); err != nil {
+	if _, err := p.begin(context.Background(), a, 24*time.Hour, free); err != nil {
 		t.Fatalf("organisation A's search: %v", err)
 	}
-	if _, err := p.begin(context.Background(), b, 24*time.Hour, nil, func(int) {}); err != nil {
+	if _, err := p.begin(context.Background(), b, 24*time.Hour, free); err != nil {
 		t.Fatalf("organisation A's search refused organisation B's: %v — the slot is process-wide, not per tenant", err)
+	}
+}
+
+// ── the other half of the same bound: the RATE, not only the concurrency ─────
+//
+// The slot above stops ONE tenant's concurrency from multiplying the expensive
+// read. It does not stop that tenant asking again, and again: the setup ran
+// BEFORE ANY GATE AT ALL — the ledger check was the LAST step of begin — so a
+// caller with no balance drove a roll of up to four source planes and a
+// full-window read on the one warehouse every tenant shares, was refused at the
+// end, and paid for none of it, as often as it cared to ask.
+//
+// A search is now priced TWICE, each half before the half it prices: the surface
+// from the WINDOW, which the caller states and which is therefore known before
+// anything runs, and the grid from the MEASURED history. Pricing the grid on its
+// upper bound instead would close the same hole and price out every small tenant
+// — maxHistory × the whole grid, whatever that organisation's history holds.
+
+// asked is one call the plane made to the money seam.
+type asked struct {
+	Kind string
+	N    int
+}
+
+// meterer is a recording money seam: it remembers every gate and every meter, and
+// refuses when told to. It is the whole ledger a plane test needs — the real one
+// has its own fixture ([mountBilled]) and its own tests.
+type meterer struct {
+	deny  error
+	gates []asked
+	paid  []asked
+}
+
+func (m *meterer) charge(kind string, n int) (func(int), error) {
+	m.gates = append(m.gates, asked{kind, n})
+	if m.deny != nil {
+		return nil, m.deny
+	}
+	return func(done int) { m.paid = append(m.paid, asked{kind, done}) }, nil
+}
+
+// TestSearch_ARefusedCallerNeverReachesTheWarehouse is the blocker: the gate on
+// the surface read must run BEFORE the surface read.
+//
+// It is proved by what the warehouse SAW. Asserting only that the call was
+// refused would pass with the gate still last, because it was refused then too —
+// after the work.
+func TestSearch_ARefusedCallerNeverReachesTheWarehouse(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	// A history worth reading, so the read this test counts is a real one.
+	for i := 0; i < 24; i++ {
+		probe.hold(string(k), map[string]any{
+			"subject_kind": kindAccount, "subject": "u_" + itoa(i%4),
+			"bucket": surfaceAt(i + 1),
+			"events": uint32(2), "spend_nano": int64(150_000_000),
+		})
+	}
+	// Residency first, so what is counted below is the SEARCH's warehouse work and
+	// not the rebuild that any first touch pays.
+	if _, err := p.resident(k); err != nil {
+		t.Fatalf("resident: %v", err)
+	}
+	before := len(probe.all())
+
+	books := &meterer{deny: zip.Errorf(402, "insufficient balance")}
+	if _, err := p.begin(context.Background(), k, 7*24*time.Hour, books.charge); err == nil {
+		t.Fatal("a search whose gate refuses must be refused")
+	}
+	if n := len(probe.all()) - before; n != 0 {
+		t.Fatalf("a caller refused for want of balance still drove %d warehouse statements — the gate runs "+
+			"AFTER the work it is supposed to gate, so the roll and the full-window read are free and repeatable", n)
+	}
+	// And it was priced on the WINDOW, which is the only size known that early. A
+	// surface priced at zero is a gate that is present and does not gate.
+	if len(books.gates) != 1 || books.gates[0].N != windowScreens(7*24*time.Hour) {
+		t.Fatalf("the surface read was gated as %+v, want one gate of %d screens (the window it rolls and reads)",
+			books.gates, windowScreens(7*24*time.Hour))
+	}
+	if len(books.paid) != 0 {
+		t.Fatalf("a refused search metered %+v — nothing ran", books.paid)
+	}
+}
+
+// TestSearch_BothHalvesArePricedForWhatTheyAre: the surface on the window, the
+// grid on the measured history. One price for both would be wrong in both
+// directions — a flat fee under-prices the grid, and the grid's upper bound
+// over-prices every tenant whose history is small.
+func TestSearch_BothHalvesArePricedForWhatTheyAre(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	const events = 12
+	for i := 0; i < events; i++ {
+		probe.hold(string(k), map[string]any{
+			"subject_kind": kindAccount, "subject": "u_" + itoa(i%3),
+			"bucket": surfaceAt(i + 1),
+			"events": uint32(2), "spend_nano": int64(150_000_000),
+		})
+	}
+	const days = 7
+	books := &meterer{}
+	run, err := p.begin(context.Background(), k, days*24*time.Hour, books.charge)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	// The grid runs behind the accept; close the plane so it has ended and the
+	// books are final.
+	if err := p.close(context.Background()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	want := []asked{{"search", days}, {"search", run.Events * len(candidates())}}
+	if len(books.gates) != 2 || books.gates[0] != want[0] || books.gates[1] != want[1] {
+		t.Fatalf("the run gated %+v, want %+v — the surface is priced from its window and the grid from its measured history", books.gates, want)
+	}
+	// METERED ON WHAT WAS DONE. The surface for the window it rolled and read; the
+	// grid for the trials that actually ran, which after a close is not the whole
+	// grid.
+	if len(books.paid) != 2 {
+		t.Fatalf("the run metered %+v, want one debit per half", books.paid)
+	}
+	if books.paid[0] != (asked{"search", days}) {
+		t.Fatalf("the surface metered %+v, want %d screens", books.paid[0], days)
+	}
+	if books.paid[1].N > run.Events*len(candidates()) {
+		t.Fatalf("the grid metered %d screens, more than the %d it was admitted for — the meter is running on the "+
+			"accepted size and not on the work", books.paid[1].N, run.Events*len(candidates()))
 	}
 }
