@@ -61,7 +61,7 @@ openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equ
 	@$(GO) test -count=1 $(ROOT)/openapi $(if $(OUT),-weave="$(abspath $(OUT))")
 
 # The exemptions are honoured HERE as well as in the gate, because the gate's
-# own failure message says "fix: make openapi" — and that fix routed through this
+# own failure message says "fix: make describe" — and that fix routed through this
 # loop, which mounted kafka, which fails closed without a live broker. So the one
 # command told to repair a red gate could not run at all. Each exemption is
 # defined once and read everywhere it applies; a repair path that skipped fewer

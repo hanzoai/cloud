@@ -34,7 +34,7 @@ import (
 
 // zipdoc lifts the doc comment off each typed op and each In/Out field into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
-// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+// and the MCP tool list — Go drops comments at compile time. Run by `make describe`.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
