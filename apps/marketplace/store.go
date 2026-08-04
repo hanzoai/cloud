@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
 	"github.com/hanzoai/cek"

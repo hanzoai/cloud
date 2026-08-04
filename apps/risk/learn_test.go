@@ -16,7 +16,12 @@ package risk
 
 import (
 	"context"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -145,30 +150,35 @@ func TestModel_LearningIsNotShared(t *testing.T) {
 	}
 }
 
-// TestRestore_RefusesAnotherOrganisationsState: a snapshot is one organisation's
-// learned behaviour, so installing it into another's model is a disclosure of the
-// first organisation's activity. The engine checks the shape, the version and the
-// mass invariant; whose state it is has to be checked here, because here the
-// caller is a request rather than the tenant.
+// TestRestore_AdoptsOnlyTheOrganisationsOwnValue: adoption takes a NAME, and the
+// only names that resolve are the ones this organisation published. A's value is
+// adoptable BY A, which is what makes [TestAddress_AForeignOrgResolvesNothing]'s
+// refusal a statement about whose value it is rather than about the value being
+// unusable.
 //
-// Mutation proof: delete the key comparison in plane.install and this fails.
-func TestRestore_RefusesAnotherOrganisationsState(t *testing.T) {
+// The check this replaces compared the organisation on a caller-supplied body. There
+// is no body any more (address.go): the masses are read from the caller's own store
+// and the organisation is stamped on from the validated principal, so the disclosure
+// the old check refused is now UNREACHABLE instead of refused. The comparison in
+// plane.install is kept as the belt to that braces — it now guards state coming off
+// this organisation's own shelf, which is the only state that reaches it.
+func TestRestore_AdoptsOnlyTheOrganisationsOwnValue(t *testing.T) {
 	probe.reset(true)
 	p := newTestPlane(t)
-	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
+	a := key(t, brandA, orgA)
 	teach(t, p, a, stream(300, time.Now().UTC().Add(-3*time.Hour)))
 
-	snap, ok, err := p.pin(a)
-	if err != nil || !ok {
-		t.Fatalf("pin(A): ok=%v err=%v", ok, err)
+	v, minted, err := p.publish(a)
+	if err != nil || !minted {
+		t.Fatalf("publish(A): minted=%v err=%v", minted, err)
 	}
-	if _, _, err := p.adopt(b, snap); err == nil {
-		t.Fatal("organisation B adopted organisation A's learned state")
+	if _, _, err := p.adopt(a, v.Address); err != nil {
+		t.Fatalf("an organisation could not adopt its own published value: %v", err)
 	}
-	// ...and A can still adopt its own, so the refusal above is about WHOSE state
-	// it is and not about the state being unusable.
-	if _, _, err := p.adopt(a, snap); err != nil {
-		t.Fatalf("an organisation could not adopt its own snapshot: %v", err)
+	// A name nobody published resolves to nothing, and it is NOT FOUND rather than a
+	// fault: an address is a name and a name that names nothing is a miss.
+	if _, _, err := p.adopt(a, strings.Repeat("0", addressBytes)); err == nil {
+		t.Fatal("an address nobody published was adopted")
 	}
 }
 
@@ -189,12 +199,12 @@ func TestSnapshot_SurvivesARestart(t *testing.T) {
 	if before.Learned == 0 {
 		t.Fatal("nothing was learned — the test proves nothing")
 	}
-	if err := first.close(); err != nil {
+	if err := first.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	after, _, err := second.state(k)
 	if err != nil {
 		t.Fatalf("state after restart: %v", err)
@@ -224,7 +234,7 @@ func TestAppetite_IsPerOrganisationAndShadowIsTheDefault(t *testing.T) {
 		t.Fatal("a brand-new model is LIVE — shadow must be the default, or a model nobody reviewed can refuse a payment")
 	}
 
-	if _, _, err := p.appetite(a, 0.05, 0.01, true); err != nil {
+	if _, err := p.appetite(a, 0.05, 0.01, true, "u_"+orgA); err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
 	sa, _, _ := p.state(a)
@@ -247,10 +257,13 @@ func TestAppetite_KeepsWhatWasLearned(t *testing.T) {
 	teach(t, p, k, stream(400, time.Now().UTC().Add(-4*time.Hour)))
 	before, _, _ := p.state(k)
 
-	after, _, err := p.appetite(k, 0.02, 0.001, false)
-	if err != nil {
+	if _, err := p.appetite(k, 0.02, 0.001, false, "u_"+orgA); err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
+	// READ THE MODEL FOR THE MODEL. A policy write answers the version it enacted
+	// and nothing about the learned state, so what the state is comes from the one
+	// place that owns it.
+	after, _, _ := p.state(k)
 	if after.Learned != before.Learned {
 		t.Fatalf("restating the appetite unlearned %d events", before.Learned-after.Learned)
 	}
@@ -302,7 +315,7 @@ func TestSearch_RefusesAnEmptyHistory(t *testing.T) {
 	}
 	// And the accepting path refuses too, rather than starting a run that proves
 	// nothing.
-	if _, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil); err == nil {
+	if _, err := p.begin(context.Background(), k, 24*time.Hour, free); err == nil {
 		t.Fatal("begin accepted a search over an empty surface")
 	}
 }
@@ -321,7 +334,7 @@ func TestSearch_ReadsOnlyItsOwnHistory(t *testing.T) {
 			"events": uint32(3), "spend_nano": int64(250_000_000 + i),
 		})
 	}
-	run, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil)
+	run, err := p.begin(context.Background(), k, 24*time.Hour, free)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -432,12 +445,12 @@ func TestResident_IsBuiltOnceHoweverManyAskAtOnce(t *testing.T) {
 	first := planeAt(t, dir)
 	holdFolds(t, first)
 	teach(t, first, k, stream(2_000, time.Now().UTC().Add(-6*time.Hour)))
-	if err := first.close(); err != nil {
+	if err := first.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	p := planeAt(t, dir)
-	defer func() { _ = p.close() }()
+	defer func() { _ = p.close(context.Background()) }()
 	holdFolds(t, p)
 	const callers = 32
 	var wg sync.WaitGroup
@@ -802,7 +815,7 @@ func TestMasses_SurviveAnUngracefulStop(t *testing.T) {
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	after, _, err := second.state(k)
 	if err != nil {
@@ -871,7 +884,7 @@ func TestMasses_AreWrittenDownOnAnIntervalToo(t *testing.T) {
 		t.Fatalf("release the files: %v", err)
 	}
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	after, _, err := second.state(k)
 	if err != nil {
@@ -883,33 +896,70 @@ func TestMasses_AreWrittenDownOnAnIntervalToo(t *testing.T) {
 	}
 }
 
-// TestRestore_CannotChooseTheGeometry: the engine regenerates a model's trees
-// from the snapshot's SEED, so a caller that supplies the seed chooses WHERE THE
-// REGIONS ARE — the one thing a snapshot is supposed not to disclose, arriving
-// through the other door. The geometry is this plane's, minted here and carried
-// with the tenant's own state.
+// TestRestore_TheGeometryIsUNSPELLABLEFromTheWire: choosing a model's SEED is
+// choosing where its dense regions are, and therefore where activity can be hidden
+// from it. This used to be a refusal — a caller could send a seed and [plane.install]
+// compared it — and it is now an ABSENCE: the adoption op takes an address, so there
+// is no field on the wire that reaches a seed at all.
 //
-// Mutation proof: delete the seed comparison in plane.install and the tampered
-// snapshot below is adopted.
-func TestRestore_CannotChooseTheGeometry(t *testing.T) {
+// That is the claim under test, and it is structural rather than behavioural,
+// because the behaviour it protects can no longer be provoked: the way to break this
+// is to put a mass, a seed or a snapshot back on an In type, and no call can catch
+// that. So the In types are read directly. [plane.install]'s seed comparison stays
+// as the guard on state coming off this organisation's own shelf.
+func TestRestore_TheGeometryIsUNSPELLABLEFromTheWire(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "typed.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse typed.go: %v", err)
+	}
+	// Every term that would let a caller describe a model rather than name one.
+	forbidden := map[string]string{
+		"seed": "the tree geometry — a caller that picks it picks where activity can be hidden",
+		"ref":  "the reference window's masses",
+		"cur":  "the open window's masses",
+		"hist": "the score distribution the threshold is cut from",
+	}
+	var found []string
+	ast.Inspect(file, func(n ast.Node) bool {
+		ts, ok := n.(*ast.TypeSpec)
+		if !ok || !strings.HasSuffix(ts.Name.Name, "In") {
+			return true
+		}
+		st, ok := ts.Type.(*ast.StructType)
+		if !ok {
+			return true
+		}
+		for _, f := range st.Fields.List {
+			if f.Tag == nil {
+				continue
+			}
+			for term, why := range forbidden {
+				if strings.Contains(f.Tag.Value, `json:"`+term) {
+					found = append(found, fmt.Sprintf("%s carries %q — %s", ts.Name.Name, term, why))
+				}
+			}
+		}
+		return true
+	})
+	if len(found) > 0 {
+		t.Fatalf("a caller can describe a model instead of naming one:\n  %s\n"+
+			"A model value is adopted by ADDRESS; the state is read from the organisation's "+
+			"own store, so nothing about it belongs on an In type.", strings.Join(found, "\n  "))
+	}
+
+	// And the behaviour that absence buys: a value published by this plane adopts,
+	// with its geometry never having left the store.
 	probe.reset(true)
 	p := newTestPlane(t)
 	holdFolds(t, p)
 	k := key(t, brandA, orgA)
 	teach(t, p, k, stream(120, time.Now().UTC().Add(-2*time.Hour)))
-	snap, ok, err := p.pin(k)
-	if err != nil || !ok {
-		t.Fatalf("pin: %v (ok=%v)", err, ok)
+	v, minted, err := p.publish(k)
+	if err != nil || !minted {
+		t.Fatalf("publish: minted=%v err=%v", minted, err)
 	}
-	// Its own state, unchanged, is adoptable.
-	if _, _, err := p.adopt(k, snap); err != nil {
-		t.Fatalf("an organisation could not adopt its own snapshot: %v", err)
-	}
-	// The same masses under a geometry the caller picked is not.
-	chosen := snap
-	chosen.Seed = snap.Seed ^ 0xdeadbeef
-	if _, _, err := p.adopt(k, chosen); err == nil {
-		t.Fatal("a caller chose its model's tree geometry — which is choosing where the dense " +
-			"regions are, and therefore where activity can be hidden")
+	if _, _, err := p.adopt(k, v.Address); err != nil {
+		t.Fatalf("an organisation could not adopt its own published value: %v", err)
 	}
 }

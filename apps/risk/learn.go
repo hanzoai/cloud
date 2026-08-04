@@ -254,6 +254,26 @@ type resident struct {
 	// gone. See [resident.hold].
 	advance chan struct{}
 	touch   time.Time // for eviction order
+	// shape is the model space this residency's arithmetic runs in: the feature
+	// inventory in order and the detector's geometry parameters, as the engine's own
+	// Digest. It is held here so EVERY SCORE CAN CITE IT at no cost — it is what an
+	// auditor pins an alert to, because a score is only meaningful against the shape
+	// that produced it, and recomputing it per score would hash the whole inventory
+	// on the hot path to learn something that cannot change.
+	//
+	// It cannot change for a residency: the digest covers the geometry parameters,
+	// and the only writers of those are [plane.plant], which builds the store, and
+	// [plane.install], which REFUSES a state whose shape differs. Restating a regime
+	// rebuilds the store ([plane.restoreRegime]) but moves only the appetite and the
+	// shadow flag, neither of which the digest covers.
+	shape string
+	// pol is the VERSION of the decision regime this model is deciding under, from
+	// the tenant's own policy history (policy.go). It is carried here so every
+	// score can cite it without a disk read, and it is set in exactly two places:
+	// where a residency is opened and where a regime is enacted. Zero means the
+	// organisation has never stated one, which is a fact a score reports rather
+	// than a gap it hides.
+	pol int
 }
 
 // fold is how much of a tenant's OWN event surface has been folded into its
@@ -526,25 +546,7 @@ func (p *plane) open(t tenant, mine *opening) (r *resident, err error) {
 	if snap, cfg, warmed, err := p.load(t); err != nil {
 		p.log.Warn("model state unavailable; tenant starts warming", "tenant", string(t), "err", err)
 	} else {
-		if cfg != nil {
-			r.cfg.Appetite, r.cfg.Shadow = cfg.Appetite, cfg.Shadow
-			mod, err := anomaly.New(r.cfg, r.vel.vel)
-			if err != nil {
-				// The stated appetite could not be rebuilt. Keep the DEFAULT posture,
-				// which is shadow — refusing to honour a policy is survivable, quietly
-				// running live because a policy failed to load is not — and say so.
-				//
-				// The geometry seed is NOT reset with it: r.cfg has to keep describing
-				// the store [plane.plant] built.
-				p.log.Warn("stated appetite could not be restored; the tenant keeps the default shadow posture",
-					"tenant", string(t), "err", err)
-				seed := r.cfg.Seed
-				r.cfg = defaultConfig()
-				r.cfg.Seed, r.cfg.MaxOrgs = seed, 1
-			} else {
-				r.mod = mod
-			}
-		}
+		p.restoreRegime(r, cfg)
 		if snap != nil {
 			if err := p.install(r, *snap); err != nil {
 				p.log.Warn("model state rejected; tenant starts warming", "tenant", string(t), "err", err)
@@ -744,7 +746,7 @@ func (p *plane) plant(t tenant, cfg anomaly.Config, vel *rings) (*resident, erro
 	if err != nil {
 		return nil, fmt.Errorf("risk: model for %q: %w", string(t), err)
 	}
-	return &resident{key: t, cfg: cfg, mod: mod, vel: vel, advance: make(chan struct{}, 1)}, nil
+	return &resident{key: t, cfg: cfg, mod: mod, vel: vel, shape: mod.Digest(), advance: make(chan struct{}, 1)}, nil
 }
 
 // hold takes this tenant's fold ticket, or gives up when the caller does.
@@ -869,19 +871,44 @@ func (p *plane) leave(t tenant) {
 // score judges one observation WITHOUT learning from it, moving any counter, or
 // touching the aggregate store. It is how a candidate is tried against a
 // tenant's own behaviour before anything depends on the answer.
-func (p *plane) score(t tenant, o observation) (anomaly.Assessment, error) {
+func (p *plane) score(t tenant, o observation) (decided, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.Assessment{}, err
+		return decided{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mod.Inspect(o.tx(t), types.Entity{OrgID: string(t)}), nil
+	// The verdict, the regime it was reached under and the SHAPE it was reached in
+	// are read in the SAME critical section, so a concurrent policy change cannot
+	// make a score cite a regime that did not produce its cut and a concurrent
+	// adoption cannot make it cite a model space it did not run in.
+	return decided{
+		A:       r.mod.Inspect(o.tx(t), types.Entity{OrgID: string(t)}),
+		Version: r.pol,
+		Shape:   r.shape,
+	}, nil
 }
 
 // learn records observations into the tenant's own aggregates and lets its model
-// learn from them, returning the verdict score would have given on each
-// afterwards.
+// learn from them. It answers HOW MANY the model learned from, and nothing else.
+//
+// IT DOES NOT SCORE. Learning is a transformation over observations; a verdict is
+// a query against the result. They were one call — Inspect to build a verdict for
+// the response, then Assess to move the counters — and both enter the engine's
+// `judge`, so the model ran TWICE over every event: two projections of the point,
+// three aggregate reads each, and two walks of the forest. Above the cut both also
+// ran the counterfactual attribution, which is a further walk per dimension, nine
+// of them; that is the expensive half, and it is reached by the share of the
+// stream the appetite admits — one per cent by default, not all of it.
+//
+// [BenchmarkLearn] measures what removing it bought: 12% off the whole learning
+// path per event (20.0µs → 17.5µs at a 128-event batch, 31.5µs → 27.8µs at eight),
+// and 8% of its allocations. The rest of the path is the durable record and the
+// aggregates, which is why the saving is a tenth and not a half — a claim of "half
+// the work" would be true of the model calls and false of the operation, and the
+// operation is what a caller waits for.
+//
+// [plane.score] is the query, it is pure, and it is the one door to a verdict.
 //
 // It takes a BATCH because durability is per batch: the whole batch is written to
 // the tenant's own record in one transaction BEFORE anything moves in memory, so
@@ -889,45 +916,44 @@ func (p *plane) score(t tenant, o observation) (anomaly.Assessment, error) {
 // the next rollout will silently undo. A batch is also one acquisition of the
 // tenant's lock instead of N.
 //
-// The order within an event is deliberate and it is the engine's: RECORD FIRST,
-// then assess. The numbers an alert quotes are then the same ones an investigator
-// sees when they look at the subject, and every baseline in the feature set has
-// this event removed from it arithmetically, so nothing is measured against
-// itself.
+// RECORD FIRST, then assess, and the order is the engine's own precondition. The
+// numbers an alert quotes are then the same ones an investigator sees when they
+// look at the subject, and every baseline in the feature set has this event
+// removed from it arithmetically, so nothing is measured against itself.
 //
 // A RETRY CONVERGES, IN MEMORY TOO. The record deduplicates on the caller's own
 // event id and says which rows were new ([plane.note]); only those move the rings
 // and the masses. Idempotence of the durable half alone is not idempotence at all
 // — the rings and the counters are what a decision is made from, and a retried
 // batch that skipped the rows and still moved them counts every event twice in
-// exactly the numbers that matter. Duplicates are still JUDGED, because the
-// caller asked what its model makes of them and the answer costs the same work.
-func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error) {
+// exactly the numbers that matter. A duplicate is therefore WHOLLY inert: it moves
+// nothing, it costs no model work, and the count returned does not include it.
+func (p *plane) learn(t tenant, obs ...observation) (int, error) {
 	if len(obs) == 0 {
-		return nil, nil
+		return 0, nil
 	}
 	r, err := p.resident(t)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	// DURABLE FIRST. The aggregates are a projection of this record; writing the
 	// counters and not the record is how a deploy blinds a tenant.
 	first, err := p.note(t, obs)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	now := p.now().UTC()
-	out := make([]anomaly.Assessment, 0, len(obs))
+	learned := 0
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i, o := range obs {
-		tx := o.tx(t)
 		if !first[i] {
-			// Already in this tenant's record, so already in the projection of it. Judge
-			// it against the model as it stands and move nothing.
-			out = append(out, r.mod.Inspect(tx, types.Entity{OrgID: string(t)}))
+			// Already in this tenant's record, so already in the projection of it.
+			// Nothing to record, nothing to learn, and — since this op no longer
+			// answers a verdict — nothing to compute either.
 			continue
 		}
+		tx := o.tx(t)
 		// THE RINGS ONLY MOVE FORWARD. An observation the aggregates cannot hold at
 		// its own bucket would be folded to the leading edge — counted as having
 		// happened NOW — so it is kept out of them. The model still learns from it.
@@ -937,32 +963,18 @@ func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error
 				r.edge = o.at
 			}
 		}
-		// TWO PASSES, IN THIS ORDER, and the order is the whole point.
-		//
-		// Assess is the learning pass: it moves the counters the governance report is
-		// computed from, and it answers only the engine's rule-hit shape — alert or
-		// not — because that is all the decision plane needs. The FULL verdict (the
-		// score, the threshold in force, every coordinate, the counterfactual
-		// attribution) is what a caller of this surface wants, and Inspect is the only
-		// way to get it.
-		//
-		// Inspect runs FIRST so both passes read the SAME model state: the aggregates
-		// already include this event, and the score is computed before the masses
-		// move. Run the other way round the reported verdict would describe a model
-		// that had already learned from the event it is judging — a different model
-		// from the one whose counters the report is built on.
-		a := r.mod.Inspect(tx, types.Entity{OrgID: string(t)})
+		// ONE PASS. Assess IS the learning pass: it moves every counter the
+		// governance report is computed from — learned, scored, alerted, refused by
+		// reason, blind by feature — which is the whole observable effect this op has
+		// on the model. Its return is the engine's rule-hit shape, and this plane has
+		// nothing that consumes an alert, so it is discarded.
 		r.mod.Assess(tx, types.Entity{OrgID: string(t)})
-		out = append(out, a)
+		learned++
 	}
 	// ONCE PER BATCH, never per event: it locks every shard. This is what turns
 	// velocity's silent LRU into a number — see [rings].
 	r.vel.reconcile()
-	for _, applied := range first {
-		if applied {
-			r.unsaved++
-		}
-	}
+	r.unsaved += learned
 	due := r.unsaved >= saveEvery
 	r.mu.Unlock()
 	if due {
@@ -975,7 +987,7 @@ func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error
 		}
 	}
 	r.mu.Lock()
-	return out, nil
+	return learned, nil
 }
 
 // saveEvery is how many events one organisation's model may learn before its
@@ -1043,71 +1055,109 @@ func (p *plane) state(t tenant) (anomaly.State, strain, error) {
 }
 
 // appetite restates the share of the stream the tenant's model may send for
-// examination, and whether it is live.
+// examination, and whether it is live. It answers the VERSION the restatement
+// left in force and nothing else.
+//
+// IT USED TO ANSWER THE MODEL TOO — the learned state and the aggregate strain,
+// so the wire could render a fifteen-field report of the whole model from a call
+// that changed three numbers. Two facts with two lifetimes, computed by one
+// writer, is how the regime came to live on the learned state's row in the first
+// place; answering both from one call is the same braid one level up. A policy
+// write reports the policy it wrote. What the model IS is read from the model.
 //
 // The appetite is a property of the Config, and the Config is fixed at
 // construction — so the change is made the only honest way: snapshot the learned
 // state, build the model the tenant asked for, restore into it. The digest covers
 // the model's SHAPE (the inventory and the geometry parameters) and not the
 // appetite, so the restore is exact and nothing is unlearned by a policy change.
-func (p *plane) appetite(t tenant, review, sample float64, live bool) (anomaly.State, strain, error) {
+// It is DURABLE BEFORE IT IS IN FORCE, and that order is the whole point. The
+// model beside this policy may hold no learned mass yet, and the writer of the
+// learned state correctly declines to write when there is nothing learned — so
+// while the regime lived only on that row, an organisation that went live before
+// its model had learned anything was told live=true and had nothing written down.
+// This binary deploys Recreate at ONE replica, so the next rollout rebuilt it
+// from [defaultConfig] — shadow — and the model decided nothing, silently. The
+// regime is now its own versioned record ([plane.enact]) written BEFORE anything
+// in memory moves, so a policy that cannot be written down is refused instead.
+func (p *plane) appetite(t tenant, review, sample float64, live bool, by string) (int, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.State{}, strain{}, err
+		return 0, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	cfg := r.cfg
-	cfg.Appetite.Review, cfg.Appetite.Sample, cfg.Shadow = review, sample, !live
+	// BUILD FIRST. Constructing the model the tenant asked for is pure and can
+	// fail, so it is done before the durable write — a recorded version whose
+	// regime could never be built would be a history that does not describe what
+	// the plane did.
+	want := regime{Review: review, Sample: sample, Live: live}
+	cfg := want.applyTo(r.cfg)
 	next, err := anomaly.New(cfg, r.vel.vel)
 	if err != nil {
-		return anomaly.State{}, strain{}, fmt.Errorf("risk: appetite: %w", err)
+		return 0, fmt.Errorf("risk: appetite: %w", err)
 	}
 	if snap, held := r.mod.Snapshot(string(t)); held {
 		if err := next.Restore(snap); err != nil {
-			return anomaly.State{}, strain{}, fmt.Errorf("risk: appetite: carry learned state: %w", err)
+			return 0, fmt.Errorf("risk: appetite: carry learned state: %w", err)
 		}
 	}
-	r.cfg, r.mod = cfg, next
+	// THE COMMIT POINT. Past here the regime is recorded and readable back; before
+	// here nothing has changed.
+	rec, _, err := p.enact(t, want, by, time.Now())
+	if err != nil {
+		return 0, err
+	}
+	r.cfg, r.mod, r.pol = cfg, next, rec.Version
+	// The learned state is written down too when there is any, so the masses and
+	// the regime come back together. Its failure is NOT fatal here: the regime is
+	// already durable, and refusing a recorded policy change because the snapshot
+	// beside it could not be written would undo nothing and report a lie.
 	if err := p.persist(r); err != nil {
-		return anomaly.State{}, strain{}, err
+		p.log.Warn("the regime was recorded but the learned state beside it was not written",
+			"tenant", string(t), "version", rec.Version, "err", err)
 	}
-	return r.mod.State(string(t)), r.vel.strain(), nil
+	// The VERSION IS RETURNED, not re-read. Re-reading it would resolve the
+	// residency a second time, outside the lock this change was made under, so two
+	// concurrent restatements could each report the other's version — an audit
+	// surface disagreeing with the record it describes.
+	return rec.Version, nil
 }
 
-// pin returns a copy of the tenant's learned state, and writes it to the
-// tenant's own shelf in the same act — a pin nobody can read back later is not a
-// pin.
-func (p *plane) pin(t tenant) (anomaly.Snapshot, bool, error) {
-	r, err := p.resident(t)
-	if err != nil {
-		return anomaly.Snapshot{}, false, err
-	}
-	r.mu.Lock()
-	snap, held := r.mod.Snapshot(string(t))
-	cfg, warmed := r.cfg, r.warmed
-	r.mu.Unlock()
-	// PLANTED IS NOT LEARNED. Every residency plants its geometry so a restore has
-	// something to be checked against, so "the engine holds a model" no longer
-	// means "this organisation has taught it anything" — and pinning an empty
-	// model would hand back a snapshot that reproduces nothing.
-	if !held || snap.Learned == 0 {
-		return anomaly.Snapshot{}, false, nil
-	}
-	if err := p.write(t, snap, cfg, warmed); err != nil {
-		return anomaly.Snapshot{}, false, err
-	}
-	return snap, true, nil
-}
-
-// adopt installs pinned state into the tenant's model and persists it, refusing a
-// snapshot that names another organisation.
-func (p *plane) adopt(t tenant, snap anomaly.Snapshot) (anomaly.State, strain, error) {
+// adopt puts one of the organisation's OWN PUBLISHED VALUES back in force, by
+// name.
+//
+// It takes an ADDRESS and never masses. That is the whole decomplect in this file:
+// the caller used to hand back 466 KiB of its own model's counters, which meant the
+// caller was the custodian of that state — it had to hold it, transport it, and be
+// trusted not to have shaped it. The engine's own Restore says as much ("the caller
+// owes the snapshot integrity — it belongs where the tenant's own data belongs, and
+// sealed if it travels"). Addressed, IT NEVER TRAVELS: the masses are read from the
+// organisation's own encrypted shelf, so the only thing the caller supplies is
+// which of its own values it wants, and the mass invariant it is checked against
+// can no longer be a defence against a body somebody composed.
+//
+// An address this organisation has not published resolves to NOT FOUND, and that
+// is the isolation boundary rather than a lookup failure — see address.go's header
+// and [TestAddress_AForeignOrgResolvesNothing]. The organisation is stamped onto
+// the state from the validated principal on the way in, so the stored row's own
+// OrgID is never the thing trusted.
+func (p *plane) adopt(t tenant, addr string) (anomaly.State, strain, error) {
 	r, err := p.resident(t)
 	if err != nil {
 		return anomaly.State{}, strain{}, err
 	}
+	snap, ok, err := p.masses(t, addr)
+	if err != nil {
+		return anomaly.State{}, strain{}, err
+	}
+	if !ok {
+		return anomaly.State{}, strain{}, zip.ErrNotFound("this organisation has published no model value by that name")
+	}
+	// FROM THE PRINCIPAL, never from the row. The engine plants into the slot the
+	// snapshot names, so the one field that decides whose model this becomes is
+	// taken from the validated tenant and not from stored bytes.
+	snap.OrgID = string(t)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := p.install(r, snap); err != nil {
@@ -1457,6 +1507,14 @@ type report struct {
 // searchDeadline bounds one run end to end.
 const searchDeadline = 10 * time.Minute
 
+// charge is the money seam as the plane sees it: GATE n screens, and get back the
+// meter for what was actually done. It is ONE function and not a gate-and-a-book
+// pair because the two halves are one decision made twice — a bound, then its
+// outcome — and a plane that took them as two parameters could be handed a gate
+// for one thing and a meter for another. [ops.gate] is the only implementation;
+// the plane never reaches the request, the ledger or the price.
+type charge func(kind string, n int) (meter func(done int), err error)
+
 // begin accepts a search: it reads the tenant's own history NOW (so a caller
 // learns immediately whether there is anything to replay) and runs the grid in
 // the background, writing the result to the tenant's own shelf.
@@ -1465,26 +1523,60 @@ const searchDeadline = 10 * time.Minute
 // the point of the search is to answer one question about one history, and two
 // answers racing to the same shelf row is not two answers.
 //
-// admit is called ONCE, with the measured size of the run, after the history is
-// read and before any candidate is tried. That is where the caller's ledger is
-// checked, because it is the first moment the cost of the run is a number rather
-// than a guess; a refusal there aborts before the first tree is planted.
+// A SEARCH COSTS TWICE AND IS PRICED TWICE, each half before the half it prices.
+// The two are genuinely different work and a single price would be wrong in both
+// directions:
 //
-// book is called ONCE when the grid ENDS, however it ends, with the screens the
-// run actually performed — trials completed × events replayed. It is separate
-// from admit for the reason the money seam states: the gate runs on the upper
-// bound before the work, the meter runs on what was done. A run cancelled by a
-// rollout after four of sixty-four candidates is billed for four.
-func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, admit func(events int) error, book func(screens int)) (report, error) {
+//	THE SURFACE   rolling up to four source planes into this organisation's own
+//	              feature surface and reading the window back. Its size is the
+//	              WINDOW, which the caller states, so it is known before anything
+//	              runs — the same unit and the same price [ops.features] pays for
+//	              the same work.
+//	THE GRID      every candidate over every event. Its size is the measured
+//	              history, so it is known only after the surface read.
+//
+// The surface half used to run BEFORE ANY GATE AT ALL: a caller with no balance
+// drove the whole warehouse cost of a search, was refused at the very end, and
+// paid for none of it — as often as it cared to ask. Pricing the grid on its
+// upper bound instead would have closed that and priced out every small tenant,
+// because the upper bound is [maxHistory] × the grid whatever the tenant's actual
+// history holds. Two bounds, each where its own size is a number.
+//
+// price is the money seam: it GATES n screens and returns the meter for what was
+// actually DONE. Each half gates before its work and meters after it, which is
+// why the grid's meter is called when the grid ENDS however it ends — a run
+// cancelled by a rollout after four of sixty-four candidates is billed for four.
+func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, price charge) (report, error) {
 	if _, err := p.resident(t); err != nil {
 		return report{}, err
 	}
-	p.mu.Lock()
-	if held, running := p.running[t]; running {
-		p.mu.Unlock()
-		return report{}, zip.ErrConflict("a search is already running for this organisation: " + held.ID)
+	// CLAIM THE SLOT BEFORE THE EXPENSIVE WORK, atomically with the check that
+	// grants it. This used to check the slot here and SET it two warehouse
+	// operations later, which is check-then-act with the whole cost of a search
+	// setup in the window: every one of a tenant's concurrent callers passed the
+	// check, and all of them rolled the tenant's source planes and read its entire
+	// history before any of them claimed anything. Sixteen callers, sixteen full
+	// history reads, sixteen background grids, one shelf row for all of them to
+	// race — from a bound whose own comment says ONE RUN PER TENANT.
+	id := runID()
+	if err := p.claim(t, id); err != nil {
+		return report{}, err
 	}
-	p.mu.Unlock()
+	// Released on every path that does not reach the run. A claim that outlived its
+	// refusal would 409 that organisation's every later search, naming a run that
+	// never started.
+	started := false
+	defer func() {
+		if !started {
+			p.unclaim(t)
+		}
+	}()
+
+	// GATED BEFORE THE WAREHOUSE IS TOUCHED, on the window the caller stated.
+	surface, err := price("search", windowScreens(lookback))
+	if err != nil {
+		return report{}, err
+	}
 
 	// A SURFACE READ ROLLS FIRST. The fold that brought this tenant's surface
 	// current runs in the background, so a search that only waited for residency
@@ -1498,6 +1590,10 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 	}
 	end := p.now().UTC()
 	rs, err := rows(ctx, t, query{start: end.Add(-lookback), end: end, limit: maxHistory})
+	// METERED HERE, BEFORE ANY REFUSAL BELOW. The roll and the read have run by
+	// this line however they went, and the meter's contract is what was DONE — the
+	// same rule [ops.features] applies when its own read fails after its roll.
+	surface(windowScreens(lookback))
 	if err != nil {
 		return report{}, err
 	}
@@ -1508,17 +1604,14 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 	if len(hist) > maxHistory {
 		hist = hist[len(hist)-maxHistory:]
 	}
-	if admit != nil {
-		if err := admit(len(hist)); err != nil {
-			return report{}, err
-		}
+	grid, err := price("search", len(hist)*len(candidates()))
+	if err != nil {
+		return report{}, err
 	}
 
-	id := runID()
 	pending := report{ID: id, Tenant: string(t), Started: end, Events: len(hist)}
-	p.mu.Lock()
-	p.running[t] = pending
-	p.mu.Unlock()
+	p.settle(t, pending)
+	started = true
 
 	p.wg.Add(1)
 	go func() {
@@ -1528,20 +1621,50 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 		// The slot is released whatever happens. A run that panicked and left the
 		// slot held would refuse every later search for that organisation with a
 		// conflict naming a run that is not running.
-		defer func() {
-			p.mu.Lock()
-			delete(p.running, t)
-			p.mu.Unlock()
-		}()
+		defer p.unclaim(t)
 		rep := p.search(runCtx, t, id, hist)
-		if book != nil {
-			book(len(rep.Trials) * rep.Events)
-		}
+		grid(len(rep.Trials) * rep.Events)
 		if err := p.keep(t, rep); err != nil {
 			p.log.Warn("search finished but could not be saved", "tenant", string(t), "run", id, "err", err)
 		}
 	}()
 	return pending, nil
+}
+
+// claim takes this tenant's one search slot, or refuses with the run that holds
+// it. It is the CHECK AND THE ACT IN ONE ACQUISITION of p.mu, which is the whole
+// point: a search's setup rolls the tenant's source planes and reads its entire
+// history, so a slot granted by a check that acts later grants that work to every
+// concurrent caller at once.
+//
+// The slot is per TENANT, so a search running for one organisation refuses only
+// that organisation's next one — at it, that tenant is told to wait and nobody
+// else notices.
+func (p *plane) claim(t tenant, id string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if held, running := p.running[t]; running {
+		return zip.ErrConflict("a search is already running for this organisation: " + held.ID)
+	}
+	// Held with the id alone until the history is measured; [plane.settle] replaces
+	// it with the real report. A poll in that window sees a run that is genuinely
+	// in flight, which is what it is.
+	p.running[t] = report{ID: id, Tenant: string(t), Started: p.now().UTC()}
+	return nil
+}
+
+// settle publishes the measured report onto the slot this tenant already holds.
+func (p *plane) settle(t tenant, rep report) {
+	p.mu.Lock()
+	p.running[t] = rep
+	p.mu.Unlock()
+}
+
+// unclaim releases this tenant's search slot.
+func (p *plane) unclaim(t tenant) {
+	p.mu.Lock()
+	delete(p.running, t)
+	p.mu.Unlock()
 }
 
 // pending reports an in-flight run for the tenant, so a poll between accepting
@@ -1708,12 +1831,21 @@ type shelf struct {
 func openShelf(db *sql.DB) (*shelf, error) {
 	s := &shelf{db: db}
 	for _, stmt := range []string{
+		// THE RESUME CELL, and it is a PLACE on purpose. One row per organisation,
+		// overwritten by the sweep and by shutdown, holding what an ungraceful stop
+		// would otherwise lose. Nobody names it, nobody cites it and nothing audits
+		// it — the values an organisation deliberately publishes are addressed by
+		// their own content in `published` (address.go), and that is what a rollback
+		// names. Keeping the two apart is what makes the 30-second write cheap and
+		// the audited history bounded; see address.go's header for the measurement
+		// that forces it.
+		//
 		// warmed is HOW FAR this organisation's own surface has been folded into the
-		// model, and it lives in the SNAPSHOT'S OWN ROW on purpose: the two facts are
-		// one fact. A state that came back and a fold that already happened must be
-		// restored together or not at all — write the watermark somewhere else and a
-		// tenant whose snapshot failed to save returns with an empty model that
-		// believes it has already read its history.
+		// model, and it lives in THIS ROW on purpose: the two facts are one fact. A
+		// state that came back and a fold that already happened must be restored
+		// together or not at all — write the watermark somewhere else and a tenant
+		// whose state failed to save returns with an empty model that believes it has
+		// already read its history.
 		`CREATE TABLE IF NOT EXISTS model (
 			tenant   TEXT PRIMARY KEY,
 			snapshot BLOB NOT NULL,
@@ -1728,6 +1860,19 @@ func openShelf(db *sql.DB) (*shelf, error) {
 			at     INTEGER NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS search_tenant ON search(tenant, at)`,
+		// The tenant's own POLICY history: every distinct decision regime it has
+		// adopted, versioned, immutable and durable on its own terms — never
+		// conditional on whether the model beside it has learned anything yet
+		// (policy.go).
+		policyDDL,
+		// The tenant's own MODEL VALUE history: every state it deliberately
+		// published, named by its own content, immutable and append-only
+		// (address.go). It is the sibling of the `model` row above and the opposite
+		// of it — that row is ONE overwritten cell whose job is resuming a killed
+		// process, this table is what a rollback names and what an adverse decision
+		// is reconstructed against.
+		publishedDDL,
+		publishedIndexDDL,
 		// The tenant's own record of what it taught, which its aggregates are a
 		// projection of (ring.go), and how far each source plane has been folded into
 		// its feature surface (feature.go).
@@ -1908,16 +2053,40 @@ func (p *plane) run(t tenant, id string) (*report, error) {
 
 // ── shutdown ─────────────────────────────────────────────────────────────────
 
-// close snapshots EVERY resident model and shuts the shelves.
+// drainBudget is the MOST of a shutdown window spent letting background work
+// finish. What is left is for the saves, and that split is the whole ordering
+// argument: a fold or a search that does not land re-runs from its own watermark
+// on the next boot, and a model that was not written down is gone.
+const drainBudget = 5 * time.Second
+
+// ErrDrainIncomplete says background work was still running when the shutdown
+// window ran out. It is JOINED into close's error rather than replacing it: every
+// resident model was still written down, and a fold or search cut short is a
+// separate, NAMED fact an operator can act on instead of a silence.
+var ErrDrainIncomplete = errors.New("risk: background work did not finish inside the shutdown window")
+
+// close snapshots EVERY resident model and shuts the shelves, inside the window
+// the caller gives it.
 //
 // This binary is deployed one replica at a time with the old pod stopped before
 // the new one starts, so every rollout drops every warming model and the
 // threshold it had computed. Without this, a deploy silently returns every tenant
 // to warming — and a warming model refuses to score, which reads as "clean" to
 // anything that does not check the refusal.
-func (p *plane) close() error {
+//
+// THE SAVES RUN UNCONDITIONALLY, AND NEVER BEHIND THE DRAIN. This used to be
+// `p.stop(); p.wg.Wait()` with the saves after it, which made the durable half of
+// a rollout depend on background work finishing — and it does not have to. The
+// process gets a 30-second window (serve.go) inside a 60-second grace period,
+// while ONE search finishing after cancellation writes its result to a shelf
+// whose durable Sync is bounded at durableOpTimeout — thirty seconds, the whole
+// window, on its own. So the wait outlived the window, the process was killed,
+// and not one tenant's model had been written down. Every tenant, once per
+// deploy, from one tenant's search.
+func (p *plane) close(ctx context.Context) error {
 	p.stop()
-	p.wg.Wait()
+	drained := p.drain(ctx)
+
 	p.mu.Lock()
 	all := make([]*resident, 0, len(p.res))
 	for _, r := range p.res {
@@ -1926,16 +2095,52 @@ func (p *plane) close() error {
 	p.res = map[tenant]*resident{}
 	p.mu.Unlock()
 
-	var first error
+	var errs []error
 	for _, r := range all {
-		if err := p.save(r); err != nil && first == nil {
-			first = err
+		if err := p.save(r); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	if err := p.shelf.CloseAll(); err != nil && first == nil {
-		first = err
+	if !drained {
+		// Named, and it names no tenant: how many models were written down anyway is
+		// the number that says this was a degradation and not a loss.
+		p.log.Warn("background work did not finish inside the shutdown window; every resident model was written down regardless",
+			"saved", len(all), "budget", drainBudget)
+		errs = append(errs, ErrDrainIncomplete)
 	}
-	return first
+	if err := p.shelf.CloseAll(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+// drain waits for the plane's background work, bounded by BOTH the caller's
+// shutdown window and [drainBudget], and reports whether it actually finished.
+//
+// The bound is the caller's because the caller is the only one that knows it: the
+// composition root already builds a shutdown context with the window in it and
+// hands it to every teardown hook. This used to throw that context away and wait
+// forever, which is how a bound that was already present became a hang.
+//
+// The waiter goroutine can outlive this call. That is deliberate and it is
+// bounded at one: the alternative is threading cancellation into every background
+// task purely so shutdown can observe it, and the process is on its way out.
+func (p *plane) drain(ctx context.Context) bool {
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(drainBudget)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // dataDirWritable reports whether the shelf's root can be written, which is the
