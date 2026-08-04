@@ -385,7 +385,7 @@ func TestTypedWritesKeepTheBodyCap(t *testing.T) {
 // and the zero value means ABSENT rather than a key with an empty value.
 func TestScalarCarriesEveryJSONToken(t *testing.T) {
 	for _, tok := range []string{`"Acme"`, `123`, `1.5`, `true`, `null`, `""`, `"quote\"inside"`, `"ünïcode"`} {
-		var s scalar
+		var s goja.Scalar
 		if err := json.Unmarshal([]byte(tok), &s); err != nil {
 			t.Fatalf("scalar cannot hold %s: %v", tok, err)
 		}
@@ -400,13 +400,17 @@ func TestScalarCarriesEveryJSONToken(t *testing.T) {
 
 	// A value that never came off the wire is the string it spells, so the type
 	// is total: every scalar marshals to valid JSON.
-	b, err := scalar("bare words").MarshalJSON()
+	b, err := goja.Scalar("bare words").MarshalJSON()
 	if err != nil || string(b) != `"bare words"` {
 		t.Fatalf(`hand-built scalar: got %s (%v), want "bare words" quoted`, b, err)
 	}
 
 	// The zero value contributes no key at all.
-	body, err := bundleBody(map[string]scalar{"absent": "", "present": `"here"`, "nulled": `null`})
+	body, err := goja.Body(map[string]goja.BodyField{
+		"absent":  goja.Scalar(""),
+		"present": goja.Scalar(`"here"`),
+		"nulled":  goja.Scalar(`null`),
+	})
 	if err != nil {
 		t.Fatalf("bundleBody: %v", err)
 	}
@@ -521,8 +525,8 @@ func TestTypedWritesAddressThroughArgumentsAlone(t *testing.T) {
 	holder := addHolder(t, app, "acme", "ada@example.com")
 	round := addOpenRound(t, app, "acme", "R-mcp")
 
-	patch := toolNamed(t, app, "captable_stakeholders", "patch")
-	closer := toolNamed(t, app, "captable_rounds", "close")
+	patch := toolNamed(t, app, "captable", "patch_stakeholders")
+	closer := toolNamed(t, app, "captable", "post_rounds", "close")
 
 	// The stakeholder the arguments name must reach the handler.
 	text, isErr := toolsCall(t, app, "acme", patch, `{"id":"`+holder+`","city":"Paris"}`)
