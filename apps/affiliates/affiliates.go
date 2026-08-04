@@ -995,7 +995,7 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 	// payout row + audit.
 	if method == methodCredits {
 		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
-			fmt.Sprintf("Affiliate commission payout (%s)", a.Code), grantTag)
+			fmt.Sprintf("Affiliate commission payout (%s)", a.Code), grantTag, "payout:"+payoutID)
 		if gerr != nil {
 			s.Log.Error("affiliates: credits payout grant failed (reserved against pending; not retried)",
 				"affiliate", a.ID, "payout", payoutID, "err", gerr)
