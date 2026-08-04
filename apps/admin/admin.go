@@ -248,7 +248,7 @@ func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
 	rows := make([]orgRow, 0, len(orgs))
 	for _, row := range orgs {
 		users := orgUserCount(o.s, ctx, cr, row.Name)
-		// orgs is a per-ROW panel (OrgRow[] via OKList; it carries NO sources[] channel):
+		// orgs is a per-ROW panel (orgRow[]; it carries NO sources[] channel):
 		// a failed read degrades THAT org's row to an honest zero, never a fleet total that
 		// falsely reads healthy. The aggregate-freshness signal lives on /overview.
 		spend, credits, _ := core.OrgMoney(o.s, ctx, row.Name)

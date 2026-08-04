@@ -220,45 +220,12 @@ type Config struct {
 	// per-conn. Env GATEWAY_BODY_LIMIT.
 	BodyLimit int
 
-	// SitesApex is the zone whose subdomains are PUBLIC published-site hosts
-	// (`<slug>.<apex>`, default hanzo.app). The site host-router (clients/sites)
-	// serves the root path space for these hosts from OUR S3, ahead of the API
-	// pipeline, so a published site is a public artifact — never an org API call.
-	// Env CLOUD_SITES_APEX.
-	SitesApex string
-
-	// SitesReserved lists subdomain labels under SitesApex that are NOT sites and
-	// must fall through to the normal pipeline (real app/api hosts on the apex).
-	// This is the reserved-host exclusion that stops a published site from
-	// shadowing a real hanzo.app app. The empty label (apex) and "www" are always
-	// reserved; these add to them. Env CLOUD_SITES_RESERVED (comma-separated).
-	SitesReserved []string
-
-	// SitesSelfDomains are OUR OWN registrable domains (hanzo.ai, hanzo.app, …).
-	// The site edge serves a BOUND CUSTOM domain (a customer's own apex pointed at
-	// this edge) from that project's S3 prefix — but only for hosts NOT at/under a
-	// self domain, so the api/console path never does a per-request binding lookup
-	// and a customer binding can never shadow a real Hanzo host. Defaults to the
-	// apex plus the registrable domain of the deployment's own Domain (api.hanzo.ai
-	// → hanzo.ai). Env CLOUD_SITES_SELF_DOMAINS (comma-separated) overrides.
-	SitesSelfDomains []string
-
-	// SitesFirstPartyApex is an internal SelfDomain (hanzo.ai) on which we serve a
-	// small OPT-IN set of OUR OWN first-party sites (SitesFirstPartySites). Unlike
-	// SitesApex — multi-tenant, sites-by-default with a reserved denylist — the brand
-	// apex carries api/console/iam/kms/…, so it serves a site ONLY for an explicitly
-	// allow-listed label; every other host falls through protected by default (no
-	// denylist to keep complete). Env CLOUD_SITES_FIRSTPARTY_APEX (default hanzo.ai).
-	SitesFirstPartyApex string
-	// SitesFirstPartySites is the explicit allowlist of first-party site labels on
-	// SitesFirstPartyApex (our internal pages: cd, flow, gallery). A user site never
-	// lands here — users get <slug>.hanzo.app. Env CLOUD_SITES_FIRSTPARTY (comma-sep).
-	SitesFirstPartySites []string
-	// SitesFirstPartyOrg owns the first-party sites (hanzo). First-party host
-	// resolution is PINNED to this org so a customer project can never shadow an
-	// internal host (cd.hanzo.ai serves ONLY org hanzo's "cd"). Empty ⇒ first-party
-	// sites are disabled (fail-closed). Env CLOUD_SITES_FIRSTPARTY_ORG (default hanzo).
-	SitesFirstPartyOrg string
+	// The site-edge configuration (apex, reserved labels, self domains, first-party
+	// sites) is NOT here: it is resolved by sites.ConfigFromEnv, in the package that
+	// owns the type. Both processes that mount the edge — this one and the light
+	// router that owns the public port — read that one function, so the env keys and
+	// their defaults cannot drift apart again. Domain (above) is the only field of
+	// this struct that feeds it.
 
 	// Endpoints for out-of-process subsystems (payments, vault). Empty
 	// means the subsystem is disabled OR the deployment expects a default
@@ -351,36 +318,6 @@ type Config struct {
 	O11yZAPAddr     string
 	VFSZAPAddr      string
 	MQZAPAddr       string
-
-	// --- Control plane (consensus platform) — STAGE 0: parsed but INERT. ---
-	//
-	// These describe this instance's place in the control-plane quorum for the
-	// coming Quasar-PQ consensus wiring (see controlplane_deps.go for the
-	// architecture direction). In Stage 0 NOTHING reads them: no engine is
-	// started, no peer is dialed, no quorum is formed. They exist so operators can
-	// begin declaring control-plane topology ahead of the engine; setting any of
-	// them has ZERO runtime effect today.
-
-	// NodeID is this instance's stable identity within the control-plane quorum.
-	// Env NODE_ID. Empty ⇒ unset.
-	NodeID string
-
-	// Peers is the control-plane peer set (the other nodes this instance would
-	// form consensus with). Env PEERS (comma-separated). Empty ⇒ unset.
-	Peers []string
-
-	// ControlPlaneRole is this instance's control-plane role: "voter"
-	// (participates in consensus) or "data" (data-plane only). Env ROLE.
-	// Empty ⇒ unset. NAMED ControlPlaneRole (not Role) to avoid colliding with
-	// the HA Role field above (role.Role, CLOUD_ROLE): #160 (writer/reader HA
-	// split) and #163 (Stage-0 control plane) each added a `Role` to this struct
-	// on separate branches, which broke the build on merge. This one is the inert
-	// Stage-0 string — read but consumed by nothing until the engine is wired.
-	ControlPlaneRole string
-
-	// ControlPlaneQuorum is the number of voter nodes required to form a
-	// control-plane quorum. Env CONTROL_PLANE_QUORUM. 0 ⇒ unset.
-	ControlPlaneQuorum int
 }
 
 // flagsOnce guards the ONE registration of the CLI overrides on the process-global
@@ -393,19 +330,12 @@ var flagsOnce sync.Once
 // LoadConfig reads flags + env into a Config. Flags override env.
 func LoadConfig() *Config {
 	cfg := &Config{
-		ListenAddr:           getenv("CLOUD_LISTEN", ":8080"),
-		ZAPListenAddr:        getenv("CLOUD_ZAP_LISTEN", ":9653"),
-		HealthListenAddr:     getenv("CLOUD_HEALTH_LISTEN", ":9090"),
-		AdminListenAddr:      getenv("CLOUD_ADMIN_LISTEN", ":8081"),
-		ReadBufferSize:       getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
-		BodyLimit:            getenvInt("GATEWAY_BODY_LIMIT", 16<<20),
-		SitesApex:            getenv("CLOUD_SITES_APEX", "hanzo.app"),
-		SitesReserved:        splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
-		SitesSelfDomains:     splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
-		SitesFirstPartyApex:  getenv("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
-		SitesFirstPartySites: splitTrim(getenv("CLOUD_SITES_FIRSTPARTY", "cd,flow,gallery")),
-		SitesFirstPartyOrg:   getenv("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
-
+		ListenAddr:              getenv("CLOUD_LISTEN", ":8080"),
+		ZAPListenAddr:           getenv("CLOUD_ZAP_LISTEN", ":9653"),
+		HealthListenAddr:        getenv("CLOUD_HEALTH_LISTEN", ":9090"),
+		AdminListenAddr:         getenv("CLOUD_ADMIN_LISTEN", ":8081"),
+		ReadBufferSize:          getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
+		BodyLimit:               getenvInt("GATEWAY_BODY_LIMIT", 16<<20),
 		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
 		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
 		Version:                 resolveVersion(),
@@ -450,13 +380,6 @@ func LoadConfig() *Config {
 		O11yZAPAddr:        getenv("CLOUD_O11Y_ZAP_ADDR", ""),
 		VFSZAPAddr:         getenv("CLOUD_VFS_ZAP_ADDR", ""),
 		MQZAPAddr:          getenv("CLOUD_MQ_ZAP_ADDR", ""),
-
-		// Control plane (consensus platform) — STAGE 0 inert topology (see Config).
-		// Read but UNUSED: no subsystem consumes these until the engine is wired.
-		NodeID:             getenv("NODE_ID", ""),
-		Peers:              splitTrim(getenv("PEERS", "")),
-		ControlPlaneRole:   getenv("ROLE", ""),
-		ControlPlaneQuorum: getenvInt("CONTROL_PLANE_QUORUM", 0),
 	}
 
 	// THE BINARY KNOWS WHICH APP IT IS; a deployment does not restate it.
@@ -505,12 +428,6 @@ func LoadConfig() *Config {
 			cfg.ZAPWebOrigins = append(cfg.ZAPWebOrigins, s)
 		}
 	}
-	// Self domains default (after flag parse so a --domain override is honored): the
-	// sites apex plus the registrable domain of the deployment's own Domain
-	// (api.hanzo.ai → hanzo.ai). An explicit CLOUD_SITES_SELF_DOMAINS wins.
-	if len(cfg.SitesSelfDomains) == 0 {
-		cfg.SitesSelfDomains = defaultSelfDomains(cfg.SitesApex, cfg.Domain)
-	}
 
 	// Edge policy (middleware_edge.go). CORS default OFF (ingress owns it on the
 	// recommended rollout — see Config.CORSOrigins); the per-IP flood cap default
@@ -520,43 +437,6 @@ func LoadConfig() *Config {
 	cfg.EdgeRatePerIP = getenvInt("CLOUD_EDGE_RATELIMIT_PER_IP", 100)
 	cfg.EdgeRateWindowSec = getenvInt("CLOUD_EDGE_RATELIMIT_WINDOW_SEC", 1)
 	return cfg
-}
-
-// defaultSelfDomains derives OUR self domains from the sites apex and the primary
-// Domain: the apex itself plus the registrable (last-two-label) domain of each, so
-// hanzo.app + api.hanzo.ai yields {hanzo.app, hanzo.ai}. Deduped, order-stable.
-func defaultSelfDomains(apex, domain string) []string {
-	out := []string{}
-	seen := map[string]bool{}
-	add := func(d string) {
-		d = strings.ToLower(strings.TrimSpace(d))
-		if d == "" || seen[d] {
-			return
-		}
-		seen[d] = true
-		out = append(out, d)
-	}
-	add(apex)
-	add(registrableDomain(apex))
-	add(registrableDomain(domain))
-	return out
-}
-
-// registrableDomain returns the last two dot-separated labels of a host (a
-// pragmatic "registrable domain" without a public-suffix list): api.hanzo.ai →
-// hanzo.ai, hanzo.app → hanzo.app. A host with fewer than two labels is returned
-// unchanged. This is only used to seed the self-domain exclusion set; it never
-// gates org isolation (which is the S3-prefix boundary in clients/sites).
-func registrableDomain(host string) string {
-	host = strings.ToLower(strings.TrimSpace(host))
-	if i := strings.IndexByte(host, ':'); i >= 0 {
-		host = host[:i]
-	}
-	parts := strings.Split(strings.Trim(host, "."), ".")
-	if len(parts) < 2 {
-		return host
-	}
-	return parts[len(parts)-2] + "." + parts[len(parts)-1]
 }
 
 // Enabled reports whether subsystem `name` is enabled in this config.
