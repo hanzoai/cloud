@@ -582,8 +582,13 @@ func init() {
 			"owns, and on the IAM path the image's registry namespace must MATCH the caller's own "+
 			"validated org — so an org admin can only publish into their own brand and can never "+
 			"overwrite another's through the shared push credential. The same confinement applies "+
-			"to the artifact lane's repo owner. Cutting a release is IAM's decision alone: the "+
-			"build token may enqueue a build but may not cut one.\n\n"+
+			"to the artifact lane's repo owner.\n\n"+
+			"`release: true` is the exception, and takes SUPERADMIN. It publishes the platform's "+
+			"own image — the binary the whole fleet runs — so what it lands reaches every org at "+
+			"the next reconcile, and no role inside the caller's own org can authorize that. An "+
+			"org admin is refused however the registry namespace lines up, and the build token, "+
+			"which carries no identity at all, may enqueue an ordinary build but never a "+
+			"release.\n\n"+
 			"The output image is parsed and validated as a single well-formed OCI ref before any "+
 			"authorization decision reads it, so a crafted ref cannot smuggle a build-exporter "+
 			"attribute past the check.")
