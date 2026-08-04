@@ -137,6 +137,27 @@ func describeBilling() {
 			"rather than a silently blank list. It is a catalog read, not an entitlement read — "+
 			"it says what may be bought, never what this caller has.")
 
+	openapi.Describe("/v1/billing/tier", http.MethodGet,
+		"The subject's plan tier and the balance a metered call is admitted on",
+		"Answers one subject's resolved tier — name, display name, agent ceiling and allowed "+
+			"models — with the balance that admits their next metered call: prepaidAvailable, "+
+			"creditsRemaining, dailyRemaining and the effectiveAvailable those fold into. The ai "+
+			"router reads it per request to pick that caller's rate-limit tier. It sits on the "+
+			"org-resolving chain because a tier is org state, and the subject keys are pinned to "+
+			"the validated caller before the handler runs, so a browser read is always the "+
+			"caller's own; user is required, which only a service-to-service caller can omit and "+
+			"be refused 400 for. The tier is an upstream tier claim, or an explicit tier "+
+			"override, when either is present — that is the service-to-service contract — and is "+
+			"otherwise DERIVED from the org's active and trialing subscriptions, the highest one "+
+			"winning, its paid-ness read from the plan catalog by slug rather than from the "+
+			"subscription's own stored copy. The rule to get right is effectiveAvailable and not "+
+			"prepaidAvailable: granted credits spend too, credits first, so an account funded "+
+			"only by a grant reads zero prepaid while holding real spendable credit — and with "+
+			"the daily term zero on every tier there is no free allowance behind it, so a "+
+			"zero-balance account is gated. A subscription-store error answers 500 rather than "+
+			"downgrading to free, so a transient failure never reports a paid subscriber as "+
+			"unsubscribed.")
+
 	openapi.Describe("/v1/billing/alerts", http.MethodGet,
 		"List your org's spend caps and rate limits",
 		"Returns the caps and alerts keyed to the caller's own billing subject, each with its "+
