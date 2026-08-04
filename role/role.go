@@ -61,10 +61,13 @@ func (r Role) String() string { return string(r) }
 // caller decides to fail closed. The Role is always usable (Writer on error) so
 // a caller that chooses to log-and-continue still lands on the safe default.
 func FromEnv() (Role, error) {
-	return parse(os.Getenv(EnvVar))
+	return Parse(os.Getenv(EnvVar))
 }
 
-func parse(raw string) (Role, error) {
+// Parse is FromEnv over a value the caller already has, so a decision that must
+// be testable against an injected environment reads the role through the SAME
+// rules rather than re-implementing them. One definition of what "reader" means.
+func Parse(raw string) (Role, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", string(Writer):
 		return Writer, nil
