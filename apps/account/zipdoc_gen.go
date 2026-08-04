@@ -18,6 +18,9 @@ func init() {
 		},
 		Example: json.RawMessage(`{"type":"publishable"}`),
 	})
+	zip.Describe("GET /avatar/:org/:user/:digest", zip.Doc{
+		Description: "Streams a stored photo. No credentials — see the file header.",
+	})
 	zip.Describe("GET /v1/commerce/topup/rails", zip.Doc{
 		Description: "Lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail\ntherefore meant rebuilding and redeploying the frontend, and with them unset the\nUI reported \"not available yet\" no matter what the server could actually accept.\nServing the set at runtime keeps ONE source of truth (the server's config) and\nlets a rail be switched on without shipping a bundle.\n\nEverything here is public on-chain data; no secret is exposed, and the set is\nempty on a deployment that accepts no crypto rail.",
 		Fields: map[string]string{
