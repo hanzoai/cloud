@@ -348,6 +348,7 @@ type Config struct {
 	IAMZAPAddr      string
 	BaseZAPAddr     string
 	CommerceZAPAddr string
+	AIZAPAddr       string
 	O11yZAPAddr     string
 	VFSZAPAddr      string
 	MQZAPAddr       string
@@ -447,6 +448,7 @@ func LoadConfig() *Config {
 		IAMZAPAddr:         getenv("CLOUD_IAM_ZAP_ADDR", ""),
 		BaseZAPAddr:        getenv("CLOUD_BASE_ZAP_ADDR", ""),
 		CommerceZAPAddr:    getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
+		AIZAPAddr:          getenv("CLOUD_AI_ZAP_ADDR", ""),
 		O11yZAPAddr:        getenv("CLOUD_O11Y_ZAP_ADDR", ""),
 		VFSZAPAddr:         getenv("CLOUD_VFS_ZAP_ADDR", ""),
 		MQZAPAddr:          getenv("CLOUD_MQ_ZAP_ADDR", ""),

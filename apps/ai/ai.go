@@ -111,9 +111,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if cloud.TracerProviderInstalled() {
 		aiobject.AdoptHostTracerProvider()
 	}
-	// Answer inference on this app's own socket, so a sibling reaches it by NAME
-	// instead of by its public URL. See apps/ai/plane.go.
-	servePlane(deps.AI)
 	// THE PREPAID GATE'S COMPLETION CEILING, PER MODEL, FROM THE CATALOG.
 	//
 	// cloud's meter must bound a completion BEFORE it runs, and that bound is a
