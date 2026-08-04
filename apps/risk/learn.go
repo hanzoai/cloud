@@ -1035,7 +1035,15 @@ func (p *plane) state(t tenant) (anomaly.State, strain, error) {
 }
 
 // appetite restates the share of the stream the tenant's model may send for
-// examination, and whether it is live.
+// examination, and whether it is live. It answers the VERSION the restatement
+// left in force and nothing else.
+//
+// IT USED TO ANSWER THE MODEL TOO — the learned state and the aggregate strain,
+// so the wire could render a fifteen-field report of the whole model from a call
+// that changed three numbers. Two facts with two lifetimes, computed by one
+// writer, is how the regime came to live on the learned state's row in the first
+// place; answering both from one call is the same braid one level up. A policy
+// write reports the policy it wrote. What the model IS is read from the model.
 //
 // The appetite is a property of the Config, and the Config is fixed at
 // construction — so the change is made the only honest way: snapshot the learned
@@ -1051,10 +1059,10 @@ func (p *plane) state(t tenant) (anomaly.State, strain, error) {
 // from [defaultConfig] — shadow — and the model decided nothing, silently. The
 // regime is now its own versioned record ([plane.enact]) written BEFORE anything
 // in memory moves, so a policy that cannot be written down is refused instead.
-func (p *plane) appetite(t tenant, review, sample float64, live bool, by string) (anomaly.State, strain, int, error) {
+func (p *plane) appetite(t tenant, review, sample float64, live bool, by string) (int, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.State{}, strain{}, 0, err
+		return 0, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1067,18 +1075,18 @@ func (p *plane) appetite(t tenant, review, sample float64, live bool, by string)
 	cfg := want.applyTo(r.cfg)
 	next, err := anomaly.New(cfg, r.vel.vel)
 	if err != nil {
-		return anomaly.State{}, strain{}, 0, fmt.Errorf("risk: appetite: %w", err)
+		return 0, fmt.Errorf("risk: appetite: %w", err)
 	}
 	if snap, held := r.mod.Snapshot(string(t)); held {
 		if err := next.Restore(snap); err != nil {
-			return anomaly.State{}, strain{}, 0, fmt.Errorf("risk: appetite: carry learned state: %w", err)
+			return 0, fmt.Errorf("risk: appetite: carry learned state: %w", err)
 		}
 	}
 	// THE COMMIT POINT. Past here the regime is recorded and readable back; before
 	// here nothing has changed.
 	rec, _, err := p.enact(t, want, by, time.Now())
 	if err != nil {
-		return anomaly.State{}, strain{}, 0, err
+		return 0, err
 	}
 	r.cfg, r.mod, r.pol = cfg, next, rec.Version
 	// The learned state is written down too when there is any, so the masses and
@@ -1093,7 +1101,7 @@ func (p *plane) appetite(t tenant, review, sample float64, live bool, by string)
 	// residency a second time, outside the lock this change was made under, so two
 	// concurrent restatements could each report the other's version — an audit
 	// surface disagreeing with the record it describes.
-	return r.mod.State(string(t)), r.vel.strain(), rec.Version, nil
+	return rec.Version, nil
 }
 
 // pin returns a copy of the tenant's learned state, and writes it to the
