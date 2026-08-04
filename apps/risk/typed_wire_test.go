@@ -168,7 +168,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 	if len(typed) != 10 {
 		t.Errorf("the model plane publishes %d typed ops, expected 10 "+
-			"(score, learn, state, appetite, snapshot, restore, policy, features, search, result)", len(typed))
+			"(score, learn, state, publish, adopt, policy, appetite, features, search, result)", len(typed))
 	}
 }
 
@@ -238,7 +238,7 @@ func TestNoInputCarriesAnOrganisation(t *testing.T) {
 		}
 		props, _ := sch["properties"].(map[string]any)
 		for field := range props {
-			// riskModelState.tenant and riskSnapshotOut.tenant are OUTPUTS — the server
+			// riskModelState.tenant and riskPublishOut.tenant are OUTPUTS — the server
 			// echoing the tenant it resolved, so a reader can see the answer is its
 			// own. Only INPUT shapes are gated here.
 			if !strings.HasSuffix(name, "In") && name != "riskEvent" && name != "riskRunRef" {
@@ -291,8 +291,8 @@ func TestTypedOpsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 		{http.MethodPost, "/v1/risk/learn", `{"events":[{"kind":"account","subject":"u_1"}]}`},
 		{http.MethodGet, "/v1/risk/state", ""},
 		{http.MethodPut, "/v1/risk/policy", `{"review":0.01,"sample":0.001}`},
-		{http.MethodPost, "/v1/risk/state/snapshot", ""},
-		{http.MethodPost, "/v1/risk/state/restore", `{"body":{"version":1}}`},
+		{http.MethodPost, "/v1/risk/state/model", ""},
+		{http.MethodPut, "/v1/risk/state/model", `{"address":"not-a-published-address"}`},
 		{http.MethodGet, "/v1/risk/policy", ""},
 		{http.MethodGet, "/v1/risk/features", ""},
 		{http.MethodPost, "/v1/risk/search", `{"days":7}`},

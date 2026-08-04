@@ -270,7 +270,11 @@ func TestSearch_BothHalvesArePricedForWhatTheyAre(t *testing.T) {
 	if err := p.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	want := []asked{{"search", days}, {"search", run.Events * len(candidates())}}
+	// The grid is gated for SIXTY-FIVE passes over the history, not sixty-four: every
+	// candidate, plus the one that FITS the winner into a value this organisation can
+	// adopt. A gate of sixty-four would be a bound the meter is free to exceed.
+	passes := len(candidates()) + 1
+	want := []asked{{"search", days}, {"search", run.Events * passes}}
 	if len(books.gates) != 2 || books.gates[0] != want[0] || books.gates[1] != want[1] {
 		t.Fatalf("the run gated %+v, want %+v — the surface is priced from its window and the grid from its measured history", books.gates, want)
 	}
@@ -283,8 +287,8 @@ func TestSearch_BothHalvesArePricedForWhatTheyAre(t *testing.T) {
 	if books.paid[0] != (asked{"search", days}) {
 		t.Fatalf("the surface metered %+v, want %d screens", books.paid[0], days)
 	}
-	if books.paid[1].N > run.Events*len(candidates()) {
+	if books.paid[1].N > run.Events*passes {
 		t.Fatalf("the grid metered %d screens, more than the %d it was admitted for — the meter is running on the "+
-			"accepted size and not on the work", books.paid[1].N, run.Events*len(candidates()))
+			"accepted size and not on the work", books.paid[1].N, run.Events*passes)
 	}
 }
