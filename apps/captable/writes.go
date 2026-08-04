@@ -30,128 +30,26 @@ package captable
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
+	"github.com/hanzoai/cloud/apps/goja"
 	"github.com/zap-proto/zip"
 )
-
-// scalar is ONE JSON value carried from the caller to the bundle unchanged —
-// the token exactly as it arrived, quotes and all: `"Acme"`, `123`, `null`.
-//
-// It exists because the bundle's string helpers are LENIENT in a way no Go type
-// is. `optString` takes any scalar and calls String(v), so `{"taxId":12345}`
-// stores "12345" today; a `*string` field would refuse it with a 400, making the
-// route accept LESS. And `reqString`/`oneOf` REFUSE a non-string, so a `*string`
-// field that refused it first would answer in zip's envelope instead of the
-// bundle's {success,message,errors}. Carrying the token verbatim keeps both: the
-// bundle sees what the caller sent and stays the only judge of it.
-//
-// A Go string is the carrier because it is a string KIND, so every projection
-// describes the field as `string` — which is what these fields are. The
-// leniency is not in the schema; it is named in each field's own prose.
-//
-// The zero value means ABSENT — no key was on the wire — which is why every
-// field below is `omitempty` and non-pointer. A pointer would collapse the
-// distinction the bundle's partial update depends on: encoding/json sets a
-// pointer field to nil for an explicit `null` WITHOUT calling UnmarshalJSON, so
-// `{"city":null}` and `{}` would arrive identically, and stakeholders.update
-// reads them differently (`!== undefined` is true for null, which clears the
-// column). A non-pointer scalar records `null` as the four bytes `null`, and an
-// empty JSON string as the two bytes `""`, so neither can be confused with
-// absent.
-type scalar string
-
-// UnmarshalJSON keeps the caller's bytes. It cannot fail: whatever the caller
-// sent for this field is the bundle's to judge, so nothing is rejected here.
-func (s *scalar) UnmarshalJSON(b []byte) error {
-	*s = scalar(b)
-	return nil
-}
-
-// MarshalJSON writes the carried token back exactly as it arrived. A value that
-// did NOT come off the wire — a hand-built op input, a URL param bound by
-// zip's setScalar — is not a JSON token but the string it spells, so it is
-// quoted. That keeps the type total: every scalar marshals to valid JSON.
-func (s scalar) MarshalJSON() ([]byte, error) {
-	if json.Valid([]byte(s)) {
-		return []byte(s), nil
-	}
-	return json.Marshal(string(s))
-}
-
-// sizedIn is the request-size half of an input, carried by every op below.
-//
-// The relay capped a body at maxBody and answered 413 (dispatch), and it did so
-// AFTER resolving the tenant. A typed op never sees the request, so the size is
-// recorded where the bytes are — the input's own UnmarshalJSON — and read back
-// after tenantOf, which is what keeps a 403 ahead of a 413 for the caller that
-// has both problems. The field is unexported, so it reaches no schema: it is not
-// something a caller sends.
-type sizedIn struct{ oversize bool }
-
-// fill decodes the caller's object into v, records whether it exceeded maxBody,
-// and NEVER refuses the body. It is the one decode path for the inputs below.
-//
-// A body that is not an object — an array, a bare scalar, `null` — leaves every
-// field absent, which is exactly what the relay did: it decoded into `any` and
-// the bundle's asObj turned anything that was not an object into `{}`. The
-// bundle then answers, in its own envelope, the same "name is required" it
-// always did. A type error on ONE key is saved and decoding continues, so a body
-// that echoes `"id":123` back at a PATCH still delivers the fields beside it —
-// as the relay did, since the URL carries the id and the bundle never read one
-// from the body.
-func (s *sizedIn) fill(b []byte, v any) {
-	s.oversize = len(b) > maxBody
-	// The error is deliberately dropped, and dropping it is the wire: see above.
-	_ = json.Unmarshal(b, v)
-}
-
-// bundleBody assembles the object the bundle validates from the caller's
-// verbatim tokens. A field left at its zero value was never on the wire, so it
-// contributes NO key — the `undefined` that a partial update reads.
-//
-// The result is a plain Go value, not bytes, because that is what crosses into
-// goja: the same shape the untyped relay handed the host after decoding the
-// caller's bytes into `any`. Key order is lost to the map on the way, and cannot
-// matter — the bundle reads its fields by name and echoes no request body back.
-func bundleBody(fields map[string]scalar) (any, error) {
-	obj := make(map[string]json.RawMessage, len(fields))
-	for k, v := range fields {
-		if v == "" {
-			continue // absent: this key was never on the wire
-		}
-		raw, err := v.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		obj[k] = raw
-	}
-	b, err := json.Marshal(obj)
-	if err != nil {
-		return nil, err
-	}
-	var body any
-	if err := json.Unmarshal(b, &body); err != nil {
-		return nil, err
-	}
-	return body, nil
-}
 
 // write is the ONE response path for a body-carrying typed op: refuse an
 // oversized body with the relay's 413, run the bundle route on the caller's
 // tenant with the assembled body, and decode the 2xx answer into out. A non-2xx
-// is the BUNDLE's, relayed through bundleErr exactly as the reads do.
-func (o ops) write(ctx context.Context, route string, size sizedIn, params map[string]string, fields map[string]scalar, out any) error {
+// is the BUNDLE's, relayed through goja.BundleErr exactly as the reads do.
+func (o ops) write(ctx context.Context, route string, size goja.SizedIn, params map[string]string, fields map[string]goja.BodyField, out any) error {
 	org, err := tenantOf(ctx)
 	if err != nil {
 		return err
 	}
 	// After the tenant, before the work — the order the relay used.
-	if size.oversize {
+	if size.Oversize() {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
 	}
-	body, err := bundleBody(fields)
+	body, err := goja.Body(fields)
 	if err != nil {
 		o.s.Log.Error("captable body assembly failed", "route", route, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "captable dispatch failed")
@@ -174,23 +72,23 @@ type captableUpdated struct {
 // captableCompanyUpdate is the company details a tenant can set on its cap-table
 // root record.
 type captableCompanyUpdate struct {
-	sizedIn
+	goja.SizedIn
 	// IncorporationCountry is the ISO country the entity is incorporated in.
 	// Optional; omitted, null or empty clears it. Any JSON scalar is accepted
 	// and stored as its text.
-	IncorporationCountry scalar `json:"incorporationCountry,omitempty"`
+	IncorporationCountry goja.Scalar `json:"incorporationCountry,omitempty"`
 	// IncorporationState is the state or province of incorporation. Optional;
 	// omitted, null or empty clears it. Any JSON scalar is accepted and stored
 	// as its text.
-	IncorporationState scalar `json:"incorporationState,omitempty"`
+	IncorporationState goja.Scalar `json:"incorporationState,omitempty"`
 	// IncorporationType is the entity kind, e.g. LLC or C_CORP. Optional;
 	// omitted, null or empty clears it. Any JSON scalar is accepted and stored
 	// as its text.
-	IncorporationType scalar `json:"incorporationType,omitempty"`
+	IncorporationType goja.Scalar `json:"incorporationType,omitempty"`
 	// Name is the company's legal name. Required, and it must be a non-empty
 	// string — anything else is refused with the cap table's own validation
 	// error.
-	Name scalar `json:"name,omitempty"`
+	Name goja.Scalar `json:"name,omitempty"`
 }
 
 // UnmarshalJSON keeps the caller's tokens and records the body size; it refuses
@@ -198,8 +96,8 @@ type captableCompanyUpdate struct {
 func (in *captableCompanyUpdate) UnmarshalJSON(b []byte) error {
 	type body captableCompanyUpdate // sheds the method, so this does not recurse
 	var v body
-	in.fill(b, &v)
-	v.sizedIn = in.sizedIn
+	in.Fill(maxBody, b, &v)
+	v.SizedIn = in.SizedIn
 	*in = captableCompanyUpdate(v)
 	return nil
 }
@@ -211,7 +109,7 @@ func (in *captableCompanyUpdate) UnmarshalJSON(b []byte) error {
 // never creates one.
 func (o ops) updateCompany(ctx context.Context, in *captableCompanyUpdate) (*captableUpdated, error) {
 	var out captableUpdated
-	err := o.write(ctx, "company.update", in.sizedIn, nil, map[string]scalar{
+	err := o.write(ctx, "company.update", in.SizedIn, nil, map[string]goja.BodyField{
 		"incorporationCountry": in.IncorporationCountry,
 		"incorporationState":   in.IncorporationState,
 		"incorporationType":    in.IncorporationType,
@@ -230,36 +128,36 @@ func (o ops) updateCompany(ctx context.Context, in *captableCompanyUpdate) (*cap
 // and a key that is present is written as sent — including an explicit null,
 // which clears the column. A request that names none of them is refused.
 type captableStakeholderPatch struct {
-	sizedIn
+	goja.SizedIn
 	// City is the stakeholder's city.
-	City scalar `json:"city,omitempty"`
+	City goja.Scalar `json:"city,omitempty"`
 	// CurrentRelationship is how the stakeholder relates to the company, e.g.
 	// FOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike
 	// adding a stakeholder, it is not checked against the vocabulary.
-	CurrentRelationship scalar `json:"currentRelationship,omitempty"`
+	CurrentRelationship goja.Scalar `json:"currentRelationship,omitempty"`
 	// Email is the stakeholder's email. This route stores it as sent — unlike
 	// adding a stakeholder, it is not checked for shape or uniqueness.
-	Email scalar `json:"email,omitempty"`
+	Email goja.Scalar `json:"email,omitempty"`
 	// ID is the stakeholder to update. It is the path segment: the URL is the
 	// addressing authority, and the org it is resolved in comes from the
 	// caller's principal, so an id from another tenant is simply not found.
 	ID string `json:"id"`
 	// InstitutionName names the institution, when the stakeholder is one.
-	InstitutionName scalar `json:"institutionName,omitempty"`
+	InstitutionName goja.Scalar `json:"institutionName,omitempty"`
 	// Name is the stakeholder's full name.
-	Name scalar `json:"name,omitempty"`
+	Name goja.Scalar `json:"name,omitempty"`
 	// StakeholderType is INDIVIDUAL or INSTITUTION. This route stores it as
 	// sent — unlike adding a stakeholder, it is not checked against the
 	// vocabulary.
-	StakeholderType scalar `json:"stakeholderType,omitempty"`
+	StakeholderType goja.Scalar `json:"stakeholderType,omitempty"`
 	// State is the stakeholder's state or province.
-	State scalar `json:"state,omitempty"`
+	State goja.Scalar `json:"state,omitempty"`
 	// StreetAddress is the stakeholder's street address.
-	StreetAddress scalar `json:"streetAddress,omitempty"`
+	StreetAddress goja.Scalar `json:"streetAddress,omitempty"`
 	// TaxID is the stakeholder's tax identifier.
-	TaxID scalar `json:"taxId,omitempty"`
+	TaxID goja.Scalar `json:"taxId,omitempty"`
 	// Zipcode is the stakeholder's postal code.
-	Zipcode scalar `json:"zipcode,omitempty"`
+	Zipcode goja.Scalar `json:"zipcode,omitempty"`
 }
 
 // UnmarshalJSON keeps the caller's tokens and records the body size; it refuses
@@ -267,8 +165,8 @@ type captableStakeholderPatch struct {
 func (in *captableStakeholderPatch) UnmarshalJSON(b []byte) error {
 	type body captableStakeholderPatch // sheds the method, so this does not recurse
 	var v body
-	in.fill(b, &v)
-	v.sizedIn = in.sizedIn
+	in.Fill(maxBody, b, &v)
+	v.SizedIn = in.SizedIn
 	*in = captableStakeholderPatch(v)
 	return nil
 }
@@ -283,7 +181,7 @@ func (in *captableStakeholderPatch) UnmarshalJSON(b []byte) error {
 // can record a value that adding one would have rejected.
 func (o ops) updateStakeholder(ctx context.Context, in *captableStakeholderPatch) (*captableUpdated, error) {
 	var out captableUpdated
-	err := o.write(ctx, "stakeholders.update", in.sizedIn, map[string]string{"id": in.ID}, map[string]scalar{
+	err := o.write(ctx, "stakeholders.update", in.SizedIn, map[string]string{"id": in.ID}, map[string]goja.BodyField{
 		"city":                in.City,
 		"currentRelationship": in.CurrentRelationship,
 		"email":               in.Email,
@@ -305,12 +203,12 @@ func (o ops) updateStakeholder(ctx context.Context, in *captableStakeholderPatch
 
 // captableRoundCloseRequest closes one of the caller org's open rounds.
 type captableRoundCloseRequest struct {
-	sizedIn
+	goja.SizedIn
 	// CloseDate is the date to record the round as closed on. Optional: omitted,
 	// null or empty records TODAY. Any JSON scalar is accepted and stored as its
 	// text, and the text is stored unparsed, so a caller that wants an ISO date
 	// sends one.
-	CloseDate scalar `json:"closeDate,omitempty"`
+	CloseDate goja.Scalar `json:"closeDate,omitempty"`
 	// ID is the round to close. It is the path segment: the URL is the
 	// addressing authority, and the org it is resolved in comes from the
 	// caller's principal, so an id from another tenant is simply not found.
@@ -322,8 +220,8 @@ type captableRoundCloseRequest struct {
 func (in *captableRoundCloseRequest) UnmarshalJSON(b []byte) error {
 	type body captableRoundCloseRequest // sheds the method, so this does not recurse
 	var v body
-	in.fill(b, &v)
-	v.sizedIn = in.sizedIn
+	in.Fill(maxBody, b, &v)
+	v.SizedIn = in.SizedIn
 	*in = captableRoundCloseRequest(v)
 	return nil
 }
@@ -334,7 +232,7 @@ func (in *captableRoundCloseRequest) UnmarshalJSON(b []byte) error {
 // found. Closing a round does not change what was invested in it.
 func (o ops) closeRound(ctx context.Context, in *captableRoundCloseRequest) (*captableUpdated, error) {
 	var out captableUpdated
-	err := o.write(ctx, "rounds.close", in.sizedIn, map[string]string{"id": in.ID}, map[string]scalar{
+	err := o.write(ctx, "rounds.close", in.SizedIn, map[string]string{"id": in.ID}, map[string]goja.BodyField{
 		"closeDate": in.CloseDate,
 	}, &out)
 	if err != nil {
