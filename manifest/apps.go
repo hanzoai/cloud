@@ -1,8 +1,9 @@
 // This file is HAND-AUTHORED. It is the SOURCE OF TRUTH for the fleet.
 //
-// Apps is every subsystem that ships as its own binary, in mount order — which
-// IS the routing order: the host loads them in this sequence and the router
-// takes the first prefix that matches. Four facts per app and no more — name,
+// Apps is every subsystem that ships as its own binary, in the order the host
+// loads them. That order is NOT what decides which app a path reaches: the router
+// resolves nested static prefixes by SPECIFICITY, and mount order breaks ties only
+// between EQUAL patterns (ai before zen, at the tail). Four facts per app and no more — name,
 // the absolute paths it answers, whether it must already be running when the
 // first request arrives, and whether the host should take traffic at all without
 // it — because that is the whole of what the light host needs to know (cmd/cloud
@@ -20,10 +21,16 @@
 // them: a row HERE (the host's view) and plugin/<name>/main.go (the app's view).
 // plugin/gen-app-cmds reads THIS list to scaffold a new app's main and to VALIDATE
 // that the two never drift — every row has a plugin/<name> serving exactly it, and
-// no plugin/<name> app-binary is missing from this list. Order is deliberate: a
-// shallower prefix registered earlier wins (account's /v1/commerce/topup/wallet
-// must precede commerce's /v1/commerce), and manifest/order_test.go freezes the
-// sequence so a reorder is a decision, never an accident.
+// no plugin/<name> app-binary is missing from this list. manifest/order_test.go
+// freezes the sequence so a reorder is a decision, never an accident — but what a
+// reorder can actually change is narrow, and this header used to overstate it: it
+// claimed account's /v1/commerce/topup/wallet "must precede" commerce's
+// /v1/commerce. Measured, it does not — registering commerce FIRST still delivers
+// /v1/commerce/topup/wallet to account, because the deeper prefix is the more
+// specific one. Which app answers a path is pinned by
+// TestEveryServedPathReachesTheAppThatServesIt (manifest/router_test.go), which
+// asks the real router built from these rows; the freeze guards the sequence, not
+// the routing.
 //
 // account no longer names anything under /v1/iam. It used to — deprecated key
 // aliases and an onboard handler sitting inside IAM's prefix — and those were
@@ -138,10 +145,20 @@ var Apps = []App{
 	// compliance operations into a live product with four paths and different
 	// customers on it.
 	//
-	// IT MUST PRECEDE risk, whose prefix is the bare /v1/risk: the router takes the
-	// first prefix that matches, so the more specific address is registered first
-	// or every label op lands on the decision plane. TestSpecificPrefixesPrecede
-	// pins it, so the constraint is a test rather than a comment.
+	// IT DOES NOT HAVE TO PRECEDE risk, whose prefix is the bare /v1/risk. This row
+	// used to say it must, that the router takes the first prefix that matches, and
+	// that TestSpecificPrefixesPrecede pinned it. No such test exists — it never
+	// did — and the rule is not the router's: with the bare /v1/risk registered
+	// FIRST and all three specific prefixes after it, the live router still delivers
+	// /v1/risk/labels here, /v1/risk/reference to reference and /v1/risk/datasets to
+	// dataset. zip resolves NESTED static prefixes by SPECIFICITY; mount order
+	// decides only between EQUAL patterns, which is what the ai-before-zen note
+	// below is actually about.
+	//
+	// What DOES hold this is TestEveryServedPathReachesTheAppThatServesIt
+	// (manifest/router_test.go): it builds the real router from these rows and asks
+	// it, per published path, which app receives the request. That is an oracle over
+	// every row at once, so no row needs a rule of its own to remember.
 	//
 	// It is its own subsystem rather than a leaf of the decision plane because its
 	// WRITERS are mostly not that plane — commerce adjudicates the dispute, the
@@ -150,19 +167,46 @@ var Apps = []App{
 	// means a separate per-tenant file, so no second process ever opens the
 	// decision plane's single-writer store.
 	{Name: "label", Prefixes: []string{"/v1/risk/labels"}},
+	// reference is the LOOKUP DATA a decision consults and cannot derive:
+	// disposable-email domains, datacentre and Tor ranges, issuer prefixes, and how
+	// current the designation lists the screening engine holds are. Same address
+	// rule as label, for the same reason — openapi.Product reads the product off
+	// the first /v1 segment, and these six operations are the risk product's, not
+	// the KServe model-SERVING product's. An earlier cut said /v1/ml/reference,
+	// which would have filed them into a live product with four paths and
+	// different customers on it.
+	//
+	// Its position relative to risk is likewise free — see the label row above.
+	{Name: "reference", Prefixes: []string{"/v1/risk/reference"}},
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
 	{Name: "risk", Prefixes: []string{"/v1/risk"}},
-	// The dataset plane sits BESIDE ml under /v1/ml rather than inside it, because
-	// the two share a face and nothing else. ml is a Kubernetes CRD bridge whose
-	// tenant boundary is a per-org NAMESPACE and whose failure domain is the
-	// cluster; this is a warehouse-backed record plane whose tenant boundary is a
-	// qualified `<brand>/<org>` KEY and whose failure domain is the columnar store.
-	// One package holding two tenancy models is the shape a privilege bug grows in,
-	// so they are two rows claiming two disjoint sets of leaves — and zip refuses
-	// two owners for one prefix at compose time, which checks it rather than
-	// trusting it.
-	{Name: "dataset", Prefixes: []string{"/v1/ml/datasets"}},
+	// dataset is the RECORD of what a model was fitted on: a versioned, immutable
+	// snapshot of one tenant's own event surface. Same address rule as label and
+	// reference, for the third time — openapi.Product reads the product off the
+	// first /v1 segment, and these seven operations are the risk product's. This row
+	// said /v1/ml/datasets, which published them as part of the KServe model-SERVING
+	// plane: one prefix, two products, and `ml` counted 14 operations that were seven
+	// serving ops and seven dataset ops. The rows here feed the risk model, which
+	// learns in-process from the org's own events, and never KServe.
+	//
+	// It is its own subsystem rather than a leaf of the decision plane because it
+	// shares no state with a scorer — no in-memory model, no ring, no single-writer
+	// file — and its tenant boundary is a different value: risk holds an in-process
+	// per-org model, this holds a qualified `<brand>/<org>` KEY into a columnar
+	// store. One package holding two tenancy models is the shape a privilege bug
+	// grows in, so they are two rows claiming two disjoint sets of leaves, and zip
+	// refuses two owners for one prefix at compose time.
+	//
+	// IT DOES NOT NEED TO PRECEDE risk, and that is MEASURED, not assumed: with the
+	// bare /v1/risk registered FIRST, the live router still delivers
+	// /v1/risk/datasets here and /v1/risk/labels to label. zip resolves NESTED
+	// static prefixes by SPECIFICITY, so mount order decides only between EQUAL
+	// patterns — which is why ai-before-zen (below) is a real decision and this is
+	// not. So this row stays where it already sat: reordering a frozen mount
+	// sequence to satisfy a rule the router does not apply would be churn, and the
+	// four /v1/risk apps are contiguous either way.
+	{Name: "dataset", Prefixes: []string{"/v1/risk/datasets"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},

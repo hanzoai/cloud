@@ -28,7 +28,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )

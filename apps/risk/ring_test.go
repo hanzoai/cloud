@@ -161,12 +161,12 @@ func TestRings_SurviveARolloutExactly(t *testing.T) {
 	first := planeAt(t, dir)
 	teach(t, first, k, evs)
 	before := velocitySnapshot(t, first, k, evs)
-	if err := first.close(); err != nil {
+	if err := first.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	after := velocitySnapshot(t, second, k, evs)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("a rollout changed this organisation's aggregates.\nbefore: %v\nafter:  %v\n"+
@@ -501,12 +501,12 @@ func TestWarm_FoldsAHistoryOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
-	if err := first.close(); err != nil { // writes the snapshot AND its watermark
+	if err := first.close(context.Background()); err != nil { // writes the snapshot AND its watermark
 		t.Fatalf("close: %v", err)
 	}
 
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	again := second.fold(context.Background(), k)
 	if again.Folded != 0 {
@@ -594,13 +594,13 @@ func TestEvent_DefaultIdsDoNotCollideInOneSecond(t *testing.T) {
 		t.Fatalf("%d events for one subject inside one second left %d row(s) on the record — "+
 			"the rest are dropped, and the aggregates are a projection of this record", n, held)
 	}
-	if err := p.close(); err != nil {
+	if err := p.close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 
 	// And the rollout: the replay must find all of them.
 	second := planeAt(t, dir)
-	defer func() { _ = second.close() }()
+	defer func() { _ = second.close(context.Background()) }()
 	holdFolds(t, second)
 	if _, _, replayed, err := second.rebuild(k); err != nil || replayed != n {
 		t.Fatalf("a rollout replayed %d of %d events (err %v) — that subject's velocity reads %d "+
@@ -626,13 +626,18 @@ func TestLearn_ARetriedBatchConvergesInMemoryToo(t *testing.T) {
 		ob(t, "evt-1", kindAccount, "u_1", 100, at),
 		ob(t, "evt-2", kindAccount, "u_1", 200, at.Add(time.Second)),
 	}
-	for i := 0; i < 2; i++ { // the client timed out and sent it again
-		verdicts, err := p.learn(k, batch...)
+	// THE COUNT IS THE ASSERTION, on both calls. The first learns the batch; the
+	// second learns NOTHING, and says so — which is what makes the convergence
+	// observable to the caller rather than only true inside the plane. It is also
+	// what the call is metered at, so a retry is free.
+	for i, want := range []int{len(batch), 0} { // the client timed out and sent it again
+		learned, err := p.learn(k, batch...)
 		if err != nil {
 			t.Fatalf("learn %d: %v", i, err)
 		}
-		if len(verdicts) != len(batch) {
-			t.Fatalf("a retried batch answered %d verdicts, want one per event", len(verdicts))
+		if learned != want {
+			t.Fatalf("call %d of a %d-event batch reported learning from %d, want %d — a duplicate is inert",
+				i, len(batch), learned, want)
 		}
 	}
 	if held := recorded(t, p, k); held != len(batch) {
