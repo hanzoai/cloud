@@ -522,7 +522,7 @@ func TestSearch_RollsBeforeItReadsItsHistory(t *testing.T) {
 			At: now.Add(-time.Duration(i+1) * 20 * time.Minute), Spend: 100_000_000,
 		})
 	}
-	run, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil)
+	run, err := p.begin(context.Background(), k, 24*time.Hour, free)
 	if err != nil {
 		t.Fatalf("the first search over an unrolled surface: %v", err)
 	}

@@ -912,12 +912,18 @@ func TestSearch_TheDebitLandsOnTheCallerThatAskedForIt(t *testing.T) {
 	if code, out := req(t, app, http.MethodPost, "/v1/risk/search", orgA, "u_"+orgA, `{"days":7}`); code != http.StatusAccepted {
 		t.Fatalf("POST /v1/risk/search = %d %s, want 202", code, out)
 	}
-	posted := books.await(t, 1)
-	if posted[0].Micros == 0 {
-		t.Fatal("a completed run metered nothing")
-	}
-	if posted[0].Org != orgA || posted[0].User != orgA {
-		t.Fatalf("the run's debit landed on %q/%q rather than the caller's own ledger — the meter is "+
-			"reading a request that has already been recycled", posted[0].Org, posted[0].User)
+	// BOTH debits, because a search meters twice: the surface read from the request
+	// goroutine, and the grid from the background one long after the 202. Waiting
+	// for ONE would be satisfied by the surface debit alone — the synchronous half —
+	// and the property this test exists for is the other one.
+	posted := books.await(t, 2)
+	for i, d := range posted {
+		if d.Micros == 0 {
+			t.Fatalf("debit %d of a completed run metered nothing", i)
+		}
+		if d.Org != orgA || d.User != orgA {
+			t.Fatalf("debit %d landed on %q/%q rather than the caller's own ledger — the meter is "+
+				"reading a request that has already been recycled", i, d.Org, d.User)
+		}
 	}
 }

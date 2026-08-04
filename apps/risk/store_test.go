@@ -303,6 +303,13 @@ func baseAt(t *testing.T, dir string) cloud.Base {
 	return cloud.NewBase(cloud.Deps{Logger: luxlog.New("risktest"), Brand: brandA, DataDir: dir}, "risk")
 }
 
+// free is the money seam as a PLANE test sees it: every bound is granted and
+// every meter is a no-op, so these tests measure the plane and never the ledger.
+// The priced path has its own fixture ([mountBilled]) and its own tests, which is
+// where a gate that stopped gating would be caught — a plane test that also
+// carried a ledger would be two subjects in one assertion.
+func free(string, int) (func(int), error) { return func(int) {}, nil }
+
 // newTestPlane builds a plane over a temporary data directory. The caller closes
 // it, which also waits for every background fold.
 func newTestPlane(t *testing.T) *plane {
