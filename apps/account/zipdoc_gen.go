@@ -21,19 +21,6 @@ func init() {
 	zip.Describe("GET /avatar/:org/:user/:digest", zip.Doc{
 		Description: "Streams a stored photo. No credentials — see the file header.",
 	})
-	zip.Describe("GET /v1/commerce/topup/rails", zip.Doc{
-		Description: "Lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail\ntherefore meant rebuilding and redeploying the frontend, and with them unset the\nUI reported \"not available yet\" no matter what the server could actually accept.\nServing the set at runtime keeps ONE source of truth (the server's config) and\nlets a rail be switched on without shipping a bundle.\n\nEverything here is public on-chain data; no secret is exposed, and the set is\nempty on a deployment that accepts no crypto rail.",
-		Fields: map[string]string{
-			"railList.rails":    "Rails is every (chain, token, treasury) triple this deployment accepts.",
-			"railView.chain":    "Chain is the human chain name, e.g. \"Base\".",
-			"railView.chainId":  "ChainID is the EIP-155 chain id the wallet must be on.",
-			"railView.decimals": "Decimals is the token's decimal places — 6 for USDC, 18 for an 18-decimal\ntoken. Cents are derived per-rail from it.",
-			"railView.id":       "ID is the stable rail id to name when submitting a transfer, e.g. \"base-usdc\".",
-			"railView.symbol":   "Symbol is the display symbol, e.g. \"USDC\".",
-			"railView.token":    "Token is the ERC-20 contract address to transfer.",
-			"railView.treasury": "Treasury is the address on this chain to send funds to.",
-		},
-	})
 	zip.Describe("GET /v1/csrf", zip.Doc{
 		Description: "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs). The token is bound to the caller's validated identity and expires,\nso one minted for one identity cannot authorize a write as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a write.",
 		Fields: map[string]string{
@@ -63,19 +50,6 @@ func init() {
 			"apiKey.type":      "Type is the key class: secret (sk-) or publishable (pk-).",
 			"apiKeyList.keys":  "Keys is every key the caller holds, at most one per type.",
 		},
-	})
-	zip.Describe("POST /v1/commerce/topup/wallet", zip.Doc{
-		Description: "Credits the caller's org for a stablecoin transfer they already sent\nto the treasury. It reads the receipt from that rail's chain, confirms a mined,\nsuccessful ERC-20 Transfer to the rail's treasury, derives USD cents from the\non-chain value using the token's own decimals, records the credit, and returns\nthe amount plus the new balance.\n\nThe credited amount is the ON-CHAIN value, never a number the caller sends, and\nthe credit lands on the caller's own validated org — there is no way to name a\nthird-party subject. Nothing is credited that the chain did not confirm: a\nmissing, failed or non-matching transaction is refused, and a deployment with no\npayment rail enabled says so rather than inventing a credit.",
-		Fields: map[string]string{
-			"walletTopupReq.fromAddress":    "FromAddress is the wallet the transfer was sent from. Optional; when given it\nmust match the transfer's on-chain sender.",
-			"walletTopupReq.rail":           "Which accepted rail the transfer was sent on, e.g. \"base-usdc\". The client\nnames it rather than the server guessing from the tx: the same address can\nexist on several chains, so inferring would risk crediting against the wrong\ntreasury. It may be omitted only while exactly one rail is enabled.",
-			"walletTopupReq.txHash":         "TxHash is the hash of the ERC-20 transfer that was already sent to the rail's\ntreasury. The receipt is read from that chain; nothing is credited that the\nchain did not confirm.",
-			"walletTopupResp.balance":       "Balance is the org's new USD-ledger balance in cents. Best-effort: a read\nfailure reports 0, and the credit has already landed either way.",
-			"walletTopupResp.creditedCents": "CreditedCents is the USD credit recorded, derived from the ON-CHAIN value\nusing the token's own decimals — never a client-supplied number.",
-			"walletTopupResp.status":        "Status is how commerce recorded the payment.",
-			"walletTopupResp.txHash":        "TxHash is the transfer that was credited.",
-		},
-		Example: json.RawMessage(`{"rail":"base-usdc","txHash":"0x0000000000000000000000000000000000000000000000000000000000000001"}`),
 	})
 	zip.Describe("POST /v1/keys", zip.Doc{
 		Description: "Creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
