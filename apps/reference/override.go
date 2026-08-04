@@ -23,6 +23,7 @@ package reference
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,9 +32,31 @@ import (
 // maxOverrides is how many entries one organisation may hold in one set.
 const maxOverrides = 10_000
 
-// row bounds ONE stored override in bytes: the two bounded strings plus the
-// verdict, the timestamp and the writer, generously rounded up.
-const row = maxKey + maxNote + 128
+// maxActor bounds, IN BYTES, the writer recorded on a row.
+//
+// It is a term of [row], and [row] is what [ownVolume] is computed from, so
+// leaving it unbounded left the published per-organisation ceiling stating a
+// figure nothing held to: the writer is [actor]'s reading of the X-User-Id the
+// request carries, so it was a caller-sized value stored [maxOverrides] times in
+// every set the catalog publishes, on the ONE volume every organisation's file
+// sits on. A count over caller-sized values is not a byte bound.
+//
+// The bound is at the store door rather than at the wire op because the row is
+// what the budget is about: bounded where a row is written, it holds for every
+// path that reaches the store and not only the one a reviewer happened to read.
+// 128 bytes is three times the UUID IAM mints.
+const maxActor = 128
+
+// errActor separates the two refusals [put] can produce. The row cap is a
+// CONFLICT — the organisation already holds what it holds — and an over-long
+// writer is a BAD REQUEST, because it is a value that arrived on this call.
+var errActor = errors.New("the writer on this row is past its bound")
+
+// row bounds ONE stored override in bytes: the three bounded strings plus the
+// verdict and the timestamp, generously rounded up. Every term is DERIVED from
+// the bound the door enforces — a term written down independently here is a
+// ceiling that stops tracking the thing it is a ceiling on.
+const row = maxKey + maxNote + maxActor
 
 // ownVolume is what one organisation may occupy on the shared volume: rows per
 // set, times the sets the catalog publishes, times [row].
@@ -118,6 +141,12 @@ func (o *overrides) count(set string) (int, error) {
 func (o *overrides) put(set string, in []ReferenceOverride, by string, now time.Time) (int, error) {
 	if len(in) == 0 {
 		return 0, nil
+	}
+	// Refused rather than shortened: the writer is who an adverse action is
+	// attributed to, and a truncated identity names someone who does not exist.
+	if len(by) > maxActor {
+		return 0, fmt.Errorf("%w: it is %d bytes and the bound is %d; a stored writer is a term of the %d MiB every organisation may hold",
+			errActor, len(by), maxActor, ownVolume()>>20)
 	}
 	tx, err := o.db.Begin()
 	if err != nil {

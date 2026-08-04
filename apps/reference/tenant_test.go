@@ -73,8 +73,18 @@ func seed(t *testing.T, name string, entries []Entry) {
 	mounted.State.plane.put(name, loaded(set, entries))
 }
 
+// call rides the wire as the org's default principal. It is [callAs] with the
+// user the rest of this file assumes, so there is one request builder and not
+// two — the writer bound is a property of what the wire hands the store, and a
+// second builder is a second answer to "what did the request carry".
 func call(t *testing.T, app *zip.App, method, path, org string, body any) (int, map[string]any) {
 	t.Helper()
+	return callAs(t, app, method, path, org, "u_"+org, body)
+}
+
+// callAs names the validated user too, because the writer recorded on a row is
+// the X-User-Id and its bound is a property of the row.
+func callAs(t *testing.T, app *zip.App, method, path, org, user string, body any) (int, map[string]any) {
 	t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -87,7 +97,7 @@ func call(t *testing.T, app *zip.App, method, path, org string, body any) (int, 
 	}
 	if org != "" {
 		rq.Header.Set("X-Org-Id", org)
-		rq.Header.Set("X-User-Id", "u_"+org) // a validated principal (principal.Org gate)
+		rq.Header.Set("X-User-Id", user) // a validated principal (principal.Org gate)
 	}
 	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
@@ -586,6 +596,56 @@ func TestAnOverrideCannotFillTheVolumeEveryOrgSharesOn(t *testing.T) {
 	}
 	if got, _ := list[0].(map[string]any)["key"].(string); len(got) != len(ok) {
 		t.Errorf("stored key is %d bytes, wrote %d — a key must never be trimmed", len(got), len(ok))
+	}
+}
+
+// TestTheWriterOnARowIsBoundedLikeEveryOtherTerm.
+//
+// [ownVolume] is the per-organisation ceiling, and it is the product of
+// [maxOverrides], the catalog size and [row] — where [row] is the sum of the
+// bounded terms. The key and the note were bounded at the wire door; the WRITER
+// was not, and it is [actor]'s reading of the X-User-Id the request carries. So
+// the third term of the row was a caller-sized value, stored [maxOverrides]
+// times in every set the catalog publishes, on the ONE volume every
+// organisation's file sits on — a count over caller-sized values, which is not a
+// byte bound, and a published ceiling nothing held to.
+//
+// It rides the WIRE rather than calling put directly, because the defect was in
+// what the wire hands the store: a unit test on put would have passed against a
+// handler that never bounded the header at all.
+func TestTheWriterOnARowIsBoundedLikeEveryOtherTerm(t *testing.T) {
+	app := mount(t)
+	body := map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny}}}
+
+	// One byte past the bound is refused, and the refusal says what was wrong.
+	code, out := callAs(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+		strings.Repeat("u", maxActor+1), body)
+	if code != http.StatusBadRequest {
+		t.Fatalf("a %d-byte writer answered %d, want 400 — an unbounded writer means ownVolume() (%d MiB) states a figure nothing holds to",
+			maxActor+1, code, ownVolume()>>20)
+	}
+	if raw, _ := json.Marshal(out); !strings.Contains(string(raw), "writer") {
+		t.Errorf("the refusal does not name the writer: %s", raw)
+	}
+
+	// And nothing landed: a refused write writes nothing.
+	if _, read := callAs(t, app, http.MethodGet, "/v1/risk/reference/domain", "acme", "u_acme", nil); true {
+		if list, _ := read["overrides"].([]any); len(list) != 0 {
+			t.Fatalf("a refused write left %d entries behind", len(list))
+		}
+	}
+
+	// The bound itself is reachable: refusing AT it would make the stated maximum
+	// a number no principal can ever use.
+	if code, _ := callAs(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+		strings.Repeat("u", maxActor), body); code != 200 {
+		t.Fatalf("a writer AT the %d-byte bound answered %d, want 200", maxActor, code)
+	}
+
+	// row is DERIVED from the three bounds, so the ceiling tracks them.
+	if row != maxKey+maxNote+maxActor {
+		t.Errorf("row = %d but its terms sum to %d — a term written down independently stops tracking the bound it names",
+			row, maxKey+maxNote+maxActor)
 	}
 }
 
