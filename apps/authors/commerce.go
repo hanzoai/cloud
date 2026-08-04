@@ -6,36 +6,32 @@ import (
 	"github.com/hanzoai/cloud/apps/payout"
 )
 
-// commerce is the narrow money seam the author royalty loop needs: read a deploying
-// org's metered spend (the royalty accrual base) and grant a promo credit to a wallet
-// (a payout made in credits, ledger tag grant:author). It is an INTERFACE so the
-// store/handler logic is testable with a fake ledger; the production binding is
-// clients/payout, reached through the thin adapter below.
+// commerce is the ONE thing the royalty loop asks of the money plane, and it is a
+// QUESTION, not an instruction: what has this org spent? That read is the accrual
+// base. It is an INTERFACE so the sweep is testable against a fake.
 //
-// The S2S impl (COMMERCE_SERVICE_TOKEN path, X-Org-Id=<org> namespace, bare-org
-// `user` subject) was three byte-identical commerce.go copies; it now lives ONCE in
-// clients/payout. An author payout-in-credits still lands in precisely the wallet the
-// balance panel reads, indistinguishable from an admin grant except by its
-// grant:author tag.
+// THERE IS NO DEPOSIT HERE, AND THERE IS NOT GOING TO BE ONE. This seam used to
+// carry `deposit`, which is how a GET on this surface came to mint platform credit:
+// the capability existed, so a caller eventually reached it. An author royalty is a PAYABLE —
+// accrued and recorded here, settled by a human out of band — and platform credit is
+// issued only by an admin grant. Re-adding a write method here re-opens exactly the
+// hole that was shut, so the SHAPE of this interface is load-bearing and
+// TestCommerceSeamIsReadOnly fails if it ever grows one.
 type commerce interface {
 	configured() bool
-	deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags, ref string) (txnID string, err error)
 	spendCents(ctx context.Context, org, user string) (int64, error)
 }
 
-// errUnconfigured is the shared sentinel a deposit against an unwired commerce
-// returns, so the caller records an honest failure rather than a phantom payout.
+// errUnconfigured is the shared sentinel a read against an unwired commerce returns,
+// so accrual stays honestly pending rather than silently earning.
 var errUnconfigured = payout.ErrUnconfigured
 
 // commerceSeam adapts the shared payout.Client onto this program's lowercase seam
 // (Go package-scoped interface methods cannot cross packages). Zero logic — pure
-// delegation; the money path lives in clients/payout.
+// delegation, and it delegates exactly one read.
 type commerceSeam struct{ c *payout.Client }
 
 func (s commerceSeam) configured() bool { return s.c.Configured() }
-func (s commerceSeam) deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags, ref string) (string, error) {
-	return s.c.Deposit(ctx, org, user, amountCents, currency, notes, tags, ref)
-}
 func (s commerceSeam) spendCents(ctx context.Context, org, user string) (int64, error) {
 	return s.c.SpendCents(ctx, org, user)
 }

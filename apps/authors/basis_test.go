@@ -231,12 +231,16 @@ func TestBasisIsPureRead(t *testing.T) {
 	}
 	assertStill("before any sweep", 0, 0, 0, 0)
 
-	// The dashboard (which sweeps lazily on read) does what the audit read refused to.
+	// No read sweeps any more — the dashboard is a pure read too.
 	const want = 10000 * defaultShareBps / bpsDenom
 	if st, b := req(t, app, http.MethodGet, "/v1/authors", "orgA", false, nil); st != http.StatusOK {
 		t.Fatalf("dashboard want 200, got %d (%s)", st, b)
 	}
-	assertStill("after the dashboard's lazy sweep", want, 0, 1, want)
+	assertStill("after the dashboard read", 0, 0, 0, 0)
+
+	// Only the admin POST accrues.
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	assertStill("after the admin sweep", want, 0, 1, want)
 
 	for i := 0; i < 3; i++ {
 		if v, _ := getBasis(t, app, "orgA", ""); v.Reconciliation.LedgerEarningCents != want {
