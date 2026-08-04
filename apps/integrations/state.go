@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -41,6 +42,14 @@ var stateTTL = 10 * time.Minute
 // provider, bad org) returns it so the callback leaks no oracle to an attacker
 // probing states.
 var errBadState = errors.New("integrations: invalid state")
+
+// badState wraps errBadState with the precise cause. errors.Is(err, errBadState)
+// still holds, so control flow is unchanged and the BROWSER still gets exactly one
+// opaque reason — the cause exists for the server log, the only audience it is safe
+// to be precise with. Without it a failed callback is indistinguishable from every
+// other failed callback, which is how a dead signing key stayed invisible: the user
+// saw "invalid state" and the log said nothing at all.
+func badState(cause string) error { return fmt.Errorf("%w: %s", errBadState, cause) }
 
 // statePayload is the CSRF + org-binding carried across the OAuth round trip. It
 // is signed (HMAC-SHA256), NOT encrypted — org/provider are not secret; the MAC
@@ -101,36 +110,41 @@ func verify(s *cloud.Service[state], token, provider string) (statePayload, erro
 	// multi-KB token is hostile. Rejecting first stops an attacker forcing a large
 	// base64 allocation (the MAC-half decode) on every forged callback.
 	if len(token) > maxStateLen {
-		return statePayload{}, errBadState
+		return statePayload{}, badState("oversize token")
 	}
 	dot := strings.IndexByte(token, '.')
 	if dot <= 0 || dot == len(token)-1 {
-		return statePayload{}, errBadState
+		return statePayload{}, badState("malformed token")
 	}
 	payloadB64, macB64 := token[:dot], token[dot+1:]
 	gotMAC, err := base64.URLEncoding.DecodeString(macB64)
 	if err != nil {
-		return statePayload{}, errBadState
+		return statePayload{}, badState("undecodable signature")
 	}
 	if !hmac.Equal(gotMAC, mac(s, payloadB64)) {
-		return statePayload{}, errBadState
+		// The overwhelmingly common cause is not an attacker: it is a state signed
+		// by a DIFFERENT key — i.e. this process did not sign it. That happens when
+		// stateKeyEnv is unset (each boot invents a key, so any restart between
+		// authorize and callback invalidates the flow) or when replicas disagree.
+		return statePayload{}, badState("signature mismatch: signed by a different key (check " + stateKeyEnv + ")")
 	}
 	raw, err := base64.URLEncoding.DecodeString(payloadB64)
 	if err != nil {
-		return statePayload{}, errBadState
+		return statePayload{}, badState("undecodable payload")
 	}
 	var p statePayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return statePayload{}, errBadState
+		return statePayload{}, badState("unparseable payload")
 	}
 	if p.Provider != provider {
-		return statePayload{}, errBadState
+		return statePayload{}, badState("provider mismatch: state is for " + p.Provider)
 	}
 	if time.Now().Unix() > p.Exp {
-		return statePayload{}, errBadState
+		return statePayload{}, badState(fmt.Sprintf("expired %s ago (states live %s)",
+			time.Since(time.Unix(p.Exp, 0)).Round(time.Second), stateTTL))
 	}
 	if !validOrg(p.Org) || strings.TrimSpace(p.Nonce) == "" {
-		return statePayload{}, errBadState
+		return statePayload{}, badState("unusable org/nonce binding")
 	}
 	return p, nil
 }
