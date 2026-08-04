@@ -169,7 +169,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// must precede every leaf below. Serve installs one app-wide too; nesting is
 	// harmless — the inner one is what the handler sees — and this one is what
 	// makes guide's own tests (which mount only guide) carry an org at all.
-	app.Group("/v1/guide").Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 
 	// TYPED ops are declared on the GROUPS this surface already has, so an op's
 	// path is the prefix composed with its leaf — the identity every projection

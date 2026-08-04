@@ -143,7 +143,7 @@ func routes(app cloud.Router, s *service) {
 	// have to be parked there. Installed on the subsystem's own subtree BEFORE the
 	// leaves — fiber runs middleware in registration order, so one installed after
 	// them never runs.
-	app.Group("/v1/prefs").Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 
 	zip.Get(cloud.ZipApp(app), "/v1/prefs", prefsOps{s: s}.getPrefs)
 
