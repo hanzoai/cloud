@@ -594,8 +594,8 @@ func projectKey(c *zip.Ctx) string {
 //
 // That was a per-DOOR copy of a decision that belongs to the TRUST LEVEL. Both alias
 // handlers now call handle (event.go) like every other door: a credential resolves to
-// its own org at full capability, and a credential-less caller gets the anonymous
-// projection under publicTenant. A Host header no longer names a tenant anywhere.
+// its own org, at full capability or through the projection, and a credential-less
+// caller is refused. A Host header no longer names a tenant anywhere.
 
 // ── ONE write core ───────────────────────────────────────────────────────────
 
