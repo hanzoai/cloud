@@ -121,10 +121,11 @@ func lookupDetector(dets map[string]Detector, signal string) (Detector, bool) {
 	return nil, false
 }
 
-// eventsTable is the event plane's product-event table, keyed on org (== the IAM
+// eventsTable is the event plane's one fact table, keyed on org (== the IAM
 // org slug) — the SAME table + tenancy column clients/analytics reads (query.go
 // eventsWhere). The plane's DDL owner is hanzoai/o11y; guide only reads it.
-const eventsTable = "event.event"
+// It holds every signal, so a product-event read pins signal='act'.
+const eventsTable = "event.fact"
 
 // detectAnalyticsEmitting reports whether insights events exist for the org. It
 // binds the org POSITIONALLY (nothing user-derived is interpolated) against the
@@ -132,7 +133,7 @@ const eventsTable = "event.event"
 // datastore not initialised in this deployment) is returned so the reconcile loop
 // leaves the step untouched — auto-detect is best-effort and never a false done.
 func detectAnalyticsEmitting(ctx context.Context, org string, _ JourneyStep) (bool, error) {
-	rows, err := datastore.Query(ctx, "SELECT count() AS n FROM "+eventsTable+" WHERE org = ?", org)
+	rows, err := datastore.Query(ctx, "SELECT count() AS n FROM "+eventsTable+" WHERE org = ? AND signal = 'act'", org)
 	if err != nil {
 		return false, err
 	}
