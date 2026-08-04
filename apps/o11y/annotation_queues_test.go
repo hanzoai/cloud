@@ -30,7 +30,7 @@ func annApp(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	// cloud.Bridge FIRST, exactly as MountO11y installs it: a typed op reads its
 	// validated org off the context, so without this every route here 403s.
-	app.Group(o11yPrefix).Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 	g := app.Group(o11yPrefix)
 	zip.Get(g, "/reviews", s.listQueues)
 	zip.Post(g, "/reviews", s.createQueue, zip.WithStatus(http.StatusCreated))
