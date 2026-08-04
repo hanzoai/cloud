@@ -41,7 +41,7 @@ func call(t *testing.T, app *zip.App, method, path, body string, hdr map[string]
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}

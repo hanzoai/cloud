@@ -32,7 +32,7 @@ func TestGetTokenAnswersARawTokenAsText(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+session(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix()))
 
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("POST /v1/meet/getToken: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestHealthCarriesABodyAtBOTHStatuses(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			app := mount(t, teamSecret, tc.key, tc.sec)
-			resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil))
+			resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil))
 			if err != nil {
 				t.Fatalf("GET /v1/meet/health: %v", err)
 			}

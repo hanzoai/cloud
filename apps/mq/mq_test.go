@@ -19,14 +19,13 @@ import (
 
 	luxlog "github.com/luxfi/log"
 	natsio "github.com/nats-io/nats.go"
-	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
 	psembed "github.com/hanzoai/pubsub/embed"
 )
 
-var httpCfg = fiber.TestConfig{Timeout: 45 * time.Second, FailOnTimeout: true}
+var httpCfg = zip.TestConfig{Timeout: 45 * time.Second, FailOnTimeout: true}
 
 // plane opens a real embedded broker on a random port and mounts the surface
 // over it, waiting for the client to connect so the first op is never a 503.
@@ -74,7 +73,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(rq, httpCfg)
+	resp, err := app.Test(rq, httpCfg)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

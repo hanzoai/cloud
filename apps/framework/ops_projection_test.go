@@ -145,7 +145,7 @@ func TestOpenObjectRefusalStillHolds(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/probe/Task", bytes.NewReader([]byte(`{"subject":"x"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	if _, err := probe.Fiber().Test(req); err != nil {
+	if _, err := probe.Test(req); err != nil {
 		t.Fatalf("probe request: %v", err)
 	}
 	if bound["subject"] != "x" {

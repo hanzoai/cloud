@@ -105,7 +105,7 @@ func TestCollabRPCBridgedUnderBareMount(t *testing.T) {
 func TestClearCookieIsExact(t *testing.T) {
 	app := mountTeam(t)
 	req := httptest.NewRequest(http.MethodDelete, "/v1/team/account/cookie", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

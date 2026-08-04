@@ -121,7 +121,7 @@ func TestMergedAndChainedAreIndistinguishableAndBothYieldOneOperation(t *testing
 // GetRoutes(true) filter drops it, and Live must use it.
 func TestLiveDropsMiddleware(t *testing.T) {
 	app := newApp()
-	app.Use(func(c *zip.Ctx) error { return c.Next() })
+	app.Use(zip.H(func(c *zip.Ctx) error { return c.Next() }))
 	app.Get("/v1/kms/health", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
 
 	live := Live(app)

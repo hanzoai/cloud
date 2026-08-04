@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/openapi"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -143,7 +142,7 @@ func headerOf(t *testing.T, app *zip.App, path, user, org, name string) string {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("X-User-Id", user)
 	req.Header.Set("X-Org-Id", org)
-	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: usageTestTimeout, FailOnTimeout: true})
+	resp, err := app.Test(req, zip.TestConfig{Timeout: usageTestTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test GET %s: %v", path, err)
 	}

@@ -86,7 +86,7 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 		req.Header.Set("X-User-IsAdmin", "true") // forgery attempt
 		req.Header.Set("X-User-Id", "attacker")
 		req.Header.Set("X-Org-Id", "attacker-org")
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
 		}
@@ -103,7 +103,7 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	// Control: the gate must deny the priced path at zero balance. If this passes,
 	// the gate is not engaged and the IAM 2xx results above prove nothing.
 	req := httptest.NewRequest(http.MethodPost, controlPricedPath, nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("control %s: %v", controlPricedPath, err)
 	}
@@ -157,7 +157,7 @@ func TestDefaultPriceExemptsIAM(t *testing.T) {
 			got = DefaultPrice(c)
 			return c.JSON(http.StatusOK, map[string]bool{"ok": true})
 		})
-		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, path, nil))
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {
 			t.Fatalf("DefaultPrice(%s): %v", path, err)
 		}

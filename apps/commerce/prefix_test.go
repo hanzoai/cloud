@@ -32,10 +32,10 @@ import (
 func TestCommercePrefixesPinned(t *testing.T) {
 	want := map[string]bool{
 		"/v1/billing/recharge": false,
-		"/v1/billing/webhooks":      false,
-		"/v1/store":                 false,
-		"/v1/catalog":               false,
-		"/v1/plans":                 false,
+		"/v1/billing/webhooks": false,
+		"/v1/store":            false,
+		"/v1/catalog":          false,
+		"/v1/plans":            false,
 	}
 	for _, p := range Prefixes {
 		if _, ok := want[p]; ok {
@@ -112,7 +112,7 @@ func TestStoreSurfaceRoutedToCommerceNotAIGate(t *testing.T) {
 // doReq drives one request through the mounted app and returns (status, body).
 func doReq(t *testing.T, app *zip.App, method, path string) (int, []byte) {
 	t.Helper()
-	resp, err := app.Fiber().Test(httptest.NewRequest(method, path, nil))
+	resp, err := app.Test(httptest.NewRequest(method, path, nil))
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

@@ -132,7 +132,7 @@ func postHost(t *testing.T, app *zip.App, host, path, body string, hdr map[strin
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test POST %s%s: %v", host, path, err)
 	}
@@ -258,7 +258,7 @@ func TestMount_HostCarve_CustomDomainCarves(t *testing.T) {
 func TestMount_HostCarve_GetNotHijacked(t *testing.T) {
 	app := carveApp(t, "hanzo")
 	req := httptest.NewRequest(http.MethodGet, "http://yadota.hanzo.app/v1/analytics/overview", nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}

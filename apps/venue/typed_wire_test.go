@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/openapi"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -33,7 +32,7 @@ func callRaw(t *testing.T, app *zip.App, method, path, org string, admin bool, b
 	if admin {
 		rq.Header.Set("X-User-IsOrgAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

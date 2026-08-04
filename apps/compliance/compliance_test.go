@@ -22,7 +22,6 @@ import (
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -82,7 +81,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, ma
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org) // a validated principal (principal.Org gate)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -110,7 +109,7 @@ func doOrgAdmin(t *testing.T, app *zip.App, method, path, org string, body any) 
 	rq.Header.Set("X-Org-Id", org)
 	rq.Header.Set("X-User-Id", "admin_"+org)
 	rq.Header.Set("X-User-IsOrgAdmin", "true")
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -130,7 +129,7 @@ func doWebhook(t *testing.T, app *zip.App, sig string, body []byte) (int, map[st
 	if sig != "" {
 		rq.Header.Set(idv.WebhookRefHeader, sig)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test webhook: %v", err)
 	}

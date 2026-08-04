@@ -30,7 +30,7 @@ func newErrApp(err error) *zip.App {
 
 func getThing(t *testing.T, err error) (int, string) {
 	t.Helper()
-	resp, rerr := newErrApp(err).Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/thing", nil))
+	resp, rerr := newErrApp(err).Test(httptest.NewRequest(http.MethodGet, "/v1/thing", nil))
 	if rerr != nil {
 		t.Fatalf("Test request: %v", rerr)
 	}
@@ -90,7 +90,7 @@ func TestPropagatedRefusalsKeepTheirStatusAndCode(t *testing.T) {
 func TestWithoutTheSeamAnUnfundedRequestIs500(t *testing.T) {
 	app := zip.New(zip.Config{}) // no ErrorHandler: zip's own
 	app.Get("/v1/thing", func(c *zip.Ctx) error { return metering.ErrInsufficientBalance })
-	resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/thing", nil))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/thing", nil))
 	if err != nil {
 		t.Fatalf("Test request: %v", err)
 	}

@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
-var testCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
+var testCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
 // do runs a control-plane JSON request through the Fiber test harness, carrying the
 // gateway identity headers a validated principal needs.
@@ -32,7 +31,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

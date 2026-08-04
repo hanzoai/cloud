@@ -111,7 +111,7 @@ func TestGitOpsGuarded(t *testing.T) {
 	s := fakeService()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
-	resp, err := app.Fiber().Test(httptest.NewRequest("GET", "/v1/deploy/gitops", nil))
+	resp, err := app.Test(httptest.NewRequest("GET", "/v1/deploy/gitops", nil))
 	if err != nil {
 		t.Fatalf("GET /v1/deploy/gitops: %v", err)
 	}

@@ -26,7 +26,7 @@ func raw(t *testing.T, app *zip.App, method, path, body string) (int, string) {
 	}
 	req := httptest.NewRequest(method, path, rdr)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
@@ -41,7 +41,6 @@ func raw(t *testing.T, app *zip.App, method, path, body string) (int, string) {
 // mounts here, so every operation in the document is one of marketing's.
 func TestTypedOpsProject(t *testing.T) {
 	app, _ := mountRoutes(t)
-	app.Prepare() // installs the deferred projections a Listen would
 
 	code, body := raw(t, app, http.MethodGet, "/.well-known/openapi.json", "")
 	if code != http.StatusOK {
@@ -97,7 +96,6 @@ func TestTypedOpsProject(t *testing.T) {
 // read, and this test is what catches it.
 func TestTypedOpRefusesAnonymousMCP(t *testing.T) {
 	app, _ := mountRoutes(t)
-	app.Prepare()
 
 	code, body := raw(t, app, http.MethodPost, "/mcp",
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_v1_marketing_campaigns","arguments":{}}}`)
@@ -176,7 +174,7 @@ func TestTypedOpRefusesUnvalidatedPrincipal(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/marketing/campaigns", nil)
 	req.Header.Set("X-Org-Id", "victim") // no X-User-Id: nothing validated this
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test request: %v", err)
 	}

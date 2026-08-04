@@ -149,7 +149,7 @@ func TestSendKeepsItsCapAndItsStrictness(t *testing.T) {
 	rq.Header.Set("Content-Type", "application/json")
 	rq.Header.Set("X-Org-Id", "acme")
 	rq.Header.Set("X-User-Id", "u-acme")
-	resp, err := e.app.Fiber().Test(rq)
+	resp, err := e.app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

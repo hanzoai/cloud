@@ -12,7 +12,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -59,7 +58,7 @@ func probe(t *testing.T, app *zip.App, method, path, org string, body any) (int,
 	// A generous timeout: fiber's 1s default is too tight for the in-memory harness
 	// under an occasional GC / cold-sqlite pause (the goja dispatch does real DB
 	// work), which would flake this suite.
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

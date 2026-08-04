@@ -70,7 +70,7 @@ func TestEdgeCORS_DisabledByDefault(t *testing.T) {
 	app := corsApp(t, nil) // empty allowlist ⇒ no-op (ingress owns CORS)
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Set("Origin", "https://hanzo.ai")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestEdgeCORS_ReflectsAllowlistedOrigin(t *testing.T) {
 	app := corsApp(t, []string{"*.hanzo.ai"})
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Set("Origin", "https://console.hanzo.ai")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -108,12 +108,12 @@ func TestEdgeCORS_PreflightShortCircuits(t *testing.T) {
 	reached := false
 	app := zip.New(zip.Config{})
 	app.Use(EdgeCORS(staticPol(t, edge.Policy{CORSOrigins: []string{"*.hanzo.ai"}})))
-	app.Use(func(c *zip.Ctx) error { reached = true; return c.Continue() })
+	app.Use(zip.H(func(c *zip.Ctx) error { reached = true; return c.Continue() }))
 	app.Get("/probe", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "1"}) })
 
 	req := httptest.NewRequest(http.MethodOptions, "/probe", nil)
 	req.Header.Set("Origin", "https://hanzo.ai")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestEdgeCORS_UnknownOriginGetsNothing(t *testing.T) {
 	app := corsApp(t, []string{"*.hanzo.ai"})
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Set("Origin", "https://evil.example")
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
@@ -168,7 +168,7 @@ func edgeGet(t *testing.T, app *zip.App, xff string) int {
 	if xff != "" {
 		req.Header.Set("X-Forwarded-For", xff)
 	}
-	res, err := app.Fiber().Test(req)
+	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}

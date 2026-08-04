@@ -98,7 +98,7 @@ func mountApp(t *testing.T) *zip.App {
 func get(t *testing.T, app *zip.App, path string) (int, []byte) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}

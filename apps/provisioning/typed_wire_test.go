@@ -214,7 +214,7 @@ func TestTypedReadsFailClosedWithoutAPrincipal(t *testing.T) {
 		tc.mount(app)
 		req, _ := http.NewRequest(tc.method, tc.path, nil)
 		req.Header.Set("X-Org-Id", "victim") // forged, with no X-User-Id
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s: Test: %v", tc.name, err)
 		}

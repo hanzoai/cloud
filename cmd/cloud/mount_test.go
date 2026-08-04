@@ -67,7 +67,7 @@ func do(t *testing.T, app *zip.App, path string) (int, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}

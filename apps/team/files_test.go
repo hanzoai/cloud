@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -73,7 +73,7 @@ func uploadFile(t *testing.T, app *zip.App, ws, blobID string, headers map[strin
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("upload Test: %v", err)
 	}
@@ -90,7 +90,7 @@ func getRaw(t *testing.T, app *zip.App, path string, headers map[string]string) 
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("get Test: %v", err)
 	}

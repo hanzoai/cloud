@@ -404,7 +404,7 @@ func TestCreateOrgGate(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/v1/sql", strings.NewReader(`{"name":"orders"}`))
 	req.Header.Set("Content-Type", "application/json")
 	// No X-Org-Id, no X-User-IsAdmin.
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -451,7 +451,7 @@ func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 		}
 		// Forge the victim's org WITHOUT any validated principal (no X-User-Id).
 		req.Header.Set("X-Org-Id", "victim-org")
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
 		}

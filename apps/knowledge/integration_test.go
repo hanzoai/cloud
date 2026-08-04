@@ -203,7 +203,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, [
 	}
 	hr.Header.Set("X-Org-Id", org)
 	hr.Header.Set("X-User-Id", "u_"+org) // the validated-principal signal
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
@@ -297,7 +297,7 @@ func TestSearchRefusesWithoutPrincipal(t *testing.T) {
 	hr := httptest.NewRequest(http.MethodPost, "/v1/kb/search", strings.NewReader(`{"query":"x"}`))
 	hr.Header.Set("Content-Type", "application/json")
 	hr.Header.Set("X-Org-Id", "victim") // forged org, no principal
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}

@@ -75,7 +75,7 @@ func patchRaw(t *testing.T, app *zip.App, id, body string) syncView {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "acme")
 	req.Header.Set("X-User-Id", "u_acme")
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("PATCH %s: %v", body, err)
 	}

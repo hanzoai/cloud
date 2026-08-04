@@ -274,7 +274,7 @@ func TestFailClosedCoversEveryMountedAddress(t *testing.T) {
 // get drives one request through the live router and returns the status and body.
 func get(t *testing.T, app *zip.App, path string) (int, string) {
 	t.Helper()
-	resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, path, nil))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}

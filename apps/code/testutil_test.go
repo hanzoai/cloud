@@ -105,7 +105,7 @@ func doAuth(t *testing.T, app *zip.App, method, path, org string, body any) (int
 
 func runReq(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	t.Helper()
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", req.Method, req.URL.Path, err)
 	}

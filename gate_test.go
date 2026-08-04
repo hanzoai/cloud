@@ -92,7 +92,7 @@ func TestGuardRefusesBeforeTheHandler(t *testing.T) {
 		for k, v := range tc.headers {
 			req.Header.Set(k, v)
 		}
-		resp, err := app.Fiber().Test(req)
+		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
@@ -118,7 +118,7 @@ func TestAuthorityOfReadsTheThreePredicates(t *testing.T) {
 	req.Header.Set("X-User-Id", "u1")
 	req.Header.Set("X-User-IsAdmin", "true")
 	req.Header.Set("X-User-IsOrgAdmin", "true")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
 	want := cloud.Authority{Validated: true, Super: true, OrgAdmin: true}

@@ -13,7 +13,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -56,7 +55,7 @@ func req(t *testing.T, app *zip.App, method, path, org, user string, body any) (
 	// microseconds still reports "i/o timeout", and the suite fails for a reason
 	// that has nothing to do with the code. The bound stays (a hang must still
 	// fail) — it is just far enough out to be a real hang and not a busy CPU.
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

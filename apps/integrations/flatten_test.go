@@ -21,12 +21,12 @@ import (
 // installV1Flatten reproduces apps.mountCommerce's /v1 ErrorHandlerJSON (see the sync
 // twin): a /v1 group middleware that turns any propagated downstream error into 500.
 func installV1Flatten(app *zip.App) {
-	app.Group("/v1").Use(func(c *zip.Ctx) error {
+	app.Group("/v1").Use(zip.H(func(c *zip.Ctx) error {
 		if err := c.Next(); err != nil {
 			return c.Bytes(http.StatusInternalServerError, []byte(`{"error":"flattened"}`))
 		}
 		return nil
-	})
+	}))
 }
 
 // newAppUnderFlatten mounts integrations BEHIND the /v1 flatten filter (production
@@ -81,7 +81,7 @@ func TestConnectorWebhookRouteMoved(t *testing.T) {
 	rq := httptest.NewRequest(http.MethodPost, "/v1/github-webhook", bytes.NewReader(p))
 	rq.Header.Set("X-GitHub-Event", "push")
 	rq.Header.Set("X-Hub-Signature-256", ghSign(secret, p))
-	resp, err := app.Fiber().Test(rq)
+	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("old path: %v", err)
 	}

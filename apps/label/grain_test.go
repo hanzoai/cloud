@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -185,7 +184,7 @@ func reqProjectBody(t *testing.T, app *zip.App, org, user, project, method, path
 	r.Header.Set("X-Org-Id", org)
 	r.Header.Set("X-User-Id", user)
 	r.Header.Set("X-Project-Id", project)
-	resp, err := app.Fiber().Test(r, fiber.TestConfig{Timeout: fiberTimeout(t)})
+	resp, err := app.Test(r, zip.TestConfig{Timeout: fiberTimeout(t)})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

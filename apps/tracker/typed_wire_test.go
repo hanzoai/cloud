@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
@@ -60,7 +59,7 @@ func doWire(t *testing.T, app *zip.App, method, path, org string, body any) (int
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org) // a validated principal (principal.Org gate)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -200,7 +199,7 @@ func TestTypedOpsPreserveTheTrackerWire(t *testing.T) {
 			}
 			rq.Header.Set("X-Org-Id", org)
 			rq.Header.Set("X-User-Id", "u_"+org)
-			resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+			resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
 			if err != nil {
 				t.Fatalf("%s: %v", tc.name, err)
 			}
@@ -222,7 +221,7 @@ func TestTypedOpsPreserveTheTrackerWire(t *testing.T) {
 		rq.Header.Set("Content-Type", "application/json")
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org)
-		resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+		resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
 		if err != nil {
 			t.Fatalf("%v", err)
 		}

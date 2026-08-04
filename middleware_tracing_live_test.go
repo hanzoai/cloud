@@ -19,9 +19,9 @@ import (
 	"strconv"
 	"testing"
 
+	luxtrace "github.com/luxfi/trace"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel/attribute"
-	luxtrace "github.com/luxfi/trace"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -78,10 +78,10 @@ func TestTracingMiddleware_LiveZAP(t *testing.T) {
 	})
 
 	for i := 0; i < n; i++ {
-		if _, err := app.Fiber().Test(httptest.NewRequest("GET", "/v1/models", nil)); err != nil {
+		if _, err := app.Test(httptest.NewRequest("GET", "/v1/models", nil)); err != nil {
 			t.Fatalf("GET /v1/models #%d: %v", i, err)
 		}
-		if _, err := app.Fiber().Test(httptest.NewRequest("POST", "/v1/chat/completions", nil)); err != nil {
+		if _, err := app.Test(httptest.NewRequest("POST", "/v1/chat/completions", nil)); err != nil {
 			t.Fatalf("POST /v1/chat/completions #%d: %v", i, err)
 		}
 	}

@@ -274,7 +274,7 @@ func do(t *testing.T, app *zip.App, method, path, user, org, body string) (int, 
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test(%s %s): %v", method, path, err)
 	}

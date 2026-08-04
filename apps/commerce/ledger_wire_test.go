@@ -93,7 +93,7 @@ func readAs(t *testing.T, app *zip.App, path, org string) []byte {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("X-User-Id", org+"/dave")
 	req.Header.Set("X-Org-Id", org)
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}

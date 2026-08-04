@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
@@ -225,7 +224,7 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 		rq := httptest.NewRequest(method, path, r)
 		rq.Header.Set("X-Org-Id", "acme")
 		rq.Header.Set("X-User-Id", "u_acme")
-		resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true})
+		resp, err := app.Test(rq, zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true})
 		if err != nil {
 			t.Fatalf("Test %s %s: %v", method, path, err)
 		}
@@ -386,7 +385,7 @@ func TestHostRoutesStillWinTheThreeSharedAddresses(t *testing.T) {
 			rq.Header.Set("X-Org-Id", "acme")
 			rq.Header.Set("X-User-Id", "u_acme")
 		}
-		resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 20 * time.Second, FailOnTimeout: true})
+		resp, err := app.Test(rq, zip.TestConfig{Timeout: 20 * time.Second, FailOnTimeout: true})
 		if err != nil {
 			t.Fatalf("Test %s %s: %v", method, path, err)
 		}

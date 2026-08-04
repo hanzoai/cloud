@@ -10,7 +10,6 @@ import (
 	"time"
 
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -102,7 +101,7 @@ func TestServeCollectionsGate(t *testing.T) {
 	app.All("/v1/collections/*", func(c *zip.Ctx) error { return serveCollections(proxy, c) })
 
 	// No principal → 403, upstream never reached.
-	res, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/collections/tenants/records", nil), fiber.TestConfig{Timeout: 30 * time.Second})
+	res, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/collections/tenants/records", nil), zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("app.Test (anon): %v", err)
 	}
@@ -116,7 +115,7 @@ func TestServeCollectionsGate(t *testing.T) {
 	// Validated principal (X-User-Id set) + allow-listed path → forwarded.
 	req := httptest.NewRequest(http.MethodGet, "/v1/collections/tenants/records", nil)
 	req.Header.Set("X-User-Id", "u-123")
-	res, err = app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	res, err = app.Test(req, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("app.Test (authed): %v", err)
 	}

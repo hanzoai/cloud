@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -32,7 +31,7 @@ func reqH(t *testing.T, app *zip.App, method, path string, headers map[string]st
 	for k, v := range headers {
 		rq.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -55,7 +54,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) httpRes
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -74,7 +73,7 @@ func reqRaw(t *testing.T, app *zip.App, method, path string, headers map[string]
 	for k, v := range headers {
 		rq.Header.Set(k, v)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

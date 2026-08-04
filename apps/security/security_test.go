@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/security/detect"
 	luxlog "github.com/luxfi/log"
@@ -21,7 +20,7 @@ import (
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
-var testCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
+var testCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
@@ -51,7 +50,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}

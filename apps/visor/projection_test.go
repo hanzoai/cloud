@@ -26,7 +26,6 @@ func projectionApp(t *testing.T) *zip.App {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	app.Prepare()
 	return app
 }
 
@@ -35,7 +34,7 @@ func body(t *testing.T, app *zip.App, method, path, payload string) string {
 	var r *strings.Reader = strings.NewReader(payload)
 	req := httptest.NewRequest(method, path, r)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}

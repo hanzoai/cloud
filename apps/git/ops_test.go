@@ -22,7 +22,6 @@ const typedOpCount = 24
 // operation in the document is one of git's.
 func TestTypedOpsProject(t *testing.T) {
 	app := mountApp(t)
-	app.Prepare() // installs the deferred projections a Listen would
 
 	code, body := do(t, app, http.MethodGet, "/.well-known/openapi.json", "", nil)
 	if code != http.StatusOK {
@@ -70,7 +69,6 @@ func TestTypedOpsProject(t *testing.T) {
 // a tool argument is a cross-tenant read, and this test is what catches it.
 func TestTypedOpRefusesAnonymousMCP(t *testing.T) {
 	app := mountApp(t)
-	app.Prepare()
 
 	code, body := do(t, app, http.MethodPost, "/mcp", "", map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",

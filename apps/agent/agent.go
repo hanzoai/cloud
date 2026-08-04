@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	fiber "github.com/zap-proto/fiber/v3"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,6 @@ import (
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/openapi"
 	openai "github.com/hanzoai/go-openai"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 

@@ -79,7 +79,7 @@ func drive(t *testing.T, app *zip.App, r greq) (int, string) {
 	if r.apiKeyHeader != "" {
 		hr.Header.Set("api-key", r.apiKeyHeader)
 	}
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("drive: %v", err)
 	}

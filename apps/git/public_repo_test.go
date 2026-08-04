@@ -28,7 +28,7 @@ func TestPublicRepo_AnonymousRead(t *testing.T) {
 
 	anonGet := func(path string) *http.Response {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-		resp, err := app.Fiber().Test(req, testCfg)
+		resp, err := app.Test(req, testCfg)
 		if err != nil {
 			t.Fatalf("anon %s: %v", path, err)
 		}
@@ -95,7 +95,7 @@ func TestPublicRepo_CreatePublic(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/git/acme/oss.git/info/refs?service=git-upload-pack", nil)
-	resp, err := app.Fiber().Test(req, testCfg)
+	resp, err := app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("anon fetch: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestPublicRepo_CreatePublic(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/v1/git/acme/oss.git/info/refs?service=git-upload-pack", nil)
 	req.Header.Set("X-Org-Id", "rival")
 	req.Header.Set("X-User-Id", "u_rival")
-	resp, err = app.Fiber().Test(req, testCfg)
+	resp, err = app.Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("cross-org fetch: %v", err)
 	}

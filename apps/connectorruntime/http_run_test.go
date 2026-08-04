@@ -11,7 +11,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -44,7 +43,7 @@ func post(t *testing.T, app *zip.App, path, org string, body any) (int, []byte) 
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("Test POST %s: %v", path, err)
 	}

@@ -35,7 +35,7 @@ func post(t *testing.T, app *zip.App, org string, body any, principal bool) (int
 	if principal {
 		hr.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("POST /v1/search: %v", err)
 	}

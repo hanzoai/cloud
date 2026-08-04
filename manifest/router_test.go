@@ -151,9 +151,11 @@ func router(t *testing.T) *zip.App {
 		if a.Coresident {
 			continue
 		}
-		if err := app.Add(zip.Load(zip.Plugin{Name: a.Name, Addr: "oracle://" + a.Name}, a.Prefixes...)); err != nil {
+		leaf, err := zip.Load(zip.Plugin{Name: a.Name, Addr: "oracle://" + a.Name}, a.Prefixes...)
+		if err != nil {
 			t.Fatalf("%s: %v", a.Name, err)
 		}
+		app.Use(leaf)
 	}
 	return app
 }
@@ -167,7 +169,7 @@ func router(t *testing.T) *zip.App {
 // is a function of the PATH alone.
 func destination(t *testing.T, app *zip.App, path string) string {
 	t.Helper()
-	resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, concrete(path), nil))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, concrete(path), nil))
 	if err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}

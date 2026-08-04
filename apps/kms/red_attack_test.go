@@ -540,7 +540,7 @@ func TestVector8_ForgedOrgNoPrincipalDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/kms/secrets", nil)
 	req.Header.Set("X-Org-Id", "victim") // forged; EQUALS the route :org
 	// deliberately NO X-User-Id / X-User-IsAdmin — the anonymous-forge signature.
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("forged request: %v", err)
 	}

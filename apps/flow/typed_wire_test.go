@@ -76,8 +76,8 @@ type upstreamCall struct {
 type fakeFlow struct {
 	mu       sync.Mutex
 	calls    []upstreamCall
-	projects map[string]string            // name → id
-	flows    map[string]map[string]any    // id → FlowRead-ish record
+	projects map[string]string         // name → id
+	flows    map[string]map[string]any // id → FlowRead-ish record
 	nextID   int
 	deny     bool // refuse the platform credential (401) when set
 }
@@ -217,7 +217,7 @@ func do(t *testing.T, app *zip.App, method, path, user, org, body string) (int, 
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test(%s %s): %v", method, path, err)
 	}

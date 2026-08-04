@@ -126,7 +126,7 @@ func abuseHit(app *zip.App, method, path, org, cred, ip string) *http.Response {
 	if ip != "" {
 		req.Header.Set("X-Forwarded-For", ip)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		return &http.Response{StatusCode: 0}
 	}
@@ -419,7 +419,7 @@ func TestAbuseGate_ClassesAgentTrafficApartFromBots(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer sk-live-2")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh) Chrome/126")
 	req.Header.Set("X-Forwarded-For", "203.0.113.5")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatal(err)
 	}
 	if lanes[len(lanes)-1] != edge.AgencyAgent {
@@ -577,7 +577,7 @@ func TestAbuseGate_HeadersAloneDoNotBuyTheAgentLane(t *testing.T) {
 	req.Header.Set("X-User-IsAdmin", "true") // forged
 	req.Header.Set("Authorization", "Bearer sk-live-forged")
 	req.Header.Set("X-Forwarded-For", "203.0.113.66")
-	if _, err := app.Fiber().Test(req); err != nil {
+	if _, err := app.Test(req); err != nil {
 		t.Fatal(err)
 	}
 

@@ -83,7 +83,7 @@ func mount(t *testing.T, commerce cloud.CommerceClient) (*zip.App, *service) {
 
 func send(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	t.Helper()
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", req.Method, req.URL.Path, err)
 	}

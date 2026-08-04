@@ -53,7 +53,7 @@ func TestCatalog_RequiresPrincipal(t *testing.T) {
 	app := mountKB(t)
 	hr := httptest.NewRequest(http.MethodGet, "/v1/kb/connectors/catalog", strings.NewReader(""))
 	hr.Header.Set("X-Org-Id", "acme") // forged org, no principal (no X-User-Id)
-	resp, err := app.Fiber().Test(hr)
+	resp, err := app.Test(hr)
 	if err != nil {
 		t.Fatalf("test: %v", err)
 	}
