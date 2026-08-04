@@ -201,6 +201,37 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     go generate -run zipdoc ./...
+# The commit this image is built FROM, handed in by the SAME builder that already
+# feeds it to the OCI label in the final stage (apps/platform buildFrontendCmdRev,
+# `--opt build-arg:REVISION=<sha>`; the other lane passes github.sha).
+#
+# `ARG REVISION` already existed — but ONLY in that final stage, and an ARG is
+# per-stage, so it was never in scope where `go build` runs and no binary in this
+# image could name its commit. The wire was connected at one end.
+#
+# Do not "fix" it by trusting the label. A label is read by whoever thinks to open
+# the registry; the PROCESS is read by whoever is holding the outage — and this
+# fleet's revision label has itself read `unknown` on natively-built images
+# without anyone noticing, which is what a label is worth.
+#
+# DECLARED HERE, AS LATE AS POSSIBLE, and deliberately not beside ARG VERSION at
+# the top of the stage: everything below `COPY . .` is already re-keyed by any
+# source change, so a per-commit value costs nothing from this line down. The same
+# value in scope ABOVE would re-key `go mod download` and turn every build into a
+# full one.
+ARG REVISION=unknown
+# ONE flag string for EVERY binary in this image. This is a build-stage variable —
+# the final stage does not inherit it and nothing reads it at run time; it exists
+# so the stamp cannot reach some binaries and miss others.
+#
+# It has to reach the PLUGINS. cmd/cloud is a router that links zip and the
+# manifest, not the package these symbols live in, so `-X github.com/hanzoai/
+# cloud.Version=` on /cloud has always been silently dropped — measured: the flag
+# shows up in the binary's `go version -m` build record and the value is nowhere
+# in the linked bytes. The plugins are what serve /v1/health, and they carried no
+# -X whatsoever, so stamping only the entrypoint would have left the process that
+# answers the question mute.
+ENV GO_LDFLAGS="-s -w -X github.com/hanzoai/cloud.Version=${VERSION} -X github.com/hanzoai/cloud.revision=${REVISION}"
 # THE LIGHT HOST (cmd/cloud) — ~400 packages, pure Go, no codec and no subsystem
 # (it links zip + the manifest + the light webui console embed, and nothing else).
 # It is the ENTRYPOINT. It knows only where each app lives and what path it
@@ -209,14 +240,13 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # together, so no build in this image is the mega link that once dominated it.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 go build \
-      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud
+    CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /cloud ./cmd/cloud
 # The functional smoke prober (plugin/smoke) — a stdlib-only static binary shipped
 # alongside the host so the release gate can `docker exec` it against the freshly-
 # built image (and any deployment can be smoked via `docker run --entrypoint /smoke`).
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./plugin/smoke
+    CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /smoke ./plugin/smoke
 # EVERY subsystem, each as its OWN binary in /plugins beside the host. The host
 # fork/execs a sibling <dir>/<name> (manifest.App.Plugin) on the first request that
 # reaches its prefix, so the binary must be in the image or the mount aborts:
@@ -260,8 +290,34 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     for p in $names; do \
       [ -d "./plugin/$p" ] || { echo "FATAL: manifest app '$p' has no plugin/$p — run 'make generate' and commit"; exit 1; }; \
       echo "building plugin $p"; \
-      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="-s -w" -o "/plugins/$p" "./plugin/$p"; \
+      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$p" "./plugin/$p"; \
     done
+# THE STAMP LANDED — asked of the ARTIFACT, not of the flag string.
+#
+# `-X` naming a path or symbol the linker cannot resolve is not an error: it is
+# dropped, the build succeeds, and every binary then reports the entirely
+# legitimate-looking "unknown" forever. A renamed package or variable would fail
+# in exactly the one way nobody looks at, which is how this started.
+#
+# `go version -m` is NOT a witness — it echoes the -ldflags string that was
+# REQUESTED, and that string is present even when the symbol was never set
+# (measured on /cloud, whose Version stamp has been dropped all along). Only the
+# linked bytes answer.
+#
+# strings|grep rather than a bare grep: grep treats binary input as non-text and
+# its exit status there is not portable across implementations, so a plain
+# `grep -qF` can report no match on a binary that demonstrably contains the sha.
+# strings normalises to text lines first; binutils is already installed above.
+#
+# An image built with no REVISION is not a failure — it is a build that cannot
+# name its commit, and it says so here and on every health response it serves.
+RUN set -eu; \
+    if [ "$REVISION" = "unknown" ]; then \
+      echo ">> no REVISION build-arg: this image cannot name its commit, and every health response it serves will report revision=unknown"; \
+    else \
+      strings -a /plugins/base | grep -qF "$REVISION" || { echo "FATAL: -X did not reach /plugins/base — github.com/hanzoai/cloud.revision was not resolved, so it was dropped and every health response would report 'unknown'"; exit 1; }; \
+      echo ">> revision $REVISION linked into the plugins"; \
+    fi
 # Prove a SHIPPED sqlite-backed plugin binds sqlite3_* to libsqlcipher, not a
 # plaintext libsqlite3. /plugins/base opens per-org stores under the SAME CGO=1 +
 # libsqlite3 build every plugin above got, so it is a real witness for the set.
