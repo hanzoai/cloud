@@ -12,6 +12,9 @@
   ],
   "tags": [
     {
+      "name": "avatar"
+    },
+    {
       "name": "commerce"
     },
     {
@@ -28,6 +31,52 @@
     }
   ],
   "paths": {
+    "/v1/avatar": {
+      "post": {
+        "operationId": "post_v1_avatar",
+        "summary": "Set your profile photo",
+        "description": "Stores one image as the signed-in user's profile photo and answers the URL it is served from, which is also written to the user's IAM record — so every surface that already renders `avatar` picks it up with no further call.\n\nThe body is a multipart form with a `file` part. The format is decided by the BYTES, never the filename or the part's Content-Type: png, jpeg, gif and webp are accepted and everything else is refused with 415, so an SVG cannot be stored as a picture and later served as a program. Over 8 MiB is 413; empty is 400.\n\nThe photo is addressed by the sha256 of its bytes, so setting a new one yields a new URL rather than a stale cache of the old face. The caller is taken from the validated identity ONLY — there is no way to name a different subject — so this always sets your own photo, and a caller with no organization yet is refused.",
+        "tags": [
+          "avatar"
+        ]
+      }
+    },
+    "/v1/avatar/{org}/{user}/{digest}": {
+      "get": {
+        "operationId": "get_v1_avatar_by_org_by_user_by_digest",
+        "summary": "Fetch a profile photo",
+        "description": "Streams a profile photo's raw BYTES. This is the address stored on the user's IAM record and rendered directly by an `\u003cimg\u003e`, so it takes no credentials — the 64-hex content digest in the path is the capability, and it can only be produced by someone who already has the image.\n\nThe Content-Type is derived from the stored bytes and the response carries nosniff, so only a real raster image is ever served and only under its true type. Anything else — a miss, a malformed path, an object that is not an image — is one 404, and a hit caches for a year because the address is the content.",
+        "tags": [
+          "avatar"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "digest",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/commerce/topup/rails": {
       "get": {
         "operationId": "get_v1_commerce_topup_rails",
