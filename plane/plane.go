@@ -64,6 +64,17 @@ const (
 
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
+	// AIChat and AIEmbed are inference asked of the `ai` app BY NAME.
+	//
+	// They exist so a sibling never reaches `ai` by URL. `ai` is a plugin of the
+	// same binary running as its own process, and the configured alternative was
+	// its PUBLIC address — so a pod left through Cloudflare and minted an OAuth
+	// token to authenticate to its own deployment, to reach code one socket away.
+	// A plane op is addressed by app name (zip.SocketPath), so there is nothing
+	// to configure and nothing to get wrong.
+	AIChat  = "ai_chat"
+	AIEmbed = "ai_embed"
+
 	FinanceRecord    = "finance_record" // the meter
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
@@ -256,6 +267,46 @@ type RecordIn struct {
 // it.
 type Recorded struct {
 	Amount Money `json:"amount"`
+}
+
+// ---- ai.chat / ai.embed ----------------------------------------------------
+
+// ChatIn is one completion. Org is the EFFECTIVE tenant (the data scope: BYO
+// provider keys, RAG); the billing scope stays with the CALLER, which meters
+// before it asks — inference is priced where it is gated, not twice.
+//
+// MaxTokens is the ceiling the caller's prepaid gate reserved against. It rides
+// the request so the servant cannot return a completion nobody paid for.
+type ChatIn struct {
+	Model     string `json:"model"`
+	Prompt    string `json:"prompt" validate:"required"`
+	Org       string `json:"org,omitempty"`
+	Project   string `json:"project,omitempty"`
+	MaxTokens int    `json:"maxTokens,omitempty"`
+}
+
+// ChatOut carries the completion and the token counts the caller settles on.
+// Zero counts mean the servant reported no usage, and the caller falls back to
+// its own estimate rather than treating the call as free.
+type ChatOut struct {
+	Content          string `json:"content"`
+	PromptTokens     int    `json:"promptTokens,omitempty"`
+	CompletionTokens int    `json:"completionTokens,omitempty"`
+	TotalTokens      int    `json:"totalTokens,omitempty"`
+}
+
+// EmbedIn embeds Inputs in order; the result is one vector per input, aligned by
+// index.
+type EmbedIn struct {
+	Model   string   `json:"model"`
+	Inputs  []string `json:"inputs" validate:"required"`
+	Org     string   `json:"org,omitempty"`
+	Project string   `json:"project,omitempty"`
+}
+
+// EmbedOut is one vector per input, in the order they were given.
+type EmbedOut struct {
+	Vectors [][]float32 `json:"vectors"`
 }
 
 // ---- finance.balance -------------------------------------------------------

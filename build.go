@@ -671,11 +671,19 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 	// pod out through Cloudflare and back, and makes it mint an OAuth token to
 	// authenticate to its own deployment, to reach code one socket away.
 	//
-	// Ordered, not gated: a deployment that names no peer still falls through to
-	// the gateway exactly as before, so this is inert until the address is set.
-	if cfg.AIZAPAddr != "" {
-		log.Info("deps.AI (completions) → in-cluster plane", "addr", cfg.AIZAPAddr)
-		return clients.AIRPCAt(cfg.AIZAPAddr)
+	// Decided by what this PROCESS is, not by configuration.
+	//
+	// !Enabled(ai) means this process does not carry the `ai` app, which is
+	// exactly when `ai` is a SIBLING and the plane can reach it by name. The
+	// process that IS `ai` (and the host, which mounts everything) falls through
+	// to the real transport below — asking the plane there would be this process
+	// calling itself.
+	//
+	// A deployment whose inference genuinely lives elsewhere is a different fact
+	// and keeps the gateway.
+	if !cfg.Enabled(aiApp) {
+		log.Info("deps.AI (completions) → in-cluster plane", "app", aiApp)
+		return peerAI{}
 	}
 	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" && !publishableKey(cfg.AIAPIKey) {
 		log.Info("deps.AI (completions) → HTTP gateway (static secret key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
@@ -706,7 +714,7 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 //  2. Otherwise share the completions resolution (M2M / ZAP / fail-closed) so a
 //     deploy with no dedicated embed key still indexes — no regression.
 func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
-	if cfg.AIZAPAddr != "" {
+	if !cfg.Enabled(aiApp) {
 		return pickCompletionsClient(cfg, log) // the peer serves embeddings too.
 	}
 	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" {
