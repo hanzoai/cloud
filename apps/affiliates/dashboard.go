@@ -198,15 +198,6 @@ func myEarnings(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
-	if a.Status == StatusApproved {
-		if _, _, serr := sweepAffiliate(s, ctx, a); serr != nil {
-			s.Log.Warn("affiliates: lazy sweep failed", "affiliate", a.ID, "err", serr)
-		}
-		if refreshed, rerr := s.State.store.GetByID(ctx, a.ID); rerr == nil {
-			a = refreshed
-		}
-	}
-
 	byPeriod, err := s.State.store.EarningsByPeriod(ctx, a.ID, earningsLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "earnings by period: %v", err)
