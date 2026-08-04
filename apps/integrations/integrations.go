@@ -796,9 +796,17 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	o := ops{s: s}
 	// The bridges first: every typed op below reads its org (cloud.Bridge) and the
 	// remaining identity facts (bridgeFacts) off the request context, and a Use only
-	// runs ahead of routes registered after it. Bounded to the group, which is the
-	// prefix this subsystem serves.
-	app.Group("/v1/integrations").Use(cloud.Bridge(), zip.H(bridgeFacts))
+	// runs ahead of routes registered after it.
+	//
+	// Through the SCOPE, not a Group of the prefix. The routes below register on
+	// zapp at absolute paths, so a Group("/v1/integrations") node never received
+	// one, and middleware whose own subtree is empty is a program zip refuses to
+	// compose — this subsystem exited before it listened and /v1/integrations and
+	// /v1/connectors both answered 503. scope.Use installs once at the root and
+	// gates by path (see scope.go), which confines it to exactly the prefixes the
+	// manifest declares for this subsystem while leaving it on a node that has the
+	// routes.
+	app.Use(cloud.Bridge(), zip.H(bridgeFacts))
 
 	zip.Get(zapp, "/v1/integrations", o.list)
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))

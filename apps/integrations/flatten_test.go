@@ -18,10 +18,19 @@ import (
 // downstream error into a hardcoded 500. cloud.Terminal writes the reject status
 // in-band so it survives. It also pins the route move to the /v1/connector namespace.
 
-// installV1Flatten reproduces apps.mountCommerce's /v1 ErrorHandlerJSON (see the sync
-// twin): a /v1 group middleware that turns any propagated downstream error into 500.
+// installV1Flatten reproduces commerce's ErrorHandlerJSON (see the sync twin,
+// commerceErrorScope): a middleware that turns any propagated downstream error
+// into 500.
+//
+// It installs on the APP rather than on a Group("/v1"), which is also what the
+// twin now does — commerce gates the envelope by path instead of hanging it on
+// the shared /v1 node. A group whose subtree holds no routes is a program zip
+// refuses to compose, and every route this test registers is registered on the
+// app, so the group form wrapped nothing and only aborted the package. The
+// reproduction is unchanged: the filter still runs ahead of the handler under
+// test, which is the whole point of the fixture.
 func installV1Flatten(app *zip.App) {
-	app.Group("/v1").Use(zip.H(func(c *zip.Ctx) error {
+	app.Use(zip.H(func(c *zip.Ctx) error {
 		if err := c.Next(); err != nil {
 			return c.Bytes(http.StatusInternalServerError, []byte(`{"error":"flattened"}`))
 		}

@@ -42,11 +42,15 @@ import (
 // Called last from routes(); the literal /providers registers before the wildcard
 // GETs (static-before-wildcard discipline, same as routes()).
 func connectorRoutes(app cloud.Router, zapp *zip.App, o ops) {
-	// Its OWN prefix, so it needs its own bridge: the ops below read the org
-	// (cloud.Bridge) and the user id (bridgeFacts) off the request context. A
-	// group's Use is bounded by the group, which is the door scope.go names for a
-	// subsystem gating a subtree it serves.
-	app.Group("/v1/connectors").Use(cloud.Bridge(), zip.H(bridgeFacts))
+	// The ops below read the org (cloud.Bridge) and the user id (bridgeFacts) off
+	// the request context, so the bridge has to run ahead of them.
+	//
+	// routes() already installs both through the scope, and the scope gates by
+	// path across EVERY prefix the manifest declares for this subsystem —
+	// /v1/connectors among them — so this subtree is covered by that one install.
+	// The Group("/v1/connectors") that used to stand here was a second install on
+	// a node with no routes beneath it (the ops register on zapp at absolute
+	// paths), which is what zip refuses to compose.
 
 	zip.Get(zapp, "/v1/connectors", o.connectors)
 	zip.Get(zapp, "/v1/connectors/providers", o.connectorProviders)
