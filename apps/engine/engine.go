@@ -61,11 +61,25 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// defaultUpstream is the in-cluster Service of the engine deployment (the
-// hanzoai/engine `hanzo serve` process; 1234 is its default port).
-// Overridable via ENGINE_UPSTREAM — tests point it at an httptest server; a
-// dev box points it at a local `hanzo serve`.
-const defaultUpstream = "http://engine.hanzo.svc.cluster.local:1234"
+// defaultUpstream is the in-cluster Service of the engine deployment, and the
+// port is 36900 because that is the port the deployed Service actually exposes
+// (svc/engine in namespace hanzo: name http, port 36900, target 36900).
+//
+// IT WAS 1234, WHICH IS A DIFFERENT ENGINE. 1234 is standalone `hanzo serve`'s
+// default; 36900 is the port the engine binds when it runs as the node's engine,
+// and 36900 is what is deployed. The cloud Deployment sets no ENGINE_UPSTREAM, so
+// the default WAS the production value, and it named a port the Service does not
+// carry — every op on this plane dialled a refused connection, which this
+// subsystem faithfully reported as reachable:false and 503. A plane that is
+// honest about being unreachable is still unreachable.
+//
+// The same 1234-vs-36900 confusion is on record from the desktop build, where a
+// frontend discovered models at one port while the engine that answers ran at the
+// other. One value, resolved against what is deployed.
+//
+// Overridable via ENGINE_UPSTREAM — tests point it at an httptest server; a dev
+// box points it at a local `hanzo serve`, which is where 1234 is right.
+const defaultUpstream = "http://engine.hanzo.svc.cluster.local:36900"
 
 func upstream() string {
 	if v := strings.TrimSpace(os.Getenv("ENGINE_UPSTREAM")); v != "" {
