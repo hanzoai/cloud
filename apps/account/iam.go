@@ -199,18 +199,50 @@ func (c *iamClient) do(ctx context.Context, method, path string, q url.Values, b
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return iamEnvelope{}, fmt.Errorf("iam denied (%d)", resp.StatusCode)
 	}
+	// TWO WIRE SHAPES, and this door has to read both.
+	//
+	// Some routes answer the {status,msg,data} envelope this type was written
+	// for. Others — /v1/iam/users/get among them — answer the RESOURCE DIRECTLY,
+	// and errors come back as {"status":404,"error":"…"} where `status` is a
+	// NUMBER, not the string "ok".
+	//
+	// Assuming the envelope broke both: a raw row parsed with Status "" and was
+	// rejected as `iam status 200`, and an error body failed to unmarshal at all
+	// and was reported as `iam non-envelope response (400)`. Both were the avatar
+	// write's "photo stored but the profile could not be updated" — measured
+	// against the running IAM, where GET users/get?owner=hanzo&name=z returns
+	// {createdAt,updatedAt,deleted,id,owner,name,…} with no envelope in sight.
+	//
+	// So the HTTP status decides, and the body is only read for what it carries:
+	// a 2xx with no envelope IS the data; a non-2xx yields its `error` or `msg`.
 	var env iamEnvelope
-	if err := json.Unmarshal(raw, &env); err != nil {
-		return iamEnvelope{}, fmt.Errorf("iam non-envelope response (%d)", resp.StatusCode)
-	}
-	if env.Status != "ok" {
+	enveloped := json.Unmarshal(raw, &env) == nil && env.Status != ""
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg := env.Msg
 		if msg == "" {
-			msg = fmt.Sprintf("iam status %d", resp.StatusCode)
+			var alt struct {
+				Error string `json:"error"`
+				Msg   string `json:"msg"`
+			}
+			_ = json.Unmarshal(raw, &alt)
+			msg = firstNonEmpty(alt.Error, alt.Msg, fmt.Sprintf("iam status %d", resp.StatusCode))
 		}
 		return iamEnvelope{}, fmt.Errorf("iam: %s", msg)
 	}
-	return env, nil
+
+	if enveloped {
+		if env.Status != "ok" {
+			msg := env.Msg
+			if msg == "" {
+				msg = fmt.Sprintf("iam status %d", resp.StatusCode)
+			}
+			return iamEnvelope{}, fmt.Errorf("iam: %s", msg)
+		}
+		return env, nil
+	}
+	// A 2xx that is not an envelope: the body is the resource.
+	return iamEnvelope{Status: "ok", Data: json.RawMessage(raw)}, nil
 }
 
 // ── the Cloud API key (per-user) ─────────────────────────────────────────────
