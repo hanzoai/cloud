@@ -254,6 +254,19 @@ type resident struct {
 	// gone. See [resident.hold].
 	advance chan struct{}
 	touch   time.Time // for eviction order
+	// shape is the model space this residency's arithmetic runs in: the feature
+	// inventory in order and the detector's geometry parameters, as the engine's own
+	// Digest. It is held here so EVERY SCORE CAN CITE IT at no cost — it is what an
+	// auditor pins an alert to, because a score is only meaningful against the shape
+	// that produced it, and recomputing it per score would hash the whole inventory
+	// on the hot path to learn something that cannot change.
+	//
+	// It cannot change for a residency: the digest covers the geometry parameters,
+	// and the only writers of those are [plane.plant], which builds the store, and
+	// [plane.install], which REFUSES a state whose shape differs. Restating a regime
+	// rebuilds the store ([plane.restoreRegime]) but moves only the appetite and the
+	// shadow flag, neither of which the digest covers.
+	shape string
 	// pol is the VERSION of the decision regime this model is deciding under, from
 	// the tenant's own policy history (policy.go). It is carried here so every
 	// score can cite it without a disk read, and it is set in exactly two places:
@@ -733,7 +746,7 @@ func (p *plane) plant(t tenant, cfg anomaly.Config, vel *rings) (*resident, erro
 	if err != nil {
 		return nil, fmt.Errorf("risk: model for %q: %w", string(t), err)
 	}
-	return &resident{key: t, cfg: cfg, mod: mod, vel: vel, advance: make(chan struct{}, 1)}, nil
+	return &resident{key: t, cfg: cfg, mod: mod, vel: vel, shape: mod.Digest(), advance: make(chan struct{}, 1)}, nil
 }
 
 // hold takes this tenant's fold ticket, or gives up when the caller does.
@@ -865,10 +878,15 @@ func (p *plane) score(t tenant, o observation) (decided, error) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// The verdict and the version it was reached under are read in the SAME
-	// critical section, so a concurrent policy change cannot make a score cite a
-	// regime that did not produce its cut.
-	return decided{A: r.mod.Inspect(o.tx(t), types.Entity{OrgID: string(t)}), Version: r.pol}, nil
+	// The verdict, the regime it was reached under and the SHAPE it was reached in
+	// are read in the SAME critical section, so a concurrent policy change cannot
+	// make a score cite a regime that did not produce its cut and a concurrent
+	// adoption cannot make it cite a model space it did not run in.
+	return decided{
+		A:       r.mod.Inspect(o.tx(t), types.Entity{OrgID: string(t)}),
+		Version: r.pol,
+		Shape:   r.shape,
+	}, nil
 }
 
 // learn records observations into the tenant's own aggregates and lets its model
@@ -1096,38 +1114,40 @@ func (p *plane) appetite(t tenant, review, sample float64, live bool, by string)
 	return r.mod.State(string(t)), r.vel.strain(), rec.Version, nil
 }
 
-// pin returns a copy of the tenant's learned state, and writes it to the
-// tenant's own shelf in the same act — a pin nobody can read back later is not a
-// pin.
-func (p *plane) pin(t tenant) (anomaly.Snapshot, bool, error) {
-	r, err := p.resident(t)
-	if err != nil {
-		return anomaly.Snapshot{}, false, err
-	}
-	r.mu.Lock()
-	snap, held := r.mod.Snapshot(string(t))
-	cfg, warmed := r.cfg, r.warmed
-	r.mu.Unlock()
-	// PLANTED IS NOT LEARNED. Every residency plants its geometry so a restore has
-	// something to be checked against, so "the engine holds a model" no longer
-	// means "this organisation has taught it anything" — and pinning an empty
-	// model would hand back a snapshot that reproduces nothing.
-	if !held || snap.Learned == 0 {
-		return anomaly.Snapshot{}, false, nil
-	}
-	if err := p.write(t, snap, cfg, warmed); err != nil {
-		return anomaly.Snapshot{}, false, err
-	}
-	return snap, true, nil
-}
-
-// adopt installs pinned state into the tenant's model and persists it, refusing a
-// snapshot that names another organisation.
-func (p *plane) adopt(t tenant, snap anomaly.Snapshot) (anomaly.State, strain, error) {
+// adopt puts one of the organisation's OWN PUBLISHED VALUES back in force, by
+// name.
+//
+// It takes an ADDRESS and never masses. That is the whole decomplect in this file:
+// the caller used to hand back 466 KiB of its own model's counters, which meant the
+// caller was the custodian of that state — it had to hold it, transport it, and be
+// trusted not to have shaped it. The engine's own Restore says as much ("the caller
+// owes the snapshot integrity — it belongs where the tenant's own data belongs, and
+// sealed if it travels"). Addressed, IT NEVER TRAVELS: the masses are read from the
+// organisation's own encrypted shelf, so the only thing the caller supplies is
+// which of its own values it wants, and the mass invariant it is checked against
+// can no longer be a defence against a body somebody composed.
+//
+// An address this organisation has not published resolves to NOT FOUND, and that
+// is the isolation boundary rather than a lookup failure — see address.go's header
+// and [TestAddress_AForeignOrgResolvesNothing]. The organisation is stamped onto
+// the state from the validated principal on the way in, so the stored row's own
+// OrgID is never the thing trusted.
+func (p *plane) adopt(t tenant, addr string) (anomaly.State, strain, error) {
 	r, err := p.resident(t)
 	if err != nil {
 		return anomaly.State{}, strain{}, err
 	}
+	snap, ok, err := p.masses(t, addr)
+	if err != nil {
+		return anomaly.State{}, strain{}, err
+	}
+	if !ok {
+		return anomaly.State{}, strain{}, zip.ErrNotFound("this organisation has published no model value by that name")
+	}
+	// FROM THE PRINCIPAL, never from the row. The engine plants into the slot the
+	// snapshot names, so the one field that decides whose model this becomes is
+	// taken from the validated tenant and not from stored bytes.
+	snap.OrgID = string(t)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := p.install(r, snap); err != nil {
@@ -1801,12 +1821,21 @@ type shelf struct {
 func openShelf(db *sql.DB) (*shelf, error) {
 	s := &shelf{db: db}
 	for _, stmt := range []string{
+		// THE RESUME CELL, and it is a PLACE on purpose. One row per organisation,
+		// overwritten by the sweep and by shutdown, holding what an ungraceful stop
+		// would otherwise lose. Nobody names it, nobody cites it and nothing audits
+		// it — the values an organisation deliberately publishes are addressed by
+		// their own content in `published` (address.go), and that is what a rollback
+		// names. Keeping the two apart is what makes the 30-second write cheap and
+		// the audited history bounded; see address.go's header for the measurement
+		// that forces it.
+		//
 		// warmed is HOW FAR this organisation's own surface has been folded into the
-		// model, and it lives in the SNAPSHOT'S OWN ROW on purpose: the two facts are
-		// one fact. A state that came back and a fold that already happened must be
-		// restored together or not at all — write the watermark somewhere else and a
-		// tenant whose snapshot failed to save returns with an empty model that
-		// believes it has already read its history.
+		// model, and it lives in THIS ROW on purpose: the two facts are one fact. A
+		// state that came back and a fold that already happened must be restored
+		// together or not at all — write the watermark somewhere else and a tenant
+		// whose state failed to save returns with an empty model that believes it has
+		// already read its history.
 		`CREATE TABLE IF NOT EXISTS model (
 			tenant   TEXT PRIMARY KEY,
 			snapshot BLOB NOT NULL,
@@ -1826,6 +1855,14 @@ func openShelf(db *sql.DB) (*shelf, error) {
 		// conditional on whether the model beside it has learned anything yet
 		// (policy.go).
 		policyDDL,
+		// The tenant's own MODEL VALUE history: every state it deliberately
+		// published, named by its own content, immutable and append-only
+		// (address.go). It is the sibling of the `model` row above and the opposite
+		// of it — that row is ONE overwritten cell whose job is resuming a killed
+		// process, this table is what a rollback names and what an adverse decision
+		// is reconstructed against.
+		publishedDDL,
+		publishedIndexDDL,
 		// The tenant's own record of what it taught, which its aggregates are a
 		// projection of (ring.go), and how far each source plane has been folded into
 		// its feature surface (feature.go).
