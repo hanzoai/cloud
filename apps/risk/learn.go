@@ -890,8 +890,25 @@ func (p *plane) score(t tenant, o observation) (decided, error) {
 }
 
 // learn records observations into the tenant's own aggregates and lets its model
-// learn from them, returning the verdict score would have given on each
-// afterwards.
+// learn from them. It answers HOW MANY the model learned from, and nothing else.
+//
+// IT DOES NOT SCORE. Learning is a transformation over observations; a verdict is
+// a query against the result. They were one call — Inspect to build a verdict for
+// the response, then Assess to move the counters — and both enter the engine's
+// `judge`, so the model ran TWICE over every event: two projections of the point,
+// three aggregate reads each, and two walks of the forest. Above the cut both also
+// ran the counterfactual attribution, which is a further walk per dimension, nine
+// of them; that is the expensive half, and it is reached by the share of the
+// stream the appetite admits — one per cent by default, not all of it.
+//
+// [BenchmarkLearn] measures what removing it bought: 12% off the whole learning
+// path per event (20.0µs → 17.5µs at a 128-event batch, 31.5µs → 27.8µs at eight),
+// and 8% of its allocations. The rest of the path is the durable record and the
+// aggregates, which is why the saving is a tenth and not a half — a claim of "half
+// the work" would be true of the model calls and false of the operation, and the
+// operation is what a caller waits for.
+//
+// [plane.score] is the query, it is pure, and it is the one door to a verdict.
 //
 // It takes a BATCH because durability is per batch: the whole batch is written to
 // the tenant's own record in one transaction BEFORE anything moves in memory, so
@@ -899,45 +916,44 @@ func (p *plane) score(t tenant, o observation) (decided, error) {
 // the next rollout will silently undo. A batch is also one acquisition of the
 // tenant's lock instead of N.
 //
-// The order within an event is deliberate and it is the engine's: RECORD FIRST,
-// then assess. The numbers an alert quotes are then the same ones an investigator
-// sees when they look at the subject, and every baseline in the feature set has
-// this event removed from it arithmetically, so nothing is measured against
-// itself.
+// RECORD FIRST, then assess, and the order is the engine's own precondition. The
+// numbers an alert quotes are then the same ones an investigator sees when they
+// look at the subject, and every baseline in the feature set has this event
+// removed from it arithmetically, so nothing is measured against itself.
 //
 // A RETRY CONVERGES, IN MEMORY TOO. The record deduplicates on the caller's own
 // event id and says which rows were new ([plane.note]); only those move the rings
 // and the masses. Idempotence of the durable half alone is not idempotence at all
 // — the rings and the counters are what a decision is made from, and a retried
 // batch that skipped the rows and still moved them counts every event twice in
-// exactly the numbers that matter. Duplicates are still JUDGED, because the
-// caller asked what its model makes of them and the answer costs the same work.
-func (p *plane) learn(t tenant, obs ...observation) ([]decided, error) {
+// exactly the numbers that matter. A duplicate is therefore WHOLLY inert: it moves
+// nothing, it costs no model work, and the count returned does not include it.
+func (p *plane) learn(t tenant, obs ...observation) (int, error) {
 	if len(obs) == 0 {
-		return nil, nil
+		return 0, nil
 	}
 	r, err := p.resident(t)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	// DURABLE FIRST. The aggregates are a projection of this record; writing the
 	// counters and not the record is how a deploy blinds a tenant.
 	first, err := p.note(t, obs)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	now := p.now().UTC()
-	out := make([]decided, 0, len(obs))
+	learned := 0
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i, o := range obs {
-		tx := o.tx(t)
 		if !first[i] {
-			// Already in this tenant's record, so already in the projection of it. Judge
-			// it against the model as it stands and move nothing.
-			out = append(out, decided{A: r.mod.Inspect(tx, types.Entity{OrgID: string(t)}), Version: r.pol})
+			// Already in this tenant's record, so already in the projection of it.
+			// Nothing to record, nothing to learn, and — since this op no longer
+			// answers a verdict — nothing to compute either.
 			continue
 		}
+		tx := o.tx(t)
 		// THE RINGS ONLY MOVE FORWARD. An observation the aggregates cannot hold at
 		// its own bucket would be folded to the leading edge — counted as having
 		// happened NOW — so it is kept out of them. The model still learns from it.
@@ -947,32 +963,18 @@ func (p *plane) learn(t tenant, obs ...observation) ([]decided, error) {
 				r.edge = o.at
 			}
 		}
-		// TWO PASSES, IN THIS ORDER, and the order is the whole point.
-		//
-		// Assess is the learning pass: it moves the counters the governance report is
-		// computed from, and it answers only the engine's rule-hit shape — alert or
-		// not — because that is all the decision plane needs. The FULL verdict (the
-		// score, the threshold in force, every coordinate, the counterfactual
-		// attribution) is what a caller of this surface wants, and Inspect is the only
-		// way to get it.
-		//
-		// Inspect runs FIRST so both passes read the SAME model state: the aggregates
-		// already include this event, and the score is computed before the masses
-		// move. Run the other way round the reported verdict would describe a model
-		// that had already learned from the event it is judging — a different model
-		// from the one whose counters the report is built on.
-		a := r.mod.Inspect(tx, types.Entity{OrgID: string(t)})
+		// ONE PASS. Assess IS the learning pass: it moves every counter the
+		// governance report is computed from — learned, scored, alerted, refused by
+		// reason, blind by feature — which is the whole observable effect this op has
+		// on the model. Its return is the engine's rule-hit shape, and this plane has
+		// nothing that consumes an alert, so it is discarded.
 		r.mod.Assess(tx, types.Entity{OrgID: string(t)})
-		out = append(out, decided{A: a, Version: r.pol})
+		learned++
 	}
 	// ONCE PER BATCH, never per event: it locks every shard. This is what turns
 	// velocity's silent LRU into a number — see [rings].
 	r.vel.reconcile()
-	for _, applied := range first {
-		if applied {
-			r.unsaved++
-		}
-	}
+	r.unsaved += learned
 	due := r.unsaved >= saveEvery
 	r.mu.Unlock()
 	if due {
@@ -985,7 +987,7 @@ func (p *plane) learn(t tenant, obs ...observation) ([]decided, error) {
 		}
 	}
 	r.mu.Lock()
-	return out, nil
+	return learned, nil
 }
 
 // saveEvery is how many events one organisation's model may learn before its
@@ -1053,7 +1055,15 @@ func (p *plane) state(t tenant) (anomaly.State, strain, error) {
 }
 
 // appetite restates the share of the stream the tenant's model may send for
-// examination, and whether it is live.
+// examination, and whether it is live. It answers the VERSION the restatement
+// left in force and nothing else.
+//
+// IT USED TO ANSWER THE MODEL TOO — the learned state and the aggregate strain,
+// so the wire could render a fifteen-field report of the whole model from a call
+// that changed three numbers. Two facts with two lifetimes, computed by one
+// writer, is how the regime came to live on the learned state's row in the first
+// place; answering both from one call is the same braid one level up. A policy
+// write reports the policy it wrote. What the model IS is read from the model.
 //
 // The appetite is a property of the Config, and the Config is fixed at
 // construction — so the change is made the only honest way: snapshot the learned
@@ -1069,10 +1079,10 @@ func (p *plane) state(t tenant) (anomaly.State, strain, error) {
 // from [defaultConfig] — shadow — and the model decided nothing, silently. The
 // regime is now its own versioned record ([plane.enact]) written BEFORE anything
 // in memory moves, so a policy that cannot be written down is refused instead.
-func (p *plane) appetite(t tenant, review, sample float64, live bool, by string) (anomaly.State, strain, int, error) {
+func (p *plane) appetite(t tenant, review, sample float64, live bool, by string) (int, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.State{}, strain{}, 0, err
+		return 0, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1085,18 +1095,18 @@ func (p *plane) appetite(t tenant, review, sample float64, live bool, by string)
 	cfg := want.applyTo(r.cfg)
 	next, err := anomaly.New(cfg, r.vel.vel)
 	if err != nil {
-		return anomaly.State{}, strain{}, 0, fmt.Errorf("risk: appetite: %w", err)
+		return 0, fmt.Errorf("risk: appetite: %w", err)
 	}
 	if snap, held := r.mod.Snapshot(string(t)); held {
 		if err := next.Restore(snap); err != nil {
-			return anomaly.State{}, strain{}, 0, fmt.Errorf("risk: appetite: carry learned state: %w", err)
+			return 0, fmt.Errorf("risk: appetite: carry learned state: %w", err)
 		}
 	}
 	// THE COMMIT POINT. Past here the regime is recorded and readable back; before
 	// here nothing has changed.
 	rec, _, err := p.enact(t, want, by, time.Now())
 	if err != nil {
-		return anomaly.State{}, strain{}, 0, err
+		return 0, err
 	}
 	r.cfg, r.mod, r.pol = cfg, next, rec.Version
 	// The learned state is written down too when there is any, so the masses and
@@ -1111,7 +1121,7 @@ func (p *plane) appetite(t tenant, review, sample float64, live bool, by string)
 	// residency a second time, outside the lock this change was made under, so two
 	// concurrent restatements could each report the other's version — an audit
 	// surface disagreeing with the record it describes.
-	return r.mod.State(string(t)), r.vel.strain(), rec.Version, nil
+	return rec.Version, nil
 }
 
 // adopt puts one of the organisation's OWN PUBLISHED VALUES back in force, by

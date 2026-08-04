@@ -52,6 +52,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
@@ -159,10 +160,21 @@ func (t tenant) org() string {
 //
 // It fails closed off the HTTP path too: a caller with no validated principal has
 // no org, so there is no key and no read.
+//
+// NO PRINCIPAL IS [cloud.ErrNoLedger], the fleet's one value for "there is nobody
+// asking", refused in the fleet's one envelope. It is the same fact
+// [cloud.ResourceMeter.Gate] answers with when it is handed an empty org, and this
+// package must not hold a second spelling of it: the ops that price first reach
+// the money door and the ops that resolve the tenant first — [ops.search] — reach
+// here, so two spellings meant ONE surface answering ONE refusal in two shapes
+// depending on which operation was called. Measured: eight ops nested,
+// /v1/risk/search flat.
+//
+// A malformed org is a DIFFERENT fact and keeps its own sentence below.
 func tenantOf(ctx context.Context, brandID string) (tenant, error) {
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return "", zip.ErrForbidden("no validated principal")
+		return "", cloud.Denied(cloud.ErrNoLedger)
 	}
 	t, err := qualify(brandID, org)
 	if err != nil {
