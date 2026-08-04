@@ -82,7 +82,7 @@ func TestObsErrorInCrossesThePlane(t *testing.T) {
 // added to any of these is the same 24h outage.
 func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 	types := []any{
-		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{}, plane.StarterIn{},
+		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{},
 		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
 		plane.ObsErrorIn{}, plane.ObsErrorOut{}, plane.Header{},
 		// ScopeRules is walked, not ScopeRule: the walk descends a slice of

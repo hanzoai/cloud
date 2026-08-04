@@ -99,12 +99,40 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 		// A void reply is not a zero balance. Nothing was read, so nothing is known.
 		return 0, true, fmt.Errorf("balance: commerce answered nothing")
 	}
-	cents, cerr := out.Amount.Minor()
-	if cerr != nil {
+	// Round DOWN, explicitly, because this is a DISPLAY.
+	//
+	// plane.Money.Minor() refuses a value finer than a cent rather than round
+	// behind the caller — right for a debit, and its own doc says a caller that
+	// wants a rounded figure "should round explicitly, where the choice is
+	// visible". This view never rounded, so a real balance made the read FAIL:
+	// live on 2026-08-03 the org held $149,913.078983985999994361 and every read
+	// answered 502 "billing upstream unreachable" — a misleading label, since
+	// nothing upstream was involved — which the console rendered as "Unavailable"
+	// while the money sat there. It worsens as usage accumulates, because a longer
+	// history makes a sub-cent tail likelier.
+	//
+	// Minor() RESCALES, and hanzoai/decimal's Rescale rounds half-away-from-zero
+	// (decimal.go:145) — it does not truncate. Measured live: the ledger's
+	// …078983985999994361 came back as 14991308 cents, a tenth of a cent ABOVE the
+	// true balance. That is acceptable here and nowhere else: this number is a
+	// DISPLAY, nothing is billed from it, and the gate that admits or refuses
+	// spend reads the exact decimal itself. A caller that must not overstate —
+	// any debit — has to round down deliberately rather than reuse this.
+	//
+	// (apps/ai carries a comment calling this "truncated toward zero" for the same
+	// call. That is wrong in the same way and worth correcting there; its gate
+	// compares > 0, so a sub-cent rounding cannot change its verdict.)
+	amt, perr := out.Amount.Parse()
+	if perr != nil {
 		// The peer ANSWERED and the reply did not parse. That is a real failure, not
 		// an absent ledger, and it must surface: a corrupt reply rendered as zero is
 		// a funded account shown as broke.
-		return 0, true, cerr
+		return 0, true, perr
 	}
-	return cents, true, nil
+	minor := amt.Minor() // big.Int of cents; Rescale rounds half-away-from-zero
+	if !minor.IsInt64() {
+		return 0, true, fmt.Errorf("balance %s %s exceeds int64 cents",
+			out.Amount.Decimal, out.Amount.Currency)
+	}
+	return minor.Int64(), true, nil
 }

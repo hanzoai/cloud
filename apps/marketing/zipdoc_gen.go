@@ -177,9 +177,8 @@ func init() {
 		Fields: map[string]string{
 			"PromoRef.code":            "Code is the promo code from the path, e.g. \"first1000\".",
 			"Redemption.code":          "Code is the promo redeemed.",
-			"Redemption.creditCents":   "CreditCents is the discount value credited to the org's wallet — the promo\nis realized as a NON-CASH credit, not a subscription coupon.",
-			"Redemption.creditEntryId": "CreditEntryID is the finance ledger entry that credit landed in.",
-			"Redemption.plan":          "Plan and Seats are what was redeemed against.",
+			"Redemption.discountCents": "DiscountCents is the month-one discount this redemption CLAIMS, in USD\ncents. It is a recorded figure, NOT a balance: nothing was credited and no\nwallet moved. An admin granting against this claim is what would make it\nmoney, and that decision happens on the admin surface, not here.",
+			"Redemption.plan":          "Plan and Seats are what was redeemed against. Both are DERIVED server-side\n— Plan from the org's live paid subscription, Seats from claimSeats — and\nneither is ever read from the request.",
 			"Redemption.redeemedAt":    "RedeemedAt is unix seconds.",
 		},
 		Example: json.RawMessage(`{"code":"first1000"}`),
@@ -348,21 +347,18 @@ func init() {
 		Example: json.RawMessage(`{"id":"camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60","scheduledAt":1780000000}`),
 	})
 	zip.Describe("POST /v1/marketing/promos/:code/redeem", zip.Doc{
-		Description: "Redeems the promo for the caller's org, crediting the discount\nvalue to its wallet through the finance ledger. Three guards run under one\nlock so the cap cannot be raced past: the fleet-wide redemption cap, one\nredemption per org, and one per payment instrument.\n\nIt is IDEMPOTENT: an org that already redeemed gets its original redemption\nback with alreadyRedeemed true and is not credited twice.",
+		Description: "Records the caller org's claim on a promo. NOTHING IS CREDITED:\nthe redemption is a row, and credit into an org is an admin decision made on\nthe admin surface against an auditable ledger.\n\nThe plan is DERIVED from the org's live ACTIVE/TRIALING paid subscription and\ncan never be named by the caller — an org with no qualifying subscription is\nrefused, and so is one whose subscription cannot be read. The seat count is\nthe single-seat floor (claimSeats), so the recorded figure has no input that\ncan inflate it.\n\nGuards run under one lock so the cap cannot be raced past: the fleet-wide\nredemption cap, one redemption per org, one per payment instrument (REQUIRED),\nand the per-redemption ceiling.\n\nIt is IDEMPOTENT: an org that already redeemed gets its original redemption\nback with alreadyRedeemed true.",
 		Fields: map[string]string{
 			"RedeemInput.code":             "Code is the promo code from the path.",
-			"RedeemInput.instrument":       "Instrument identifies the payment method. It is the anti-farming key: one\nredemption per instrument, fleet-wide.",
-			"RedeemInput.plan":             "Plan is the plan being redeemed against: pro, max or team.",
-			"RedeemInput.seats":            "Seats is the Team seat count; 0 means 1. Seats beyond the promo's\nteamSeatCap bill at list.",
-			"RedeemResult.alreadyRedeemed": "AlreadyRedeemed is true when this org had already taken the promo and the\ncall was an idempotent replay — nothing was credited a second time.",
-			"RedeemResult.chargeCents":     "ChargeCents is what month one costs after the discount, DiscountCents the\ncredit that produced it.",
+			"RedeemInput.instrument":       "Instrument identifies the payment method. It is the anti-farming key: one\nredemption per instrument, fleet-wide, and it is REQUIRED — an absent\ninstrument is refused, never waved through.",
+			"RedeemResult.alreadyRedeemed": "AlreadyRedeemed is true when this org had already taken the promo and the\ncall was an idempotent replay.",
+			"RedeemResult.chargeCents":     "ChargeCents is what month one costs after the discount, DiscountCents the\ndiscount that produced it. Both are quoted figures against the org's\nderived plan — NOTHING WAS CREDITED and no wallet moved.",
 			"Redemption.code":              "Code is the promo redeemed.",
-			"Redemption.creditCents":       "CreditCents is the discount value credited to the org's wallet — the promo\nis realized as a NON-CASH credit, not a subscription coupon.",
-			"Redemption.creditEntryId":     "CreditEntryID is the finance ledger entry that credit landed in.",
-			"Redemption.plan":              "Plan and Seats are what was redeemed against.",
+			"Redemption.discountCents":     "DiscountCents is the month-one discount this redemption CLAIMS, in USD\ncents. It is a recorded figure, NOT a balance: nothing was credited and no\nwallet moved. An admin granting against this claim is what would make it\nmoney, and that decision happens on the admin surface, not here.",
+			"Redemption.plan":              "Plan and Seats are what was redeemed against. Both are DERIVED server-side\n— Plan from the org's live paid subscription, Seats from claimSeats — and\nneither is ever read from the request.",
 			"Redemption.redeemedAt":        "RedeemedAt is unix seconds.",
 		},
-		Example: json.RawMessage(`{"code":"first1000","plan":"pro","seats":1,"instrument":"pm_1QxYz2AbCdEf"}`),
+		Example: json.RawMessage(`{"code":"first1000","instrument":"pm_1QxYz2AbCdEf"}`),
 	})
 	zip.Describe("POST /v1/marketing/sequences", zip.Doc{
 		Description: "Registers a drip sequence in the caller's org. Name is\nrequired; status defaults to draft, and a sequence must be ACTIVE before it\nwill accept enrollments. The id, createdAt and updatedAt of the input are\nignored — the server assigns them.",
