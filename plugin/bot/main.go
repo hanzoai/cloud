@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/bot"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the bot app.
@@ -17,7 +18,11 @@ import (
 // `bot openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:       "bot",
+		Name: "bot",
+		// Declared: undeclared falls back to /v1/bot, which this app does not
+		// serve — the scope then guards a path with no routes and zip refuses to
+		// compose (see plugin/account/main.go).
+		Prefixes:   manifest.PrefixesFor("bot"),
 		Price:      cloud.Free,
 		Mount:      bot.Mount,
 		Shutdown:   bot.Shutdown,

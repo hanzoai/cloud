@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/dataset"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the dataset app.
@@ -27,9 +28,13 @@ import (
 // every op reports in band as a 503 rather than as an empty answer.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "dataset",
-		Price: cloud.Metered,
-		Mount: dataset.Mount,
+		Name: "dataset",
+		// Declared: undeclared falls back to /v1/dataset, which this app does not
+		// serve — the scope then guards a path with no routes and zip refuses to
+		// compose (see plugin/account/main.go).
+		Prefixes: manifest.PrefixesFor("dataset"),
+		Price:    cloud.Metered,
+		Mount:    dataset.Mount,
 	}}, []string{"dataset"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
