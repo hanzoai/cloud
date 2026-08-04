@@ -338,6 +338,9 @@ var Apps = []App{
 	// (apps/zen), routing zen-SKU requests and Next()ing the rest. It therefore
 	// routes NO prefix of its own — see App.Coresident. The row exists because
 	// every plugin/<name> binary must have one (gen-app-cmds bijection).
-	{Name: "zen", Coresident: true},
+	// Gates, not Prefixes: zen ROUTES nothing and WRAPS ai's "/v1". Stating it
+	// here is what gives plugin/zen a grant to install the Claim on, without
+	// re-making the routing claim that Coresident exists to remove.
+	{Name: "zen", Coresident: true, Gates: []string{"/v1"}},
 	{Name: "plugins", Prefixes: []string{"/v1/admin/plugins"}},
 }
