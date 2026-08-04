@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admission"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the admission app.
@@ -17,7 +18,11 @@ import (
 // `admission openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:     "admission",
+		Name: "admission",
+		// Declared: undeclared falls back to /v1/admission, which this app does not
+		// serve — the scope then guards a path with no routes and zip refuses to
+		// compose (see plugin/account/main.go).
+		Prefixes: manifest.PrefixesFor("admission"),
 		Price:    cloud.Free,
 		Mount:    admission.Mount,
 		Shutdown: cloud.CtxShutdown(admission.Shutdown),
