@@ -12,10 +12,15 @@ import (
 // There are now four projections of this one API, and they are compared against
 // each other by TEST:
 //
-//	the woven golden               openapi.yaml, written by the weave (make openapi)
+//	the woven golden               openapi.yaml, written by the weave (make describe)
 //	each app binary's own subset   `<app> openapi`, one file per app
 //	the woven fleet document       Weave() over those subsets
 //	the live endpoint              GET /v1/openapi.json
+//
+// And one projection OF the golden, downstream and in another repo:
+// hanzoai/openapi's hanzo.yaml, which every published SDK is generated from.
+// It refutes itself against the LIVE endpoint above (`publish.py --served`),
+// because that is the only one of the four a repo without a checkout can read.
 //
 // An info block that differed between them would make two documents OF THE SAME
 // API compare unequal for a reason that has nothing to do with the API — which
