@@ -109,6 +109,20 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 	if costCents <= 0 {
 		return nil
 	}
+	// An empty org is an IDENTITY refusal, and it is answered here rather than by
+	// the money plane, because every way of asking the money plane to price a spend
+	// for a nameless subject answers in the vocabulary of money: the co-resident
+	// meter refuses an empty org fail-closed and renders 503 "Billing temporarily
+	// unavailable", and gatePeer ships AuthorizeIn{Subject:""} whose far end refuses
+	// with 400 `field "subject" is required` — a field that appears in no published
+	// request schema on any of these surfaces, so no caller can satisfy it.
+	//
+	// It sits ABOVE both branches so a fail-OPEN money policy cannot make an
+	// unidentified caller free: fail-open decides what to do when the ledger is
+	// unreachable, never who the caller is. See [ErrNoLedger] and [denial].
+	if org == "" {
+		return ErrNoLedger
+	}
 	// NEVER CONSTRUCTED is not the same as NO LOCAL LEDGER, and only the second
 	// is answerable by asking a peer:
 	//
@@ -251,7 +265,19 @@ func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted f
 // answers with, and the code+message it carries. Both renderings below read it,
 // so an untyped handler and a typed op can never describe the same refusal two
 // different ways.
+// ErrNoLedger is a priced act with no ledger to charge: there is nobody to bill
+// because there is nobody. It is the ONE value [ResourceMeter.Gate] answers with
+// when it is handed an empty org, so all of its callers refuse identically
+// without any of them re-deciding it — [denial] renders it as the tenant gate's
+// own 403 rather than as a fault of the biller.
+var ErrNoLedger = errors.New("no validated principal")
+
 func denial(err error) (int, string, string) {
+	// Identity before money: this refusal is about WHO is asking, so it never
+	// takes a money status. Checked first because it is the more specific fact.
+	if errors.Is(err, ErrNoLedger) {
+		return http.StatusForbidden, "forbidden", ErrNoLedger.Error()
+	}
 	// The ONE classifier (errmap.go), so the money wire and the app's error
 	// renderer answer one refusal identically. It keeps the DISTINCT 402s — a
 	// per-scope cap (issue #70) is never the out-of-funds shape, which would be
