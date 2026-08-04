@@ -168,21 +168,28 @@ func admitAddress(s string) (string, error) {
 	return strings.ToLower(s), nil
 }
 
-// maxModelBodyBytes is what ONE published value's encoded masses may cost, and it
-// is ENFORCED rather than assumed ([plane.publish] refuses past it). That is what
-// makes the row bound below a bound: the body is the only term in it whose size is
-// not already fixed, so a ceiling on the body is a ceiling on the row.
+// maxModelBodyBytes is what ONE published value's encoded state may cost, and it is
+// ENFORCED rather than assumed ([plane.mint] refuses past it). That is what makes the
+// row bound below a bound: the body is the only term in it whose size is not already
+// fixed, so a ceiling on the body is a ceiling on the row.
 //
-// MEASURED, at the shape this plane can actually reach: 466 KiB for 25 trees of
-// 511 nodes over two windows plus a 256-bucket distribution, with every mass
-// carrying a full mantissa — the steady state, because folding a window blends
-// them into irrational-looking decimals rather than the round counts a fresh fold
-// produces. 768 KiB is that with headroom for a wider inventory, and far under
-// what the widest point of the search grid would need (40 trees of 2047 nodes
-// measures 2.96 MiB) — which is correct, because no search winner is adoptable
-// today: [plane.install] refuses a shape change. A shape this bound cannot hold is
-// refused with the number named rather than written and discovered later.
-const maxModelBodyBytes = 768 << 10
+// IT IS SIZED ON THE WIDEST SHAPE THE SEARCH GRID DECLARES, rather than on the
+// deployment's default topology. A published value used to only ever come from a
+// residency running that default — 466 KiB measured, so 768 KiB with headroom was the
+// whole story — because a search winner could not be adopted at all: install refused a
+// shape change. It replants now, so 40 trees of 2047 regions over two windows is a
+// value an organisation can legitimately publish and must therefore be able to store.
+//
+// MEASURED, at full occupancy: 2,214,100 bytes for that shape with every region carrying
+// a full mantissa. Occupancy is the term that matters and the one a fitted sample gets
+// wrong by an order of magnitude — a deep tree over a short history leaves most regions
+// at zero, and a zero costs two bytes where a blended mass costs twenty. This is the
+// busy organisation's number, with room for the grid to widen.
+//
+// [TestModel_TheWidestShapeFitsItsOwnBound] is that measurement, run rather than
+// recorded, so a grid that grows past this bound turns a test red instead of turning up
+// as a 413 on some organisation's adoption.
+const maxModelBodyBytes = 3 << 20
 
 // maxModelRowBytes is what ONE retained value costs on the organisation's own
 // shelf, worst case, including its primary-key index and SQLite's own per-row
@@ -197,7 +204,14 @@ const maxModelRowBytes = maxModelBodyBytes + addressBytes + maxTenant + addressB
 // bytes: every organisation's shelf lives on one volume, so a history bounded only
 // in rows is one organisation filling the disk another organisation's model is
 // stored on.
-const modelBudget = 8 << 20
+//
+// It moved with [maxModelBodyBytes] and for the same reason. The rollback depth this
+// history is FOR — a champion, a challenger and eight points to go back to — is the
+// requirement; the budget is what that depth costs once the widest shape a search can
+// win in is a shape an organisation can hold. It is a CEILING and not an allocation:
+// only an organisation that publishes ten of the widest values reaches it, where ten at
+// the default shape cost under 5 MiB.
+const modelBudget = 32 << 20
 
 // modelValues is that budget in values, and it is both the bound the disposal
 // enforces and the bound the read reports against, because those must be one
@@ -258,6 +272,24 @@ type value struct {
 	At time.Time
 }
 
+// model is one published value AS IT IS STORED: the masses, and the SHAPE they are
+// only meaningful against.
+//
+// The two travel together because they are one value. Masses restored into a
+// different space are not stale, they are meaningless — so a store that held the
+// masses alone could only ever put them back into the space that was already running,
+// which is precisely why a search winner was unadoptable. [plane.install] rebuilds
+// the space from this shape and proves it by digest before believing a single mass.
+//
+// The masses are INLINE, so a body written before this plane recorded shapes decodes
+// into exactly the same masses with the shape ABSENT — and absent is honest rather
+// than defaulted: install refuses to replant onto a shape nobody recorded instead of
+// guessing that it was the deployment's own.
+type model struct {
+	anomaly.Snapshot
+	Shape shape `json:"shape"`
+}
+
 // publish mints the caller organisation's current working state as a value on its
 // own shelf, and answers with the name.
 //
@@ -276,12 +308,29 @@ func (p *plane) publish(t tenant) (value, bool, error) {
 	}
 	r.mu.Lock()
 	snap, held := r.mod.Snapshot(string(t))
+	// THE SHAPE THE STORE IS ACTUALLY RUNNING, off the residency's own record of it
+	// ([plane.plant] reads it back from the store rather than trusting what it was
+	// handed). A value whose recorded shape does not produce its digest is refused on
+	// adoption, so both must come from one place, and this is that place.
+	m := model{Snapshot: snap, Shape: shapeOf(r.cfg)}
 	warmed := r.warmed
 	r.mu.Unlock()
 	if !held || snap.Learned == 0 {
 		return value{}, false, nil
 	}
-	body, err := json.Marshal(snap)
+	return p.mint(t, m, warmed)
+}
+
+// mint records ONE model value on an organisation's own shelf, addressed by its
+// content, and answers with the record and whether anything was written.
+//
+// It is the ONE writer of the value history. Two callers reach it — an organisation
+// publishing its working state ([plane.publish]) and a search publishing the winning
+// shape it has just fitted ([plane.fitWinner]) — and they differ only in which model
+// they hand over. The bound, the address, the sequence, the idempotence and the
+// retention are therefore one implementation rather than two that agree today.
+func (p *plane) mint(t tenant, m model, warmed time.Time) (value, bool, error) {
+	body, err := json.Marshal(m)
 	if err != nil {
 		return value{}, false, fmt.Errorf("risk: encode model value: %w", err)
 	}
@@ -297,9 +346,9 @@ func (p *plane) publish(t tenant) (value, bool, error) {
 		return value{}, false, err
 	}
 	v := value{
-		Address: address(snap, warmed),
-		Shape:   snap.Digest,
-		Learned: snap.Learned,
+		Address: address(m.Snapshot, warmed),
+		Shape:   m.Digest,
+		Learned: m.Learned,
 		Warmed:  warmed.UTC().Truncate(time.Second),
 		At:      p.now().UTC().Truncate(time.Second),
 	}
@@ -360,31 +409,32 @@ func (p *plane) valueAt(t tenant, addr string) (value, bool, error) {
 	return v, true, nil
 }
 
-// masses reads one published value's state, for the one caller that needs it.
+// modelAt reads one published value's MODEL — its masses and the shape they describe
+// — for the one caller that needs them.
 //
-// It is separate from [plane.valueAt] because the masses are 466 KiB and every
-// other reader wants the record: a single function returning both would put that
-// body on the path of every list and every report. Same organisation predicate,
-// same file.
-func (p *plane) masses(t tenant, addr string) (anomaly.Snapshot, bool, error) {
+// It is separate from [plane.valueAt] because a model is hundreds of kilobytes and
+// every other reader wants the record: a single function returning both would put that
+// body on the path of every list and every report. Same organisation predicate, same
+// file.
+func (p *plane) modelAt(t tenant, addr string) (model, bool, error) {
 	sh, err := p.for_(t)
 	if err != nil {
-		return anomaly.Snapshot{}, false, err
+		return model{}, false, err
 	}
 	var body []byte
 	err = sh.db.QueryRow(`SELECT body FROM published WHERE tenant = ? AND address = ?`,
 		string(t), addr).Scan(&body)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return anomaly.Snapshot{}, false, nil
+		return model{}, false, nil
 	case err != nil:
-		return anomaly.Snapshot{}, false, fmt.Errorf("risk: read model value: %w", err)
+		return model{}, false, fmt.Errorf("risk: read model value: %w", err)
 	}
-	var snap anomaly.Snapshot
-	if err := json.Unmarshal(body, &snap); err != nil {
-		return anomaly.Snapshot{}, false, fmt.Errorf("risk: decode model value: %w", err)
+	var m model
+	if err := json.Unmarshal(body, &m); err != nil {
+		return model{}, false, fmt.Errorf("risk: decode model value: %w", err)
 	}
-	return snap, true, nil
+	return m, true, nil
 }
 
 // values reads an organisation's own published history, newest first, and says how
