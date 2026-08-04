@@ -53,6 +53,12 @@ import (
 )
 
 func main() {
+	// BEFORE any plugin is mounted: the wire to a plugin resolves its transport
+	// from a process-global registry at dial time, and the default one caps a
+	// whole response at 30 seconds — which silently truncated every model
+	// completion longer than that (transport.go).
+	useLongPluginDeadline()
+
 	listen := flag.String("listen", getenv("CLOUD_LISTEN", ":8080"), "HTTP listen address")
 	zapAddr := flag.String("zap", getenv("CLOUD_ZAP_LISTEN", ":9653"), "ZAP-RPC listen address")
 	enable := flag.String("enable", os.Getenv("CLOUD_ENABLE"), "comma-separated subsystems to mount; empty mounts all")
