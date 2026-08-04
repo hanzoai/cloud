@@ -72,7 +72,7 @@ var annQueues *annService
 // by MountO11y inside the one order-69 mount, so every route precedes the order-70
 // wildcard. A store-open failure fails the mount (a broken data plane must not
 // silently serve empty queues).
-func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
+func mountAnnotationQueues(a *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("o11y.mountAnnotationQueues: empty DataDir")
 	}
@@ -90,7 +90,7 @@ func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
 	// below reach all of them. Static collection routes register before the :id
 	// param routes so an id can never shadow a collection route (the eval
 	// discipline).
-	g := a.Group(o11yPrefix)
+	g := under{a, o11yPrefix}
 	zip.Get(g, "/reviews", s.listQueues)
 	zip.Post(g, "/reviews", s.createQueue, zip.WithStatus(http.StatusCreated))
 	zip.Get(g, "/reviews/:id", s.getQueue)
