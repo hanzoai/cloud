@@ -324,32 +324,150 @@ func TestGitHubJSON_NonSuccessReportsStatusNotADecodeError(t *testing.T) {
 }
 
 // The receipt: tagRelease POSTs refs/tags/<v> at the pinned sha with the bearer token.
-func TestTagRelease_RefPath(t *testing.T) {
+// tagRelease VERIFIES the claim that claimReleaseVersion already took; it no
+// longer creates anything. The distinction is the whole fix — a tag minted at the
+// end is a receipt for a number two lanes may both have spent, a tag taken at the
+// start is the thing that stops the second lane.
+func TestTagRelease_VerifiesTheClaim(t *testing.T) {
 	t.Setenv("GH_PAT", "test-token")
-	var gotBody map[string]string
-	var gotAuth string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/repos/hanzoai/cloud/git/refs" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		gotAuth = r.Header.Get("Authorization")
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer srv.Close()
-	defer swapAPIBase(srv.URL)()
-
 	sha := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
-	if err := tagRelease(testService(), context.Background(), releaseRepoSlug, sha, "v1.786.44"); err != nil {
-		t.Fatalf("tagRelease: %v", err)
+
+	for _, tc := range []struct {
+		name    string
+		status  int
+		refSHA  string
+		wantErr bool
+	}{
+		{"claim still stands", http.StatusOK, sha, false},
+		{"receipt deleted under us", http.StatusNotFound, "", true},
+		{"claim overwritten by another commit", http.StatusOK, "cafebabecafebabecafebabecafebabecafebabe", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var method, path, auth string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				method, path, auth = r.Method, r.URL.Path, r.Header.Get("Authorization")
+				if tc.status != http.StatusOK {
+					w.WriteHeader(tc.status)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": tc.refSHA}})
+			}))
+			defer srv.Close()
+			defer swapAPIBase(srv.URL)()
+
+			err := tagRelease(testService(), context.Background(), releaseRepoSlug, sha, "v1.786.44")
+			if tc.wantErr != (err != nil) {
+				t.Fatalf("tagRelease err=%v, wantErr=%v", err, tc.wantErr)
+			}
+			// A verification that POSTs is a verification that MUTATES.
+			if method != http.MethodGet {
+				t.Fatalf("tagRelease used %s; it must only READ the ref", method)
+			}
+			if path != "/repos/hanzoai/cloud/git/ref/tags/v1.786.44" {
+				t.Fatalf("read the wrong ref path: %q", path)
+			}
+			if auth != "Bearer test-token" {
+				t.Fatalf("auth header wrong: %q", auth)
+			}
+		})
 	}
-	if gotBody["ref"] != "refs/tags/v1.786.44" || gotBody["sha"] != sha {
-		t.Fatalf("tag body wrong: %v", gotBody)
+}
+
+// THE RACE, REPRODUCED. Two commits ask for a version at the same moment; the
+// registry and the git tag list both still say the same number is next. Exactly
+// one may end up owning it, and the other must walk forward rather than build.
+func TestClaimReleaseVersion_IsExclusive(t *testing.T) {
+	t.Setenv("GH_PAT", "test-token")
+	mine := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	theirs := "cafebabecafebabecafebabecafebabecafebabe"
+
+	// held maps an already-claimed tag to the commit holding it.
+	newSrv := func(held map[string]string, claimed *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			// The two universes computeReleaseVersion reads. Floor them low so the
+			// candidate is deterministic.
+			case r.URL.Path == "/repos/hanzoai/cloud/tags":
+				_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "v1.786.0"}})
+			case r.Method == http.MethodPost && r.URL.Path == "/repos/hanzoai/cloud/git/refs":
+				var body map[string]string
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				tag := strings.TrimPrefix(body["ref"], "refs/tags/")
+				if _, taken := held[tag]; taken {
+					w.WriteHeader(http.StatusUnprocessableEntity)
+					_ = json.NewEncoder(w).Encode(map[string]string{"message": "Reference already exists"})
+					return
+				}
+				*claimed = append(*claimed, tag)
+				held[tag] = body["sha"]
+				w.WriteHeader(http.StatusCreated)
+			case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/hanzoai/cloud/git/ref/tags/"):
+				tag := strings.TrimPrefix(r.URL.Path, "/repos/hanzoai/cloud/git/ref/tags/")
+				sha, ok := held[tag]
+				if !ok {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": sha}})
+			default:
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
 	}
-	if gotAuth != "Bearer test-token" {
-		t.Fatalf("auth header wrong: %q", gotAuth)
-	}
+
+	t.Run("a free number is claimed", func(t *testing.T) {
+		var claimed []string
+		srv := newSrv(map[string]string{}, &claimed)
+		defer srv.Close()
+		defer swapAPIBase(srv.URL)()
+		v, err := claimFrom(testService(), context.Background(), releaseRepoSlug, mine, "1.786.1")
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		if v != "1.786.1" {
+			t.Fatalf("claimed %q, want the first free number 1.786.1", v)
+		}
+		if len(claimed) != 1 || claimed[0] != "v"+v {
+			t.Fatalf("claimed %v but returned %q", claimed, v)
+		}
+	})
+
+	t.Run("a number another commit holds is skipped, not overwritten", func(t *testing.T) {
+		var claimed []string
+		// The loser arrives second: the next two numbers are already gone.
+		held := map[string]string{"v1.786.1": theirs, "v1.786.2": theirs}
+		srv := newSrv(held, &claimed)
+		defer srv.Close()
+		defer swapAPIBase(srv.URL)()
+		v, err := claimFrom(testService(), context.Background(), releaseRepoSlug, mine, "1.786.1")
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		if v != "1.786.3" {
+			t.Fatalf("walked to %q, want 1.786.3 — a held number must never be reused", v)
+		}
+		if held["v1.786.1"] != theirs || held["v1.786.2"] != theirs {
+			t.Fatal("claiming overwrote a version another commit held")
+		}
+	})
+
+	t.Run("our own claim is a resume, not a collision", func(t *testing.T) {
+		var claimed []string
+		held := map[string]string{"v1.786.1": mine}
+		srv := newSrv(held, &claimed)
+		defer srv.Close()
+		defer swapAPIBase(srv.URL)()
+		v, err := claimFrom(testService(), context.Background(), releaseRepoSlug, mine, "1.786.1")
+		if err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		if v != "1.786.1" {
+			t.Fatalf("resumed as %q, want 1.786.1 — a re-run must reuse its own number", v)
+		}
+		if len(claimed) != 0 {
+			t.Fatalf("a resume must mint nothing, minted %v", claimed)
+		}
+	})
 }
 
 // Fail-closed: the tag seam refuses when its KMS-provisioned token is unset — no

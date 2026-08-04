@@ -836,7 +836,7 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// param, computed by buildImageRef from the validated tenant) and appears as
 	// its own fixed argv element, so a client can never override --output/--opt to
 	// push to another tenant's repo.
-	command := buildFrontendCmd(buildCtx, dockerfile, image)
+	command := buildFrontendCmdRev(buildCtx, dockerfile, image, cleanRef)
 	pushSecret, err := buildPushSecret(image)
 	if err != nil {
 		return "", err
@@ -869,6 +869,45 @@ const platformBuildOrg = "platform"
 // credential. Public repos ignore it; without the Secret the env is empty and
 // fetches are anonymous, exactly as before.
 func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
+	return buildFrontendCmdRev(buildCtx, dockerfile, image, "")
+}
+
+// isCommitSHA reports whether ref is a full 40-hex commit id. A build context may
+// name a BRANCH, and a branch is not a revision: stamping "main" into
+// org.opencontainers.image.revision would make the label look populated while
+// answering a different question than the one anybody reads it for, which is
+// strictly worse than the honest empty it replaces.
+func isCommitSHA(ref string) bool {
+	if len(ref) != 40 {
+		return false
+	}
+	for _, c := range ref {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// buildFrontendCmdRev is buildFrontendCmd plus the commit being built, which is
+// the difference between an image that can be traced back to source and one that
+// cannot.
+//
+// Every image this lane published carried `org.opencontainers.image.revision=
+// unknown`. Not because the label was missing — cloud's Dockerfile declares
+// `ARG REVISION=unknown` and stamps the label from it — but because nothing here
+// ever passed REVISION, so the default won on every build. The other lane
+// (docker/build-push-action) sets the label from the OUTSIDE, after the
+// Dockerfile, so its images were fine and the gap was invisible unless you
+// compared the two.
+//
+// It stopped being cosmetic the moment two lanes raced for one tag. With one
+// image labelled 1b8b76ed and the other labelled `unknown`, "which of these is
+// the release" had no answer that did not involve diffing layers — and the
+// release that lost had already been pinned. A version is only a receipt if the
+// image can name its own commit, so the arg is passed here and the label is true
+// no matter which builder ran.
+func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 	cmd := []any{"buildctl-daemonless.sh", "build"}
 	if strings.TrimSpace(dockerfile) != "" {
 		cmd = append(cmd,
@@ -899,6 +938,11 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	if _, tag := splitImageRef(image); tag != "" && tag != "latest" && !strings.Contains(tag, ":") {
 		cmd = append(cmd, "--opt", "build-arg:VERSION="+tag)
 		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+strings.TrimPrefix(tag, "v"))
+	}
+	// Empty only for callers that genuinely have no commit (a context that is not
+	// a git ref); a Dockerfile with no `ARG REVISION` ignores it either way.
+	if isCommitSHA(revision) {
+		cmd = append(cmd, "--opt", "build-arg:REVISION="+revision)
 	}
 	// REGISTRY LAYER CACHE, both directions. Every build job is a fresh pod with an
 	// empty local cache, so without this each one re-resolves and re-downloads its
@@ -1242,7 +1286,7 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 	}
 	jobName := truncate("pf-runner-"+jobIDSuffix(buildID), 63)
 	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
-	command := buildFrontendCmd(buildCtx, cleanDockerfile, image)
+	command := buildFrontendCmdRev(buildCtx, cleanDockerfile, image, cleanRef)
 	pushSecret, err := buildPushSecret(image)
 	if err != nil {
 		return "", err
