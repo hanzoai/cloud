@@ -56716,7 +56716,7 @@ paths:
       description: |-
         Model reads one model's load state — loaded, unloading, or not_found, as
         the engine itself reports it.
-      operationId: get_v1_engine_model
+      operationId: engineModel
       parameters:
       - description: Model is the model id to inspect, exactly as the model list reports
           it.
@@ -56732,8 +56732,7 @@ paths:
             application/json:
               schema: {}
           description: ok
-      summary: Model reads one model's load state — loaded, unloading, or not_found,
-        as the engine itself reports it.
+      summary: Read one model's load state on the serving runtime
       tags:
       - engine
       x-app: engine
@@ -56743,16 +56742,14 @@ paths:
         Models lists the models the engine serves, each with its load state — the
         server's own model table (its standard list envelope, load status
         included), relayed verbatim.
-      operationId: get_v1_engine_models
+      operationId: engineModels
       responses:
         "200":
           content:
             application/json:
               schema: {}
           description: ok
-      summary: Models lists the models the engine serves, each with its load state
-        — the server's own model table (its standard list envelope, load status included),
-        relayed verbatim.
+      summary: List the models the serving runtime holds, with each one's load state
       tags:
       - engine
       x-app: engine
@@ -56762,7 +56759,7 @@ paths:
         Status reports whether the engine deployment is reachable and which build
         revision it runs — an honest lens for "is the serving runtime up", never a
         fabricated ok.
-      operationId: get_v1_engine_status
+      operationId: engineStatus
       responses:
         "200":
           content:
@@ -56770,9 +56767,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/engineStatus'
           description: ok
-      summary: Status reports whether the engine deployment is reachable and which
-        build revision it runs — an honest lens for "is the serving runtime up", never
-        a fabricated ok.
+      summary: Whether the serving runtime is reachable, and which build it runs
       tags:
       - engine
       x-app: engine
@@ -56783,17 +56778,14 @@ paths:
         device with its VRAM and compute capability, and the build's capabilities
         (CUDA/Metal/flash-attention) — the real hardware under the serving runtime,
         relayed verbatim.
-      operationId: get_v1_engine_system
+      operationId: engineSystem
       responses:
         "200":
           content:
             application/json:
               schema: {}
           description: ok
-      summary: 'System reads the engine host''s inventory: OS, CPU, memory, every
-        accelerator device with its VRAM and compute capability, and the build''s
-        capabilities (CUDA/Metal/flash-attention) — the real hardware under the serving
-        runtime, relayed verbatim.'
+      summary: 'The serving host''s own inventory: devices, memory and build capabilities'
       tags:
       - engine
       x-app: engine
