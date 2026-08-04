@@ -59,6 +59,7 @@ package reference
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -969,7 +970,10 @@ func (o ops) write(ctx context.Context, in *SetReferenceIn) (*SetReferenceOut, e
 		return nil, err
 	}
 	n, err := own.put(set.Name, batch, actor(ctx), o.s.State.now())
-	if err != nil {
+	switch {
+	case errors.Is(err, errActor):
+		return nil, zip.ErrBadRequest(err.Error())
+	case err != nil:
 		return nil, zip.ErrConflict(err.Error())
 	}
 	if err := o.ship(ctx); err != nil {
