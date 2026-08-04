@@ -74,6 +74,8 @@ PC = "."
 RL = "apps/risk/learn.go"
 RG = "apps/risk/ring.go"
 PR = "./apps/risk/"
+ML = "apps/ml/ml.go"
+PML = "./apps/ml/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -719,6 +721,29 @@ MUTANTS = [
     ("risk: an evicted organisation is dropped without writing its state down", [
         (RL, '\t\tif err := p.save(gone); err != nil {', '\t\tif err := error(nil); err != nil {')],
      "TestResident_TheBoundHasAnOperatingPoint", PR),
+
+    # ── ml: the serving plane's CAPACITY ─────────────────────────────────────
+    # The probe read only "is the CRD served", and kserve admits an
+    # InferenceService no runtime supports and then never schedules it — so the
+    # cluster answered 200 while every deploy hung. The cluster carried twelve
+    # ClusterServingRuntimes, ten for backends nothing had ever deployed, and
+    # purging them is a legitimate act: doing it INVISIBLY is the defect. The
+    # first mutant is the state the probe shipped in.
+    ("ml: the serving probe stops reading capacity (CRD served == healthy)", [
+        (ML, '\t\tif capacity.Resource != "" {', '\t\tif false {')],
+     "TestServingHealthReportsRuntimeCapacity", PML),
+    ("ml: an unreadable runtime list is folded into the count as zero", [
+        (ML, '\t\t\t\tres[capacity.Resource], allOK = err.Error(), false',
+             '\t\t\t\tres[capacity.Resource], allOK = 0, false')],
+     "TestServingHealthSeparatesAnUnreadableRuntimeListFromAnEmptyOne", PML),
+    ("ml: capacity is asked of TRAINING too, which runs on no serving runtime", [
+        (ML, '\tgtrain.Get("/health", health(s, "train", schema.GroupVersionResource{}, trainjobGVR, experimentGVR))',
+             '\tgtrain.Get("/health", health(s, "train", runtimeGVR, trainjobGVR, experimentGVR))')],
+     "TestTrainingHealthHasNoRuntimeClause", PML),
+    ("ml: the runtime coordinate is read at the InferenceService's version", [
+        (ML, 'runtimeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1alpha1", Resource: "clusterservingruntimes"}',
+             'runtimeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1beta1", Resource: "clusterservingruntimes"}')],
+     "TestGVRs", PML),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)
