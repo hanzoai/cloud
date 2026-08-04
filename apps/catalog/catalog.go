@@ -329,8 +329,25 @@ func lexical(ctx context.Context, org, q string) ([]json.RawMessage, error) {
 	if index.Ready() {
 		return index.Query(ctx, org, uid, q, scan, 0)
 	}
+	// WHICH TENANT THE CALL IS MADE FOR, and why it is not For().
+	//
+	// A typed handler's ctx carries the in-flight request, and zip's
+	// forwardIdentity says an inbound request ALWAYS wins over a stated caller —
+	// so For() is silently ignored here and the call goes out as whoever asked.
+	// For an anonymous visitor that is nobody, which is exactly what shipped:
+	// 500 "index: no org on the call" on the public browse.
+	//
+	// As() re-points the tenant on a context with NO request behind it, which is
+	// the one place zip reads what we stated. The caller's authority still
+	// travels whole; only the tenant is re-pointed — which is the whole point,
+	// because the published corpus is read as PublicOrg by everyone, signed in
+	// or not.
+	call := cloud.For(ctx, org)
+	if c, ok := cloud.Request(ctx); ok {
+		call = cloud.As(c, org)
+	}
 	out, err := cloud.Ask[plane.IndexQueryIn, plane.IndexQueryOut](
-		cloud.For(ctx, org), "index", plane.IndexQuery,
+		call, "index", plane.IndexQuery,
 		&plane.IndexQueryIn{UID: uid, Q: q, Limit: scan})
 	if err != nil {
 		return nil, err
