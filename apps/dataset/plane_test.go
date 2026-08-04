@@ -35,7 +35,7 @@ func exercise(t *testing.T) ([]call, *fake) {
 	}
 	exported(t, app, "one", "d")
 	lineageOf(t, app, "one", "d", built.Version)
-	if code, body := do(t, app, http.MethodDelete, "/v1/ml/datasets/d", "one", nil); code != 200 {
+	if code, body := do(t, app, http.MethodDelete, "/v1/risk/datasets/d", "one", nil); code != 200 {
 		t.Fatalf("dispose: %d (%s)", code, body)
 	}
 	seen := f.seen()
@@ -156,7 +156,7 @@ func TestADatasetNameCannotCarrySyntax(t *testing.T) {
 	} {
 		in := declared("placeholder")
 		in.Name = bad
-		code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", in)
+		code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", in)
 		if code != http.StatusBadRequest {
 			t.Errorf("name %q was admitted with %d (%s)", bad, code, body)
 		}
@@ -164,10 +164,10 @@ func TestADatasetNameCannotCarrySyntax(t *testing.T) {
 	// Case is NORMALISED, not refused: one dataset has one name, so `Orders` and
 	// `orders` are the same dataset rather than two that differ by a shift key.
 	in := declared("MixedCase")
-	if code, body := do(t, app, http.MethodPost, "/v1/ml/datasets", "one", in); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPost, "/v1/risk/datasets", "one", in); code != http.StatusOK {
 		t.Fatalf("a mixed-case name was refused: %d (%s)", code, body)
 	}
-	if code, body := do(t, app, http.MethodGet, "/v1/ml/datasets/mixedcase", "one", nil); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodGet, "/v1/risk/datasets/mixedcase", "one", nil); code != http.StatusOK {
 		t.Fatalf("the normalised name does not address the dataset: %d (%s)", code, body)
 	}
 }
