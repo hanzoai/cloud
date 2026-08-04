@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -101,9 +101,8 @@ func pricePeer(ctx context.Context, resource string) (Terms, bool, error) {
 		Amount:            money.FromDecimal(amount.Decimal()),
 		RecipientOrg:      out.RecipientOrg,
 		RecipientWalletID: out.RecipientWalletID,
-		Token:             out.Token,
+		Asset:             out.Asset,
 		Network:           out.Network,
-		ChainID:           out.ChainID,
 	}, true, nil
 }
 

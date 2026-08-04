@@ -114,9 +114,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // generated SDK method are all projected from. All eight are typed.
 //
 // Static /v1/wallets/accounts routes register BEFORE the /v1/wallets/:id param
-// route so the static segment wins. The collection root is declared on the app
-// with its absolute path — `zip.Post(g, "", …)` would name /v1/wallets/, a path
-// this API has never served, and op.Path is the identity every projection keys on.
+// route so the static segment wins. The collection root is declared on the /v1
+// PARENT with a non-empty leaf — `zip.Post(g, "", …)` would name /v1/wallets/, a
+// path this API has never served, and op.Path is the identity every projection
+// keys on. It is the parent and NOT the app, because zip v1.23 scopes a
+// definition's middleware to its own subtree: declared on the app, the collection
+// root sat outside the group carrying the Bridge and reached its handler with no
+// validated principal, so every POST/GET /v1/wallets answered 403 "sign in".
 func routes(app cloud.Router, s *cloud.Service[state]) error {
 	// The typed registrars take the App behind the Router: a typed op is a route
 	// PLUS a registry entry, and the registry lives on the App. A subsystem that
@@ -126,20 +130,22 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	if zapp == nil {
 		return fmt.Errorf("wallets.Mount: router exposes no zip.App, so no typed op could be registered")
 	}
-	g := app.Group("/v1/wallets")
-	// The Bridge FIRST, bounded to the subtree wallets owns: a typed op receives
-	// only a context, so the validated org has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Listen installs one app-wide too; nesting is harmless, and
-	// having it here is what makes this package's own tests — which mount on a
-	// bare app — exercise the same tenancy the binary does.
-	g.Use(cloud.Bridge())
+	// The Bridge FIRST, on the /v1 parent both the collection root and the subtree
+	// hang off: a typed op receives only a context, so the validated org has to be
+	// parked there, and fiber runs middleware in registration order — one installed
+	// after these leaves, or on a group they are not beneath, never runs.
+	// cloud.Listen installs one app-wide too; nesting is harmless, and having it
+	// here is what makes this package's own tests — which mount on a bare app —
+	// exercise the same tenancy the binary does.
+	v1 := app.Group("/v1")
+	v1.Use(cloud.Bridge())
+	g := v1.Group("/wallets")
 
 	o := ops{s: s}
 	zip.Post(g, "/accounts", o.createAccount)
 	zip.Get(g, "/accounts", o.listAccounts)
-	zip.Post(zapp, "/v1/wallets", o.createWallet)
-	zip.Get(zapp, "/v1/wallets", o.listWallets)
+	zip.Post(v1, "/wallets", o.createWallet)
+	zip.Get(v1, "/wallets", o.listWallets)
 	zip.Get(g, "/:id", o.getWallet)
 	zip.Post(g, "/:id/keys", o.rotateKeys)
 	zip.Post(g, "/:id/sign", o.sign)

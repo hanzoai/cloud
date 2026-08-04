@@ -229,7 +229,7 @@ var allowedRequestUses = map[string]string{
 		"SuperAdmin masquerade (X-User-IsAdmin plus the X-User-Owner home claim) that " +
 		"principal.OrgFrom cannot carry — reading the tenant through OrgFrom would charge the " +
 		"INSPECTED org's ledger for a platform admin's call. The client's signed authorization rides " +
-		"the X-Payment header, and the 402 challenge the rail answers with has to be written back onto " +
+		"the PAYMENT-SIGNATURE header, and the 402 challenge the rail answers with has to be written back onto " +
 		"THIS process's response, because the rail has no response to write it to. Neither is nameable " +
 		"as an In field: the tool call's body names a tool, and a payer a caller could state is a " +
 		"caller that could spend another tenant's ledger. ONE function, asked by the one dispatch " +

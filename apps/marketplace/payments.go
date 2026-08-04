@@ -86,9 +86,9 @@ type charger struct{}
 //
 // A PRICED tool with no payment is refused with tools.ErrPaymentRequired, which the
 // tool surface answers 402 with; x402 has already written the challenge to the
-// response's X-Payment-Required header, so the client learns the amount, the payee
-// address and the chain, signs an ERC-3009 authorization over exactly those terms,
-// and retries. Every other failure — the rail down, the payee wallet unresolvable,
+// response's PAYMENT-REQUIRED header, so the client learns the amount, the payee
+// address and the network, signs an EIP-3009 authorization over exactly those
+// terms, and retries. Every other failure — the rail down, the payee wallet unresolvable,
 // a caller with no billable ledger — is returned as-is and fails the call CLOSED. A
 // tool that cannot be paid for is never served free.
 func (charger) Charge(ctx context.Context, tool string) error {
