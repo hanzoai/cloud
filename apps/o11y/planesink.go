@@ -33,7 +33,11 @@
 // Row identity: every table is a ReplacingMergeTree keyed on (…, id), so ids
 // are DERIVED — a span's id is its span_id; a log line's id is a hash of what
 // it says and when. Idempotency is structural, exactly as in the analytics
-// warehouse next door.
+// warehouse next door. event.trace is the one exception and is not an identity
+// table at all: it is an AggregatingMergeTree of per-batch PARTIALS, so a
+// re-sent batch re-adds its span count (min/max absorb the repeat, sum cannot).
+// That is the documented cost of the partial-summary design, and it is the same
+// contract hanzoai/o11y's own datastoretraces writer states.
 
 package o11y
 
@@ -50,6 +54,7 @@ import (
 	ds "github.com/hanzo-ds/go"
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
+	luxlog "github.com/luxfi/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/hanzoai/cloud"
@@ -61,6 +66,26 @@ import (
 const (
 	planeSpanTable = "event.span"
 	planeLogTable  = "event.log"
+
+	// event.trace is the trace SUMMARY the read plane resolves a trace id
+	// against, and it is fed BY THE SPAN WRITER, not by a materialized view.
+	// Each write emits one PARTIAL row per trace in the batch — its own min
+	// start, max end and span count — which the AggregatingMergeTree folds over
+	// SimpleAggregateFunction(min/max/sum). hanzoai/o11y's own driver does
+	// exactly this (pkg/datastoretraces/writer.go, traceSQLTmpl); this writer
+	// implemented event.span without it, so the summary stayed empty while the
+	// spans piled up.
+	//
+	// AN EMPTY SUMMARY IS NOT A MISSING FEATURE, IT IS A SILENT OUTAGE.
+	// telemetrytraces.TraceTimeRangeFinder resolves every trace_id predicate
+	// here first, and when the lookup returns no row the querier
+	// SHORT-CIRCUITS THE TRACE QUERY TO EMPTY (pkg/querier/builder_query.go,
+	// narrowWindowByTraceID) — a missing summary row means "no spans exist",
+	// which is the one thing it did not mean. So the detail read, the
+	// waterfall, the flamegraph and every funnel answered empty over a
+	// complete span table.
+	// This sink is the production span writer, so this sink owes the partial.
+	planeTraceTable = "event.trace"
 
 	// The ZAP wire addresses, unchanged from the embedded collector: 4317 is
 	// the canonical span wire every Hanzo service sends to, 4318 the log wire.
@@ -98,6 +123,27 @@ var (
 		"trace_id", "span_id", "parent", "duration", "status", "attributes"}
 	planeLogColumns = []string{"org", "time", "id", "name", "kind", "service",
 		"severity_text", "severity_number", "body", "trace_id", "span_id", "attributes"}
+
+	// event.trace's full column list — the table has FIVE columns and no
+	// ingested_at, so the rule above has nothing to omit here. Its retention and
+	// partitioning are measured from `end` (TTL toDateTime(end) + 30d,
+	// PARTITION BY toYYYYMM(end)), which is intrinsic to the trace rather than a
+	// clock the sender gets to choose: end is derived from the span rows already
+	// written, so a summary cannot outlive or predate its own spans.
+	planeTraceColumns = []string{"org", "trace_id", "start", "end", "num_spans"}
+)
+
+// The planeSpanColumns positions traceRowsOf reads. It folds ALREADY-BUILT span
+// rows rather than re-deriving the summary from each input shape, so the four
+// values below are read POSITIONALLY out of a []any — which is only safe while
+// these constants and the column list agree. TestPlaneSpanColumnIndexesArePinned
+// asserts exactly that, so a reordered column list goes red instead of silently
+// summarizing a trace by its duration column.
+const (
+	planeSpanColOrg      = 0
+	planeSpanColTime     = 1
+	planeSpanColTraceID  = 6
+	planeSpanColDuration = 9
 )
 
 // planeSink pins the ingest resources for the process life so shutdown can
@@ -132,11 +178,7 @@ func mountPlaneIngest(deps cloud.Deps) error {
 		Listen: planeSpanListen,
 		NodeID: "cloud-o11y-plane",
 		OnBatch: func(ctx context.Context, b *zapreceiver.SpanBatch) error {
-			rows := spanRowsOf(b)
-			if len(rows) == 0 {
-				return nil
-			}
-			return ps.sink.Insert(ctx, planeSpanTable, planeSpanColumns, rows)
+			return ps.insertSpans(ctx, log, spanRowsOf(b))
 		},
 	})
 	if err != nil {
@@ -167,11 +209,7 @@ func mountPlaneIngest(deps cloud.Deps) error {
 	// flag, same fall-through-to-the-wire contract tracesink.go carried.
 	if cloud.TraceInprocEnabled() {
 		cloud.RegisterTraceSink(func(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
-			rows := sdkSpanRowsOf(spans)
-			if len(rows) == 0 {
-				return nil
-			}
-			return ps.sink.Insert(ctx, planeSpanTable, planeSpanColumns, rows)
+			return ps.insertSpans(ctx, log, sdkSpanRowsOf(spans))
 		})
 		log.Info("in-process trace sink live: cloud's own spans -> event.span (Cost-0, no socket)")
 	}
@@ -197,6 +235,38 @@ func shutdownPlaneIngest(context.Context) error {
 		ps.logRcv.Stop()
 	}
 	return ps.sink.Close()
+}
+
+// insertSpans is the ONE span write path — both producers (the ZAP wire receiver
+// and the in-process SDK sink) hand it rows already shaped by planeSpanColumns,
+// and it writes the facts and then the summary they imply. Neither caller may
+// insert event.span directly: a span written without its event.trace partial is
+// a span the trace list cannot find, and that is exactly the state this file was
+// in while event.span held 172,789 distinct trace ids and event.trace held one.
+//
+// The partial write is NON-FATAL, matching pushOnce's discipline next door: the
+// spans are the facts and they are already durable, the summary is derived from
+// them, and returning an error here would tell the receiver its batch failed
+// after it had in fact landed — which on the wire path means the sender re-sends
+// it, adding its span count to num_spans a second time (start/end are min/max
+// and absorb the repeat; the count is a sum and does not). Failing soft costs a
+// stale summary; failing hard corrupts it.
+func (ps *planeSink) insertSpans(ctx context.Context, log luxlog.Logger, rows [][]any) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	if err := ps.sink.Insert(ctx, planeSpanTable, planeSpanColumns, rows); err != nil {
+		return err
+	}
+	partials := traceRowsOf(rows)
+	if len(partials) == 0 {
+		return nil
+	}
+	if err := ps.sink.Insert(ctx, planeTraceTable, planeTraceColumns, partials); err != nil {
+		log.Warn("plane trace summary write failed; spans landed, trace list stays stale",
+			"err", err, "spans", len(rows), "traces", len(partials))
+	}
+	return nil
 }
 
 // ── pure row builders (unit-tested without a store or a socket) ─────────────
@@ -343,6 +413,82 @@ func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
 			status,
 			attrs,
 		})
+	}
+	return rows
+}
+
+// traceRowsOf folds event.span rows into event.trace PARTIALS — this batch's
+// contribution to each trace's summary, which the AggregatingMergeTree merges
+// with min(start) / max(end) / sum(num_spans) into the whole trace. A partial is
+// not an approximation of the trace and must not try to be one: a trace's spans
+// arrive in many batches from many processes, and the only honest statement any
+// single writer can make is what IT carried.
+//
+// It takes the BUILT rows rather than the wire batch or the SDK spans on
+// purpose. The two producers disagree about everything upstream of the row —
+// one decodes a wire struct, the other reads an SDK interface — and agree
+// exactly at planeSpanColumns. Folding there means the summary is derived from
+// the same values that were inserted, by one function, so a span row and its
+// partial cannot drift apart. It is also why the fold reads positionally: the
+// row is already the shared shape, and the index constants are pinned by test.
+//
+// end is max(start + duration), NOT max(start): the trace ends when its LAST
+// span ends, and the span that ends last is frequently not the one that starts
+// last — a root server span starts first and outlives every child it awaits, so
+// max(start) would truncate the waterfall to the last child's start and every
+// trace would render as ending before its own root did.
+func traceRowsOf(spanRows [][]any) [][]any {
+	type partial struct {
+		start, end time.Time
+		numSpans   uint64
+	}
+	// Keyed by (org, trace_id) — event.trace's ORDER BY, and the reason org is
+	// part of it here: one wire batch can carry spans of several tenants, since
+	// planeOrg reads each span's own hanzo.org attribute.
+	acc := make(map[[2]string]*partial, len(spanRows))
+	order := make([][2]string, 0, len(spanRows))
+	for _, row := range spanRows {
+		if len(row) <= planeSpanColDuration {
+			continue
+		}
+		traceID, _ := row[planeSpanColTraceID].(string)
+		if traceID == "" {
+			continue // a span with no trace summarizes nothing
+		}
+		start, ok := row[planeSpanColTime].(time.Time)
+		if !ok {
+			continue
+		}
+		org, _ := row[planeSpanColOrg].(string)
+		// duration is unsigned nanoseconds, and both builders derive it from an
+		// int64 delta, so it is bounded by MaxInt64 and the conversion is exact.
+		dur, _ := row[planeSpanColDuration].(uint64)
+		end := start.Add(time.Duration(dur))
+
+		k := [2]string{org, traceID}
+		p := acc[k]
+		if p == nil {
+			acc[k] = &partial{start: start, end: end, numSpans: 1}
+			order = append(order, k)
+			continue
+		}
+		if start.Before(p.start) {
+			p.start = start
+		}
+		if end.After(p.end) {
+			p.end = end
+		}
+		p.numSpans++
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	// First-appearance order, not map order: the rows a batch writes are then a
+	// function of the batch alone, which is what makes the fold testable.
+	rows := make([][]any, 0, len(order))
+	for _, k := range order {
+		p := acc[k]
+		rows = append(rows, []any{k[0], k[1], p.start, p.end, p.numSpans})
 	}
 	return rows
 }
