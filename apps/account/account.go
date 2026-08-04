@@ -1,5 +1,4 @@
-// Package account is your own account: API keys you mint and revoke, org onboarding,
-// and wallet top-up.
+// Package account is your own account: API keys you mint and revoke, and org onboarding.
 //
 // It mounts the signed-in caller's OWN self-service surface natively in the unified
 // cloud binary — the Go port of the console's two NON-proxy Next server routes
@@ -12,9 +11,8 @@
 // reverse-proxies — app/cloud, app/ai — vanish in the one-binary model: the SPA calls
 // the canonical /v1/* on its own origin and the already-mounted subsystems answer. The
 // routes ported HERE do REAL server work a static SPA cannot: keys/onboard run
-// privileged IAM logic as the confidential `hanzo-console` client, and
-// embed/topup do server-side verification. Each has no pure-proxy equivalent,
-// so it must be ported.
+// privileged IAM logic as the confidential `hanzo-console` client, and embed does
+// server-side verification. Each has no pure-proxy equivalent, so it must be ported.
 //
 // The billing and store DATA are not among them, and the difference is the whole
 // lesson. They were ported as two catch-all forwarders — GET|POST /v1/billing/* and
@@ -39,8 +37,6 @@
 //	POST   /v1/orgs                  — create the caller's org (+ move them in on first run).
 //	GET    /v1/csrf                  — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
 //	GET    /v1/embed                 — brand-app embed entitlement + reachability probe (embed.go).
-//	POST   /v1/commerce/topup/wallet — HUSD on-chain verify → commerce credit (topup.go).
-//	GET    /v1/commerce/topup/rails  — the accepted on-chain rails the send UI renders (topup.go).
 //
 // ONE SUBSYSTEM REGISTRATION, at order 48. The order is a convention, not the
 // protection: the fiber fork inserts endpoint routes MOST-SPECIFIC-FIRST regardless of
@@ -230,14 +226,25 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	zip.Post(guard, "/orgs", o.onboard)
 	// Console module embed-entitlement + reachability probe (embed.go).
 	zip.Get(open, "/embed", o.embedStatus)
-	// HUSD wallet top-up (on-chain verify → commerce credit). A SPECIFIC commerce route
-	// that must beat the commerce embed (100), so it mounts here at 48, ahead of it.
-	zip.Post(write, "/commerce/topup/wallet", o.walletTopup)
-	// The accepted rails are public on-chain data (chain, token, treasury), read by
-	// the browser to render the send UI. A GET with no side effects and no secret,
-	// so it needs neither CSRF nor the write limiter — but it MUST sit beside the
-	// POST at this priority, for the same reason.
-	zip.Get(open, "/commerce/topup/rails", o.topupRails)
+	// The crypto wallet top-up (POST /commerce/topup/wallet + GET /commerce/topup/rails)
+	// used to mount here. It verified an on-chain transfer and then recorded the credit
+	// to commerce at POST /v1/billing/payment — an address NO app in either server repo
+	// has EVER registered, in any commit. So the last step of the only path that credited
+	// anything always failed, and a customer who had already sent real USDC to the
+	// treasury got a 502 for it. It was 501 besides: TOPUP_RAILS is configured in no
+	// environment, so `configured()` was false everywhere and the surface never took a
+	// cent.
+	//
+	// It is not a rename and there was nothing to point it at. Money-IN has ONE door
+	// (commerce's mint-gated POST /v1/billing/deposit, which requires an
+	// X-Idempotency-Key naming the settlement or tx hash that caused the credit), and
+	// the fleet deliberately routes NO mint address at the edge — the only two money-in
+	// paths manifest.Apps hands to an app are the card ones, both with a
+	// server-authoritative amount. Wiring this to the mint would newly expose that
+	// surface, which is a money decision and not a routing fix, so the phantom is
+	// deleted rather than plumbed. Deciding to accept crypto is a product decision that
+	// starts from the mint gate, not from this handler.
+
 	// The signed-in user's profile photo (avatar.go). The write is gated like the
 	// others here; the read takes no credentials because its whole job is to be an
 	// <img src> from another origin. Both are UNTYPED and cannot be otherwise —
