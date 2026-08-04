@@ -13,6 +13,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/team/token"
 	model "github.com/hanzoai/iam/pkg/model"
+	"github.com/hanzoai/orm/query"
 )
 
 // newTestApp registers a standalone api's account routes on a fresh app with no
@@ -42,9 +43,11 @@ func seedMember(t *testing.T, s *accountStore, org, account, slug, role string) 
 		ID: uuid.NewString(), Slug: slug, Name: slug, UUID: uuid.NewString(),
 		Owner: account, OwnerOrg: org,
 	}
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO workspaces (`+wsCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
-		w.ID, w.Slug, w.Name, w.UUID, w.Owner, w.OwnerOrg, w.DataID, w.Region, int64(1)); err != nil {
+	if _, err := s.db.Insert("workspaces", query.Params{
+		"id": w.ID, "slug": w.Slug, "name": w.Name, "uuid": w.UUID,
+		"owner": w.Owner, "owner_org": w.OwnerOrg, "data_id": w.DataID,
+		"region": w.Region, "created_at": int64(1),
+	}).WithContext(ctx).Execute(); err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
 	if err := s.AddMember(ctx, w.ID, account, role, slug); err != nil {

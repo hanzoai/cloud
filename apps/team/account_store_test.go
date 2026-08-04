@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/orm/query"
 
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
@@ -123,9 +124,10 @@ func TestSeatsCountsActiveMember(t *testing.T) {
 
 	seed := func(user, role string, bot, active int) {
 		t.Helper()
-		if _, err := s.db.ExecContext(ctx,
-			`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
-			 VALUES (?,?,?,?,?,?,1)`, w.ID, user, role, "m", bot, active); err != nil {
+		if _, err := s.db.Insert("members", query.Params{
+			"workspace_id": w.ID, "user_id": user, "role": role,
+			"display_name": "m", "is_bot": bot, "active": active, "joined_at": 1,
+		}).WithContext(ctx).Execute(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -171,9 +173,10 @@ func TestEnsureWorkspaceHealsMigratedMember(t *testing.T) {
 	}
 
 	// Corrupt the owner's row exactly as the migration did: bot + inactive.
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE members SET is_bot = 1, active = 0 WHERE workspace_id = ? AND user_id = ?`,
-		w.ID, acct); err != nil {
+	if _, err := s.db.Update("members",
+		query.Params{"is_bot": 1, "active": 0},
+		query.HashExp{"workspace_id": w.ID, "user_id": acct},
+	).WithContext(ctx).Execute(); err != nil {
 		t.Fatal(err)
 	}
 	if seats, _, _ := s.Seats(ctx, org); seats != 0 {
@@ -287,5 +290,66 @@ func TestSelectWorkspaceCore(t *testing.T) {
 	}
 	if dec.Account != acct || dec.Workspace != ws.UUID || dec.Org() != org {
 		t.Fatalf("workspace token claims = %+v, want acct=%s ws=%s org=%s", dec, acct, ws.UUID, org)
+	}
+}
+
+// TestAddMemberPreservesJoinOrderAndBotFlag pins the exact ON CONFLICT semantics that
+// keep AddMember on a verbatim statement. dbx's Upsert fans EVERY inserted column into
+// the DO UPDATE SET list, so expressing this through the builder would overwrite
+// joined_at and is_bot on a re-invite — and joined_at IS the order GuestRank ranks by
+// and the guest cap admits by, so an overwrite silently reshuffles who keeps access.
+// The four assertions below are the four columns the statement treats differently;
+// swapping in db.Upsert("members", …) turns the first two red.
+func TestAddMemberPreservesJoinOrderAndBotFlag(t *testing.T) {
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const org, owner = "acme", "550e8400-e29b-41d4-a716-446655440000"
+	const guest = "00000000-0000-4000-8000-000000000001"
+
+	w, err := s.EnsureWorkspace(ctx, org, owner, "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A member who joined long ago, since deactivated, already carrying a name.
+	if _, err := s.db.Insert("members", query.Params{
+		"workspace_id": w.ID, "user_id": guest, "role": roleGuest,
+		"display_name": "Original", "is_bot": 1, "active": 0, "joined_at": 42,
+	}).WithContext(ctx).Execute(); err != nil {
+		t.Fatal(err)
+	}
+	// Re-invite: a new role, a new display name.
+	if err := s.AddMember(ctx, w.ID, guest, "member", "Replacement"); err != nil {
+		t.Fatal(err)
+	}
+	ms, err := s.MembersForWorkspaceUUID(ctx, org, w.UUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got member
+	for _, m := range ms {
+		if m.UserID == guest {
+			got = m
+		}
+	}
+	if got.UserID == "" {
+		t.Fatal("re-invited member missing from the roster")
+	}
+	// PRESERVED — the two an Upsert would clobber.
+	if got.JoinedAt != 42 {
+		t.Errorf("joined_at = %d, want 42 preserved (guest join-order must not reshuffle)", got.JoinedAt)
+	}
+	if !got.IsBot {
+		t.Errorf("is_bot = false, want the row's own flag untouched by a re-invite")
+	}
+	// UPDATED — what a re-invite is for.
+	if got.Role != "member" {
+		t.Errorf("role = %q, want member (the re-invite's role)", got.Role)
+	}
+	if !got.Active {
+		t.Errorf("active = false, want a re-invite to clear a prior deactivation")
+	}
+	// KEPT — the CASE WHEN only fills an EMPTY name.
+	if got.DisplayName != "Original" {
+		t.Errorf("display_name = %q, want Original kept (only an empty name is filled)", got.DisplayName)
 	}
 }
