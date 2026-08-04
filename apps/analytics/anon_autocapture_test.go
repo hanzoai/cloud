@@ -49,7 +49,7 @@ const anonClick = `{"batch":[{"type":"event","event":"$click","distinctId":"anon
 func TestAnonAutocapture_ClickAdmittedThroughThePublicDoor(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
-	code, body := doHost(t, app, "/v1/event", "", "", "hanzo.ai", anonClick)
+	code, body := postAnon(t, app, "/v1/event", anonClick, nil)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("anonymous $click = %d (%s), want 503 ADMITTED — a logged-out interaction is "+
 			"the bulk of what a heatmap is drawn from, and it was being dropped behind a 200",
@@ -66,7 +66,7 @@ func TestAnonAutocapture_ClickAdmittedOnThePostHogWire(t *testing.T) {
 	app := mountApp(t)
 	body := `{"event":"$click","distinct_id":"anon-1",` +
 		`"properties":{"$current_url":"https://hanzo.ai/pricing","$pathname":"/pricing","$el":"nav/button[cta]"}}`
-	if code, got := doHost(t, app, "/v1/event", "", "", "insights.hanzo.ai", body); code != http.StatusServiceUnavailable {
+	if code, got := postAnon(t, app, "/v1/event", body, nil); code != http.StatusServiceUnavailable {
 		t.Fatalf("anonymous $click on the PostHog wire = %d (%s), want 503 ADMITTED", code, got)
 	}
 }
@@ -84,12 +84,12 @@ func TestAnonAutocapture_StoresTheRealURL(t *testing.T) {
 	if len(out) != 1 || dropped != 0 {
 		t.Fatalf("admitPublic = %d admitted / %d dropped, want 1/0", len(out), dropped)
 	}
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("the admitted click must be routable — an unnamed track is dropped by the write core")
 	}
-	if f.org != publicTenant {
-		t.Fatalf("fact org = %q, want %q", f.org, publicTenant)
+	if f.org != "acme" {
+		t.Fatalf("fact org = %q, want %q", f.org, "acme")
 	}
 	if f.name != "$click" {
 		t.Fatalf("stored name = %q, want $click", f.name)
@@ -170,7 +170,7 @@ func TestAnonAutocapture_NameIsTheServersNotTheCallers(t *testing.T) {
 			t.Fatalf("spelling %q stored as %q — the stored name must be the table's value, "+
 				"never the caller's bytes", wire, out[0].Event)
 		}
-		f, ok := normalize(publicTenant, time.Now(), out[0])
+		f, ok := normalize("acme", time.Now(), out[0])
 		if !ok || f.name != "$click" {
 			t.Fatalf("spelling %q normalized to %q (routable=%v), want $click", wire, f.name, ok)
 		}
@@ -209,7 +209,7 @@ func TestAnonAutocapture_VocabularyIsClosed(t *testing.T) {
 		if len(out) != 1 || dropped != 0 {
 			t.Fatalf("%q: admitted %d dropped %d, want 1/0", wire, len(out), dropped)
 		}
-		f, ok := normalize(publicTenant, time.Now(), out[0])
+		f, ok := normalize("acme", time.Now(), out[0])
 		if !ok || f.name != stored {
 			t.Fatalf("%q normalized to %q (routable=%v), want %q", wire, f.name, ok, stored)
 		}
@@ -245,7 +245,7 @@ func TestAnonAutocapture_OnlyTheAnnotationCrosses(t *testing.T) {
 	}
 	// Through the real normalizer nothing the caller chose reaches the attributes map —
 	// the dictionary an unbounded anonymous bag would attack.
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
@@ -271,7 +271,7 @@ func TestAnonPageview_StillCarriesNoCallerName(t *testing.T) {
 		t.Fatalf("projected pageview carries name %q — the kind family must drop the caller's name "+
 			"and let resolveName supply it", out[0].Event)
 	}
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok || f.name != "page_viewed" {
 		t.Fatalf("stored pageview name = %q (routable=%v), want the route's own page_viewed", f.name, ok)
 	}
@@ -304,7 +304,7 @@ func TestAnonError_NameIsNeverTheCallersExceptionClass(t *testing.T) {
 			t.Fatalf("class %.20q: admitted %d dropped %d, want 1/0 — an anonymous error still lands",
 				class, len(out), dropped)
 		}
-		f, ok := normalize(publicTenant, time.Now(), out[0])
+		f, ok := normalize("acme", time.Now(), out[0])
 		if !ok {
 			t.Fatalf("class %.20q: admitted error must stay routable", class)
 		}
@@ -324,7 +324,7 @@ func TestAnonError_ClassStillGroupsTheIssue(t *testing.T) {
 	fact := func(class, msg string) fact {
 		e := foldException(CaptureEvent{Type: "error", Error: &Exception{Type: class, Message: msg}})
 		out, _ := admitPublic([]CaptureEvent{e})
-		f, ok := normalize(publicTenant, time.Now(), out[0])
+		f, ok := normalize("acme", time.Now(), out[0])
 		if !ok {
 			t.Fatalf("class %q must stay routable", class)
 		}
@@ -357,7 +357,7 @@ func TestAnonError_OversizeClassIsDropped(t *testing.T) {
 	if len(out) != 1 || dropped != 0 {
 		t.Fatalf("admitted %d dropped %d, want the error to still land", len(out), dropped)
 	}
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
@@ -411,7 +411,7 @@ func TestAnonAnnotation_OversizeIsDropped(t *testing.T) {
 			t.Errorf("%s: reached the projection as %+v — an out-of-bounds annotation is not carried",
 				tc.what, out[0].Properties)
 		}
-		f, ok := normalize(publicTenant, time.Now(), out[0])
+		f, ok := normalize("acme", time.Now(), out[0])
 		if !ok {
 			t.Fatalf("%s: want routable", tc.what)
 		}
@@ -448,7 +448,7 @@ func TestAnonAnnotation_RealClientOutputFits(t *testing.T) {
 		Type: "event", Event: "$click",
 		Properties: map[string]any{"$el": label, "$path": trail, "$role": "button"},
 	}})
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
@@ -478,42 +478,41 @@ func TestAnonAnnotation_BoundsAreDerivedNotInvented(t *testing.T) {
 	}
 }
 
-// TestAnonError_RealOrgNeverTakesACallerChosenName is Red's probe, kept: the attack was
-// not theoretical and its worst form went through the published-site host, where the
-// projection's tenant is a REAL org rather than $public. Fifty distinct caller-chosen
-// classes in ONE request — the batch ceiling, and at the documented rate caps
-// 15 000 names/min from a single IP — must produce fifty rows all named `error`.
+// ownerOrg is a REAL org — the projected lane files into one (a team guest writes
+// into the org that invited it), which is what makes these rules load-bearing.
+const ownerOrg = "hanzo"
+
+// TestAnonError_RealOrgNeverTakesACallerChosenName is Red's probe, kept: the projected
+// lane files into a REAL org (a team guest writes into the org that invited it), so a
+// caller-chosen error class would mint cardinality in that org's ORDER BY key. Fifty
+// distinct classes in ONE request — the batch ceiling — must produce fifty rows all
+// named `error`.
 //
-// It asserts on the FACTS the write path emitted, not on the status code, because the
-// door returned 200 both before and after: the whole bug lived past the receipt.
+// Driven at the projection, which is where the rule lives: admitPublic decides what is
+// admitted, normalize stamps the tenant and the name.
 func TestAnonError_RealOrgNeverTakesACallerChosenName(t *testing.T) {
-	tightenPublicRate(t, 1_000_000, 1_000_000)
-	w := fakeWarehouse(t)
-	app := firstPartyApp(t)
-
-	var b strings.Builder
-	b.WriteString(`{"batch":[`)
+	evs := make([]CaptureEvent, 0, maxPublicBatch)
 	for i := 0; i < maxPublicBatch; i++ {
-		if i > 0 {
-			b.WriteByte(',')
-		}
 		// Each one distinct, and long enough that a survivor is unmistakable.
-		fmt.Fprintf(&b, `{"type":"error","path":"/pricing","error":{"type":"RED-%d-%s","message":"boom"}}`,
-			i, strings.Repeat("N", 200))
+		evs = append(evs, CaptureEvent{
+			Type: "error", Path: "/pricing",
+			Error: &Exception{Type: fmt.Sprintf("RED-%d-%s", i, strings.Repeat("N", 200)), Message: "boom"},
+		})
 	}
-	b.WriteString(`]}`)
-
-	if code := postHost(t, app, "yadota.hanzo.ai", "/v1/event", b.String(), nil); code != http.StatusOK {
-		t.Fatalf("batch = %d, want 200 — the errors are admitted, they are just not caller-named", code)
-	}
-	if len(w.facts) != maxPublicBatch {
-		t.Fatalf("stored %d facts, want %d — the errors must still land", len(w.facts), maxPublicBatch)
+	admitted, dropped := admitPublic(evs)
+	if len(admitted) != maxPublicBatch || dropped != 0 {
+		t.Fatalf("admitted %d dropped %d, want %d/0 — the errors must still land",
+			len(admitted), dropped, maxPublicBatch)
 	}
 	names := map[string]int{}
-	for _, f := range w.facts {
+	for _, e := range admitted {
+		f, ok := normalize(ownerOrg, time.Now(), foldException(e))
+		if !ok {
+			t.Fatal("want routable")
+		}
 		names[f.name]++
 		if f.org != ownerOrg {
-			t.Fatalf("fact landed in %q, want the site's real org %q", f.org, ownerOrg)
+			t.Fatalf("fact landed in %q, want the real org %q", f.org, ownerOrg)
 		}
 		if strings.Contains(f.name, "RED-") || len(f.name) > 64 {
 			t.Fatalf("caller bytes reached `name`: %.60q (len %d)", f.name, len(f.name))
@@ -560,7 +559,7 @@ func TestAnonAutocapture_CarriesNoException(t *testing.T) {
 			t.Errorf("%s/%s: the projection carried an exception onto a row that is not a fault", tc.kind, tc.event)
 		}
 		// The fold runs AFTER the projection, exactly as ingestDecoded runs it.
-		f, ok := normalize(publicTenant, time.Now(), foldException(out[0]))
+		f, ok := normalize("acme", time.Now(), foldException(out[0]))
 		if !ok {
 			t.Fatalf("%s/%s: want routable", tc.kind, tc.event)
 		}
@@ -592,7 +591,7 @@ func TestAnonError_StillCarriesItsException(t *testing.T) {
 		t.Fatal("the projection dropped the exception from an ERROR — the fix over-reached and the " +
 			"anonymous error stream is now empty")
 	}
-	f, ok := normalize(publicTenant, time.Now(), foldException(out[0]))
+	f, ok := normalize("acme", time.Now(), foldException(out[0]))
 	if !ok {
 		t.Fatal("want routable")
 	}
@@ -620,22 +619,25 @@ func TestAnonError_StillCarriesItsException(t *testing.T) {
 // the door answered 200 before the fix and answers 200 after: the whole bug lived past
 // the receipt.
 func TestAnonAutocapture_NoExceptionReachesARealOrg(t *testing.T) {
-	tightenPublicRate(t, 1_000_000, 1_000_000)
-	w := fakeWarehouse(t)
-	app := firstPartyApp(t)
-
-	body := fmt.Sprintf(
-		`{"batch":[{"type":"event","event":"$click","url":"https://yadota.hanzo.ai/pricing","path":"/pricing",`+
-			`"properties":{"$el":"nav/button[cta]"},"error":{"type":"TypeError","message":"%s","stack":"%s"}}]}`,
-		strings.Repeat("M", 22000), strings.Repeat("S", 10000))
-
-	if code := postHost(t, app, "yadota.hanzo.ai", "/v1/event", body, nil); code != http.StatusOK {
-		t.Fatalf("POST = %d, want 200 — the click is admitted, it just carries no fault", code)
+	admitted, dropped := admitPublic([]CaptureEvent{{
+		Type: "event", Event: "$click",
+		URL: "https://yadota.hanzo.ai/pricing", Path: "/pricing",
+		Properties: map[string]any{"$el": "nav/button[cta]"},
+		Error: &Exception{
+			Type:    "TypeError",
+			Message: strings.Repeat("M", 22000),
+			Stack:   strings.Repeat("S", 10000),
+		},
+	}})
+	if len(admitted) != 1 || dropped != 0 {
+		t.Fatalf("admitted %d dropped %d, want 1/0 — the click is admitted, it just carries no fault",
+			len(admitted), dropped)
 	}
-	if len(w.facts) != 1 {
-		t.Fatalf("stored %d facts, want 1", len(w.facts))
+	// The REAL pipeline order: the projection runs first, foldException second.
+	f, ok := normalize(ownerOrg, time.Now(), foldException(admitted[0]))
+	if !ok {
+		t.Fatal("want routable")
 	}
-	f := w.facts[0]
 	if f.org != ownerOrg {
 		t.Fatalf("fact landed in %q, want the site's real org %q", f.org, ownerOrg)
 	}
@@ -696,7 +698,7 @@ func TestAnonLane_CannotMintALensName(t *testing.T) {
 		} {
 			out, _ := admitPublic([]CaptureEvent{tc.ev})
 			for _, adm := range out {
-				f, ok := normalize(publicTenant, time.Now(), foldException(adm))
+				f, ok := normalize("acme", time.Now(), foldException(adm))
 				if !ok {
 					continue // unroutable is a drop, which is a pass
 				}
@@ -723,7 +725,7 @@ func TestAnonAutocapture_IsNotTheAdLensClick(t *testing.T) {
 		if len(out) != 1 {
 			t.Fatalf("%s must be admitted — it is the heatmap", n)
 		}
-		f, ok := normalize(publicTenant, time.Now(), out[0])
+		f, ok := normalize("acme", time.Now(), out[0])
 		if !ok {
 			t.Fatalf("%s must be routable", n)
 		}

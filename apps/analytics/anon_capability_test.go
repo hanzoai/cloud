@@ -8,13 +8,9 @@
 package analytics
 
 import (
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/zap-proto/zip"
 )
 
 // anon_capability_test.go — the TRUST-LEVEL invariant, proven at EVERY door.
@@ -62,22 +58,6 @@ const commercePostHog = `{"event":"order_completed","distinct_id":"attacker",` +
 // working on every door, so the fix is a capability drop and not a feature deletion.
 const pageviewWire = `{"batch":[{"type":"pageview","distinctId":"anon-1","path":"/pricing"}]}`
 
-// postHostBody is postHost (hostcarve_test.go) with the response body returned, so a
-// site-host case can assert the honest {accepted,dropped} receipt and not just a status.
-func postHostBody(t *testing.T, app *zip.App, host, path, body string) (int, []byte) {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "http://"+host+path, strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Host = host
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Test POST %s%s: %v", host, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	b, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, b
-}
-
 // roomyRate installs anonymous counters big enough that no capability test can be
 // masked by a 429 from a bucket another test in this package already spent. The rate
 // cap itself is pinned by TestPublic_RateLimited / TestPublic_PeerCeiling.
@@ -98,38 +78,9 @@ func TestAnonCommerce_RefusedOnEveryBrandHost(t *testing.T) {
 	}
 }
 
-// TestAnonCommerce_RefusedAtSiteHostDoor: the published-site carve is the second door
-// that reached full capability with no credential. It ran BEFORE the identity boundary
-// (serve.go mounts sites at 241, IdentityMiddleware at 267), so nothing there could
-// vouch for a caller — yet it wrote into the site's REAL org whatever the body said.
-// Anyone could aim it at any customer's org with a Host header.
-//
-// Before the fix all three paths answered 503 (admitted at full capability).
-func TestAnonCommerce_RefusedAtSiteHostDoor(t *testing.T) {
-	roomyRate(t)
-	app := carveApp(t, "yadota")
-	for _, door := range doors {
-		code, body := postHostBody(t, app, "yadota.hanzo.app", door.path, commerceFor(t, door))
-		if code == http.StatusServiceUnavailable {
-			t.Errorf("site-host POST %s: reached the write core at FULL capability — "+
-				"a Host header alone let a stranger write revenue/groupId/personId into the site's org", door.path)
-			continue
-		}
-		refusedAnon(t, "site-host POST "+door.path, code, body)
-	}
-}
-
-// TestAnonCommerce_RefusedOnBoundCustomDomain: the carve fires for a bound custom
-// domain too, so that door needed the same drop.
-func TestAnonCommerce_RefusedOnBoundCustomDomain(t *testing.T) {
-	roomyRate(t)
-	app := carveApp(t, "yadota")
-	code, body := postHostBody(t, app, "yadota.tech", "/v1/event", commerceWire)
-	if code == http.StatusServiceUnavailable {
-		t.Fatalf("custom-domain beacon reached the write core at FULL capability")
-	}
-	refusedAnon(t, "custom-domain anonymous commerce", code, body)
-}
+// The site-host carve is deleted, so "a Host header may not reach the write core" is
+// no longer a rule this door enforces — there is no site-host door. apps/sites'
+// TestSiteHostNeverIngests pins that a site host serves bytes and is terminal.
 
 // TestAnonIdentity_RefusedAtEveryDoor: `identify` and `group` are the two kinds that
 // bind an event to a named person and a named group. A caller nobody vouched for may
@@ -155,17 +106,21 @@ func TestAnonIdentity_RefusedAtEveryDoor(t *testing.T) {
 	}
 }
 
-// TestPublicCaptureOff_RefusesEveryAnonymousDoor: CLOUD_ANALYTICS_PUBLIC_CAPTURE is the
-// ONE anonymous-capture switch and it still governs every door — including the two that
-// used to route around the anonymous lane entirely (and therefore around this flag's
-// only enforcement point).
-func TestPublicCaptureOff_RefusesEveryAnonymousDoor(t *testing.T) {
-	t.Setenv(publicCaptureEnv, "off")
+// TestAnonymousRefusedOnEveryDoor: a keyless beacon is refused on every door, with
+// no switch to turn it back on. It used to be ACCEPTED into a reserved tenant and
+// answered 200 — the switch that governed it defaulted ON, so the silent-accept was
+// the shipped behaviour and only an operator who knew the flag existed could stop it.
+// Attribution is the key now, so there is nothing left to gate.
+func TestAnonymousRefusedOnEveryDoor(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
 	for _, d := range doors {
-		if code, body := doHost(t, app, d.path, "", "", "hanzo.ai", pageviewFor(t, d)); code != http.StatusForbidden {
-			t.Errorf("public-capture-off anonymous %s = %d (%s), want 403", d.path, code, body)
+		code, body := doHost(t, app, d.path, "", "", "hanzo.ai", pageviewFor(t, d))
+		if code != http.StatusUnauthorized {
+			t.Errorf("anonymous %s = %d (%s), want 401", d.path, code, body)
+		}
+		if !strings.Contains(string(body), "ingest_key_required") {
+			t.Errorf("anonymous %s body = %s, want the ingest_key_required code", d.path, body)
 		}
 	}
 }

@@ -25,10 +25,18 @@ import (
 // postAnon issues an ANONYMOUS POST — no X-User-Id, no X-Org-Id, no key of any kind —
 // with optional extra headers, returning the status and body. This is exactly the
 // shape a logged-out marketing page emits.
+// postAnon drives the PROJECTED lane. Since the keyless lane was deleted, the one
+// caller that reaches publicIngest is a REDUCED principal — a team guest, which holds
+// a credential proving its org but not its capability. It carries a guest token so
+// these tests exercise the projection, the bounds and the opt-out gate through the
+// door that still reaches them.
 func postAnon(t *testing.T, app *zip.App, path, body string, hdr map[string]string) (int, []byte) {
 	t.Helper()
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+teamToken(t, "acme", "a-real-team-secret",
+		map[string]any{"role": "guest"}, time.Now().Add(time.Hour).Unix()))
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
@@ -39,6 +47,14 @@ func postAnon(t *testing.T, app *zip.App, path, body string, hdr map[string]stri
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b
+}
+
+// refusedGuest is refusedAnon's signed twin: on the reduced lane the caller HAS a
+// credential, so a request that stored nothing is 403 insufficient_capability — it
+// needs capability, not another key.
+func refusedGuest(t *testing.T, what string, status int, body []byte) bool {
+	t.Helper()
+	return refused(t, what, status, body, http.StatusForbidden, "insufficient_capability")
 }
 
 // receipt decodes the {accepted,dropped} contract.
@@ -106,12 +122,11 @@ func TestAdmitPublic_CannotReachAttribution(t *testing.T) {
 // REAL normalizer — the one function that stamps tenant_id. Whichever tenant the door
 // supplies, the row carries EXACTLY that and never the org the body named:
 //
-//   - every /v1 door passes the publicTenant constant (handle, event.go);
-//   - the published-site host passes the org the site resolver returned for that host
-//     (installHostCarve, analytics.go), which is why a customer's own site analytics
-//     keep landing in the customer's org under this same projection.
+//   - the org is always the one the CREDENTIAL resolved to (handle, event.go), and
+//     never a body claim. There is no reserved anonymous tenant any more, so both
+//     cases here are real orgs.
 func TestAdmitPublic_DoorOwnsTheTenant(t *testing.T) {
-	for _, doorOrg := range []string{publicTenant, "yadota"} {
+	for _, doorOrg := range []string{"acme", "yadota"} {
 		out, _ := admitPublic([]CaptureEvent{{
 			Type: "pageview", GroupID: "maxpower", PersonID: "victim",
 			Properties: map[string]any{"org": "maxpower", "tenant_id": "maxpower"},
@@ -129,20 +144,6 @@ func TestAdmitPublic_DoorOwnsTheTenant(t *testing.T) {
 		if f.attributes["group_id"] != "" || f.person != "" || len(f.attributes) != 0 {
 			t.Fatalf("door %q: a body claim reached the fact: group=%q person=%q attrs=%v",
 				doorOrg, f.attributes["group_id"], f.person, f.attributes)
-		}
-	}
-}
-
-// TestPublicTenantOutsideOrgNamespace pins WHY the sentinel is safe: an IAM org slug is
-// lowercase ASCII alphanumerics and '-' (that is all the IAM slugifier emits), so a
-// '$'-carrying tenant cannot collide with a real org.
-func TestPublicTenantOutsideOrgNamespace(t *testing.T) {
-	if !strings.HasPrefix(publicTenant, "$") {
-		t.Fatalf("publicTenant %q must carry the reserved '$' so no IAM slug can collide", publicTenant)
-	}
-	for _, r := range publicTenant[1:] {
-		if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '-' {
-			t.Fatalf("publicTenant %q: unexpected byte %q", publicTenant, r)
 		}
 	}
 }
@@ -187,13 +188,13 @@ func TestAdmitPublic_ForeignOrgFieldsDropped(t *testing.T) {
 // fact carries the public tenant, not the org the body named.
 func TestAdmitPublic_ForeignOrgNeverStamped(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", GroupID: "maxpower"}})
-	// publicTenant is the org every /v1 door hands this lane (handle, event.go).
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	// "acme" is the org every /v1 door hands this lane (handle, event.go).
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if f.org != publicTenant {
-		t.Fatalf("fact org = %q, want %q — an anonymous write must never land in a real org", f.org, publicTenant)
+	if f.org != "acme" {
+		t.Fatalf("fact org = %q, want %q — an anonymous write must never land in a real org", f.org, "acme")
 	}
 	if f.org == "maxpower" || f.attributes["group_id"] == "maxpower" {
 		t.Fatalf("the body-named org reached the fact: org=%q group=%q", f.org, f.attributes["group_id"])
@@ -293,7 +294,7 @@ func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
 	// nothing else. (The typed error itself also fills the fault body — the error
 	// fact's first-class message/class/group — but the attributes map is the one
 	// place a caller-chosen KEY could survive, so it is the map that is pinned.)
-	f, ok := normalize(publicTenant, time.Now(), CaptureEvent{
+	f, ok := normalize("acme", time.Now(), CaptureEvent{
 		Type: folded.Type, Error: folded.Error, Properties: withSource(folded.Properties, sourceEvent),
 	})
 	if !ok {
@@ -342,7 +343,7 @@ func TestPublic_AnonymousErrorAccepted(t *testing.T) {
 // TestPublic_ForeignOrgClaimBuysNothing: an anonymous caller that names a foreign org
 // EVERY way the wire allows — the X-Org-Id header, a body org/tenant field, groupId —
 // is not refused at the GATE (it is anonymous traffic) but gains nothing: the only kind
-// it sent is non-allowlisted, so nothing is stored, the door answers 401, and no row
+// it sent is non-allowlisted, so nothing is stored, the door answers 403, and no row
 // exists to carry `maxpower`. The tenant it would have landed under is proven by
 // TestAdmitPublic_ForeignOrgNeverStamped.
 func TestPublic_ForeignOrgClaimBuysNothing(t *testing.T) {
@@ -350,11 +351,11 @@ func TestPublic_ForeignOrgClaimBuysNothing(t *testing.T) {
 	code, body := postAnon(t, app, "/v1/event",
 		`{"org":"maxpower","tenant_id":"maxpower","batch":[{"type":"event","event":"steal","groupId":"maxpower"}]}`,
 		map[string]string{"X-Org-Id": "maxpower"})
-	refusedAnon(t, "forged-org anonymous batch", code, body)
+	refusedGuest(t, "forged-org guest batch", code, body)
 }
 
 // TestPublic_NonAllowlistedKindRejected: a custom/product/billing event is refused
-// storage anonymously and the door says so (401). A mixed batch keeps its allowlisted
+// storage on the reduced lane and the door says so (403). A mixed batch keeps its allowlisted
 // events and drops the rest — and still 200s, which is why marketing telemetry lands
 // while the arbitrary surface stays shut.
 func TestPublic_NonAllowlistedKindRejected(t *testing.T) {
@@ -365,7 +366,7 @@ func TestPublic_NonAllowlistedKindRejected(t *testing.T) {
 		`{"batch":[{"type":"group","groupId":"maxpower"}]}`,
 	} {
 		code, got := postAnon(t, app, "/v1/event", body, nil)
-		refusedAnon(t, "non-allowlisted kind "+body, code, got)
+		refusedGuest(t, "non-allowlisted kind "+body, code, got)
 	}
 	// Mixed batch: the pageview survives (so the request reaches the warehouse → 503),
 	// the custom event does not.
@@ -476,16 +477,6 @@ func TestPublic_OptOutHonored(t *testing.T) {
 	}
 }
 
-// TestPublic_CaptureFlagOff: CLOUD_ANALYTICS_PUBLIC_CAPTURE is the ONE existing
-// anonymous-capture switch, and turning it off restores the strict principal-only door.
-func TestPublic_CaptureFlagOff(t *testing.T) {
-	t.Setenv(publicCaptureEnv, "false")
-	app := mountApp(t)
-	if code, body := postAnon(t, app, "/v1/event", anonPageview, nil); code != http.StatusForbidden {
-		t.Fatalf("public capture off ⇒ anonymous /v1/event want 403, got %d (%s)", code, body)
-	}
-}
-
 // TestPublic_PresentedKeyStillFailsClosed: the anonymous lane is for a caller that
 // presented NOTHING. A presented-but-unresolvable ingest key is still refused, never
 // downgraded into the public bucket — a misconfigured key must not silently file its
@@ -522,8 +513,8 @@ func TestAuthenticated_KeepsFullCapability(t *testing.T) {
 	commerce := `{"batch":[{"type":"event","event":"order_completed","revenue":99.5,` +
 		`"productId":"prod_1","quantity":2,"currency":"USD","groupId":"acme-team",` +
 		`"personId":"p1","properties":{"plan":"pro"}}]}`
-	if code, body := postAnon(t, app, "/v1/event", commerce, nil); code != http.StatusUnauthorized {
-		t.Fatalf("precondition: the commerce event must be dropped anonymously (401), got %d (%s)", code, body)
+	if code, body := postAnon(t, app, "/v1/event", commerce, nil); code != http.StatusForbidden {
+		t.Fatalf("precondition: the commerce event must be dropped on the reduced lane (403), got %d (%s)", code, body)
 	}
 	if code, body := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", commerce); code != http.StatusServiceUnavailable {
 		t.Fatalf("bearer commerce event want 503 (admitted, full capability), got %d (%s)", code, body)
@@ -534,8 +525,8 @@ func TestAuthenticated_KeepsFullCapability(t *testing.T) {
 		`{"batch":[{"type":"identify","distinctId":"u1","personId":"p1"}]}`,
 		`{"batch":[{"type":"group","groupId":"acme-team"}]}`,
 	} {
-		if code, got := postAnon(t, app, "/v1/event", body, nil); code != http.StatusUnauthorized {
-			t.Fatalf("precondition: %s must be dropped anonymously (401), got %d (%s)", body, code, got)
+		if code, got := postAnon(t, app, "/v1/event", body, nil); code != http.StatusForbidden {
+			t.Fatalf("precondition: %s must be dropped on the reduced lane (403), got %d (%s)", body, code, got)
 		}
 		if code, got := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", body); code != http.StatusServiceUnavailable {
 			t.Fatalf("bearer %s want 503 (admitted), got %d (%s)", body, code, got)
@@ -616,11 +607,11 @@ func TestFanOut_PublicTenantNeverReachesDestinations(t *testing.T) {
 	})
 	t.Cleanup(remove)
 
-	fanOut(publicTenant, []CaptureEvent{{Type: "pageview", Event: "$pageview"}})
+	fanOut("acme", []CaptureEvent{{Type: "pageview", Event: "$pageview"}})
 	// Give a real fan-out time to land.
 	time.Sleep(50 * time.Millisecond)
-	if got := seen(); len(got) != 0 {
-		t.Fatalf("the public tenant must never fan out to destinations, got orgs %v", got)
+	if got := seen(); len(got) != 1 || got[0] != "acme" {
+		t.Fatalf("a projected write must fan out to its own org, got %v", got)
 	}
 
 	// A real org still fans out — the guard is scoped to the sentinel, not a regression.
