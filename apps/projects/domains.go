@@ -10,16 +10,21 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
 
-// operatorOrgsFromEnv builds the set of orgs that may bind a custom domain
+// operatorOrgsFromEnv builds the set of orgs whose ADMINS may bind a custom domain
 // WITHOUT proving ownership (besides a SuperAdmin): CLOUD_PLATFORM_OPERATOR_ORGS
-// (comma-separated) when set, else the deployment's own brand org. The brand org
-// is the platform operator and manages customer DNS on their behalf, so its bind
-// IS the vouch. Every other org self-serves through the DNS challenge below.
+// (comma-separated) when set, else the deployment's own brand org. The brand org is
+// the platform operator and manages customer DNS on their behalf, so its admin's
+// bind IS the vouch. Every other org self-serves through the DNS challenge below.
+//
+// The SET names an org; it never names an authority. Naming an org here is the
+// DEPLOYMENT's grant of a capability to that tenant, and who inside that tenant may
+// exercise it is IAM's answer, not this file's — see vouches, which requires both.
 //
 // Each entry is the VERBATIM validated IAM owner, trimmed and nothing else —
 // the SAME value setDomains looks the caller up by (org → principal.Org, which
@@ -69,20 +74,62 @@ func publicHost(s *cloud.Service[state], slug string) string {
 	return slug + "." + s.State.apex
 }
 
-// ours reports whether host is a domain WE run, or anything beneath it. Those names
-// are ours to assign, and no DNS proof is even possible for them — a customer cannot
-// publish a TXT record in a zone we run.
+// ours reports whether host is a name WE hold — a domain we run, or anything
+// beneath it. Those names are ours to assign, and no DNS proof is even possible for
+// them: a customer cannot publish a TXT record in a zone we run.
 //
-// It asks the SAME shared self-domain set the sites serve gate uses
-// (sites.IsSelfHost), not just the published-site apex. Checking only the apex left
-// the brand domain claimable: `api.hanzo.ai` — our production API host — passed this
-// gate and took a first-come claim row. It could never serve (the serve gate excluded
-// it), but the row denied the host to its real owner for good. The sites apex is
-// always in that set, so this is strictly wider, never narrower; the explicit apex
-// test remains as the floor for a deployment that registered no self domains.
+// It asks the SAME shared predicate the storage invariant asks (sites.Ours, which
+// for a hostname is the self-domain set the serve gate uses), not just the
+// published-site apex. Checking only the apex left the brand domain claimable:
+// `api.hanzo.ai` — our production API host — passed this gate and took a first-come
+// claim row. It could never serve (the serve gate excluded it), but the row denied
+// the host to its real owner for good. The sites apex is always in that set, so
+// this is strictly wider, never narrower; the explicit apex test remains as the
+// floor, since the apex this app serves under is its own state.
 func ours(s *cloud.Service[state], host string) bool {
-	return sites.IsSelfHost(host) ||
+	return sites.Ours(host) ||
 		host == s.State.apex || strings.HasSuffix(host, "."+s.State.apex)
+}
+
+// vouches reports whether this caller may bind a host WITHOUT proving control of
+// it: the bind lands VERIFIED and routes immediately, and the "a host we operate"
+// refusal (ours) does not apply. It is the whole of the authority question this
+// surface asks, so it is one function and the gate below reads as one word.
+//
+// TWO GRANTS, BOTH ADMIN-SCOPED, and membership is neither.
+//
+//	SuperAdmin              platform sudo — the caller is a member of the reserved
+//	                        `admin` org (owner == admin, principal.IsSuperAdmin).
+//	                        Cross-tenant by construction, so it vouches in ANY org:
+//	                        this is the operator onboarding a customer's domain
+//	                        while switched into that customer's org.
+//	operator-org ADMIN      the deployment named this org an operator
+//	                        (CLOUD_PLATFORM_OPERATOR_ORGS, else the brand) AND IAM
+//	                        says the caller ADMINISTERS it (principal.IsOrgAdmin).
+//
+// The second grant is a CONJUNCTION of two independently administered facts — a
+// capability the deployment grants to an org, and the role IAM grants inside it —
+// and that is exactly what it used to be missing. It read `operatorOrgs[org]`
+// alone: bare MEMBERSHIP of the brand org, which every deployment has by default
+// (brand.Default = "hanzo"), so every staff account regardless of role, plus anyone
+// a brand-org admin ever invited, could bind `login.example-bank.com` live with no
+// DNS-01 proof — serving attacker content at any custom-domain customer whose DNS
+// already points at our edge, and denying the name to its rightful owner forever
+// (a verified row is first-come and global; the real owner gets 409).
+//
+// Membership is not an admin scope and the two must never be conjoined: that
+// conflation IS the privilege escalation. The org term is asked of the EFFECTIVE
+// org — the same value SanitizeIdentity keys X-User-IsOrgAdmin on — so the pair
+// reads "admin OF this operator org" and never "admin of some org I switched out
+// of". Both bits are stripped on ingress and re-minted only from validated claims,
+// so neither is forgeable.
+//
+// FAIL-SECURE either way: if an issuer stops signing the org role, IsOrgAdmin goes
+// false and the operator-org grant degrades to a PENDING claim carrying the DNS
+// challenge — the same self-service path every other tenant takes. Nothing opens,
+// and SuperAdmin onboarding is untouched because it never depended on that claim.
+func vouches(c *zip.Ctx, operatorOrgs map[string]bool, org string) bool {
+	return principal.IsSuperAdmin(c) || (operatorOrgs[org] && principal.IsOrgAdmin(c))
 }
 
 // projectsDomain is one row of a site's domains panel.
@@ -165,16 +212,19 @@ type projectsBoundDomains struct {
 // BindDomains attaches one or more CUSTOM public hostnames to this org's site.
 //
 // Binding a host you do not own would let you shadow it at the edge, so which
-// outcome you get depends on whether ownership is already established: a
-// platform admin or the platform-operator org — which manages customer DNS, so
-// its bind IS the vouch — binds VERIFIED immediately; any other org has the host
+// outcome you get depends on whether ownership is already established: a caller
+// vouches (a SuperAdmin, or an ADMIN of a platform-operator org — which manages
+// customer DNS, so its admin's bind IS the vouch) and binds VERIFIED immediately;
+// every other caller, INCLUDING a plain member of an operator org, has the host
 // CLAIMED as pending and gets the DNS challenge back in `bound[].records`. A
 // pending claim HOLDS the name so nobody else can take it, but it does not route
 // until POST .../domains/{host}/verify proves control.
 //
 // A hostname we operate is refused to a non-vouched caller (those are assigned
 // by the platform, never claimed), a host another site already holds is a 409,
-// and a reserved label is a 400. Claims and binds are idempotent for the same
+// and a name the platform holds is a 400 for EVERY caller — a vouch skips the
+// ownership proof, never the host table's own invariant. Claims and binds are
+// idempotent for the same
 // (org, slug), and re-claiming returns the SAME token rather than invalidating a
 // record the customer has already published. The edge cache-tag is flushed
 // afterwards so a newly-verified host serves the current build immediately.
@@ -193,7 +243,7 @@ func (o ops) bindDomains(ctx context.Context, in *projectsDomainsBind) (*project
 	if len(in.Domains) == 0 {
 		return nil, zip.ErrBadRequest("no domains to bind")
 	}
-	vouched := c.IsAdmin() || s.State.operatorOrgs[org]
+	vouched := vouches(c, s.State.operatorOrgs, org)
 	now := time.Now().Unix()
 	target := publicHost(s, p.Slug)
 
@@ -225,7 +275,7 @@ func (o ops) bindDomains(ctx context.Context, in *projectsDomainsBind) (*project
 		case errors.Is(bindErr, errHostTaken):
 			return nil, zip.ErrConflict("domain " + host + " is already bound to another site")
 		case errors.Is(bindErr, errReservedHost):
-			return nil, zip.ErrBadRequest("domain " + host + " is a reserved label")
+			return nil, zip.ErrBadRequest("domain " + host + " is a name the platform holds")
 		case bindErr != nil:
 			return nil, zip.Errorf(http.StatusInternalServerError, "bind %q: %v", host, bindErr)
 		}
