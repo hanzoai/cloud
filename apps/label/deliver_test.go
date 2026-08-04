@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/tenant"
 	"github.com/zap-proto/zip"
 )
 
@@ -35,7 +35,7 @@ type recorder struct {
 
 func (r *recorder) plane() columnar {
 	return columnar{
-		send: func(_ context.Context, _ cloud.Tenant, facts []Fact) error {
+		send: func(_ context.Context, _ tenant.Key, facts []Fact) error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			if r.down != nil {
@@ -48,7 +48,7 @@ func (r *recorder) plane() columnar {
 			r.sent = append(r.sent, ids)
 			return nil
 		},
-		sweep: func(_ context.Context, _ cloud.Tenant, ids []string) error {
+		sweep: func(_ context.Context, _ tenant.Key, ids []string) error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			if r.down != nil {
@@ -268,7 +268,7 @@ func TestTheCursorCannotStepOverAWriteItNeverSaw(t *testing.T) {
 	_, s := wireWith(t, "", w.plane())
 	st := storeOf(t, s, "acme")
 	ctx := t.Context()
-	tn, err := cloud.Qualify("hanzo", "acme")
+	tn, err := tenant.Mint("hanzo", "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ func TestConcurrentWritesAreAllDelivered(t *testing.T) {
 	// the end: if a row is still missing after this, the cursor is past it and
 	// NOTHING can ever send it.
 	st := storeOf(t, s, "acme")
-	tn, err := cloud.Qualify("hanzo", "acme")
+	tn, err := tenant.Mint("hanzo", "acme")
 	if err != nil {
 		t.Fatal(err)
 	}

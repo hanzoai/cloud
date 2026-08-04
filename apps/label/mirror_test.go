@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/tenant"
 )
 
 // TestTheMirrorSortKeyKeepsCorrections is the finding that changed the table.
@@ -83,9 +83,9 @@ func mustDeletion(t *testing.T) string {
 }
 
 // tenantFor mints the qualified key the columnar statements bind.
-func tenantFor(t *testing.T) cloud.Tenant {
+func tenantFor(t *testing.T) tenant.Key {
 	t.Helper()
-	tn, err := cloud.Qualify("hanzo", "acme")
+	tn, err := tenant.Mint("hanzo", "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
