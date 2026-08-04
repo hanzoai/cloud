@@ -3597,6 +3597,47 @@ The org an inbound webhook belongs to comes from the App INSTALLATION id via the
 acked `200 {"ignored":"unknown installation"}` and silently does nothing — a 200 on
 that path is not evidence it worked; check for sync/build activity.
 
+### Ask the PROCESS which commit it is — `revision` on the health payload
+
+```
+curl -s https://api.hanzo.ai/v1/health
+{"revision":"d25b0f5e70f79bfb04ec60b1f535f20db9a62062","status":"ok"}
+```
+
+Same field on the ops listener's `/healthz`, `/readyz` and `/health`
+(`CLOUD_HEALTH_LISTEN`, default `:9090`) — unauthenticated, which is the
+in-cluster read a rollout check makes. One field, one builder (`healthBody` in
+serve.go), so no surface can carry it while its siblings stay mute.
+
+A build that cannot name its commit answers `"unknown"` — never blank, never a
+branch name, never a short sha. `cloud.IsCommit` is that rule, and the BUILDER
+applies the same one before it will pass `build-arg:REVISION` at all
+(apps/platform), so the two ends of that wire cannot drift.
+
+**The version is NOT this answer.** `x-api-version` is the image TAG — an
+operator's label that `CLOUD_VERSION` can restate on a pod running any image.
+v1.801.426 was pinned, rolled out and served traffic while the job meant to build
+it sat `Failed`: the tag was right, the image was built from older source, both
+fixes it claimed were missing, and establishing that took exec-ing into the pod to
+read a panic out of a second binary. `revision` is written by the linker only
+(Dockerfile `GO_LDFLAGS`) and is deliberately unreadable from the environment,
+because an env var can name a commit it was never built from.
+
+The OCI `image.revision` label is fed the same build-arg and is NOT a substitute —
+a label is read by whoever thinks to open the registry, and this fleet's has read
+`unknown` without anyone noticing.
+
+Two things worth knowing when reading this:
+
+- `-X` on a symbol the linker cannot resolve is dropped SILENTLY, and a dropped
+  stamp reads as the legitimate `"unknown"`. The image build therefore greps its
+  own linked binaries for the sha after linking them, and `version_test.go` links
+  a real binary and asks the process rather than setting the variable itself.
+- `cmd/cloud` does not link the root package, so `-X …cloud.Version=` on `/cloud`
+  has always been a no-op — the flag appears in that binary's `go version -m`
+  record and the value is nowhere in its bytes. The PLUGINS serve `/v1/health`,
+  and they are stamped.
+
 ## The `hanzo` name is TWO binaries — the Rust CLI, and cmd/hanzo's control half
 
 The `hanzo` fabric CLI is the RUST binary at `~/work/hanzo/cli`. Its control-plane
