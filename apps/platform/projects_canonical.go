@@ -39,11 +39,11 @@ import (
 // the IAM. ident may be nil (no KMS plane) — the canonical client then fails
 // closed per read, which iamStore's 503 convention already covers.
 func newProjectStore(iamIssuer string, ident tenantKMSIdentity) ProjectStore {
-	base := cloud.IAMBaseURL(iamIssuer)
-	if v := getenv("IAM_URL", ""); strings.TrimSpace(v) == "" {
+	if !cloud.IAMExternal() {
 		// No external IAM named: the embedded subsystem is the canonical store.
 		return iamProjects{}
 	}
+	base := cloud.IAMBaseURL(iamIssuer)
 	return &canonicalProjects{
 		base:  base,
 		ident: ident,
