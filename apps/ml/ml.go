@@ -83,6 +83,13 @@ var (
 	trainjobGVR   = schema.GroupVersionResource{Group: "trainer.kubeflow.org", Version: "v1alpha1", Resource: "trainjobs"}
 	experimentGVR = schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1beta1", Resource: "experiments"}
 	trialGVR      = schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1beta1", Resource: "trials"}
+	// runtimeGVR is the CLUSTER-SCOPED ClusterServingRuntime — the thing an
+	// InferenceService actually runs ON. It is not a fourth managed resource: this
+	// subsystem never creates or reads one on a tenant's behalf (a tenant names a
+	// runtime in its own spec, or kserve matches one by model format). It is here
+	// because the serving plane's CAPACITY is a fact only this coordinate answers,
+	// and health has to state it — see health.
+	runtimeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1alpha1", Resource: "clusterservingruntimes"}
 )
 
 // resourceKind binds a GVR to the apiVersion/kind strings needed to build an
@@ -254,11 +261,14 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// reporting ACTUAL k8s reachability + CRD presence.
 	//
 	// UNTYPED BY DESIGN — both answer 503 carrying the degraded REPORT as their
-	// body (status/k8s/error/crds), which is the point of a real probe. A typed op
-	// can only reach a non-2xx by returning an error, and zip renders that as its
-	// own envelope, dropping the report.
-	gml.Get("/health", health(s, "ml", isvcGVR))
-	gtrain.Get("/health", health(s, "train", trainjobGVR, experimentGVR))
+	// body (status/k8s/error/crds + the serving plane's runtime count), which is the
+	// point of a real probe. A typed op can only reach a non-2xx by returning an
+	// error, and zip renders that as its own envelope, dropping the report.
+	//
+	// Only SERVING has a capacity fact: a model needs a runtime to run on, while a
+	// TrainJob and an Experiment carry their own images and need none.
+	gml.Get("/health", health(s, "ml", runtimeGVR, isvcGVR))
+	gtrain.Get("/health", health(s, "train", schema.GroupVersionResource{}, trainjobGVR, experimentGVR))
 }
 
 // The prose for the seven routes above that are untyped BY DESIGN. Their reasons
@@ -353,13 +363,19 @@ func init() {
 	openapi.Describe("/v1/ml/health", http.MethodGet,
 		"Whether model serving can actually work right now",
 		"Reports whether the model-serving plane is genuinely usable: that the Kubernetes "+
-			"API answers, and that the InferenceService CRD is actually served by this "+
-			"cluster. It is a REAL probe, not status theatre — it makes a live call rather "+
-			"than reporting a flag set at boot.\n\n"+
+			"API answers, that the InferenceService CRD is actually served by this cluster, "+
+			"and that the cluster holds at least one serving runtime to run a model ON. It is "+
+			"a REAL probe, not status theatre — it makes a live call rather than reporting a "+
+			"flag set at boot.\n\n"+
 			"200 only when everything checks out. Otherwise 503 CARRYING THE REPORT — which "+
 			"component failed, and the real error — and that body is the reason this is not a "+
 			"typed op: a typed op reaches a non-2xx by returning an error, and the envelope "+
 			"that produces would drop exactly the detail the probe exists to deliver.\n\n"+
+			"The runtime count is reported as its own field and is a SEPARATE fact from the "+
+			"CRD being served: a cluster with the CRD but no runtime accepts a deploy and then "+
+			"never schedules it, so reporting only the CRD would answer 200 while every model "+
+			"hangs. A runtime list this service cannot read reports the read error instead of a "+
+			"count, because a missing grant is a broken probe and not an empty cluster.\n\n"+
 			"It answers about the cluster, not about a tenant, so it takes no org and reveals "+
 			"no tenant data. A cluster with no kserve CRD reports degraded honestly rather "+
 			"than failing later at the first deploy.")
@@ -539,10 +555,18 @@ func predict(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.Bytes(resp.StatusCode, rb)
 }
 
-// health is a REAL probe: it verifies the API server is reachable and that the
-// subsystem's CRDs are served, and reports the actual state. 200 only when
-// everything is ok; 503 + the real reason otherwise (never status-theater).
-func health(s *cloud.Service[state], name string, gvrs ...schema.GroupVersionResource) zip.Handler {
+// health is a REAL probe: it verifies the API server is reachable, that the
+// subsystem's CRDs are served, and — where the plane has one — that it holds the
+// CAPACITY to run what it accepts. 200 only when everything is ok; 503 + the real
+// reason otherwise (never status-theater).
+//
+// `capacity` names a cluster-scoped resource this plane needs at least ONE of, or
+// is the zero GVR for a plane with no such fact. A served CRD is not capacity:
+// kserve admits an InferenceService whose model format no ClusterServingRuntime
+// supports and simply never schedules it, so a probe that reads only "is the CRD
+// served" answers 200 while every deploy hangs. Purging the last runtime is a
+// legitimate operator act; doing it INVISIBLY is what this clause forbids.
+func health(s *cloud.Service[state], name string, capacity schema.GroupVersionResource, gvrs ...schema.GroupVersionResource) zip.Handler {
 	return func(c *zip.Ctx) error {
 		res := map[string]any{"service": name, "status": "ok"}
 		if s.State.dyn == nil {
@@ -565,6 +589,23 @@ func health(s *cloud.Service[state], name string, gvrs ...schema.GroupVersionRes
 			}
 		}
 		res["crds"] = crds
+		// The two failures here are DIFFERENT states and are reported as different
+		// values, because they call for different operator acts: an unreadable list
+		// (no RBAC, group not served) is a broken probe, and a readable EMPTY list is
+		// a plane with nothing to serve on. Folding either into the other would let a
+		// missing grant read as "no capacity" — or worse, the reverse.
+		if capacity.Resource != "" {
+			list, err := s.State.dyn.Resource(capacity).List(ctx, metav1.ListOptions{})
+			switch {
+			case err != nil:
+				res[capacity.Resource], allOK = err.Error(), false
+			default:
+				res[capacity.Resource] = len(list.Items)
+				if len(list.Items) == 0 {
+					allOK = false
+				}
+			}
+		}
 		if !allOK {
 			res["status"] = "degraded"
 			return c.JSON(http.StatusServiceUnavailable, res)

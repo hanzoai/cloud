@@ -70872,9 +70872,11 @@ paths:
   /v1/ml/health:
     get:
       description: |-
-        Reports whether the model-serving plane is genuinely usable: that the Kubernetes API answers, and that the InferenceService CRD is actually served by this cluster. It is a REAL probe, not status theatre — it makes a live call rather than reporting a flag set at boot.
+        Reports whether the model-serving plane is genuinely usable: that the Kubernetes API answers, that the InferenceService CRD is actually served by this cluster, and that the cluster holds at least one serving runtime to run a model ON. It is a REAL probe, not status theatre — it makes a live call rather than reporting a flag set at boot.
 
         200 only when everything checks out. Otherwise 503 CARRYING THE REPORT — which component failed, and the real error — and that body is the reason this is not a typed op: a typed op reaches a non-2xx by returning an error, and the envelope that produces would drop exactly the detail the probe exists to deliver.
+
+        The runtime count is reported as its own field and is a SEPARATE fact from the CRD being served: a cluster with the CRD but no runtime accepts a deploy and then never schedules it, so reporting only the CRD would answer 200 while every model hangs. A runtime list this service cannot read reports the read error instead of a count, because a missing grant is a broken probe and not an empty cluster.
 
         It answers about the cluster, not about a tenant, so it takes no org and reveals no tenant data. A cluster with no kserve CRD reports degraded honestly rather than failing later at the first deploy.
       operationId: get_v1_ml_health
