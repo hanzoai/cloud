@@ -722,9 +722,18 @@ func TestEveryUntypedRouteDeclaresItsBodies(t *testing.T) {
 			}
 			continue
 		}
+		// Any declared media type counts: an asset route answers JavaScript, not
+		// JSON (openapi.Bytes), and requiring application/json here would force a
+		// document that lies about what the handler sets.
 		resp, ok := op.Responses["2XX"]
-		if !ok || len(resp.Content["application/json"].Schema) == 0 {
+		if !ok || len(resp.Content) == 0 {
 			t.Errorf("%s publishes no 2XX body schema", key)
+			continue
+		}
+		for media, m := range resp.Content {
+			if len(m.Schema) == 0 {
+				t.Errorf("%s publishes a 2XX %s with no schema", key, media)
+			}
 		}
 		_ = path
 	}
