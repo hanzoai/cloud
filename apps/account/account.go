@@ -599,13 +599,68 @@ type onboardResp struct {
 	// Additional is true when the caller already had an organization and this one
 	// was created WITHOUT moving them into it — they reach it via the org switcher.
 	Additional bool `json:"additional"`
+	// AccessKey is the identifier of the org-scoped credential provisioning minted
+	// with the organization. Present on a first run that actually minted one.
+	AccessKey string `json:"accessKey,omitempty"`
+	// AccessSecret is that credential's confidential half, returned ONCE — on the
+	// response that mints it and never again. IAM keeps only its argon2id digest
+	// and blanks the plaintext, so this is the single moment it exists in a form
+	// its owner can read; a replay of the same provision re-reveals nothing.
+	AccessSecret string `json:"accessSecret,omitempty"`
+}
+
+// hasHomeOrg reports whether the caller already OWNS an organization — the fact
+// that separates a FIRST-RUN onboarding from an ADDITIONAL one.
+//
+// Carrying an X-Org-Id is NOT that fact, and reading it as one is what left a
+// fresh sign-up unable to get a workspace. Federated sign-up files a brand-new
+// user under the sign-up APPLICATION's own organization (iam
+// internal/oidc/federation.go: `org := app.Organization`, which for hanzo-console
+// is the brand org — the same value hanzoai/account publishes as SignupOrg), so
+// the very first request a new customer ever makes already carries an owner.
+// Taken for a home it sent them down the ADDITIONAL branch, which creates an org
+// and leaves them OUTSIDE it, and answered `personal: true` with a 409 that was
+// true of the landing org and useless to the person who had just signed up.
+//
+// The orgs a sign-up can land in are exactly the ones this package already
+// refuses to hand to a customer — onboarding.go's reservedOrgs, the brand/staff
+// and IAM system orgs. One list, one fact, asked twice: an org no customer may
+// CREATE is likewise an org no customer can be said to OWN. Naming the set rather
+// than the single brand constant is also what keeps a white-labelled deployment
+// correct, where the landing org is that brand's own.
+//
+// STANDING BEATS THE LANDING, and that is not a nicety. A SuperAdmin IS a member
+// of the reserved `admin` org — that membership is the whole definition — so
+// treating it as a landing and moving them out would strip the privilege. An org
+// ADMIN therefore always counts as owning their org. Only IAM may attest to that,
+// so it is read from the authoritative row; a header would let a caller elect
+// their own move.
+//
+// A caller already in a real tenant is spared the read entirely: that org is
+// theirs whatever standing they hold in it, so an invited member creating a
+// second org is never yanked out of the team that invited them.
+func hasHomeOrg(ctx context.Context, iam *iamClient, cr caller) (bool, error) {
+	if cr.owner == "" {
+		return false, nil // no org at all — unambiguously a first run
+	}
+	if !isReservedOrg(cr.owner) {
+		return true, nil // a real tenant: theirs, and never to be moved out of
+	}
+	row, err := iam.getUserRow(ctx, cr.id)
+	if err != nil {
+		// Fail closed: unresolved standing must never be read as "no standing",
+		// because that answer is the one that MOVES the user.
+		return false, zip.Errorf(http.StatusBadGateway, "could not resolve your account: %v", err)
+	}
+	return row.IsAdmin, nil
 }
 
 // Onboard creates the caller's organization. Two flows, keyed on whether the caller
 // already has a home org (mirrors app/onboard/route.ts):
 //
-//   - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT
-//     carries the new owner and the cloud scopes everything to it.
+//   - FIRST-RUN (no home org): create + MOVE the user in as admin, so their next
+//     JWT carries the new owner and the cloud scopes everything to it. This is the
+//     path a fresh OAuth sign-up takes, from the sign-up application's org.
 //   - ADDITIONAL (owner set): create the org but do NOT move the user — a move
 //     changes their IAM owner (stripping a SuperAdmin's status + orphaning their
 //     current org). They reach the new org via the OrgSwitcher, which re-scopes
@@ -625,7 +680,10 @@ func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) 
 	body := *in
 	rctx := c.Context()
 
-	additional := cr.owner != ""
+	additional, herr := hasHomeOrg(rctx, s.State.iam, cr)
+	if herr != nil {
+		return nil, herr
+	}
 	if additional && body.Personal {
 		return nil, zip.ErrConflict("you already have an organization; name the new one explicitly")
 	}
@@ -678,12 +736,20 @@ func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) 
 	return &onboardResp{Org: slug, DisplayName: displayName, Additional: false}, nil
 }
 
-// onboardFirstRun drives the ONE atomic IAM provision for a zero-org caller (create
-// org + move them in as admin + mint the hashed org-scoped credential), replacing
-// the create-org + move-user pair so a mid-flight retry converges on the founder's
-// own org instead of orphaning it. The org starts at a ZERO balance — usage is
-// pre-paid, so there is no signup grant. Split out so the provisioning glue is
-// unit-tested against mock IAM without the CSRF/routing/principal shell.
+// onboardFirstRun drives the ONE atomic IAM provision for a caller with no home
+// org (create org + move them in as admin + mint the hashed org-scoped
+// credential), replacing the create-org + move-user pair so a mid-flight retry
+// converges on the founder's own org instead of orphaning it. The org starts at a
+// ZERO balance — usage is pre-paid, so there is no signup grant. Split out so the
+// provisioning glue is unit-tested against mock IAM without the CSRF/routing/
+// principal shell.
+//
+// The minted credential travels back on THIS response because this is the only
+// moment it can: IAM stores the argon2id digest and blanks the plaintext, so the
+// secret exists in readable form exactly once, in the answer to the call that
+// minted it. Dropping it here left a customer holding an account whose credential
+// had been issued and could never be obtained. It is revealed, never persisted in
+// the clear, and a replay (which mints nothing) carries no secret at all.
 func onboardFirstRun(ctx context.Context, iam *iamClient, callerID, slug, displayName string, personal bool) (onboardResp, error) {
 	row, err := iam.getUserRow(ctx, callerID)
 	if err != nil {
@@ -693,7 +759,10 @@ func onboardFirstRun(ctx context.Context, iam *iamClient, callerID, slug, displa
 	if err != nil {
 		return onboardResp{}, zip.Errorf(http.StatusBadGateway, "could not provision the organization: %v", err)
 	}
-	return onboardResp{Org: res.Org, DisplayName: displayName, Additional: false}, nil
+	return onboardResp{
+		Org: res.Org, DisplayName: displayName, Additional: false,
+		AccessKey: res.AccessKey, AccessSecret: res.AccessSecret,
+	}, nil
 }
 
 // resolveOnboardName derives the base slug + display name from the request, or a

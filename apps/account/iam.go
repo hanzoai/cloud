@@ -122,10 +122,16 @@ func (c *iamClient) provision(ctx context.Context, owner, name, orgSlug string, 
 
 // userRow is the subset of an IAM user the onboarding path reads to resolve the
 // caller's authoritative (owner, name) — a zero-org caller's owner is not on its
-// token, so provision needs it from the row.
+// token, so provision needs it from the row — and whether they ADMIN the org they
+// are in, which is what tells a home org from a place they merely landed.
 type userRow struct {
 	Owner string `json:"owner"`
 	Name  string `json:"name"`
+	// IsAdmin is IAM's org-admin bit: standing in Owner, as opposed to mere
+	// membership of it. It is read from the ROW and never from a header — the
+	// decision it feeds moves a user between organizations, so a caller must not
+	// be able to elect their own move.
+	IsAdmin bool `json:"isAdmin"`
 }
 
 // getUserRow resolves the user by the caller's id (the same read the move did) into
