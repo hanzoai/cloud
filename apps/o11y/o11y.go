@@ -609,7 +609,10 @@ func MountO11y(host *zip.App, deps cloud.Deps) error {
 	if err := mount(a, host, deps); err != nil {
 		return err
 	}
-	return host.Graft(a)
+	// zip v1.23: Use is the ONE composition verb, and an *App IS a Component. The
+	// address-conflict check Graft ran here now runs at Build over the whole program.
+	host.Use(a)
+	return nil
 }
 
 // mount performs the ordered sub-mounts that make up the one observability

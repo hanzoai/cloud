@@ -368,7 +368,11 @@ func safeMount(app cloud.Router, db orm.DB) (err error) {
 	if host == nil {
 		return fmt.Errorf("iam: the router is not a zip App, so IAM cannot be grafted")
 	}
-	return host.Graft(iamserver.NewApp(db))
+	// zip v1.23: Use is the ONE composition verb, and an *App IS a Component, so
+	// the child is included by reference. Graft refused an address conflict at the
+	// call; Use defers that verdict to Build, where the whole program is known.
+	host.Use(iamserver.NewApp(db))
+	return nil
 }
 
 // mountFailClosed serves an honest JSON 503 on every address IAM answers when IAM
