@@ -28,6 +28,12 @@ import (
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
+// compose installs what the program's composer installs — cloud.Bridge, once at
+// the app root. A subsystem never installs its own, so a test app owes the same
+// root install; without it every org-scoped op answers a 403 no production
+// program would produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // newService builds a wallets service over a fresh temp store with the given custody set,
 // installs it as the process singleton, and mounts the routes on a fresh app.
 func newService(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Service[state], *zip.App) {
@@ -45,6 +51,7 @@ func newService(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Servic
 	mounted = s
 	t.Cleanup(func() { mounted = nil })
 	app := zip.New(zip.Config{Logger: log})
+	compose(app)
 	routes(app, s)
 	return s, app
 }

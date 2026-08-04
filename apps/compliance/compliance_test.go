@@ -45,6 +45,13 @@ func (f fakeProvider) Check(context.Context, string, string) (idv.Result, error)
 	return idv.Result{Ref: "ref_" + f.name, Status: f.checkStatus}, nil
 }
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, and
+// in a test the test is the composer, so it owes the same install. A test that
+// skips it does not test a stricter program — it tests one where every op that
+// reads the org answers a refusal production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mount brings compliance up on a bare app with a real audit recorder, and
 // returns the app + the recorder for assertions. The provider defaults to Manual.
 func mount(t *testing.T) (*zip.App, *audit.Recorder) {
@@ -55,6 +62,7 @@ func mount(t *testing.T) (*zip.App, *audit.Recorder) {
 		t.Fatalf("audit.Open: %v", err)
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Audit: rec}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -173,6 +181,7 @@ func mountWithWebhook(t *testing.T, secret string) *zip.App {
 		t.Fatalf("audit.Open: %v", err)
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{
 		Logger: luxlog.New("test"), DataDir: t.TempDir(), Audit: rec,
 		KMS: fakeKMS{ref: "kms://idv-webhook", secret: []byte(secret)},

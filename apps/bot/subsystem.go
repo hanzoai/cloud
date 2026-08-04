@@ -195,13 +195,10 @@ type ops struct{ s *cloud.Service[state] }
 // registration below. A typed op answers ONE marshalled value at ONE declared
 // success status, and these three do not.
 func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there. fiber runs middleware in registration
-	// order, so one installed after its leaves never runs. Installed through the
-	// scope's Use, once per declared prefix, so it lands on exactly the subtrees
-	// this subsystem declares (/v1/bot/connect, /v1/bot/nodes, /v1/bot/peer/invoke)
-	// rather than on a /v1/bot the scope does not own — which would fail the mount.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here. Whoever composes the program installs it
+	// once at the root — after the identity check that mints the validated org and
+	// before any subsystem registers a route (serve.go) — because that order is a
+	// property of the whole program and no subsystem can assert it for itself.
 
 	// One transport for the process, not one per dial: it carries the uptime a
 	// node reads out of the handshake, which is the process's, not the socket's.

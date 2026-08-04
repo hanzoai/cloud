@@ -150,16 +150,11 @@ type ops struct{ s *cloud.Service[state] }
 // groups, because joining a "/v1/vpcs" prefix with an empty leaf yields
 // "/v1/vpcs/" — a different path from the one this surface has always served.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// cloud.Bridge carries into a typed op the request its signature drops — this
-	// subsystem resolves its tenant through tenant(), which reads the validated
-	// principal AND the SuperAdmin bit, so it needs the request itself and not
-	// only the org. On the scoped Router this installs once per DECLARED prefix
-	// (/v1/vpcs, /v1/balancers) and nowhere else. It must precede the leaves
-	// below: fiber runs middleware in registration order, so one installed after
-	// them never runs for them. Serve installs one app-wide too — nesting is
-	// harmless (the inner one is what the handler sees) and the tests mount this
-	// subsystem on a bare app with no Serve, so this install is what makes them pass.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge belongs to the composer — the fused host installs it at its
+	// root, and a plugin program's constructor does the same — so it is already
+	// in place when these ops run. This package only reads what it parks:
+	// tenant() resolves the validated principal and the SuperAdmin bit from the
+	// context.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
 		s.Log.Error("do: router exposes no op registry; the DigitalOcean surface would serve routes no projection knows")

@@ -108,6 +108,7 @@ func TestEnablement_OptInRefusesNonBeta(t *testing.T) {
 func mountEnablement(t *testing.T) func(method, path, body string, hdr map[string]string) (*http.Response, []byte) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)

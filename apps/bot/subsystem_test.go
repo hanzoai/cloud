@@ -20,6 +20,15 @@ import (
 // an i/o timeout, which teaches nothing. The generous bound still fails a hang.
 var botTestCfg = zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing — and a test that skips it does not
+// test a stricter program, it tests a program where every org-scoped op answers
+// 403 for a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountBot builds the surface over a registry the test controls, through the same
 // routes() the binary calls — so what a test drives is the code that ships.
 func mountBot(t *testing.T, reg *Registry) *zip.App {
@@ -30,6 +39,7 @@ func mountBot(t *testing.T, reg *Registry) *zip.App {
 		State: state{reg: reg},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	compose(app)
 	routes(app, s, deps)
 	return app
 }

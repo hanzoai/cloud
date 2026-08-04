@@ -150,15 +150,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //
 // Registration order is match order, and it is the order it has always been.
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
-	// The bridge FIRST, bounded to destinations' own subtree: a typed op receives
-	// only a context, so the validated org has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Listen installs one app-wide too; nesting is harmless (the
-	// inner one is what the handler sees), and having it here is what makes this
-	// package's own tests — which mount on a bare zip.App — exercise the same
-	// tenancy the binary does.
+	// A typed op receives only a context, so the validated org has to be parked
+	// there. cloud.Bridge parks it, and the COMPOSER installs it, not this
+	// subsystem: the fused host once at its root (serve.go), and a plugin
+	// program's constructor likewise. An install here would only repeat the one
+	// the program already carries.
 	g := app.Group("/v1/destinations")
-	g.Use(cloud.Bridge())
 
 	o := ops{s: s}
 	zip.Get(zapp, "/v1/destinations", o.list)

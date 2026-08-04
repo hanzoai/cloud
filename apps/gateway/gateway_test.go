@@ -16,7 +16,14 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mountApp wires /v1/gateway over a real temp-dir store and returns both so a test
+// compose installs what a host installs. A subsystem never installs cloud.Bridge:
+// the program's composer owns it — serve.go at the root of the fused host, the
+// plugin constructor for a plugin program. In a test the test is the composer, so
+// it owes the same install; skipping it drives a program where every org-scoped op
+// answers 403 for a reason production callers never see.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
+// mountApp builds /v1/gateway over a real temp-dir store and returns both so a test
 // can assert the HTTP surface and the persisted state.
 func mountApp(t *testing.T) (*zip.App, *edge.Store) {
 	t.Helper()
@@ -25,6 +32,7 @@ func mountApp(t *testing.T) (*zip.App, *edge.Store) {
 		t.Fatalf("store: %v", err)
 	}
 	app := zip.New(zip.Config{})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -313,6 +321,7 @@ func TestSuperAdmin_ReadsTheLaneWithNoTenant(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 	tr := edge.NewTraffic()
 	app := zip.New(zip.Config{})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st, Traffic: tr}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -362,6 +371,7 @@ func TestOrgAdmin_CannotReadTheLaneWithNoTenant(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 	tr := edge.NewTraffic()
 	app := zip.New(zip.Config{})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st, Traffic: tr}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

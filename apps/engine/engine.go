@@ -160,10 +160,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/engine")
 	o := ops{s: s}
 
-	// Bridge FIRST: a typed op receives only a context, so the validated
-	// principal reaches it by being parked there — never as an In field.
-	g.Use(cloud.Bridge())
-
+	// A typed op receives only a context, so the validated principal reaches it
+	// parked there by cloud.Bridge — never as an In field. The composer owns
+	// that install, once at its root; this group is a bare path prefix.
 	zip.Get(g, "/status", o.status,
 		zip.WithOperationID("engineStatus"),
 		zip.WithSummary("Whether the serving runtime is reachable, and which build it runs"))

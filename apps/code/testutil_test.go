@@ -69,14 +69,21 @@ func newTestService(t *testing.T) *service {
 	return s
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func newTestApp(t *testing.T) (*zip.App, *service) {
 	t.Helper()
 	s := newTestService(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	// The REAL registration, not a reconstruction of it: routes() is what Mount
-	// calls, so the Bridge that carries the validated org to every typed op is
-	// exercised here exactly as the binary installs it. A hand-listed copy drifts
-	// silently the first time a route moves.
+	// calls, so every typed op is exercised here exactly as the binary serves it.
+	// A hand-listed copy drifts silently the first time a route moves.
 	if err := routes(app, s); err != nil {
 		t.Fatalf("routes: %v", err)
 	}

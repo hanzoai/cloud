@@ -100,17 +100,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // channels/generate/publish) never collide with the parameterised transition route
 // (which is three segments deep), so registration order is not load-bearing here.
 //
-// cloud.Bridge is installed on the group FIRST, ahead of every leaf: a typed op
-// receives a context.Context and its decoded In and nothing else, so the validated
-// org crosses on the context and there is no request for it to read. Serve installs
-// the same middleware for the whole binary, and nesting is harmless (the inner one
-// is the one the handler sees) — it is declared here so the subsystem is
-// self-sufficient: mounted on a bare app, by a test or by any composition root that
-// is not Serve, its typed ops still resolve their tenant instead of refusing every
-// caller.
+// The composer owns cloud.Bridge: the fused host installs it once at its root
+// and the plugin constructor does the same for a plugin program, so no
+// subsystem installs it.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/content")
-	g.Use(cloud.Bridge())
 	o := contentOps{s: s}
 	zip.Get(g, "/lifecycle", o.getLifecycle)
 	zip.Get(g, "/board", o.getBoard)

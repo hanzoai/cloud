@@ -139,13 +139,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	o := ops{s: s}
 	g := app.Group("/v1/campaign")
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field, which is
+	// A typed op receives only a context, so the validated org it reads is parked
+	// there by cloud.Bridge — never carried as an In field, which is
 	// caller-supplied and would be a cross-tenant read the caller asserted for
-	// itself. fiber runs middleware in registration order, so this must precede
-	// every leaf below; nesting under Serve's own Bridge is harmless (the inner
-	// one is what the handler sees).
-	g.Use(cloud.Bridge())
+	// itself. This subsystem does not install the bridge: the program's composer
+	// does, once at the root, after the identity check that mints the org and
+	// before any subsystem registers a route — an order only the composer can
+	// hold.
 
 	zip.Get(g, "/summary", o.summary)
 

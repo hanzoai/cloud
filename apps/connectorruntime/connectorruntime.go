@@ -36,13 +36,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	log := deps.Logger
 	g := app.Group("/v1/automations/connectors")
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field, which is
-	// caller-supplied. When this package is mounted through automations.Mount the
-	// automations group's Bridge already covers the path; this one is what makes
-	// the SUBSYSTEM self-contained when mounted alone. Nesting is harmless — the
-	// inner one is what the handler sees.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here. Whoever composes the program installs it
+	// once at the root — after the identity check that mints the validated org and
+	// before any subsystem registers a route (serve.go) — because that order is a
+	// property of the whole program and no subsystem can assert it for itself. The
+	// validated org still reaches the typed op only off the context, never as an
+	// In field, which is caller-supplied.
 	zip.Post(g, "/:id/run", run)
 	if log != nil {
 		log.New("subsystem", "connectorruntime").Info(

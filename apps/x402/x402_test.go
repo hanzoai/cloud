@@ -142,6 +142,13 @@ func (h *harness) tie(want money.Amount, when string) {
 	}
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root. In a
+// test the test IS the composer, so it owes the same thing — a test that skips it
+// tests a program where the receipt lookup answers 403 for a reason that would
+// never exist in production. Same helper apps/integrations uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	// A settlement is a ledger entry on BOTH sides, so every test gets a real
@@ -162,6 +169,7 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(func() { _ = kmsClient.Close() })
 
 	app := zip.New(zip.Config{Logger: log})
+	compose(app)
 	deps := cloud.Deps{Logger: log, KMS: kmsClient, DataDir: dir}
 
 	if err := wallets.Mount(app, deps); err != nil {

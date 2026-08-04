@@ -137,6 +137,13 @@ func (g *fakeGitHub) fetchFile(_ context.Context, _, owner, repo, branch, path s
 	return g.files[owner+"/"+repo+"@"+branch+"/"+path], nil
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root. In a
+// test the test IS the composer, so it owes the same thing — a test that skips it
+// tests a program where every org-scoped op answers 403 for a reason that would
+// never exist in production. Same helper apps/integrations uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mount builds an authors app backed by a fresh store + injected fakes, returning the
 // app, the service, and the fakes for assertions.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeGitHub) {
@@ -159,6 +166,7 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeG
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, app, s)
 	return app, s, fc, fg
 }
@@ -917,6 +925,7 @@ func sweptAccrued(t *testing.T, body []byte) int {
 // a temp DataDir, proving the package boots as the binary loads it.
 func TestMount(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

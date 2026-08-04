@@ -348,9 +348,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// gated user can still resolve mode.
 	//
 	// A typed op receives only a context, so the request the ?host= default falls
-	// back to has to be parked there. Installed BEFORE the leaf — fiber runs
-	// middleware in registration order, so one installed after it never runs.
-	app.Use(cloud.Bridge())
+	// back to reaches it from that context. Whoever composes the app parks it there,
+	// at the root, ahead of every leaf; this surface installs no middleware of its
+	// own. One that it installed for itself could only hang on a /v1/flags/waitlist
+	// node, and the leaf below registers through the root, so that node would carry
+	// middleware over an empty subtree and zip refuses to compose it.
 	zip.Get(cloud.ZipApp(app), "/v1/flags/waitlist", waitlistOps{}.mode)
 	log.Info("admission gate ready", "services", n)
 	return nil

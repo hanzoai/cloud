@@ -161,15 +161,15 @@ type noInput struct{}
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// The bridge FIRST, and on guide's OWN subtree — the shape apps/admin and
-	// apps/marketing already use. A TYPED op receives only a context, so the
-	// validated org has to be parked there; it is never taken from an In field,
-	// which is caller-supplied and would be a cross-tenant read the caller
-	// asserted for itself. fiber runs middleware in registration order, so this
-	// must precede every leaf below. Serve installs one app-wide too; nesting is
-	// harmless — the inner one is what the handler sees — and this one is what
-	// makes guide's own tests (which mount only guide) carry an org at all.
-	app.Use(cloud.Bridge())
+	// A TYPED op receives only a context, so the validated org reaches it from the
+	// request parked on that context; it is never read off an In field, which is
+	// caller-supplied and would be a cross-tenant read the caller asserted for
+	// itself. Whoever composes the app parks it — the fused host, and the plugin
+	// program when guide runs alone — because only a composer knows the identity
+	// boundary has already run and that nothing serves ahead of it. A subsystem
+	// asserting that for itself is repeating a claim it cannot check, which is how
+	// one copy per subsystem accumulated and how the copy on a route-less node took
+	// a surface down.
 
 	// TYPED ops are declared on the GROUPS this surface already has, so an op's
 	// path is the prefix composed with its leaf — the identity every projection

@@ -433,13 +433,12 @@ func TestScalarCarriesEveryJSONToken(t *testing.T) {
 // newAppMCP mounts captable the way the SERVER does: one cloud.Bridge at the app
 // ROOT. zip's own projections of the typed-op registry — the MCP endpoint at /mcp
 // and the call plane at /.well-known/zip/op/ — are ordinary routes on the app
-// itself, so they sit OUTSIDE the /v1/captable group and the group's own Bridge
-// never runs for them. cloud.Listen installs the root one, which is what gives them
-// a validated org in production.
+// itself, outside the /v1/captable group, so only the root install reaches them.
+// cloud.Listen makes that root install in production.
 func newAppMCP(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Use(cloud.Bridge())
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

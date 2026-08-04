@@ -97,14 +97,14 @@ var mounted *state
 
 // Mount registers /v1/risk/labels.
 //
-// EVERY INHERITED CAPABILITY IS WIRED HERE, EXPLICITLY:
+// EVERY INHERITED CAPABILITY IS NAMED HERE, EXPLICITLY:
 //
 //	IAM auth     SanitizeIdentity mints the verified org upstream (serve.go).
 //	             This package never validates a token and never can.
-//	tenant gate  cloud.Bridge() on the group, FIRST, before any leaf — fiber
-//	             orders middleware by registration, so one installed after its
-//	             leaves never runs. A typed op receives only a context; Bridge is
-//	             what parks the validated principal in it.
+//	tenant gate  cloud.Bridge(), which the composer installs — the fused host
+//	             at its root, a plugin program in its constructor. A typed op
+//	             receives only a context; Bridge is what parks the validated
+//	             principal in it, and this package only reads it.
 //	durability   cloud.WithDurable routes each tenant file through the ha-elected
 //	             single writer, and every op that writes calls state.ship before
 //	             it answers. Wiring the option alone is NOT durability: it only

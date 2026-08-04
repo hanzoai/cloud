@@ -165,13 +165,11 @@ type ops struct{ s *cloud.Service[state] }
 // roll-up, and the Startup Program application intake.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/crm")
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there. fiber runs middleware in registration
-	// order, so one installed after its leaves never runs. Serve installs the same
-	// bridge for the whole binary; nesting is harmless (the inner one is what the
-	// handler sees) and this keeps the subsystem's ops org-scoped wherever it is
-	// mounted — including a test app that never calls Serve.
-	g.Use(cloud.Bridge())
+	// A typed op receives only a context, so the validated org it reads is parked
+	// there by cloud.Bridge. This subsystem does not install it: the program's
+	// composer does, once at the root, after the identity check that mints the org
+	// and before any subsystem registers a route — an order only the composer can
+	// hold.
 
 	// Declared on the GROUP: the op's path is the prefix composed with the leaf,
 	// which is the identity every projection keys on, and cmd/zipdoc (zip v1.18.3+)

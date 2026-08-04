@@ -15,6 +15,12 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// compose installs what the program's composer installs — cloud.Bridge, once at
+// the app root. A subsystem never installs its own, so a test app owes the same
+// root install; without it every org-scoped op answers a 403 no production
+// program would produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountApp builds a bare zip.App (no SanitizeIdentity middleware, so X-Org-Id +
 // X-User-Id are trusted verbatim — the standard cloud leaf test harness) and
 // mounts the captable leaf on it. This exercises the REAL HTTP path: routing →
@@ -23,6 +29,7 @@ import (
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

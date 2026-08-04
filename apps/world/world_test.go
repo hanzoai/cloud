@@ -63,11 +63,18 @@ func fixtureServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 403 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountWorld mounts the world surface on a fresh app with a temp data dir and
 // returns the app plus the mounted service (white-box access for test wiring).
 func mountWorld(t *testing.T) (*zip.App, *service) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

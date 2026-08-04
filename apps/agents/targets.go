@@ -624,12 +624,6 @@ type patchTargetIn struct {
 // captured as a ref. The static /v1/agents/targets precedes /v1/agents/targets/:id.
 func mountTargets(s *cloud.Service[state], app cloud.Router) {
 	g := app.Group("/v1/agents")
-	// cloud.Bridge is installed ONCE, at the top of Mount, ahead of every leaf on
-	// this prefix. It used to be installed here, which was too late for the leaves
-	// registered before this call: fiber runs middleware in registration order, so
-	// the sessions and agent-CRUD routes above would have had no org on the context
-	// the moment they became typed ops.
-	//
 	// TYPED ops, declared on the group itself: zip.Get and friends take any
 	// Router since v1.18.0, so the prefix is part of each op's path and every
 	// projection — the document, the MCP tool, the CLI command, the call plane —

@@ -94,6 +94,13 @@ func (f *fakeRuntime) has(org, id string) bool {
 	return ok
 }
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge:
+// the program's composer owns it — serve.go at the root of the fused host, the
+// plugin constructor for a plugin program. In a test the test is the composer, so
+// it owes the same install; skipping it drives a program where every org-scoped op
+// answers 403 for a reason production callers never see.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountWith builds the surface over an injected runtime, exactly as Mount does over
 // the real one — routes() is the shared registration path, so what a test drives is
 // the code that ships.
@@ -105,6 +112,7 @@ func mountWith(t *testing.T, rt Runtime) *zip.App {
 		State: state{gateway: gatewayBase(), runtime: rt},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	compose(app)
 	routes(app, s)
 	return app
 }

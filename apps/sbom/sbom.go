@@ -127,12 +127,9 @@ type ops struct{ s *cloud.Service[state] }
 // OpenAPI operation, the MCP tool, the CLI command and every generated SDK method
 // follow. `GET /v1/sbom/*` stays a raw handler; see resolve for why.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Bridge FIRST: a typed op receives only a context, so the request it still needs
-	// (ingest's SuperAdmin gate reads X-User-IsAdmin) reaches it by being parked there.
-	// fiber runs middleware in registration order, so one installed after its leaves
-	// never runs. Installed through the SUBSYSTEM's router, which scopes it to the
-	// prefixes this app declares (/v1/sbom) rather than the whole binary.
-	app.Use(cloud.Bridge())
+	// The composer owns cloud.Bridge: the fused host installs it once at its root
+	// and the plugin constructor does the same for a plugin program, so no
+	// subsystem installs it.
 
 	o := ops{s: s}
 	g := app.Group("/v1/sbom")

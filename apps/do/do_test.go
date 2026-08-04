@@ -95,9 +95,16 @@ func (f *fakeLBs) Delete(_ context.Context, id string) (*godo.Response, error) {
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 403 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountFake(t *testing.T) (*zip.App, *fakeVPCs, *fakeLBs) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	vpcs := &fakeVPCs{byID: map[string]*godo.VPC{}}
 	lbs := &fakeLBs{byID: map[string]*godo.LoadBalancer{}}
 	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{vpcs: vpcs, lbs: lbs}}
@@ -260,6 +267,7 @@ func TestForgePathRefused(t *testing.T) {
 
 	// X-Org-Id present but NO X-User-Id (the forgeable path) → still 403.
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app2)
 	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{vpcs: &fakeVPCs{byID: map[string]*godo.VPC{}}, lbs: &fakeLBs{byID: map[string]*godo.LoadBalancer{}}}}
 	routes(app2, s)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/vpcs", nil)
@@ -278,6 +286,7 @@ func TestForgePathRefused(t *testing.T) {
 // honest 503 — never a fabricated resource.
 func TestFailClosedWhenUnconfigured(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{}} // nil seams → unconfigured
 	routes(app, s)
 

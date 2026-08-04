@@ -120,16 +120,18 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// "models you serve" and "models that learn" at once. Deciding and learning are
 	// the same act here, so they are one face.
 	g := app.Group("/v1/risk")
-	// cloud.Bridge FIRST. A typed op receives only a context, so the validated
-	// identity it reads has to be parked there; fiber runs middleware in
-	// registration order, so one installed after its leaves never runs.
+	// cloud.Bridge is not installed here. Whoever composes the program installs it
+	// once at the root — after the identity check that mints the validated org and
+	// before any subsystem registers a route (serve.go) — because that order is a
+	// property of the whole program and no subsystem can assert it for itself.
 	//
-	// cloud.DenyEnvelope beside it, for the same registration-order reason: every
-	// op that costs compute gates on the caller's balance, and the envelope is what
+	// cloud.DenyEnvelope BEFORE the leaves, because fiber runs middleware in
+	// registration order and one installed after its leaves never runs: every op
+	// that costs compute gates on the caller's balance, and the envelope is what
 	// makes the refusal the fleet's own nested {"error":{"code","message"}} 402
 	// rather than a second vocabulary for a refusal the platform already has words
 	// for.
-	g.Use(cloud.Bridge(), cloud.DenyEnvelope())
+	g.Use(cloud.DenyEnvelope())
 	o := ops{s: s}
 
 	zip.Post(g, "/score", o.score,

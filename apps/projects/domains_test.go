@@ -47,7 +47,8 @@ type caller struct {
 func domainApp(t *testing.T, s *cloud.Service[state]) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: s.Log})
-	app.Use(cloud.Bridge(), cloud.DenyEnvelope())
+	compose(app)
+	app.Use(cloud.DenyEnvelope())
 	r := cloud.ZipApp(app)
 	o := ops{s: s}
 	zip.Post(r, "/v1/projects/:slug/domains", o.bindDomains)

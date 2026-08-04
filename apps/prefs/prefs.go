@@ -140,10 +140,11 @@ func init() {
 // operationId, the MCP tool and every generated SDK's URL.
 func routes(app cloud.Router, s *service) {
 	// A typed op receives only a context, so the request facts its signature drops
-	// have to be parked there. Installed on the subsystem's own subtree BEFORE the
-	// leaves — fiber runs middleware in registration order, so one installed after
-	// them never runs.
-	app.Use(cloud.Bridge())
+	// reach it from that context. Whoever composes the app parks them there, at the
+	// root, ahead of every leaf; this surface installs no middleware of its own. One
+	// that it installed for itself could only hang on a /v1/prefs node, and both
+	// leaves below register through the root, so that node would carry middleware
+	// over an empty subtree and zip refuses to compose it.
 
 	zip.Get(cloud.ZipApp(app), "/v1/prefs", prefsOps{s: s}.getPrefs)
 

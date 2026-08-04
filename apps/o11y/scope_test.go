@@ -14,9 +14,10 @@ import (
 )
 
 // scopeApp builds the scoped o11y read surface (the three typed reads) exactly as
-// MountO11y + mountScope register them — cloud.Bridge on the o11y group first, so
-// the validated org reaches a typed op the same way it does in the real process —
-// so the tests exercise the real handlers.
+// MountO11y + mountScope register them, and stands in for the composer by
+// installing cloud.Bridge at the root first — so the validated org reaches a typed
+// op the same way it does in the real process and the tests exercise the real
+// handlers.
 func scopeApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -60,12 +61,14 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 
 // A typed op receives a context and its decoded input — never the request — so the
 // validated org reaches it ONLY because cloud.Bridge parked it on the context.
-// cloud.Listen installs one app-wide, but o11y runs as its OWN binary
+// cloud.Serve installs one app-wide, but o11y also runs as its OWN binary
 // (plugin/o11y/main.go builds a bare zip.App and calls MountO11y), and a context
 // value does not cross the socket between host and plugin: the host's Bridge parks
-// the org in the HOST. So MountO11y installs its own on the o11y group, and this
-// pins that — without it every typed o11y op answers 403 to a caller the host had
-// already validated, which is a total outage of the surface, not a degradation.
+// the org in the HOST. So the process that composes this app has to install one of
+// its own — MountO11y does not, because a subsystem cannot know the identity
+// boundary has already run — and this pins what happens either way: with no Bridge
+// in front, every typed o11y op answers 403 to a caller the host had already
+// validated, which is a total outage of the surface, not a degradation.
 func TestTypedOpsResolveTheirOrgThroughTheBridge(t *testing.T) {
 	const path = "/v1/o11y/status?product=not-a-real-service"
 
@@ -210,6 +213,7 @@ func TestProductAliasResolution(t *testing.T) {
 func TestScopedReadsOwnTheirAddressesAndOnlyTheirs(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
+	// order 69: the scoped GET handlers.
 	mountScopedReads(app)
 	// Stands in for whatever else is mounted under the prefix (SENTINEL: 599).
 	app.All("/v1/o11y/*", func(c *zip.Ctx) error { return c.String(599, "FELL-THROUGH") })

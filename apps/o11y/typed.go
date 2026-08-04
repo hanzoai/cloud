@@ -10,7 +10,8 @@ package o11y
 // signature drops, so they are resolved here and nowhere else:
 //
 //   - the TENANT and VALIDATED-NESS both come off the context, parked there by
-//     cloud.Bridge (installed at the top of MountO11y) — principal.OrgFrom and
+//     cloud.Bridge (installed by whoever composes this app, never by the app
+//     itself — see mount) — principal.OrgFrom and
 //     principal.ValidatedFrom, the two facts a gate turns on. Neither is EVER an
 //     In field: an In field is caller-supplied, so a tenant key read from one is
 //     a cross-tenant read the caller asserted for itself.
@@ -38,9 +39,10 @@ import (
 )
 
 // o11yPrefix is the subtree this package's cloud-native routes live under — the
-// group every typed op is declared on, and the group cloud.Bridge is installed
-// on. ONE definition, so the op's path, the middleware's reach and the log line
-// can never name different subtrees.
+// group every typed op is declared on. ONE definition, so the op's path and the
+// log line can never name different subtrees. No middleware hangs on this group:
+// cloud.Bridge is the composer's to install, once at the root, ahead of every
+// route it gates; see mount.
 const o11yPrefix = "/v1/o11y"
 
 // productPrefix is the PRODUCT face of that subtree: the reads keyed by a console

@@ -52,14 +52,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	if zapp == nil {
 		return fmt.Errorf("channels.Mount: router exposes no zip.App, so no typed op could be registered")
 	}
+	// A typed op receives only a context, so the validated org has to be parked
+	// there. cloud.Bridge parks it, and the composer owns that install: the
+	// fused host at its root, a plugin program in its constructor.
 	g := app.Group("/v1/channels")
-	// The Bridge FIRST, bounded to the subtree channels owns: a typed op receives
-	// only a context, so the validated org has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Listen installs one app-wide too; nesting is harmless, and
-	// having it here is what makes this package's own tests — which mount on a
-	// bare app — exercise the same tenancy the binary does.
-	g.Use(cloud.Bridge())
 
 	o := ops{s: s}
 	// cloud.Terminal is func(func(*zip.Ctx) error) func(*zip.Ctx) error; zip.Middleware

@@ -73,6 +73,13 @@ func writeJSON(w http.ResponseWriter, v any) {
 // fail to resolve — no lookup, no wait, no dependence on the machine's DNS.
 const unreachable = "http://127.0.0.1:0"
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer does, once at the root. In a test
+// the test IS the composer, so it owes the same install — skipping it does not
+// test a stricter program, it tests one where every org-scoped op answers 403
+// for a reason production could never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountApp mounts the graph surface against the fake upstream at base.
 func mountApp(t *testing.T, base string) *zip.App {
 	t.Helper()
@@ -80,6 +87,7 @@ func mountApp(t *testing.T, base string) *zip.App {
 	t.Setenv("GRAPH_URL", base)
 	t.Setenv("CHAIN_DATA_TOKEN", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "lux", Env: "mainnet"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

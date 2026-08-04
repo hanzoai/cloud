@@ -187,12 +187,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s := &cloud.Service[*state]{Base: b, State: mounted}
 
-	// Bridge FIRST: a typed op receives only a context, so the validated org — and,
-	// for the review write, the request the ATTRIBUTION is read off — reach it by
-	// being parked there. fiber runs middleware in registration order, so one
-	// installed after its leaves never runs. Installed through the SUBSYSTEM's own
-	// router, which scopes it to the prefix this app declares (/v1/translate).
-	app.Use(cloud.Bridge())
+	// cloud.Bridge is installed by whoever composes the app — the fused host at
+	// its root — never here: the validated org, and for the review write the
+	// request the attribution is read off, are parked on the context by that
+	// root install.
 
 	app.Post("/v1/translate", cloud.Handle(s, serve))
 	g := app.Group("/v1/translate")

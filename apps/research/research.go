@@ -211,7 +211,7 @@ func build(b cloud.Base) (state, error) {
 	// deployment, where the store is exactly the pre-durability local cache.
 	return state{
 		stores: cloud.NewOrgStore(b, "research", openStore),
-		wh: &warehouse{},
+		wh:     &warehouse{},
 	}, nil
 }
 
@@ -233,12 +233,10 @@ type ops struct{ s *cloud.Service[state] }
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	shutdownStores = s.State.stores.CloseAll
 	mountedStores = s.State.stores // the in-process evidence seam (compose.go)
-	// cloud.Bridge carries into a typed op the request its signature drops: the
-	// validated org (the physical tenant boundary) and the project sub-scope. On the
-	// scoped Router it installs once per DECLARED prefix (/v1/research) and nowhere
-	// else, and it must precede the leaves below — fiber runs middleware in
-	// registration order. Serve installs one app-wide too; nesting is harmless.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here: the composer owns it — the fused host
+	// installs it once at its root, and the plugin constructor does the same for a
+	// plugin program — and typed ops read the validated org and the project scope
+	// off the request it parks on the context.
 	g := app.Group("/v1/research")
 	o := ops{s: s}
 	zip.Post(g, "/experiments", o.postExperiments) // ingest (idempotent) → SQLite → roll up

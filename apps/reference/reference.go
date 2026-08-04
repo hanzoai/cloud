@@ -497,21 +497,14 @@ func stamp(s string, now time.Time) time.Time {
 // can never be named "resolve": first match wins, and the addressing has to be
 // decided here rather than by whatever a caller sends.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// The Bridge FIRST, on the subtree this app owns and NOT ONE SEGMENT WIDER: a
-	// typed op receives only a context, so the validated principal has to be parked
-	// there, and fiber runs middleware in registration order — one installed after
-	// these leaves would never run.
-	//
-	// It goes on /v1/risk/reference rather than on /v1/risk because a prefix
-	// middleware runs for every route under that prefix, whoever registered it.
-	// /v1/risk is a shared parent: the decision plane answers on /v1/risk/score and
-	// the ground-truth plane on /v1/risk/labels in the same process, and a
-	// middleware this app installs one segment up would run inside two other
-	// planes' request paths depending only on mount order. An app owns its own leaf
-	// and nothing above it.
+	// A typed op receives only a context, so the validated principal has to be
+	// parked there — cloud.Bridge does that, and the composer owns that install,
+	// once at its root. Both groups here are bare path prefixes carrying no
+	// middleware: /v1/risk is a shared parent (the decision plane answers on
+	// /v1/risk/score and the ground-truth plane on /v1/risk/labels in the same
+	// process), so this app declares its own leaf and gates nothing above it.
 	parent := app.Group(parentPrefix)
 	g := parent.Group(leaf)
-	g.Use(cloud.Bridge())
 
 	o := ops{s: s}
 	zip.Post(g, "/resolve", o.resolve,

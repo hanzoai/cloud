@@ -34,6 +34,7 @@ func liveApp(t *testing.T) *zip.App {
 	t.Setenv("ENGINE_UPSTREAM", up)
 	t.Setenv("ENGINE_API_KEY", os.Getenv("ENGINE_E2E_KEY"))
 	app := zip.New(zip.Config{Logger: luxlog.New("enginelive"), DisableStartupMessage: true})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("enginelive"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

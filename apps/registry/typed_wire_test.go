@@ -190,6 +190,14 @@ func (f *fakePkg) serve(t *testing.T) string {
 	return srv.URL
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes says why): the program's composer installs it once at the root, after
+// the identity check and before any route registers. In a test the test IS the
+// composer, so it owes the same install — a test that skips it does not test a
+// stricter program, it tests one where every org-scoped op answers 403 for a
+// reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // harness mounts the app against fake upstreams and returns all three.
 func harness(t *testing.T) (*zip.App, *fakeRegistry, *fakePkg) {
 	t.Helper()
@@ -214,6 +222,7 @@ func harness(t *testing.T) (*zip.App, *fakeRegistry, *fakePkg) {
 	t.Setenv("REGISTRY_CLIENT_SECRET", "svc-secret")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("registrytest"), DisableStartupMessage: true})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("registrytest"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -575,6 +584,7 @@ func TestStatusIsAnHonestLens(t *testing.T) {
 	}
 
 	down := zip.New(zip.Config{Logger: luxlog.New("registrytest"), DisableStartupMessage: true})
+	compose(down)
 	t.Setenv("REGISTRY_UPSTREAM", "http://127.0.0.1:1")
 	t.Setenv("REGISTRY_PKG", "http://127.0.0.1:1")
 	if err := Mount(down, cloud.Deps{Logger: luxlog.New("registrytest"), DataDir: t.TempDir()}); err != nil {

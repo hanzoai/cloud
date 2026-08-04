@@ -27,7 +27,7 @@ func doRaw(t *testing.T, app *zip.App, rq *http.Request) *http.Response {
 }
 
 // TestHealthNeedsNoPrincipal pins the ONE route on this surface that does not
-// read a tenant. It is the route the group's cloud.Bridge could most easily have
+// read a tenant. It is the route the composer's cloud.Bridge could most easily have
 // broken: Bridge is what parks the validated org for every other op, and if it
 // REFUSED a request that carries no org, installing it in front of the leaves
 // would have turned liveness into a 403 — the failure mode where a subsystem

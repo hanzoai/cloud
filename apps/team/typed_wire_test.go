@@ -78,14 +78,13 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 }
 
 // TestCollabRPCBridgedUnderBareMount is the regression bar for the defect typing
-// this route surfaced: the collaborator plane is app-level, so team's own
-// cloud.Bridge — scoped to the /v1/team group — never covered it. A typed op
-// reaches its caller's token ONLY through the request cloud.Bridge parks, so
-// without one on this plane every call would 401 under a bare Mount (the app's
-// own tests, and any embedder that mounts without Serve). A 200 here proves the
-// bridge is installed and precedes the op.
+// this route surfaced: the collaborator plane is app-level, OUTSIDE /v1/team, and
+// a typed op reaches its caller's token ONLY through the request cloud.Bridge
+// parks. The composer installs that bridge once at its root (compose here, since
+// the test is the composer), and a 200 proves the root install covers this plane
+// too — a prefix-scoped one would leave every call here 401.
 func TestCollabRPCBridgedUnderBareMount(t *testing.T) {
-	app := mountTeam(t) // a bare zip.App: Mount only, no Serve, no fleet middleware
+	app := mountTeam(t) // Mount plus the composer's root bridge; no Serve, no fleet middleware
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
 	ws, err := mounted.State.accounts.EnsureWorkspace(t.Context(), org, acct, "Ada")
 	if err != nil {
@@ -95,7 +94,7 @@ func TestCollabRPCBridgedUnderBareMount(t *testing.T) {
 	code, body := call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, bearerFor(t, acct, org),
 		map[string]any{"method": "getContent", "payload": map[string]any{}})
 	if code != http.StatusOK {
-		t.Fatalf("bridged collab RPC = %d (%s), want 200 — cloud.Bridge missing from the /collaborator plane", code, body)
+		t.Fatalf("bridged collab RPC = %d (%s), want 200 — the composer's root bridge does not reach the /collaborator plane", code, body)
 	}
 }
 
@@ -133,6 +132,7 @@ func TestClearCookieIsExact(t *testing.T) {
 func TestClearCookieDegraded(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

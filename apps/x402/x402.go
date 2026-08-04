@@ -193,14 +193,11 @@ type ops struct{ s *cloud.Service[state] }
 
 // routes registers the receipt lookup.
 //
-// Bridge FIRST, on the group and BEFORE the leaf: fiber runs middleware in
-// registration order, so one installed after its route never runs. It parks the
-// request a typed op's signature drops, which is how the op below resolves the
-// PAYER (see settlement). Serve installs one app-wide too; nesting is harmless,
-// and this package's own tests mount on a bare app with no Serve, so this install
-// is what makes them work.
+// cloud.Bridge parks the request a typed op's signature drops, which is how the
+// op below resolves the PAYER (see settlement). The composer owns that install,
+// once at its root; the group is a bare path prefix.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/x402", cloud.Bridge())
+	g := app.Group("/v1/x402")
 	o := ops{s: s}
 	zip.Get(g, "/settlements/:id", o.settlement)
 }

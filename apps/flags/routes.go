@@ -34,15 +34,10 @@ import (
 type ops struct{ s *cloud.Service[state] }
 
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// cloud.Bridge carries into a typed op the request its signature drops. This
-	// surface needs more than the org key: the PROJECT scope that narrows within
-	// it, and the actor an audited write is recorded under. On the scoped Router
-	// this installs once per DECLARED prefix (/v1/flags) and nowhere else, and it
-	// must precede the leaves below — fiber runs middleware in registration order.
-	// Serve installs one app-wide too; nesting is harmless (the inner one is what
-	// the handler sees) and the tests mount this subsystem on a bare app with no
-	// Serve, so this install is what makes them pass.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge is installed by whoever composes the app — the fused host at
+	// its root — never here: the org, project scope and actor every op below
+	// reads still arrive because the root install parks the request on the
+	// context.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
 		s.Log.Error("flags: router exposes no op registry; the flag surface would serve routes no projection knows")

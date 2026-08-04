@@ -91,6 +91,13 @@ func (f *fakeZT) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountApp mounts the zt surface against the fake controller with a service
 // credential configured.
 func mountApp(t *testing.T, f *fakeZT) *zip.App {
@@ -102,6 +109,7 @@ func mountApp(t *testing.T, f *fakeZT) *zip.App {
 	t.Setenv("ZT_CA_PEM", "")
 	t.Setenv("ZT_INSECURE_SKIP_VERIFY", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -298,6 +306,7 @@ func TestUnconfiguredFailsClosedExceptEmptyProjections(t *testing.T) {
 	t.Setenv("ZT_CLIENT_ID", "")
 	t.Setenv("ZT_CLIENT_SECRET", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

@@ -61,11 +61,21 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing — and a test that skips it does not
+// test a stricter program, it tests a program where every org-scoped op refuses
+// for a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountApp(t *testing.T, base, token string) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_COMMERCE_HTTP_URL", base)
 	t.Setenv("COMMERCE_SERVICE_TOKEN", token)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

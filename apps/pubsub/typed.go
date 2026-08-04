@@ -98,10 +98,11 @@ type noContent = struct{}
 // kv), so nothing can shadow anything.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
+	// A typed op receives only a context, so the validated org reaches it by
+	// being parked there — never as an In field. cloud.Bridge parks it, and the
+	// composer owns that install: the fused host at its root, a plugin program
+	// in its constructor.
 	g := app.Group("/v1/pubsub")
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field.
-	g.Use(cloud.Bridge())
 
 	zip.Post(g, "/publish", o.publish)
 	zip.Post(g, "/request", o.request)

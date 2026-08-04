@@ -106,21 +106,15 @@ func Shutdown(_ context.Context) error {
 
 // routes registers the surface.
 //
-// cloud.Bridge comes FIRST, ahead of every leaf: a typed op receives a
-// context.Context and its decoded In and nothing else, so the validated org — and
-// the request the admin predicates read their attested claims off — cross on the
-// context. Installed through the subsystem's Router, it lands once per prefix this
-// subsystem DECLARES (/v1/usage/activity, /v1/usage/leaderboard,
-// /v1/usage/rollup/backfill) and never on the /v1/usage/* paths clients/usage owns.
-// Serve installs the same middleware binary-wide; nesting is harmless (the inner one
-// is the one the handler sees) and declaring it here is what makes the subsystem
-// self-sufficient when a test or a non-Serve composition root mounts it on a bare app.
+// A typed op receives a context.Context and its decoded In and nothing else, so
+// the validated org — and the request the admin predicates read their attested
+// claims off — cross on the context, parked there by cloud.Bridge. The composer
+// owns that install, once at its root.
 //
 // The group is a bare path prefix — no middleware, so it gates nothing on the
 // co-owned /v1/usage root — and exists only so each op's path is composed the one way
 // the router composes it.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Use(cloud.Bridge())
 	g := app.Group("/v1/usage")
 	o := boardOps{s: s}
 	zip.Get(g, "/leaderboard", o.leaderboard)

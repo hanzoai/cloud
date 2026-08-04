@@ -19,6 +19,7 @@ import (
 func ctxWith(t *testing.T, headers map[string]string, fn func(c *zip.Ctx)) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	app.Get("/probe", func(c *zip.Ctx) error {
 		fn(c)
 		return c.NoContent(204)

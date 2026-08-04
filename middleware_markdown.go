@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/md"
 	"github.com/zap-proto/zip"
 )
@@ -40,7 +41,14 @@ func MarkdownNegotiation(defaultPrefixes []string) zip.Handler {
 		resp := c.Fiber().Response()
 		// The representation varies by Accept — keep a cache from cross-serving
 		// markdown to a JSON client and vice versa.
-		resp.Header.Set("Vary", "Accept")
+		//
+		// ADDITIVE, because this is not the only thing the response varies on and
+		// this runs LAST. EdgeCORS has already recorded Origin by the time the
+		// transform below runs, and replacing the header dropped that: the response
+		// then told a shared cache it varied by Accept alone, which is how one
+		// origin's body becomes a candidate answer for another origin's request.
+		// Every writer of this header owns one field of it, never the whole value.
+		addVary(resp, "Accept")
 		if !want {
 			return nil
 		}
@@ -146,4 +154,22 @@ func parseMediaRange(part string) (string, float64) {
 
 func isJSONContentType(ct string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(ct)), "application/json")
+}
+
+// addVary records one more request header this response varies on, preserving any
+// field a middleware upstream already recorded. Vary is a SET, and every
+// middleware that negotiates on a request header contributes one member of it; a
+// writer that assigns the whole value silently speaks for the others.
+func addVary(resp *fasthttp.Response, field string) {
+	cur := strings.TrimSpace(string(resp.Header.Peek("Vary")))
+	if cur == "" {
+		resp.Header.Set("Vary", field)
+		return
+	}
+	for _, f := range strings.Split(cur, ",") {
+		if strings.EqualFold(strings.TrimSpace(f), field) {
+			return
+		}
+	}
+	resp.Header.Set("Vary", cur+", "+field)
 }
