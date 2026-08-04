@@ -18,6 +18,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/types"
+	"github.com/hanzoai/orm/query"
 )
 
 type fakeCommerce struct {
@@ -137,9 +138,10 @@ func TestEntitleGuestCap(t *testing.T) {
 	ws, _ := store.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
 	guest := func(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", i) }
 	for i := 1; i <= 4; i++ {
-		if _, err := store.db.ExecContext(ctx,
-			`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
-			 VALUES (?,?,?,?,0,1,?)`, ws.ID, guest(i), roleGuest, "g", int64(i)); err != nil {
+		if _, err := store.db.Insert("members", query.Params{
+			"workspace_id": ws.ID, "user_id": guest(i), "role": roleGuest,
+			"display_name": "g", "is_bot": 0, "active": 1, "joined_at": int64(i),
+		}).WithContext(ctx).Execute(); err != nil {
 			t.Fatalf("seed guest %d: %v", i, err)
 		}
 	}
@@ -163,9 +165,10 @@ func TestEntitleGuestCap(t *testing.T) {
 		return nil, fmt.Errorf("plans not mounted")
 	})
 	wsD, _ := storeDown.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
-	if _, err := storeDown.db.ExecContext(ctx,
-		`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
-		 VALUES (?,?,?,?,0,1,1)`, wsD.ID, guest(1), roleGuest, "g"); err != nil {
+	if _, err := storeDown.db.Insert("members", query.Params{
+		"workspace_id": wsD.ID, "user_id": guest(1), "role": roleGuest,
+		"display_name": "g", "is_bot": 0, "active": 1, "joined_at": 1,
+	}).WithContext(ctx).Execute(); err != nil {
 		t.Fatal(err)
 	}
 	if code, body := selectWS(t, appDown, gateOrg, guest(1), wsD.Slug); code != http.StatusOK {

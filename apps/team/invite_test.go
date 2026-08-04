@@ -13,6 +13,7 @@ import (
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/types"
 	model "github.com/hanzoai/iam/pkg/model"
+	"github.com/hanzoai/orm/query"
 )
 
 // TestOrgGrantRoleCaps proves a workspace invite can never confer an org-level
@@ -73,9 +74,10 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	ctx := context.Background()
 	ws, _ := store.EnsureWorkspace(ctx, org, inviterAcct, "Max Power")
 	// One guest already present (join order 1) — the plan's cap of 1 is now full.
-	if _, err := store.db.ExecContext(ctx,
-		`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
-		 VALUES (?,?,?,?,0,1,1)`, ws.ID, "00000000-0000-4000-8000-000000000001", roleGuest, "g1"); err != nil {
+	if _, err := store.db.Insert("members", query.Params{
+		"workspace_id": ws.ID, "user_id": "00000000-0000-4000-8000-000000000001",
+		"role": roleGuest, "display_name": "g1", "is_bot": 0, "active": 1, "joined_at": 1,
+	}).WithContext(ctx).Execute(); err != nil {
 		t.Fatal(err)
 	}
 

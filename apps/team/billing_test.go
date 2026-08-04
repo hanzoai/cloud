@@ -21,6 +21,7 @@ import (
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/apps/team/wallet"
 	"github.com/hanzoai/cloud/types"
+	"github.com/hanzoai/orm/query"
 )
 
 // billingApp registers the billing plane directly (no Mount) with a fake
@@ -112,9 +113,10 @@ func TestBillingPlanOrgScoped(t *testing.T) {
 	wsA, _ := store.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
 	seed := func(ws workspace, user, role string, bot int) {
 		t.Helper()
-		if _, err := store.db.ExecContext(ctx,
-			`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
-			 VALUES (?,?,?,?,?,1,1)`, ws.ID, user, role, "m", bot); err != nil {
+		if _, err := store.db.Insert("members", query.Params{
+			"workspace_id": ws.ID, "user_id": user, "role": role,
+			"display_name": "m", "is_bot": bot, "active": 1, "joined_at": 1,
+		}).WithContext(ctx).Execute(); err != nil {
 			t.Fatal(err)
 		}
 	}
