@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package dataset is the per-org dataset plane of /v1/ml: a dataset is a VERSIONED, IMMUTABLE snapshot of one tenant's own event surface, and this is where it is declared, materialised, described, exported and disposed of.",
+    "description": "Package dataset is the per-org dataset plane of /v1/risk: a dataset is a VERSIONED, IMMUTABLE snapshot of one tenant's own event surface, and this is where it is declared, materialised, described, exported and disposed of.",
     "version": "v1"
   },
   "servers": [
@@ -12,24 +12,24 @@
   ],
   "tags": [
     {
-      "name": "ml"
+      "name": "risk"
     }
   ],
   "paths": {
-    "/v1/ml/datasets": {
+    "/v1/risk/datasets": {
       "get": {
-        "operationId": "mlDatasets",
+        "operationId": "riskDatasets",
         "summary": "List this org's datasets",
         "description": "Datasets lists this org's datasets, each with its newest version. An org that\nhas declared none gets an empty list; a store that cannot be reached gets a\nrefusal, never an empty list, because the two read identically and only one of\nthem is true.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlDatasetList"
+                  "$ref": "#/components/schemas/riskDatasetList"
                 }
               }
             },
@@ -38,11 +38,11 @@
         }
       },
       "post": {
-        "operationId": "mlCreateDataset",
+        "operationId": "riskCreateDataset",
         "summary": "Declare the next version of a dataset",
         "description": "Declares the next version of a dataset from a bound query over\nthis org's own feature surface.\n\nIt mints a VERSION and writes no rows: a version is declared, then materialised\nonce, then never rewritten. Version numbers are monotone and never reused, so\n\"version 3 of signups\" means one thing forever — which is the whole reason a\nmodel can cite one.\n\nThe window is bounded by the source's retention, the horizon by a year, the\nrows by the plane's cap, and the number of datasets and versions per org by\ntheir own limits. Every refusal names which bound it hit.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "requestBody": {
           "content": {
@@ -55,7 +55,7 @@
                 "to": "2026-04-01T00:00:00Z"
               },
               "schema": {
-                "$ref": "#/components/schemas/mlDatasetSpec"
+                "$ref": "#/components/schemas/riskDatasetSpec"
               }
             }
           },
@@ -66,7 +66,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlDataset"
+                  "$ref": "#/components/schemas/riskDataset"
                 }
               }
             },
@@ -75,13 +75,13 @@
         }
       }
     },
-    "/v1/ml/datasets/{name}": {
+    "/v1/risk/datasets/{name}": {
       "delete": {
-        "operationId": "mlDeleteDataset",
+        "operationId": "riskDeleteDataset",
         "summary": "Dispose of one dataset and every version of it",
         "description": "Disposes of one dataset and every version of it: the rows are\ndropped and the register is marked with what went.\n\nThis is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:\na table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is\nthe opposite of a retention decision belonging to the tenant whose records they\nare. The drop is a partition drop on (org, dataset), so the tenant is the first\ncomponent of the thing being dropped and a disposal cannot be spelled across one.\n\nThe BYTES are what goes. The register keeps one `disposed` row per version — the\nname, the number, the spec, the digest and who disposed of it when — for two\nreasons: a retention obligation is answered by a record of the deletion, not by\nsilence; and version numbers must stay monotone, so that after `orders` is\ndisposed of and declared again the next version is 4 and not 1. A number that\ncould be reused would make every citation of `orders v3` ambiguous forever.\n\nIt is not reversible and there is no soft state in between. A version a model\ncited has no rows once this returns, and every read of it says so.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "parameters": [
           {
@@ -100,7 +100,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlDisposal"
+                  "$ref": "#/components/schemas/riskDatasetDisposal"
                 }
               }
             },
@@ -109,11 +109,11 @@
         }
       },
       "get": {
-        "operationId": "mlDataset",
+        "operationId": "riskDataset",
         "summary": "Describe every version of one dataset",
         "description": "Dataset describes every version of one dataset, newest first — the whole\nhistory, because the point of a version is that the older ones are still there\nand a model fitted last quarter cites one of them.\n\nA name this org does not own answers 404, exactly as an unknown name does, so a\nprobe learns nothing about another tenant's datasets.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "parameters": [
           {
@@ -132,7 +132,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlDatasetVersions"
+                  "$ref": "#/components/schemas/riskDatasetVersions"
                 }
               }
             },
@@ -141,13 +141,13 @@
         }
       }
     },
-    "/v1/ml/datasets/{name}/export": {
+    "/v1/risk/datasets/{name}/export": {
       "get": {
-        "operationId": "mlExportDataset",
+        "operationId": "riskExportDataset",
         "summary": "Read a version's rows back, one page at a time",
         "description": "Reads a published version's rows back, one bounded page at a\ntime, in the version's own stable row order.\n\nOnly a published version can be exported. Rows written by an attempt that never\ncompleted are inert — no register row names them — and they are disposed of with\nthe dataset.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "parameters": [
           {
@@ -205,7 +205,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlDatasetRows"
+                  "$ref": "#/components/schemas/riskDatasetRows"
                 }
               }
             },
@@ -214,13 +214,13 @@
         }
       }
     },
-    "/v1/ml/datasets/{name}/lineage": {
+    "/v1/risk/datasets/{name}/lineage": {
       "get": {
-        "operationId": "mlDatasetLineage",
+        "operationId": "riskDatasetLineage",
         "summary": "Show where a version's rows came from, and whether that can still be demonstrated",
         "description": "Shows where a version's rows came from and whether that can\nstill be demonstrated.\n\nThe answer is MEASURED, not recalled: the plane asks the source the same\nbounded question again and compares it to the fingerprint taken when the\nversion was built. Anything but exact agreement is reported as drift — the\nsource is fed by a rollup that runs behind the events, so \"it holds more now\"\nis the ordinary case and it means re-running the spec would not reproduce this\nversion. An admitted gap is actionable; an unfalsifiable claim is not.\n\nIT IS A PRICED, BOUNDED READ, because it is the same statement a\nmaterialisation is charged for: an exact distinct-count over up to 400 days of\nthis org's feature surface. It takes the org's ONE source-scan slot, so a\ntenant looping it spends one scan and not a thousand; it counts against the\nplane's ceiling, so the fleet's warehouse is bounded too; and it runs under\nthis plane's own deadline rather than the caller's patience.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "parameters": [
           {
@@ -249,7 +249,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlLineage"
+                  "$ref": "#/components/schemas/riskLineage"
                 }
               }
             },
@@ -258,13 +258,13 @@
         }
       }
     },
-    "/v1/ml/datasets/{name}/materialize": {
+    "/v1/risk/datasets/{name}/materialize": {
       "post": {
-        "operationId": "mlMaterializeDataset",
+        "operationId": "riskMaterializeDataset",
         "summary": "Materialise the declared version into immutable rows",
         "description": "Builds the declared version into immutable rows and answers\n202 as soon as the attempt is on record.\n\nIt never holds the request open for the work: a materialisation is a bounded\nwarehouse scan, and letting an HTTP client's timeout be a data plane's timeout\nis how one tenant's retry loop becomes everyone's outage. ONE materialisation\nruns per org at a time; a second is refused rather than queued, because a queue\nadmits the same work later and the honest answer to \"again\" while one is\nrunning is that one is running.\n\nOnly a DECLARED version is admitted. A published version is immutable, and a\nversion whose earlier attempt did not complete is never re-attempted — that\nwould union two runs' rows under one number and make the digest a lie. In both\ncases the answer is to declare a new version, which is what a second run over a\nmoving source honestly is.",
         "tags": [
-          "ml"
+          "risk"
         ],
         "parameters": [
           {
@@ -283,7 +283,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mlDataset"
+                  "$ref": "#/components/schemas/riskDataset"
                 }
               }
             },
@@ -295,7 +295,7 @@
   },
   "components": {
     "schemas": {
-      "mlDataset": {
+      "riskDataset": {
         "properties": {
           "at": {
             "description": "At is when this version last changed state, and By who.",
@@ -305,7 +305,7 @@
             "type": "string"
           },
           "counts": {
-            "$ref": "#/components/schemas/mlSplitCounts",
+            "$ref": "#/components/schemas/riskSplitCounts",
             "description": "Counts is how the rows fall across the splits."
           },
           "digest": {
@@ -333,7 +333,7 @@
             "type": "integer"
           },
           "spec": {
-            "$ref": "#/components/schemas/mlDatasetSpec",
+            "$ref": "#/components/schemas/riskDatasetSpec",
             "description": "Spec is the bound query this version was built from, exactly as recorded."
           },
           "status": {
@@ -350,19 +350,34 @@
         },
         "type": "object"
       },
-      "mlDatasetList": {
+      "riskDatasetDisposal": {
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "integer"
+          },
+          "versions": {
+            "description": "Versions is how many versions went, and Rows how many rows they held between\nthem, as the register recorded them.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "riskDatasetList": {
         "properties": {
           "items": {
             "description": "Items is one entry per dataset, carrying its newest version. Never null: an\norg that has declared nothing gets an empty array.",
             "items": {
-              "$ref": "#/components/schemas/mlDataset"
+              "$ref": "#/components/schemas/riskDataset"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "mlDatasetRow": {
+      "riskDatasetRow": {
         "properties": {
           "at": {
             "description": "At is the row's instant.",
@@ -393,7 +408,7 @@
         },
         "type": "object"
       },
-      "mlDatasetRows": {
+      "riskDatasetRows": {
         "properties": {
           "dataset": {
             "type": "string"
@@ -419,7 +434,7 @@
           "rows": {
             "description": "Rows is the page. Never null.",
             "items": {
-              "$ref": "#/components/schemas/mlDatasetRow"
+              "$ref": "#/components/schemas/riskDatasetRow"
             },
             "type": "array"
           },
@@ -429,7 +444,7 @@
         },
         "type": "object"
       },
-      "mlDatasetSpec": {
+      "riskDatasetSpec": {
         "properties": {
           "cuts": {
             "description": "Cuts are the two RFC 3339 instants dividing train | val | test. Omit them to\ntake 70% and 85% of the window by time. Splitting is TEMPORAL and then\ngrouped by subject — a random split puts one device on both sides of the\nline and the model memorises the entity instead of the behaviour.",
@@ -475,11 +490,11 @@
         },
         "type": "object"
       },
-      "mlDatasetVersions": {
+      "riskDatasetVersions": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/mlDataset"
+              "$ref": "#/components/schemas/riskDataset"
             },
             "type": "array"
           },
@@ -489,22 +504,7 @@
         },
         "type": "object"
       },
-      "mlDisposal": {
-        "properties": {
-          "dataset": {
-            "type": "string"
-          },
-          "rows": {
-            "type": "integer"
-          },
-          "versions": {
-            "description": "Versions is how many versions went, and Rows how many rows they held between\nthem, as the register recorded them.",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "mlLineage": {
+      "riskLineage": {
         "properties": {
           "dataset": {
             "type": "string"
@@ -560,7 +560,7 @@
         },
         "type": "object"
       },
-      "mlSplitCounts": {
+      "riskSplitCounts": {
         "properties": {
           "judged": {
             "description": "Judged is how many rows carry a disposition. It is zero until a label plane\nwrites one, and reporting it plainly is what lets a model plane refuse to\nrank rather than name a winner it cannot justify.",

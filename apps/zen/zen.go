@@ -24,7 +24,7 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
-	cloudmoney "github.com/hanzoai/cloud/apps/money"
+	cloudmoney "github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	hmoney "github.com/hanzoai/money"
 	"github.com/hanzoai/zen"

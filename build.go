@@ -24,7 +24,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/types"
@@ -664,32 +664,35 @@ func publishableKey(apiKey string) bool {
 //  3. ZAP RPC when an addr is configured (split-deploy of a future ai subsystem).
 //  4. Fail-closed stub otherwise — a run records an honest error, never fakes one.
 func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
-	// THE IN-CLUSTER PEER WINS. `ai` is a plugin of this same binary running as
-	// its own process, so the honest way to reach it is the plane — the same
-	// socket every other cross-app call uses (metering's gatePeer, the finance
-	// debit). The HTTP gateway below is a PUBLIC address: preferring it sends the
-	// pod out through Cloudflare and back, and makes it mint an OAuth token to
-	// authenticate to its own deployment, to reach code one socket away.
+	// THE PEER IS REACHED OVER ITS OWN SOCKET, and the address is its NAME.
 	//
-	// Ordered, not gated: a deployment that names no peer still falls through to
-	// the gateway exactly as before, so this is inert until the address is set.
-	if cfg.AIZAPAddr != "" {
-		log.Info("deps.AI (completions) → in-cluster plane", "addr", cfg.AIZAPAddr)
-		return clients.AIRPCAt(cfg.AIZAPAddr)
-	}
-	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" && !publishableKey(cfg.AIAPIKey) {
-		log.Info("deps.AI (completions) → HTTP gateway (static secret key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
-		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)
+	// `ai` is a plugin of this same binary running as its own process, and its
+	// routes ride its unix socket exactly as they ride a public listener. The
+	// configured alternative was the pod's OWN public address, so a completion
+	// left through Cloudflare and came back — and, because that listener demands
+	// a credential, the pod minted an OAuth token to authenticate to its own
+	// deployment. Both were consequences of addressing a peer by URL.
+	//
+	// Which transport a process gets is decided by WHAT IT IS: !Enabled(ai) means
+	// this process does not carry the app, which is exactly when `ai` is a
+	// sibling. The process that IS `ai` never routes inference back through here.
+	//
+	// The CREDENTIAL is unchanged — same static key or same M2M identity, chosen
+	// the same way — because who may ask is a different question from where the
+	// peer is. Only the address and the route it travels change.
+	via, base := aiRoute(cfg)
+	if base != "" && cfg.AIAPIKey != "" && !publishableKey(cfg.AIAPIKey) {
+		log.Info("deps.AI (completions) → static secret key", "at", base, "socket", via != nil, "default_model", cfg.AIDefaultModel)
+		return clients.AIHTTPOn(base, cfg.AIAPIKey, cfg.AIDefaultModel, via)
 	}
 	if cfg.AIAPIKey != "" && publishableKey(cfg.AIAPIKey) {
-		log.Info("deps.AI (completions) → refusing read-only publishable (pk-) key for chat; using M2M", "base_url", cfg.AIBaseURL)
+		log.Info("deps.AI (completions) → refusing read-only publishable (pk-) key for chat; using M2M", "at", base)
 	}
-	if cfg.AIBaseURL != "" && cfg.AIAuthClientID != "" && cfg.AIAuthClientSecret != "" {
-		tokenURL := aiM2MTokenURL(cfg)
-		if tokenURL != "" {
-			log.Info("deps.AI (completions) → HTTP gateway (IAM M2M)", "base_url", cfg.AIBaseURL,
+	if base != "" && cfg.AIAuthClientID != "" && cfg.AIAuthClientSecret != "" {
+		if tokenURL := aiM2MTokenURL(cfg); tokenURL != "" {
+			log.Info("deps.AI (completions) → IAM M2M", "at", base, "socket", via != nil,
 				"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", cfg.AIDefaultModel)
-			return clients.AIHTTPM2M(cfg.AIBaseURL, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel)
+			return clients.AIHTTPM2MOn(base, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel, via)
 		}
 	}
 	log.Info("deps.AI (completions) → disabled (no secret key, no IAM M2M identity, no gateway configured)")
@@ -706,12 +709,10 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 //  2. Otherwise share the completions resolution (M2M / ZAP / fail-closed) so a
 //     deploy with no dedicated embed key still indexes — no regression.
 func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
-	if cfg.AIZAPAddr != "" {
-		return pickCompletionsClient(cfg, log) // the peer serves embeddings too.
-	}
-	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" {
-		log.Info("deps.Embed → HTTP gateway (static embed key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
-		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)
+	via, base := aiRoute(cfg)
+	if base != "" && cfg.AIAPIKey != "" {
+		log.Info("deps.Embed → static embed key", "at", base, "socket", via != nil, "default_model", cfg.AIDefaultModel)
+		return clients.AIHTTPOn(base, cfg.AIAPIKey, cfg.AIDefaultModel, via)
 	}
 	return pickCompletionsClient(cfg, log)
 }

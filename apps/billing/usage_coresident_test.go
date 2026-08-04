@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/finance"
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // TestCoResidentUsage proves usage() answers from the finance ledger (never the
