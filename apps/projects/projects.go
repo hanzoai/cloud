@@ -403,9 +403,7 @@ func init() {
 // They share the handler, so there is still exactly one implementation.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
-	for _, prefix := range []string{"/v1/projects", "/v1/sites", "/v1/platform/sites"} {
-		app.Group(prefix, cloud.Bridge(), cloud.DenyEnvelope())
-	}
+	app.Use(cloud.Bridge(), cloud.DenyEnvelope())
 	r := cloud.ZipApp(app)
 
 	zip.Post(r, "/v1/projects", o.create, zip.WithStatus(http.StatusCreated))

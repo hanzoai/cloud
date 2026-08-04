@@ -39,7 +39,7 @@ func billingApp(t *testing.T, commerce types.CommerceClient, planEnt func(contex
 	// and a typed op receives only a context — the request its session token
 	// rides on crosses on that context or not at all. A harness that skipped it
 	// would be testing a wiring no deployment has.
-	app.Group(teamPrefix).Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 	b.register(app, func(h zip.Handler) zip.Handler { return h })
 	return app, store
 }

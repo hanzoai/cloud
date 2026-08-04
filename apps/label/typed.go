@@ -154,8 +154,7 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 	// installs it app-wide already; nesting is harmless and this one is scoped,
 	// so a host that ever stopped installing it globally does not silently turn
 	// every op below into an unauthenticated one.
-	g := app.Group("/v1/risk/labels")
-	g.Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
