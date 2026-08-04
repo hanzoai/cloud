@@ -77,13 +77,13 @@ func TestEveryRouteIsATypedOp(t *testing.T) {
 // generated artefacts at once and must be a deliberate edit here.
 func TestTheSurfaceIsExactlyWhatItSays(t *testing.T) {
 	want := []string{
-		"DELETE /v1/ml/datasets/{name}",
-		"GET /v1/ml/datasets",
-		"GET /v1/ml/datasets/{name}",
-		"GET /v1/ml/datasets/{name}/export",
-		"GET /v1/ml/datasets/{name}/lineage",
-		"POST /v1/ml/datasets",
-		"POST /v1/ml/datasets/{name}/materialize",
+		"DELETE /v1/risk/datasets/{name}",
+		"GET /v1/risk/datasets",
+		"GET /v1/risk/datasets/{name}",
+		"GET /v1/risk/datasets/{name}/export",
+		"GET /v1/risk/datasets/{name}/lineage",
+		"POST /v1/risk/datasets",
+		"POST /v1/risk/datasets/{name}/materialize",
 	}
 	served, _ := projections(t)
 	var got []string
@@ -113,8 +113,8 @@ func TestEveryOpIsNamedTaggedAndDescribed(t *testing.T) {
 			t.Errorf("operation id %q is claimed by both %s and %s", op.OperationID, prev, key)
 		}
 		ids[op.OperationID] = key
-		if !strings.HasPrefix(op.OperationID, "ml") {
-			t.Errorf("%s is called %q; every leaf of this plane belongs to the ml face", key, op.OperationID)
+		if !strings.HasPrefix(op.OperationID, product) {
+			t.Errorf("%s is called %q; every leaf of this plane belongs to the %s face", key, op.OperationID, product)
 		}
 		if len(op.Tags) == 0 {
 			t.Errorf("%s carries no tag", key)
