@@ -45,7 +45,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -57,12 +56,6 @@ import (
 // maxBatch bounds one ingest request so a single POST cannot pin the warehouse.
 // Larger batches are rejected (400) rather than silently truncated.
 const maxBatch = 500
-
-// publicCaptureEnv gates anonymous (no-principal) capture. Default ON: the
-// marketing sites emit anonymous pageviews, and cloud is REPLACING the already-
-// public insights-capture ingest, so refusing anonymous events would drop that
-// traffic. Set to a falsey value to require a validated principal on every event.
-const publicCaptureEnv = "CLOUD_ANALYTICS_PUBLIC_CAPTURE"
 
 // maxClockSkew and maxBackdate are the TWO bounds on the one caller-chosen value
 // that reaches a key column, and they exist for different reasons.
@@ -538,16 +531,6 @@ func strconv64(n int64) string {
 }
 
 // ── handler ──────────────────────────────────────────────────────────────────
-
-// publicCaptureEnabled reports whether anonymous capture is allowed (default ON).
-func publicCaptureEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(publicCaptureEnv))) {
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return true
-	}
-}
 
 // resolveKeyOrg maps a presented project/API key to its org through the ONE IAM
 // key seam (cloud.OrgForKey). It is a package var ONLY so a test can substitute a

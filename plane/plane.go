@@ -62,6 +62,12 @@ const (
 	SitesResolve    = "sites_resolve"
 	SitesResolveOrg = "sites_resolve_org"
 
+	// ProjectsResolveKey answers "which project minted this publishable ingest
+	// key?" for the analytics ingest door — here for the same reason as the two
+	// above, and between the same two processes: the door serves api.hanzo.ai and
+	// the key lives in the project store.
+	ProjectsResolveKey = "projects_resolve_key"
+
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
@@ -760,6 +766,23 @@ func BindRuntimeDir() string {
 type SiteIn struct {
 	Slug string `json:"slug"`
 	Org  string `json:"org,omitempty"`
+}
+
+// KeyIn names a publishable ingest key to resolve. No org: the KEY is the tenant
+// key, and accepting one would let a caller file a beacon under someone else's.
+type KeyIn struct {
+	Key string `json:"key"`
+}
+
+// Attribution is the write scope a publishable key names. Found is explicit for the
+// same reason it is on Site: a key no project holds is a clean refusal, and a
+// failure to ASK is not — collapsing them would silently drop every site's
+// analytics during any transient failure of the owning app, which is the exact
+// class of silent loss this key exists to end.
+type Attribution struct {
+	Found   bool   `json:"found"`
+	Org     string `json:"org"`
+	Project string `json:"project"`
 }
 
 // Site is a published site's serving facts. Found is explicit: a site that does
