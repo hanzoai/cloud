@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cek"
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/namespace"
 )

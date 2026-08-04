@@ -38,7 +38,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // Canonical chart-of-accounts ids. ONE shared reserve pool with per-program payout
