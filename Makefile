@@ -64,7 +64,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-.PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run smoke test test-fast test-cgo test-codec vet tidy docker docker-push compose clean e2e
+.PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -190,6 +190,11 @@ RUN_PLUGINS ?= iam,base,kms,gateway,o11y
 run: cloud ## Run the host, building the plugins in RUN_PLUGINS (iam,base,kms,gateway,o11y).
 	@for a in $$(echo $(RUN_PLUGINS) | tr ',' ' '); do $(MAKE) --no-print-directory plugin APP=$$a; done
 	./bin/cloud
+
+# dev and lint are the names every repo in the fleet answers to. They are ALIASES
+# of the two targets that already do the work, never copies of them, so each of
+# those two things still has exactly one recipe.
+dev: run ## Alias for run.
 
 smoke: ## Build and run the smoke prober (mount-time integration check).
 	$(GO) run ./plugin/smoke
@@ -319,6 +324,8 @@ test-codec: ## Run the suite against the engine the image ships (cgo + a real li
 
 vet: ## go vet across the module.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
+
+lint: vet ## Alias for vet.
 
 # Not part of `test`: it rewrites source, so it runs deliberately, alone. It is how a
 # new assertion earns its place — break the property, watch the test go RED. An anchor
