@@ -411,6 +411,29 @@ func splitID(id string) (owner, name string) {
 	return "", id
 }
 
+// nameOf resolves a user's NAME from its id within an org, for the callers whose
+// only handle is the UUID `sub`. One roster read, used only after the direct
+// lookup has already failed — never on the happy path.
+func (c *iamClient) nameOf(ctx context.Context, owner, id string) (string, error) {
+	env, err := c.do(ctx, http.MethodGet, "/v1/iam/get-users", url.Values{"owner": {owner}}, nil)
+	if err != nil {
+		return "", err
+	}
+	var rows []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(env.Data, &rows); err != nil {
+		return "", err
+	}
+	for _, r := range rows {
+		if r.ID == id {
+			return r.Name, nil
+		}
+	}
+	return "", errNotFound
+}
+
 func (c *iamClient) getUser(ctx context.Context, owner, name string) (json.RawMessage, error) {
 	// An org-less caller (first-run onboarding) has no owner to send, and this is
 	// the ONE read that must still be attempted for them — resolving their
@@ -423,6 +446,17 @@ func (c *iamClient) getUser(ctx context.Context, owner, name string) (json.RawMe
 		q = url.Values{"owner": {owner}, "name": {name}}
 	}
 	env, err := c.do(ctx, http.MethodGet, "/v1/iam/users/get", q, nil)
+	if err != nil && owner != "" {
+		// `name` was not a username. On the direct-Bearer path the only user
+		// handle a token carries is the UUID `sub`, and IAM addresses a row by
+		// its NAME — so the lookup that just failed asked for a user that does
+		// not exist under that spelling. The org's roster carries both, so the
+		// id resolves to the name and the read is retried once.
+		if n, rerr := c.nameOf(ctx, owner, name); rerr == nil && n != "" && n != name {
+			env, err = c.do(ctx, http.MethodGet, "/v1/iam/users/get",
+				url.Values{"owner": {owner}, "name": {n}}, nil)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
