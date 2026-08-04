@@ -224,7 +224,7 @@ func TestAppetite_IsPerOrganisationAndShadowIsTheDefault(t *testing.T) {
 		t.Fatal("a brand-new model is LIVE — shadow must be the default, or a model nobody reviewed can refuse a payment")
 	}
 
-	if _, _, err := p.appetite(a, 0.05, 0.01, true); err != nil {
+	if _, _, _, err := p.appetite(a, 0.05, 0.01, true, "u_"+orgA); err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
 	sa, _, _ := p.state(a)
@@ -247,7 +247,7 @@ func TestAppetite_KeepsWhatWasLearned(t *testing.T) {
 	teach(t, p, k, stream(400, time.Now().UTC().Add(-4*time.Hour)))
 	before, _, _ := p.state(k)
 
-	after, _, err := p.appetite(k, 0.02, 0.001, false)
+	after, _, _, err := p.appetite(k, 0.02, 0.001, false, "u_"+orgA)
 	if err != nil {
 		t.Fatalf("appetite: %v", err)
 	}

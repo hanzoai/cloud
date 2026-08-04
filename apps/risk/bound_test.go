@@ -697,9 +697,13 @@ func TestObservation_HasOneConstructor(t *testing.T) {
 // names it.
 func TestOps_EveryOpIsAdmittedAndPriced(t *testing.T) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "typed.go", nil, 0)
+	// THE WHOLE PACKAGE, not typed.go. An op declared in any other file would
+	// otherwise be admitted and priced by nobody's assertion — the gate would read
+	// green while the surface it guards grew past it, which is the one way a
+	// structural test stops being one.
+	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
 	if err != nil {
-		t.Fatalf("parse typed.go: %v", err)
+		t.Fatalf("parse package: %v", err)
 	}
 	// The ops are exactly the methods on `ops` that a typed registration names.
 	registered := map[string]bool{}
@@ -720,11 +724,58 @@ func TestOps_EveryOpIsAdmittedAndPriced(t *testing.T) {
 	if len(registered) < 9 {
 		t.Fatalf("found %d registered ops, want every one of them — the scan is not reading the mount", len(registered))
 	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv == nil || !registered[fn.Name.Name] {
-			continue
+	seen := map[string]bool{}
+	for _, pkg := range pkgs {
+		for name, file := range pkg.Files {
+			if strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				// The RECEIVER TYPE is part of the identity, not just the name. The plane
+				// carries methods called score, learn, state and appetite too, and matching
+				// on the name alone reads those instead — which is a scan that fails every
+				// op for the wrong reason and would be "fixed" by narrowing it back.
+				if !ok || recvType(fn) != "ops" || !registered[fn.Name.Name] {
+					continue
+				}
+				seen[fn.Name.Name] = true
+				checkOpIsAdmittedAndPriced(t, fn)
+			}
 		}
+	}
+	// Every registered op was FOUND. A name the mount registers and no file
+	// declares means the scan stopped reading the surface, which is how this test
+	// passes by looking at nothing.
+	for name := range registered {
+		if !seen[name] {
+			t.Errorf("the mount registers op %q and no file in this package declares it — the scan is "+
+				"not reading the surface it claims to check", name)
+		}
+	}
+}
+
+// recvType is the receiver's type name, without its pointer, or "" for a
+// function with no receiver.
+func recvType(fn *ast.FuncDecl) string {
+	if fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return ""
+	}
+	expr := fn.Recv.List[0].Type
+	if star, ok := expr.(*ast.StarExpr); ok {
+		expr = star.X
+	}
+	if id, ok := expr.(*ast.Ident); ok {
+		return id.Name
+	}
+	return ""
+}
+
+// checkOpIsAdmittedAndPriced is the per-op half of
+// [TestOps_EveryOpIsAdmittedAndPriced].
+func checkOpIsAdmittedAndPriced(t *testing.T, fn *ast.FuncDecl) {
+	t.Helper()
+	{
 		var admits, gates bool
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
@@ -771,6 +822,7 @@ func TestEveryOp_IsGatedOnTheCallersOwnBalance(t *testing.T) {
 		{http.MethodPut, "/v1/risk/state/appetite", `{"review":0.01,"sample":0.001}`},
 		{http.MethodPost, "/v1/risk/state/snapshot", ""},
 		{http.MethodPost, "/v1/risk/state/restore", `{"body":{"version":1}}`},
+		{http.MethodGet, "/v1/risk/policy", ""},
 		{http.MethodGet, "/v1/risk/features?days=400", ""},
 		{http.MethodGet, "/v1/risk/search/srch_none", ""},
 	} {

@@ -254,6 +254,13 @@ type resident struct {
 	// gone. See [resident.hold].
 	advance chan struct{}
 	touch   time.Time // for eviction order
+	// pol is the VERSION of the decision regime this model is deciding under, from
+	// the tenant's own policy history (policy.go). It is carried here so every
+	// score can cite it without a disk read, and it is set in exactly two places:
+	// where a residency is opened and where a regime is enacted. Zero means the
+	// organisation has never stated one, which is a fact a score reports rather
+	// than a gap it hides.
+	pol int
 }
 
 // fold is how much of a tenant's OWN event surface has been folded into its
@@ -526,25 +533,7 @@ func (p *plane) open(t tenant, mine *opening) (r *resident, err error) {
 	if snap, cfg, warmed, err := p.load(t); err != nil {
 		p.log.Warn("model state unavailable; tenant starts warming", "tenant", string(t), "err", err)
 	} else {
-		if cfg != nil {
-			r.cfg.Appetite, r.cfg.Shadow = cfg.Appetite, cfg.Shadow
-			mod, err := anomaly.New(r.cfg, r.vel.vel)
-			if err != nil {
-				// The stated appetite could not be rebuilt. Keep the DEFAULT posture,
-				// which is shadow — refusing to honour a policy is survivable, quietly
-				// running live because a policy failed to load is not — and say so.
-				//
-				// The geometry seed is NOT reset with it: r.cfg has to keep describing
-				// the store [plane.plant] built.
-				p.log.Warn("stated appetite could not be restored; the tenant keeps the default shadow posture",
-					"tenant", string(t), "err", err)
-				seed := r.cfg.Seed
-				r.cfg = defaultConfig()
-				r.cfg.Seed, r.cfg.MaxOrgs = seed, 1
-			} else {
-				r.mod = mod
-			}
-		}
+		p.restoreRegime(r, cfg)
 		if snap != nil {
 			if err := p.install(r, *snap); err != nil {
 				p.log.Warn("model state rejected; tenant starts warming", "tenant", string(t), "err", err)
@@ -869,14 +858,17 @@ func (p *plane) leave(t tenant) {
 // score judges one observation WITHOUT learning from it, moving any counter, or
 // touching the aggregate store. It is how a candidate is tried against a
 // tenant's own behaviour before anything depends on the answer.
-func (p *plane) score(t tenant, o observation) (anomaly.Assessment, error) {
+func (p *plane) score(t tenant, o observation) (decided, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.Assessment{}, err
+		return decided{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mod.Inspect(o.tx(t), types.Entity{OrgID: string(t)}), nil
+	// The verdict and the version it was reached under are read in the SAME
+	// critical section, so a concurrent policy change cannot make a score cite a
+	// regime that did not produce its cut.
+	return decided{A: r.mod.Inspect(o.tx(t), types.Entity{OrgID: string(t)}), Version: r.pol}, nil
 }
 
 // learn records observations into the tenant's own aggregates and lets its model
@@ -902,7 +894,7 @@ func (p *plane) score(t tenant, o observation) (anomaly.Assessment, error) {
 // batch that skipped the rows and still moved them counts every event twice in
 // exactly the numbers that matter. Duplicates are still JUDGED, because the
 // caller asked what its model makes of them and the answer costs the same work.
-func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error) {
+func (p *plane) learn(t tenant, obs ...observation) ([]decided, error) {
 	if len(obs) == 0 {
 		return nil, nil
 	}
@@ -917,7 +909,7 @@ func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error
 		return nil, err
 	}
 	now := p.now().UTC()
-	out := make([]anomaly.Assessment, 0, len(obs))
+	out := make([]decided, 0, len(obs))
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i, o := range obs {
@@ -925,7 +917,7 @@ func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error
 		if !first[i] {
 			// Already in this tenant's record, so already in the projection of it. Judge
 			// it against the model as it stands and move nothing.
-			out = append(out, r.mod.Inspect(tx, types.Entity{OrgID: string(t)}))
+			out = append(out, decided{A: r.mod.Inspect(tx, types.Entity{OrgID: string(t)}), Version: r.pol})
 			continue
 		}
 		// THE RINGS ONLY MOVE FORWARD. An observation the aggregates cannot hold at
@@ -953,7 +945,7 @@ func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error
 		// from the one whose counters the report is built on.
 		a := r.mod.Inspect(tx, types.Entity{OrgID: string(t)})
 		r.mod.Assess(tx, types.Entity{OrgID: string(t)})
-		out = append(out, a)
+		out = append(out, decided{A: a, Version: r.pol})
 	}
 	// ONCE PER BATCH, never per event: it locks every shard. This is what turns
 	// velocity's silent LRU into a number — see [rings].
@@ -1050,30 +1042,58 @@ func (p *plane) state(t tenant) (anomaly.State, strain, error) {
 // state, build the model the tenant asked for, restore into it. The digest covers
 // the model's SHAPE (the inventory and the geometry parameters) and not the
 // appetite, so the restore is exact and nothing is unlearned by a policy change.
-func (p *plane) appetite(t tenant, review, sample float64, live bool) (anomaly.State, strain, error) {
+// It is DURABLE BEFORE IT IS IN FORCE, and that order is the whole point. The
+// model beside this policy may hold no learned mass yet, and the writer of the
+// learned state correctly declines to write when there is nothing learned — so
+// while the regime lived only on that row, an organisation that went live before
+// its model had learned anything was told live=true and had nothing written down.
+// This binary deploys Recreate at ONE replica, so the next rollout rebuilt it
+// from [defaultConfig] — shadow — and the model decided nothing, silently. The
+// regime is now its own versioned record ([plane.enact]) written BEFORE anything
+// in memory moves, so a policy that cannot be written down is refused instead.
+func (p *plane) appetite(t tenant, review, sample float64, live bool, by string) (anomaly.State, strain, int, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.State{}, strain{}, err
+		return anomaly.State{}, strain{}, 0, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	cfg := r.cfg
-	cfg.Appetite.Review, cfg.Appetite.Sample, cfg.Shadow = review, sample, !live
+	// BUILD FIRST. Constructing the model the tenant asked for is pure and can
+	// fail, so it is done before the durable write — a recorded version whose
+	// regime could never be built would be a history that does not describe what
+	// the plane did.
+	want := regime{Review: review, Sample: sample, Live: live}
+	cfg := want.applyTo(r.cfg)
 	next, err := anomaly.New(cfg, r.vel.vel)
 	if err != nil {
-		return anomaly.State{}, strain{}, fmt.Errorf("risk: appetite: %w", err)
+		return anomaly.State{}, strain{}, 0, fmt.Errorf("risk: appetite: %w", err)
 	}
 	if snap, held := r.mod.Snapshot(string(t)); held {
 		if err := next.Restore(snap); err != nil {
-			return anomaly.State{}, strain{}, fmt.Errorf("risk: appetite: carry learned state: %w", err)
+			return anomaly.State{}, strain{}, 0, fmt.Errorf("risk: appetite: carry learned state: %w", err)
 		}
 	}
-	r.cfg, r.mod = cfg, next
-	if err := p.persist(r); err != nil {
-		return anomaly.State{}, strain{}, err
+	// THE COMMIT POINT. Past here the regime is recorded and readable back; before
+	// here nothing has changed.
+	rec, _, err := p.enact(t, want, by, time.Now())
+	if err != nil {
+		return anomaly.State{}, strain{}, 0, err
 	}
-	return r.mod.State(string(t)), r.vel.strain(), nil
+	r.cfg, r.mod, r.pol = cfg, next, rec.Version
+	// The learned state is written down too when there is any, so the masses and
+	// the regime come back together. Its failure is NOT fatal here: the regime is
+	// already durable, and refusing a recorded policy change because the snapshot
+	// beside it could not be written would undo nothing and report a lie.
+	if err := p.persist(r); err != nil {
+		p.log.Warn("the regime was recorded but the learned state beside it was not written",
+			"tenant", string(t), "version", rec.Version, "err", err)
+	}
+	// The VERSION IS RETURNED, not re-read. Re-reading it would resolve the
+	// residency a second time, outside the lock this change was made under, so two
+	// concurrent restatements could each report the other's version — an audit
+	// surface disagreeing with the record it describes.
+	return r.mod.State(string(t)), r.vel.strain(), rec.Version, nil
 }
 
 // pin returns a copy of the tenant's learned state, and writes it to the
@@ -1801,6 +1821,11 @@ func openShelf(db *sql.DB) (*shelf, error) {
 			at     INTEGER NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS search_tenant ON search(tenant, at)`,
+		// The tenant's own POLICY history: every distinct decision regime it has
+		// adopted, versioned, immutable and durable on its own terms — never
+		// conditional on whether the model beside it has learned anything yet
+		// (policy.go).
+		policyDDL,
 		// The tenant's own record of what it taught, which its aggregates are a
 		// projection of (ring.go), and how far each source plane has been folded into
 		// its feature surface (feature.go).
