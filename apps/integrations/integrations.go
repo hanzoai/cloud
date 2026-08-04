@@ -798,7 +798,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// remaining identity facts (bridgeFacts) off the request context, and a Use only
 	// runs ahead of routes registered after it. Bounded to the group, which is the
 	// prefix this subsystem serves.
-	app.Group("/v1/integrations").Use(cloud.Bridge(), bridgeFacts)
+	app.Group("/v1/integrations").Use(cloud.Bridge(), zip.H(bridgeFacts))
 
 	zip.Get(zapp, "/v1/integrations", o.list)
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))
