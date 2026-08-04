@@ -5,9 +5,10 @@ package risk
 //
 // Every org's events already land in one columnar store through one ingest door
 // (POST /v1/event → the bus → one durable consumer per table): product events in
-// event.event, captured failures in event.error, and every priced inference in
-// hanzo.cloud_usage. This file turns that stream into a PER-ORG FEATURE SURFACE
-// — hanzo.risk_feature — and reads it back for exactly one tenant at a time.
+// event.fact under signal='act', captured failures in event.error, and every
+// priced inference in hanzo.cloud_usage. This file turns that stream into a
+// PER-ORG FEATURE SURFACE — hanzo.risk_feature — and reads it back for exactly
+// one tenant at a time.
 //
 // THREE PROPERTIES, EACH LOAD-BEARING.
 //
@@ -30,7 +31,7 @@ package risk
 //     uncomputable rather than merely disallowed.
 //
 // The SOURCE planes are read with the BARE org, because that is the column they
-// carry: event.event and hanzo.cloud_usage were written by the ingest door long
+// carry: event.fact and hanzo.cloud_usage were written by the ingest door long
 // before this plane existed and their tenant column is the IAM org slug. The
 // qualification is applied on the way IN — the rollup writes the qualified key
 // into hanzo.risk_feature — so this plane's own index is qualified end to end and
@@ -208,7 +209,7 @@ var kinds = []string{kindPerson, kindSession, kindAccount}
 // this file touches belongs to another owner and is READ ONLY.
 const (
 	featureTable = "hanzo.risk_feature"
-	sourceEvent  = "event.event"
+	sourceEvent  = "event.fact"
 	sourceError  = "event.error"
 	sourceUsage  = "hanzo.cloud_usage"
 )
@@ -462,6 +463,9 @@ type rollupStmt struct {
 // plane happens to carry) as its leading bound predicate and writes the
 // QUALIFIED key, so the surface's own index is qualified even though the planes
 // it is rolled up from are not.
+//
+// event.fact holds every signal in one table, so its readers pin signal='act' —
+// without it a person's error and span rows count as things they did.
 var rollups = []rollupStmt{
 	{
 		Name: "person",
@@ -470,8 +474,8 @@ var rollups = []rollupStmt{
 		      FROM (
 		        SELECT if(person_id != '', person_id, if(distinct_id != '', distinct_id, anonymous_id)) AS s,
 		               toStartOfFiveMinute(time) AS b, session_id, distinct_id, path
-		        FROM event.event
-		        WHERE org = ? AND time >= ? AND time < ?
+		        FROM event.fact
+		        WHERE org = ? AND signal = 'act' AND time >= ? AND time < ?
 		      )
 		      WHERE s != ''
 		      GROUP BY s, b
@@ -481,8 +485,8 @@ var rollups = []rollupStmt{
 		Name: "session",
 		SQL: `INSERT INTO hanzo.risk_feature (org, subject_kind, subject, bucket, events, sessions, distincts, paths)
 		      SELECT ?, 'session', session_id, toStartOfFiveMinute(time), count(), 1, uniqExact(distinct_id), uniqExact(path)
-		      FROM event.event
-		      WHERE org = ? AND time >= ? AND time < ? AND session_id != ''
+		      FROM event.fact
+		      WHERE org = ? AND signal = 'act' AND time >= ? AND time < ? AND session_id != ''
 		      GROUP BY session_id, toStartOfFiveMinute(time)
 		      LIMIT ?`,
 	},
