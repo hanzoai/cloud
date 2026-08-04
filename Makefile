@@ -179,15 +179,17 @@ hanzo: ## Build the control CLI into ./bin/hanzo (links cli and nothing else).
 	@mkdir -p bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) -X main.version=$(VERSION)" -o bin/$@ ./cmd/$@
 
-# Builds the host plus EXACTLY the plugins it is told to mount — not all 106.
-# The host resolves a plugin as a file beside itself (manifest.App.Plugin), so a
-# name in RUN_ENABLE with no binary in ./bin is the one way this fails; building
-# that same list here is what keeps the two in step.
-RUN_ENABLE ?= iam,base,kms,gateway,o11y
+# Builds the host plus the plugins you want to exercise locally — not all 106.
+# The host mounts what manifest.Apps lists and resolves each plugin as a file
+# beside itself (manifest.App.Plugin); a lazy one with no binary simply never
+# starts, and a Required one fails loudly. So this list is a BUILD list, not a
+# mount list — the binary has never taken one, and stating the app set a second
+# time is what took devnet down twice.
+RUN_PLUGINS ?= iam,base,kms,gateway,o11y
 
-run: cloud ## Run the host with iam,base,kms,gateway,o11y (matches README quickstart); builds just those plugins.
-	@for a in $$(echo $(RUN_ENABLE) | tr ',' ' '); do $(MAKE) --no-print-directory plugin APP=$$a; done
-	./bin/cloud --enable=$(RUN_ENABLE)
+run: cloud ## Run the host, building the plugins in RUN_PLUGINS (iam,base,kms,gateway,o11y).
+	@for a in $$(echo $(RUN_PLUGINS) | tr ',' ' '); do $(MAKE) --no-print-directory plugin APP=$$a; done
+	./bin/cloud
 
 smoke: ## Build and run the smoke prober (mount-time integration check).
 	$(GO) run ./plugin/smoke

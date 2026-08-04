@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // Verifies amountMoney precedence: typed Amount wins (18-dp native, no floor),
