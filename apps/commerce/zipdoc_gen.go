@@ -10,14 +10,56 @@ func init() {
 	zip.Describe("DELETE /v1/billing/alerts/:id", zip.Doc{
 		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
 	})
+	zip.Describe("DELETE /v1/billing/portal/methods/:id", zip.Doc{
+		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
+	})
 	zip.Describe("GET /_/commerce/healthz", zip.Doc{
 		Description: "Native zip health endpoint — registered FIRST so probes answer even when\nthe embed fails below.",
 	})
 	zip.Describe("GET /v1/billing/alerts/authorize", zip.Doc{
 		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
 	})
+	zip.Describe("GET /v1/billing/invoices/:id", zip.Doc{
+		Description: "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"InvoiceLineIn.amount":       "Amount is the line total in whole cents (250000 is $2,500.00).",
+			"InvoiceLineIn.description":  "Description is the human-readable line, e.g. \"Advisory retainer — August\".",
+			"InvoiceLineIn.quantity":     "Quantity is the number of units, when the line is metered. Optional.",
+			"InvoiceLineIn.unitPrice":    "UnitPrice is the per-unit price in cents, when the line is metered. Optional.",
+			"InvoiceOut.amountDueCents":  "AmountDueCents is what remains collectible.",
+			"InvoiceOut.amountPaidCents": "AmountPaidCents is what has been collected so far.",
+			"InvoiceOut.createdAt":       "CreatedAt is when the draft was raised, RFC3339.",
+			"InvoiceOut.currency":        "Currency is the ISO 4217 code.",
+			"InvoiceOut.customerEmail":   "CustomerEmail is where it is sent.",
+			"InvoiceOut.id":              "ID is the invoice id — what the issue, collect and void ops address.",
+			"InvoiceOut.lines":           "Lines are the charges on the invoice.",
+			"InvoiceOut.number":          "Number is the human-facing invoice number, e.g. \"INV-0042\". A draft has\nnone; issuing assigns it.",
+			"InvoiceOut.paymentRef":      "PaymentRef is the processor reference for the collection, once paid.",
+			"InvoiceOut.status":          "Status is draft, open, paid, void or uncollectible. A draft is not\ncollectible; issuing moves it to open.",
+			"InvoiceOut.subtotalCents":   "SubtotalCents is the sum of the lines.",
+			"InvoiceOut.userId":          "UserID is the customer billed.",
+			"InvoiceRefIn.id":            "ID is the invoice id.",
+		},
+	})
 	zip.Describe("GET /v1/billing/plans", zip.Doc{
 		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
+	})
+	zip.Describe("GET /v1/billing/portal/methods", zip.Doc{
+		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
+	})
+	zip.Describe("GET /v1/payments/:id", zip.Doc{
+		Description: "Reads one settled payment out of the caller's org ledger.\n\nThe org scopes the read by construction — the ledger is namespaced to it — so\nan id belonging to another tenant is simply not found rather than found and\nthen filtered. A ledger row that is not a payment is likewise not found, so\nthis cannot be used to walk the org's usage debits.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"PaymentRecord.amountCents": "AmountCents is the credited amount in whole cents.",
+			"PaymentRecord.createdAt":   "CreatedAt is when the credit was written, RFC3339.",
+			"PaymentRecord.currency":    "Currency is the ISO 4217 code.",
+			"PaymentRecord.id":          "ID is the ledger transaction id.",
+			"PaymentRecord.notes":       "Notes is the ledger memo, carrying the processor and its reference.",
+			"PaymentRecord.status":      "Status is the payment's state. This ledger writes a deposit only AFTER the\nprocessor settled, so a payment that can be read is one that succeeded.",
+			"PaymentRecord.subject":     "Subject is the billing key this payment credited.",
+			"PaymentRecord.test":        "Test reports whether this was a sandbox charge (test balance) or live money.",
+			"PaymentRef.id":             "ID is the ledger transaction id a payment returned.",
+		},
 	})
 	zip.Describe("PATCH /v1/billing/alerts/:id", zip.Doc{
 		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
@@ -46,6 +88,104 @@ func init() {
 	zip.Describe("POST /v1/billing/alerts", zip.Doc{
 		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
 	})
+	zip.Describe("POST /v1/billing/invoices", zip.Doc{
+		Description: "Raises a DRAFT invoice against a customer in the caller's own org.\n\nThe invoice is not collectible yet: a draft exists so it can be read and\ncorrected, and issueInvoice is the separate act that turns it into a demand for\npayment. The subtotal and amount due are computed from the lines, so there is\nno total to send and none to get wrong.\n\nThe billing org is the caller's, taken from the validated principal, so an\ninvoice can only ever be raised on the caller's own books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"InvoiceLineIn.amount":         "Amount is the line total in whole cents (250000 is $2,500.00).",
+			"InvoiceLineIn.description":    "Description is the human-readable line, e.g. \"Advisory retainer — August\".",
+			"InvoiceLineIn.quantity":       "Quantity is the number of units, when the line is metered. Optional.",
+			"InvoiceLineIn.unitPrice":      "UnitPrice is the per-unit price in cents, when the line is metered. Optional.",
+			"InvoiceOut.amountDueCents":    "AmountDueCents is what remains collectible.",
+			"InvoiceOut.amountPaidCents":   "AmountPaidCents is what has been collected so far.",
+			"InvoiceOut.createdAt":         "CreatedAt is when the draft was raised, RFC3339.",
+			"InvoiceOut.currency":          "Currency is the ISO 4217 code.",
+			"InvoiceOut.customerEmail":     "CustomerEmail is where it is sent.",
+			"InvoiceOut.id":                "ID is the invoice id — what the issue, collect and void ops address.",
+			"InvoiceOut.lines":             "Lines are the charges on the invoice.",
+			"InvoiceOut.number":            "Number is the human-facing invoice number, e.g. \"INV-0042\". A draft has\nnone; issuing assigns it.",
+			"InvoiceOut.paymentRef":        "PaymentRef is the processor reference for the collection, once paid.",
+			"InvoiceOut.status":            "Status is draft, open, paid, void or uncollectible. A draft is not\ncollectible; issuing moves it to open.",
+			"InvoiceOut.subtotalCents":     "SubtotalCents is the sum of the lines.",
+			"InvoiceOut.userId":            "UserID is the customer billed.",
+			"RaiseInvoiceIn.currency":      "Currency is the ISO 4217 code, lower-cased. Empty means usd.",
+			"RaiseInvoiceIn.customerEmail": "CustomerEmail is where the invoice is sent. Optional.",
+			"RaiseInvoiceIn.lines":         "Lines are the charges. The invoice subtotal and amount due are COMPUTED\nfrom these — there is no total field to send, because a total that\ndisagreed with its own lines would bill a number nobody could derive.",
+			"RaiseInvoiceIn.userId":        "UserID identifies the customer being billed, within the caller's own org.\nRequired — an invoice with no addressee is not an invoice.",
+		},
+	})
+	zip.Describe("POST /v1/billing/invoices/:id/collect", zip.Doc{
+		Description: "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file — the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable — and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"CollectOut.balanceUsedCents": "BalanceUsedCents is how much was covered by prepaid balance.",
+			"CollectOut.cardChargedCents": "CardChargedCents is how much was charged to the card on file.",
+			"CollectOut.creditUsedCents":  "CreditUsedCents is how much was covered by credit grants.",
+			"CollectOut.invoice":          "Invoice is the invoice AFTER the attempt — its status is the authority on\nwhat happened, not this struct's other fields.",
+			"CollectOut.paid":             "Paid reports whether the invoice is now settled in full. A false here with\nno error is a DECLINE: the invoice stays open and may be collected again.",
+			"CollectOut.processorRef":     "ProcessorRef is the processor's reference for any card charge — the field\nthat proves money moved at the gateway rather than only in our ledger.",
+			"CollectOut.reason":           "Reason explains a decline or partial collection. Empty on success.",
+			"InvoiceLineIn.amount":        "Amount is the line total in whole cents (250000 is $2,500.00).",
+			"InvoiceLineIn.description":   "Description is the human-readable line, e.g. \"Advisory retainer — August\".",
+			"InvoiceLineIn.quantity":      "Quantity is the number of units, when the line is metered. Optional.",
+			"InvoiceLineIn.unitPrice":     "UnitPrice is the per-unit price in cents, when the line is metered. Optional.",
+			"InvoiceOut.amountDueCents":   "AmountDueCents is what remains collectible.",
+			"InvoiceOut.amountPaidCents":  "AmountPaidCents is what has been collected so far.",
+			"InvoiceOut.createdAt":        "CreatedAt is when the draft was raised, RFC3339.",
+			"InvoiceOut.currency":         "Currency is the ISO 4217 code.",
+			"InvoiceOut.customerEmail":    "CustomerEmail is where it is sent.",
+			"InvoiceOut.id":               "ID is the invoice id — what the issue, collect and void ops address.",
+			"InvoiceOut.lines":            "Lines are the charges on the invoice.",
+			"InvoiceOut.number":           "Number is the human-facing invoice number, e.g. \"INV-0042\". A draft has\nnone; issuing assigns it.",
+			"InvoiceOut.paymentRef":       "PaymentRef is the processor reference for the collection, once paid.",
+			"InvoiceOut.status":           "Status is draft, open, paid, void or uncollectible. A draft is not\ncollectible; issuing moves it to open.",
+			"InvoiceOut.subtotalCents":    "SubtotalCents is the sum of the lines.",
+			"InvoiceOut.userId":           "UserID is the customer billed.",
+			"InvoiceRefIn.id":             "ID is the invoice id.",
+		},
+	})
+	zip.Describe("POST /v1/billing/invoices/:id/issue", zip.Doc{
+		Description: "Issues a draft invoice: moves it to OPEN, assigns its number, and makes it\ncollectible.\n\nOnly a draft can be issued. An invoice already open, paid or void is refused\nwith the state machine's own reason rather than being silently re-issued, which\nwould mint a second number for one debt.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"InvoiceLineIn.amount":       "Amount is the line total in whole cents (250000 is $2,500.00).",
+			"InvoiceLineIn.description":  "Description is the human-readable line, e.g. \"Advisory retainer — August\".",
+			"InvoiceLineIn.quantity":     "Quantity is the number of units, when the line is metered. Optional.",
+			"InvoiceLineIn.unitPrice":    "UnitPrice is the per-unit price in cents, when the line is metered. Optional.",
+			"InvoiceOut.amountDueCents":  "AmountDueCents is what remains collectible.",
+			"InvoiceOut.amountPaidCents": "AmountPaidCents is what has been collected so far.",
+			"InvoiceOut.createdAt":       "CreatedAt is when the draft was raised, RFC3339.",
+			"InvoiceOut.currency":        "Currency is the ISO 4217 code.",
+			"InvoiceOut.customerEmail":   "CustomerEmail is where it is sent.",
+			"InvoiceOut.id":              "ID is the invoice id — what the issue, collect and void ops address.",
+			"InvoiceOut.lines":           "Lines are the charges on the invoice.",
+			"InvoiceOut.number":          "Number is the human-facing invoice number, e.g. \"INV-0042\". A draft has\nnone; issuing assigns it.",
+			"InvoiceOut.paymentRef":      "PaymentRef is the processor reference for the collection, once paid.",
+			"InvoiceOut.status":          "Status is draft, open, paid, void or uncollectible. A draft is not\ncollectible; issuing moves it to open.",
+			"InvoiceOut.subtotalCents":   "SubtotalCents is the sum of the lines.",
+			"InvoiceOut.userId":          "UserID is the customer billed.",
+			"InvoiceRefIn.id":            "ID is the invoice id.",
+		},
+	})
+	zip.Describe("POST /v1/billing/invoices/:id/void", zip.Doc{
+		Description: "Voids a draft or issued invoice — the cancel.\n\nA paid invoice cannot be voided: money has moved, and the correction for that\nis a refund, not an erasure. The state machine refuses it and that refusal is\nthe answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"InvoiceLineIn.amount":       "Amount is the line total in whole cents (250000 is $2,500.00).",
+			"InvoiceLineIn.description":  "Description is the human-readable line, e.g. \"Advisory retainer — August\".",
+			"InvoiceLineIn.quantity":     "Quantity is the number of units, when the line is metered. Optional.",
+			"InvoiceLineIn.unitPrice":    "UnitPrice is the per-unit price in cents, when the line is metered. Optional.",
+			"InvoiceOut.amountDueCents":  "AmountDueCents is what remains collectible.",
+			"InvoiceOut.amountPaidCents": "AmountPaidCents is what has been collected so far.",
+			"InvoiceOut.createdAt":       "CreatedAt is when the draft was raised, RFC3339.",
+			"InvoiceOut.currency":        "Currency is the ISO 4217 code.",
+			"InvoiceOut.customerEmail":   "CustomerEmail is where it is sent.",
+			"InvoiceOut.id":              "ID is the invoice id — what the issue, collect and void ops address.",
+			"InvoiceOut.lines":           "Lines are the charges on the invoice.",
+			"InvoiceOut.number":          "Number is the human-facing invoice number, e.g. \"INV-0042\". A draft has\nnone; issuing assigns it.",
+			"InvoiceOut.paymentRef":      "PaymentRef is the processor reference for the collection, once paid.",
+			"InvoiceOut.status":          "Status is draft, open, paid, void or uncollectible. A draft is not\ncollectible; issuing moves it to open.",
+			"InvoiceOut.subtotalCents":   "SubtotalCents is the sum of the lines.",
+			"InvoiceOut.userId":          "UserID is the customer billed.",
+			"InvoiceRefIn.id":            "ID is the invoice id.",
+		},
+	})
 	zip.Describe("POST /v1/billing/mode", zip.Doc{
 		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
 	})
@@ -66,5 +206,19 @@ func init() {
 	})
 	zip.Describe("POST /v1/billing/webhooks/:provider", zip.Doc{
 		Description: "Extracts the standard Go context from the HTTP request\nand stores it in the request-scoped locals for downstream handlers.\n\nIt also marks the stored context mint-gated (mintauth.WithGate): every inbound\nrequest is a potential untrusted principal, so any spendable-balance mint that\nflows from it must carry mint authorization or the ledger sink refuses it. This\nbacks up the primary gate in Organization.Namespaced for the rare handler that\nbuilds a datastore straight from c.Context(). Authorization\n(PlatformOnly / settled payment / server-fixed grant) rides on top.",
+	})
+	zip.Describe("POST /v1/payments", zip.Doc{
+		Description: "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"PaymentIn.amountCents":    "AmountCents is the amount to charge, in whole cents (5000 is $50.00).\nServer-side bounds apply and are authoritative — the default floor is $1\nand the ceiling $5,000, so a fat-fingered or hostile amount is refused\nbefore any money moves.",
+			"PaymentIn.currency":       "Currency is the ISO 4217 code, lower-cased. Empty means usd.",
+			"PaymentIn.idempotencyKey": "IdempotencyKey makes a retry safe: the same key never charges twice, it\nreplays the first result. Sending one is strongly recommended for an agent,\nwhich retries by construction. Empty falls back to a windowed key derived\nfrom the amount and currency, so a double-submit inside 15 minutes still\ncollapses onto one charge.",
+			"PaymentIn.sourceId":       "SourceID is the single-use payment token that stands in for the card: a\nSquare Web Payments SDK nonce minted in the browser, or a Square sandbox\ntest nonce when the org's credentials are sandbox ones. The card number\nitself never reaches this process, which is what keeps it out of PCI scope.",
+			"PaymentOut.balanceCents":  "BalanceCents is the org's balance AFTER this payment, read back from the\nsame key just credited so it matches what the balance endpoint reports.",
+			"PaymentOut.id":            "ID is the ledger transaction id for the credit. It is what getPayment\nreads back, and the customer-visible receipt for the money.",
+			"PaymentOut.processorRef":  "ProcessorRef is the payment processor's own reference for the charge\n(Square's payment id). It is the field that proves money actually moved at\nthe gateway rather than only in our ledger — the thing to quote when\nreconciling against a processor dashboard.",
+			"PaymentOut.status":        "Status is \"ok\" on a settled charge. A charge that did not settle is an\nerror with the processor's reason, never a status field to inspect.",
+			"PaymentOut.test":          "Test reports which bucket this credited: true is a SANDBOX charge crediting\nthe test balance, false is live money. It is always stated so a receipt can\nnever be mistaken for the other kind.",
+		},
 	})
 }
