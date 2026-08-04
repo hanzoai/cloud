@@ -366,7 +366,7 @@ func issuePayout(s *cloud.Service[state], ctx context.Context, a Author, amountC
 	// is logged loud (never silent) so an operator reconciles from the payout row + audit.
 	if method == methodCredits {
 		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), amountCents, grantCurrency,
-			fmt.Sprintf("OSS author royalty payout (%s)", a.GithubLogin), grantTag)
+			fmt.Sprintf("OSS author royalty payout (%s)", a.GithubLogin), grantTag, "payout:"+payoutID)
 		if gerr != nil {
 			s.Log.Error("authors: credits payout grant failed (reserved against pending; not retried)",
 				"author", a.ID, "payout", payoutID, "err", gerr)
