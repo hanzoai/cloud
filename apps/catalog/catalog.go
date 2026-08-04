@@ -219,19 +219,27 @@ func build(b cloud.Base) (state, error) {
 
 // routes registers the lens.
 //
-// Bridge FIRST, on the subsystem's own prefix and BEFORE the leaf: fiber runs
-// middleware in registration order, so one installed after its route never runs.
-// A typed op receives only a context, so the validated org reaches it by being
-// parked there — never as an In field, which is caller-supplied and would be a
-// cross-tenant read the caller asserted for itself. Serve installs one app-wide
-// too; nesting is harmless, and this package's own tests mount on a bare app with
-// no Serve, so this install is what makes them pass.
+// Bridge FIRST and BEFORE the leaf: fiber runs middleware in registration order,
+// so one installed after its route never runs. A typed op receives only a
+// context, so the validated org reaches it by being parked there — never as an
+// In field, which is caller-supplied and would be a cross-tenant read the caller
+// asserted for itself. Serve installs one app-wide too; nesting is harmless, and
+// this package's own tests mount on a bare app with no Serve, so this install is
+// what makes them pass.
 //
-// The op is declared on the App with its WHOLE path, not on the group with an
-// empty leaf: joining "/v1/catalog" with "" yields "/v1/catalog/", a different
-// path from the one this API has always served.
+// USE, NOT A MIDDLEWARE-CARRYING GROUP — the same correction as auditlog, for
+// the same reason. This used to say `app.Group("/v1/catalog", Bridge())`, but
+// the op below is declared on the App with its WHOLE path, so no route sits
+// beneath that group; middleware over an empty subtree can never run, and zip
+// refuses to compose it. Use is the ONE composition verb, and it means the right
+// thing through both routers: cloud's scope gates it to this subsystem's
+// declared subtrees, and a bare *zip.App treats root middleware as always-live.
+//
+// The op keeps its WHOLE path rather than moving to a group with an empty leaf:
+// joining "/v1/catalog" with "" yields "/v1/catalog/", a different path from the
+// one this API has always served, and one that would ship in OpenAPI and the SDK.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Group("/v1/catalog", cloud.Bridge())
+	app.Use(zip.H(cloud.Bridge()))
 	o := ops{s: s}
 	zip.Get(cloud.ZipApp(app), "/v1/catalog", o.browse)
 }

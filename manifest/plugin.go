@@ -33,6 +33,18 @@ type App struct {
 	// one binary.
 	Prefixes []string
 
+	// Gates are the subtrees whose MIDDLEWARE this app may install, when that is
+	// not the same list as Prefixes. Empty — every app but one — means Prefixes,
+	// because you gate what you serve.
+	//
+	// It exists for the co-resident case, where the two genuinely differ: zen
+	// answers no path and wraps ai's "/v1". Saying that with Prefixes would be a
+	// routing claim on a path it does not serve — the duplicate this field's
+	// neighbour Coresident was introduced to remove — and saying it nowhere is
+	// what actually happened: the grant went silently to nil and zen's mount was
+	// refused. See [GrantFor], which is the only reader.
+	Gates []string
+
 	// Coresident means the app is NOT prefix-routed: it mounts as middleware on
 	// another app's router and decides per request whether to serve or call Next.
 	// The light host must not Load it, because Load's whole job is to claim a
