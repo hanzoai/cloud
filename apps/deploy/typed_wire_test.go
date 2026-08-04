@@ -37,6 +37,7 @@ import (
 func probe(t *testing.T, s *cloud.Service[state], req *http.Request) (int, string) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	resp, err := app.Test(req)
 	if err != nil {
@@ -132,6 +133,7 @@ func TestRefusalIsA403AndANavigationIsBounced(t *testing.T) {
 		nav := httptest.NewRequest(http.MethodGet, path, nil)
 		nav.Header.Set("Sec-Fetch-Dest", "document")
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
+		compose(app)
 		routes(app, s)
 		resp, err := app.Test(nav)
 		if err != nil {
@@ -246,6 +248,7 @@ func TestPostsStayRawBecauseZipDecodesTheBodyFirst(t *testing.T) {
 // carries prose. Nothing on this plane publishes an operationId and nothing else.
 func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, fakeService())
 	doc, err := openapi.Spec(app, openapi.Info{Title: "deploy", Version: "v1"})
 	if err != nil {

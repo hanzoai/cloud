@@ -59,6 +59,12 @@ func wireApp(t *testing.T, dir string) (*zip.App, *cloud.Service[*state]) {
 	return wireWith(t, dir, warehouse)
 }
 
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 403 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // wireWith mounts the surface with a stated columnar plane, and returns the
 // directory so a test can mount a SECOND process over the same files.
 //
@@ -77,6 +83,7 @@ func wireWith(t *testing.T, dir string, c columnar) (*zip.App, *cloud.Service[*s
 	}
 	s.State.derived = c
 	app := zip.New(zip.Config{Logger: luxlog.New("labeltest"), DisableStartupMessage: true})
+	compose(app)
 	routes(app, s)
 	t.Cleanup(func() { _ = s.State.stores.CloseAll() })
 	return app, s

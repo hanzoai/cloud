@@ -16,6 +16,13 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (Mount says why beside its registrations): the program's composer does, once
+// at the root. In a test the test IS the composer, so it owes the same install —
+// skipping it does not test a stricter program, it tests one where every
+// org-scoped op answers 403 for a reason production could never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // TestAdminCatalog_HTTP drives the real subsystem over HTTP: it Mounts
 // pricing on a zip app and exercises the admin write surface + the gated
 // read path end-to-end. This verifies the load-bearing pieces the pure-gate
@@ -23,6 +30,7 @@ import (
 // IsAdmin gate, and the enable→customer-sees flow.
 func TestAdminCatalog_HTTP(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)

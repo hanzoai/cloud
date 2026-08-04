@@ -225,13 +225,10 @@ func init() {
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	g := app.Group("/v1/tracker")
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field, which is
-	// caller-supplied and would be a cross-tenant read the caller asserted for
-	// itself. fiber runs middleware in registration order, so this must precede
-	// every leaf below; nesting under Serve's own Bridge is harmless (the inner
-	// one is what the handler sees).
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here: the composer installs it once at the
+	// root, after the identity check that mints the validated org and before any
+	// subsystem registers a route — an order only the whole program can assert.
+	// The ops below read what it parks off the context.
 
 	// UNTYPED BY DESIGN — the pre-create balance gate renders its denial with
 	// cloud.DenyResource, the fleet's nested {"error":{"code","message"}} at

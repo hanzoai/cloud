@@ -125,16 +125,12 @@ type ops struct{ s *cloud.Service[state] }
 // /v1/usage/health liveness route (OwnsHealth=false) is a distinct path and never
 // shadows these.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Bridge FIRST: a typed op receives only a context, so the validated org — and
-	// the request the caller's SUBJECT and the no-store header ride on — reach it by
-	// being parked there. fiber runs middleware in registration order, so one
-	// installed after its leaves never runs. Installed through the scope's Use, once
-	// per declared prefix, which covers the flat POST /v1/usage as well as the
-	// group's leaves; Serve installs the same bridge for the whole binary and
-	// nesting is harmless, so this keeps the ops scoped wherever they are mounted —
-	// including a test app that never calls Serve.
-	app.Use(cloud.Bridge())
-
+	// cloud.Bridge is not installed here. Whoever composes the program installs it
+	// once at the root — after the identity check that mints the validated org and
+	// before any subsystem registers a route (serve.go) — because that order is a
+	// property of the whole program and no subsystem can assert it for itself. The
+	// validated org — and the request the caller's SUBJECT and the no-store header
+	// ride on — still reach a typed op only by being parked on the context.
 	o := ops{s: s}
 	// Collection root (/v1/usage) stays flat — Group(p).Post("") yields "p/".
 	zip.Post(cloud.ZipApp(app), "/v1/usage", o.record, zip.WithStatus(http.StatusAccepted))

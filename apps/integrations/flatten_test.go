@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -18,19 +19,19 @@ import (
 // downstream error into a hardcoded 500. cloud.Terminal writes the reject status
 // in-band so it survives. It also pins the route move to the /v1/connector namespace.
 
-// installV1Flatten reproduces commerce's ErrorHandlerJSON (see the sync twin,
-// commerceErrorScope): a middleware that turns any propagated downstream error
-// into 500.
+// installV1Flatten reproduces apps.mountCommerce's ErrorHandlerJSON (see the sync
+// twin): a filter over /v1 that turns any propagated downstream error into 500.
 //
-// It installs on the APP rather than on a Group("/v1"), which is also what the
-// twin now does — commerce gates the envelope by path instead of hanging it on
-// the shared /v1 node. A group whose subtree holds no routes is a program zip
-// refuses to compose, and every route this test registers is registered on the
-// app, so the group form wrapped nothing and only aborted the package. The
-// reproduction is unchanged: the filter still runs ahead of the handler under
-// test, which is the whole point of the fixture.
+// At the ROOT, gated on the path it claims, which is the shape production actually
+// runs (commerce.commerceErrorScope). It used to hang on a /v1 group, and that
+// fixture could not compose: the routes it means to wrap are registered on the root
+// by Mount, so the group node held middleware over an empty subtree and zip refused
+// the program — the same refusal that stopped the app this file guards.
 func installV1Flatten(app *zip.App) {
 	app.Use(zip.H(func(c *zip.Ctx) error {
+		if !strings.HasPrefix(c.Path(), "/v1/") {
+			return c.Next()
+		}
 		if err := c.Next(); err != nil {
 			return c.Bytes(http.StatusInternalServerError, []byte(`{"error":"flattened"}`))
 		}
@@ -43,7 +44,8 @@ func installV1Flatten(app *zip.App) {
 func newAppUnderFlatten(t *testing.T, kc *kms.Client) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	installV1Flatten(app)
+	installV1Flatten(app) // the commerce filter is OUTERMOST: it mounts before us
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.ai"}
 	if kc != nil {
 		deps.KMS = kc

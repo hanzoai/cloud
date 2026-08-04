@@ -29,6 +29,7 @@ import (
 func projections(t *testing.T) (served map[string]bool, typed map[string]*openapi.Operation) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("datasettest"), DisableStartupMessage: true})
+	compose(app)
 	if err := mount(newPlane(&fake{}), app); err != nil {
 		t.Fatalf("mount: %v", err)
 	}

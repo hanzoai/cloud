@@ -49,6 +49,7 @@ func newOpsApp(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_INGRESS_EDGE_ENABLED", "")
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.NewNoOpLogger(), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

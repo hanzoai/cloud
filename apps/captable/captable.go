@@ -125,13 +125,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // which of its fields does that.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/captable")
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field, which is
-	// caller-supplied and would be a cross-tenant read the caller asserted for
-	// itself. fiber runs middleware in registration order, so this must precede
-	// the leaves below; it is prefix-scoped, and nesting under Serve's own Bridge
-	// is harmless (the inner one is what the handler sees).
-	g.Use(cloud.Bridge())
 	// Then the bundle's own envelope: a typed op that must answer the bundle's
 	// 400/404/409/500 returns a goja.BundleErr, and this writes those bytes back
 	// verbatim. Also before the leaves, for the same registration-order reason.

@@ -2,7 +2,7 @@ package integrations
 
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// ops.go is the integrations TYPED-op seam.
+// ops.go is where integrations registers its TYPED ops.
 //
 // A typed op (zip.Get[In, Out] and friends) is ONE registry entry with N
 // projections: the REST route, the JSON Schema in /.well-known/openapi.json, the
@@ -23,16 +23,24 @@ package integrations
 //   - THE ORG. cloud.Bridge parks the VALIDATED org on the request context and
 //     principal.OrgFrom reads it back. It is a context value and NEVER an In
 //     field: an In field is caller-supplied, so a tenant key read from one is a
-//     cross-tenant read the caller asserted for itself.
+//     cross-tenant read the caller asserted for itself. This subsystem does not
+//     install it: whoever composes the program does, once at the root, because it
+//     must run after the identity check that mints the org and before any
+//     subsystem's routes — an order only the composer can hold (serve.go).
 //   - THE OTHER IDENTITY FACTS. Two more live only in headers: the caller's
 //     own-org admin bit (what the AdminOnly connectors gate on) and their user id
 //     (what the per-USER /v1/connectors plane keys every row by). bridgeFacts
-//     parks them beside the org.
+//     parks them beside the org, and it IS this subsystem's own.
 //
-// The bridges are installed per SERVED PREFIX — /v1/integrations (routes) and
-// /v1/connectors (connectorRoutes) — through a group's own Use, which the group
-// bounds. Ahead of the ops, always: fiber runs middleware in registration order,
-// so one installed after its leaves never runs.
+// So bridgeFacts is the one thing registered here, at the ROOT and gated by PATH
+// (scope.Use), rather than on a group per served prefix. A group per prefix reads
+// better and does not run: these routes are registered on the root node, so the
+// group node would declare middleware over a subtree holding no routes, which zip
+// refuses to compose — the app exits instead of listening. The gate is the prefix
+// set manifest/apps.go declares for this subsystem, so bridgeFacts reaches
+// /v1/integrations, /v1/connectors and the connector webhook, and nothing that
+// belongs to anyone else. Ahead of the ops, always: fiber runs middleware in
+// registration order, so one installed after its leaves never runs.
 //
 // FAIL CLOSED OFF THE HTTP PATH. zip publishes every typed op as an MCP tool at
 // POST /mcp and as a CLI command, neither of which passes through those prefixes

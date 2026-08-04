@@ -115,11 +115,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	o := ops{s: s}
 	z := cloud.ZipApp(app)
-	// The bridge FIRST: fiber runs middleware in registration order, so one installed
-	// after these leaves would never run — and every op below takes the request off the
-	// context it parks. Bounded to admin's own subtree. Serve installs one app-wide too;
-	// nesting is harmless, and this is what makes the surface testable on a bare app.
-	app.Use(cloud.Bridge())
+	// Every op below takes the request off the context, and whoever composes the app
+	// parks it there — at the root, ahead of these leaves, since fiber runs
+	// middleware in registration order. This surface installs none of its own: one
+	// it installed for itself could only hang on a /v1/admin node, and every op
+	// below registers through the root, so that node would carry middleware over an
+	// empty subtree and zip refuses to compose it.
 
 	// Org-scoped panels — AdmitScoped. Cross-tenant reads are impossible for a
 	// non-super caller.

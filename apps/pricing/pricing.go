@@ -144,16 +144,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("pricing.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
 	}
-	// Bridge FIRST: a typed op receives only a context, so the validated org (and
-	// the request the admin gate reads X-User-IsAdmin off) reach it by being
-	// parked there. fiber runs middleware in registration order, so this must
-	// precede every leaf below. On the scoped router it installs once per declared
-	// prefix — which is why Prefixes has to name all five. Serve installs one
-	// app-wide too; nesting is harmless (the inner one is what the handler sees)
-	// and this is what makes the subsystem's own tests, which mount it on a bare
-	// zip app, exercise the same identity path production does.
-	app.Use(cloud.Bridge())
-
+	// A typed op receives only a context, so the validated org — and the request
+	// the admin gate reads X-User-IsAdmin off — reach it by being parked there by
+	// cloud.Bridge. This subsystem does not install the bridge: the program's
+	// composer does, once at the root, after the identity check that mints the org
+	// and before any subsystem registers a route — an order only the composer can
+	// hold.
 	o := ops{log: logger}
 	zip.Get(zapp, "/v1/pricing/health", o.health)
 

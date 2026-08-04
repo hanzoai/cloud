@@ -38,6 +38,7 @@ func gateApp(t *testing.T, approvalStatus string) *zip.App {
 	}, time.Minute)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	app.Use(Enforce(EnforceConfig{WaitlistURL: "https://waitlist.hanzo.ai", Approvals: approvals, Gate: testGate}))
 	app.Get("/*", func(c *zip.Ctx) error { return c.String(200, "ok") })
 	return app
@@ -214,6 +215,7 @@ func TestRule_ForwardHeaderApproved_ThroughWithoutLookup(t *testing.T) {
 // host, so Enforce never gates pre-boot.
 func TestEnforce_DefaultGate_FailsOpenPreBoot(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	app.Use(Enforce(EnforceConfig{WaitlistURL: "https://waitlist.hanzo.ai",
 		Approvals: newApprovalsWithLookup(func(context.Context, string, string) (string, bool) { return "pending", true }, time.Minute)}))
 	app.Get("/*", func(c *zip.Ctx) error { return c.String(200, "ok") })

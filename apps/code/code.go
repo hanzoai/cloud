@@ -105,18 +105,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 }
 
 // routes registers the /v1/code surface. It is a FUNCTION rather than inline in
-// Mount so this package's own tests drive the REAL registration — the Bridge
-// included — instead of a reconstruction of it that can drift from what the
-// binary serves.
+// Mount so this package's own tests drive the REAL registration instead of a
+// reconstruction of it that can drift from what the binary serves.
 func routes(app cloud.Router, s *service) error {
 	g := app.Group("/v1/code")
-	// The Bridge FIRST, bounded to the subtree code owns: a typed op receives only
-	// a context, so the validated org has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Listen installs one app-wide too; nesting is harmless, and
-	// having it here is what makes this package's own tests — which mount on a
-	// bare app — exercise the same tenancy the binary does.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here: the composer installs it once at the
+	// root, after the identity check that mints the validated org and before any
+	// subsystem registers a route — an order only the whole program can assert.
+	// The ops below read what it parks off the context.
 
 	// Every route is a TYPED op: one registry entry, which is what the OpenAPI
 	// operation, the MCP tool, the CLI command and every generated SDK method are

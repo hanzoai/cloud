@@ -39,6 +39,7 @@ func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, pat
 func mountService(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *cloud.Service[core.State], *fiber.App) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	s := &cloud.Service[core.State]{State: core.State{
 		IAM:      iam.New(iamURL),
 		Commerce: commerce.New(commerceURL, "test-token"),
@@ -731,6 +732,7 @@ func TestMount_NilGuards(t *testing.T) {
 		t.Error("Mount(nil app) must error")
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{}); err == nil {
 		t.Error("Mount(nil logger) must error")
 	}
@@ -747,6 +749,7 @@ func servePlatformEmpty(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
 	app := zip.New(zip.Config{AppName: "platform"})
+	compose(app)
 	zip.Post[struct{}, plane.Fleet](app, "/platform/fleet",
 		func(context.Context, *struct{}) (*plane.Fleet, error) {
 			return &plane.Fleet{}, nil

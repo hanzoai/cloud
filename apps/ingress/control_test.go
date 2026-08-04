@@ -20,12 +20,19 @@ import (
 // HERE — against a real router, over real requests. The store/engine tests next
 // door prove the edge routes; these prove the API that configures it.
 
+// compose installs what the program's composer installs — cloud.Bridge, once at
+// the app root. A subsystem never installs its own, so a test app owes the same
+// root install; without it every org-scoped op answers a 403 no production
+// program would produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountControl mounts the /v1/ingress control plane on its own app + data dir.
 // App role (CLOUD_INGRESS_EDGE_ENABLED unset), so no listener is bound.
 func mountControl(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_INGRESS_EDGE_ENABLED", "")
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.NewNoOpLogger(), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

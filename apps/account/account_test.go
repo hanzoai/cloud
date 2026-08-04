@@ -255,12 +255,20 @@ func mountApp(t *testing.T, base, clientID, clientSecret string) *zip.App {
 	return mount(t, "hanzo")
 }
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge:
+// the program's composer owns it — serve.go at the root of the fused host, the
+// plugin constructor for a plugin program. In a test the test is the composer, so
+// it owes the same install; skipping it drives a program where every org-scoped op
+// answers 403 for a reason production callers never see.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mount mounts the account subsystem on a bare app — exactly what production
 // registers (account@48). The caller sets the IAM env (IAM_URL / IAM_MINT_CLIENT_*)
 // before calling.
 func mount(t *testing.T, brand string) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), Brand: brand}
 	if err := MountAccount(app, deps); err != nil {
 		t.Fatalf("MountAccount: %v", err)
@@ -742,6 +750,7 @@ func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 	t.Setenv("IAM_MINT_CLIENT_SECRET", "s3cr3t")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := MountAccount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
 		t.Fatalf("MountAccount: %v", err)
 	}

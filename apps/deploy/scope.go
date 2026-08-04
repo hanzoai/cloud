@@ -121,8 +121,9 @@ func navigating(c *zip.Ctx) bool {
 }
 
 // bounce turns a REFUSED browser navigation into the sign-in redirect, and leaves
-// every other answer alone. Installed once, on the /v1/deploy group (routes,
-// deploy.go), so it covers the typed ops and the raw handlers with one rule.
+// every other answer alone. Installed once, on the root and confined by path to
+// the /v1/deploy prefixes this subsystem declares (routes, deploy.go), so it
+// covers the typed ops and the raw handlers with one rule.
 //
 // It reads the ANSWER, not the caller: a 403 is the only thing it reshapes, and
 // only for a request that positively identifies as a document GET — so the API

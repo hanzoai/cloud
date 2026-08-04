@@ -22,8 +22,8 @@ import (
 var untypedByDesign = map[string]string{}
 
 // typedApp mounts the wallets surface with KMS custody only — the fully
-// exercised spine — on a bare app with NO app-wide cloud.Bridge, so the bridge
-// these ops read their tenant through has to be the one routes() installs.
+// exercised spine — on the app newService composes, which carries the root
+// cloud.Bridge these ops read their tenant through.
 func typedApp(t *testing.T) *zip.App {
 	t.Helper()
 	k, _ := testKMS(t)

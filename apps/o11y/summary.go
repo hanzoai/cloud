@@ -144,15 +144,13 @@ type noArgs struct{}
 // mountSummary registers the public status face. It is a TYPED op so the one
 // registry every projection reads (OpenAPI, MCP, the CLI) carries it — this is a
 // published contract other people's clients call, and a raw route would be
-// invisible to all three.
-//
-// The bridge this handler needs — it brands per Host and sets Cache-Control off
-// the request — is the app-wide one [mount] installs before calling this, so
-// there is none here. There used to be, on a.Group("/v1/summary"), and it was
-// the same defect twice over: the leaf below registers on the APP at the group's
-// own address rather than beneath the group, so the group wrapped nothing, and a
-// group that declares middleware and owns no leaf is a refused program. One
-// install, at the one scope that covers every noun this subsystem answers on.
+// invisible to all three. The handler reaches for the request — to brand per Host
+// and to set Cache-Control — which cloud.Bridge parks on the context, but this
+// registers no Bridge of its own: the composer installs one at the root ahead of
+// every route, so a second copy on a /v1/summary node would gate a node that holds
+// no routes (the leaf below is registered through `a`) and zip refuses to compose
+// middleware that could never run. Without a request the handler still answers,
+// branded for the deployment rather than for the caller's Host — see handleSummary.
 func mountSummary(a *zip.App, deps cloud.Deps) {
 	deploymentBrand = deps.Brand
 	zip.Get(a, "/v1/summary", handleSummary)

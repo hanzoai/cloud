@@ -77,20 +77,12 @@ type collabService struct {
 func (s *collabService) register(app cloud.Router, guard guardFn) {
 	// The live Y.js WebSocket (wss://<host>/collaborator). UNTYPED, and it cannot
 	// be otherwise: the response is a protocol upgrade, not a value.
-	//
-	// Registered BEFORE the bridge below on purpose — fiber runs middleware in
-	// registration order, so a handler registered first never sees one installed
-	// after it, and the upgrade path stays exactly as it was.
 	app.Get(collabPrefix, guard(s.ws))
 	g := app.Group(collabPrefix)
-	// Bridge, because a typed op receives only a context: the RPC authenticates
-	// with team's OWN HS256 token, which rides in a header or the account cookie,
-	// and cloud.Request is the only way to reach either (typed.go). Serve installs
-	// the same middleware for the whole binary; this one is what makes the op
-	// resolve its caller under a BARE Mount too — the app's own tests, and any
-	// embedder that mounts without Serve. team's other Bridge is scoped to the
-	// /v1/team group and never covered this plane.
-	g.Use(cloud.Bridge())
+	// The RPC is a typed op, so it receives only a context: it authenticates with
+	// team's OWN HS256 token, which rides in a header or the account cookie, and
+	// cloud.Request is the only way to reach either (typed.go). cloud.Bridge
+	// parks that request, and the composer owns that install, once at its root.
 	zip.Post(g, "/rpc/:documentId", s.rpc)
 }
 

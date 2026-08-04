@@ -171,13 +171,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/cloudflare")
 	o := ops{s: s}
 
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field, which is
-	// caller-supplied and would be a cross-tenant read the caller asserted for
-	// itself. fiber runs middleware in registration order, so this must precede
-	// the leaves below; it is prefix-scoped, and nesting under Serve's own Bridge
-	// is harmless (the inner one is what the handler sees).
-	g.Use(cloud.Bridge())
+	// A typed op receives only a context, so the validated org reaches it by
+	// being parked there — never as an In field, which is caller-supplied and
+	// would be a cross-tenant read the caller asserted for itself. cloud.Bridge
+	// does the parking, and the composer owns that install, once at its root;
+	// this group is a bare path prefix.
 
 	// Zones + Analytics (read) — enumerate the org's zones and read a zone's traffic
 	// analytics; the zone ids feed Workers routes and analytics. Zone/record

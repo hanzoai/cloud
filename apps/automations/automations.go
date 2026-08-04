@@ -204,15 +204,9 @@ type ops struct{ s *cloud.Service[state] }
 // message and an address that lives only in the URL never arrives.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/automations")
-	// Bridge FIRST: a typed op receives only a context, so the validated org reaches
-	// it by being parked there — never as an In field, which is caller-supplied and
-	// would be a cross-tenant read the caller asserted for itself. fiber runs
-	// middleware in registration order, so this must precede the leaves below.
-	// Serve installs one for the whole binary; this one is what makes the SUBSYSTEM
-	// self-contained, so a harness that mounts it without Serve (this package's own
-	// tests) resolves the same org the server does. Nesting is harmless — the inner
-	// one is what the handler sees.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is installed by whoever composes the app — the fused host at
+	// its root — never here: the validated org still reaches every typed op below
+	// because the root install parks it on the context.
 
 	o := ops{s: s}
 	zip.Get(g, "/connectors", o.connectors)

@@ -199,18 +199,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// A typed op receives ONLY a context, so the validated org has to be PARKED
 	// there — never carried as an In field, which is caller-supplied and would make
 	// a cross-tenant read something the caller asserts for itself. cloud.Bridge
-	// parks it, and it is installed FIRST because fiber runs middleware in
-	// registration order: one installed below a leaf never runs for that leaf.
-	//
-	// On a scoped mount Use installs it once per prefix the subsystem DECLARES
-	// (scope.go), which is why plugin/analytics/main.go now declares all six of
-	// this app's prefixes: with only the /v1/<name> default, the typed reads at
-	// /v1/errors and /v1/insights/* would sit outside every prefix this subsystem
-	// could gate. Serve installs one app-wide too; nesting is harmless, and the
-	// tests mount this subsystem on a bare app with no Serve, so the subsystem's
-	// own install is what makes them pass.
-	app.Use(cloud.Bridge())
-
+	// parks it, and the COMPOSER installs it, not this subsystem: the fused host
+	// once at its root (serve.go), and a plugin program's constructor likewise. An
+	// install here would hang middleware on prefixes with no routes beneath them,
+	// a program zip refuses to compose.
 	o := readOps{s: s}
 	// The read lenses, declared on the GROUP: each op's path is the prefix composed
 	// with its leaf — the same composition the router does, and the identity every

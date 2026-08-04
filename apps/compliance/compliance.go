@@ -146,12 +146,11 @@ func init() {
 // split its two 200 shapes (reconciled check vs benign unknown-reference no-op).
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group(routePrefix)
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field, which is
-	// caller-supplied and would be a cross-tenant read the caller asserted for
-	// itself. fiber runs middleware in registration order, so this precedes the
-	// leaves below.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here: the composer owns it — the fused host
+	// installs it once at its root, and the plugin constructor does the same for a
+	// plugin program — and typed ops read the validated org it parks on the
+	// context. bodyCap precedes the leaves because fiber runs middleware in
+	// registration order.
 	g.Use(bodyCap())
 	o := ops{s: s}
 

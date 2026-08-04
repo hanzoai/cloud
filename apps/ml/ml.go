@@ -201,19 +201,16 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// which is what carries the prose in typed.go to the document and the MCP tool
 	// list.
 	//
-	// cloud.Bridge FIRST on the group: a typed op receives only a context, so the
-	// request its tenant seam reads (tenantFrom — the org SUB-SCOPE and
-	// platform-admin-ness live in headers principal.OrgFrom does not carry) has to
-	// be parked there. fiber runs middleware in registration order, so this must
-	// precede the leaves below; nesting under Serve's own app-wide Bridge is
-	// harmless — the inner one is what the handler sees.
+	// cloud.Bridge is not installed here: the composer owns it — the fused host
+	// installs it once at its root, and the plugin constructor does the same for a
+	// plugin program. tenantFrom still reads the request that install parks on the
+	// context.
 	// One `g := <router>.Group("/prefix")` per line: cmd/zipdoc resolves a group's
 	// prefix by reading that exact assignment form, and it FAILS the generate rather
 	// than filing prose under a path that does not exist — so a tuple assignment
 	// costs the doc comments below, silently, in both the document and the MCP tool
 	// list.
 	gml := app.Group("/v1/ml")
-	gml.Use(cloud.Bridge())
 	o := ops{s: s}
 
 	// Models (kserve InferenceService).

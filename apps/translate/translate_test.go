@@ -79,11 +79,20 @@ func (m *model) drift() {
 
 func upper(s string) string { return strings.ToUpper(s) }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (Mount says why): the program's composer installs it once at the root, after
+// the identity check and before any route registers. In a test the test IS the
+// composer, so it owes the same install — a test that skips it does not test a
+// stricter program, it tests one where every principal-gated op answers 401 for
+// a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mount brings up the real /v1/translate surface over a temp DataDir and the fake
 // model plane — the real router, the real memory, the real handlers.
 func mount(t *testing.T, m *model) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AIDefaultModel: "zen"}
 	if m != nil {
 		deps.AI = m

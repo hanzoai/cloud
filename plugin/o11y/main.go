@@ -161,12 +161,20 @@ func run() error {
 // Shadow per org by default, exactly as in the fused binary, so this is a sensor
 // here until an operator arms the org — not a second policy.
 func newApp(cfg *cloud.Config, deps cloud.Deps) *zip.App {
-	// cloud.ErrorHandler for the same reason cloud.Serve installs it: this main is
-	// hand-written, and without it a refusal this app propagates renders 500 —
-	// which is exactly what the identity boundary and the abuse gate above emit.
-	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger, ErrorHandler: cloud.ErrorHandler})
-	app.Use(cloud.EdgeCORS(deps.GatewayPolicy))
-	app.Use(cloud.IdentityMiddleware(cfg))
+	// cloud.App, not zip.New. Every other app binary already ran this exact chain,
+	// because every other one reaches it through cloud.Listen; this program was the
+	// single exception, and the six members it silently lacked are what the long
+	// note above is about. Assembling one by hand is no longer possible, so the
+	// exception cannot come back.
+	//
+	// nil tools: the MCP surface is projected from a subsystem list, and this
+	// program mounts o11y directly rather than holding one.
+	app := cloud.App("o11y", cfg, deps, nil)
+
+	// AbuseGate is NOT part of the constructor: in cloud.Listen it sits after the
+	// audit trail and the per-org ceiling, so that a refused request is still
+	// recorded. Installing it here keeps it after everything the constructor
+	// carries, which is the same position relative to identity that it has there.
 	app.Use(cloud.AbuseGate(deps, deps.Traffic))
 	return app
 }
