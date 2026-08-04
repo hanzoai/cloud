@@ -49,6 +49,41 @@ func PrefixesFor(name string) []string {
 	return nil
 }
 
+// GrantFor is the subtrees whose MIDDLEWARE an app may install — what
+// cloud.Plugin.Prefixes bounds, and what a plugin/<app>/main.go hands it.
+//
+// IT IS A DIFFERENT QUESTION FROM PrefixesFor, and for one app a different
+// answer. PrefixesFor asks what the host ROUTES to an app; GrantFor asks what an
+// app may WRAP. For every routed app they coincide — you gate what you serve —
+// and TestGrantMatchesPrefixesForRoutedApps keeps that true, so this is not a
+// second list to maintain.
+//
+// zen is the app that separates them, and it separated them the expensive way.
+// It is Coresident: it answers no path and mounts as a Claim on ai's "/v1". Its
+// row therefore states no prefix — correct, and what stopped it duplicating ai's
+// routing claim. But plugin/zen/main.go fed that same nil into the GRANT, so the
+// scope zen received owned only the conventional "/v1/zen", installing the Claim
+// on "/v1" escaped it, and MountAll refused the mount outright. One field had
+// been answering two questions, and dropping the routing answer silently revoked
+// the gate.
+//
+// Gates is the second answer, stated once, where a co-resident app can say what
+// it wraps without claiming to serve it.
+func GrantFor(name string) []string {
+	for _, a := range Apps {
+		if a.Name == name {
+			src := a.Gates
+			if len(src) == 0 {
+				src = a.Prefixes
+			}
+			out := make([]string, len(src))
+			copy(out, src)
+			return out
+		}
+	}
+	return nil
+}
+
 // OwnerOf reports which app the host routes a path to: the app whose declared
 // prefix is the LONGEST match. That is the same rule the router itself applies,
 // and stating it here lets anything downstream ask "whose surface is this?"

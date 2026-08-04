@@ -210,18 +210,33 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// the parse it exists to prevent. Both are wire, so the route stays raw until
 	// zip can carry them.
 	//
-	// REGISTRATION ORDER IS WIRE HERE. app.Group(prefix, mw) registers mw as a
-	// prefix-scoped Use, so it applies to every /v1/crm route registered AFTER it —
-	// the three staff application routes below included, and none of the CRUD ops
-	// above. Moving a registration across this line changes what is rate-limited.
-	app.Group("/v1/crm", middleware.RateLimit(middleware.RateLimitConfig{
+	// THE SUBTREE IS THE SCOPE — not registration order.
+	//
+	// This used to be a second /v1/crm group with the limiter on it, and the routes
+	// it covered were "everything registered after this line": the intake POST plus
+	// the three staff routes, with the CRUD above deliberately outside. That was
+	// true of the flat, registration-time model. It is not true of zip v1.24, where
+	// a definition's middleware wraps the routes in its OWN subtree and nothing
+	// else — so the limiter silently narrowed to the single route chained onto it,
+	// and the three staff routes lost their cover with no error anywhere. That is
+	// the same "silently stops running" failure as an inert seam, wearing the shape
+	// of an ordering convention that no longer holds.
+	//
+	// So the covered routes are now COMPOSED BENEATH the limiter, which is the only
+	// thing that states the coverage rather than implying it. The empty prefix
+	// keeps the paths exactly as served: this group inherits /v1/crm from g, and
+	// with it g's Bridge, which the typed ops below need to resolve their tenant.
+	// The CRUD above stays outside because it is registered on g, not here — a
+	// property of WHERE a route is written now, not of when.
+	applications := g.Group("", middleware.RateLimit(middleware.RateLimitConfig{
 		Limit:  intakeRateLimit,
 		Window: intakeRateWindow,
 		KeyFn:  func(c *zip.Ctx) string { return c.Fiber().IP() },
-	})).Post("/applications", cloud.Handle(s, apply))
-	zip.Get(g, "/applications", o.listApplications)
-	zip.Get(g, "/applications/:id", o.getApplication)
-	zip.Patch(g, "/applications/:id", o.patchApplication)
+	}))
+	applications.Post("/applications", cloud.Handle(s, apply))
+	zip.Get(applications, "/applications", o.listApplications)
+	zip.Get(applications, "/applications/:id", o.getApplication)
+	zip.Patch(applications, "/applications/:id", o.patchApplication)
 }
 
 // ---- shared helpers ----
