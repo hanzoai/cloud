@@ -103,6 +103,7 @@
 package analytics
 
 import (
+	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -325,19 +326,31 @@ func publicName(e CaptureEvent) (string, bool) {
 }
 
 // publicProps is the property bag's PROJECTION — the field projection's own argument,
-// applied one level down. It keeps exactly the @hanzo/observe annotation
-// (annotationKeys, fact.go) and drops every other key, so the property names an
-// anonymous row may carry are a set this SERVER declares.
+// applied one level down. It keeps TWO declared families — the @hanzo/observe
+// annotation (annotationKeys, fact.go) and the pointer position (positionKeys) — and
+// drops every other key, so the property names an anonymous row may carry are a set
+// this SERVER declares.
 //
 // The annotation is what makes an anonymous interaction worth storing: a $click with a
-// url and no element identity is a count, not a heatmap. It is also the one property
-// family that widens nothing, and that is why it is the one that may cross: the
-// annotation keys are LIFTED OUT of the bag into the `el` tuple (annotationOf), and
-// attributesOf skips exactly the same keys — so admitting them adds no key to
-// attributes, whose Map(LowCardinality(String), String) dictionary is the thing an
-// unbounded anonymous property bag would actually attack. The invariant above survives
-// verbatim: an anonymous row's attributes hold the folded $exception and the write
-// core's $source, and nothing a caller sent.
+// url and no element identity is a count, not a heatmap. It widens nothing, which is why
+// it may cross: the annotation keys are LIFTED OUT of the bag into the `el` tuple
+// (annotationOf), and attributesOf skips exactly the same keys — so admitting them adds
+// no key to attributes, whose Map(LowCardinality(String), String) dictionary is the thing
+// an unbounded anonymous property bag would actually attack.
+//
+// THE POSITION IS THE SECOND FAMILY, and it is the one that finishes the sentence above:
+// element identity says WHICH thing was clicked and never where on the page it sat, so a
+// heat map cannot be drawn from the annotation alone. The bulk of what a heat map is made
+// of is logged-out traffic, so a position admitted only on the signed-in lane is a
+// position for the minority of clicks.
+//
+// It does NOT get the annotation's free ride — nothing lifts these into a column, so each
+// one really does add a key to the dictionary. What bounds it is that the set is CLOSED
+// and spelled by this server: five keys, never a caller's own vocabulary, so the
+// dictionary grows by five and stops. The values are numbers and a boolean, so they carry
+// no text to widen. The invariant that mattered survives with its reason intact: an
+// anonymous row's attributes hold the folded $exception, the write core's $source, and a
+// fixed set of coordinates this file names — never a key a caller chose.
 //
 // A value is projected only when it is WITHIN BOUNDS (maxAnnotation / maxAnnotationPath);
 // an out-of-bounds value is simply not carried. That is this same projection with a
@@ -359,13 +372,22 @@ func publicProps(p map[string]any) map[string]any {
 	// Ranging over annotationKeys rather than over p is what binds this to the reader:
 	// a key fact.go starts lifting into the tuple is carried here by construction,
 	// instead of by remembering to spell the set a second time.
-	out := make(map[string]any, len(annotationKeys))
+	out := make(map[string]any, len(annotationKeys)+len(positionKeys))
 	for _, k := range annotationKeys {
 		v, ok := p[k]
 		if !ok {
 			continue
 		}
 		if v, ok := boundedAnnotation(v); ok {
+			out[k] = v
+		}
+	}
+	for _, k := range positionKeys {
+		v, ok := p[k]
+		if !ok {
+			continue
+		}
+		if v, ok := boundedPosition(v); ok {
 			out[k] = v
 		}
 	}
@@ -414,6 +436,50 @@ func boundedAnnotation(v any) (any, bool) {
 			if !ok || len(s) > maxAnnotation {
 				return nil, false
 			}
+		}
+		return t, true
+	default:
+		return nil, false
+	}
+}
+
+// positionKeys are WHERE a click happened — the pointer position @hanzo/observe measures
+// off the MouseEvent, and the family a heat map is actually drawn from. The set is
+// CLOSED, spelled here, and read off the client's own wire (observer.ts).
+//
+// Written down beside annotationKeys rather than derived from it, because the two are
+// admitted for different reasons and cost different things: the annotation is free
+// (lifted into the `el` tuple), the position is five dictionary keys. A family that costs
+// something should have to be named.
+var positionKeys = []string{"$x", "$y", "$target_fixed", "$viewport_width", "$viewport_height"}
+
+// maxCoordinate bounds ONE stored coordinate. A page a million pixels down is not a page,
+// and a viewport that size is not a viewport — this is far past any real document while
+// keeping the stored decimal short.
+//
+// It is the SERVER's bound, and deliberately not the warehouse's: the projection into
+// `heatmaps` clamps again on its way into an Int16 grid. Two layers, each stating the
+// limit it actually owns, because neither can assume the other ran.
+const maxCoordinate = 1 << 20
+
+// boundedPosition reports whether one position value is within bounds, and yields the
+// value to store. Like boundedAnnotation it is a FILTER, never a truncator: a clamped
+// coordinate is a click somewhere the visitor did not click, and a heat map is a picture
+// of exactly that. Over the bound the key is dropped and the click still lands as a
+// count.
+//
+// The shapes are the two the position actually has: $target_fixed is a flag, every other
+// key is a number. JSON has one number type, so a coordinate arrives as float64 —
+// anything else (a string "640", an object, a list) is not a position and is refused,
+// which is what keeps a text value out of a dictionary these keys are supposed to cost
+// five entries in.
+func boundedPosition(v any) (any, bool) {
+	switch t := v.(type) {
+	case bool:
+		return t, true
+	case float64:
+		if math.IsNaN(t) || math.IsInf(t, 0) || t < -maxCoordinate || t > maxCoordinate {
+			return nil, false
 		}
 		return t, true
 	default:
