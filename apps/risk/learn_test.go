@@ -302,7 +302,7 @@ func TestSearch_RefusesAnEmptyHistory(t *testing.T) {
 	}
 	// And the accepting path refuses too, rather than starting a run that proves
 	// nothing.
-	if _, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil); err == nil {
+	if _, err := p.begin(context.Background(), k, 24*time.Hour, free); err == nil {
 		t.Fatal("begin accepted a search over an empty surface")
 	}
 }
@@ -321,7 +321,7 @@ func TestSearch_ReadsOnlyItsOwnHistory(t *testing.T) {
 			"events": uint32(3), "spend_nano": int64(250_000_000 + i),
 		})
 	}
-	run, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil)
+	run, err := p.begin(context.Background(), k, 24*time.Hour, free)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
