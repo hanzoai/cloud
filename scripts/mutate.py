@@ -659,6 +659,22 @@ MUTANTS = [
         (RL, '\tid := runID()\n\tif err := p.claim(t, id); err != nil {\n\t\treturn report{}, err\n\t}\n',
              '\tid := runID()\n\tp.mu.Lock()\n\tif held, running := p.running[t]; running {\n\t\tp.mu.Unlock()\n\t\treturn report{}, zip.ErrConflict("a search is already running for this organisation: " + held.ID)\n\t}\n\tp.mu.Unlock()\n')],
      "TestSearch_OneTenantsConcurrencyDoesNotMultiplyTheExpensiveRead", PR),
+    # ── risk: the search pays for the surface it reads ───────────────────────
+    # The surface half — rolling up to four source planes and reading the window
+    # back — ran BEFORE ANY GATE AT ALL. A caller with no balance drove the whole
+    # warehouse cost, was refused at the very end, and paid for none of it, as
+    # often as it cared to ask. The gate has to sit above the work it prices.
+    ("risk: the surface is gated AFTER the warehouse it pays for (original)", [
+        (RL, '\tsurface, err := price("search", windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n',
+             '\tvar surface func(int)\n'),
+        (RL, '\tsurface(windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n',
+             '\tsurface, gerr := price("search", windowScreens(lookback))\n\tif gerr != nil {\n\t\treturn report{}, gerr\n\t}\n\tsurface(windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n')],
+     "TestSearch_ARefusedCallerNeverReachesTheWarehouse", PR),
+    ("risk: only the grid is priced, so the surface read is free", [
+        (RL, '\tsurface, err := price("search", windowScreens(lookback))\n\tif err != nil {\n\t\treturn report{}, err\n\t}\n', ''),
+        (RL, '\tsurface(windowScreens(lookback))\n', '')],
+     "TestSearch_BothHalvesArePricedForWhatTheyAre", PR),
+
     ("risk: a refused search never releases its claim", [
         (RL, '\tstarted := false\n\tdefer func() {\n\t\tif !started {\n\t\t\tp.unclaim(t)\n\t\t}\n\t}()\n', '\tstarted := false\n\t_ = started\n'),
         (RL, '\tp.settle(t, pending)\n\tstarted = true\n', '\tp.settle(t, pending)\n')],
