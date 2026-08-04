@@ -73,7 +73,7 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 // received, and a request cancellation must not cancel the money. A failure is
 // logged for reconciliation rather than swallowed — an unbilled create is a number
 // somebody has to find later, so it says so now.
-func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage) {
+func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted func()) {
 	// The EXACT debit, never the cents field. plane.Money is a decimal string
 	// precisely so a debit crosses the process boundary unrounded, and the
 	// receiver honors that (meter_rpc.go parses the decimal and debits it
@@ -91,6 +91,7 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage) {
 	}
 	log := rm.log
 	go func() {
+		defer posted() // the hold ends where the money lands, not where the call returned.
 		// The debit acts FOR the org with no request behind it, so it states the
 		// tenant explicitly — the books it writes to are chosen here, not by
 		// whatever ran last.
