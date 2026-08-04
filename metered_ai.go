@@ -237,37 +237,63 @@ func (m *meteredAI) gate(ctx context.Context, org, project string, cents int64) 
 	return m.meter.Gate(ctx, org, project, false, AIMeterProvider, cents)
 }
 
-// atMost resolves the completion ceiling ONTO the request and returns what the
-// chat could cost at most: the prompt, which is known, plus that ceiling.
+// atMost is what a chat could cost at most: the prompt, which is known before
+// the call, plus the most completion the MODEL can produce.
 //
-// Writing the ceiling back is what makes the reservation SOUND rather than
-// merely optimistic. The transport sends req.MaxTokens upstream, so the provider
-// is bound by the very number the gate priced — one value, resolved once, and
-// the meter and the wire cannot disagree about what was paid for. Reserving a
-// ceiling nobody enforces would leave the completion just as unfunded as pricing
-// the prompt alone, only less visibly.
+// The ceiling is per-MODEL and comes from the catalog, never from a constant. A
+// constant is wrong by construction — it caps a 1M-context model at whatever
+// number was typed, and it is one release out of date the moment a model ships.
+// This estate has paid for that twice already: ai/model's deleted name-matching
+// table gave deepseek-v4-pro 16384 and 402'd every long prompt, and glm-5.2
+// dead-ended /compact on a stale 16K fallback. Both were fixed the same way —
+// declare it in models.yaml, resolve it here.
+//
+// It does NOT write the ceiling onto the request. What we reserve is a billing
+// fact; req.MaxTokens is the CALLER's, and forwarding a limit they never asked
+// for silently truncates their answer. The reservation is sound regardless: a
+// model cannot exceed its own max output, so the bound holds whether or not we
+// restate it on the wire.
 func atMost(req *types.ChatRequest) int {
-	if req.MaxTokens <= 0 {
-		req.MaxTokens = maxCompletionTokens()
+	out := req.MaxTokens
+	if out <= 0 {
+		out = completionCeiling(req.Model)
 	}
-	return EstTokens(req.Prompt) + req.MaxTokens
+	return EstTokens(req.Prompt) + out
 }
 
-// defaultMaxCompletionTokens is the completion ceiling assumed for a caller that
-// states no MaxTokens. It is what the gate RESERVES, never what it charges —
-// settlement always debits the exact usage and the rest of the reservation is
-// released — so the only thing this number trades off is which failure a caller
-// meets at the edge of its balance:
+// ceilingOf resolves a model's max completion length. Installed at wire-up from
+// the model catalog (see SetCompletionCeiling); nil until then.
+var ceilingOf func(model string) int
+
+// SetCompletionCeiling installs the per-model completion-ceiling lookup the
+// prepaid gate reserves against. Called once at startup by the package that
+// links the model catalog (apps/ai), so package cloud states WHAT it needs
+// without importing where the answer lives — the same seam shape the AI module
+// uses for SetContextWindowResolver.
+func SetCompletionCeiling(f func(model string) int) { ceilingOf = f }
+
+// completionCeiling answers the most tokens a completion of `model` can be: the
+// catalog's number when it declares one, else the floor.
+func completionCeiling(model string) int {
+	if ceilingOf != nil {
+		if n := ceilingOf(model); n > 0 {
+			return n
+		}
+	}
+	return maxCompletionTokens()
+}
+
+// defaultMaxCompletionTokens is the FLOOR used when the catalog declares nothing
+// for a model — a deployment with no models.yaml, or a model reaching the
+// gateway before its entry lands. It is not a per-model answer and must never be
+// used as one; MaxOutput in the catalog is the answer.
 //
-//	too LOW  -> the ceiling is also sent upstream, so a legitimate long answer is
-//	            TRUNCATED. Silent, visible only in the output, and a product bug.
-//	too HIGH -> a nearly-empty wallet is refused a call it could almost afford.
-//	            Loud, correct, and exactly what "prepay fully" means.
-//
-// So it is set generously (32k — a common modern output cap, above what real
-// completions reach) and the second failure is the one we choose. At the default
-// price that reserves ~7c, which no funded account notices. Ops tunes it per
-// deployment with CLOUD_AI_MAX_COMPLETION_TOKENS.
+// A floor, not a guess, in the same sense as ai/model.DefaultContextLength: the
+// value that is safe across the lineup. It is only ever RESERVED, never charged
+// (settlement debits the exact usage and releases the rest) and never sent
+// upstream, so it cannot truncate an answer. Its only effect is which nearly
+// empty wallets are refused early — so it is set generously. Ops overrides it
+// per deployment with CLOUD_AI_MAX_COMPLETION_TOKENS.
 const defaultMaxCompletionTokens = 32768
 
 // maxCompletionTokens resolves the assumed completion ceiling. A
