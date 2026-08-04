@@ -172,6 +172,12 @@ func init() {
 			"projectsUpdate.visibility":    "Visibility flips an existing project between \"public\" and \"private\". Same\nONE rule as at create: public is free, private needs a paid plan.",
 		},
 	})
+	zip.Describe("POST /sites/resolve", zip.Doc{
+		Description: "Answers the multi-tenant product URL (<slug>.hanzo.app) and\nbound custom domains. Not-found is `Found:false`, never an error: the edge\nturns that into an honest 404, and an error into a 503. Collapsing the two\nwould serve 404s for real live sites during a transient failure.",
+	})
+	zip.Describe("POST /sites/resolve-org", zip.Doc{
+		Description: "Is the first-party path: it NEVER falls back to\nunique-across-orgs, so an internal host is served only by our own project and\nnever a customer's same-named one.",
+	})
 	zip.Describe("POST /v1/platform/sites", zip.Doc{
 		Description: "Creates a project — the handle a site is deployed and served\nunder — and answers 201 with it in `draft`.\n\n`name` is required; `slug` is derived from the name when omitted and is the\nidentifier that matters — it becomes the S3 key segment, the public host\n`<slug>.hanzo.app`, and the handle every later call addresses, so it must\nmatch `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$` and may not be a reserved label\nsuch as `api` or `admin`. `framework` is a build hint from a closed set,\ndefaulting to `static`; it never gates a deploy, it only tells CI how to build\na linked repo.\n\nTwo defaults are worth knowing: the analytics beacon is ON unless `analytics`\nis explicitly false, and `visibility` is `public` unless asked otherwise.\nPublishing publicly is free; PRIVATE is the paid feature, and an unfunded org\nasking for it is refused rather than quietly published as public. Creation\nalso provisions the project's data space and a canonical git repo, both\nbest-effort — neither can fail the create.\n\nScope: a validated principal is required (403 without one) and the project is\ncreated in THAT principal's org. The slug is unique per org, so a slug already\nused in the caller's own org is a 409 while the same slug in another org is\nirrelevant.",
 		Fields: map[string]string{
