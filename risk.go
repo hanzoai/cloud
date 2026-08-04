@@ -15,22 +15,34 @@ package cloud
 // what makes the gate below complete and testable before a scorer exists, and
 // correct when it is absent at run time.
 //
-// IT IS AN IN-PROCESS HANDOFF, AND EVERY APP IS ITS OWN PROCESS. cmd/cloud mounts
-// each subsystem as a separate binary, so a scorer installed through SetRiskScorer
-// answers for THAT process and no other: called from the risk app's Mount it arms
-// the risk process alone, and RiskScorerInstalled stays false in every other one
-// however healthy the risk process is. The observability plane's event door rode
-// this exact shape (cloud.SetObsErrorIngest, in a file named obsevents.go) and
-// read nil in the process that needed it, answering 503 to every Sentry SDK until
-// it moved to a plane op — apps/o11y/obs_rpc.go is what replaced it, and
-// obsevents.go is gone.
+// IT IS AN IN-PROCESS HANDOFF, and which apps share a process is a per-plugin
+// CHOICE rather than a law. Each plugin/<name> is a composition root that links
+// whatever it imports: plugin/risk lists risk alone and plugin/gateway lists gateway
+// alone, so as composed today no binary holds both, and a scorer installed here
+// would arm the risk process while apps/gateway's RiskScorerInstalled — running in
+// the gateway binary — stayed false. Sibling apps DO co-reside wherever a root asks
+// them to: plugin/campaign, plugin/integrations and plugin/guide each link three or
+// four apps/* and wire process-global seams across them (seams.go in each), which is
+// this seam's shape exactly, under no build tag. One import in one composition root
+// is the whole distance between the two arrangements, so read "one process per app"
+// as the current composition and never as an impossibility.
 //
-// So the reach of this seam is one process, by construction. A caller in another
-// binary — the abuse gate that serve.go installs fleet-wide, the signup gate in
-// hanzoai/iam — reaches /v1/risk over the wire or over the plane, never through
-// this global. Note what that means for the tests below: they link cloud and the
-// app into ONE binary, where the handoff always works, so no test here can
-// observe the boundary that decides whether it works in production.
+// WHAT HOLDS WHATEVER THE TOPOLOGY IS SIMPLER: apps/risk exports Mount and Shutdown,
+// and nothing else. There is no scoring function to install, so SetRiskScorer has no
+// producer because none can be spelled — not because a boundary forbids one. Giving
+// it one means EXPORTING a scorer from apps/risk and then deciding what it answers
+// for: this global answers for its own process, while arming asks whether the risk
+// plane can answer for the FLEET. That is a cross-process ask. The observability
+// plane's event door was the same shape and learned it the expensive way
+// (cloud.SetObsErrorIngest, in a file named obsevents.go, read nil in the process
+// that needed it and answered 503 to every Sentry SDK until apps/o11y/obs_rpc.go
+// replaced it with a plane op; obsevents.go is gone).
+//
+// So a caller in another binary — the abuse gate that serve.go installs fleet-wide,
+// the signup gate in hanzoai/iam — reaches /v1/risk over the wire or over the plane,
+// never through this global. Note what that means for the tests below: they link
+// cloud and the app into ONE binary, where the handoff always works, so no test here
+// can observe the composition that decides whether it works in production.
 //
 // THE FAIL POLICY LIVES HERE, IN ONE FUNCTION, AND NOWHERE ELSE.
 //
