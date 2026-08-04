@@ -15,48 +15,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// TestOperatorOrgsFromEnv: the operator set is keyed by the SAME value the vouch
-// is looked up by — the VERBATIM validated IAM owner (principal.Org), trimmed and
-// nothing else. Only whitespace around a comma-separated entry is dropped.
-//
-// This used to fold each entry through the old sanitizeOrg (lowercase +
-// non-alnum→'-' + truncate-32) while domains.go looked the tenant up verbatim, so
-// the two halves of one decision disagreed: configuring "Acme" wrote the key
-// "acme", handing a DIFFERENT tenant — the one whose real IAM owner is "acme" —
-// platform-operator vouch, which SKIPS the DNS-01 ownership proof entirely; and
-// the genuine operator "Acme" silently lost its own. "team.a" → "team-a" is the
-// same class. Fold on one side of a comparison is never a normalization, it is a
-// collision, so both sides are now the same verbatim value.
-func TestOperatorOrgsFromEnv(t *testing.T) {
-	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "")
-	got := operatorOrgsFromEnv("hanzo")
-	if !got["hanzo"] || len(got) != 1 {
-		t.Fatalf("default operator orgs = %v, want {hanzo}", got)
-	}
-	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "hanzo, yadota ,Acme,team.a")
-	got = operatorOrgsFromEnv("ignored-when-env-set")
-	for _, o := range []string{"hanzo", "yadota", "Acme", "team.a"} {
-		if !got[o] {
-			t.Errorf("operator org %q missing from %v — entries are verbatim", o, got)
-		}
-	}
-	// The folded spellings are NOT operators: they name other tenants.
-	for _, o := range []string{"acme", "team-a"} {
-		if got[o] {
-			t.Errorf("folded spelling %q vouched from %v — a case/punctuation fold hands "+
-				"a different tenant the operator's DNS-proof bypass", o, got)
-		}
-	}
-	if len(got) != 4 {
-		t.Errorf("operator orgs = %v, want exactly 4 verbatim entries", got)
-	}
-	// The brand default is verbatim too — no fold on the fallback path either.
-	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "")
-	if got = operatorOrgsFromEnv("Acme"); !got["Acme"] || got["acme"] || len(got) != 1 {
-		t.Fatalf("brand-default operator orgs = %v, want exactly {Acme}", got)
-	}
-}
-
 // caller is one identity as the trust boundary presents it: the effective org plus
 // the two admin bits SanitizeIdentity mints from validated claims. Both are stripped
 // on ingress and re-injected only for a verified principal, so setting them here is
@@ -122,37 +80,37 @@ func domainsApp(t *testing.T, s *cloud.Service[state]) func(c caller, slug, host
 	}
 }
 
-// TestOperatorVouchNeedsAdminScope is the privilege-escalation regression, driven
-// through the REAL handler. The vouch skips the DNS-01 ownership proof (BindHost,
-// live immediately) and bypasses the "host we operate" refusal, so it is platform
-// authority and only an ADMIN scope may carry it.
+// TestVouchIsSuperAdminOnly is the privilege-escalation regression on the ROLE
+// axis, driven through the REAL handler. The vouch skips the DNS-01 ownership proof
+// (BindHost, live immediately) and bypasses the "host we operate" refusal, so it is
+// PLATFORM authority and only the platform predicate carries it.
 //
-// It used to key on MEMBERSHIP: `operatorOrgs[org]` alone, and the set defaults to
-// the deployment's brand org in EVERY deployment (brand.Default = "hanzo"). So any
-// member of org hanzo — every staff account whatever its role, plus anyone a
-// hanzo admin ever invited — could bind `login.example-bank.com` VERIFIED with no
-// proof at all: attacker content served at any custom-domain customer whose DNS
-// already points at our edge, and the name denied to its rightful owner for good,
-// since a verified row is first-come and global.
+// Three identities in the deployment's OWN brand org, one question each:
 //
-// Four identities, one operator org, one question each:
+//	plain member  → NOT vouched (pending claim + 403 on ours)
+//	org ADMIN     → NOT vouched (pending claim + 403 on ours)
+//	SuperAdmin    → vouched (operator onboarding)
 //
-//	plain member of the operator org  → NOT vouched (pending claim + 403 on ours)
-//	SuperAdmin                        → vouched (operator onboarding, unchanged)
-//	ADMIN of the operator org         → vouched (the set's grant, exercised by its admin)
-//	ADMIN of some OTHER org           → NOT vouched (the set is not a role, and a
-//	                                    role is not the set)
-func TestOperatorVouchNeedsAdminScope(t *testing.T) {
-	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "")
+// The org-admin row is the tightening. The gate used to admit `operatorOrgs[org] &&
+// IsOrgAdmin(c)` — the deployment names an org, IAM says you administer it — and
+// the default set is the brand org in EVERY deployment. But `isAdmin` is
+// SELF-SERVICE: an org's own admin sets it on a member of THEIR org, so every
+// `hanzo` admin could enrol any `hanzo` member into the gate, and the far side of
+// the gate would be populated by an authority the platform does not administer.
+// A vouched bind takes the name first-come and global and routes at once, so that
+// is `login.example-bank.com` served from our edge to any custom-domain customer
+// already pointed at it, and denied to its real owner for good.
+//
+// SuperAdmin ⟺ `owner == "admin"` is the ONE platform predicate; admitting a second,
+// weaker spelling of platform authority IS the escalation, whatever conjunction
+// dresses it up.
+func TestVouchIsSuperAdminOnly(t *testing.T) {
 	ctx := context.Background()
 	log := luxlog.New("test")
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
-		Base: cloud.Base{Log: log},
-		State: state{
-			apex: "hanzo.app", store: store, cf: sites.NewPurger(log),
-			operatorOrgs: operatorOrgsFromEnv("hanzo"), // the default set: {hanzo}
-		},
+		Base:  cloud.Base{Log: log},
+		State: state{apex: "hanzo.app", store: store, cf: sites.NewPurger(log)},
 	}
 	bind := domainsApp(t, svc)
 	for _, org := range []string{"hanzo", "acme"} {
@@ -161,106 +119,104 @@ func TestOperatorVouchNeedsAdminScope(t *testing.T) {
 		}
 	}
 
-	// A PLAIN MEMBER of the brand operator org. No admin bit of either kind — the
-	// identity every staff account and every invitee has.
-	member := caller{org: "hanzo"}
-
-	// It self-serves like any other tenant: a PENDING claim carrying the challenge.
-	code, v := bind(member, "site", "login.example-bank.com")
-	if code != http.StatusOK {
-		t.Fatalf("member bind = %d, want 200 (a pending claim)", code)
-	}
-	if v.Verified || v.Status != "pending" || len(v.Records) == 0 {
-		t.Fatalf("a PLAIN MEMBER of the operator org was vouched: %+v — membership is not "+
-			"an admin scope, and this bind skipped the DNS-01 ownership proof on a host "+
-			"the caller does not own", v)
-	}
-	// …and it cannot take a host WE operate at all; only a vouched caller may.
-	if code, _ = bind(member, "site", "evil.hanzo.app"); code != http.StatusForbidden {
-		t.Fatalf("member claim of our own host = %d, want 403 — ours() must apply to "+
-			"every non-vouched caller, operator-org membership included", code)
+	// Neither identity in the brand org may skip the proof: not the plain member
+	// every staff account and every invitee has, and NOT the org admin — which any
+	// existing brand-org admin can hand to any brand-org member.
+	for _, tc := range []struct {
+		name string
+		c    caller
+		host string
+	}{
+		{"plain member of the brand org", caller{org: "hanzo"}, "login.example-bank.com"},
+		{"ADMIN of the brand org", caller{org: "hanzo", orgAdmin: true}, "admin.example-bank.com"},
+	} {
+		// It self-serves like any other tenant: a PENDING claim carrying the challenge.
+		code, v := bind(tc.c, "site", tc.host)
+		if code != http.StatusOK {
+			t.Fatalf("%s bind = %d, want 200 (a pending claim)", tc.name, code)
+		}
+		if v.Verified || v.Status != "pending" || len(v.Records) == 0 {
+			t.Fatalf("%s was VOUCHED: %+v — this bind skipped the DNS-01 ownership proof "+
+				"on a host the caller does not own, and the org-admin bit that reaches it "+
+				"is set by the org's own admins, not by the platform", tc.name, v)
+		}
+		// …and it cannot take a host WE operate at all; only a vouched caller may.
+		if code, _ = bind(tc.c, "site", "evil.hanzo.app"); code != http.StatusForbidden {
+			t.Fatalf("%s claim of our own host = %d, want 403 — ours() must apply to every "+
+				"caller the platform predicate does not admit", tc.name, code)
+		}
 	}
 
 	// OPERATOR ONBOARDING STILL WORKS. A real SuperAdmin vouches — and in ANY org,
 	// because platform sudo is cross-tenant by construction: this is the operator
 	// switched into a customer's org to bind the domain it manages DNS for.
-	code, v = bind(caller{org: "acme", superAdmin: true}, "site", "customer.example")
+	code, v := bind(caller{org: "acme", superAdmin: true}, "site", "customer.example")
 	if code != http.StatusOK || !v.Verified || v.Status != "live" {
 		t.Fatalf("SuperAdmin lost the vouch: code=%d %+v — operator onboarding is "+
 			"disabled, which is a regression and not a fix", code, v)
 	}
-
-	// The set's own grant, exercised by an ADMIN of the org it names.
-	code, v = bind(caller{org: "hanzo", orgAdmin: true}, "site", "operator.example")
-	if code != http.StatusOK || !v.Verified || v.Status != "live" {
-		t.Fatalf("admin OF the operator org lost the vouch: code=%d %+v", code, v)
-	}
-
-	// An org admin OUTSIDE the set gets nothing: the org-admin bit is self-service
-	// authority within one's own tenant, never platform authority.
-	code, v = bind(caller{org: "acme", orgAdmin: true}, "site", "outsider.example")
-	if code != http.StatusOK {
-		t.Fatalf("non-operator org-admin bind = %d, want 200 (a pending claim)", code)
-	}
-	if v.Verified || v.Status != "pending" {
-		t.Fatalf("an org admin OUTSIDE the operator set was vouched: %+v — the IAM "+
-			"isAdmin bit is org-scoped self-service, never platform authority", v)
-	}
 }
 
-// TestOperatorVouchIsVerbatimEndToEnd is the cross-tenant privilege-bleed
-// regression, driven through the REAL route. The vouch is what skips the DNS-01
-// ownership proof (BindHost, live immediately) and bypasses the "host we operate"
-// refusal — so a tenant that merely case-folds onto an operator's name must NOT
-// get it, however privileged it is inside its OWN org.
+// TestVouchDoesNotTurnOnTheOrg is the cross-tenant privilege-bleed regression on the
+// ORG axis, driven through the REAL route: the vouch reads the caller's PLATFORM
+// bit and nothing about which tenant the request operates in.
 //
-// CLOUD_PLATFORM_OPERATOR_ORGS="Acme" names ONE operator. Tenant "acme" is a
-// different IAM owner and must self-serve: its bind is a PENDING claim carrying a
-// DNS challenge, and a host we operate is refused outright. The operator "Acme"
-// keeps its vouch: bound live, no challenge. BOTH callers are org admins here, so
-// the only axis left is the org name — which is the axis under test, and it is
-// never folded.
-func TestOperatorVouchIsVerbatimEndToEnd(t *testing.T) {
-	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "Acme")
+// It used to turn on the org, against a configured set of operator names, and both
+// halves of that comparison had to be the same value or the mismatch WAS a
+// cross-tenant grant: the set was folded (lowercase + non-alnum→'-' + truncate-32)
+// while the lookup stayed verbatim, so configuring "Acme" wrote the key "acme" and
+// handed the DNS-proof bypass to whichever different tenant really owns "acme",
+// while the genuine "Acme" silently lost it ("team.a" → "team-a" likewise). No
+// comparison, no fold, no collision — but only if the org truly leaves the
+// predicate, so that is what this pins.
+//
+// Four org names spanning the classes that used to matter — the brand org, its case
+// fold, an unrelated tenant, and the reserved `admin` org's own NAME — each with an
+// org ADMIN and a SuperAdmin. The org-admin never vouches and the SuperAdmin always
+// does, in every one.
+func TestVouchDoesNotTurnOnTheOrg(t *testing.T) {
 	ctx := context.Background()
 	log := luxlog.New("test")
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
-		Base: cloud.Base{Log: log},
-		State: state{
-			apex: "hanzo.app", store: store, cf: sites.NewPurger(log),
-			operatorOrgs: operatorOrgsFromEnv("ignored-when-env-set"),
-		},
+		Base:  cloud.Base{Log: log},
+		State: state{apex: "hanzo.app", store: store, cf: sites.NewPurger(log)},
 	}
 	bind := domainsApp(t, svc)
 
-	// Two DISTINCT tenants whose owners differ only in case, each with its own
-	// project. Slugs are lowercase because slugParam lowercases the path segment;
-	// the ORG is the axis under test, and it is never folded.
-	if err := store.CreateProject(ctx, mkProject("Acme", "operator-site", "Operator")); err != nil {
-		t.Fatalf("create operator project: %v", err)
+	// Slugs are lowercase because slugParam lowercases the path segment; the ORG is
+	// the axis under test, and it is never folded.
+	for i, org := range []string{"hanzo", "Hanzo", "acme", "admin"} {
+		if err := store.CreateProject(ctx, mkProject(org, "site"+string(rune('a'+i)), org)); err != nil {
+			t.Fatalf("create %q project: %v", org, err)
+		}
 	}
-	if err := store.CreateProject(ctx, mkProject("acme", "tenant-site", "Tenant")); err != nil {
-		t.Fatalf("create tenant project: %v", err)
-	}
+	for i, org := range []string{"hanzo", "Hanzo", "acme", "admin"} {
+		slug := "site" + string(rune('a'+i))
 
-	// The lookalike tenant is NOT the operator: it self-serves through DNS-01.
-	code, v := bind(caller{org: "acme", orgAdmin: true}, "tenant-site", "lookalike.example")
-	if code != http.StatusOK {
-		t.Fatalf("lookalike bind = %d, want 200 (a pending claim)", code)
-	}
-	if v.Verified || v.Status != "pending" || len(v.Records) == 0 {
-		t.Fatalf("tenant %q was VOUCHED as platform operator: %+v — a case fold onto "+
-			"operator \"Acme\" skipped the DNS-01 ownership proof", "acme", v)
-	}
-	// …and it cannot claim a host WE operate at all; only a vouched caller may.
-	if code, _ = bind(caller{org: "acme", orgAdmin: true}, "tenant-site", "api.hanzo.app"); code != http.StatusForbidden {
-		t.Fatalf("lookalike claim of our own host = %d, want 403", code)
-	}
-	// The real operator keeps its vouch: bound live, no challenge owed.
-	code, v = bind(caller{org: "Acme", orgAdmin: true}, "operator-site", "operator.example")
-	if code != http.StatusOK || !v.Verified || v.Status != "live" {
-		t.Fatalf("operator %q lost its vouch: code=%d %+v", "Acme", code, v)
+		// An ADMIN of this org self-serves through DNS-01, whatever the org is called.
+		// "admin" is the reserved org's NAME, and naming it in X-Org-Id is not being in
+		// it: the platform bit is minted upstream from the validated owner, never read
+		// off the org the request carries.
+		code, v := bind(caller{org: org, orgAdmin: true}, slug, "admin."+slug+".example")
+		if code != http.StatusOK {
+			t.Fatalf("org %q admin bind = %d, want 200 (a pending claim)", org, code)
+		}
+		if v.Verified || v.Status != "pending" || len(v.Records) == 0 {
+			t.Fatalf("org %q was VOUCHED on its NAME: %+v — the org must not reach the "+
+				"platform predicate, or a fold or a lookalike name is a proof bypass", org, v)
+		}
+		// …and it cannot claim a host WE operate at all; only a vouched caller may.
+		if code, _ = bind(caller{org: org, orgAdmin: true}, slug, "api.hanzo.app"); code != http.StatusForbidden {
+			t.Fatalf("org %q admin claim of our own host = %d, want 403", org, code)
+		}
+
+		// A SuperAdmin vouches in EVERY org — cross-tenant is what platform sudo is,
+		// and it is the onboarding path for a customer's domain.
+		code, v = bind(caller{org: org, superAdmin: true}, slug, "super."+slug+".example")
+		if code != http.StatusOK || !v.Verified || v.Status != "live" {
+			t.Fatalf("SuperAdmin lost the vouch in org %q: code=%d %+v", org, code, v)
+		}
 	}
 }
 
@@ -284,11 +240,8 @@ func TestOursNeverEntersHostTable(t *testing.T) {
 	log := luxlog.New("test")
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
-		Base: cloud.Base{Log: log},
-		State: state{
-			apex: "hanzo.app", store: store, cf: sites.NewPurger(log),
-			operatorOrgs: map[string]bool{"hanzo": true},
-		},
+		Base:  cloud.Base{Log: log},
+		State: state{apex: "hanzo.app", store: store, cf: sites.NewPurger(log)},
 	}
 	bind := domainsApp(t, svc)
 	if err := store.CreateProject(ctx, mkProject("hanzo", "site", "Site")); err != nil {
