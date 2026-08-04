@@ -83,19 +83,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	cfg := loadConfig()
 	o := productOps{cfg: cfg, log: logger}
 
-	// The bearer key is a REQUEST fact — a header — and a typed op receives only a
-	// context, so the check that used to open each handler is middleware on the
-	// two subtrees instead. Middleware runs before the op, exactly where the
-	// in-handler call ran, so an unconfigured deployment still 503s and a wrong key
-	// still 401s before anything reaches an upstream. Two subtrees, two keys: the
-	// search bearer never admits a vector read.
+	// The bearer key is a REQUEST fact, so each op declares it: keyedIn carries
+	// the Authorization header as a typed input field, and requireKey opens every
+	// handler — an unconfigured deployment still 503s and a wrong key still 401s
+	// before anything reaches an upstream. Two keys, never crossed: the search
+	// bearer never admits a vector read.
+	//
+	// NOT middleware. /v1/search and /v1/vector belong to provisioning
+	// (manifest/apps.go); product owns exactly four routes inside them, and a key
+	// check hung on either subtree would have gated provisioning's routes in the
+	// unified binary — the confinement gate refused that boot, and it was right
+	// to. Declaring the header on In is zip's replacement for exactly that
+	// middleware: the credential appears in the document, the CLI flag and the
+	// MCP schema, instead of being smuggled past every projection.
 	sg := app.Group("/v1/search")
-	sg.Use(requireKey(cfg.searchKey))
 	zip.Get(sg, "/indexes", o.searchIndexes)
 	zip.Get(sg, "/stats", o.searchStats)
 
 	vg := app.Group("/v1/vector")
-	vg.Use(requireKey(cfg.vectorKey))
 	zip.Get(vg, "/collections", o.vectorCollections)
 	zip.Get(vg, "/stats", o.vectorStats)
 
@@ -106,28 +111,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 }
 
 // requireKey enforces the bearer key against the configured upstream key with a
-// constant-time compare, for every route of the subtree it is installed on. It
-// returns a *zip.HTTPError (which zip's errorHandler renders as a JSON body with
-// the right status) on rejection and writes nothing itself — no double-write.
-// An unset key fails closed (503) so a mis-provisioned deploy never silently
-// serves an open endpoint.
-//
-// It is MIDDLEWARE rather than a call at the top of each handler because the
-// credential is a header, and a typed op receives only a context: the check has
-// to run where it can still see the request. It runs in exactly the position the
-// in-handler call held — before the op — so the statuses and their order are
-// unchanged.
-func requireKey(want string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if want == "" {
-			return zip.Errorf(http.StatusServiceUnavailable, "product surface not configured")
-		}
-		got := bearer(c.Header("Authorization"))
-		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			return zip.ErrUnauthorized("invalid api key")
-		}
-		return c.Continue()
+// constant-time compare. It is the first call of every handler and returns a
+// *zip.HTTPError (which zip's errorHandler renders as a JSON body with the
+// right status) on rejection. An unset key fails closed (503) so a
+// mis-provisioned deploy never silently serves an open endpoint.
+func requireKey(auth, want string) error {
+	if want == "" {
+		return zip.Errorf(http.StatusServiceUnavailable, "product surface not configured")
 	}
+	if subtle.ConstantTimeCompare([]byte(bearer(auth)), []byte(want)) != 1 {
+		return zip.ErrUnauthorized("invalid api key")
+	}
+	return nil
 }
 
 func bearer(h string) string {
@@ -149,9 +144,19 @@ type productOps struct {
 	log luxlog.Logger
 }
 
-// noIn is the input of an op that takes nothing: no body, no path parameter, no
-// query. GET carries no request body (zip's hasBody), so this publishes nothing.
-type noIn struct{}
+// keyedIn is the input of every product read: no body, no path or query
+// parameter — just the bearer that authorizes it. The header is a typed input
+// field because that is how a typed op sees a request header, and it puts the
+// credential in the op's contract: a header parameter in the document, a flag
+// on the command, a property in the MCP tool schema.
+type keyedIn struct {
+	// Authorization carries the surface's bearer key (`Bearer <key>`); the bare
+	// key is accepted too. Search and vector are two surfaces with two keys.
+	// It is not `validate:"required"` on purpose: requireKey answers absence
+	// itself, so an unconfigured surface 503s and a missing bearer 401s — a
+	// validation refusal would rewrite both statuses.
+	Authorization string `json:"authorization" header:"Authorization"`
+}
 
 // searchIndexList is the GET /v1/search/indexes envelope.
 type searchIndexList struct {
@@ -175,7 +180,10 @@ type vectorCollectionList struct {
 // EMPTY list, so the panel shows an honest empty state instead of an error.
 // createdAt falls back to now and lastIndexedAt to null when the index list is
 // unavailable.
-func (o productOps) searchIndexes(ctx context.Context, _ *noIn) (*searchIndexList, error) {
+func (o productOps) searchIndexes(ctx context.Context, in *keyedIn) (*searchIndexList, error) {
+	if err := requireKey(in.Authorization, o.cfg.searchKey); err != nil {
+		return nil, err
+	}
 	stats, err := meiliStats(o.cfg)
 	if err != nil {
 		o.log.Warn("search indexes: meili stats unreachable", "err", err)
@@ -203,7 +211,10 @@ func (o productOps) searchIndexes(ctx context.Context, _ *noIn) (*searchIndexLis
 // query-history counters, so searches, sessions and the per-day series are not
 // derivable from the index and this surface reports the honest zero instead of a
 // fabricated number. An unreachable Meilisearch answers 200 with all zeros.
-func (o productOps) searchStats(ctx context.Context, _ *noIn) (*searchStats, error) {
+func (o productOps) searchStats(ctx context.Context, in *keyedIn) (*searchStats, error) {
+	if err := requireKey(in.Authorization, o.cfg.searchKey); err != nil {
+		return nil, err
+	}
 	stats, err := meiliStats(o.cfg)
 	if err != nil {
 		o.log.Warn("search stats: meili unreachable", "err", err)
@@ -228,7 +239,10 @@ func (o productOps) searchStats(ctx context.Context, _ *noIn) (*searchStats, err
 // Per-collection detail is best-effort — one collection that fails to describe
 // itself keeps its name and defaults (dimension 0, cosine) rather than blanking
 // the whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.
-func (o productOps) vectorCollections(ctx context.Context, _ *noIn) (*vectorCollectionList, error) {
+func (o productOps) vectorCollections(ctx context.Context, in *keyedIn) (*vectorCollectionList, error) {
+	if err := requireKey(in.Authorization, o.cfg.vectorKey); err != nil {
+		return nil, err
+	}
 	cols, err := qdrantCollections(o.cfg)
 	if err != nil {
 		o.log.Warn("vector collections: qdrant unreachable", "err", err)
@@ -242,7 +256,10 @@ func (o productOps) vectorCollections(ctx context.Context, _ *noIn) (*vectorColl
 // Every figure is summed from the same per-collection detail
 // GET /v1/vector/collections returns, so the two panels can never disagree. An
 // unreachable Qdrant answers 200 with all zeros rather than an error.
-func (o productOps) vectorStats(ctx context.Context, _ *noIn) (*vectorStats, error) {
+func (o productOps) vectorStats(ctx context.Context, in *keyedIn) (*vectorStats, error) {
+	if err := requireKey(in.Authorization, o.cfg.vectorKey); err != nil {
+		return nil, err
+	}
 	cols, err := qdrantCollections(o.cfg)
 	if err != nil {
 		o.log.Warn("vector stats: qdrant unreachable", "err", err)
