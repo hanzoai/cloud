@@ -626,13 +626,18 @@ func TestLearn_ARetriedBatchConvergesInMemoryToo(t *testing.T) {
 		ob(t, "evt-1", kindAccount, "u_1", 100, at),
 		ob(t, "evt-2", kindAccount, "u_1", 200, at.Add(time.Second)),
 	}
-	for i := 0; i < 2; i++ { // the client timed out and sent it again
-		verdicts, err := p.learn(k, batch...)
+	// THE COUNT IS THE ASSERTION, on both calls. The first learns the batch; the
+	// second learns NOTHING, and says so — which is what makes the convergence
+	// observable to the caller rather than only true inside the plane. It is also
+	// what the call is metered at, so a retry is free.
+	for i, want := range []int{len(batch), 0} { // the client timed out and sent it again
+		learned, err := p.learn(k, batch...)
 		if err != nil {
 			t.Fatalf("learn %d: %v", i, err)
 		}
-		if len(verdicts) != len(batch) {
-			t.Fatalf("a retried batch answered %d verdicts, want one per event", len(verdicts))
+		if learned != want {
+			t.Fatalf("call %d of a %d-event batch reported learning from %d, want %d — a duplicate is inert",
+				i, len(batch), learned, want)
 		}
 	}
 	if held := recorded(t, p, k); held != len(batch) {
