@@ -114,7 +114,7 @@ test:
     #
     # It also pins FRESHNESS, which is why it earns its own entry rather than
     # riding go-unit: the monolith is gone, so the woven document IS openapi.yaml —
-    # `make openapi` writes it through this same weave, and this verifies the
+    # `make describe` writes it through this same weave, and this verifies the
     # committed subsets weave back to the committed golden byte for byte. A route
     # change that regenerates one and not the other goes red here, in seconds,
     # instead of shipping a wrong SDK. Links no subsystem and mounts nothing but
