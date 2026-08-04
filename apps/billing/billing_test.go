@@ -55,6 +55,7 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/v1/billing/gpu/eligibility", h)
 	mux.HandleFunc("/v1/billing/gpu/charge", h)
 	mux.HandleFunc("/v1/billing/portal/methods", h)
+	mux.HandleFunc("/v1/billing/portal/methods/", h) // the {id} sub-resource
 	mux.HandleFunc("/v1/billing/methods", h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -423,5 +424,98 @@ func TestCreatePaymentMethod_Unauthenticated401(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "svc-token")
 	if code, _ := callBody(t, app, http.MethodPost, "/v1/billing/methods", "", "", `{}`); code != 401 {
 		t.Fatalf("unauth save card: want 401, got %d", code)
+	}
+}
+
+// TestDeletePaymentMethod_ProxiesPortal_Scoped — removing a card reaches commerce
+// at the PORTAL sub-resource (never /v1/billing/methods/{id}, which this app owns
+// and would re-enter), carries the caller's OWN org as the trusted selector, and
+// forwards commerce's body and status verbatim.
+func TestDeletePaymentMethod_ProxiesPortal_Scoped(t *testing.T) {
+	f := &fakeCommerce{status: 200, body: `{"deleted":true,"id":"pm_1"}`}
+	app := mountApp(t, f.server(t).URL, "svc-token")
+
+	code, body := call(t, app, http.MethodDelete, "/v1/billing/methods/pm_1", "maxpower/dave", "maxpower")
+	if code != 200 || string(body) != f.body {
+		t.Fatalf("delete method: want 200 verbatim, got %d (%s)", code, body)
+	}
+	if f.gotMethod != http.MethodDelete || f.gotPath != "/v1/billing/portal/methods/pm_1" {
+		t.Fatalf("commerce call: want DELETE /v1/billing/portal/methods/pm_1, got %s %q", f.gotMethod, f.gotPath)
+	}
+	if f.gotOrg != "maxpower" {
+		t.Fatalf("X-Org-Id must be the caller's own org, got %q", f.gotOrg)
+	}
+}
+
+// TestDeletePaymentMethod_TenantIsolation is the RED-focus test: everything a
+// caller can say about WHOSE card this is gets overwritten with the caller's own
+// org before the request leaves this process.
+//
+// X-Org-Id is the only tenant selector commerce honours on the S2S seam, and it is
+// taken from the VALIDATED principal — so org A deleting with a forged ?org=orgb,
+// a forged subject, or org B's own id can never reach org B's namespace, and the
+// id it names is resolved inside org A's, where a foreign card is not found.
+// (commerce/api/billing/payment_methods_tenant_test.go proves the far side: org B
+// handed org A's id gets 404 and the card survives.)
+func TestDeletePaymentMethod_TenantIsolation(t *testing.T) {
+	f := &fakeCommerce{status: 200, body: `{"deleted":true,"id":"pm_victim"}`}
+	app := mountApp(t, f.server(t).URL, "svc-token")
+
+	// org A ("maxpower") aims a delete at org B ("victimorg") every way the wire allows.
+	code, _ := call(t, app, http.MethodDelete,
+		"/v1/billing/methods/pm_victim?org=victimorg&customerId=victimorg&user=victimorg&userId=victimorg",
+		"maxpower/dave", "maxpower")
+	if code != 200 {
+		t.Fatalf("want 200, got %d", code)
+	}
+	if f.gotOrg != "maxpower" {
+		t.Fatalf("CROSS-TENANT: X-Org-Id reached commerce as %q, want the caller's own org", f.gotOrg)
+	}
+	if f.gotQuery.Has("org") {
+		t.Fatalf("CROSS-TENANT: client-forged org reached commerce as %q", f.gotQuery.Get("org"))
+	}
+	for _, k := range []string{"customerId", "user", "userId"} {
+		if got := f.gotQuery.Get(k); got != "maxpower" {
+			t.Fatalf("CROSS-TENANT: forged %s reached commerce as %q, want the caller's own org", k, got)
+		}
+	}
+}
+
+// TestDeletePaymentMethod_Unauthenticated401 — removing a card is a MUTATION, so
+// it resolves the org with principal.Org (the validated principal ONLY) and not
+// readerOrg, which additionally admits the in-proc service token for reads. No
+// identity is 401 "sign in", the same answer saving a card gives.
+func TestDeletePaymentMethod_Unauthenticated401(t *testing.T) {
+	f := &fakeCommerce{status: 200, body: `{}`}
+	app := mountApp(t, f.server(t).URL, "svc-token")
+	if code, _ := call(t, app, http.MethodDelete, "/v1/billing/methods/pm_1", "", ""); code != 401 {
+		t.Fatalf("unauth delete card: want 401, got %d", code)
+	}
+	// The service token alone is not a customer: a READ would be admitted here
+	// (readerOrg), a mutation must not be.
+	if f.gotPath != "" {
+		t.Fatalf("an unauthenticated delete must not reach commerce at all, got %q", f.gotPath)
+	}
+}
+
+// TestDeletePaymentMethod_IDIsAValueNotARoute — the id is a caller-supplied path
+// segment, and the router hands it over STILL PERCENT-ENCODED, so it is escaped
+// again on the way out. An id carrying encoded separators must name a (missing)
+// resource inside the portal sub-resource, never steer the S2S call to a different
+// commerce address — /v1/billing/deposit being the one that would matter, since
+// this process holds the service token that satisfies commerce's mint gate.
+func TestDeletePaymentMethod_IDIsAValueNotARoute(t *testing.T) {
+	f := &fakeCommerce{status: 404, body: `{"error":"payment method not found"}`}
+	app := mountApp(t, f.server(t).URL, "svc-token")
+
+	code, body := call(t, app, http.MethodDelete, "/v1/billing/methods/pm%2f..%2f..%2fbilling%2fdeposit",
+		"maxpower/dave", "maxpower")
+	if code != 404 || string(body) != f.body {
+		t.Fatalf("want commerce's 404 forwarded verbatim, got %d (%s)", code, body)
+	}
+	const prefix = "/v1/billing/portal/methods/"
+	rest, ok := strings.CutPrefix(f.gotPath, prefix)
+	if !ok || strings.Contains(rest, "/") {
+		t.Fatalf("the id must stay ONE segment under %s, got %q", prefix, f.gotPath)
 	}
 }
