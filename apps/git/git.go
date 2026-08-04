@@ -293,7 +293,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/git")
 	// The principal bridge first: every typed op below reads its tenant off the
 	// request context, and a Use only runs ahead of routes registered after it.
-	g.Use(bridgePrincipal)
+	g.Use(zip.H(bridgePrincipal))
 
 	// Control plane (JSON). Static /repos + /usage register before the
 	// smart-HTTP :org/:repo params so a real org can never shadow them.

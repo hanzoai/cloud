@@ -46,7 +46,7 @@ func connectorRoutes(app cloud.Router, zapp *zip.App, o ops) {
 	// (cloud.Bridge) and the user id (bridgeFacts) off the request context. A
 	// group's Use is bounded by the group, which is the door scope.go names for a
 	// subsystem gating a subtree it serves.
-	app.Group("/v1/connectors").Use(cloud.Bridge(), bridgeFacts)
+	app.Group("/v1/connectors").Use(cloud.Bridge(), zip.H(bridgeFacts))
 
 	zip.Get(zapp, "/v1/connectors", o.connectors)
 	zip.Get(zapp, "/v1/connectors/providers", o.connectorProviders)

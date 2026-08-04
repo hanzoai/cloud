@@ -47,7 +47,12 @@ import (
 // fleet board (/v1/admin/plugins) is the reader; making it Global to ask a
 // read-only question would have granted app-wide middleware to buy a status field.
 type Router interface {
-	Use(handlers ...zip.Handler) zip.Router
+	// Use is zip's ONE composition verb, so it takes a [zip.Component] —
+	// middleware, or another *zip.App included by reference. It is the only
+	// signature that widened in zip v1.23; every route method below still takes
+	// ...Handler. Mirroring zip.Router exactly is what lets a *zip.App satisfy
+	// this interface, which ZipApp's type switch depends on.
+	Use(cs ...zip.Component) zip.Router
 
 	Get(path string, handlers ...zip.Handler) zip.Router
 	Post(path string, handlers ...zip.Handler) zip.Router
@@ -123,10 +128,10 @@ func (s *scope) owns(path string) bool {
 
 // Use installs the middleware once per declared prefix. On a bare app this is the
 // app-wide door; here it is the subsystem's own subtrees and nothing else.
-func (s *scope) Use(handlers ...zip.Handler) zip.Router {
+func (s *scope) Use(cs ...zip.Component) zip.Router {
 	var last zip.Router
 	for _, p := range s.prefixes {
-		last = s.app.Group(p).Use(handlers...)
+		last = s.app.Group(p).Use(cs...)
 	}
 	return last
 }

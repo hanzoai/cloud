@@ -311,8 +311,12 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	p.Env = append(p.Env, childEnv(a.Name, secret, rootKey)...)
 	p.Start = startTimeout()
 
-	err := app.Add(zip.Load(p, a.Prefixes...))
+	// zip v1.23 removed (*App).Add: Use is the ONE composition verb, and zip.Load
+	// already returns the leaf *App — which IS a zip.Component — so the child is
+	// included by reference rather than through a second registration call.
+	leaf, err := zip.Load(p, a.Prefixes...)
 	if err == nil {
+		app.Use(leaf)
 		return nil
 	}
 	if a.Required {
@@ -338,9 +342,11 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	// fails again, which is zip's existing answer for a cold plugin and heals the
 	// common cause of a boot failure: a dependency that was not up yet.
 	p.Lazy = true
-	if err := app.Add(zip.Load(p, a.Prefixes...)); err != nil {
-		return fmt.Errorf("%s: mounting it absent failed too: %w", a.Name, err)
+	lazy, lerr := zip.Load(p, a.Prefixes...)
+	if lerr != nil {
+		return fmt.Errorf("%s: mounting it absent failed too: %w", a.Name, lerr)
 	}
+	app.Use(lazy)
 	return nil
 }
 
