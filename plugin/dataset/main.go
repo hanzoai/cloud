@@ -26,7 +26,7 @@ import (
 // probe of its own would report the store's reachability, which is already what
 // every op reports in band as a 503 rather than as an empty answer.
 func main() {
-	if err := cloud.Serve([]cloud.Plugin{{
+	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "dataset",
 		Price: cloud.Metered,
 		Mount: dataset.Mount,

@@ -17487,6 +17487,17 @@ components:
         name:
           description: Name and Version identify the version.
           type: string
+        oversize:
+          description: |-
+            Oversize is how many of the window's subjects this version could NOT carry
+            because their subject identity exceeds the plane's per-subject byte bound.
+
+            It is on the wire, not only in a log, because it is the one degradation a
+            caller cannot otherwise detect: the rows that are here look complete, and a
+            dataset silently missing a population is a model silently blind to it.
+            Non-zero does not make a version invalid — it makes it a version whose
+            coverage is STATED. Zero is the normal case and omits.
+          type: integer
         refusal:
           description: Refusal names why there are no bytes, when there are none.
           type: string
@@ -17682,6 +17693,12 @@ components:
           description: |-
             Holds is what the source holds for the same window NOW. The difference
             between it and Rows is the whole of the reproducibility claim.
+          type: integer
+        oversize:
+          description: |-
+            Oversize is how many subjects the window held that were too large to
+            represent when this version was built. It is part of the fingerprint, so it
+            is part of what "reproducible" is measured over.
           type: integer
         refusal:
           type: string
@@ -46818,6 +46835,46 @@ paths:
       tags:
       - automations
       x-app: automations
+  /v1/avatar:
+    post:
+      description: |-
+        Stores one image as the signed-in user's profile photo and answers the URL it is served from, which is also written to the user's IAM record — so every surface that already renders `avatar` picks it up with no further call.
+
+        The body is a multipart form with a `file` part. The format is decided by the BYTES, never the filename or the part's Content-Type: png, jpeg, gif and webp are accepted and everything else is refused with 415, so an SVG cannot be stored as a picture and later served as a program. Over 8 MiB is 413; empty is 400.
+
+        The photo is addressed by the sha256 of its bytes, so setting a new one yields a new URL rather than a stale cache of the old face. The caller is taken from the validated identity ONLY — there is no way to name a different subject — so this always sets your own photo, and a caller with no organization yet is refused.
+      operationId: post_v1_avatar
+      summary: Set your profile photo
+      tags:
+      - avatar
+      x-app: account
+  /v1/avatar/{org}/{user}/{digest}:
+    get:
+      description: |-
+        Streams a profile photo's raw BYTES. This is the address stored on the user's IAM record and rendered directly by an `<img>`, so it takes no credentials — the 64-hex content digest in the path is the capability, and it can only be produced by someone who already has the image.
+
+        The Content-Type is derived from the stored bytes and the response carries nosniff, so only a real raster image is ever served and only under its true type. Anything else — a miss, a malformed path, an object that is not an image — is one 404, and a hit caches for a year because the address is the content.
+      operationId: get_v1_avatar_by_org_by_user_by_digest
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: user
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: digest
+        required: true
+        schema:
+          type: string
+      summary: Fetch a profile photo
+      tags:
+      - avatar
+      x-app: account
   /v1/balancers:
     get:
       description: |-
@@ -70490,6 +70547,19 @@ paths:
       tags:
       - models
       x-app: ai
+  /v1/models/providers:
+    get:
+      description: |-
+        Public, secret-free list of the providers serving the models that
+        GET /v1/models lists — the same source, projected. Safe unauthenticated: no
+        keys, URLs, or config are returned, and it reports a SET of names, never
+        which provider serves which model.
+      operationId: get_v1_models_providers
+      summary: Public, secret-free list of the providers serving the models that GET
+        /v1/models lists — the same source, projected.
+      tags:
+      - models
+      x-app: github.com/hanzoai/ai
   /v1/mq/health:
     get:
       description: Reports whether the message plane behind this surface answers.
@@ -85551,18 +85621,6 @@ paths:
       tags:
       - prompts
       x-app: prompts
-  /v1/provider-flags:
-    get:
-      description: |-
-        Public, secret-free list of enabled Model provider NAMES. Used by
-        the pricing catalog sync to gate which providers' models are published
-        (replaces the standalone ENABLE_OPENROUTER env — one control). Safe to be
-        unauthenticated: no keys, URLs, or config are returned.
-      operationId: get_v1_provider-flags
-      summary: Public, secret-free list of enabled Model provider NAMES.
-      tags:
-      - provider-flags
-      x-app: github.com/hanzoai/ai
   /v1/pubsub/jetstream/streams:
     get:
       description: |-
@@ -95277,6 +95335,9 @@ tags:
 - description: Package automations is workflows that run themselves, on a schedule
     or a webhook.
   name: automations
+- description: 'Package account is your own account: API keys you mint and revoke,
+    org onboarding, and wallet top-up.'
+  name: avatar
 - description: Package do is the org-scoped private-network surface — /v1/vpcs and
     /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
   name: balancers
@@ -95652,11 +95713,6 @@ tags:
 - description: Package prompts is your prompt library, versioned, so nothing changes
     silently.
   name: prompts
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: provider-flags
 - description: 'Package pubsub is your message bus: publish, subscribe, and durable
     streams your apps read at their own pace.'
   name: pubsub

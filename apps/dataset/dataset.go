@@ -330,10 +330,15 @@ func (p *plane) who(ctx context.Context) (caller, error) {
 // warehouse scans against a single stateful store, and a thousand times [maxRows]
 // rows resident in one process. Both are fleet resources no tenant owns.
 //
-// Eight jobs of at most 200k rows is a few hundred megabytes and eight concurrent
-// scans, which the store carries and this process survives. The ceiling is stated
-// here rather than inferred from a pool size so that raising it is a decision
-// somebody made.
+// Eight jobs of at most [maxRows] rows is [maxProcessBytes] resident and eight
+// concurrent scans, which the store carries and this process survives. That first
+// figure is a COMPUTED one, and it did not used to be: this comment read "a few
+// hundred megabytes" while a row's subject was a string the caller sized, so the
+// real number was whatever one tenant's `session_id` made it. See
+// [maxSubjectBytes] — the count is only a byte bound because the value is bounded.
+//
+// The ceiling is stated here rather than inferred from a pool size so that raising
+// it is a decision somebody made.
 const maxJobs = 8
 
 // admit is THE door to the source surface: it prices the act at the meter, takes

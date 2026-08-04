@@ -265,7 +265,7 @@ func (c *idClaims) homeOrg() string {
 	if c.subjectOrg != "" {
 		return c.subjectOrg // API key: resolved from the subject
 	}
-	if isKMSMachinePrincipal(c) {
+	if isKMSMachinePrincipal(c) || isClientCredentialsPrincipal(c) {
 		return c.Owner // machine JWT: the app IS the principal
 	}
 	// Everything else is the estate rule: the first entry of the signed membership
@@ -273,6 +273,53 @@ func (c *idClaims) homeOrg() string {
 	// only cloud has, because only cloud authenticated the credential that carries
 	// them.
 	return c.Claims.Home()
+}
+
+// isClientCredentialsPrincipal reports whether a validated token was minted by the
+// client_credentials grant — an application authenticating AS ITSELF, with no user
+// behind it.
+//
+// It is the same fact isKMSMachinePrincipal establishes, for every other app. KMS
+// could be recognised by audience alone because its client id is DERIVED from the org
+// it belongs to ("<org>-platform-kms"), so the audience proves the pairing. No other
+// app's id is derivable that way, so the recognition has to come from the token's
+// SHAPE instead.
+//
+// The shape is not forgeable by a human token. In a client_credentials token the
+// client IS the subject: IAM sets sub to "<org>/<app>", and azp — the authorized
+// party, i.e. the client that obtained the token — equals the sole audience, because
+// the app requested a token for itself. A human's token cannot look like that: its
+// subject is the user, and azp names whichever app they signed in through, which is
+// the very mis-attribution homeOrg exists to prevent. And every field read here is
+// signed by IAM; none is a header a caller can set.
+//
+// WHY THIS MATTERS, measured. studio authenticates this way. Its token carries
+// owner=hanzo and organization=hanzo but no `orgs` — correct-by-design for a machine,
+// exactly as an sk- key carries none — so Home() returned "" and SanitizeIdentity
+// minted X-User-Id with no X-Org-Id. Every org-scoped gate then refused it, and the
+// one that mattered was the durable queue: `POST /v1/tasks/.../activities` answered
+// 403 "identity required", so no render could be enqueued at all. Thirteen jobs sat
+// `queued` in studio's worklog for up to 19 hours while both GPUs polled an empty
+// namespace every two seconds and reported themselves healthy.
+//
+// It is NOT a widening of who may cross tenants. This resolves an org for a principal
+// that already has exactly one and can no more choose it than an API key can: `owner`
+// is the application's own organization, set by IAM when the app was created, and
+// obtaining the token at all requires that application's client secret. A human with
+// no `orgs` still resolves nothing and still fails closed — the case the estate rule
+// exists for is untouched.
+func isClientCredentialsPrincipal(c *idClaims) bool {
+	if c == nil || c.Owner == "" || c.Azp == "" {
+		return false
+	}
+	// The client obtained a token FOR ITSELF: one audience, and it is the client.
+	if len(c.Audience) != 1 || c.Audience[0] != c.Azp {
+		return false
+	}
+	// And it IS the subject: "<org>/<app>", naming that same client.
+	sub := c.Subject
+	i := strings.LastIndex(sub, "/")
+	return i > 0 && sub[i+1:] == c.Azp
 }
 
 // isKMSMachinePrincipal reports whether a validated token is a per-org KMS-sync

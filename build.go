@@ -664,6 +664,19 @@ func publishableKey(apiKey string) bool {
 //  3. ZAP RPC when an addr is configured (split-deploy of a future ai subsystem).
 //  4. Fail-closed stub otherwise — a run records an honest error, never fakes one.
 func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
+	// THE IN-CLUSTER PEER WINS. `ai` is a plugin of this same binary running as
+	// its own process, so the honest way to reach it is the plane — the same
+	// socket every other cross-app call uses (metering's gatePeer, the finance
+	// debit). The HTTP gateway below is a PUBLIC address: preferring it sends the
+	// pod out through Cloudflare and back, and makes it mint an OAuth token to
+	// authenticate to its own deployment, to reach code one socket away.
+	//
+	// Ordered, not gated: a deployment that names no peer still falls through to
+	// the gateway exactly as before, so this is inert until the address is set.
+	if cfg.AIZAPAddr != "" {
+		log.Info("deps.AI (completions) → in-cluster plane", "addr", cfg.AIZAPAddr)
+		return clients.AIRPCAt(cfg.AIZAPAddr)
+	}
 	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" && !publishableKey(cfg.AIAPIKey) {
 		log.Info("deps.AI (completions) → HTTP gateway (static secret key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
 		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)
@@ -679,10 +692,6 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 			return clients.AIHTTPM2M(cfg.AIBaseURL, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel)
 		}
 	}
-	if cfg.AIZAPAddr != "" {
-		log.Info("deps.AI (completions) → ZAP RPC", "addr", cfg.AIZAPAddr)
-		return clients.AIRPCAt(cfg.AIZAPAddr)
-	}
 	log.Info("deps.AI (completions) → disabled (no secret key, no IAM M2M identity, no gateway configured)")
 	return clients.DisabledAI()
 }
@@ -697,6 +706,9 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 //  2. Otherwise share the completions resolution (M2M / ZAP / fail-closed) so a
 //     deploy with no dedicated embed key still indexes — no regression.
 func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
+	if cfg.AIZAPAddr != "" {
+		return pickCompletionsClient(cfg, log) // the peer serves embeddings too.
+	}
 	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" {
 		log.Info("deps.Embed → HTTP gateway (static embed key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
 		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)

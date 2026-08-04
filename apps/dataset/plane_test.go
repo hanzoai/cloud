@@ -98,8 +98,15 @@ func TestTheTenantLeadsEveryPredicate(t *testing.T) {
 		if !strings.HasPrefix(c.Stmt[i+len(" WHERE "):], "org = ?") {
 			t.Errorf("a read whose predicate does not OPEN with org: %s", c.Stmt)
 		}
-		if len(c.Args) == 0 || c.Args[0] != key {
-			t.Errorf("a read that does not bind the tenant first: %s %v", c.Stmt, c.Args)
+		// The argument bound to THAT placeholder is the tenant, which is not the same
+		// claim as "the first argument is the tenant". A driver binds `?` positionally
+		// across the WHOLE statement, so a statement carrying placeholders in its
+		// SELECT list — the census, whose aggregates are conditional on the row-size
+		// bound — offsets every WHERE argument. Reading args[0] there measured an
+		// aggregate's bound and called it the tenant.
+		lead := strings.Count(c.Stmt[:i], "?")
+		if lead >= len(c.Args) || c.Args[lead] != key {
+			t.Errorf("a read whose leading org predicate does not bind the tenant: %s %v (arg %d)", c.Stmt, c.Args, lead)
 		}
 	}
 	if checked < 8 {
@@ -264,6 +271,101 @@ func TestEveryReadOfTheSourceTakesAnAdmission(t *testing.T) {
 // (see [catalogue]). Named here so the exemption is a decision on the record
 // rather than a hole in the test above.
 const exempt = "retention"
+
+// TestEveryReadOfTheSourceIsBoundedInBytes is the SECOND half of the admission
+// property, and it exists because the first half was satisfiable by a read that
+// was still unbounded.
+//
+// A [scan] proves a read was priced, counted and limited to [maxRows] ROWS. A row
+// count bounds bytes only if a row's size is bounded, and a row's subject is a
+// string this plane does not write: the rollup lifts it from `distinct_id`,
+// `session_id` and `user_id`, which arrive on /v1/event from the caller.
+// `session_id` — the whole subject of the `session` rollup — is capped nowhere on
+// the way in. So "200k rows" and "eight jobs" were counts over caller-sized values,
+// and one tenant's traffic decided how many bytes either meant.
+//
+// [representable] is the bound, and this is the gate that keeps a future reader
+// from being added without it. It is the SAME shape as the admission gate above —
+// the package's own AST — because the failure it prevents is the same one: a new
+// op that reads the source and skips a property nobody is checking. `lineage` is
+// how that happened the first time.
+func TestEveryReadOfTheSourceIsBoundedInBytes(t *testing.T) {
+	fset := token.NewFileSet()
+	pkg, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var checked int
+	for _, p := range pkg {
+		for name, file := range p.Files {
+			for _, d := range file.Decls {
+				fn, ok := d.(*ast.FuncDecl)
+				if !ok || fn.Body == nil {
+					continue
+				}
+				var names, asks, bounds bool
+				ast.Inspect(fn.Body, func(n ast.Node) bool {
+					switch v := n.(type) {
+					case *ast.Ident:
+						names = names || v.Name == "sourceTable"
+						// Either spelling of the bound counts: the read applies
+						// [representable], the census additionally counts what
+						// [oversized] excludes.
+						bounds = bounds || v.Name == "representable" || v.Name == "oversized"
+					case *ast.SelectorExpr:
+						asks = asks || v.Sel.Name == "Query" || v.Sel.Name == "Exec"
+					}
+					return true
+				})
+				if !names || !asks || fn.Name.Name == exempt {
+					continue
+				}
+				checked++
+				if !bounds {
+					t.Errorf("%s: %s reads the source without the row-size bound — a row cap over caller-sized subjects bounds the COUNT and not the bytes",
+						name, fn.Name.Name)
+				}
+			}
+		}
+	}
+	// A gate that examined nothing passes. This is the same anti-vacuity floor the
+	// admission gate carries, and for the same reason: both walk the same set of
+	// functions, so a change that hides them from one hides them from both.
+	if checked < 2 {
+		t.Fatalf("only %d functions read the source; this test no longer covers the reads", checked)
+	}
+}
+
+// TestTheByteBoundIsDerivedFromTheValueBound pins the arithmetic that makes a count
+// mean a size. Every figure the package states about memory or response size is
+// computed from [maxSubjectBytes] and len(dims); this fails if any of them is ever
+// written down independently again, which is how the wrong one got there before.
+func TestTheByteBoundIsDerivedFromTheValueBound(t *testing.T) {
+	if got, want := maxRowBytes, maxSubjectBytes+8*len(dims)+fixedRowBytes; got != want {
+		t.Errorf("maxRowBytes = %d, want %d — it must be derived, not asserted", got, want)
+	}
+	if got, want := maxResidentBytes, maxRows*maxRowBytes; got != want {
+		t.Errorf("maxResidentBytes = %d, want %d", got, want)
+	}
+	if got, want := maxProcessBytes, maxJobs*maxResidentBytes; got != want {
+		t.Errorf("maxProcessBytes = %d, want %d", got, want)
+	}
+	if got, want := maxPageBytes, page*maxRowBytes; got != want {
+		t.Errorf("maxPageBytes = %d, want %d", got, want)
+	}
+	// The bound has to actually bound something. A subject cap at or above the row
+	// count's own scale would make the product meaningless again.
+	if maxSubjectBytes <= 0 {
+		t.Fatal("maxSubjectBytes must be positive, or the product below is not a bound")
+	}
+	// And the whole point: the resident ceiling is a real number an operator can
+	// hold in their head, not "a few hundred megabytes" of unknown provenance.
+	if maxProcessBytes > 8<<30 {
+		t.Errorf("maxProcessBytes = %d bytes, which is past anything this process can hold; one of the counts is too high", maxProcessBytes)
+	}
+}
 
 // TestAnUnkeyedCallReachesNoStatement. Every entry point takes a tenant.Key, and
 // the zero key — the value of a Key that was never minted — refuses before any

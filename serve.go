@@ -287,6 +287,11 @@ func Listen(plugins []Plugin, enable []string) error {
 	// injected at its Mount via sites.SetResolver; until then a site host 404s
 	// honestly. Org isolation (org+prefix come only from the store keyed by the
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
+	// The edge asks the app that owns the store when it is not in this process,
+	// which in production is always: the pod boots ~25 single-app processes, so
+	// the registry projects.Mount writes is nil here. Co-resident still wins with
+	// no hop — currentResolver prefers the in-process one.
+	sites.SetFallbackResolver(planeSites{})
 	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved, SelfDomains: cfg.SitesSelfDomains, FirstPartyApex: cfg.SitesFirstPartyApex, FirstPartySites: cfg.SitesFirstPartySites, FirstPartyOrg: cfg.SitesFirstPartyOrg}, deps.Logger).Middleware())
 
 	// Edge policy — the "gateway role" cloud absorbs to serve the public
@@ -392,17 +397,6 @@ func Listen(plugins []Plugin, enable []string) error {
 	// arms that org at PUT /v1/gateway/config.
 	app.Use(AbuseGate(deps, deps.Traffic))
 
-	// Starter credit — the funding path the two gates below are sequenced behind.
-	// It needs the gateway-asserted principal to resolve a
-	// wallet; an unvalidated caller is skipped) and BEFORE both gates, so a brand-new
-	// account is funded before anything on this same request asks whether it can pay.
-	// Mounted here rather than at the org-creating handler because that handler is not
-	// on every path: /v1/iam/* is routed to the IAM service at the edge, and cloud's
-	// own onboard treats a signup-org caller as already-having-an-org. This position
-	// depends on neither. Hot-path cost in the steady state is one map load
-	// (middleware_starter.go); only a wallet's first request in this process reads the
-	// ledger. It never rejects — funding is not an authorization decision.
-	app.Use(StarterGrant())
 
 	// Billing gate. Sits at the (future) Auth position — after identity is
 	// established by Recover/RequestID/Logger and before any subsystem mounts —

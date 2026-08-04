@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	aimod "github.com/hanzoai/ai"
+	aictl "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	airouters "github.com/hanzoai/ai/routers"
 	"github.com/hanzoai/cloud"
@@ -110,6 +111,28 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if cloud.TracerProviderInstalled() {
 		aiobject.AdoptHostTracerProvider()
 	}
+	// THE PREPAID GATE'S COMPLETION CEILING, PER MODEL, FROM THE CATALOG.
+	//
+	// cloud's meter must bound a completion BEFORE it runs, and that bound is a
+	// property of the model — 1M-context models exist, and any constant caps them
+	// at whatever number was typed. It cannot read models.yaml itself:
+	// hanzoai/ai/controllers imports hanzoai/cloud, so the catalog is a CYCLE from
+	// cloud's root, not merely weight. This package already links both, which is
+	// why the seam is installed here beside the other cross-module hooks.
+	//
+	// max_output_tokens is the answer when the catalog declares one; otherwise the
+	// model's context window is still a true architectural bound (prompt +
+	// completion can never exceed it). 0 from both leaves cloud on its own floor.
+	cloud.SetCompletionCeiling(func(model string) int {
+		mc := aictl.GetModelConfig()
+		if mc == nil {
+			return 0
+		}
+		if n := mc.MaxOutput(model); n > 0 {
+			return n
+		}
+		return mc.ContextWindow(model)
+	})
 	// INSTALL ONLY WHAT THIS PROCESS ACTUALLY HAS. `ai` runs as its OWN process
 	// (ps in a prod pod: /cloud, /kms, /tasks, /ai, …), and these hooks are
 	// package-level vars — so a reader wireFinance sets in the CLOUD process is

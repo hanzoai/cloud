@@ -49,15 +49,19 @@ type PlanChecker interface {
 
 // SpendGate returns the balance-and-subscription gate serve.go mounts app-wide.
 //
-// DEFAULT OFF, AND THAT IS A SEQUENCING DECISION, NOT TIMIDITY. There is no reachable
-// starter-credit path in this binary today: the grant-starter route was deleted from
-// commerce (last present in commerce v1.48.2), its replacement POST /v1/billing/credit
-// is not registered in the co-resident build, and no ensureStarterCredit runs
-// anywhere. So a brand-new signup's wallet is $0 with no self-service way to fund it.
-// Enforcing on that state 402s every new signup on day one — trading a revenue leak
-// for a total signup outage. The gate therefore ships behind the kill switch, proven
-// by tests, and is flipped only after a funding path exists. Turning it on before then
-// is the one way to make this worse.
+// DEFAULT OFF, AND THAT IS A SEQUENCING DECISION, NOT TIMIDITY. A brand-new signup's
+// wallet is $0 and there is NO automatic path that funds it: credit is an admin
+// decision, granted deliberately through the admin surface, and the automatic starter
+// grant that used to run as middleware here has been deleted outright rather than
+// left switched off (an automatic path that mints money is a liability even when
+// disabled, because disabled is one flag away from enabled).
+//
+// So flipping this gate on 402s every new account from its first request. That is a
+// real product decision — an honest paywall — and NOT one this flag should make
+// silently as a side effect of the grant's removal. Until the paywall's add-credit
+// state is the one a new user actually lands in, enforcing here trades a revenue leak
+// for a signup that dead-ends. The gate therefore stays behind the kill switch,
+// proven by tests, and is flipped as its own deliberate change.
 //
 // Enforcement is read PER REQUEST from the platform switch an owner flips at
 // admin.hanzo.ai, so it turns on and off within one flag-cache TTL — no redeploy, no
