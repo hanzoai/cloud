@@ -10,9 +10,11 @@ import (
 
 // The scoped status read: a LIVE in-cluster health probe of the product's service
 // (time-boxed, latency-measured) FUSED with the VM `up{service=…}` inventory
-// (each series = one replica/instance with its up value). The health probe target
-// is ONLY ever an allowlisted service host (resolveService), so a crafted product
-// can never turn this into an SSRF of an arbitrary host — the SSRF boundary.
+// (each series = one replica/instance with its up value). The address probed is
+// ONLY ever a literal from the fleet registry (probes.go, reached through
+// resolveService), so a crafted product can never turn this into a request at an
+// arbitrary host — the boundary against that is the allowlist plus the fact that
+// the caller's text never reaches the URL.
 //
 // Status is infra health, not tenant data (a service is up or down for everyone),
 // so it is principal-gated (any validated caller) but NOT org-partitioned; the org
@@ -44,7 +46,7 @@ func probeStatus(ctx context.Context, svc service) statusResult {
 		Product:   svc.ID,
 		CheckedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	probeUp, latency := probeHealth(ctx, svc.HealthHost)
+	probeUp, latency := probeHealth(ctx, svc.URL)
 	res.LatencyMs = latency.Milliseconds()
 
 	deps := upInventory(ctx, svc)
@@ -83,31 +85,38 @@ func unknownStatus(product string) statusResult {
 	}
 }
 
-// probeHealth hits the service's in-cluster health endpoint, trying /health then
-// /healthz, time-boxed. Returns up + the measured latency. Only an allowlisted
-// host reaches here (the caller resolved it), so this is not an SSRF vector.
-func probeHealth(ctx context.Context, host string) (bool, time.Duration) {
+// probeHealth asks one measured address whether the service answers, time-boxed,
+// and returns the verdict with the round trip it took.
+//
+// The address is a literal from the fleet registry, selected by an allowlisted
+// product id, so the caller's text never reaches the URL. An unwatched service
+// has no address and is not probed: this used to synthesize a hostname and try
+// /health then /healthz against it, which spent two timeouts per request dialling
+// names that mostly do not serve port 80, and reported services down that were
+// up. The verdict is `answered` — the same rule the fleet prober applies, so the
+// two reads of one address cannot contradict each other.
+func probeHealth(ctx context.Context, url string) (bool, time.Duration) {
+	if url == "" {
+		return false, 0
+	}
 	client := &http.Client{Timeout: healthProbeTimeout}
-	for _, path := range []string{"/health", "/healthz"} {
-		start := time.Now()
-		pctx, cancel := context.WithTimeout(ctx, healthProbeTimeout)
-		req, err := http.NewRequestWithContext(pctx, http.MethodGet, "http://"+host+path, nil)
-		if err != nil {
-			cancel()
-			continue
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			cancel()
-			continue
-		}
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		_ = resp.Body.Close()
-		latency := time.Since(start)
-		cancel()
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return true, latency
-		}
+	start := time.Now()
+	pctx, cancel := context.WithTimeout(ctx, healthProbeTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(pctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, 0
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, 0
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	_ = resp.Body.Close()
+	latency := time.Since(start)
+	if answered(resp.StatusCode) {
+		return true, latency
 	}
 	return false, 0
 }
