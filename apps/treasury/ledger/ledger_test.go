@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // memStore is an in-memory ledger.Store used ONLY to prove the engine is
