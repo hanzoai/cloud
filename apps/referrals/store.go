@@ -29,30 +29,31 @@ var (
 	errUnknownCode  = errors.New("referrals: unknown referral code")
 )
 
-// Status values. A referral advances signup → qualified → credited. It never
-// moves backward; credited is terminal (the bonus was granted, once).
+// Status values. A referral advances signup → qualified. It never moves backward;
+// qualified is terminal (the referee became a real customer, once).
+//
+// There is deliberately no third state: the old "credited" existed only to record
+// that this package had minted platform credit, and it does not mint anything.
 const (
 	StatusSignup    = "signup"
 	StatusQualified = "qualified"
-	StatusCredited  = "credited"
 )
 
 // Referral is one referrer↔referee edge. RefereeOrg is UNIQUE across the table —
 // an org can be referred at most once, ever (first-touch attribution), which is
 // also the idempotency key for POST /v1/referrals/claim.
+//
+// It holds attribution and nothing else. No amount, no ledger transaction: what a
+// qualified referral is WORTH is an affiliate payable in commerce, and pricing it
+// here would be a second answer to a question that already has one.
 type Referral struct {
-	ID                 string `json:"id"`
-	ReferrerOrg        string `json:"-"`    // hidden: the code owner; never leak the other side's org to a referee
-	RefereeOrg         string `json:"-"`    // hidden for the same reason (admin view re-exposes both)
-	Code               string `json:"code"` // the referrer code used at claim
-	Status             string `json:"status"`
-	ReferrerGrantCents int64  `json:"referrerGrantCents"`
-	RefereeGrantCents  int64  `json:"refereeGrantCents"`
-	ReferrerTxn        string `json:"-"`
-	RefereeTxn         string `json:"-"`
-	CreatedAt          int64  `json:"createdAt"`
-	QualifiedAt        int64  `json:"qualifiedAt"`
-	CreditedAt         int64  `json:"creditedAt"`
+	ID          string `json:"id"`
+	ReferrerOrg string `json:"-"`    // hidden: the code owner; never leak the other side's org to a referee
+	RefereeOrg  string `json:"-"`    // hidden for the same reason (admin view re-exposes both)
+	Code        string `json:"code"` // the referrer code used at claim
+	Status      string `json:"status"`
+	CreatedAt   int64  `json:"createdAt"`
+	QualifiedAt int64  `json:"qualifiedAt"`
 }
 
 // Store is the referrals database. ONE SQLite file holds every org's codes +
@@ -86,24 +87,28 @@ CREATE TABLE IF NOT EXISTS referral_codes (
 );
 
 CREATE TABLE IF NOT EXISTS referrals (
-  id                   TEXT PRIMARY KEY,
-  referrer_org         TEXT NOT NULL,
-  referee_org          TEXT NOT NULL UNIQUE,
-  code                 TEXT NOT NULL,
-  status               TEXT NOT NULL,
-  referrer_grant_cents INTEGER NOT NULL DEFAULT 0,
-  referee_grant_cents  INTEGER NOT NULL DEFAULT 0,
-  referrer_txn         TEXT NOT NULL DEFAULT '',
-  referee_txn          TEXT NOT NULL DEFAULT '',
-  created_at           INTEGER NOT NULL,
-  qualified_at         INTEGER NOT NULL DEFAULT 0,
-  credited_at          INTEGER NOT NULL DEFAULT 0
+  id           TEXT PRIMARY KEY,
+  referrer_org TEXT NOT NULL,
+  referee_org  TEXT NOT NULL UNIQUE,
+  code         TEXT NOT NULL,
+  status       TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  qualified_at INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ix_referrals_referrer ON referrals(referrer_org, created_at);
 CREATE INDEX IF NOT EXISTS ix_referrals_status   ON referrals(status);
 
 -- One vocabulary: the pre-rename rows said 'signed_up'. Idempotent.
 UPDATE referrals SET status='signup' WHERE status='signed_up';
+
+-- The credit era is over. Rows an earlier build marked 'credited' recorded that a
+-- referee had qualified AND that platform credit was minted for it; the first half
+-- is still true and is the state they keep, the second half is not a thing this
+-- table records any more. The grant/txn columns are left to rot in place on an
+-- existing file (SQLite DROP COLUMN is not portable across the versions in the
+-- fleet, and no code reads or writes them): NOT NULL DEFAULT means an insert that
+-- names only the live columns still succeeds. New files never get them.
+UPDATE referrals SET status='qualified' WHERE status='credited';
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("referrals migrate: %w", err)
@@ -207,46 +212,31 @@ func (s *Store) Claim(ctx context.Context, id, referrerOrg, refereeOrg, code str
 	return Referral{}, false, fmt.Errorf("claim: %w", err)
 }
 
-// LatchCredit atomically CLAIMS the one-and-only grant for a referral: it sets
-// credited_at (+ status=credited, grant amounts, qualified_at if unset) ONLY when
-// credited_at is still 0. RowsAffected==1 means THIS caller won the race and must
-// perform the deposits; 0 means another sweep already granted (never double-pay).
-// credited_at is the idempotency latch — the money is guaranteed at-most-once.
-func (s *Store) LatchCredit(ctx context.Context, id string, referrerCents, refereeCents, now int64) (bool, error) {
+// LatchQualified atomically advances a referral to qualified: it sets status +
+// qualified_at ONLY while qualified_at is still 0. RowsAffected==1 means THIS
+// caller won the race and observed the transition; 0 means a concurrent sweep
+// already made it. qualified_at is the idempotency latch, so the edge qualifies
+// at-most-once and the audit trail records one transition, not two.
+func (s *Store) LatchQualified(ctx context.Context, id string, now int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE referrals
-		    SET status='credited',
-		        qualified_at = CASE WHEN qualified_at=0 THEN ? ELSE qualified_at END,
-		        credited_at  = ?,
-		        referrer_grant_cents = ?,
-		        referee_grant_cents  = ?
-		  WHERE id=? AND credited_at=0`,
-		now, now, referrerCents, refereeCents, id)
+		    SET status='qualified',
+		        qualified_at = ?
+		  WHERE id=? AND qualified_at=0`,
+		now, id)
 	if err != nil {
-		return false, fmt.Errorf("latch credit: %w", err)
+		return false, fmt.Errorf("latch qualified: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n == 1, nil
 }
 
-// SetTxns records the two ledger transaction ids after the deposits land (best-
-// effort receipt; the latch, not this, is the idempotency authority).
-func (s *Store) SetTxns(ctx context.Context, id, referrerTxn, refereeTxn string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE referrals SET referrer_txn=?, referee_txn=? WHERE id=?`, referrerTxn, refereeTxn, id)
-	if err != nil {
-		return fmt.Errorf("set txns: %w", err)
-	}
-	return nil
-}
-
-const referralCols = `id,referrer_org,referee_org,code,status,referrer_grant_cents,referee_grant_cents,referrer_txn,referee_txn,created_at,qualified_at,credited_at`
+const referralCols = `id,referrer_org,referee_org,code,status,created_at,qualified_at`
 
 func scanReferral(sc interface{ Scan(...any) error }) (Referral, error) {
 	var r Referral
 	err := sc.Scan(&r.ID, &r.ReferrerOrg, &r.RefereeOrg, &r.Code, &r.Status,
-		&r.ReferrerGrantCents, &r.RefereeGrantCents, &r.ReferrerTxn, &r.RefereeTxn,
-		&r.CreatedAt, &r.QualifiedAt, &r.CreditedAt)
+		&r.CreatedAt, &r.QualifiedAt)
 	return r, err
 }
 
@@ -274,7 +264,7 @@ func (s *Store) getByReferee(ctx context.Context, refereeOrg string) (Referral, 
 	return r, nil
 }
 
-// Get re-reads a referral by id (post-grant refresh).
+// Get re-reads a referral by id (post-transition refresh).
 func (s *Store) Get(ctx context.Context, id string) (Referral, error) { return s.get(ctx, id) }
 
 // ListByReferrer returns an org's referrals (the people IT referred), newest
@@ -284,7 +274,7 @@ func (s *Store) ListByReferrer(ctx context.Context, referrerOrg string, limit in
 }
 
 // ListPending returns referrals still awaiting the qualify check (status
-// signup), oldest first, bounded — the sweep + the lazy-on-read check fold
+// signup), oldest first, bounded — the admin sweep folds
 // over this set. optReferrer scopes to one referrer ("" = all, the admin sweep).
 func (s *Store) ListPending(ctx context.Context, optReferrer string, limit int) ([]Referral, error) {
 	if optReferrer == "" {

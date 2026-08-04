@@ -49,12 +49,12 @@
 //
 // Surface (/v1 only):
 //
-//	GET    /v1/ml/reference            every set, its version and its freshness
-//	GET    /v1/ml/reference/{set}      one set, plus this org's overrides
-//	PUT    /v1/ml/reference/{set}      write this org's overrides
-//	DELETE /v1/ml/reference/{set}      clear one of this org's overrides
-//	POST   /v1/ml/reference/resolve    resolve keys, naming the version consulted
-//	POST   /v1/ml/reference/refresh    take a new version of a set (SuperAdmin)
+//	GET    /v1/risk/reference            every set, its version and its freshness
+//	GET    /v1/risk/reference/{set}      one set, plus this org's overrides
+//	PUT    /v1/risk/reference/{set}      write this org's overrides
+//	DELETE /v1/risk/reference/{set}      clear one of this org's overrides
+//	POST   /v1/risk/reference/resolve    resolve keys, naming the version consulted
+//	POST   /v1/risk/reference/refresh    take a new version of a set (SuperAdmin)
 package reference
 
 import (
@@ -80,10 +80,10 @@ import (
 
 const (
 	// parentPrefix and leaf compose the ONE address this app answers on,
-	// /v1/ml/reference. They are separate because the collection route has to be
+	// /v1/risk/reference. They are separate because the collection route has to be
 	// declared on the parent to avoid a trailing slash, and a prefix written twice
 	// is a prefix that can disagree with itself.
-	parentPrefix = "/v1/ml"
+	parentPrefix = "/v1/risk"
 	leaf         = "/reference"
 	// subsystem names this app's per-org store file: {DataDir}/orgs/{org}/reference.db.
 	subsystem = "reference"
@@ -165,7 +165,7 @@ type work struct {
 // stores.
 var mounted *cloud.Service[state]
 
-// Mount wires /v1/ml/reference/* and starts the hydrate-and-refresh loop.
+// Mount wires /v1/risk/reference/* and starts the hydrate-and-refresh loop.
 //
 // The loop is started rather than the sets being loaded inline because the
 // warehouse connects ASYNCHRONOUSLY: at mount time it is usually not up, and a
@@ -501,40 +501,40 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// there, and fiber runs middleware in registration order — one installed after
 	// these leaves would never run.
 	//
-	// It goes on /v1/ml/reference rather than on /v1/ml because a prefix
+	// It goes on /v1/risk/reference rather than on /v1/risk because a prefix
 	// middleware runs for every route under that prefix, whoever registered it.
-	// /v1/ml is a shared parent: a model-serving plane already answers on
-	// /v1/ml/models and a dataset plane on /v1/ml/datasets in the same process, and
-	// a middleware this app installs one segment up would run inside two other
-	// products' request paths depending only on mount order. An app owns its own
-	// leaf and nothing above it.
-	ml := app.Group(parentPrefix)
-	g := ml.Group(leaf)
+	// /v1/risk is a shared parent: the decision plane answers on /v1/risk/score and
+	// the ground-truth plane on /v1/risk/labels in the same process, and a
+	// middleware this app installs one segment up would run inside two other
+	// planes' request paths depending only on mount order. An app owns its own leaf
+	// and nothing above it.
+	parent := app.Group(parentPrefix)
+	g := parent.Group(leaf)
 	g.Use(cloud.Bridge())
 
 	o := ops{s: s}
 	zip.Post(g, "/resolve", o.resolve,
-		zip.WithOperationID("mlResolveReference"),
-		zip.WithTags("ml"))
+		zip.WithOperationID("riskResolveReference"),
+		zip.WithTags("risk"))
 	zip.Post(g, "/refresh", o.refresh,
-		zip.WithOperationID("mlRefreshReference"),
-		zip.WithTags("ml"))
+		zip.WithOperationID("riskRefreshReference"),
+		zip.WithTags("risk"))
 	// The collection route is declared on the PARENT with a non-empty leaf:
 	// zip.Get(g, "") normalises to a trailing slash, and op.Path is the identity
 	// every projection keys on — the document, the operationId, the MCP tool and
 	// every generated SDK would carry an address this API has never served.
-	zip.Get(ml, leaf, o.sets,
-		zip.WithOperationID("mlReferenceSets"),
-		zip.WithTags("ml"))
+	zip.Get(parent, leaf, o.sets,
+		zip.WithOperationID("riskReferenceSets"),
+		zip.WithTags("risk"))
 	zip.Get(g, "/:set", o.set,
-		zip.WithOperationID("mlReference"),
-		zip.WithTags("ml"))
+		zip.WithOperationID("riskReference"),
+		zip.WithTags("risk"))
 	zip.Put(g, "/:set", o.write,
-		zip.WithOperationID("mlSetReference"),
-		zip.WithTags("ml"))
+		zip.WithOperationID("riskSetReference"),
+		zip.WithTags("risk"))
 	zip.Delete(g, "/:set", o.clear,
-		zip.WithOperationID("mlClearReference"),
-		zip.WithTags("ml"))
+		zip.WithOperationID("riskClearReference"),
+		zip.WithTags("risk"))
 }
 
 // ops binds the mounted Service so each op is a method value — the only bound
@@ -639,7 +639,7 @@ func actor(ctx context.Context) string {
 	return ""
 }
 
-// ── GET /v1/ml/reference ─────────────────────────────────────────────────────
+// ── GET /v1/risk/reference ─────────────────────────────────────────────────────
 
 // ReferenceSet is one published set and how current it is.
 //
@@ -804,7 +804,7 @@ func project(set Set, s *snap, now time.Time) ReferenceSet {
 	return view
 }
 
-// ── GET /v1/ml/reference/{set} ───────────────────────────────────────────────
+// ── GET /v1/risk/reference/{set} ───────────────────────────────────────────────
 
 // ReferenceIn addresses one set and pages this org's overrides in it.
 type ReferenceIn struct {
@@ -876,7 +876,7 @@ func (o ops) set(ctx context.Context, in *ReferenceIn) (*ReferenceOut, error) {
 	return out, nil
 }
 
-// ── PUT /v1/ml/reference/{set} ───────────────────────────────────────────────
+// ── PUT /v1/risk/reference/{set} ───────────────────────────────────────────────
 
 // ReferenceOverrideIn is one entry your org is laying over the baseline.
 type ReferenceOverrideIn struct {
@@ -1014,7 +1014,7 @@ func normal(set Set, key string) string {
 	return key
 }
 
-// ── DELETE /v1/ml/reference/{set} ────────────────────────────────────────────
+// ── DELETE /v1/risk/reference/{set} ────────────────────────────────────────────
 
 // ClearReferenceIn names one of your org's overrides to remove.
 //
@@ -1083,7 +1083,7 @@ func (o ops) clear(ctx context.Context, in *ClearReferenceIn) (*ClearReferenceOu
 	return &ClearReferenceOut{Set: set.Name, Key: key, Cleared: gone, Overrides: got}, nil
 }
 
-// ── POST /v1/ml/reference/resolve ────────────────────────────────────────────
+// ── POST /v1/risk/reference/resolve ────────────────────────────────────────────
 
 // ResolveReferenceIn asks about keys.
 type ResolveReferenceIn struct {
@@ -1241,7 +1241,7 @@ func chosen(names []string) ([]Set, error) {
 	return out, nil
 }
 
-// ── POST /v1/ml/reference/refresh ────────────────────────────────────────────
+// ── POST /v1/risk/reference/refresh ────────────────────────────────────────────
 
 // ReferenceReceipt is a load receipt from the component that HOLDS a set's
 // membership — the screening engine, for the designation lists.
