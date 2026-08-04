@@ -185,14 +185,21 @@ var allowedRequestUses = map[string]string{
 		"alone would turn that live admin bucket into a 403). ONE function, which every typed op asks, " +
 		"delegating to the same tenant() the untyped handlers beside them use; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no namespace to name.",
-	"apps/risk/typed.go": "gate — the ONE money seam for the model plane, and money is the reason it " +
-		"needs more of the principal than the org: the debit is keyed on the SELECTED billing ledger " +
-		"(principal.Ledger, which a SuperAdmin masquerade moves off the effective org), narrowed by the " +
-		"server-minted project (X-Project-Id, with its validated-ness), and attributed with the user, the " +
-		"request id and the client IP — none of which principal.OrgFrom carries. The TENANT is never read " +
-		"through it: tenantFor uses principal.OrgFrom, right beside this. ONE function, which every priced " +
-		"op asks, so the gate and the meter cannot disagree about who pays; off the HTTP path there is no " +
-		"ledger, and the pair is a no-op, which is the rule the rest of the fleet applies.",
+	"apps/risk/typed.go": "gate / caller. gate is the ONE money seam for the model plane, and money is " +
+		"the reason it needs more of the principal than the org: the debit is keyed on the SELECTED billing " +
+		"ledger (principal.Ledger, which a SuperAdmin masquerade moves off the effective org), narrowed by " +
+		"the server-minted project (X-Project-Id, with its validated-ness), and attributed with the user, " +
+		"the request id and the client IP — none of which principal.OrgFrom carries. caller is the identity " +
+		"a DECISION REGIME is recorded against: a policy version is an adverse-action input (it fixes the " +
+		"cut every later score was judged by), so the row stamps the validated user id (X-User-Id), which " +
+		"principal.OrgFrom does not carry and which must never be an In field — an attributable record whose " +
+		"attribution the caller chose is not attributable. It reads the SAME header gate already reads for " +
+		"the meter's actor, which is why it lives in this file rather than beside its one use in " +
+		"policy_wire.go: a second file would be this same hatch under a second justification. TWO functions " +
+		"in ONE file, so the whole package shares one seam. The TENANT is never read through either: " +
+		"tenantFor uses principal.OrgFrom, right beside them. Off the HTTP path there is no ledger and the " +
+		"metering pair is a no-op — the rule the rest of the fleet applies — and no identity, which " +
+		"plane.enact refuses rather than recording an anonymous change.",
 	"apps/o11y/typed.go": "callerIsAdmin / callerProject — the o11y surface's ONE identity seam. The " +
 		"scoped reads switch on platform-sudo (X-User-IsAdmin: the infra-log god-view and the " +
 		"whole-product RED) and the annotation queues narrow by project (X-Project-Id); neither header " +
