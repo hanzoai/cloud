@@ -241,6 +241,10 @@ type fleet struct {
 	key    *ecdsa.PrivateKey
 	wallet string
 	kids   map[string]*exec.Cmd
+	// resource is what the last challenge said it was FOR. In x402 v2 the resource
+	// lives on the PaymentRequired envelope (resource.url), not on the individual
+	// PaymentRequirements.
+	resource string
 }
 
 // splitFleet starts the peers as real processes and mounts the tool plane HERE,
@@ -390,7 +394,7 @@ func (f *fleet) call(org, tool, proof string) (int, []byte, http.Header) {
 	hr.Header.Set("X-Org-Id", org)
 	hr.Header.Set("X-User-Id", "u_"+org)
 	if proof != "" {
-		hr.Header.Set(x402.HeaderProof, proof)
+		hr.Header.Set(x402.HeaderPaymentSignature, proof)
 	}
 	resp, err := f.app.Test(hr, zip.TestConfig{Timeout: 0})
 	if err != nil {
@@ -434,26 +438,29 @@ func (f *fleet) fund(org string, amount money.Amount) {
 func (f *fleet) pay(req x402.PaymentRequirements, nonce string) string {
 	f.t.Helper()
 	now := time.Now().Unix()
-	p, err := x402.Sign(req, f.key, nonce, now-60, now+300, "", "")
+	p, err := x402.Sign(req, f.key, nonce, now-60, now+300)
 	if err != nil {
 		f.t.Fatalf("sign: %v", err)
 	}
-	b, _ := json.Marshal(p)
-	return string(b)
+	return x402.EncodeHeader(p)
 }
 
 func (f *fleet) challengeOf(h http.Header) x402.PaymentRequirements {
 	f.t.Helper()
-	raw := h.Get(x402.HeaderRequirements)
+	raw := h.Get(x402.HeaderPaymentRequired)
 	if raw == "" {
 		f.t.Fatalf("402 carried no %s header — a challenge a client cannot read is not a challenge",
-			x402.HeaderRequirements)
+			x402.HeaderPaymentRequired)
 	}
-	var req x402.PaymentRequirements
-	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+	var required x402.PaymentRequired
+	if err := x402.DecodeHeader(raw, &required); err != nil {
 		f.t.Fatalf("decode challenge %q: %v", raw, err)
 	}
-	return req
+	if len(required.Accepts) != 1 {
+		f.t.Fatalf("challenge offered %d ways to pay, want 1", len(required.Accepts))
+	}
+	f.resource = required.Resource.URL
+	return required.Accepts[0]
 }
 
 func newNonce(t *testing.T) string {
@@ -496,10 +503,10 @@ func TestSplitFleetSettlesAPricedTool(t *testing.T) {
 		t.Fatalf("the tools process still has no rail across the boundary: %s", body)
 	}
 	req := f.challengeOf(hdr)
-	if req.Resource != plane.ToolResource(pricedTool) {
-		t.Fatalf("challenge names %q, want %q", req.Resource, plane.ToolResource(pricedTool))
+	if f.resource != plane.ToolResource(pricedTool) {
+		t.Fatalf("challenge names %q, want %q", f.resource, plane.ToolResource(pricedTool))
 	}
-	if req.Payee == "" {
+	if req.PayTo == "" {
 		t.Fatal("challenge names no payee address — wallets was never reached")
 	}
 	// $0.0025 at USDC's 6 decimals is 2500 smallest units. A cents-typed hop
@@ -520,8 +527,8 @@ func TestSplitFleetSettlesAPricedTool(t *testing.T) {
 	if !bytes.Contains(body, []byte(`"ran":true`)) {
 		t.Fatalf("tool did not run after payment: %s", body)
 	}
-	if hdr.Get(x402.HeaderReceipt) == "" {
-		t.Fatalf("paid call carried no %s receipt", x402.HeaderReceipt)
+	if hdr.Get(x402.HeaderPaymentResponse) == "" {
+		t.Fatalf("paid call carried no %s receipt", x402.HeaderPaymentResponse)
 	}
 
 	debited := before.Sub(f.balance(buyerOrg, buyerOrg))
@@ -561,7 +568,7 @@ func TestSplitFleetFreeToolNeedsNoPayment(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("free tool = %d (%s), want 200 — an unpriced tool is not for sale", code, body)
 	}
-	if hdr.Get(x402.HeaderRequirements) != "" {
+	if hdr.Get(x402.HeaderPaymentRequired) != "" {
 		t.Fatalf("a free tool was challenged for payment it does not cost")
 	}
 	if got := f.balance(buyerOrg, buyerOrg); got.Cmp(before) != 0 {
@@ -587,9 +594,9 @@ func TestSplitFleetFailsClosedWithoutTheRail(t *testing.T) {
 	if code == http.StatusOK {
 		t.Fatalf("a priced tool was SERVED with no payment rail: %s", body)
 	}
-	if hdr.Get(x402.HeaderRequirements) != "" {
+	if hdr.Get(x402.HeaderPaymentRequired) != "" {
 		t.Fatalf("an unenforceable price issued a challenge a client could satisfy: %s",
-			hdr.Get(x402.HeaderRequirements))
+			hdr.Get(x402.HeaderPaymentRequired))
 	}
 	if got := f.balance(buyerOrg, buyerOrg); got.Cmp(before) != 0 {
 		t.Fatalf("a refused call moved money: %s → %s", before, got)
@@ -646,7 +653,7 @@ func TestSplitFleetProofIsNotABearerToken(t *testing.T) {
 	// THE ATTACK: another org submits the SAME authorization, byte for byte.
 	code, body, _ := f.call(thief, pricedTool, proof)
 	if code == http.StatusOK {
-		t.Fatalf("a captured X-Payment served another tenant's call: %s", body)
+		t.Fatalf("a captured PAYMENT-SIGNATURE served another tenant's call: %s", body)
 	}
 	if got := f.balance(thief, thief); got.Cmp(money.FromCents(100)) != 0 {
 		t.Fatalf("the replaying org was charged %s for a refused call", money.FromCents(100).Sub(got))
