@@ -4215,16 +4215,18 @@ SDK and every MCP tool list that answer 404 in production: the same dark hole th
 cost 17 documented-but-uncallable operations. Re-home that surface only after the
 upstream ships it, and prove the upstream answers before declaring anything.
 
-## /v1/ml/reference — the reference plane: two stores, one precedence, versions on the wire
+## /v1/risk/reference — the reference plane: two stores, one precedence, versions on the wire
 
 `apps/reference` is the lookup data a risk decision needs but cannot derive:
 disposable email domains, hosting and Tor address ranges, crawler user-agent
 patterns, delegated autonomous system numbers, card-scheme prefixes, browsers
 the fleet sees everywhere, and how current the designation lists the screening
 engine holds actually are. It is a row of its own in `manifest/apps.go` (one
-prefix, `/v1/ml/reference`), disjoint from `ml`'s `/v1/ml/health` and
-`/v1/ml/models`, so longest-prefix separates them and neither row moves. Six
-operations, all typed.
+prefix, `/v1/risk/reference`), preceding `risk`'s bare `/v1/risk`, so
+longest-prefix separates them and neither row moves. It addresses under the risk
+product for the same reason `label` does: `openapi.Product` reads the product off
+the first `/v1` segment, and these six operations belong to the risk product and
+not to the KServe model-SERVING product on `/v1/ml`. Six operations, all typed.
 
 **The unit of version and freshness is the SOURCE, not the set.** A set is the
 union of its publishers, and each carries its own version, its own as-of and its
@@ -4274,7 +4276,7 @@ one held by the engine that screens against it, and one behind a licence all
 answer with `refusal` — a caller reading `hit=false` without reading `refusal` is
 reading "we have no idea" as "not listed". A set past `MaxAge` still answers,
 because yesterday's list beats none, and every answer carries `version`, `asOf`,
-`age` and `stale`. `POST /v1/ml/reference/resolve` returns `consulted` — one
+`age` and `stale`. `POST /v1/risk/reference/resolve` returns `consulted` — one
 version line per set — which is what a decision records.
 
 **Restart drops the snapshots, and that is handled rather than papered over.**
