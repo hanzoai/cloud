@@ -91,19 +91,44 @@ test:
     # the import graph rather than with a size threshold nobody can interpret. One
     # stray import of a apps/* package drags a subsystem's whole graph back in,
     # and the only symptom would be a slow build — this turns that into a failed
-    # one. (There is no package apps to leak anymore; it is gone.)
+    # one.
+    #
+    # TWO CHECKS, BECAUSE THE NAME AND THE PROPERTY ARE DIFFERENT QUESTIONS.
+    # "No apps/* import at all" was a PROXY for "links no subsystem graph", and
+    # the proxy went wrong the moment an app's EDGE had to run in this process:
+    # cmd/cloud/sites.go serves <slug>.hanzo.app, and it must, because the image
+    # runs this binary on the public port — a published site mounted anywhere else
+    # is served nowhere, which is the outage that put it here. apps/sites is a
+    # leaf (zip + s3; 2 cloud packages, never the root), so it drags in nothing,
+    # and the host measured 392 packages with it linked — inside the ~395 the
+    # paragraph above names. The gate was red on main for a day for a graph that
+    # never grew, and because every later car declares `needs:` on this one, that
+    # is the whole release train stopped by its own approximation.
+    #
+    # So the exception is NAMED with its reason — the discipline go-unit's -skip
+    # list already follows — and the property it approximates is measured
+    # directly beside it. The name check catches a subsystem leaking in; the count
+    # catches an ALLOWED leaf that quietly grew a graph. Neither alone is enough,
+    # which is exactly why this is two checks and not a widened pattern.
     run: |
       set -e
       # CGO_ENABLED=0 to match `make cloud`: the cgo graph carries one extra
       # package, so leaving it unset makes the number CI prints disagree with the
       # number a developer measures, for no reason anyone can see.
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=0
-      leak=$(go list -deps ./cmd/cloud | grep -E '^github.com/hanzoai/cloud/(apps|clients)' || true)
+      # apps/s3admin rides in with apps/sites (its storage leaf), not on its own.
+      leak=$(go list -deps ./cmd/cloud | grep -E '^github.com/hanzoai/cloud/(apps|clients)' \
+        | grep -vE '^github.com/hanzoai/cloud/apps/(sites|s3admin)$' || true)
       if [ -n "$leak" ]; then
         echo "::error::cmd/cloud links subsystem code, which defeats the point of the light host: $leak"
         exit 1
       fi
-      echo "OK: cmd/cloud links $(go list -deps ./cmd/cloud | wc -l) packages and no subsystem"
+      n=$(go list -deps ./cmd/cloud | wc -l)
+      if [ "$n" -gt 450 ]; then
+        echo "::error::cmd/cloud links $n packages (bound 450) — an edge leaf grew a subsystem graph; the name check above cannot see this."
+        exit 1
+      fi
+      echo "OK: cmd/cloud links $n packages and no subsystem"
   - name: openapi-composed
     # The fleet spec must BE the composition of its apps' own specs. Each app
     # binary emits its own subset from its own router (`<app> openapi`), and
