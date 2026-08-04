@@ -60,3 +60,18 @@ node_modules/
 **/node_modules/
 native/flags/target/
 tools
+
+# Build output at the repo root. `go build ./apps/gateway` and friends drop the
+# binary HERE by default, and five of them (gateway 53M, account 33M, authz 30M,
+# smoke 8M, gen-app-cmds 4M — ELF x86-64, ELF aarch64 and Mach-O arm64, so three
+# different people's machines) were committed and pushed the module tree past Go's
+# 500MB zip limit. `go get github.com/hanzoai/cloud@latest` then failed outright
+# with "module source tree too large", which is every consumer, not just ours.
+#
+# Each is built from a real package that keeps its source: apps/gateway,
+# apps/account, plugin/authz, plugin/smoke, plugin/gen-app-cmds.
+/gateway
+/account
+/authz
+/smoke
+/gen-app-cmds
