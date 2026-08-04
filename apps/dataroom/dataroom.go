@@ -139,39 +139,85 @@ func Mount(app hcloud.Router, deps hcloud.Deps) error {
 	return nil
 }
 
-// routes wires the /v1/dataroom/* surface onto app.
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make describe`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// routes wires the /v1/dataroom/* route table → bundle route names, in TWO planes
+// over one dispatch.
+//
+// TEN routes are TYPED ops, so they carry In/Out types and reach the document, the
+// MCP tool list, the CLI and the generated SDKs (typed.go, which holds the models
+// and the prose): every JSON route on the admin surface. Each relays the bundle's
+// own refusal bytes through goja.BundleErr, so what a client sees is unchanged.
+//
+// SEVEN stay untyped relays, and each has a reason in the WIRE. The upload takes
+// the file itself as the raw body and the two /file routes answer with a byte
+// stream, which no In/Out pair describes. The three /view/* viewer routes carry no
+// principal — their tenant comes from the public link index — so they have no
+// validated org a typed op could read, and they are the surface a visitor's
+// browser drives rather than one an agent calls. Health is native and answers
+// before any of this exists.
 func routes(app hcloud.Router, s *hcloud.Service[state]) {
 	g := app.Group("/v1/dataroom")
-	// --- admin surface (validated principal → org) ---------------------------
-	g.Get("/documents", admin(s, "documents.list", nil, false))
+	// Bridge FIRST: a typed op receives only a context, so the validated org
+	// reaches it by being parked there — never as an In field, which is
+	// caller-supplied and would be a cross-tenant read the caller asserted for
+	// itself. fiber runs middleware in registration order, so this must precede
+	// the leaves below.
+	g.Use(hcloud.Bridge())
+	// Then the bundle's own envelope: a typed op that must answer the bundle's
+	// {"error": …} returns a goja.BundleErr, and this writes those bytes back
+	// verbatim. Also before the leaves, for the same registration-order reason.
+	g.Use(goja.Envelope())
+
+	// --- admin surface, typed (validated principal → org) --------------------
+	//
+	// Declared on the GROUP, so each op's path is the prefix composed with its
+	// leaf — the same composition the router does, and the identity every
+	// projection keys on. cmd/zipdoc resolves the prefix the same way, so the doc
+	// comments reach the document and the MCP tool list.
+	o := ops{s: s}
+	zip.Get(g, "/documents", o.listDocuments)
+	zip.Get(g, "/documents/:id", o.getDocument)
+	zip.Get(g, "/datarooms", o.listDatarooms)
+	zip.Post(g, "/datarooms", o.createDataroom)
+	zip.Get(g, "/datarooms/:id", o.getDataroom)
+	zip.Post(g, "/datarooms/:id/documents", o.addDataroomDocument)
+	zip.Get(g, "/links", o.listDataroomLinks)
+	zip.Post(g, "/links", o.createDataroomLink)
+	zip.Get(g, "/analytics/link/:linkId", o.getLinkAnalytics)
+	zip.Get(g, "/analytics/dataroom/:dataroomId", o.getDataroomAnalytics)
+
+	// --- admin surface, untyped: the bytes ------------------------------------
+	// The file IS the body on the way in and a stream on the way out; there is no
+	// In/Out pair for that, and inventing a base64 envelope would change the wire.
 	g.Post("/documents", hcloud.Handle(s, uploadDocument))
-	g.Get("/documents/:id", adminID(s, "documents.get", false))
 	g.Get("/documents/:id/file", hcloud.Handle(s, adminDownload))
-	g.Get("/datarooms", admin(s, "datarooms.list", nil, false))
-	g.Post("/datarooms", admin(s, "datarooms.create", nil, true))
-	g.Get("/datarooms/:id", adminID(s, "datarooms.get", false))
-	g.Post("/datarooms/:id/documents", adminID(s, "datarooms.addDocument", true))
-	g.Get("/links", admin(s, "links.list", nil, false))
-	g.Post("/links", hcloud.Handle(s, createLink))
-	g.Get("/analytics/link/:linkId", adminParam(s, "analytics.link", "linkId", false))
-	g.Get("/analytics/dataroom/:dataroomId", adminParam(s, "analytics.dataroom", "dataroomId", false))
 
 	// --- viewer surface (public; org resolved from the link index) -----------
+	// No principal reaches these: the visitor is whoever holds the link id, and
+	// the org is resolved from the link index, so tenantOf has nothing to read.
 	g.Get("/view/:linkId", viewer(s, "view.link", false))
 	g.Post("/view/:linkId/authenticate", viewer(s, "view.authenticate", true))
 	g.Post("/view/:linkId/pageview", viewer(s, "view.recordPage", true))
 	g.Get("/view/:linkId/document/:documentId/file", hcloud.Handle(s, viewerDownload))
 }
 
-// The document's prose for this surface. NONE of the routes above can be a typed
-// op — a typed op's prose is lifted from its handler's doc comment by zipdoc, and
-// every route here is an untyped relay: the domain logic is the goja bundle, so
-// the answer is opaque bundle bytes (or, for the two file routes, a byte stream
-// off the object-storage seam) that no Go In/Out pair describes. Declared through
-// the same registry the projector reads, keyed by the fiber pattern verbatim, so
-// prose renders only while the router actually serves the route and every consumer
-// of the document — the generated SDKs, the MCP tool list, the spec-derived CLI —
-// carries it. Without it the surface publishes an operationId and nothing else.
+// The prose for the routes that are NOT typed ops — the upload, the two file
+// streams, and the four public viewer routes. A typed op's prose is lifted from
+// its handler's doc comment by zipdoc instead (typed.go, zipdoc_gen.go), so an op
+// described here as well would be the same fact written in two places, and a
+// second source can only be stale or accidentally correct; openapi.Describe
+// panics on a duplicate, which is that rule enforced rather than remembered.
+//
+// Declared through the same registry the projector reads, keyed by the fiber
+// pattern verbatim, so prose renders only while the router actually serves the
+// route and every consumer of the document — the generated SDKs, the spec-derived
+// CLI — carries it. Without it these routes publish an operationId and nothing
+// else, which is all an untyped route can publish: it reaches no MCP tool at all.
 func init() {
 	openapi.Describe("/v1/dataroom/health", http.MethodGet,
 		"Liveness of the dataroom subsystem",
@@ -182,15 +228,6 @@ func init() {
 			"room can be read or written.")
 
 	// --- admin surface (validated principal → org) ---------------------------
-	openapi.Describe("/v1/dataroom/documents", http.MethodGet,
-		"List the org's documents, newest first",
-		"Returns every document in the caller's own tenant store — name, opaque storage key, "+
-			"content type, page count, size and timestamps — ordered newest first.\n\n"+
-			"Requires a validated principal; 403 without one. Tenant isolation is the per-org "+
-			"store itself: there is one SQLite file per org and the org is never a parameter, so "+
-			"no input the caller controls can address another tenant's documents. Metadata only — "+
-			"the bytes come from the file route.")
-
 	openapi.Describe("/v1/dataroom/documents", http.MethodPost,
 		"Upload a document's bytes and record it",
 		"Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — "+
@@ -205,14 +242,6 @@ func init() {
 			"bytes. A storage write that fails is 502 and no metadata row is recorded, so a "+
 			"document never exists without its file.")
 
-	openapi.Describe("/v1/dataroom/documents/:id", http.MethodGet,
-		"Read one document's metadata",
-		"Returns the document's name, opaque storage key, content type, page count, size and "+
-			"timestamps.\n\n"+
-			"Requires a validated principal; 403 without one. The lookup runs in the caller's own "+
-			"tenant store, so an id belonging to another org is a 404 exactly like one that never "+
-			"existed. Metadata only — the bytes are a separate read.")
-
 	openapi.Describe("/v1/dataroom/documents/:id/file", http.MethodGet,
 		"Download a document's bytes as its owner",
 		"Streams the stored file back under its recorded content type, falling back to "+
@@ -223,81 +252,6 @@ func init() {
 			"on the viewer surface, not here. Bytes that cannot be fetched from object storage are "+
 			"502, never a truncated or empty file.")
 
-	openapi.Describe("/v1/dataroom/datarooms", http.MethodGet,
-		"List the org's data rooms, newest first",
-		"Returns every data room in the caller's own tenant store with its short public id, "+
-			"name, description and timestamps, newest first.\n\n"+
-			"Requires a validated principal; 403 without one. Documents are not included — a "+
-			"room's contents come from the single-room read.")
-
-	openapi.Describe("/v1/dataroom/datarooms", http.MethodPost,
-		"Create a data room",
-		"Creates an empty data room from {name, description} and answers with it, including the "+
-			"short public id it is addressed by.\n\n"+
-			"Requires a validated principal; 403 without one. `name` is required; without it the "+
-			"call is 400 and the tenant store is untouched, because a dispatch answering 4xx rolls "+
-			"its transaction back. A new room holds no documents and is reachable by nobody until "+
-			"a share link is created over it.")
-
-	openapi.Describe("/v1/dataroom/datarooms/:id", http.MethodGet,
-		"Read one data room with its documents in display order",
-		"Returns the room and every document attached to it, each carrying its membership id and "+
-			"order index, sorted by that index with unordered documents last and creation time "+
-			"breaking ties — the same order a link's visitor sees.\n\n"+
-			"Requires a validated principal; 403 without one, and a room id outside the caller's "+
-			"own tenant store is a 404.")
-
-	openapi.Describe("/v1/dataroom/datarooms/:id/documents", http.MethodPost,
-		"Attach an existing document to a data room",
-		"Adds an already-uploaded document to the room by {documentId} and answers with the new "+
-			"membership id. An optional `orderIndex` fixes its place in the viewer's list.\n\n"+
-			"Requires a validated principal; 403 without one. Both the room and the document must "+
-			"exist in the caller's own tenant store — either missing is a 404 — and a document "+
-			"already in the room is a 409 rather than a duplicate row. It attaches, it never "+
-			"uploads: the bytes must already be stored.")
-
-	openapi.Describe("/v1/dataroom/links", http.MethodGet,
-		"List the org's live share links and the gates they enforce",
-		"Returns every non-archived link with the controls a visitor will meet: whether an "+
-			"address is required, whether a password is set, the allow and deny lists, whether "+
-			"download is permitted, and when the link expires.\n\n"+
-			"Requires a validated principal; 403 without one. Archived links are omitted entirely. "+
-			"A link reports only THAT a password is set — the stored form is a bcrypt hash and no "+
-			"route returns it.")
-
-	openapi.Describe("/v1/dataroom/links", http.MethodPost,
-		"Create a share link with its access controls",
-		"Mints a public link over one data room (`dataroomId`) or one document (`documentId`) — "+
-			"one of the two is required — and answers with it. The controls are declared here and "+
-			"enforced only on the viewer surface: `password` is hashed with bcrypt before storage "+
-			"and is never readable back, `emailProtected` (on by default) makes a visitor state an "+
-			"address, `allowList`/`denyList` narrow which addresses pass, `allowDownload` (off by "+
-			"default) governs downloads, and `expiresAt` closes the link.\n\n"+
-			"Requires a validated principal; 403 without one, and the target room or document must "+
-			"exist in the caller's own tenant store or it is a 404.\n\n"+
-			"Creating a link also writes dataroom's ONE cross-tenant row: the link id to owning org "+
-			"mapping an anonymous visitor is routed through. That write is part of the operation — "+
-			"if it fails the call is 500, so a link that no visitor could open is never handed "+
-			"back as usable.")
-
-	openapi.Describe("/v1/dataroom/analytics/link/:linkId", http.MethodGet,
-		"Per-page view analytics for one share link",
-		"Returns how the link was actually read: total viewing sessions, total page views, and "+
-			"per page the view count, the summed dwell measure and its average.\n\n"+
-			"Requires a validated principal; 403 without one. The link is resolved in the caller's "+
-			"OWN tenant store, so another org's link id is a 404 — knowing a link id is enough to "+
-			"open the room it shares, and never enough to read who has been reading it.")
-
-	openapi.Describe("/v1/dataroom/analytics/dataroom/:dataroomId", http.MethodGet,
-		"Per-page view analytics for a data room, across all its links",
-		"Rolls up every link pointing at the room: session and page-view totals for the room, "+
-			"plus the same per-page breakdown for each link beneath it.\n\n"+
-			"Requires a validated principal; 403 without one, and a room id outside the caller's "+
-			"own tenant store is a 404. Only links that NAME the room are counted — a link created "+
-			"over a single document contributes nothing here, even when that document also sits in "+
-			"the room.")
-
-	// --- viewer surface (public; org resolved from the link index) -----------
 	openapi.Describe("/v1/dataroom/view/:linkId", http.MethodGet,
 		"What a share link's visitor sees before authenticating",
 		"Answers the pre-auth face of a link to anyone holding its id: name and type, which gates "+
@@ -355,34 +309,6 @@ func init() {
 			"owner did not permit it. Read that flag precisely: it gates the DOWNLOAD intent, not "+
 			"access to the bytes — without the parameter an authorised visitor is served the file "+
 			"for in-place viewing whether or not downloads are allowed.")
-}
-
-// === admin dispatch (validated principal) ====================================
-
-func admin(s *hcloud.Service[state], route string, params map[string]string, readBody bool) zip.Handler {
-	return func(c *zip.Ctx) error { return adminDispatch(s, c, route, params, readBody) }
-}
-func adminID(s *hcloud.Service[state], route string, readBody bool) zip.Handler {
-	return func(c *zip.Ctx) error {
-		return adminDispatch(s, c, route, map[string]string{"id": c.Param("id")}, readBody)
-	}
-}
-func adminParam(s *hcloud.Service[state], route, param string, readBody bool) zip.Handler {
-	return func(c *zip.Ctx) error {
-		return adminDispatch(s, c, route, map[string]string{param: c.Param(param)}, readBody)
-	}
-}
-
-func adminDispatch(s *hcloud.Service[state], c *zip.Ctx, route string, params map[string]string, readBody bool) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	body, err := decodeBody(c, readBody)
-	if err != nil {
-		return err
-	}
-	return write(s, c, org, route, params, nil, body)
 }
 
 // === viewer dispatch (public; org via the link index) ========================
@@ -511,38 +437,6 @@ func streamFile(s *hcloud.Service[state], c *zip.Ctx, resp *goja.Response) error
 	}
 	c.SetHeader("Content-Type", ct)
 	return c.Bytes(http.StatusOK, data)
-}
-
-// createLink dispatches links.create and, on success, records the new link id in
-// the cross-tenant index so a public viewer can resolve it to this org.
-func createLink(s *hcloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	body, err := decodeBody(c, true)
-	if err != nil {
-		return err
-	}
-	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{Route: "links.create", Body: body})
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "dataroom dispatch failed")
-	}
-	if resp.Status == http.StatusOK {
-		var out struct {
-			Link struct {
-				ID string `json:"id"`
-			} `json:"link"`
-		}
-		if json.Unmarshal(resp.Body, &out) == nil && out.Link.ID != "" {
-			if err := s.State.index.put(out.Link.ID, org); err != nil {
-				s.Log.Error("dataroom link index write failed", "link", out.Link.ID, "err", err)
-				return zip.Errorf(http.StatusInternalServerError, "link index write failed")
-			}
-		}
-	}
-	c.SetHeader("Content-Type", "application/json")
-	return c.Bytes(resp.Status, resp.Body)
 }
 
 // write dispatches one bundle route on the tenant's Base store (one transaction
