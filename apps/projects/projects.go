@@ -255,13 +255,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	b := cloud.NewBase(deps, "projects")
 	s := &cloud.Service[state]{Base: b, State: state{
-		store:        store,
-		blob:         openBlobStore(),
-		cf:           sites.NewPurger(b.Log),
-		ai:           deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
-		bill:         cloud.NewResourceMeter(deps, hostingProvider),
-		apex:         env("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
-		ensureSpace:  base.EnsureSpace,                     // wired-by-default Base data space (fail-soft).
+		store:       store,
+		blob:        openBlobStore(),
+		cf:          sites.NewPurger(b.Log),
+		ai:          deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
+		bill:        cloud.NewResourceMeter(deps, hostingProvider),
+		apex:        env("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
+		ensureSpace: base.EnsureSpace,                     // wired-by-default Base data space (fail-soft).
 	}}
 	mounted = s
 
@@ -375,23 +375,19 @@ func init() {
 // routes registers the projects surface and its two mirrors — /v1/sites and
 // /v1/platform/sites — as TYPED ops.
 //
-// THE BRIDGE AND THE MONEY ENVELOPE GO ON FIRST, in that order.
+// THE MONEY ENVELOPE GOES ON FIRST. cloud.Bridge — what carries the validated
+// principal to a typed op, which receives a context and its decoded In and
+// nothing else — is the composer's install, once at the root of every program,
+// so this package does not install its own.
 //
-// cloud.Bridge is what carries the validated principal across the typed seam —
-// a typed op receives a context and its decoded In and nothing else, so without
-// it every op here answers 403. Serve installs one for the whole binary; this
-// one is prefix-scoped to the three subtrees this app owns, so the surface is
-// self-sufficient wherever it is mounted and nesting under Serve's is harmless
-// (the inner one is what the handler sees).
-//
-// Then the money envelope. Six of these ops gate on BALANCE, and a
+// Six of these ops gate on BALANCE, and a
 // refused balance is the fleet's nested {"error":{"code","message"}} 402/503 —
 // a contract every metered Hanzo client reads by error.code, and one zip's own
 // error envelope does not speak. So a gated op returns cloud.Denied and
-// cloud.DenyEnvelope writes those bytes back verbatim. It is installed on each
-// of the three prefixes this app OWNS (manifest/apps.go), before any leaf,
-// because fiber runs middleware in registration order and one installed after
-// its routes never runs.
+// cloud.DenyEnvelope writes those bytes back verbatim. It is installed once,
+// before any leaf because fiber runs middleware in registration order, and the
+// scope bounds it to the three prefixes this app OWNS (manifest/apps.go) — the
+// same confinement the per-prefix installs used to spell out by hand.
 //
 // The ops themselves are declared on the *zip.App with FULL paths rather than on
 // those groups: a group leaf of "" would publish "/v1/projects/" — a different
@@ -403,7 +399,7 @@ func init() {
 // They share the handler, so there is still exactly one implementation.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
-	app.Use(cloud.Bridge(), cloud.DenyEnvelope())
+	app.Use(cloud.DenyEnvelope())
 	r := cloud.ZipApp(app)
 
 	zip.Post(r, "/v1/projects", o.create, zip.WithStatus(http.StatusCreated))

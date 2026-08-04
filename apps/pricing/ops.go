@@ -72,7 +72,7 @@ import (
 // resolves a request's subsystem label and its declared Price from this, and
 // cloud's scope refuses middleware a subsystem installs outside what it declared
 // — so an undeclared subtree is one whose requests are attributed to somebody
-// else and on which this subsystem cannot install the typed-op Bridge. The same
+// else. The same
 // four are listed in manifest/apps.go, which the light host reads to route to
 // this plugin; that copy is a literal on purpose (the host must not import an
 // app package), so the two are kept equal by hand.

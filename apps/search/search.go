@@ -169,7 +169,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "search")
 	log = b.Log
-	app.Use(cloud.Bridge())
 	zip.Post(z, "/v1/search", Query,
 		zip.WithOperationID("search"),
 		zip.WithSummary("Hybrid search over the org's own corpora"),

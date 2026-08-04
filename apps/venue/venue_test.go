@@ -166,9 +166,17 @@ func newVenue(t *testing.T, f folder, kc *kms.Client) *zip.App {
 		}},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	return app
 }
+
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer does, once at the root. In a test
+// the test IS the composer, so it owes the same install — skipping it does not
+// test a stricter program, it tests one where every org-scoped op answers 403
+// for a reason production could never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 type result struct {
 	Code int

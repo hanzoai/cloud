@@ -15,6 +15,12 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// compose installs what the program's composer installs — cloud.Bridge, once at
+// the app root. A subsystem never installs its own, so a test app owes the same
+// root install; without it every org-scoped op answers a 403 no production
+// program would produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountApp mounts the agents surface with a deterministic fake AI so run() is
 // exercised end-to-end over HTTP without a real gateway. Pass a nil interface
 // to exercise the no-inference fail-closed path.
@@ -40,6 +46,7 @@ func mountAppDir(t *testing.T, dir string) *zip.App {
 func mountAppIn(t *testing.T, dir string, ai types.AIClient, defaultModel string) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: dir, AI: ai, AIDefaultModel: defaultModel}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

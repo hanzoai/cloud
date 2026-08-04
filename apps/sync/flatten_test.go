@@ -2,6 +2,7 @@ package sync
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -15,12 +16,20 @@ import (
 // /v1/sync surfaced as 500 instead of 401. These tests reproduce that filter and
 // prove the reject statuses now survive it.
 
-// installV1Flatten reproduces apps.mountCommerce's /v1 ErrorHandlerJSON: a /v1 group
-// middleware that turns any propagated downstream error into a hardcoded 500. Faithful
-// to the real commercemid.ErrorHandlerJSON (ErrorJSON writes c.Bytes(500, …)); kept
-// dependency-light so the guard pins the invariant, not a commerce version.
+// installV1Flatten reproduces apps.mountCommerce's /v1 ErrorHandlerJSON: middleware
+// bounded to /v1 that turns any propagated downstream error into a hardcoded 500.
+// Faithful to the real commercemid.ErrorHandlerJSON (ErrorJSON writes c.Bytes(500, …));
+// kept dependency-light so the guard pins the invariant, not a commerce version.
+//
+// It takes the ROOT form, gated by path, rather than a group at /v1: the real
+// commerce /v1 node owns routes, while this reproduction carries the middleware
+// alone, and a group holding middleware with no routes beneath it is a program
+// zip refuses to compose.
 func installV1Flatten(app *zip.App) {
 	app.Use(zip.H(func(c *zip.Ctx) error {
+		if c.Path() != "/v1" && !strings.HasPrefix(c.Path(), "/v1/") {
+			return c.Next()
+		}
 		if err := c.Next(); err != nil {
 			return c.Bytes(http.StatusInternalServerError, []byte(`{"error":"flattened"}`))
 		}
@@ -29,10 +38,11 @@ func installV1Flatten(app *zip.App) {
 }
 
 // mountSyncUnderFlatten mounts sync BEHIND the /v1 flatten filter, reproducing the
-// production mount order (commerce before sync in apps.Wire).
+// production order: the composer's Bridge at the root first, commerce before sync.
 func mountSyncUnderFlatten(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	installV1Flatten(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)

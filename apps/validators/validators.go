@@ -130,17 +130,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zapp := cloud.ZipApp(app)
 
 	g := app.Group("/v1/validators")
-	// Bridge FIRST, at the TOP of the whole surface: a typed op receives only a
-	// context, so the validated org reaches it by being parked there — never as an
-	// In field, which is caller-supplied and would be a cross-tenant read the
-	// caller asserted for itself. fiber runs middleware in registration order, so
-	// one installed after its leaves never runs. Serve installs one app-wide too;
-	// nesting is harmless (the inner one is what the handler sees) and this
-	// package's tests mount on a bare app with no Serve.
-	//
-	// requireOrgOnWrite keeps the identity refusal exactly where it has always
-	// been — see its own comment.
-	g.Use(cloud.Bridge(), requireOrgOnWrite())
+	// The composer owns cloud.Bridge: the fused host installs it once at its root
+	// and the plugin constructor does the same for a plugin program, so no
+	// subsystem installs it. requireOrgOnWrite keeps the identity refusal exactly
+	// where it has always been — see its own comment.
+	g.Use(requireOrgOnWrite())
 
 	// The collection root (/v1/validators) stays FLAT, declared on the App with
 	// its WHOLE path: joining "/v1/validators" with "" yields "/v1/validators/"

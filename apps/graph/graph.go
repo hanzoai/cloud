@@ -78,13 +78,12 @@ func build(b cloud.Base) (state, error) {
 
 // routes is the ONE place the surface is wired.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// A typed op receives only a context, so the validated org and the caller's own
-	// Authorization (which the upstream read forwards) have to be parked there.
-	// Installed BEFORE the leaves — fiber runs middleware in registration order, so
-	// one installed after them never runs. Serve already installs it process-wide;
-	// this makes the subsystem self-sufficient wherever it is mounted, and nesting
-	// is harmless (the inner one is the one the handler sees).
-	app.Use(cloud.Bridge())
+	// A typed op receives only a context, so the validated org and the request the
+	// caller's own Authorization is forwarded from are parked there by
+	// cloud.Bridge. This subsystem does not install it: the program's composer
+	// does, once at the root, after the identity check that mints the org and
+	// before any subsystem registers a route — an order only the composer can
+	// hold.
 
 	// TYPED ops. graph owns two top-level nouns rather than one prefix, so each is
 	// declared at its whole path on the app's registry — the identity every

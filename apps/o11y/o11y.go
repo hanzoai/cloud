@@ -624,38 +624,19 @@ func MountO11y(host *zip.App, deps cloud.Deps) error {
 // see [MountO11y]. It is registered in its own order here rather than before or
 // after the whole mount, because the /v1/sentry wildcard has to precede the
 // module's own /v1/sentry ingest routes exactly as it always did.
+//
+// cloud.Bridge is NOT installed here, and no subsystem installs it. The typed ops
+// below do need it — a zip.Get[In, Out] handler receives a context and its decoded
+// In and nothing else, so the validated org reaches it only by being parked on
+// that context — but the middleware belongs to whoever COMPOSES this app. Only a
+// composer knows that the identity boundary has already run (the org is
+// trustworthy only once SanitizeIdentity has minted it) and that no route is
+// registered ahead of it; see the install in cloud.Serve. Installing a second copy
+// here is what took the surface down: each Group call makes a fresh node, so the
+// install went on a node of its own at the same prefix while the routes below live
+// beneath the different node mountScope creates — and zip judges the node, not the
+// path, so it refused to compose middleware that could never run.
 func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
-	// Bridge FIRST, APP-WIDE. A typed op receives only a context, so the validated
-	// org reaches it by being parked there — never as an In field, which is
-	// caller-supplied and would be a cross-tenant read the caller asserted for
-	// itself. Middleware runs in registration order, so this must precede every
-	// leaf below.
-	//
-	// It has to be installed HERE, not only by cloud.Listen, because o11y runs as
-	// its OWN process (plugin/o11y/main.go builds a bare zip.App and mounts this).
-	// The host's app-wide Bridge parks the org on a context in the HOST; the
-	// request crosses to this process as headers, so without this install every
-	// typed op here would answer 403 for a caller the host had already validated.
-	// Nesting under Serve's own Bridge — the fused case — is harmless: the inner
-	// one is what the handler sees.
-	//
-	// On the APP and not on a.Group(o11yPrefix), for the reason serve.go states
-	// where it installs the same handler app-wide: a subsystem whose routes are
-	// spread across several top-level nouns owns no single prefix to hang it on.
-	// This one owns eight — /v1/o11y, /v1/sentry, /v1/summary, /v1/event,
-	// /v1/errors, /v1/analytics, /v1/insights, /v1/integrations — so a prefix
-	// group covers a fraction of the leaves that need the org parked.
-	//
-	// It also has to be the app under zip's composition rules, which is what a
-	// group here got WRONG in two separate ways. A group's middleware wraps the
-	// routes in its OWN subtree, and these routes are not in it: the module's 353
-	// typed ops register on the app at a root prefix (hanzoai/o11y relay.go), and
-	// the group declared here never received a leaf of its own, so the walk
-	// refused the program outright — "declares middleware and no routes anywhere
-	// beneath it". The whole subsystem then failed to compose, the child exited
-	// before listening, and every prefix above answered 503.
-	a.Use(cloud.Bridge())
-
 	// READ/SERVE plane — specific routes before the wildcard.
 	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
 	mountAlerts(a) // POST /v1/o11y/alerts/:receiver + GET /v1/o11y/alerts/last

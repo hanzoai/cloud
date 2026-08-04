@@ -48,7 +48,7 @@ const dashPrefix = "/v1/deploy"
 
 // registerDashboardRoutes wires the ArgoCD-UI-compatible API surface (no FE —
 // the SPA is a separate hanzoai/spa App). Called from routes() (deploy.go), which
-// owns the group and installs the bridge and the sign-in bounce on it.
+// installs the sign-in bounce so it covers this prefix.
 //
 // Every READ here is a TYPED op declared on that group, so the op's path is the
 // prefix composed with the leaf — the identity every projection keys on — and the
@@ -62,7 +62,11 @@ func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
 	// `g := <router>.Group("/prefix")` in the SAME file, and a prefix it cannot
 	// resolve is prose filed under the wrong path and silently dropped from both the
 	// document and the MCP tool — so it refuses, naming the file, the line and this
-	// fix. routes() (deploy.go) hangs the group's middleware off the same prefix.
+	// fix. The group is a bare path prefix carrying NO middleware, which is what
+	// keeps it composable: the leaves below register through THIS node, and
+	// middleware belongs on the root gated by path (routes(), deploy.go), because a
+	// second Group at the same prefix would be a fresh node — middleware there
+	// stands beside these routes, not above them, and zip judges the node.
 	g := app.Group(dashPrefix)
 	o := ops{s: s}
 

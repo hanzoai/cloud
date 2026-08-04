@@ -84,34 +84,29 @@ func build(b cloud.Base) (state, error) {
 // routes is the ONE place the surface is wired. Static paths register before their
 // :param siblings so an id can never shadow a literal.
 //
-// cloud.Bridge FIRST and ONCE, through Use, BEFORE the leaves: a typed op receives
-// only a context, so the validated org reaches it by being parked there — never as
-// an In field, which is caller-supplied and would be a cross-tenant read the caller
-// asserted for itself. fiber runs middleware in registration order, so one installed
-// after its leaves never runs. On a scope, Use is bounded by the prefixes the
-// manifest declared for this subsystem (/v1/networks and /v1/mesh/services), which
-// is every route below and nothing else; on a bare app — what this package's tests
-// mount on — it is app-wide, which is what makes the tenant boundary hold there.
+// cloud.Bridge is not installed here: the composer installs it once at the root,
+// after the identity check that mints the validated org and before any subsystem
+// registers a route — an order only the whole program can assert. The typed ops
+// below read what it parks off the context.
 //
-// IT USED TO BE TWO GROUP INSTALLS, and that is the defect this shape closes.
+// IT USED TO BE TWO GROUP INSTALLS, and that defect is closed by the composer.
 // Middleware on a group wraps what is composed BENEATH it, and the two collection
 // ROOTS are declared on the App with their whole path — joining "/v1/networks" with
 // an empty leaf yields "/v1/networks/", a different address from the one they have
-// always served. So the group's Bridge covered /v1/networks/routers and /:id and
+// always served. So the group's enrichment covered /v1/networks/routers and /:id and
 // missed /v1/networks itself: a validated caller reached the op with no org parked
-// and was answered 403. TestBridgeIsInstalledOnEveryPrefix is that measurement, and
-// the path-bounded Use covers the root and the subtree with one install.
+// and was answered 403. The composer's root install covers every path, collection
+// roots included — TestValidatedOrgReachesEveryPrefix measures exactly that.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ztOps{s: s}
 	zapp := cloud.ZipApp(app)
-	app.Use(cloud.Bridge())
 
 	ng := app.Group("/v1/networks")
 	zip.Get(zapp, "/v1/networks", o.listNetworks)
 	// The overlay's routers hang off the network they belong to, so they register on
-	// the SAME group — one subtree, no second top-level name. "routers" is a literal
-	// beside ":id" and goes first, per this function's rule. That ordering is a
-	// convention here, not a load-bearing accident: measured on this router, the
+	// the SAME group — one subtree, no second top-level name. "routers" is
+	// a literal beside ":id" and goes first, per this function's rule. That ordering is
+	// a convention here, not a load-bearing accident: measured on this router, the
 	// static segment wins over its param sibling in EITHER registration order, so
 	// nothing has to be frozen by a test to keep /v1/networks/routers reachable.
 	zip.Get(ng, "/routers", o.listRouters)

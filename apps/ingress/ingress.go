@@ -172,14 +172,11 @@ func Shutdown(ctx context.Context) error {
 // body, which is exactly the precedence the untyped handler spelled out by hand.
 func mountRoutes(s *cloud.Service[state], app cloud.Router) {
 	g := app.Group("/v1/ingress")
-	// Bridge FIRST. A typed op receives only a context, so the REQUEST its
-	// SuperAdmin gate reads — admin-ness lives in a header, which
-	// principal.OrgFrom does not carry — has to be parked there. fiber runs
-	// middleware in registration order, so this must precede the leaves below; it
-	// is prefix-scoped, and nesting under Serve's own Bridge is harmless (the
-	// inner one is what the handler sees). Same shape apps/agents, apps/search
-	// and apps/integrations already use.
-	g.Use(cloud.Bridge())
+	// The SuperAdmin gate below reads admin-ness off the REQUEST cloud.Bridge
+	// parks on the context — a header principal.OrgFrom does not carry. Bridge is
+	// the composer's install — once at the root of every program — so this
+	// package does not install its own.
+	//
 	// TYPED ops declared on the GROUP: each op's path is the group's prefix
 	// composed with its leaf — the identity every projection keys on — and
 	// cmd/zipdoc resolves the prefix the same way as of zip v1.18.3, so the prose

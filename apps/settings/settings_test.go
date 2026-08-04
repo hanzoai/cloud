@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
@@ -17,6 +18,12 @@ import (
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
+
+// compose installs what the program's composer installs — cloud.Bridge, once at
+// the app root. A subsystem never installs its own, so a test app owes the same
+// root install; without it every org-scoped op answers a 403 no production
+// program would produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // mountSettings builds the settings surface with a temp SQLite store and an
 // optional KMS (nil ⇒ secret writes must fail closed, never plaintext).
@@ -29,6 +36,7 @@ func mountSettings(t *testing.T, kms cloudKMS) (*zip.App, *service) {
 	t.Cleanup(func() { _ = store.Close() })
 	s := &service{store: store, kms: kms, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	// The REAL registration, not a reconstruction of it: routes() is what Mount
 	// calls, so a route or a middleware added there is exercised here too.
 	routes(app, s)

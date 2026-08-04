@@ -226,14 +226,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // Registration order is match order: the static collection before the :slug
 // forms, exactly as before.
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
-	// The bridge FIRST, bounded to templates' own subtree: a typed op receives
-	// only a context, so the validated org has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Listen installs one app-wide too; nesting is harmless (the
-	// inner one is what the handler sees), and having it here is what makes the
-	// subsystem's own tests — which mount on a bare zip.App — exercise the same
-	// tenancy the binary does.
-	app.Use(cloud.Bridge())
+	// A typed op receives only a context, so the validated org reaches it from the
+	// request on that context. Whoever composes the app parks it there — at the
+	// root, ahead of these leaves, since fiber runs middleware in registration
+	// order. This surface installs none of its own: one it installed for itself
+	// could only hang on a /v1/templates node, and every op below registers on
+	// zapp, the root app, so that node would carry middleware over an empty subtree
+	// and zip refuses to compose it.
 
 	o := ops{s: s}
 	zip.Get(zapp, "/v1/templates", o.browse)

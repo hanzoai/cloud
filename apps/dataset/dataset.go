@@ -147,16 +147,16 @@ type scan struct {
 	since   time.Time
 }
 
-// Mount wires the dataset leaves of /v1/risk onto app.
+// Mount registers the dataset leaves of /v1/risk onto app.
 //
-// EVERY INHERITED CAPABILITY IS WIRED HERE, EXPLICITLY. Being embedded in cloud
+// EVERY INHERITED CAPABILITY IS NAMED HERE, EXPLICITLY. Being embedded in cloud
 // makes each one AVAILABLE; none is automatic:
 //
 //	IAM auth     SanitizeIdentity mints X-Org-Id from the verified bearer, in
 //	             serve.go. This app never validates a token and never can.
-//	tenant gate  cloud.Bridge() on the group, FIRST, before any leaf — a typed op
-//	             receives only a context, and Bridge is what parks the validated
-//	             org in it. fiber orders middleware by registration.
+//	tenant gate  cloud.Bridge parks the validated org on the context a typed op
+//	             receives; it is the composer's install — once at the root of
+//	             every program — so this package does not install it.
 //	meter+gate   cloud.NewResourceMeter(deps, "dataset"); Gate before the one
 //	             priced op and Meter after it.
 //	logs         cloud.NewBase(deps, "dataset") gives the scoped logger.
@@ -226,28 +226,22 @@ func (p *plane) ready(ctx context.Context) error {
 // plane came from — the same split apps/ml makes, for the same reason: a test
 // pins the plane and exercises the wire.
 func mount(p *plane, app cloud.Router) error {
-	// TWO SEAMS, EACH FOR WHAT IT IS FOR.
-	//
-	// app.Use installs the tenant bridge ONCE PER DECLARED PREFIX — the scope
-	// reads manifest.Apps for that — so the middleware lands exactly on
-	// /v1/risk/datasets and nowhere else. Grouping at /v1/risk to get a shorter leaf
-	// would install it across a subtree this app does not own — that stem is the
-	// decision plane's — which is the escape the scope exists to refuse.
-	//
 	// cloud.ZipApp recovers the typed-op registry, which the Router interface does
 	// not carry, and the ops register at ABSOLUTE paths on it. That is what keeps
 	// the published address exactly `/v1/risk/datasets` — a group root composes to
 	// `/v1/risk/datasets/`, and a trailing slash in the document is a trailing slash
 	// in every generated SDK.
 	//
-	// Bridge FIRST, before any leaf: a typed op receives only a context, and this
-	// is what parks the validated org that tenant.Of reads. fiber runs middleware
-	// in registration order, so an install after its leaves never runs.
+	// cloud.Bridge is the composer's install — once at the root of every program —
+	// so this package installs only its own envelope. app.Use lands that ONCE PER
+	// DECLARED PREFIX — the scope reads manifest.Apps for that — so it covers
+	// /v1/risk/datasets and nowhere else; grouping at /v1/risk for a shorter leaf
+	// would spread it across a subtree this app does not own — that stem is the
+	// decision plane's — which is the escape the scope exists to refuse.
 	z := cloud.ZipApp(app)
 	if z == nil {
 		return fmt.Errorf("dataset.Mount: the router carries no typed-op registry")
 	}
-	app.Use(cloud.Bridge())
 	// DenyEnvelope renders a gate refusal as the money wire's own bytes, the same
 	// ones every other Hanzo surface emits — one error contract for "no funds"
 	// across the fleet instead of this plane's private spelling of it. It touches

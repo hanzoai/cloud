@@ -36,13 +36,18 @@ var untypedByDesign = map[string]string{
 		"and a CLI command — not a document claiming it takes no body.",
 }
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge
+// (routes says why): the program's composer owns it — serve.go in production — so
+// a test app owes the same install, else every org-scoped op answers 403 for a
+// reason no composed program has.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountApp mounts the destinations surface on a fresh in-memory app with a temp
-// store, exactly as the unified binary does — and, deliberately, with NO app-wide
-// cloud.Bridge, so the bridge these ops read their tenant through has to be the
-// one Mount installs itself.
+// store, exactly as the unified binary does: composed at the root, then mounted.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	t.Setenv(publicFanoutEnv, "0") // a document is not a reason to install a live sink
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)

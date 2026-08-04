@@ -93,16 +93,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("plan.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
 	}
-	// Bridge FIRST: a typed op receives only a context, so the VALIDATED org — the
-	// tenant that selects a reseller's catalog overrides — reaches it by being
-	// parked there. fiber runs middleware in registration order, so this must
-	// precede every leaf below. On the scoped router it installs once per declared
-	// prefix, which is why plugin/plan/main.go has to declare /v1/plans: under the
-	// /v1/<name> default this landed on /v1/plan and never ran. Serve installs one
-	// app-wide too; nesting is harmless (the inner one is what the handler sees)
-	// and this is what makes the subsystem's own tests, which mount it on a bare
-	// zip app, exercise the same identity path production does.
-	app.Use(cloud.Bridge())
+	// The composer owns cloud.Bridge: the fused host installs it once at its root
+	// and the plugin constructor does the same for a plugin program, so no
+	// subsystem installs it.
 
 	o := ops{log: logger}
 

@@ -35,13 +35,20 @@ var untypedByDesign = map[string]string{
 		"zip can declare a body-tolerant op.",
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer does, once at the root. In a test
+// the test IS the composer, so it owes the same install — skipping it does not
+// test a stricter program, it tests one where every org-scoped op answers 403
+// for a reason production could never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountApp mounts the ads surface on a fresh in-memory app with a temp store,
-// exactly as the unified binary does — and, deliberately, with NO app-wide
-// cloud.Bridge, so the bridge these ops read their tenant through has to be the
-// one routes() installs itself.
+// composed exactly as the unified binary is: cloud.Bridge at the root, the
+// subsystem's routes beneath it.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

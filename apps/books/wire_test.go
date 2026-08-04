@@ -37,11 +37,19 @@ import (
 
 var wireCfg = zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true}
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, and
+// in a test the test is the composer, so it owes the same install. A test that
+// skips it does not test a stricter program — it tests one where every op that
+// reads the org answers a refusal production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountBooks brings up the real /v1/books surface over a temp DataDir: the real
 // router, the real middleware, the real stores.
 func mountBooks(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("mount: %v", err)

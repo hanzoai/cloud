@@ -59,11 +59,11 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/money"
 	"github.com/zap-proto/zip"
 )
 
@@ -111,13 +111,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// what a tool costs cannot differ by who is asking or over which transport.
 	exposePrice(store)
 
-	// cloud.Bridge FIRST, ahead of every leaf: a typed op receives a context.Context
-	// and its decoded In and nothing else, so the validated org — and the request the
-	// project scope and the audit actor are read off — cross on the context. Serve
-	// installs the same middleware binary-wide; nesting is harmless (the inner one is
-	// the one the handler sees) and declaring it here is what makes the subsystem
-	// self-sufficient when a test or a non-Serve composition root mounts it bare.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge is installed by whoever composes the app — the fused host at
+	// its root — never here: the validated org and the request the project scope
+	// and audit actor are read off still cross on the context, parked by the root
+	// install.
 
 	// Registered on the App with WHOLE paths, not on a group: the surface root IS
 	// /v1/marketplace, and Group("/v1/marketplace") composed with an empty leaf yields

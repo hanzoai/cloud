@@ -104,10 +104,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // the binary serves rather than a reconstruction of it.
 func routes(app cloud.Router, s *service) {
 	g := app.Group("/v1/settings")
-	// A typed op receives only a context, so the validated org has to be parked
-	// there. Installed on the group BEFORE its leaves — fiber runs middleware in
-	// registration order, so one installed after them never runs.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge parks the validated org on the context a typed op receives; it
+	// is the composer's install — once at the root of every program — so this
+	// package does not install its own.
 	o := settingsOps{s: s}
 	zip.Get(g, "/:product", o.getSettings)
 	zip.Put(g, "/:product", o.putSettings)

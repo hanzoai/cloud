@@ -70,13 +70,20 @@ func (f *fakeCommerce) CheckEntitlement(_ context.Context, orgID, productID stri
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mount(t *testing.T, commerce cloud.CommerceClient) (*zip.App, *service) {
 	t.Helper()
 	s := &service{store: openTestStore(t), commerce: commerce, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	// The REAL registration, not a reconstruction of it: a test that rebuilt the
-	// router by hand could exercise a surface this binary does not serve — and
-	// would silently drop the cloud.Bridge every typed op resolves its org through.
+	// router by hand could exercise a surface this binary does not serve.
 	routes(app, s)
 	return app, s
 }

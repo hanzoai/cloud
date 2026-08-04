@@ -25,6 +25,7 @@ import (
 func listApplicationsAs(t *testing.T, s *cloud.Service[state], headers map[string]string) (int, map[string]any) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	req := httptest.NewRequest("GET", "/v1/deploy/applications", nil)
 	for k, v := range headers {

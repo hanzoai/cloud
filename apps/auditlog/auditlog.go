@@ -83,13 +83,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // routes registers the org-scoped audit surface.
 //
-// Bridge FIRST and noStore beside it, both installed BEFORE the leaf: fiber runs
-// middleware in registration order, so one installed after its route never runs.
-// Bridge parks the validated org, which is the only way a typed op — which
-// receives a context and nothing else — can resolve the tenant. Serve installs
-// one app-wide too; nesting is harmless (the inner one is what the handler sees)
-// and this package's own tests mount on a bare app with no Serve, so this
-// install is what makes them pass.
+// cloud.Bridge is absent on purpose: the composer owns that install — the fused
+// host at its root, a plugin program in its constructor — and it is what parks
+// the validated org, the only way a typed op (a context and nothing else) can
+// resolve the tenant.
+//
+// noStore takes the ROOT form, before the leaf because fiber runs middleware in
+// registration order. A group at /v1/audit cannot carry it: the op below is
+// declared on the App, so that group would hold middleware with no routes
+// beneath it, a program zip refuses to compose. Through the scoped Router the
+// root form is confined to /v1/audit, the one prefix this subsystem declares.
 //
 // USE, NOT A MIDDLEWARE-CARRYING GROUP. This used to say
 // `app.Group("/v1/audit", Bridge(), noStore())`, and that is the one shape this
@@ -110,7 +113,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // joining "/v1/audit" with "" yields "/v1/audit/", a different path from the one
 // this API has always served, and one that would ship in OpenAPI and the SDK.
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
-	app.Use(zip.H(cloud.Bridge()), zip.H(noStore()))
+	app.Use(noStore())
 	o := ops{s: s}
 	zip.Get(zapp, "/v1/audit", o.list)
 }
