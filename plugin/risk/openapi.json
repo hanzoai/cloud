@@ -64,7 +64,7 @@
       "post": {
         "operationId": "riskLearn",
         "summary": "Teach your organisation's own model from its own events",
-        "description": "Learn records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them, answering the model's verdict on each.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nEvents are recorded FIRST and judged after, which is deliberate: the numbers an\nalert quotes are then the same ones an investigator sees when they look at the\nsubject, and every baseline has the event removed from it arithmetically so\nnothing is measured against itself.",
+        "description": "Learn records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them. It answers how many it learned from.\n\nIT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;\nlearning is a transformation over observations; a verdict is a query against the\nresult. This op is the first two. [ops.score] is the third, it is pure, and it\nis the ONE door to a verdict. They were one call, which meant you could not\nrecord without training and could not train without being answered — and the\nmodel ran twice over every event to produce a verdict the response carried and\nno caller read.\n\nTO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then\nlearn: the score is then the model's opinion of an event it has not yet learned\nfrom, which is the question worth asking. The other order answers for a model\nthat has already absorbed the event it is judging.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nA RETRY IS INERT. The record deduplicates on the event id you send, and an event\nalready in it moves nothing, costs nothing and is not counted — so a client that\ntimed out can send the same batch again and its model holds what it holds.\nWithout an id of your own there is nothing to converge on: two identical bodies\nare two events.",
         "tags": [
           "risk"
         ],
@@ -550,15 +550,8 @@
       "riskLearnOut": {
         "properties": {
           "learned": {
-            "description": "Learned is how many events the model learned from, which is the batch, and\nis also what the call is metered at: one screen per event.",
+            "description": "Learned is how many of the events the model actually learned from, and is\nalso what the call is metered at: one screen per event learned from. It is\nthe batch minus the events already in this organisation's record, so a\nretried batch reports — and is charged — zero.",
             "type": "integer"
-          },
-          "verdicts": {
-            "description": "Verdicts is the model's verdict on each event, in the order given, so a\ncaller that is both teaching and deciding needs one round trip.",
-            "items": {
-              "$ref": "#/components/schemas/riskScoreOut"
-            },
-            "type": "array"
           }
         },
         "type": "object"
