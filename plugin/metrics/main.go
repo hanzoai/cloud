@@ -17,6 +17,7 @@ import (
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "metrics",
+		OwnsHealth: true,
 		Price: cloud.Free,
 		App:   cloud.MountMetrics,
 	}}, []string{"metrics"}); err != nil {
