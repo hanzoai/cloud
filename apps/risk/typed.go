@@ -313,12 +313,11 @@ type riskLearnIn struct {
 
 // riskLearnOut is what the batch did.
 type riskLearnOut struct {
-	// Learned is how many events the model learned from, which is the batch, and
-	// is also what the call is metered at: one screen per event.
+	// Learned is how many of the events the model actually learned from, and is
+	// also what the call is metered at: one screen per event learned from. It is
+	// the batch minus the events already in this organisation's record, so a
+	// retried batch reports — and is charged — zero.
 	Learned int `json:"learned"`
-	// Verdicts is the model's verdict on each event, in the order given, so a
-	// caller that is both teaching and deciding needs one round trip.
-	Verdicts []riskScoreOut `json:"verdicts"`
 }
 
 // riskStateIn takes nothing off the wire. The whole input is the caller's validated
@@ -458,23 +457,6 @@ type riskSurface struct {
 	// case. An empty surface and an unreachable warehouse are different facts and
 	// a model must not report them as the same one.
 	Gap string `json:"gap,omitempty"`
-}
-
-// riskAppetiteIn restates the risk appetite, which is the decision the model is not
-// permitted to make for itself.
-type riskAppetiteIn struct {
-	// Review is the share of the stream that may be sent for examination, in
-	// (0, 0.5]. The alert threshold is derived from it as a quantile of the scores
-	// actually observed, so the level is governed rather than tuned.
-	Review float64 `json:"review"`
-	// Sample is the share of below-the-line events retained for review, in
-	// [0, 1]. It is the instrument that measures what the model missed; there are
-	// no labels, so nothing else can.
-	Sample float64 `json:"sample"`
-	// Live turns the model out of shadow. It defaults to FALSE on every call, so
-	// going live is always an explicit act and never a side effect of changing a
-	// number.
-	Live bool `json:"live"`
 }
 
 // riskSnapshotIn takes nothing off the wire.
@@ -787,17 +769,31 @@ func (o ops) score(ctx context.Context, in *riskScoreIn) (*riskScoreOut, error) 
 }
 
 // Learn records a batch of events into the caller organisation's own aggregates
-// and lets its model learn from them, answering the model's verdict on each.
+// and lets its model learn from them. It answers how many it learned from.
+//
+// IT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;
+// learning is a transformation over observations; a verdict is a query against the
+// result. This op is the first two. [ops.score] is the third, it is pure, and it
+// is the ONE door to a verdict. They were one call, which meant you could not
+// record without training and could not train without being answered — and the
+// model ran twice over every event to produce a verdict the response carried and
+// no caller read.
+//
+// TO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then
+// learn: the score is then the model's opinion of an event it has not yet learned
+// from, which is the question worth asking. The other order answers for a model
+// that has already absorbed the event it is judging.
 //
 // This is the training path, and there is no job behind it: the model IS a set of
 // mass counters over half-space trees, so learning is an increment and the model
 // is current the instant the last event lands. Nothing from any other
 // organisation is in it, and nothing from this organisation leaves it.
 //
-// Events are recorded FIRST and judged after, which is deliberate: the numbers an
-// alert quotes are then the same ones an investigator sees when they look at the
-// subject, and every baseline has the event removed from it arithmetically so
-// nothing is measured against itself.
+// A RETRY IS INERT. The record deduplicates on the event id you send, and an event
+// already in it moves nothing, costs nothing and is not counted — so a client that
+// timed out can send the same batch again and its model holds what it holds.
+// Without an id of your own there is nothing to converge on: two identical bodies
+// are two events.
 //
 // Example: {"events":[{"id":"tx_9","kind":"account","subject":"u_412","nano":420000000}]}
 func (o ops) learn(ctx context.Context, in *riskLearnIn) (*riskLearnOut, error) {
@@ -828,16 +824,16 @@ func (o ops) learn(ctx context.Context, in *riskLearnIn) (*riskLearnOut, error) 
 		return nil, err
 	}
 	defer leave()
-	verdicts, err := p.learn(t, obs...)
+	learned, err := p.learn(t, obs...)
 	if err != nil {
 		return nil, wrap(err)
 	}
-	pay(len(verdicts))
-	out := riskLearnOut{Learned: len(verdicts), Verdicts: make([]riskScoreOut, 0, len(verdicts))}
-	for _, d := range verdicts {
-		out.Verdicts = append(out.Verdicts, verdict(d))
-	}
-	return &out, nil
+	// METERED ON WHAT WAS DONE, which is this app's own stated rule for the pair
+	// ([ops.gate]) and is now the truth rather than an approximation of it. The
+	// gate above still bounds the batch the caller stated, because how many of it
+	// is new is not knowable until the record has been written.
+	pay(learned)
+	return &riskLearnOut{Learned: learned}, nil
 }
 
 // State reports the caller organisation's own model: what it has learned, whether
@@ -864,47 +860,6 @@ func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error)
 		return nil, wrap(err)
 	}
 	ver, err := p.regimeNow(t)
-	if err != nil {
-		return nil, wrap(err)
-	}
-	pay(1)
-	out, err := p.review(t, st, agg, ver)
-	if err != nil {
-		return nil, wrap(err)
-	}
-	return &out, nil
-}
-
-// SetAppetite restates how much of the stream the caller organisation's model may
-// send for examination, and whether it is live.
-//
-// The appetite is the decision a model is not permitted to make for itself: its
-// output is a probability, so how likely it is to MISS something is a matter of
-// policy that has to be stated, measured and reviewed rather than absorbed into a
-// constant. The alert threshold is then derived from it as a quantile of the
-// scores actually observed, which is what keeps its meaning as the distribution
-// drifts.
-//
-// Learned state survives the change. The model's identity covers its SHAPE — the
-// inventory and the geometry — and not its appetite, so restating policy unlearns
-// nothing.
-//
-// Example: {"review":0.01,"sample":0.001,"live":false}
-func (o ops) appetite(ctx context.Context, in *riskAppetiteIn) (*riskModelState, error) {
-	// The bounds on `review` and `sample` are NOT restated here. They live in
-	// admitRegime, which every path that records a regime goes through — including
-	// the one-time adoption of a regime that predates the record — so a rule stated
-	// here as well would be a second spelling to disagree with the first.
-	pay, err := o.gate(ctx, "appetite", 1)
-	if err != nil {
-		return nil, err
-	}
-	p, t, leave, err := o.admit(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer leave()
-	st, agg, ver, err := p.appetite(t, in.Review, in.Sample, in.Live, caller(ctx))
 	if err != nil {
 		return nil, wrap(err)
 	}
@@ -1300,33 +1255,22 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 		return func(int) {}, nil
 	}
 	ledger := principal.Ledger(c)
-	// NO LEDGER IS AN IDENTITY REFUSAL, AND IT IS ANSWERED HERE RATHER THAN BY THE
-	// MONEY PLANE.
+	// NO LEDGER IS AN IDENTITY REFUSAL, and [cloud.ResourceMeter.Gate] is where it
+	// is answered — above both of its branches, for every caller of the money door,
+	// as [cloud.ErrNoLedger]. [cloud.denial] renders that as 403 "no validated
+	// principal" and [cloud.DenyEnvelope] writes it in the fleet's own nested
+	// {"error":{"code","message"}}, so this surface refuses an unidentified caller
+	// in the same bytes as every other one.
 	//
-	// principal.Ledger answers "" for exactly the requests the tenant gate refuses —
-	// it composes the same Validated check — so an empty ledger means there is nobody
-	// to bill because there is nobody. Handing that to the money plane asks it to
-	// price a spend for a NAMELESS subject, and it answers with the vocabulary of
-	// money about a question of identity:
+	// This op used to hold its own copy of that rule, from before the fleet door
+	// had one. Both answered 403 with the identical sentence, so the only thing the
+	// copy still decided was the SHAPE — flat {"status","code","error"} from zip
+	// instead of the nested envelope — which made /v1/risk the one surface where a
+	// client reading error.code found nothing. Measured, both ways, on this
+	// package's own priced ops before it was removed.
 	//
-	//	co-resident ledger — metering refuses an empty org fail-closed, which is not a
-	//	   4xx, so the money wire's fallback renders 503 "Billing temporarily
-	//	   unavailable". The caller is told the biller is broken.
-	//	peer ledger (what deploys) — the gate ships AuthorizeIn{Subject:""} over the
-	//	   internal plane, commerce's own `validate:"required"` rejects it, and because
-	//	   that refusal IS a 4xx the money wire preserves it verbatim: 400 `field
-	//	   "subject" is required`. The caller is told to send a field that appears
-	//	   nowhere in this operation's published request schema, so no caller can ever
-	//	   satisfy it — a door that answers, and cannot be opened.
-	//
-	// Both were measured, the second on api.hanzo.ai across eight of the ten declared
-	// paths. The refusal is the tenant gate's OWN sentence, from the one function that
-	// owns it ([tenantOf]), because a second wording would be a second answer to one
-	// question. [ops.search] never had the defect for the one reason that it reaches
-	// [ops.admit] before it prices anything — which is the rule this makes general.
-	if ledger == "" {
-		return nil, zip.ErrForbidden("no validated principal")
-	}
+	// [TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope] is what holds
+	// the remaining answer, and it fails if this file grows a second one back.
 	project, validated := principal.ValidatedProject(c)
 	if err := o.s.Bill.Gate(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(n))); err != nil {
 		return nil, cloud.Denied(err)

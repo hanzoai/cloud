@@ -14,8 +14,8 @@ import (
 
 var day = 24 * time.Hour
 
-func window(from, to time.Time) mlDatasetSpec {
-	return mlDatasetSpec{Name: "d", From: from.Format(time.RFC3339), To: to.Format(time.RFC3339)}
+func window(from, to time.Time) riskDatasetSpec {
+	return riskDatasetSpec{Name: "d", From: from.Format(time.RFC3339), To: to.Format(time.RFC3339)}
 }
 
 // TestNormalizeRefusesEveryUnboundedOrUnreadableSpec. Each case below is either a
@@ -25,38 +25,38 @@ func TestNormalizeRefusesEveryUnboundedOrUnreadableSpec(t *testing.T) {
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	ok := window(now.Add(-30*day), now.Add(-1*day))
 
-	mutate := func(f func(*mlDatasetSpec)) mlDatasetSpec {
+	mutate := func(f func(*riskDatasetSpec)) riskDatasetSpec {
 		in := ok
 		f(&in)
 		return in
 	}
 	for _, tc := range []struct {
 		name string
-		in   mlDatasetSpec
+		in   riskDatasetSpec
 		says string
 	}{
-		{"no name", mutate(func(s *mlDatasetSpec) { s.Name = "" }), "dataset name"},
-		{"a name with syntax in it", mutate(func(s *mlDatasetSpec) { s.Name = "a;b" }), "dataset name"},
-		{"an unknown subject kind", mutate(func(s *mlDatasetSpec) { s.Kind = "device" }), "subject kind"},
-		{"an unpublished dim", mutate(func(s *mlDatasetSpec) { s.Dims = []string{"events", "secrets"} }), "not a published dim"},
-		{"an unparseable window", mutate(func(s *mlDatasetSpec) { s.From = "yesterday" }), "RFC 3339"},
-		{"an inverted window", mutate(func(s *mlDatasetSpec) { s.From, s.To = s.To, s.From }), "empty or inverted"},
-		{"an empty window", mutate(func(s *mlDatasetSpec) { s.To = s.From }), "empty or inverted"},
+		{"no name", mutate(func(s *riskDatasetSpec) { s.Name = "" }), "dataset name"},
+		{"a name with syntax in it", mutate(func(s *riskDatasetSpec) { s.Name = "a;b" }), "dataset name"},
+		{"an unknown subject kind", mutate(func(s *riskDatasetSpec) { s.Kind = "device" }), "subject kind"},
+		{"an unpublished dim", mutate(func(s *riskDatasetSpec) { s.Dims = []string{"events", "secrets"} }), "not a published dim"},
+		{"an unparseable window", mutate(func(s *riskDatasetSpec) { s.From = "yesterday" }), "RFC 3339"},
+		{"an inverted window", mutate(func(s *riskDatasetSpec) { s.From, s.To = s.To, s.From }), "empty or inverted"},
+		{"an empty window", mutate(func(s *riskDatasetSpec) { s.To = s.From }), "empty or inverted"},
 		{"a window past the source's retention", window(now.Add(-401*day), now), "retention of the source"},
-		{"a negative horizon", mutate(func(s *mlDatasetSpec) { s.Horizon = -1 }), "between 0 and"},
-		{"a horizon past a year", mutate(func(s *mlDatasetSpec) { s.Horizon = 366 }), "between 0 and"},
-		{"a window younger than its horizon", mutate(func(s *mlDatasetSpec) { s.Horizon = 60 }), "maturity horizon"},
-		{"one cut", mutate(func(s *mlDatasetSpec) { s.Cuts = []string{now.Format(time.RFC3339)} }), "exactly two"},
-		{"three cuts", mutate(func(s *mlDatasetSpec) {
+		{"a negative horizon", mutate(func(s *riskDatasetSpec) { s.Horizon = -1 }), "between 0 and"},
+		{"a horizon past a year", mutate(func(s *riskDatasetSpec) { s.Horizon = 366 }), "between 0 and"},
+		{"a window younger than its horizon", mutate(func(s *riskDatasetSpec) { s.Horizon = 60 }), "maturity horizon"},
+		{"one cut", mutate(func(s *riskDatasetSpec) { s.Cuts = []string{now.Format(time.RFC3339)} }), "exactly two"},
+		{"three cuts", mutate(func(s *riskDatasetSpec) {
 			s.Cuts = []string{now.Format(time.RFC3339), now.Format(time.RFC3339), now.Format(time.RFC3339)}
 		}), "exactly two"},
-		{"cuts out of order", mutate(func(s *mlDatasetSpec) {
+		{"cuts out of order", mutate(func(s *riskDatasetSpec) {
 			s.Cuts = []string{now.Add(-5 * day).Format(time.RFC3339), now.Add(-20 * day).Format(time.RFC3339)}
 		}), "strictly increase"},
-		{"a cut outside the window", mutate(func(s *mlDatasetSpec) {
+		{"a cut outside the window", mutate(func(s *riskDatasetSpec) {
 			s.Cuts = []string{now.Add(-20 * day).Format(time.RFC3339), now.Add(5 * day).Format(time.RFC3339)}
 		}), "inside the window"},
-		{"an oversized seed", mutate(func(s *mlDatasetSpec) { s.Seed = strings.Repeat("s", maxSeed+1) }), "at most"},
+		{"an oversized seed", mutate(func(s *riskDatasetSpec) { s.Seed = strings.Repeat("s", maxSeed+1) }), "at most"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := normalize(tc.in, now)

@@ -26,7 +26,7 @@ type ops struct{ p *plane }
 
 // ── what a caller sends ──────────────────────────────────────────────────────
 
-// mlDatasetSpec is the whole of what a dataset IS: a bound query over this org's
+// riskDatasetSpec is the whole of what a dataset IS: a bound query over this org's
 // own feature surface, a maturity horizon, where the splits cut, and the seed
 // that decides membership. Declaring one mints the next VERSION; it never
 // rewrites an existing one.
@@ -34,7 +34,7 @@ type ops struct{ p *plane }
 // Nothing here becomes a SQL identifier. Dims resolve through the published
 // allowlist to fixed columns, the kind is checked against a closed set, and every
 // remaining value binds.
-type mlDatasetSpec struct {
+type riskDatasetSpec struct {
 	// Name identifies the dataset across its versions: lower-case letters, digits
 	// and hyphens, starting with a letter.
 	Name string `json:"name"`
@@ -70,46 +70,46 @@ type mlDatasetSpec struct {
 	Rows int `json:"rows,omitempty"`
 }
 
-// mlDatasetsIn takes nothing off the wire. The whole input is the caller's
+// riskDatasetsIn takes nothing off the wire. The whole input is the caller's
 // validated principal, which is what decides whose datasets these are.
-type mlDatasetsIn struct{}
+type riskDatasetsIn struct{}
 
-// mlDatasetRef addresses one dataset by name. The name is the path segment: the
+// riskDatasetRef addresses one dataset by name. The name is the path segment: the
 // URL is the addressing authority, so it binds from there whatever a body says.
-type mlDatasetRef struct {
+type riskDatasetRef struct {
 	// Name is the dataset, from the path.
 	Name string `json:"name"`
 }
 
-// mlMaterializeIn asks for the declared version to be built. It carries only the
+// riskMaterializeIn asks for the declared version to be built. It carries only the
 // name because a materialisation always targets the version that is DECLARED —
 // there is no version to choose, and offering one would suggest a published
 // version could be rebuilt.
-type mlMaterializeIn struct {
+type riskMaterializeIn struct {
 	// Name is the dataset, from the path.
 	Name string `json:"name"`
 }
 
-// mlDisposeIn asks for a whole dataset to be disposed of. It carries no version,
+// riskDatasetDisposeIn asks for a whole dataset to be disposed of. It carries no version,
 // because disposal is per DATASET: the register row and the bytes go together, in
 // one partition drop that cannot name another tenant.
-type mlDisposeIn struct {
+type riskDatasetDisposeIn struct {
 	// Name is the dataset, from the path.
 	Name string `json:"name"`
 }
 
-// mlLineageIn addresses one version's lineage.
-type mlLineageIn struct {
+// riskLineageIn addresses one version's lineage.
+type riskLineageIn struct {
 	// Name is the dataset, from the path.
 	Name string `json:"name"`
 	// Version is the version to trace. Zero takes the newest published one.
 	Version int `json:"version,omitempty"`
 }
 
-// mlExportIn reads a published version's rows back, one page at a time. The page
+// riskExportIn reads a published version's rows back, one page at a time. The page
 // is bounded by the plane, not by the caller: an export is a read of the same
 // store every other tenant is using.
-type mlExportIn struct {
+type riskExportIn struct {
 	// Name is the dataset, from the path.
 	Name string `json:"name"`
 	// Version is the version to read. Zero takes the newest published one.
@@ -126,10 +126,10 @@ type mlExportIn struct {
 
 // ── what a caller gets ───────────────────────────────────────────────────────
 
-// mlDataset is one version of one dataset. A version is the unit of citation: a
+// riskDataset is one version of one dataset. A version is the unit of citation: a
 // model names the dataset AND the version AND the digest, or it has not said what
 // it was fitted on.
-type mlDataset struct {
+type riskDataset struct {
 	// Name and Version identify the version.
 	Name    string `json:"name"`
 	Version int    `json:"version"`
@@ -150,9 +150,9 @@ type mlDataset struct {
 	// one spec agree on it or the plane says they do not.
 	Digest string `json:"digest,omitempty"`
 	// Spec is the bound query this version was built from, exactly as recorded.
-	Spec mlDatasetSpec `json:"spec"`
+	Spec riskDatasetSpec `json:"spec"`
 	// Counts is how the rows fall across the splits.
-	Counts mlSplitCounts `json:"counts"`
+	Counts riskSplitCounts `json:"counts"`
 	// Share is the fraction of the window's subjects admitted, in thousandths.
 	// 1000 means the whole window fitted under the cap; anything less means the
 	// version is a reproducible sample and says by how much.
@@ -172,8 +172,8 @@ type mlDataset struct {
 	Oversize int `json:"oversize,omitempty"`
 }
 
-// mlSplitCounts is how a version's rows fall, and how much of it is judged.
-type mlSplitCounts struct {
+// riskSplitCounts is how a version's rows fall, and how much of it is judged.
+type riskSplitCounts struct {
 	Rows  int `json:"rows"`
 	Train int `json:"train"`
 	Val   int `json:"val"`
@@ -192,27 +192,27 @@ type mlSplitCounts struct {
 	Unproductive int `json:"unproductive"`
 }
 
-// mlDatasetList is every dataset this org holds, newest version first.
-type mlDatasetList struct {
+// riskDatasetList is every dataset this org holds, newest version first.
+type riskDatasetList struct {
 	// Items is one entry per dataset, carrying its newest version. Never null: an
 	// org that has declared nothing gets an empty array.
-	Items []mlDataset `json:"items"`
+	Items []riskDataset `json:"items"`
 }
 
-// mlDatasetVersions is every version of one dataset, newest first. The whole
+// riskDatasetVersions is every version of one dataset, newest first. The whole
 // history is returned because the point of a version is that the old ones are
 // still there: a model fitted last quarter cites one of them.
-type mlDatasetVersions struct {
-	Name  string      `json:"name"`
-	Items []mlDataset `json:"items"`
+type riskDatasetVersions struct {
+	Name  string        `json:"name"`
+	Items []riskDataset `json:"items"`
 }
 
-// mlLineage is where a version's rows came from, and whether that can still be
+// riskLineage is where a version's rows came from, and whether that can still be
 // DEMONSTRATED. Reproducible is measured by asking the source the same question
 // again — it is false when the source has since expired the window, which is a
 // fact about the plane rather than a failure, and hiding it would make every
 // lineage claim unfalsifiable.
-type mlLineage struct {
+type riskLineage struct {
 	Dataset string `json:"dataset"`
 	Version int    `json:"version"`
 	// Source is the plane the rows were derived from.
@@ -247,8 +247,8 @@ type mlLineage struct {
 	Refusal      string `json:"refusal,omitempty"`
 }
 
-// mlDatasetRow is one row of a published version.
-type mlDatasetRow struct {
+// riskDatasetRow is one row of a published version.
+type riskDatasetRow struct {
 	// ID names the row forever. It is DERIVED from the row's own subject and
 	// instant, not allocated, so two materialisations of the same fact agree on it
 	// without coordinating.
@@ -264,8 +264,8 @@ type mlDatasetRow struct {
 	Point []float64 `json:"point"`
 }
 
-// mlDatasetRows is one page of a version's rows.
-type mlDatasetRows struct {
+// riskDatasetRows is one page of a version's rows.
+type riskDatasetRows struct {
 	Dataset string `json:"dataset"`
 	Version int    `json:"version"`
 	// Digest is the version's fingerprint. An exported page that did not carry it
@@ -278,12 +278,12 @@ type mlDatasetRows struct {
 	Offset int `json:"offset"`
 	Limit  int `json:"limit"`
 	// Rows is the page. Never null.
-	Rows []mlDatasetRow `json:"rows"`
+	Rows []riskDatasetRow `json:"rows"`
 }
 
-// mlDisposal is what a disposal removed. A retention action answers with what it
+// riskDatasetDisposal is what a disposal removed. A retention action answers with what it
 // destroyed, because "204 No Content" is a poor reply to "prove you deleted it".
-type mlDisposal struct {
+type riskDatasetDisposal struct {
 	Dataset string `json:"dataset"`
 	// Versions is how many versions went, and Rows how many rows they held between
 	// them, as the register recorded them.
@@ -306,7 +306,7 @@ type mlDisposal struct {
 // their own limits. Every refusal names which bound it hit.
 //
 // Example: {"name": "signups", "kind": "person", "from": "2026-01-01T00:00:00Z", "to": "2026-04-01T00:00:00Z", "horizon": 14}
-func (o ops) create(ctx context.Context, in *mlDatasetSpec) (*mlDataset, error) {
+func (o ops) create(ctx context.Context, in *riskDatasetSpec) (*riskDataset, error) {
 	c, err := o.p.who(ctx)
 	if err != nil {
 		return nil, err
@@ -329,7 +329,7 @@ func (o ops) create(ctx context.Context, in *mlDatasetSpec) (*mlDataset, error) 
 // has declared none gets an empty list; a store that cannot be reached gets a
 // refusal, never an empty list, because the two read identically and only one of
 // them is true.
-func (o ops) list(ctx context.Context, _ *mlDatasetsIn) (*mlDatasetList, error) {
+func (o ops) list(ctx context.Context, _ *riskDatasetsIn) (*riskDatasetList, error) {
 	c, err := o.p.who(ctx)
 	if err != nil {
 		return nil, err
@@ -341,7 +341,7 @@ func (o ops) list(ctx context.Context, _ *mlDatasetsIn) (*mlDatasetList, error) 
 	if err != nil {
 		return nil, o.p.gap(err)
 	}
-	out := &mlDatasetList{Items: []mlDataset{}}
+	out := &riskDatasetList{Items: []riskDataset{}}
 	seen := map[string]bool{}
 	for _, e := range all {
 		if seen[e.Name] {
@@ -361,7 +361,7 @@ func (o ops) list(ctx context.Context, _ *mlDatasetsIn) (*mlDatasetList, error) 
 // probe learns nothing about another tenant's datasets.
 //
 // Example: {"name": "signups"}
-func (o ops) describe(ctx context.Context, in *mlDatasetRef) (*mlDatasetVersions, error) {
+func (o ops) describe(ctx context.Context, in *riskDatasetRef) (*riskDatasetVersions, error) {
 	c, err := o.p.who(ctx)
 	if err != nil {
 		return nil, err
@@ -376,7 +376,7 @@ func (o ops) describe(ctx context.Context, in *mlDatasetRef) (*mlDatasetVersions
 	if len(es) == 0 {
 		return nil, zip.ErrNotFound("no such dataset")
 	}
-	out := &mlDatasetVersions{Name: es[0].Name, Items: make([]mlDataset, 0, len(es))}
+	out := &riskDatasetVersions{Name: es[0].Name, Items: make([]riskDataset, 0, len(es))}
 	for _, e := range es {
 		out.Items = append(out.Items, *o.view(c, e))
 	}
@@ -400,7 +400,7 @@ func (o ops) describe(ctx context.Context, in *mlDatasetRef) (*mlDatasetVersions
 // moving source honestly is.
 //
 // Example: {"name": "signups"}
-func (o ops) materialize(ctx context.Context, in *mlMaterializeIn) (*mlDataset, error) {
+func (o ops) materialize(ctx context.Context, in *riskMaterializeIn) (*riskDataset, error) {
 	c, err := o.p.who(ctx)
 	if err != nil {
 		return nil, err
@@ -434,7 +434,7 @@ func (o ops) materialize(ctx context.Context, in *mlMaterializeIn) (*mlDataset, 
 // this plane's own deadline rather than the caller's patience.
 //
 // Example: {"name": "signups", "version": 1}
-func (o ops) lineage(ctx context.Context, in *mlLineageIn) (*mlLineage, error) {
+func (o ops) lineage(ctx context.Context, in *riskLineageIn) (*riskLineage, error) {
 	c, err := o.p.who(ctx)
 	if err != nil {
 		return nil, err
@@ -473,7 +473,7 @@ func (o ops) lineage(ctx context.Context, in *mlLineageIn) (*mlLineage, error) {
 // the dataset.
 //
 // Example: {"name": "signups", "version": 1, "split": "train", "limit": 500}
-func (o ops) export(ctx context.Context, in *mlExportIn) (*mlDatasetRows, error) {
+func (o ops) export(ctx context.Context, in *riskExportIn) (*riskDatasetRows, error) {
 	c, err := o.p.who(ctx)
 	if err != nil {
 		return nil, err
@@ -504,17 +504,17 @@ func (o ops) export(ctx context.Context, in *mlExportIn) (*mlDatasetRows, error)
 	if err != nil {
 		return nil, o.p.gap(err)
 	}
-	out := &mlDatasetRows{
+	out := &riskDatasetRows{
 		Dataset: e.Name,
 		Version: e.Version,
 		Digest:  e.Digest,
 		Dims:    e.Spec.Dims,
 		Offset:  offset,
 		Limit:   limit,
-		Rows:    make([]mlDatasetRow, 0, len(rows)),
+		Rows:    make([]riskDatasetRow, 0, len(rows)),
 	}
 	for _, r := range rows {
-		out.Rows = append(out.Rows, mlDatasetRow{
+		out.Rows = append(out.Rows, riskDatasetRow{
 			ID:      r.ID,
 			Split:   splitName(r.Split),
 			Kind:    r.Kind,
@@ -556,7 +556,7 @@ const page = 5_000
 // cited has no rows once this returns, and every read of it says so.
 //
 // Example: {"name": "signups"}
-func (o ops) dispose(ctx context.Context, in *mlDisposeIn) (*mlDisposal, error) {
+func (o ops) dispose(ctx context.Context, in *riskDatasetDisposeIn) (*riskDatasetDisposal, error) {
 	c, err := o.p.who(ctx)
 	if err != nil {
 		return nil, err
@@ -577,7 +577,7 @@ func (o ops) dispose(ctx context.Context, in *mlDisposeIn) (*mlDisposal, error) 
 		// the register has already marked disposed.
 		return nil, zip.ErrConflict("a materialisation of this dataset is running; it must finish before the dataset can be disposed of")
 	}
-	out := &mlDisposal{Dataset: es[0].Name, Versions: len(es)}
+	out := &riskDatasetDisposal{Dataset: es[0].Name, Versions: len(es)}
 	for _, e := range es {
 		out.Rows += e.Counts.Rows
 	}
@@ -638,9 +638,9 @@ func (o ops) published(ctx context.Context, c caller, name string, version int) 
 // view projects a register entry onto the wire. It is the ONE projection, so the
 // list, the description and the two mutations cannot describe a version
 // differently.
-func (o ops) view(c caller, e entry) *mlDataset {
+func (o ops) view(c caller, e entry) *riskDataset {
 	held, running := o.p.running(c.key)
-	return &mlDataset{
+	return &riskDataset{
 		Name:    e.Name,
 		Version: e.Version,
 		At:      stamp(e.At),
@@ -649,7 +649,7 @@ func (o ops) view(c caller, e entry) *mlDataset {
 		Running: running && held.name == e.Name && held.version == e.Version,
 		Refusal: e.Refusal,
 		Digest:  e.Digest,
-		Spec: mlDatasetSpec{
+		Spec: riskDatasetSpec{
 			Name:    e.Spec.Name,
 			Kind:    e.Spec.Kind,
 			Dims:    e.Spec.Dims,
@@ -660,7 +660,7 @@ func (o ops) view(c caller, e entry) *mlDataset {
 			Seed:    e.Spec.Seed,
 			Rows:    e.Spec.Rows,
 		},
-		Counts: mlSplitCounts{
+		Counts: riskSplitCounts{
 			Rows:         e.Counts.Rows,
 			Train:        e.Counts.Train,
 			Val:          e.Counts.Val,
