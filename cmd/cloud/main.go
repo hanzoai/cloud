@@ -44,6 +44,8 @@ import (
 
 	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/internal/datadir"
+	"github.com/hanzoai/cloud/internal/writerlease"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plugin"
@@ -118,6 +120,34 @@ func run(addr, zapAddr string) error {
 	// one), and when those two were written down separately the second one was
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
 	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Disabled: true}})
+
+	// THE POD'S WRITER LEASE, and this is the only process that may take it.
+	//
+	// The lease says "this pod owns this volume", so it belongs to the ROOT of the
+	// pod — the process that exists before any store is open and outlives every
+	// process that opens one. That is this host. It used to be taken in
+	// cloud.Listen instead, which is the body each PLUGIN runs and the one thing
+	// this binary never calls, so switching CLOUD_WRITER_LEASE on pointed a
+	// single-holder lock at the siblings: kms took it, pubsub and kafka waited for
+	// a handoff that could not come, nothing bound :8080, and the pod was killed by
+	// its own liveness probe and restarted into the same deadlock (2026-08-04,
+	// api.hanzo.ai, four minutes of 503).
+	//
+	// HERE, before stampAndScrub and before the mount loops, because the very next
+	// thing this function does is spawn children — and the whole point is that they
+	// are born into a pod whose volume is already claimed. Hold stamps the
+	// environment they inherit, so each one knows the answer instead of racing for
+	// it. Released by the defer AFTER app.Listen returns, which is after zip has
+	// drained its shutdown hooks and stopped every child: the lock is withdrawn
+	// only once nothing in this pod can still write.
+	//
+	// Unset CLOUD_WRITER_LEASE ⇒ Hold does nothing at all, which is correct under
+	// strategy: Recreate and is what production runs today.
+	releaseLease, err := writerlease.Hold(datadir.Resolve(), writerlease.DefaultWait, app.Logger().Info)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = releaseLease() }()
 
 	// Mint this host's child-signing secret and take the KMS root key OUT of the
 	// host's own environment — both BEFORE the first Load spawns an eager child.
