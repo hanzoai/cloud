@@ -220,7 +220,6 @@ type Config struct {
 // serve/create/bind never disagree. It reads the resolver at request time.
 type Server struct {
 	apex            string
-	selfDomains     []string        // OUR own registrable domains — never custom-domain candidates
 	firstPartyApex  string          // internal apex serving OUR opt-in first-party sites (hanzo.ai); "" = none
 	firstPartySites map[string]bool // the explicit allowlist of first-party site labels on that apex
 	firstPartyOrg   string          // the org that owns the first-party sites — resolution is PINNED to it
@@ -250,10 +249,6 @@ func New(cfg Config, log luxlog.Logger) *Server {
 		seen[d] = true
 		self = append(self, d)
 	}
-	// Publish the SAME set to the shared source, so the claim gate refuses what the
-	// serve gate would refuse. Registered here, next to SetReservedExtra, for the
-	// identical reason: one source, no drift between enforcement points.
-	SetSelfDomains(self)
 	// First-party apex (internal, opt-in sites) — normalize, force it to be a self
 	// domain (a first-party site host is never a customer custom-domain candidate),
 	// and build the explicit allowlist. Empty apex or empty allowlist ⇒ disabled.
@@ -287,7 +282,19 @@ func New(cfg Config, log luxlog.Logger) *Server {
 	} else {
 		fpApex = "" // no owning org ⇒ never serve a first-party site (fail-closed)
 	}
-	return &Server{apex: apex, selfDomains: self, firstPartyApex: fpApex, firstPartySites: fpSites, firstPartyOrg: fpOrg, admin: s3admin.New(), log: log.New("subsystem", "sites")}
+	// Publish the COMPLETE set to the shared source, so the claim gate refuses what
+	// the serve gate would refuse. Registered here, next to SetReservedExtra, for the
+	// identical reason: one source, no drift between enforcement points.
+	//
+	// AFTER the first-party apex is folded in, not before. SetSelfDomains COPIES, so
+	// a domain appended to the local slice afterwards never reaches IsSelfHost — and
+	// IsSelfHost is the one predicate that decides whether a host is ours. Published
+	// early, a first-party apex whose registrable domain was not already in
+	// SelfDomains would be absent from the set, making every non-allowlisted
+	// <label>.<fpApex> a custom-domain CANDIDATE on the apex that carries
+	// api/login/console.
+	SetSelfDomains(self)
+	return &Server{apex: apex, firstPartyApex: fpApex, firstPartySites: fpSites, firstPartyOrg: fpOrg, admin: s3admin.New(), log: log.New("subsystem", "sites")}
 }
 
 // Middleware is the host-router. Three outcomes, in order:
