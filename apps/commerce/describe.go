@@ -158,6 +158,36 @@ func describeBilling() {
 			"downgrading to free, so a transient failure never reports a paid subscriber as "+
 			"unsubscribed.")
 
+	openapi.Describe("/v1/billing/portal/methods", http.MethodGet,
+		"Cards saved against the caller's org, masked — the portal read",
+		"Answers the org's saved payment methods as masked descriptors: brand, last four, expiry "+
+			"and the processor's reusable reference. No card number and no security code exist "+
+			"here to return; both live at the processor and never enter this system.\n\n"+
+			"This is the SERVICE-TOKEN face of the same list a customer reads at "+
+			"/v1/billing/methods, and it exists as its own address because the host that "+
+			"publishes that one cannot forward to it — the forward would re-enter its own "+
+			"handler. Both answer the same rows.\n\n"+
+			"The customer filter is pinned to the VALIDATED caller before the handler runs, so a "+
+			"browser sees only its own subject's cards whatever customerId it sends; only a "+
+			"caller holding the internal service token may name the subject, and the org it may "+
+			"name it within is fixed by the gateway. Cross-tenant is closed by the org namespace "+
+			"for both, so an id or a subject from another org resolves to nothing. A caller who "+
+			"is neither is refused before the read.")
+
+	openapi.Describe("/v1/billing/portal/methods/:id", http.MethodDelete,
+		"Remove a saved card — the portal detach",
+		"Detaches the addressed card: the stored reference is removed here AND withdrawn from "+
+			"the processor's vault, so nothing is left that a later charge could bill.\n\n"+
+			"The service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own "+
+			"address for the same reason the portal list is — the host that publishes the "+
+			"customer address proxies here rather than into itself.\n\n"+
+			"The id is resolved INSIDE the caller's org namespace, so another tenant's card is "+
+			"not found there and answers 404 — never 403, which would confirm the id exists. "+
+			"That bound holds for the service token too: it may act for any subject within the "+
+			"org the gateway pinned, and for no subject outside it.\n\n"+
+			"Removing the card an auto-recharge or a running lease bills leaves that arrangement "+
+			"with nothing to charge; that is the customer's call to make.")
+
 	openapi.Describe("/v1/billing/alerts", http.MethodGet,
 		"List your org's spend caps and rate limits",
 		"Returns the caps and alerts keyed to the caller's own billing subject, each with its "+
