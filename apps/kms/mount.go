@@ -375,15 +375,24 @@ func listSecrets(s *cloud.Service[state], ctx *zip.Ctx) error {
 	// `environment` and `secretPath`; this plane's own clients use `env` and
 	// `path`. Accept both so one endpoint serves both callers — the operator can
 	// be repointed here without a lockstep operator release.
-	env := envOr(firstQuery(ctx, "env", "environment"))
-	if !validEnv(env) {
+	// An OMITTED env means every environment, and an omitted path means the whole
+	// org — this is the enumeration surface, so it must be able to answer "what
+	// is in here". envOr's silent default belongs on the single-secret routes,
+	// where a coordinate has to be complete; applied here it reported a populated
+	// store as empty, because the fleet writes `prod` and the default was
+	// `default`. A caller that wants one env still says so.
+	env := strings.TrimSpace(firstQuery(ctx, "env", "environment"))
+	if env != "" && !validEnv(env) {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
 	sub := firstQuery(ctx, "path", "secretPath")
 	if !ValidSubpath(sub) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
-	metas, err := s.State.kms.List(orgPath(org, sub), env)
+	// Find, not List: the path is a subtree root here, so listing an org returns
+	// the org. List is exact-coordinate and stays that way for the credential
+	// broker, which must not have its scope widened by a listing change.
+	metas, err := s.State.kms.Find(orgPath(org, sub), env)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
 	}

@@ -92,13 +92,13 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 
 // TestTheSurfaceIsTheDeclaredPrefix holds that this app answers on exactly one
 // address family and takes nothing that belongs to the ml app one prefix over —
-// the manifest routes /v1/ml/reference here and /v1/ml/models and /v1/ml/health
+// the manifest routes /v1/risk/reference here and /v1/ml/models and /v1/ml/health
 // there, and zip refuses two owners for one path at compose time.
 func TestTheSurfaceIsTheDeclaredPrefix(t *testing.T) {
 	served, _ := surface(t)
 	for key := range served {
 		_, path, _ := strings.Cut(key, " ")
-		if !strings.HasPrefix(path, "/v1/ml/reference") {
+		if !strings.HasPrefix(path, "/v1/risk/reference") {
 			t.Errorf("%s is outside this app's declared prefix", key)
 		}
 	}
