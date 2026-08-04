@@ -108,6 +108,11 @@ var Prefixes = []string{
 	// this list's job to prevent. (Landed 5x before the unfork — #274 — and the
 	// pin test lives beside THIS list so it can't silently regress.)
 	"/v1/billing/recharge",
+	// The typed payment ops (POST /v1/payments, GET /v1/payments/:id — payments.go).
+	// Own the prefix here or the bare /v1/* AI catch-all swallows them: that gate
+	// refuses on a prepaid BALANCE, which would make "take a payment" require the
+	// balance the payment exists to create.
+	paymentsPrefix,
 }
 
 // commerceMasterKey answers ONE question — can this build actually use the key we
@@ -193,6 +198,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Vault == nil {
 		lg.Warn("commerce: deps.Vault is nil — vault charge paths unavailable; tenant config + admin still served")
 	}
+
+	// The typed payment surface. Registered EARLY, beside the health probe and
+	// ahead of the embed, for the reason the probe is: these are the fleet's only
+	// agent-callable money ops, and a failure to boot the legacy embed must not be
+	// what decides whether an agent can take a payment. They share commerce's ONE
+	// charge core with the browser's card top-up (payments.go), so registering
+	// them here adds a door, never a second money path.
+	exposePayments(app)
+	exposeInvoices(app)
 
 	// Native zip health endpoint — registered FIRST so probes answer even when
 	// the embed fails below.
