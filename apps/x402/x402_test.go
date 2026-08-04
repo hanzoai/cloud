@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -51,6 +52,53 @@ func (d *commerceDoer) Do(*http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader([]byte(body))), Header: make(http.Header)}, nil
 }
 
+// halfDown is a ledger whose CREDIT side is broken and whose DEBIT side works —
+// the exact partial failure a settlement has to survive, and the one no fake that
+// simply removes the ledger can produce. The payer's half goes through the metering
+// spine (RecordUsage) and the payee's is a Deposit, so failing only Deposit lands
+// the debit and drops the credit.
+type halfDown struct {
+	finance.Client
+	mu       sync.Mutex
+	broken   bool
+	deposits []types.DepositInput
+}
+
+func (h *halfDown) breaks(v bool) { h.mu.Lock(); h.broken = v; h.mu.Unlock() }
+
+// credits returns the deposits tagged x402 — the settlement's payee side, captured
+// at the ledger. It is how a test asserts WHERE money landed: the ledger's Balance
+// aggregates at the org, so reading a balance cannot tell a credit to the payout
+// wallet's subject from one to the org itself, and a settlement that paid the wrong
+// subject would read as correct.
+func (h *halfDown) credits() []types.DepositInput {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []types.DepositInput
+	for _, d := range h.deposits {
+		if d.Tags == "x402" {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+func (h *halfDown) Deposit(ctx context.Context, in types.DepositInput) (string, error) {
+	h.mu.Lock()
+	broken := h.broken
+	h.mu.Unlock()
+	if broken {
+		return "", errors.New("ledger: credit side is down")
+	}
+	id, err := h.Client.Deposit(ctx, in)
+	if err == nil {
+		h.mu.Lock()
+		h.deposits = append(h.deposits, in)
+		h.mu.Unlock()
+	}
+	return id, err
+}
+
 // funded is what the payer org starts with, so every debit has balance to draw down.
 var funded = money.FromCents(1000)
 
@@ -59,6 +107,7 @@ type harness struct {
 	app       *zip.App
 	doer      *commerceDoer
 	fin       types.FinanceClient
+	ledger    *halfDown
 	payerKey  *ecdsa.PrivateKey
 	payerOrg  string
 	payeeOrg  string
@@ -97,8 +146,8 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	// A settlement is a ledger entry on BOTH sides, so every test gets a real
 	// co-resident ledger — there is no "settled" to assert without one.
-	fin := finance.New(t.TempDir())
-	finance.Publish(fin)
+	ledger := &halfDown{Client: finance.New(t.TempDir())}
+	finance.Publish(ledger)
 	t.Cleanup(func() { finance.Publish(nil); _ = wallets.Shutdown(); _ = Shutdown() })
 
 	log := luxlog.New("test")
@@ -137,10 +186,11 @@ func newHarness(t *testing.T) *harness {
 	paid.Get("/other", served)
 	paid.Get("/free", served)
 
-	h := &harness{t: t, app: app, doer: doer, fin: fin, payerOrg: "payerorg", payeeOrg: "payeeorg"}
+	h := &harness{t: t, app: app, doer: doer, fin: ledger, ledger: ledger,
+		payerOrg: "payerorg", payeeOrg: "payeeorg"}
 	h.payerKey, _ = crypto.GenerateKey()
 	h.recipient = h.createRecipient(h.payeeOrg)
-	if _, err := fin.Deposit(context.Background(), depositUSD(h.payerOrg, h.payerOrg, funded, "fund")); err != nil {
+	if _, err := ledger.Client.Deposit(context.Background(), depositUSD(h.payerOrg, h.payerOrg, funded, "fund")); err != nil {
 		t.Fatalf("fund payer: %v", err)
 	}
 	return h
@@ -171,9 +221,10 @@ func (h *harness) createRecipient(org string) string {
 	return w.ID
 }
 
-// req drives one request. org (non-empty) sets a validated principal; proof (non-
-// empty) sets the X-Payment header; jsonBody (non-empty) is a JSON POST body.
-func (h *harness) req(method, path, org, proof, jsonBody string) (int, []byte, http.Header) {
+// req drives one request. org (non-empty) sets a validated principal; payment
+// (non-empty) sets the PAYMENT-SIGNATURE header; jsonBody (non-empty) is a JSON
+// POST body.
+func (h *harness) req(method, path, org, payment, jsonBody string) (int, []byte, http.Header) {
 	h.t.Helper()
 	var body io.Reader
 	if jsonBody != "" {
@@ -187,8 +238,8 @@ func (h *harness) req(method, path, org, proof, jsonBody string) (int, []byte, h
 		hr.Header.Set("X-Org-Id", org)
 		hr.Header.Set("X-User-Id", "u_"+org)
 	}
-	if proof != "" {
-		hr.Header.Set(HeaderProof, proof)
+	if payment != "" {
+		hr.Header.Set(HeaderPaymentSignature, payment)
 	}
 	resp, err := h.app.Test(hr)
 	if err != nil {
@@ -199,29 +250,62 @@ func (h *harness) req(method, path, org, proof, jsonBody string) (int, []byte, h
 	return resp.StatusCode, b, resp.Header
 }
 
-// challenge does the unpaid GET and returns the PaymentRequirements from the 402.
+// challenge does the unpaid GET and returns the PaymentRequirements the 402
+// advertised — read off the PAYMENT-REQUIRED header, which is the canonical
+// location the HTTP transport names, exactly as a compliant client reads it.
 func (h *harness) challenge(path, org string) PaymentRequirements {
 	h.t.Helper()
-	code, b, _ := h.req(http.MethodGet, path, org, "", "")
+	code, b, hdr := h.req(http.MethodGet, path, org, "", "")
 	if code != http.StatusPaymentRequired {
 		h.t.Fatalf("challenge %s = %d (%s), want 402", path, code, b)
 	}
-	var body struct {
-		Accepts PaymentRequirements `json:"accepts"`
+	raw := hdr.Get(HeaderPaymentRequired)
+	if raw == "" {
+		h.t.Fatalf("402 carried no %s header — a challenge a client cannot read is not a challenge",
+			HeaderPaymentRequired)
 	}
-	if err := json.Unmarshal(b, &body); err != nil {
-		h.t.Fatalf("decode 402: %v (%s)", err, b)
+	var req PaymentRequired
+	if err := DecodeHeader(raw, &req); err != nil {
+		h.t.Fatalf("decode %s: %v", HeaderPaymentRequired, err)
 	}
-	return body.Accepts
+	if req.X402Version != Version {
+		h.t.Fatalf("challenge x402Version = %d, want %d", req.X402Version, Version)
+	}
+	if len(req.Accepts) != 1 {
+		h.t.Fatalf("challenge offered %d ways to pay, want 1", len(req.Accepts))
+	}
+	if req.Resource.URL != path {
+		h.t.Fatalf("challenge resource.url = %q, want %q", req.Resource.URL, path)
+	}
+	return req.Accepts[0]
 }
 
-// payFor signs a proof for req with the given nonce and retries the request.
+// pay signs req with the given nonce and window and returns the PAYMENT-SIGNATURE
+// header value — exactly what a compliant client sends.
+func (h *harness) pay(req PaymentRequirements, nonce string, validAfter, validBefore int64) string {
+	h.t.Helper()
+	return EncodeHeader(signPayment(h.t, h.payerKey, req, nonce, validAfter, validBefore))
+}
+
+// payFor signs for req with the given nonce over a live window and retries.
 func (h *harness) payFor(path, org string, req PaymentRequirements, nonce string) (int, []byte, http.Header) {
 	h.t.Helper()
 	now := nowUnix()
-	p := signProof(h.t, h.payerKey, req, nonce, now-60, now+300)
-	pb, _ := json.Marshal(p)
-	return h.req(http.MethodGet, path, org, string(pb), "")
+	return h.req(http.MethodGet, path, org, h.pay(req, nonce, now-60, now+300), "")
+}
+
+// settlement decodes the PAYMENT-RESPONSE header an answered request carries.
+func (h *harness) settlement(hdr http.Header) SettlementResponse {
+	h.t.Helper()
+	raw := hdr.Get(HeaderPaymentResponse)
+	if raw == "" {
+		h.t.Fatalf("no %s header on the response", HeaderPaymentResponse)
+	}
+	var s SettlementResponse
+	if err := DecodeHeader(raw, &s); err != nil {
+		h.t.Fatalf("decode %s: %v", HeaderPaymentResponse, err)
+	}
+	return s
 }
 
 func randNonce() string {
@@ -251,8 +335,10 @@ func (r fakeReg) Price(_ context.Context, resource string) (Terms, bool, error) 
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
-// The full flow: unpaid → 402 + requirements; signed proof → verify, settle, serve
-// (with a receipt); and the settlement is looked up scoped to the payer org.
+// The full exact-scheme flow: unpaid → 402 + requirements on PAYMENT-REQUIRED;
+// signed payload on PAYMENT-SIGNATURE → verify, settle, serve, with the
+// SettlementResponse on PAYMENT-RESPONSE; and the settlement is looked up scoped
+// to the payer org.
 func TestChallengeVerifyServe(t *testing.T) {
 	h := newHarness(t)
 	pubRegistry(map[string]Terms{
@@ -260,10 +346,16 @@ func TestChallengeVerifyServe(t *testing.T) {
 	})
 
 	req := h.challenge("/paid/tool", h.payerOrg)
-	if req.Amount != "1000000" { // $1.00 → USDC 6-dp
+	if req.Amount != "1000000" { // $1.00 → USDC 6-dp atomic units
 		t.Fatalf("challenge amount = %q, want 1000000", req.Amount)
 	}
-	if req.Payee == "" || req.Resource != "/paid/tool" {
+	if req.Scheme != SchemeExact {
+		t.Fatalf("challenge scheme = %q, want %q", req.Scheme, SchemeExact)
+	}
+	if req.Network != DefaultNetwork {
+		t.Fatalf("challenge network = %q, want the CAIP-2 %q", req.Network, DefaultNetwork)
+	}
+	if req.PayTo == "" || req.MaxTimeoutSeconds <= 0 || req.Extra == nil {
 		t.Fatalf("bad requirements: %+v", req)
 	}
 
@@ -274,28 +366,25 @@ func TestChallengeVerifyServe(t *testing.T) {
 	if !bytes.Contains(b, []byte(`"served":true`)) {
 		t.Fatalf("handler did not run: %s", b)
 	}
-	rcptHdr := hdr.Get(HeaderReceipt)
-	if rcptHdr == "" {
-		t.Fatal("no X-Payment-Receipt header on served response")
+	settled := h.settlement(hdr)
+	if !settled.Success || settled.Transaction == "" || settled.Network != req.Network {
+		t.Fatalf("bad settlement response: %+v", settled)
 	}
-	var rcpt Receipt
-	if err := json.Unmarshal([]byte(rcptHdr), &rcpt); err != nil {
-		t.Fatalf("decode receipt: %v", err)
-	}
-	if rcpt.Payer != h.payerOrg || rcpt.SettledVia != "ledger" || rcpt.Amount != "1" {
-		t.Fatalf("bad receipt: %+v", rcpt)
+	if settled.Payer == "" || settled.Amount != "1" {
+		t.Fatalf("settlement response amount/payer: %+v", settled)
 	}
 	h.tie(money.FromCents(100), "after one paid request")
 	if h.doer.calls() != 0 {
 		t.Fatalf("settlement went out over HTTP (%d calls) instead of the co-resident ledger", h.doer.calls())
 	}
 
-	// Receipt lookup is tenant-scoped: the payer sees it; another org gets 404.
-	code, _, _ = h.req(http.MethodGet, "/v1/x402/settlements/"+rcpt.ID, h.payerOrg, "", "")
+	// Receipt lookup is tenant-scoped: the payer sees it; another org gets 404. The
+	// id is the settlement response's `transaction`, which is how a client finds it.
+	code, _, _ = h.req(http.MethodGet, "/v1/x402/settlements/"+settled.Transaction, h.payerOrg, "", "")
 	if code != 200 {
 		t.Fatalf("receipt lookup by payer = %d, want 200", code)
 	}
-	code, _, _ = h.req(http.MethodGet, "/v1/x402/settlements/"+rcpt.ID, "intruder", "", "")
+	code, _, _ = h.req(http.MethodGet, "/v1/x402/settlements/"+settled.Transaction, "intruder", "", "")
 	if code != 404 {
 		t.Fatalf("cross-tenant receipt lookup = %d, want 404", code)
 	}
@@ -319,12 +408,16 @@ func TestNonceReplayRejected(t *testing.T) {
 
 	// Reuse the SAME (from, nonce) to buy a DIFFERENT, more expensive resource.
 	reqOther := h.challenge("/paid/other", h.payerOrg)
-	code, b, _ := h.payFor("/paid/other", h.payerOrg, reqOther, nonce)
+	code, b, hdr := h.payFor("/paid/other", h.payerOrg, reqOther, nonce)
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("replayed nonce = %d (%s), want 402", code, b)
 	}
-	if !bytes.Contains(b, []byte("nonce_replayed")) {
+	if !bytes.Contains(b, []byte(reasonReplay)) {
 		t.Fatalf("replay not flagged: %s", b)
+	}
+	// The spec requires a SettlementResponse on the failure leg too.
+	if failed := h.settlement(hdr); failed.Success || failed.ErrorReason != reasonReplay {
+		t.Fatalf("failure leg settlement = %+v", failed)
 	}
 	h.tie(money.FromCents(100), "after the replay was refused")
 }
@@ -338,21 +431,19 @@ func TestSettleOnceOnRetry(t *testing.T) {
 	})
 	req := h.challenge("/paid/tool", h.payerOrg)
 	now := nowUnix()
-	proof := signProof(t, h.payerKey, req, randNonce(), now-60, now+300)
-	pb, _ := json.Marshal(proof)
+	payment := h.pay(req, randNonce(), now-60, now+300)
 
 	var firstID string
 	for i := 0; i < 3; i++ {
-		code, b, hdr := h.req(http.MethodGet, "/paid/tool", h.payerOrg, string(pb), "")
+		code, b, hdr := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, "")
 		if code != 200 {
 			t.Fatalf("retry %d = %d (%s), want 200", i, code, b)
 		}
-		var rc Receipt
-		_ = json.Unmarshal([]byte(hdr.Get(HeaderReceipt)), &rc)
+		id := h.settlement(hdr).Transaction
 		if firstID == "" {
-			firstID = rc.ID
-		} else if rc.ID != firstID {
-			t.Fatalf("retry produced a new settlement id %s != %s", rc.ID, firstID)
+			firstID = id
+		} else if id != firstID {
+			t.Fatalf("retry produced a new settlement id %s != %s", id, firstID)
 		}
 	}
 	h.tie(money.FromCents(100), "after 3 retries of one authorization")
@@ -393,10 +484,9 @@ func TestSettlesToRecipientLedger(t *testing.T) {
 	})
 	req := h.challenge("/paid/tool", h.payerOrg)
 	now := nowUnix()
-	proof := signProof(t, h.payerKey, req, randNonce(), now-60, now+300)
-	pb, _ := json.Marshal(proof)
+	payment := h.pay(req, randNonce(), now-60, now+300)
 
-	if code, b, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, string(pb), ""); code != 200 {
+	if code, b, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, ""); code != 200 {
 		t.Fatalf("paid request = %d (%s)", code, b)
 	}
 	h.tie(money.FromCents(100), "after payment")
@@ -405,7 +495,7 @@ func TestSettlesToRecipientLedger(t *testing.T) {
 	}
 
 	// Retry the same authorization: settle-once → balances unchanged.
-	if code, _, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, string(pb), ""); code != 200 {
+	if code, _, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, ""); code != 200 {
 		t.Fatal("retry not served")
 	}
 	h.tie(money.FromCents(100), "after retrying the same authorization")
@@ -422,16 +512,146 @@ func TestSettlementRefusesHalfMove(t *testing.T) {
 	})
 	req := h.challenge("/paid/tool", h.payerOrg)
 	now := nowUnix()
-	proof := signProof(t, h.payerKey, req, randNonce(), now-60, now+300)
-	pb, _ := json.Marshal(proof)
+	payment := h.pay(req, randNonce(), now-60, now+300)
 
 	ledger := finance.Current()
 	finance.Publish(nil) // the payee's ledger goes away mid-flight
-	code, b, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, string(pb), "")
+	code, b, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, "")
 	finance.Publish(ledger)
 
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("settlement with no payee ledger = %d (%s), want 503 — never serve a half-moved payment", code, b)
 	}
 	h.tie(money.Zero(), "after a refused settlement")
+}
+
+// THE MONEY-LOSS REGRESSION. The payer's debit lands and the payee's credit fails —
+// the one interleaving that actually moves money and then stops.
+//
+// The old flow left the payer permanently down: recovery ran only through the
+// client re-presenting its authorization, and the authorization expires
+// (maxTimeoutSeconds, 300s), so a client that gave up for five minutes was debited
+// with nothing delivered and nothing to sweep it. This pins the two independent
+// paths that now converge instead:
+//
+//  1. the CLIENT comes back — at any time, with the SAME authorization, long after
+//     validBefore — and is served, because the window gates ACCEPTING a payment and
+//     not COMPLETING one already accepted; and
+//  2. the client never comes back and Reconcile finishes it from the durable claim,
+//     with no signature involved at all.
+//
+// Either way the books end tied, which is the whole invariant: the payer is never
+// left down money that no path can deliver.
+func TestIncompleteSettlementNeverStrandsThePayer(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		recover func(t *testing.T, h *harness, path, payment string)
+	}{
+		{"the client returns after the authorization expired", func(t *testing.T, h *harness, path, payment string) {
+			// Long past validBefore. The claim, not the signature, is what completes it.
+			restore := nowUnix
+			nowUnix = func() int64 { return restore() + 100_000 }
+			defer func() { nowUnix = restore }()
+
+			code, b, hdr := h.req(http.MethodGet, path, h.payerOrg, payment, "")
+			if code != 200 {
+				t.Fatalf("expired retry of an accepted payment = %d (%s), want 200 — "+
+					"validBefore bounds acceptance, not completion", code, b)
+			}
+			if s := h.settlement(hdr); !s.Success {
+				t.Fatalf("completed settlement reported failure: %+v", s)
+			}
+		}},
+		{"the client never returns and the sweep finishes it", func(t *testing.T, h *harness, _, _ string) {
+			n, err := Reconcile(context.Background(), 0)
+			if err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+			if n != 1 {
+				t.Fatalf("reconcile completed %d settlements, want 1", n)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			pubRegistry(map[string]Terms{
+				"/paid/tool": {Amount: money.FromCents(100), RecipientOrg: h.payeeOrg, RecipientWalletID: h.recipient},
+			})
+			req := h.challenge("/paid/tool", h.payerOrg)
+			now := nowUnix()
+			payment := h.pay(req, randNonce(), now-60, now+300)
+
+			// The credit side breaks AFTER the debit has landed.
+			h.ledger.breaks(true)
+			code, b, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, "")
+			if code != http.StatusServiceUnavailable {
+				t.Fatalf("settlement with a broken credit = %d (%s), want 503", code, b)
+			}
+			if got := h.debited(); got.Cmp(money.FromCents(100)) != 0 {
+				t.Fatalf("precondition: payer debited %s, want the interleaving that "+
+					"strands money (debit landed, credit did not)", got.String())
+			}
+			if got := h.credited(); got.Sign() != 0 {
+				t.Fatalf("precondition: payee credited %s, want 0", got.String())
+			}
+
+			h.ledger.breaks(false) // the ledger comes back
+			tc.recover(t, h, "/paid/tool", payment)
+
+			// The books tie: the payer is down exactly the price and the payee is up
+			// exactly the price. Nothing minted, nothing destroyed.
+			h.tie(money.FromCents(100), "after the settlement converged")
+
+			// And it landed in the RIGHT account — the payout wallet the listing
+			// named, not the seller org. A balance read cannot tell those apart
+			// (finance aggregates at the org), so the ledger is asked directly.
+			credits := h.ledger.credits()
+			if len(credits) != 1 {
+				t.Fatalf("want exactly one x402 credit, got %d: %+v", len(credits), credits)
+			}
+			if credits[0].Subject != h.recipient {
+				t.Fatalf("credited subject %q, want the payout wallet %q — completing a "+
+					"settlement must pay the account the claim named", credits[0].Subject, h.recipient)
+			}
+			if credits[0].Org != h.payeeOrg {
+				t.Fatalf("credited org %q, want %q", credits[0].Org, h.payeeOrg)
+			}
+		})
+	}
+}
+
+// The claim is durable BEFORE the money moves, which is what makes an interrupted
+// settlement recoverable at all — and it must not, on its own, look like a paid
+// settlement. A claim that served the resource would be a free lunch.
+func TestAClaimIsNotAReceipt(t *testing.T) {
+	h := newHarness(t)
+	pubRegistry(map[string]Terms{
+		"/paid/tool": {Amount: money.FromCents(100), RecipientOrg: h.payeeOrg, RecipientWalletID: h.recipient},
+	})
+	req := h.challenge("/paid/tool", h.payerOrg)
+	now := nowUnix()
+	payment := h.pay(req, randNonce(), now-60, now+300)
+
+	h.ledger.breaks(true)
+	if code, _, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, ""); code != http.StatusServiceUnavailable {
+		t.Fatalf("broken credit must refuse, got %d", code)
+	}
+	// The claim exists and is unsettled.
+	pending, err := mounted.State.store.pending(context.Background(), nowUnix())
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	if len(pending) != 1 || pending[0].Settled {
+		t.Fatalf("want exactly one UNSETTLED claim, got %+v", pending)
+	}
+	// Retrying while the ledger is still broken must still refuse, never serve: a
+	// claim is a record that we accepted a payment, not that we received one.
+	if code, _, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, ""); code != http.StatusServiceUnavailable {
+		t.Fatalf("a retry against a still-broken ledger = %d, want 503 — a claim is not a payment", code)
+	}
+	h.ledger.breaks(false)
+	if code, _, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, ""); code != 200 {
+		t.Fatalf("the settlement must complete once the ledger returns")
+	}
+	h.tie(money.FromCents(100), "after the claim completed")
 }
