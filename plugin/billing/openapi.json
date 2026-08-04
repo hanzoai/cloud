@@ -67,6 +67,26 @@
         ]
       }
     },
+    "/v1/billing/methods/{id}": {
+      "delete": {
+        "operationId": "delete_v1_billing_methods_by_id",
+        "summary": "Remove a saved card from the caller's org",
+        "description": "Detaches a card on file: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe id is resolved INSIDE the caller's own org, so it can only ever name a card this org can list. Another tenant's id does not resolve and answers 404 — not 403, because a status that separates 'not yours' from 'not there' turns an id into something worth guessing.\n\nRemoving the card an auto-recharge or a running GPU lease bills leaves that arrangement with nothing to charge; it is the customer's call to make, and this makes it rather than refusing on their behalf.\n\n401 without a validated principal — the org is the validated owner claim, never a client-supplied field, so this cannot be pointed at another tenant.",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/billing/usage": {
       "get": {
         "operationId": "get_v1_billing_usage",

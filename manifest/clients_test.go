@@ -51,6 +51,7 @@ var calls = []struct{ by, path string }{
 	// billing.hanzo.ai — lib/commerce-client.ts, against commerce-api.hanzo.ai
 	// (the same fleet edge as api.hanzo.ai).
 	{"billing.hanzo.ai", "/v1/billing/methods"},
+	{"billing.hanzo.ai", "/v1/billing/methods/{id}"},
 	{"billing.hanzo.ai", "/v1/billing/alerts"},
 	{"billing.hanzo.ai", "/v1/billing/alerts/{id}"},
 	{"billing.hanzo.ai", "/v1/billing/credits"},
@@ -86,6 +87,19 @@ var calls = []struct{ by, path string }{
 	// The request-edge metering gate — cloud's own S2S read of the per-scope
 	// spend cap, on every metered call.
 	{"metering gate", "/v1/billing/alerts/authorize"},
+
+	// cloud's OWN billing app, reading and removing saved cards over the commerce
+	// S2S seam (apps/billing/billing.go paymentMethods + deletePaymentMethod). It
+	// is a first-party client like any other and belongs here for exactly the
+	// reason the metering gate does: nobody watches an S2S call fail. This one
+	// failed silently for as long as it has existed — the card list came back 404
+	// and rendered as "no cards saved", which is what made "card save is broken"
+	// true end to end.
+	//
+	// It cannot ask for /v1/billing/methods, the customer address it publishes
+	// itself: that forward re-enters its own handler. The portal family is the
+	// address commerce publishes for a host that fronts it.
+	{"cloud billing app", "/v1/billing/portal/methods"},
 }
 
 // broken is the LEDGER: addresses a client still asks for that the fleet does
@@ -93,49 +107,37 @@ var calls = []struct{ by, path string }{
 // `unreachable` — these are DEFECTS, recorded so the next one cannot hide among
 // them, and the list may only SHRINK. An entry that stops being true fails this
 // test exactly as loudly as a new one.
-var broken = map[string]string{
-	// POST /v1/billing/payment — billing.hanzo.ai records a crypto or wire
-	// payment here (recordCryptoPayment / recordWirePayment, both with live
-	// callers). No app in the fleet has ever registered it, so both have always
-	// failed; the client swallows the error, which is why nobody noticed. It is
-	// NOT a rename — there is no short name to converge on — so fixing it means
-	// deciding what records an off-rail payment, which is a product decision and
-	// not a renaming one. Recorded rather than guessed at.
-	"/v1/billing/payment": "no app has ever served it; needs a product decision, not a rename",
-
-	// DELETE and PATCH /v1/billing/methods/{id} — removing or editing a saved
-	// card. The billing app owns the /v1/billing/methods prefix and registers only
-	// the COLLECTION (GET list, POST save), so the sub-resource misses on method:
-	// the live edge answers 405 to DELETE today. A customer can add a card and
-	// never remove one.
-	//
-	// The handlers exist in the vendored module (UpdatePaymentMethod,
-	// DetachPaymentMethod). What does not exist is a safe way to reach them from
-	// here: the billing app would have to proxy an address it owns itself, which
-	// is the self-dispatch loop that produced the depth-8 502s on top-up (see
-	// apps/commerce/mount.go). Fixing it is a plumbing decision on the money path,
-	// so it is recorded, not guessed at.
-	"/v1/billing/methods/{id}": "billing owns the prefix but registers only the collection; the sub-resource needs a proxy target that does not self-dispatch",
-
-	// GET /v1/billing/portal/methods — the org's saved cards, masked. This is the
-	// one that makes "card save is broken" true END TO END: cloud's billing app
-	// serves GET /v1/billing/methods by proxying to this address, and NOTHING in
-	// the fleet serves it. No manifest row claims /v1/billing/portal and no app
-	// registers it, so the proxy forwards a 404 verbatim and the saved-card list
-	// is empty no matter how many cards were vaulted. (Until this commit the proxy
-	// also asked for the retired /v1/billing/portal/payment-methods, so it was
-	// wrong twice; the name is fixed here, the missing owner is not.)
-	//
-	// Registering it is NOT a one-liner and must not be treated as one.
-	// PortalPaymentMethods keys tenancy on a `customerId` QUERY PARAM, so exposing
-	// it needs a chain that pins the subject. The console chain (IAMTokenRequired
-	// + PinBillingSubject) cannot serve this caller — it arrives with the service
-	// token, not an IAM JWT — and the S2S chain (TokenRequired) authenticates
-	// without pinning, which would let any authenticated browser read another
-	// tenant's cards by passing their customerId. That is an IDOR, and choosing
-	// the gate is a security design decision, not a route.
-	"/v1/billing/portal/methods": "nothing serves it; the handler keys tenancy on a query param, so it needs a subject-pinning gate that works for a service token — an IDOR control, not a route",
-}
+// It is EMPTY, and that is a state it is allowed to be in — not a reason to
+// delete the mechanism. The ledger's whole value is that the NEXT defect cannot
+// hide among the recorded ones, and a list with nothing in it says that most
+// clearly. All three entries it held were closed together:
+//
+//   - GET /v1/billing/portal/methods. Now claimed on commerce's manifest row and
+//     registered co-resident (apps/commerce/mount.go). The gate the entry called
+//     for is TokenRequired + PinBillingSubject: TokenRequired resolves the org
+//     from the gateway-pinned X-Org-Id for BOTH principals that reach here (an
+//     IAM member and the raw service token — IAMTokenRequired admits only the
+//     first), and PinBillingSubject is the IDOR control the entry said was
+//     missing, overwriting every billing-subject key with the validated caller's
+//     own subject so a browser cannot name another tenant's customerId, passing
+//     the query through only for a verified COMMERCE_SERVICE_TOKEN bearer, and
+//     fail-closing anyone who is neither.
+//
+//   - DELETE /v1/billing/methods/{id}. billing registers the sub-resource now and
+//     proxies it to commerce's DELETE /v1/billing/portal/methods/{id} — the
+//     non-self-dispatching target the entry said did not exist, added in the
+//     commerce repo beside the portal read it mirrors. (PATCH is still not
+//     served: nothing asks for it. `calls` is what a client is entitled to, and
+//     no client edits a card.)
+//
+//   - POST /v1/billing/payment. DELETED rather than served — see
+//     apps/account/account.go, where the caller was. It is not a rename and there
+//     was nothing to point it at: money-IN has one door (commerce's mint-gated
+//     POST /v1/billing/deposit) and the fleet deliberately routes NO mint address
+//     at the edge, so serving this would have opened the mint surface to a
+//     client-supplied amount and a client-supplied subject — the exact shape the
+//     mint gate exists to refuse.
+var broken = map[string]string{}
 
 // TestEveryAddressAClientCallsIsRoutedAndServed is the gate.
 //

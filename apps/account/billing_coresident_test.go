@@ -40,6 +40,12 @@ func echoBody(c *zip.Ctx) error {
 	return c.JSON(200, got)
 }
 
+// alice is a VALIDATED principal: X-User-Id is set by the gateway only from a
+// verified credential, and X-Org-Id is the owner claim minted alongside it. It
+// lived in the crypto-top-up suite that this package no longer has, and it is the
+// caller identity every test below pins against.
+var alice = map[string]string{"X-User-Id": "alice", "X-Org-Id": "acme"}
+
 func pinApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
