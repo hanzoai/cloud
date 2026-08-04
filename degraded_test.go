@@ -14,20 +14,17 @@ func TestDegraded_RecordsAndReports(t *testing.T) {
 	resetDegradedForTest()
 	t.Cleanup(resetDegradedForTest)
 
-	if IsDegraded() {
+	if len(Degradations()) != 0 {
 		t.Fatal("a fresh process must not be degraded")
 	}
 	Degraded("commerce", errors.New("invalid KV_URL: kv: invalid URL scheme: redis"))
 
-	if !IsDegraded() {
-		t.Fatal("IsDegraded must be true once a plane mounted fail-closed")
-	}
 	got := Degradations()
+	if len(got) != 1 {
+		t.Fatalf("Degradations = %v, want exactly [commerce]", got)
+	}
 	if got["commerce"] == "" || !strings.Contains(got["commerce"], "invalid URL scheme") {
 		t.Fatalf("reason lost: %q — the gate must say WHY, not merely that something broke", got["commerce"])
-	}
-	if names := DegradedNames(); len(names) != 1 || names[0] != "commerce" {
-		t.Fatalf("DegradedNames = %v, want [commerce]", names)
 	}
 }
 
@@ -52,8 +49,8 @@ func TestDegraded_IgnoresNonFailures(t *testing.T) {
 
 	Degraded("commerce", nil)
 	Degraded("", errors.New("boom"))
-	if IsDegraded() {
-		t.Fatalf("registry took a non-failure: %v", Degradations())
+	if d := Degradations(); len(d) != 0 {
+		t.Fatalf("registry took a non-failure: %v", d)
 	}
 }
 

@@ -7,14 +7,11 @@ package cloud
 // serve, identity and the apps already use; the logic is one copy, in brand.
 import "github.com/hanzoai/cloud/brand"
 
-// BrandInfo is the public per-brand identity. Alias of brand.Info.
-type BrandInfo = brand.Info
-
 // DefaultBrand is the fallback brand when CLOUD_BRAND is unknown.
 const DefaultBrand = brand.Default
 
 var (
-	// BrandFor returns the BrandInfo for a brand id (Hanzo default for unknown).
+	// BrandFor returns the brand.Info for a brand id (Hanzo default for unknown).
 	BrandFor = brand.For
 	// IssuerForBrand returns the canonical OIDC issuer for a brand id.
 	IssuerForBrand = brand.IssuerFor

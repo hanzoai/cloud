@@ -25,48 +25,23 @@
 // shape a list MUST NOT return, so the name went with it. Nothing about the
 // value changed: same int, same position, a name a reader can act on.
 //
-// This shape was first written in clients/admin/core, but the
-// writers are pure over *zip.Ctx and every subsystem needs them — trapping them
-// under clients/admin (whose sibling files pull in cloud + admin/iam +
-// principal) would force any package that wants ONE envelope to drag the whole
-// admin IAM fan-in in transitively. So the writers live HERE, in package cloud,
-// beside Handle/Mount/Terminal — the handler ergonomics every subsystem already
-// reaches for. clients/admin/core.OK/OKList/OKRaw/Fail now delegate here, so
-// there is ONE implementation and admin keeps its spelling.
+// The writers are pure over *zip.Ctx and every subsystem needs them, so they live
+// HERE, in package cloud, beside Handle/Mount/Terminal — the handler ergonomics
+// every subsystem already reaches for.
 //
-// A subsystem writes a success body with cloud.OK / cloud.OKList / cloud.OKRaw
-// and a surfaced error with cloud.Fail — never a hand-rolled
-// map[string]any{"status":...}. Handlers with a typed public body that is NOT
-// the operator envelope (a health probe, an OAuth token, an SDK-shaped struct)
-// keep returning c.JSON with their own type — this envelope is for the operator
-// get<T>/getList<T> contract, not a mandate on every response.
+// A subsystem writes a success body with cloud.OK and a surfaced error with
+// cloud.Fail — never a hand-rolled map[string]any{"status":...}. Handlers with a
+// typed public body that is NOT the operator envelope (a health probe, an OAuth
+// token, an SDK-shaped struct) keep returning c.JSON with their own type — this
+// envelope is for the operator get<T> contract, not a mandate on every response.
 
 package cloud
 
-import (
-	"encoding/json"
-
-	"github.com/zap-proto/zip"
-)
+import "github.com/zap-proto/zip"
 
 // OK writes a { status:"ok", data } envelope (the get<T> shape).
 func OK(c *zip.Ctx, data any) error {
 	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": data})
-}
-
-// OKList writes a { status:"ok", data:[...], total } envelope (getList<T>).
-func OKList(c *zip.Ctx, rows any, total int) error {
-	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": rows, "total": total})
-}
-
-// OKRaw writes a { status:"ok", data:<raw>, total } envelope, forwarding a
-// pre-encoded payload verbatim so its exact wire shape reaches the operator
-// field-for-field. An empty payload is normalized to an empty array.
-func OKRaw(c *zip.Ctx, rows json.RawMessage, total int) error {
-	if len(rows) == 0 {
-		rows = json.RawMessage("[]")
-	}
-	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": rows, "total": total})
 }
 
 // Fail writes a { status:"error", msg } envelope. The operator's transport maps a
