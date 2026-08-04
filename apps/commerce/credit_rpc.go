@@ -6,7 +6,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	credit "github.com/hanzoai/cloud/apps/money"
+	credit "github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
