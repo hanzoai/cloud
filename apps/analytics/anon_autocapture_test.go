@@ -9,6 +9,7 @@ package analytics
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
@@ -750,4 +751,110 @@ func TestAnonAutocapture_IsNotTheAdLensClick(t *testing.T) {
 // and empty, a column cannot.
 func faulted(f fact) bool {
 	return f.signal == signalError || f.class != "" || f.issue != "" || len(f.frames) > 0
+}
+
+// ── the position ────────────────────────────────────────────────────────────
+
+// TestAnonAutocapture_ThePositionCrosses: element identity says WHICH thing was clicked
+// and never where on the page it sat, so a heat map cannot be drawn from the annotation
+// alone. The bulk of what a heat map is made of is logged-out traffic, so the position
+// has to survive THIS lane or it survives for a minority of clicks.
+func TestAnonAutocapture_ThePositionCrosses(t *testing.T) {
+	out, _ := admitPublic([]CaptureEvent{{
+		Type:  "event",
+		Event: "$click",
+		Properties: map[string]any{
+			"$el":              "main/button[save]",
+			"$role":            "button",
+			"$x":               float64(640),
+			"$y":               float64(1200),
+			"$target_fixed":    false,
+			"$viewport_width":  float64(1440),
+			"$viewport_height": float64(900),
+		},
+	}})
+	if len(out) != 1 {
+		t.Fatal("want 1 admitted event")
+	}
+	f, ok := normalize(publicTenant, time.Now(), out[0])
+	if !ok {
+		t.Fatal("want routable")
+	}
+	// The warehouse reads these off the attributes map (insights heatmap_mv), so the
+	// assertion is on the STORED strings, not on the projected bag.
+	for k, want := range map[string]string{
+		"$x": "640", "$y": "1200", "$target_fixed": "false",
+		"$viewport_width": "1440", "$viewport_height": "900",
+	} {
+		if got := f.attributes[k]; got != want {
+			t.Errorf("attributes[%q] = %q, want %q — a click with no position is a count, not a heatmap", k, got, want)
+		}
+	}
+	if f.el.label != "main/button[save]" {
+		t.Fatalf("the annotation stopped crossing: %+v", f.el)
+	}
+}
+
+// TestAnonAutocapture_PositionIsAClosedSet: admitting a second family must not open the
+// bag. A caller's own key still cannot reach the dictionary, and a coordinate that is not
+// a number is not a coordinate.
+func TestAnonAutocapture_PositionIsAClosedSet(t *testing.T) {
+	out, _ := admitPublic([]CaptureEvent{{
+		Type:  "event",
+		Event: "$click",
+		Properties: map[string]any{
+			"$el":              "main/button",
+			"$x":               float64(10),
+			"$viewport_width":  "1440", // a string is not a coordinate
+			"$viewport_height": map[string]any{"nope": true},
+			"$scroll_depth":    float64(99), // plausible, unnamed, therefore refused
+			"tenant_id":        "maxpower",
+		},
+	}})
+	f, ok := normalize(publicTenant, time.Now(), out[0])
+	if !ok {
+		t.Fatal("want routable")
+	}
+	if f.attributes["$x"] != "10" {
+		t.Fatalf("the named coordinate did not cross: %v", f.attributes)
+	}
+	for _, k := range []string{"$viewport_width", "$viewport_height", "$scroll_depth", "tenant_id"} {
+		if _, bad := f.attributes[k]; bad {
+			t.Errorf("key %q reached the attributes dictionary: %v", k, f.attributes)
+		}
+	}
+}
+
+// TestAnonAutocapture_PositionIsFilteredNotClamped: a clamped coordinate is a click
+// somewhere the visitor did not click, and a heat map is a picture of exactly that. Over
+// the bound the key is dropped and the interaction still lands.
+func TestAnonAutocapture_PositionIsFilteredNotClamped(t *testing.T) {
+	for _, tc := range []struct {
+		what string
+		x    any
+	}{
+		{"absurdly deep", float64(1 << 24)},
+		{"absurdly negative", float64(-(1 << 24))},
+		{"not a number", math.NaN()},
+		{"infinite", math.Inf(1)},
+	} {
+		out, _ := admitPublic([]CaptureEvent{{
+			Type:       "event",
+			Event:      "$click",
+			Properties: map[string]any{"$el": "main/button", "$x": tc.x, "$y": float64(10)},
+		}})
+		if len(out) != 1 {
+			t.Fatalf("%s: the interaction itself must still land", tc.what)
+		}
+		f, ok := normalize(publicTenant, time.Now(), out[0])
+		if !ok {
+			t.Fatalf("%s: want routable", tc.what)
+		}
+		if v, bad := f.attributes["$x"]; bad {
+			t.Errorf("%s: out-of-bounds coordinate was stored as %q — the bound is a filter", tc.what, v)
+		}
+		if f.attributes["$y"] != "10" {
+			t.Errorf("%s: a sound coordinate beside a refused one was lost", tc.what)
+		}
+	}
 }
