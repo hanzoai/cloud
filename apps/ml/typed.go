@@ -1,19 +1,19 @@
 package ml
 
-// typed.go is ml's typed-op surface: the ten reads and deregistrations of the
-// three Kubeflow-family resources this subsystem bridges, declared as zip typed
-// ops so ONE registration is the whole contract — the REST route, the OpenAPI
-// operation, the MCP tool, the CLI command and every generated SDK method all
-// project from it. An untyped route appends nothing to that registry and is
-// therefore invisible to all five, which is what these conversions buy.
+// typed.go is ml's typed-op surface: the reads and the deregistration of the one
+// kserve CustomResource this subsystem bridges, declared as zip typed ops so ONE
+// registration is the whole contract — the REST route, the OpenAPI operation, the
+// MCP tool, the CLI command and every generated SDK method all project from it.
+// An untyped route appends nothing to that registry and is therefore invisible to
+// all five, which is what these conversions buy.
 //
-// Seven of ml's seventeen operations are NOT here. Each is wire-bound, not
-// un-migrated: the three creates answer 402/503 in band with the fleet's nested
-// billing-denial contract, the model PATCH relays an opaque RFC 7386 merge patch
-// verbatim to the Kubernetes API, predict returns the predictor's own status,
-// bytes and Content-Type, and the two health probes answer 503 carrying the
-// degraded REPORT as their body. typed_wire_test.go holds that closed list and
-// fails on any route that is neither typed nor named in it.
+// Four of ml's seven operations are NOT here. Each is wire-bound, not
+// un-migrated: create answers 402/503 in band with the fleet's nested
+// billing-denial contract, PATCH relays an opaque RFC 7386 merge patch verbatim
+// to the Kubernetes API, predict returns the predictor's own status, bytes and
+// Content-Type, and health answers 503 carrying the degraded REPORT as its body.
+// typed_wire_test.go holds that closed list and fails on any route that is
+// neither typed nor named in it.
 
 import (
 	"context"
@@ -103,8 +103,8 @@ type mlResource struct {
 	// Spec is the resource spec, verbatim as Kubernetes stores it. Present on a
 	// single-object read, absent from a list.
 	Spec *map[string]any `json:"spec,omitempty"`
-	// Status is the live status its operator owns (kserve, trainer or katib),
-	// verbatim. Absent until that operator has written one.
+	// Status is the live status kserve owns, verbatim. Absent until kserve has
+	// written one.
 	Status *map[string]any `json:"status,omitempty"`
 }
 
@@ -116,20 +116,12 @@ type mlResourceList struct {
 	Items []mlResource `json:"items"`
 }
 
-// mlTrials is the katib Trials one experiment owns.
-type mlTrials struct {
-	// Experiment is the experiment the trials belong to, echoed from the path.
-	Experiment string `json:"experiment"`
-	// Items is one entry per Trial, in the list shape (no spec).
-	Items []mlResource `json:"items"`
-}
-
-// ── the three shared bodies ──────────────────────────────────────────────────
+// ── the shared bodies ──────────────────────────────────────────────────
 //
-// The three resource families have ONE CRUD shape each, so the bodies below are
-// written once and parameterised by resourceKind. The per-family ops are thin
-// method values over them, which is what zipdoc needs to lift prose and what
-// keeps nine registrations from being nine copies of a body.
+// The resource family has ONE CRUD shape, so the bodies below are written once
+// and parameterised by resourceKind. The per-family ops are thin method values
+// over them, which is what zipdoc needs to lift prose — and the parameterisation
+// stays because it is the shape, not a count of callers.
 
 // listOf lists every object of one kind in the caller's tenant namespace. A
 // namespace that does not exist yet is an EMPTY LIST, not a 404: an org that has
@@ -223,90 +215,4 @@ func (o ops) getModel(ctx context.Context, in *mlRef) (*mlResource, error) {
 // Example: {"name": "sentiment"}
 func (o ops) deleteModel(ctx context.Context, in *mlRef) (*struct{}, error) {
 	return o.deleteOf(ctx, modelKind, in)
-}
-
-// ── training jobs (trainer TrainJob) ─────────────────────────────────────────
-
-// ListJobs lists the training jobs in the caller's org. Each entry carries the
-// job's name, when Kubernetes admitted it, and the trainer operator's live status
-// — the spec is on the single-job read.
-func (o ops) listJobs(ctx context.Context, _ *mlNoInput) (*mlResourceList, error) {
-	return o.listOf(ctx, jobKind)
-}
-
-// GetJob returns one training job. Its spec comes with it, and the trainer
-// operator's live status, which is where a run's phase and its conditions are
-// reported.
-//
-// Example: {"name": "finetune-1"}
-func (o ops) getJob(ctx context.Context, in *mlRef) (*mlResource, error) {
-	return o.getOf(ctx, jobKind, in)
-}
-
-// DeleteJob deletes a training job. Kubernetes garbage-collects the pods the
-// trainer operator created under it, because they carry the TrainJob as their
-// owner — so deleting the job is how a run is stopped. Answers 204, or 404 for a
-// name the caller's org does not own.
-//
-// Example: {"name": "finetune-1"}
-func (o ops) deleteJob(ctx context.Context, in *mlRef) (*struct{}, error) {
-	return o.deleteOf(ctx, jobKind, in)
-}
-
-// ── experiments + trials (katib) ─────────────────────────────────────────────
-
-// ListExperiments lists the caller org's tuning experiments. Each entry carries
-// the experiment's name, when Kubernetes admitted it, and katib's live status —
-// the spec is on the single-experiment read.
-func (o ops) listExperiments(ctx context.Context, _ *mlNoInput) (*mlResourceList, error) {
-	return o.listOf(ctx, expKind)
-}
-
-// GetExperiment returns one hyperparameter-tuning experiment. Its spec comes with
-// it, and katib's live status, which is where the best trial found so far is
-// reported.
-//
-// Example: {"name": "sweep-1"}
-func (o ops) getExperiment(ctx context.Context, in *mlRef) (*mlResource, error) {
-	return o.getOf(ctx, expKind, in)
-}
-
-// DeleteExperiment deletes a hyperparameter-tuning experiment. Kubernetes
-// garbage-collects the Trials katib created under it, because they carry the
-// Experiment as their owner. Answers 204, or 404 for a name the caller's org does
-// not own.
-//
-// Example: {"name": "sweep-1"}
-func (o ops) deleteExperiment(ctx context.Context, in *mlRef) (*struct{}, error) {
-	return o.deleteOf(ctx, expKind, in)
-}
-
-// ListTrials lists the katib Trials one experiment owns. The experiment is read
-// FIRST, so a name the caller's org does not own is a clean 404 rather than an
-// empty list; the Trials themselves are selected by katib's own
-// katib.kubeflow.org/experiment label within the caller's tenant namespace.
-//
-// Example: {"name": "sweep-1"}
-func (o ops) listTrials(ctx context.Context, in *mlRef) (*mlTrials, error) {
-	if err := ready(o.s); err != nil {
-		return nil, err
-	}
-	ns, _, _, err := tenantFrom(ctx)
-	if err != nil {
-		return nil, err
-	}
-	name := normName(in.Name)
-	if _, err := o.s.State.dyn.Resource(experimentGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, zip.ErrNotFound("experiment not found")
-		}
-		return nil, k8sErr(o.s, expKind, "get", err)
-	}
-	ul, err := o.s.State.dyn.Resource(trialGVR).Namespace(ns).List(ctx, metav1.ListOptions{
-		LabelSelector: katibExpLabel + "=" + name,
-	})
-	if err != nil {
-		return nil, k8sErr(o.s, resourceKind{trialGVR, "kubeflow.org/v1beta1", "Trial"}, "list", err)
-	}
-	return &mlTrials{Experiment: name, Items: viewList(ul.Items)}, nil
 }

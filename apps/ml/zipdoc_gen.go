@@ -16,20 +16,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"sentiment"}`),
 	})
-	zip.Describe("DELETE /v1/train/experiments/:name", zip.Doc{
-		Description: "Deletes a hyperparameter-tuning experiment. Kubernetes\ngarbage-collects the Trials katib created under it, because they carry the\nExperiment as their owner. Answers 204, or 404 for a name the caller's org does\nnot own.",
-		Fields: map[string]string{
-			"mlRef.name": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
-		},
-		Example: json.RawMessage(`{"name":"sweep-1"}`),
-	})
-	zip.Describe("DELETE /v1/train/jobs/:name", zip.Doc{
-		Description: "Deletes a training job. Kubernetes garbage-collects the pods the\ntrainer operator created under it, because they carry the TrainJob as their\nowner — so deleting the job is how a run is stopped. Answers 204, or 404 for a\nname the caller's org does not own.",
-		Fields: map[string]string{
-			"mlRef.name": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
-		},
-		Example: json.RawMessage(`{"name":"finetune-1"}`),
-	})
 	zip.Describe("GET /v1/ml/health", zip.Doc{
 		Description: "Is a REAL probe: it verifies the API server is reachable, that the\nsubsystem's CRDs are served, and — where the plane has one — that it holds the\nCAPACITY to run what it accepts. 200 only when everything is ok; 503 + the real\nreason otherwise (never status-theater).\n\n`capacity` names a cluster-scoped resource this plane needs at least ONE of, or\nis the zero GVR for a plane with no such fact. A served CRD is not capacity:\nkserve admits an InferenceService whose model format no ClusterServingRuntime\nsupports and simply never schedules it, so a probe that reads only \"is the CRD\nserved\" answers 200 while every deploy hangs. Purging the last runtime is a\nlegitimate operator act; doing it INVISIBLY is what this clause forbids.",
 	})
@@ -39,7 +25,7 @@ func init() {
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
 			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
 			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
-			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
+			"mlResource.status":    "Status is the live status kserve owns, verbatim. Absent until kserve has\nwritten one.",
 			"mlResourceList.items": "Items is one entry per object, newest LAST (the Kubernetes list order).",
 		},
 	})
@@ -50,67 +36,9 @@ func init() {
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
 			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
 			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
-			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
+			"mlResource.status":    "Status is the live status kserve owns, verbatim. Absent until kserve has\nwritten one.",
 		},
 		Example: json.RawMessage(`{"name":"sentiment"}`),
-	})
-	zip.Describe("GET /v1/train/experiments", zip.Doc{
-		Description: "Lists the caller org's tuning experiments. Each entry carries\nthe experiment's name, when Kubernetes admitted it, and katib's live status —\nthe spec is on the single-experiment read.",
-		Fields: map[string]string{
-			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
-			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
-			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
-			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
-			"mlResourceList.items": "Items is one entry per object, newest LAST (the Kubernetes list order).",
-		},
-	})
-	zip.Describe("GET /v1/train/experiments/:name", zip.Doc{
-		Description: "Returns one hyperparameter-tuning experiment. Its spec comes with\nit, and katib's live status, which is where the best trial found so far is\nreported.",
-		Fields: map[string]string{
-			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
-			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
-			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
-			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
-			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
-		},
-		Example: json.RawMessage(`{"name":"sweep-1"}`),
-	})
-	zip.Describe("GET /v1/train/experiments/:name/trials", zip.Doc{
-		Description: "Lists the katib Trials one experiment owns. The experiment is read\nFIRST, so a name the caller's org does not own is a clean 404 rather than an\nempty list; the Trials themselves are selected by katib's own\nkatib.kubeflow.org/experiment label within the caller's tenant namespace.",
-		Fields: map[string]string{
-			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
-			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
-			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
-			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
-			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
-			"mlTrials.experiment":  "Experiment is the experiment the trials belong to, echoed from the path.",
-			"mlTrials.items":       "Items is one entry per Trial, in the list shape (no spec).",
-		},
-		Example: json.RawMessage(`{"name":"sweep-1"}`),
-	})
-	zip.Describe("GET /v1/train/health", zip.Doc{
-		Description: "Is a REAL probe: it verifies the API server is reachable, that the\nsubsystem's CRDs are served, and — where the plane has one — that it holds the\nCAPACITY to run what it accepts. 200 only when everything is ok; 503 + the real\nreason otherwise (never status-theater).\n\n`capacity` names a cluster-scoped resource this plane needs at least ONE of, or\nis the zero GVR for a plane with no such fact. A served CRD is not capacity:\nkserve admits an InferenceService whose model format no ClusterServingRuntime\nsupports and simply never schedules it, so a probe that reads only \"is the CRD\nserved\" answers 200 while every deploy hangs. Purging the last runtime is a\nlegitimate operator act; doing it INVISIBLY is what this clause forbids.",
-	})
-	zip.Describe("GET /v1/train/jobs", zip.Doc{
-		Description: "Lists the training jobs in the caller's org. Each entry carries the\njob's name, when Kubernetes admitted it, and the trainer operator's live status\n— the spec is on the single-job read.",
-		Fields: map[string]string{
-			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
-			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
-			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
-			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
-			"mlResourceList.items": "Items is one entry per object, newest LAST (the Kubernetes list order).",
-		},
-	})
-	zip.Describe("GET /v1/train/jobs/:name", zip.Doc{
-		Description: "Returns one training job. Its spec comes with it, and the trainer\noperator's live status, which is where a run's phase and its conditions are\nreported.",
-		Fields: map[string]string{
-			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
-			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
-			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
-			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
-			"mlResource.status":    "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
-		},
-		Example: json.RawMessage(`{"name":"finetune-1"}`),
 	})
 	zip.Describe("POST /v1/ml/models/:name/predict", zip.Doc{
 		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",

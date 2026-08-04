@@ -122,7 +122,7 @@ var Apps = []App{
 	{Name: "content", Prefixes: []string{"/v1/content"}},
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
-	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models", "/v1/train/experiments", "/v1/train/health", "/v1/train/jobs"}},
+	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models"}},
 	// risk owns /v1/risk OUTRIGHT — the per-organisation model plane that decides
 	// AND learns. It shares no prefix with the row above: `ml` is model SERVING
 	// (InferenceServices, predict) and it is live with customers on it, so the two
