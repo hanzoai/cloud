@@ -60,37 +60,113 @@ var baseReserved = func() map[string]bool {
 }()
 
 var (
-	reservedMu    sync.RWMutex
+	policyMu      sync.RWMutex
+	seeded        bool
 	extraReserved = map[string]bool{}
 )
 
-// SetReservedExtra registers operator-supplied extra reserved labels (from
-// CLOUD_SITES_RESERVED). It ADDS to baseReserved; it can never remove a baked-in
-// reserved label. Called once at startup by New.
-func SetReservedExtra(labels []string) {
+// seed derives the policy from the ENVIRONMENT the first time any gate asks, so a
+// process that enforces the gates without constructing a Server still reads the
+// real set. Both setters below mark the policy seeded, so an explicit publication
+// always wins and is never re-read over.
+//
+// Config is not the Server's to own. Which apps share a process is a per-plugin
+// composition choice, and as composed today plugin/projects links this package for
+// IsReserved/IsSelfHost and never calls New — the edge is not in that process. So a
+// set published only by New was EMPTY in the very process that enforces the claim
+// gate and the site_hosts invariant, while being full in the one that serves.
+// IsSelfHost answered false for everything there: `api.hanzo.ai` read as not-ours
+// and took a first-come row, which is the exact defect SetSelfDomains was added to
+// close, defeated by composition rather than by logic (no test could see it — they
+// publish the set themselves, in one binary). Every process reads the same
+// environment and ConfigFromEnv is the ONE reader of it, so deriving the policy
+// wherever the question is asked cannot drift the way a hand-off between processes
+// does — and it stays right however the plugins are later composed.
+func seed() {
+	policyMu.RLock()
+	ok := seeded
+	policyMu.RUnlock()
+	if ok {
+		return
+	}
+	cfg := ConfigFromEnv("")
+	labels, self := labelSet(cfg.Reserved), hosts(selfOf(cfg))
+	policyMu.Lock()
+	if !seeded { // an explicit New/SetX landed while we derived — it wins
+		extraReserved, selfDomains, seeded = labels, self, true
+	}
+	policyMu.Unlock()
+}
+
+// labelSet normalizes labels into the lowercase set the reserved comparison uses.
+func labelSet(labels []string) map[string]bool {
 	m := make(map[string]bool, len(labels))
 	for _, l := range labels {
 		if l = strings.ToLower(strings.TrimSpace(l)); l != "" {
 			m[l] = true
 		}
 	}
-	reservedMu.Lock()
-	extraReserved = m
-	reservedMu.Unlock()
+	return m
 }
 
-// IsReserved reports whether a subdomain label may NOT be a published site. This is
-// the ONE predicate every enforcement point calls, so serve/create/bind never drift.
-// The comparison is on the lowercased label.
+// hosts normalizes a domain list, dropping blanks.
+func hosts(domains []string) []string {
+	out := make([]string, 0, len(domains))
+	for _, d := range domains {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// SetReservedExtra registers operator-supplied extra reserved labels (from
+// CLOUD_SITES_RESERVED). It ADDS to baseReserved; it can never remove a baked-in
+// reserved label. Called once at startup by New.
+func SetReservedExtra(labels []string) {
+	m := labelSet(labels)
+	policyMu.Lock()
+	extraReserved, seeded = m, true
+	policyMu.Unlock()
+}
+
+// IsReserved reports whether a subdomain LABEL may NOT be a published site. The
+// comparison is on the lowercased label.
+//
+// It takes a label, never a hostname: the set it compares against holds bare
+// labels, so a whole FQDN matches nothing. Ours is the predicate for a name whose
+// shape is not known in advance.
 func IsReserved(label string) bool {
 	label = strings.ToLower(strings.TrimSpace(label))
 	if baseReserved[label] {
 		return true
 	}
-	reservedMu.RLock()
+	seed()
+	policyMu.RLock()
 	ok := extraReserved[label]
-	reservedMu.RUnlock()
+	policyMu.RUnlock()
 	return ok
+}
+
+// Ours reports whether name is a name the PLATFORM holds rather than a tenant's to
+// take. It is the ONE predicate the claim gate and the host table both ask, over
+// the two shapes site_hosts actually stores:
+//
+//	a bare label  → the reserved-subdomain policy; it would publish as <label>.<apex>
+//	a hostname    → the self-domain set; at or under a registrable domain we run
+//
+// One question, two shapes, because the table holds both: a project's own bare slug
+// (deploy.go siteHost) and its custom FQDNs (domains.go). The storage gate used to
+// ask IsReserved with whichever it was given, so a HOSTNAME was compared against a
+// set of bare labels and `login.hanzo.ai` matched nothing — the backstop that is
+// supposed to make the serve-time gate a mere backstop contributed nothing at all
+// for the FQDN half. Splitting on shape is what makes one predicate answer both
+// without the label policy ever reaching a customer's own `www.example.com`.
+func Ours(name string) bool {
+	if strings.Contains(name, ".") {
+		return IsSelfHost(name)
+	}
+	return IsReserved(name)
 }
 
 // selfDomains is the registrable domains WE run — the sites apex (hanzo.app), the
@@ -107,15 +183,48 @@ var selfDomains []string
 // SetSelfDomains registers the domains we operate, from the same list the serve gate
 // is built with. Called once at startup by New, beside SetReservedExtra.
 func SetSelfDomains(domains []string) {
-	out := make([]string, 0, len(domains))
-	for _, d := range domains {
-		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+	out := hosts(domains)
+	policyMu.Lock()
+	selfDomains, seeded = out, true
+	policyMu.Unlock()
+}
+
+// apexOf is the published-site zone, normalized, with the product default. ONE
+// reading, so New and selfOf cannot disagree about which zone is ours.
+func apexOf(apex string) string {
+	if a := strings.ToLower(strings.TrimSpace(apex)); a != "" {
+		return a
+	}
+	return "hanzo.app"
+}
+
+// selfOf derives the domains WE run from config: the sites apex, the operator's own
+// self domains, and the first-party apex when first-party serving is actually on.
+//
+// The first-party apex is folded in HERE rather than by the caller, so the set is
+// COMPLETE by construction instead of by statement order. It used to be appended to
+// a local slice after publication, and SetSelfDomains copies — so the apex that
+// carries api/login/console was absent from the one predicate that decides whether
+// a host is ours, making every non-allowlisted <label>.<fpApex> a custom-domain
+// candidate. Gated on the SAME fail-closed pair New requires (an apex AND an owning
+// org): with no owner nothing first-party ever serves, so nothing is self on it.
+func selfOf(cfg Config) []string {
+	apex := apexOf(cfg.Apex)
+	out := []string{apex}
+	seen := map[string]bool{apex: true}
+	add := func(d string) {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" && !seen[d] {
+			seen[d] = true
 			out = append(out, d)
 		}
 	}
-	reservedMu.Lock()
-	selfDomains = out
-	reservedMu.Unlock()
+	for _, d := range cfg.SelfDomains {
+		add(d)
+	}
+	if strings.TrimSpace(cfg.FirstPartyOrg) != "" {
+		add(cfg.FirstPartyApex)
+	}
+	return out
 }
 
 // IsSelfHost reports whether host is one of OUR registrable domains or anything
@@ -127,8 +236,9 @@ func IsSelfHost(host string) bool {
 	if host == "" {
 		return false
 	}
-	reservedMu.RLock()
-	defer reservedMu.RUnlock()
+	seed()
+	policyMu.RLock()
+	defer policyMu.RUnlock()
 	for _, d := range selfDomains {
 		if host == d || strings.HasSuffix(host, "."+d) {
 			return true
