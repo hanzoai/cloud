@@ -9,12 +9,28 @@ package cloud
 // second scorer would be a second answer to one question, and the two would
 // disagree silently, which is the failure mode a risk product cannot have.
 //
-// The seam is installed the way the observability plane installs its claim on
-// the event door (obsevents.go): the app that owns /v1/risk hands its scoring
-// function to the core at mount, and the core calls it through a nil-safe
-// accessor. That inverts the import — package cloud cannot import an app, since
-// every app imports cloud — and it means the gate below is complete and testable
-// before the scorer exists, and stays correct when it is absent at run time.
+// The seam inverts the import — package cloud cannot import an app, since every
+// app imports cloud — so the app that owns /v1/risk hands its scoring function to
+// the core at mount and the core calls it through a nil-safe accessor. That is
+// what makes the gate below complete and testable before a scorer exists, and
+// correct when it is absent at run time.
+//
+// IT IS AN IN-PROCESS HANDOFF, AND EVERY APP IS ITS OWN PROCESS. cmd/cloud mounts
+// each subsystem as a separate binary, so a scorer installed through SetRiskScorer
+// answers for THAT process and no other: called from the risk app's Mount it arms
+// the risk process alone, and RiskScorerInstalled stays false in every other one
+// however healthy the risk process is. The observability plane's event door rode
+// this exact shape (cloud.SetObsErrorIngest, in a file named obsevents.go) and
+// read nil in the process that needed it, answering 503 to every Sentry SDK until
+// it moved to a plane op — apps/o11y/obs_rpc.go is what replaced it, and
+// obsevents.go is gone.
+//
+// So the reach of this seam is one process, by construction. A caller in another
+// binary — the abuse gate that serve.go installs fleet-wide, the signup gate in
+// hanzoai/iam — reaches /v1/risk over the wire or over the plane, never through
+// this global. Note what that means for the tests below: they link cloud and the
+// app into ONE binary, where the handoff always works, so no test here can
+// observe the boundary that decides whether it works in production.
 //
 // THE FAIL POLICY LIVES HERE, IN ONE FUNCTION, AND NOWHERE ELSE.
 //
