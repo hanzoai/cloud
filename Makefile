@@ -358,24 +358,30 @@ docker-push: docker ## Push the Docker image to ghcr.io. Requires docker login.
 # Each app gets a writable data dir and its OWN four ports. Without them it dies on
 # `mkdir /var/lib/cloud/orgs` or on binding :8080/:9653/:9090/:8081 long before it
 # reaches the router — and an early death looks like silence, which reads as a pass.
-COMPOSE_DIR ?= .compose
+# CONCURRENT, because the timeout is the cost and it is paid per app: run one at a
+# time and $(words $(APPS)) apps take most of an hour, which is a check nobody runs
+# — and a check nobody runs is how all of this reached production. Each app already
+# has its own dir and its own port block, so they do not contend; xargs -P just
+# stops them queueing. Failures are written to files rather than raced onto stdout.
+COMPOSE_DIR  ?= .compose
+COMPOSE_JOBS ?= 8
 compose: apps ## Prove every app binary BOOTS — the compose check `go build` cannot do.
 	@rm -rf $(COMPOSE_DIR) && mkdir -p $(COMPOSE_DIR)
-	@fail=0; port=41000; \
-	for a in $(APPS); do \
-	  d=$(COMPOSE_DIR)/$$a; mkdir -p $$d/rt; \
+	@printf '%s\n' $(APPS) | nl -ba | xargs -P$(COMPOSE_JOBS) -n2 sh -c '\
+	  a=$$1; d=$(COMPOSE_DIR)/$$1; p=$$((41000 + $$0 * 10)); mkdir -p $$d/rt; \
 	  out=$$(CLOUD_DATA_DIR=$$d ZIP_RUNTIME_DIR=$$d/rt \
-	         CLOUD_LISTEN=:$$port CLOUD_ZAP_LISTEN=:$$((port+1)) \
-	         CLOUD_HEALTH_LISTEN=:$$((port+2)) CLOUD_ADMIN_LISTEN=:$$((port+3)) \
-	         timeout 25 ./bin/$$a 2>&1); rc=$$?; port=$$((port+10)); \
-	  if printf '%s' "$$out" | grep -q 'does not compose'; then \
-	    fail=1; echo "PANIC $$a"; printf '%s\n' "$$out" | grep -E 'zip: (the group|GET|POST|PUT|PATCH|DELETE)' | sed 's/^/    /' | head -4; \
+	         CLOUD_LISTEN=:$$p CLOUD_ZAP_LISTEN=:$$((p+1)) \
+	         CLOUD_HEALTH_LISTEN=:$$((p+2)) CLOUD_ADMIN_LISTEN=:$$((p+3)) \
+	         timeout 25 ./bin/$$a 2>&1); rc=$$?; \
+	  if printf "%s" "$$out" | grep -q "does not compose"; then \
+	    { echo "PANIC $$a"; printf "%s\n" "$$out" | grep -E "zip: (the group|GET|POST|PUT|PATCH|DELETE)" | sed "s/^/    /" | head -4; } > $$d.fail; \
 	  elif [ $$rc -ne 124 ]; then \
-	    fail=1; echo "DIED  $$a (rc=$$rc): $$(printf '%s' "$$out" | tail -1 | cut -c1-140)"; \
-	  fi; \
-	done; \
-	rm -rf $(COMPOSE_DIR); \
-	test $$fail -eq 0 && echo ">> compose: $(words $(APPS)) apps boot" || { echo ">> compose FAILED"; exit 1; }
+	    echo "DIED  $$a (rc=$$rc): $$(printf "%s" "$$out" | tail -1 | cut -c1-140)" > $$d.fail; \
+	  fi'
+	@set -- $(COMPOSE_DIR)/*.fail; \
+	if [ -e "$$1" ]; then cat $(COMPOSE_DIR)/*.fail; n=$$(ls $(COMPOSE_DIR)/*.fail | wc -l); \
+	  rm -rf $(COMPOSE_DIR); echo ">> compose FAILED: $$n of $(words $(APPS)) apps"; exit 1; \
+	else rm -rf $(COMPOSE_DIR); echo ">> compose: $(words $(APPS)) apps boot"; fi
 
 clean: ## Remove built artifacts.
 	rm -rf bin $(COMPOSE_DIR)
