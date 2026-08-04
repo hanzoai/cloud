@@ -23,8 +23,7 @@ func TestCommerceErrorScope(t *testing.T) {
 	app.Get("/v1/kms/health", func(c *zip.Ctx) error { return zip.ErrForbidden("kms says no") })
 
 	// commerce (position 39): the REAL group chain, now with the scoped envelope.
-	sv1 := app.Group("/v1")
-	sv1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
+	app.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
 
 	// projects (after commerce) — typed 403; must NOT be clobbered to 500. On the
 	// APP, not the group: that is the whole point of the case, a sibling subsystem
