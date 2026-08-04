@@ -57,6 +57,7 @@ func init() {
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "authz",
+		OwnsHealth: true,
 		Price: cloud.Free,
 		// The adapter lives HERE, on cloud's side: authz is a leaf and must never
 		// import cloud, so cloud's plugin contract bends to the leaf rather than the

@@ -73,6 +73,18 @@ var subsystems atomic.Pointer[subsystemIndex]
 // MUST agree on that rule, so they share this function instead of each spelling the
 // fallback — a drift between them would mislabel every span of the subsystem that
 // disagreed.
+//
+// IT DOES NOT FALL BACK TO manifest.Apps, and the difference is worth stating because
+// the two lists look interchangeable and are not. A manifest row answers "which paths
+// does the HOST forward here" — a routing table, free to enumerate leaves: deploy's
+// row is 14 specific paths (/v1/deploy/applications, /v1/deploy/clusters, …). This
+// answers "which subtree may this subsystem's MIDDLEWARE gate", and deploy installs
+// one bridge across /v1/deploy, the parent of all 14. Feeding the routing table in
+// here made that bridge an escape and failed deploy's boot outright.
+//
+// So a subsystem whose surface is not /v1/<name> states its own bound —
+// `Prefixes: manifest.PrefixesFor(name)` where the two genuinely coincide, which is
+// what referrals and 21 others do.
 func MountPrefixes(name string, declared []string) []string {
 	if len(declared) == 0 {
 		return []string{"/v1/" + name}
