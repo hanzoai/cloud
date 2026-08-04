@@ -12,6 +12,7 @@ import (
 	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
+	"github.com/hanzoai/cloud/internal/writerlease"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
 	"github.com/hanzoai/cloud/webui"
@@ -93,33 +94,30 @@ func Listen(plugins []Plugin, enable []string) error {
 		return serveReaderProxy(cfg)
 	}
 
-	// Writer role, optional lease. When CLOUD_WRITER_LEASE is set (the surge/
-	// overlap roll topology), take the exclusive writer lease BEFORE opening the
-	// RWO stores and release it LAST (after every store is closed) so a surge
-	// writer never double-opens the exclusive-lock ZapDB/audit stores. Default
-	// OFF: a Recreate single-writer never overlaps and needs no lease, so an unset
-	// variable is byte-identical to today.
+	// The pod's writer lease — the SAME call the router makes, because the rule is
+	// one rule and a process's POSITION decides what it means (internal/writerlease).
 	//
-	// ONLY THE HOST TAKES IT. The lease interlocks two POD GENERATIONS across a
-	// roll — the thing it is guarding against is a second pod on the same PVC. A
-	// plugin child is not a second pod: it is part of the writer that already
-	// holds the lease, sharing the same DataDir by design. cloud is a plugin host
-	// now, so without this test every child races the host for a single-holder
-	// lock on one inode, the losers block until the 90s fail-closed deadline,
-	// nothing binds :8000, and the pod is killed by its own liveness probe and
-	// restarted into the identical deadlock. That is a total api.hanzo.ai outage
-	// produced entirely by the safety mechanism.
-	if cfg.WriterLease && !underRouter() {
-		release, lerr := acquireWriterLease(cfg.DataDir, 90*time.Second, luxlog.New("cloud").New("subsystem", "writer-lease"))
-		if lerr != nil {
-			return fmt.Errorf("writer lease: %w", lerr)
-		}
-		// Released after the shutdown path closes every store (app.Shutdown's
-		// subsystem teardown hooks + audit + gateway-policy) below; defer is the
-		// store-close backstop that also covers early error returns (the kernel
-		// reclaims on exit regardless).
-		defer func() { _ = release() }()
+	// In the fleet this process is a plugin child: the router took the lease before
+	// it spawned anything and stamped the environment this process was born with,
+	// so Hold recognises the parent's claim and touches nothing. Run standalone —
+	// `hanzo kms` against its own volume — nothing spawned it, so it IS the root of
+	// its pod and takes the lease itself.
+	//
+	// This used to be an acquire guarded by "am I not under a router", in the body
+	// that ONLY plugins run. That aimed a single-holder lock at the siblings rather
+	// than at the other pod generation, and cost api.hanzo.ai four minutes of 503
+	// on 2026-08-04; the guard added afterwards stopped the deadlock but left the
+	// lock in the hands of nobody, since the router does not run this code at all.
+	//
+	// Released by the defer after app.Shutdown has run every subsystem teardown
+	// hook, which is the point at which this process holds nothing open. Unset
+	// CLOUD_WRITER_LEASE ⇒ this does nothing, which is what production runs.
+	releaseLease, lerr := writerlease.Hold(cfg.DataDir, writerlease.DefaultWait,
+		luxlog.New("cloud").New("subsystem", "writer-lease").Info)
+	if lerr != nil {
+		return lerr
 	}
+	defer func() { _ = releaseLease() }()
 
 	deps := BuildDeps(cfg)
 
