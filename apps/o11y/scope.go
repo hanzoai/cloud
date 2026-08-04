@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/zap-proto/zip"
 )
@@ -45,14 +44,14 @@ func admin(c *zip.Ctx) bool { return c.IsAdmin() }
 // The public surface is FLAT and version-less (one /v1/, no nested /api/vN): the
 // upstream engine version is an internal impl detail resolved inside the
 // handlers, never leaked into the route.
-func mountScope(a cloud.Router) {
+func mountScope(a *zip.App) {
 	// Tenant-scoped, org-pinned reads — the ONE owner of these paths (handlers
 	// below), declared as TYPED ops on the group so the prefix is part of each
 	// op's path and every projection (the document, the MCP tool, the CLI
 	// command, the SDK method) follows from this one registration. cmd/zipdoc
 	// resolves the group prefix the same way, so the doc comments below reach the
 	// document and the tool list.
-	g := a.Group(o11yPrefix)
+	g := under{a, o11yPrefix}
 	zip.Get(g, "/logs", handleLogs)
 	zip.Get(g, "/metrics", handleMetrics)
 	zip.Get(g, "/status", handleStatus)
