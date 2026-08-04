@@ -334,7 +334,7 @@ func TestTeamTenantResolvesSignedOrg(t *testing.T) {
 	tok := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 
 	// The batch must be something ONLY full capability can store. error+navigation is
-	// not: both kinds are in publicKinds, so the anonymous lane 503s identically and
+	// not: both kinds are in publicKinds, so the projection stores them identically and
 	// deleting the teamTenant clause entirely would have gone unnoticed.
 	//
 	// A customEvent is the discriminator. canonicalType is "event", which is NOT in
@@ -450,19 +450,17 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 
 // ── the door ─────────────────────────────────────────────────────────────────
 
-// TestTeamDoorIsRegistered proves BOTH spellings of the door carry the team
-// wire since the fold: the canonical /v1/event dispatches the team array by
-// shape (isTeamArray) and the sunsetting caller-owned /collect path binds the
-// same ONE decode — so on both, team events survive admission and REACH the
-// write core, which is 503 in this warehouse-less harness. A wrong or missing
-// route would 404/405; a decode regression that silently dropped the batch
-// would answer 200 dropped=2 — the exact accepted-then-discarded failure the
-// old two-wire split existed to prevent.
+// TestTeamDoorIsRegistered proves the canonical door carries the team wire:
+// /v1/event dispatches the team array by shape (isTeamArray), so team events
+// survive admission and REACH the write core — 503 in this warehouse-less
+// harness. A wrong or missing route would 404/405; a decode regression that
+// silently dropped the batch would answer 200 dropped=2.
 func TestTeamDoorIsRegistered(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	app := mountApp(t)
+	tok := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 
-	if code, res := postBody(t, app, "/v1/event", teamWire, ""); code != http.StatusServiceUnavailable {
+	if code, res := postBody(t, app, "/v1/event", teamWire, tok); code != http.StatusServiceUnavailable {
 		t.Fatalf("/v1/event with team wire = %d %+v, want 503 (events must survive admission and reach the write core)", code, res)
 	}
 }
@@ -637,19 +635,19 @@ func runTenant(t *testing.T, headers map[string]string, fn func(*zip.Ctx) (admis
 	return got, ok
 }
 
-// TestUnidentifiableBearerStillTakesTheAnonymousLane is the OTHER half of the F2 fix,
-// and the reason presented() names the team bearer STRUCTURALLY rather than treating
-// every Bearer as presented. A stale or foreign JWT — no `account` claim — must keep
-// degrading to the anonymous projection, exactly as before this file learned about
-// team tokens. Turning those into 403 would be a refusal on evidence we do not have.
-func TestUnidentifiableBearerStillTakesTheAnonymousLane(t *testing.T) {
+// TestUnidentifiableBearerIsNotPresented is the reason presented() names the team
+// bearer STRUCTURALLY rather than treating every Bearer as presented. A stale or
+// foreign JWT — no `account` claim — is not evidence of a credential, so it reads as
+// "presented nothing": 401, telling the caller to get a key. A 403 would assert its
+// key is broken, on evidence we do not have.
+func TestUnidentifiableBearerIsNotPresented(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	app := mountApp(t)
 	// A well-formed JWT with no `account` claim (an IAM-shaped bearer).
 	foreign := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJzdWIiOiJ1c2VyLTEiLCJpc3MiOiJodHRwczovL2hhbnpvLmlkIn0.c2ln"
-	if code, _ := postBody(t, app, "/v1/event", teamWire, foreign); code != http.StatusServiceUnavailable {
-		t.Fatalf("foreign bearer = %d, want 503 (anonymous lane reached the store), NOT 403", code)
+	if code, _ := postBody(t, app, "/v1/event", teamWire, foreign); code != http.StatusUnauthorized {
+		t.Fatalf("foreign bearer = %d, want 401 (not presented), NOT 403", code)
 	}
 	if teamPresented2(t, foreign) {
 		t.Error("a bearer with no account claim was counted as a presented team credential")
@@ -678,16 +676,12 @@ func teamPresented2(t *testing.T, bearer string) bool {
 
 // ── the reduced lane, observed at the write core ─────────────────────────────
 
-// TestGuestRowsLandInItsOwnOrgNotPublic is the assertion the previous version of this
-// suite only CLAIMED to make. TestGuestWritesProjectedIntoItsOwnOrg checks the org on
-// teamAdmission — a pure function — and then uses a 503 as its end-to-end proof. But the
-// 503 comes from the absent warehouse either way, so swapping handle's `a.org` for
-// publicTenant survived: the whole rationale of this lane is "not $public", and nothing
-// tested it.
-//
-// With the fake warehouse the tenant column is directly observable, so this binds to
-// where the row actually lands.
-func TestGuestRowsLandInItsOwnOrgNotPublic(t *testing.T) {
+// TestGuestRowsLandInItsOwnOrg binds the reduced lane to where the row ACTUALLY
+// lands. TestGuestWritesProjectedIntoItsOwnOrg checks the org on teamAdmission — a
+// pure function — and then uses a 503 as its end-to-end proof, which the absent
+// warehouse produces either way. With the fake warehouse the tenant column is
+// directly observable.
+func TestGuestRowsLandInItsOwnOrg(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	roomyRate(t)
 	w := fakeWarehouse(t)
@@ -712,11 +706,9 @@ func TestGuestRowsLandInItsOwnOrgNotPublic(t *testing.T) {
 		t.Fatalf("wrote %d statements, want 2", len(got))
 	}
 	for _, g := range got {
-		if g == publicTenant {
-			t.Errorf("a guest's row was filed under %q, where its org cannot read it", publicTenant)
-		}
 		if g != "acme" {
-			t.Errorf("tenant = %q, want acme (the SIGNED org)", g)
+			t.Errorf("tenant = %q, want acme (the SIGNED org) — a guest's rows must land where "+
+				"its own org can read them", g)
 		}
 	}
 }
@@ -766,30 +758,20 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	}
 }
 
-// TestAnonymousLaneIdentityIsNamespacedNotSubstituted: the two genuinely anonymous
-// callers have no signed identity to substitute, so attribute() must not reach them — a
-// credential-less beacon keeps the id it sent, which is what keeps one browser one
-// visitor. What it does NOT keep is the identified namespace: publicSubject files the id
-// under the reserved prefix, so the bytes survive and the collision does not.
-//
-// This test used to assert the id verbatim, on the reasoning that it lands in $public
-// "where it means nothing". That is true of THIS door and false of the published-site
-// carve, which runs the same projection into a REAL org — so the lane had a rule and an
-// exception. It now has a rule.
-func TestAnonymousLaneIdentityIsNamespacedNotSubstituted(t *testing.T) {
+// TestAnonymousWritesNothing: a credential-less beacon is refused and reaches the
+// warehouse not at all. There is no anonymous tenant to file it under, so the
+// identity question the projection used to answer for it does not arise.
+func TestAnonymousWritesNothing(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	roomyRate(t)
 	w := fakeWarehouse(t)
 	app := mountApp(t)
 	body := `[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"visitor-7"}]`
-	if code, res := postBody(t, app, "/v1/event", body, ""); code != http.StatusOK || res.Accepted != 1 {
-		t.Fatalf("anonymous POST = %d %+v, want 200 accepted:1", code, res)
+	code, res := postBody(t, app, "/v1/event", body, "")
+	if code != http.StatusUnauthorized {
+		t.Fatalf("anonymous POST = %d %+v, want 401", code, res)
 	}
-	if got := w.tenants(t); len(got) != 1 || got[0] != publicTenant {
-		t.Fatalf("anonymous tenant = %v, want [%s]", got, publicTenant)
-	}
-	if got := w.facts[0].distinct; got != anonymousSubject+"visitor-7" {
-		t.Errorf("anonymous distinct_id = %v, want %q — the caller's id, kept but namespaced",
-			got, anonymousSubject+"visitor-7")
+	if got := w.tenants(t); len(got) != 0 {
+		t.Fatalf("anonymous wrote tenants %v, want none", got)
 	}
 }

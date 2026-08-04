@@ -113,18 +113,18 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// publicTenant is the reserved tenant every /v1 door attributes anonymous events to.
-// The '$' prefix is load-bearing: an IAM org slug is lowercase ASCII alphanumerics and
-// '-' (the IAM slugifier emits nothing else), so this value lies outside the org
-// namespace and cannot collide with a real tenant. It is also the reason the anonymous
-// stream is legible: on an API host a row's tenant_id alone says whether IAM vouched
-// for it.
+// There is no reserved anonymous tenant. Rows used to land under a `$public`
+// constant whenever a beacon carried no credential; no org could read that
+// partition, so every such caller lost everything it sent behind a 200. The lane
+// is gone (handle, event.go) and so is the constant — an event now lands in the
+// org a credential named, or is refused.
 //
-// It is a CONSTANT and not a fallback: nothing derives it from the request. The one
-// door that passes a different anonymous tenant is the published-site host, which
-// passes the org the site resolver returned for that host, so a customer's own site
-// analytics keep landing in the customer's org — under this same projection.
-const publicTenant = "$public"
+// This lane survives for the REDUCED principal: a team guest holds a credential
+// that proves its org but not its capability, so its writes go through the same
+// projection into that org. `org` below is therefore always a real tenant.
+//
+// apps/reference keeps its own `$public` literal, and correctly: it EXCLUDES that
+// org from cross-org aggregates, and the historical rows it excludes still exist.
 
 // maxPublicBytes / maxPublicBatch bound ONE anonymous request. @hanzo/event's default
 // batchSize is 20 and it also drains the queue on page-unload, so 50 leaves real
@@ -592,12 +592,6 @@ func attribute(evs []CaptureEvent, subject string) []CaptureEvent {
 // genuinely anonymous callers — the credential-less lane and the site-host carve — stay
 // exactly as they were: nobody signed for them, so there is no identity to substitute.
 func publicIngest(c *zip.Ctx, dec decode, org, source string, subject ...string) error {
-	// CLOUD_ANALYTICS_PUBLIC_CAPTURE is the ONE existing anonymous-capture switch
-	// (it also gates the site-host carve). Off ⇒ the canonical door keeps its
-	// strict, principal-only contract.
-	if !publicCaptureEnabled() {
-		return zip.ErrForbidden("valid bearer or a resolvable ingest key required")
-	}
 	if !publicRateOK(c) {
 		return zip.Errorf(http.StatusTooManyRequests, "rate limit exceeded")
 	}

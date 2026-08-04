@@ -26,7 +26,9 @@ func TestSetProjectDefaults(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := Project{Org: "acme", Slug: "landing"}
-			setProjectDefaults(&p, tc.optOut)
+			if err := setProjectDefaults(&p, tc.optOut); err != nil {
+				t.Fatalf("setProjectDefaults: %v", err)
+			}
 			if p.Analytics != tc.wantAnal {
 				t.Fatalf("analytics=%v want %v", p.Analytics, tc.wantAnal)
 			}
