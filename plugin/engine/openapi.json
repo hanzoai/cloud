@@ -18,8 +18,8 @@
   "paths": {
     "/v1/engine/model": {
       "get": {
-        "operationId": "get_v1_engine_model",
-        "summary": "Model reads one model's load state — loaded, unloading, or not_found, as the engine itself reports it.",
+        "operationId": "engineModel",
+        "summary": "Read one model's load state on the serving runtime",
         "description": "Model reads one model's load state — loaded, unloading, or not_found, as\nthe engine itself reports it.",
         "tags": [
           "engine"
@@ -50,8 +50,8 @@
     },
     "/v1/engine/models": {
       "get": {
-        "operationId": "get_v1_engine_models",
-        "summary": "Models lists the models the engine serves, each with its load state — the server's own model table (its standard list envelope, load status included), relayed verbatim.",
+        "operationId": "engineModels",
+        "summary": "List the models the serving runtime holds, with each one's load state",
         "description": "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its standard list envelope, load status\nincluded), relayed verbatim.",
         "tags": [
           "engine"
@@ -70,8 +70,8 @@
     },
     "/v1/engine/status": {
       "get": {
-        "operationId": "get_v1_engine_status",
-        "summary": "Status reports whether the engine deployment is reachable and which build revision it runs — an honest lens for \"is the serving runtime up\", never a fabricated ok.",
+        "operationId": "engineStatus",
+        "summary": "Whether the serving runtime is reachable, and which build it runs",
         "description": "Status reports whether the engine deployment is reachable and which build\nrevision it runs — an honest lens for \"is the serving runtime up\", never a\nfabricated ok.",
         "tags": [
           "engine"
@@ -92,8 +92,8 @@
     },
     "/v1/engine/system": {
       "get": {
-        "operationId": "get_v1_engine_system",
-        "summary": "System reads the engine host's inventory: OS, CPU, memory, every accelerator device with its VRAM and compute capability, and the build's capabilities (CUDA/Metal/flash-attention) — the real hardware under the serving runtime, relayed verbatim.",
+        "operationId": "engineSystem",
+        "summary": "The serving host's own inventory: devices, memory and build capabilities",
         "description": "System reads the engine host's inventory: OS, CPU, memory, every accelerator\ndevice with its VRAM and compute capability, and the build's capabilities\n(CUDA/Metal/flash-attention) — the real hardware under the serving runtime,\nrelayed verbatim.",
         "tags": [
           "engine"
