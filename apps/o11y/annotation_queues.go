@@ -90,15 +90,14 @@ func mountAnnotationQueues(a *zip.App, deps cloud.Deps) error {
 	// below reach all of them. Static collection routes register before the :id
 	// param routes so an id can never shadow a collection route (the eval
 	// discipline).
-	g := under{a, o11yPrefix}
-	zip.Get(g, "/reviews", s.listQueues)
-	zip.Post(g, "/reviews", s.createQueue, zip.WithStatus(http.StatusCreated))
-	zip.Get(g, "/reviews/:id", s.getQueue)
-	zip.Patch(g, "/reviews/:id", s.updateQueue)
-	zip.Delete(g, "/reviews/:id", s.deleteQueue)
-	zip.Get(g, "/reviews/:id/items", s.listItems)
-	zip.Post(g, "/reviews/:id/items", s.addItems, zip.WithStatus(http.StatusCreated))
-	zip.Patch(g, "/reviews/:id/items/:itemId", s.updateItem)
+	zip.Get(a, o11yPrefix+"/reviews", s.listQueues)
+	zip.Post(a, o11yPrefix+"/reviews", s.createQueue, zip.WithStatus(http.StatusCreated))
+	zip.Get(a, o11yPrefix+"/reviews/:id", s.getQueue)
+	zip.Patch(a, o11yPrefix+"/reviews/:id", s.updateQueue)
+	zip.Delete(a, o11yPrefix+"/reviews/:id", s.deleteQueue)
+	zip.Get(a, o11yPrefix+"/reviews/:id/items", s.listItems)
+	zip.Post(a, o11yPrefix+"/reviews/:id/items", s.addItems, zip.WithStatus(http.StatusCreated))
+	zip.Patch(a, o11yPrefix+"/reviews/:id/items/:itemId", s.updateItem)
 
 	log.Info("o11y reviews surface mounted (native)")
 	return nil
