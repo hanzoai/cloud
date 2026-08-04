@@ -1157,6 +1157,36 @@ components:
         version:
           type: string
       type: object
+    CollectOut:
+      properties:
+        balanceUsedCents:
+          description: BalanceUsedCents is how much was covered by prepaid balance.
+          type: integer
+        cardChargedCents:
+          description: CardChargedCents is how much was charged to the card on file.
+          type: integer
+        creditUsedCents:
+          description: CreditUsedCents is how much was covered by credit grants.
+          type: integer
+        invoice:
+          $ref: '#/components/schemas/InvoiceOut'
+          description: |-
+            Invoice is the invoice AFTER the attempt — its status is the authority on
+            what happened, not this struct's other fields.
+        paid:
+          description: |-
+            Paid reports whether the invoice is now settled in full. A false here with
+            no error is a DECLINE: the invoice stays open and may be collected again.
+          type: boolean
+        processorRef:
+          description: |-
+            ProcessorRef is the processor's reference for any card charge — the field
+            that proves money moved at the gateway rather than only in our ledger.
+          type: string
+        reason:
+          description: Reason explains a decline or partial collection. Empty on success.
+          type: string
+      type: object
     CommerceOverview:
       properties:
         aov:
@@ -2968,6 +2998,71 @@ components:
         reason:
           type: string
       type: object
+    InvoiceLineIn:
+      properties:
+        amount:
+          description: Amount is the line total in whole cents (250000 is $2,500.00).
+          type: integer
+        description:
+          description: Description is the human-readable line, e.g. "Advisory retainer
+            — August".
+          type: string
+        quantity:
+          description: Quantity is the number of units, when the line is metered.
+            Optional.
+          type: integer
+        unitPrice:
+          description: UnitPrice is the per-unit price in cents, when the line is
+            metered. Optional.
+          type: integer
+      type: object
+    InvoiceOut:
+      properties:
+        amountDueCents:
+          description: AmountDueCents is what remains collectible.
+          type: integer
+        amountPaidCents:
+          description: AmountPaidCents is what has been collected so far.
+          type: integer
+        createdAt:
+          description: CreatedAt is when the draft was raised, RFC3339.
+          type: string
+        currency:
+          description: Currency is the ISO 4217 code.
+          type: string
+        customerEmail:
+          description: CustomerEmail is where it is sent.
+          type: string
+        id:
+          description: ID is the invoice id — what the issue, collect and void ops
+            address.
+          type: string
+        lines:
+          description: Lines are the charges on the invoice.
+          items:
+            $ref: '#/components/schemas/InvoiceLineIn'
+          type: array
+        number:
+          description: |-
+            Number is the human-facing invoice number, e.g. "INV-0042". A draft has
+            none; issuing assigns it.
+          type: string
+        paymentRef:
+          description: PaymentRef is the processor reference for the collection, once
+            paid.
+          type: string
+        status:
+          description: |-
+            Status is draft, open, paid, void or uncollectible. A draft is not
+            collectible; issuing moves it to open.
+          type: string
+        subtotalCents:
+          description: SubtotalCents is the sum of the lines.
+          type: integer
+        userId:
+          description: UserID is the customer billed.
+          type: string
+      type: object
     InvoiceRow:
       properties:
         amountCents:
@@ -4043,6 +4138,95 @@ components:
         name:
           type: string
       type: object
+    PaymentIn:
+      properties:
+        amountCents:
+          description: |-
+            AmountCents is the amount to charge, in whole cents (5000 is $50.00).
+            Server-side bounds apply and are authoritative — the default floor is $1
+            and the ceiling $5,000, so a fat-fingered or hostile amount is refused
+            before any money moves.
+          type: integer
+        currency:
+          description: Currency is the ISO 4217 code, lower-cased. Empty means usd.
+          type: string
+        idempotencyKey:
+          description: |-
+            IdempotencyKey makes a retry safe: the same key never charges twice, it
+            replays the first result. Sending one is strongly recommended for an agent,
+            which retries by construction. Empty falls back to a windowed key derived
+            from the amount and currency, so a double-submit inside 15 minutes still
+            collapses onto one charge.
+          type: string
+        sourceId:
+          description: |-
+            SourceID is the single-use payment token that stands in for the card: a
+            Square Web Payments SDK nonce minted in the browser, or a Square sandbox
+            test nonce when the org's credentials are sandbox ones. The card number
+            itself never reaches this process, which is what keeps it out of PCI scope.
+          type: string
+      type: object
+    PaymentOut:
+      properties:
+        balanceCents:
+          description: |-
+            BalanceCents is the org's balance AFTER this payment, read back from the
+            same key just credited so it matches what the balance endpoint reports.
+          type: integer
+        id:
+          description: |-
+            ID is the ledger transaction id for the credit. It is what getPayment
+            reads back, and the customer-visible receipt for the money.
+          type: string
+        processorRef:
+          description: |-
+            ProcessorRef is the payment processor's own reference for the charge
+            (Square's payment id). It is the field that proves money actually moved at
+            the gateway rather than only in our ledger — the thing to quote when
+            reconciling against a processor dashboard.
+          type: string
+        status:
+          description: |-
+            Status is "ok" on a settled charge. A charge that did not settle is an
+            error with the processor's reason, never a status field to inspect.
+          type: string
+        test:
+          description: |-
+            Test reports which bucket this credited: true is a SANDBOX charge crediting
+            the test balance, false is live money. It is always stated so a receipt can
+            never be mistaken for the other kind.
+          type: boolean
+      type: object
+    PaymentRecord:
+      properties:
+        amountCents:
+          description: AmountCents is the credited amount in whole cents.
+          type: integer
+        createdAt:
+          description: CreatedAt is when the credit was written, RFC3339.
+          type: string
+        currency:
+          description: Currency is the ISO 4217 code.
+          type: string
+        id:
+          description: ID is the ledger transaction id.
+          type: string
+        notes:
+          description: Notes is the ledger memo, carrying the processor and its reference.
+          type: string
+        status:
+          description: |-
+            Status is the payment's state. This ledger writes a deposit only AFTER the
+            processor settled, so a payment that can be read is one that succeeded.
+          type: string
+        subject:
+          description: Subject is the billing key this payment credited.
+          type: string
+        test:
+          description: Test reports whether this was a sandbox charge (test balance)
+            or live money.
+          type: boolean
+      type: object
     PnL:
       properties:
         expense:
@@ -4489,6 +4673,28 @@ components:
           type: integer
         seats:
           type: integer
+      type: object
+    RaiseInvoiceIn:
+      properties:
+        currency:
+          description: Currency is the ISO 4217 code, lower-cased. Empty means usd.
+          type: string
+        customerEmail:
+          description: CustomerEmail is where the invoice is sent. Optional.
+          type: string
+        lines:
+          description: |-
+            Lines are the charges. The invoice subtotal and amount due are COMPUTED
+            from these — there is no total field to send, because a total that
+            disagreed with its own lines would bill a number nobody could derive.
+          items:
+            $ref: '#/components/schemas/InvoiceLineIn'
+          type: array
+        userId:
+          description: |-
+            UserID identifies the customer being billed, within the caller's own org.
+            Required — an invoice with no addressee is not an invoice.
+          type: string
       type: object
     RateCard:
       properties:
@@ -12188,6 +12394,384 @@ components:
         name:
           description: Name is the database name to create.
           type: string
+      type: object
+    dataroomAddDocument:
+      properties:
+        documentId:
+          description: |-
+            DocumentId is the document to attach. Required, and it must already exist
+            in the caller's own store — this route attaches, it never uploads.
+        id:
+          description: |-
+            ID is the room to add to. It is the path segment: the URL is the addressing
+            authority, and the org it is resolved in comes from the caller's principal,
+            so an id from another tenant is simply not found.
+          type: string
+        orderIndex:
+          description: |-
+            OrderIndex fixes the document's place in the viewer's list. Optional; a
+            number or a numeric string is accepted, and anything that is not a number
+            leaves the document unordered, which sorts it last.
+      type: object
+    dataroomCreate:
+      properties:
+        description:
+          description: |-
+            Description is the room's description. Optional; any JSON scalar is
+            accepted and stored as its text, and omitting it leaves the room with none.
+        name:
+          description: |-
+            Name is the room's display name. Required, and a room without one is
+            refused with the data room's own validation error.
+      type: object
+    dataroomDocument:
+      properties:
+        contentType:
+          description: ContentType is the mime type recorded at upload, null when
+            none was sent.
+          type: string
+        createdAt:
+          description: CreatedAt is when the document was uploaded, in unix milliseconds.
+          type: integer
+        fileKey:
+          description: |-
+            FileKey is the opaque object-storage key the bytes are stored under. It is
+            scoped to the tenant's own key prefix and is not a URL.
+          type: string
+        fileSize:
+          description: FileSize is the stored byte count, null when it was not recorded.
+          type: integer
+        id:
+          description: ID is the document id.
+          type: string
+        name:
+          description: Name is the document's display name.
+          type: string
+        numPages:
+          description: NumPages is the page count, null when it was not supplied at
+            upload.
+          type: integer
+        type:
+          description: Type is the document's kind, null when it was not recorded.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the document row last changed, in unix milliseconds.
+          type: integer
+      type: object
+    dataroomDocumentOne:
+      properties:
+        document:
+          $ref: '#/components/schemas/dataroomDocument'
+          description: Document is the document itself.
+      type: object
+    dataroomDocuments:
+      properties:
+        documents:
+          description: Documents is every document in the caller's own store, newest
+            first.
+          items:
+            $ref: '#/components/schemas/dataroomDocument'
+          type: array
+      type: object
+    dataroomLink:
+      properties:
+        allowDownload:
+          description: AllowDownload is whether a visitor may download, rather than
+            only view.
+          type: boolean
+        allowList:
+          description: |-
+            AllowList narrows which addresses pass the email gate. An entry may be a
+            full address, an "@domain.com" suffix, or a bare "domain.com". An EMPTY
+            list admits everyone.
+          items:
+            type: string
+          type: array
+        createdAt:
+          description: CreatedAt is when the link was minted, in unix milliseconds.
+          type: integer
+        dataroomId:
+          description: DataroomId is the room the link opens, null for a single-document
+            link.
+          type: string
+        denyList:
+          description: |-
+            DenyList rejects addresses, in the same three forms as the allow list, and
+            is checked BEFORE it — so deny always wins.
+          items:
+            type: string
+          type: array
+        documentId:
+          description: DocumentId is the document the link opens, null for a room
+            link.
+          type: string
+        emailProtected:
+          description: EmailProtected is whether a visitor must state an address to
+            enter.
+          type: boolean
+        expiresAt:
+          description: ExpiresAt is when the link closes, in unix milliseconds; null
+            never expires.
+          type: integer
+        hasPassword:
+          description: |-
+            HasPassword reports THAT a password is set. The stored form is a bcrypt
+            hash and no route returns it.
+          type: boolean
+        id:
+          description: ID is the link id — the public token a visitor opens the room
+            with.
+          type: string
+        isArchived:
+          description: IsArchived is whether the link has been retired.
+          type: boolean
+        linkType:
+          description: LinkType is DATAROOM_LINK or DOCUMENT_LINK.
+          type: string
+        name:
+          description: Name is the link's label, null when none was given.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the link last changed, in unix milliseconds.
+          type: integer
+      type: object
+    dataroomLinkCreate:
+      properties:
+        allowDownload:
+          description: |-
+            AllowDownload permits downloading rather than viewing only. Optional and
+            OFF by default; any truthy JSON value turns it on.
+        allowList:
+          description: |-
+            AllowList narrows which addresses pass the email gate. Optional; an entry
+            may be a full address ("ada@example.com"), an "@domain.com" suffix, or a
+            bare "domain.com". An omitted or EMPTY list admits everyone, so a link with
+            no list enforces the email gate alone.
+          items: {}
+          type: array
+        dataroomId:
+          description: |-
+            DataroomId is the room to share. One of dataroomId or documentId is
+            required, and the target must exist in the caller's own store.
+        denyList:
+          description: |-
+            DenyList rejects addresses, in the same three forms as the allow list.
+            Optional. It is checked BEFORE the allow list, so deny always wins.
+          items: {}
+          type: array
+        documentId:
+          description: |-
+            DocumentId shares a SINGLE document instead of a room. One of dataroomId or
+            documentId is required.
+        emailProtected:
+          description: |-
+            EmailProtected makes a visitor state an address before entering. Optional
+            and ON by default: it is disabled only by the JSON literal false, so any
+            other value — including the string "false" — leaves the gate on.
+        expiresAt:
+          description: |-
+            ExpiresAt closes the link, in unix milliseconds. Optional; a number or a
+            numeric string is accepted, and omitting it means the link never expires.
+        name:
+          description: Name labels the link. Optional; any JSON scalar is stored as
+            its text.
+        password:
+          description: |-
+            Password gates the link. Optional; it is hashed with bcrypt before storage
+            and is never readable back through any route.
+      type: object
+    dataroomLinkOne:
+      properties:
+        link:
+          $ref: '#/components/schemas/dataroomLink'
+          description: Link is the link itself, including the id a visitor opens it
+            with.
+      type: object
+    dataroomLinkStats:
+      properties:
+        linkId:
+          description: LinkId is the link these counts are for.
+          type: string
+        pages:
+          description: Pages is the per-page breakdown, in page order.
+          items:
+            $ref: '#/components/schemas/dataroomPageStat'
+          type: array
+        totalPageViews:
+          description: TotalPageViews is how many page views the link received.
+          type: integer
+        totalViews:
+          description: TotalViews is how many viewing sessions the link opened.
+          type: integer
+      type: object
+    dataroomLinks:
+      properties:
+        links:
+          description: Links is every non-archived link, newest first.
+          items:
+            $ref: '#/components/schemas/dataroomLink'
+          type: array
+      type: object
+    dataroomMember:
+      properties:
+        contentType:
+          description: ContentType is the mime type recorded at upload, null when
+            none was sent.
+          type: string
+        createdAt:
+          description: CreatedAt is when the document was uploaded, in unix milliseconds.
+          type: integer
+        dataroomDocumentId:
+          description: |-
+            DataroomDocumentId is the membership id — this document's place in THIS
+            room, distinct from the document id.
+          type: string
+        fileKey:
+          description: FileKey is the opaque object-storage key the bytes are stored
+            under.
+          type: string
+        fileSize:
+          description: FileSize is the stored byte count, null when it was not recorded.
+          type: integer
+        id:
+          description: ID is the document id.
+          type: string
+        name:
+          description: Name is the document's display name.
+          type: string
+        numPages:
+          description: NumPages is the page count, null when it was not supplied at
+            upload.
+          type: integer
+        orderIndex:
+          description: |-
+            OrderIndex is the document's place in the viewer's list, null when it was
+            added without one. Unordered documents sort last.
+          type: integer
+        type:
+          description: Type is the document's kind, null when it was not recorded.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the document row last changed, in unix milliseconds.
+          type: integer
+      type: object
+    dataroomMembership:
+      properties:
+        dataroomDocumentId:
+          description: DataroomDocumentId is the new membership id.
+          type: string
+        dataroomId:
+          description: DataroomId is the room the document was added to.
+          type: string
+        documentId:
+          description: DocumentId is the document that was added.
+          type: string
+      type: object
+    dataroomPageStat:
+      properties:
+        avgDuration:
+          description: AvgDuration is totalDuration divided by views, rounded; 0 when
+            unviewed.
+          type: integer
+        pageNumber:
+          description: PageNumber is the page these counts are for.
+          type: integer
+        totalDuration:
+          description: TotalDuration is the summed dwell measure reported for the
+            page.
+          type: integer
+        views:
+          description: Views is how many times the page was viewed.
+          type: integer
+      type: object
+    dataroomRoom:
+      properties:
+        createdAt:
+          description: CreatedAt is when the room was created, in unix milliseconds.
+          type: integer
+        description:
+          description: Description is the room's description, null when none was given.
+          type: string
+        id:
+          description: ID is the room id, which is what other dataroom calls address
+            it by.
+          type: string
+        name:
+          description: Name is the room's display name.
+          type: string
+        pId:
+          description: PId is the room's short public identifier, unique within the
+            tenant.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the room last changed, in unix milliseconds.
+          type: integer
+      type: object
+    dataroomRoomDetail:
+      properties:
+        createdAt:
+          description: CreatedAt is when the room was created, in unix milliseconds.
+          type: integer
+        description:
+          description: Description is the room's description, null when none was given.
+          type: string
+        documents:
+          description: Documents is every document in the room, in the order a visitor
+            sees them.
+          items:
+            $ref: '#/components/schemas/dataroomMember'
+          type: array
+        id:
+          description: ID is the room id.
+          type: string
+        name:
+          description: Name is the room's display name.
+          type: string
+        pId:
+          description: PId is the room's short public identifier.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the room last changed, in unix milliseconds.
+          type: integer
+      type: object
+    dataroomRoomDetailOne:
+      properties:
+        dataroom:
+          $ref: '#/components/schemas/dataroomRoomDetail'
+          description: Dataroom is the room and its contents.
+      type: object
+    dataroomRoomOne:
+      properties:
+        dataroom:
+          $ref: '#/components/schemas/dataroomRoom'
+          description: Dataroom is the room itself.
+      type: object
+    dataroomRooms:
+      properties:
+        datarooms:
+          description: Datarooms is every data room in the caller's own store, newest
+            first.
+          items:
+            $ref: '#/components/schemas/dataroomRoom'
+          type: array
+      type: object
+    dataroomStats:
+      properties:
+        dataroomId:
+          description: DataroomId is the room these counts are for.
+          type: string
+        links:
+          description: Links is the same per-page breakdown for each link into the
+            room.
+          items:
+            $ref: '#/components/schemas/dataroomLinkStats'
+          type: array
+        totalPageViews:
+          description: TotalPageViews is the room's page views across every link.
+          type: integer
+        totalViews:
+          description: TotalViews is the room's viewing sessions across every link.
+          type: integer
       type: object
     datastoreVolume:
       properties:
@@ -47613,6 +48197,127 @@ paths:
       tags:
       - billing
       x-app: commerce
+    post:
+      description: |-
+        Raises a DRAFT invoice against a customer in the caller's own org.
+
+        The invoice is not collectible yet: a draft exists so it can be read and
+        corrected, and issueInvoice is the separate act that turns it into a demand for
+        payment. The subtotal and amount due are computed from the lines, so there is
+        no total to send and none to get wrong.
+
+        The billing org is the caller's, taken from the validated principal, so an
+        invoice can only ever be raised on the caller's own books.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: raiseInvoice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RaiseInvoiceIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceOut'
+          description: created
+      summary: Raise a draft invoice against a customer
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/invoices/{id}:
+    get:
+      description: |-
+        Reads one invoice out of the caller's org.
+
+        The org scopes the read by construction — the store is namespaced to it — so an
+        id belonging to another tenant is not found rather than found and then filtered.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: getInvoice
+      parameters:
+      - description: ID is the invoice id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceOut'
+          description: ok
+      summary: Read one invoice
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/invoices/{id}/collect:
+    post:
+      description: |-
+        Collects an issued invoice: credit grants first, then prepaid balance, then the
+        card on file — the same waterfall the dunning workflow runs.
+
+        A DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the
+        invoice still open, because a declined collection is a normal business outcome
+        that must remain retryable — and because sealing it as a failure would wedge
+        dunning behind a replayed decline. Only a successful collection is sealed, so a
+        retry of a paid invoice replays the receipt instead of charging again.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: collectInvoice
+      parameters:
+      - description: ID is the invoice id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectOut'
+          description: ok
+      summary: Collect an issued invoice from credits, balance, then card
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/invoices/{id}/issue:
+    post:
+      description: |-
+        Issues a draft invoice: moves it to OPEN, assigns its number, and makes it
+        collectible.
+
+        Only a draft can be issued. An invoice already open, paid or void is refused
+        with the state machine's own reason rather than being silently re-issued, which
+        would mint a second number for one debt.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: issueInvoice
+      parameters:
+      - description: ID is the invoice id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceOut'
+          description: ok
+      summary: Issue a draft invoice, making it collectible
+      tags:
+      - billing
+      x-app: commerce
   /v1/billing/invoices/{id}/pdf:
     get:
       description: Renders the addressed invoice as a single-page PDF and answers
@@ -47630,6 +48335,35 @@ paths:
         schema:
           type: string
       summary: Download one invoice as a PDF attachment
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/invoices/{id}/void:
+    post:
+      description: |-
+        Voids a draft or issued invoice — the cancel.
+
+        A paid invoice cannot be voided: money has moved, and the correction for that
+        is a refund, not an erasure. The state machine refuses it and that refusal is
+        the answer.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: voidInvoice
+      parameters:
+      - description: ID is the invoice id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceOut'
+          description: ok
+      summary: Void a draft or issued invoice
       tags:
       - billing
       x-app: commerce
@@ -49516,7 +50250,7 @@ paths:
         Returns the caller org's share classes, in creation order. A
         share class is what a certificate is issued in, and every class the company
         has authorized appears. The response is a bare JSON array, not an envelope.
-      operationId: get_v1_captable_classes
+      operationId: v1.captable.get_classes
       responses:
         "200":
           content:
@@ -49567,7 +50301,7 @@ paths:
         Returns the caller org's cap-table company record. The row is
         seeded when the tenant's store first opens, so it always exists; its name and
         incorporation details are set with PUT /v1/captable/company.
-      operationId: get_v1_captable_company
+      operationId: v1.captable.get_company
       responses:
         "200":
           content:
@@ -49586,7 +50320,7 @@ paths:
         stored as empty when omitted, so a call that sends only a name CLEARS them.
         The company row itself is seeded when the tenant's store first opens, so this
         never creates one.
-      operationId: put_v1_captable_company
+      operationId: v1.captable.put_company
       requestBody:
         content:
           application/json:
@@ -49610,7 +50344,7 @@ paths:
         Returns the caller org's convertible notes, newest first. A
         note's principal sits OUTSIDE issued equity until it converts, so it is not
         part of the share counts.
-      operationId: get_v1_captable_convertibles
+      operationId: v1.captable.get_convertibles
       responses:
         "200":
           content:
@@ -49640,7 +50374,7 @@ paths:
         Removes one of the caller org's convertible notes, taking its
         principal out of the cap table's unconverted-instrument totals. An id this org
         does not hold is not found.
-      operationId: delete_v1_captable_convertibles_id
+      operationId: v1.captable.delete_convertibles_id
       parameters:
       - description: ID is the convertible note to delete.
         in: path
@@ -49666,7 +50400,7 @@ paths:
         Returns the caller org's investments, newest first. It spans
         every round, so it is the flat ledger of cheques written into the company,
         each naming its investor and the round it went into.
-      operationId: get_v1_captable_investments
+      operationId: v1.captable.get_investments
       responses:
         "200":
           content:
@@ -49684,7 +50418,7 @@ paths:
         Returns the caller org's option grants, newest first. Each row is
         joined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED
         or CANCELLED are listed here but do not dilute the cap table.
-      operationId: get_v1_captable_options
+      operationId: v1.captable.get_options
       responses:
         "200":
           content:
@@ -49714,7 +50448,7 @@ paths:
         Removes one of the caller org's option grants, taking its shares
         out of the cap table's granted-options and fully-diluted counts. An id this org
         does not hold is not found.
-      operationId: delete_v1_captable_options_id
+      operationId: v1.captable.delete_options_id
       parameters:
       - description: ID is the option grant to delete.
         in: path
@@ -49740,7 +50474,7 @@ paths:
         Returns the caller org's equity plans, newest first. An equity
         plan is an option pool: a reserve of shares, drawn from one share class, that
         option grants are written against.
-      operationId: get_v1_captable_plans
+      operationId: v1.captable.get_plans
       responses:
         "200":
           content:
@@ -49770,7 +50504,7 @@ paths:
         Returns the caller org's fundraising rounds, newest first. A round
         groups a fundraising event; a PRICED round also carries the share class and
         price per share it issues at.
-      operationId: get_v1_captable_rounds
+      operationId: v1.captable.get_rounds
       responses:
         "200":
           content:
@@ -49801,7 +50535,7 @@ paths:
         investment written into it, oldest first. A round id that does not exist in the
         caller's org is not found — including one that exists in another tenant, since
         the org comes from the caller's principal and is part of the lookup.
-      operationId: get_v1_captable_rounds_id
+      operationId: v1.captable.get_rounds_id
       parameters:
       - description: |-
           ID is the round to read. It is the path segment: the URL is the addressing
@@ -49831,7 +50565,7 @@ paths:
         close date and moving its status to CLOSED. Only an OPEN round can be closed:
         a round that is already closed — like an id this org does not hold — is not
         found. Closing a round does not change what was invested in it.
-      operationId: post_v1_captable_rounds_id_close
+      operationId: v1.captable.post_rounds_id_close
       parameters:
       - description: |-
           ID is the round to close. It is the path segment: the URL is the
@@ -49887,7 +50621,7 @@ paths:
         Returns the caller org's SAFEs, newest first. A SAFE is a simple
         agreement for future equity: its capital sits OUTSIDE issued equity until it
         converts, so it is not part of the share counts.
-      operationId: get_v1_captable_safes
+      operationId: v1.captable.get_safes
       responses:
         "200":
           content:
@@ -49917,7 +50651,7 @@ paths:
         Removes one of the caller org's SAFEs, taking its capital out of the
         cap table's unconverted-instrument totals. An id this org does not hold is not
         found.
-      operationId: delete_v1_captable_safes_id
+      operationId: v1.captable.delete_safes_id
       parameters:
       - description: ID is the SAFE to delete.
         in: path
@@ -49943,7 +50677,7 @@ paths:
         Returns the caller org's share certificates, newest first. Each row
         is joined to its holder and its share class, so a certificate names who holds
         it and what class it is in without a second call.
-      operationId: get_v1_captable_shares
+      operationId: v1.captable.get_shares
       responses:
         "200":
           content:
@@ -49973,7 +50707,7 @@ paths:
         Removes one of the caller org's share certificates, taking its
         shares out of the cap table's outstanding and fully-diluted counts. An id this
         org does not hold is not found.
-      operationId: delete_v1_captable_shares_id
+      operationId: v1.captable.delete_shares_id
       parameters:
       - description: ID is the share certificate to delete.
         in: path
@@ -50012,7 +50746,7 @@ paths:
         Returns the caller org's stakeholders, newest first. The
         response is a bare JSON array, not an envelope. Each row carries the holder's
         contact and address fields alongside the company's name.
-      operationId: get_v1_captable_stakeholders
+      operationId: v1.captable.get_stakeholders
       responses:
         "200":
           content:
@@ -50045,7 +50779,7 @@ paths:
         orphan issued equity: a holder that still holds share certificates or option
         grants cannot be deleted, and answers 400 saying so — release or transfer the
         holdings first. An id this org does not hold is not found.
-      operationId: delete_v1_captable_stakeholders_id
+      operationId: v1.captable.delete_stakeholders_id
       parameters:
       - description: ID is the stakeholder to delete.
         in: path
@@ -50074,7 +50808,7 @@ paths:
         The values are stored as sent. Unlike adding a stakeholder, this route does
         not check the email's shape or the type and relationship vocabularies, so it
         can record a value that adding one would have rejected.
-      operationId: patch_v1_captable_stakeholders_id
+      operationId: v1.captable.patch_stakeholders_id
       parameters:
       - description: |-
           ID is the stakeholder to update. It is the path segment: the URL is the
@@ -50112,7 +50846,7 @@ paths:
         converted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and
         CANCELLED grants are excluded, so equity issued through an exercised option is
         never counted twice.
-      operationId: get_v1_captable_summary
+      operationId: v1.captable.get_summary
       responses:
         "200":
           content:
@@ -54918,100 +55652,211 @@ paths:
   /v1/dataroom/analytics/dataroom/{dataroomId}:
     get:
       description: |-
-        Rolls up every link pointing at the room: session and page-view totals for the room, plus the same per-page breakdown for each link beneath it.
+        Rolls up every share link pointing at one data room:
+        session and page-view totals for the room, plus the per-page breakdown for each
+        link beneath it.
 
-        Requires a validated principal; 403 without one, and a room id outside the caller's own tenant store is a 404. Only links that NAME the room are counted — a link created over a single document contributes nothing here, even when that document also sits in the room.
-      operationId: get_v1_dataroom_analytics_dataroom_by_dataroomid
+        A room id outside the caller's own tenant store is not found. Only links that
+        NAME the room are counted — a link created over a single document contributes
+        nothing here, even when that document also sits in the room.
+      operationId: v1.dataroom.get_analytics_dataroom_dataroomId
       parameters:
-      - in: path
+      - description: |-
+          DataroomID is the room to report on. It is the path segment, resolved in
+          the caller's own tenant store.
+        in: path
         name: dataroomId
         required: true
         schema:
           type: string
-      summary: Per-page view analytics for a data room, across all its links
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomStats'
+          description: ok
+      summary: 'Rolls up every share link pointing at one data room: session and page-view
+        totals for the room, plus the per-page breakdown for each link beneath it.'
       tags:
       - dataroom
       x-app: dataroom
   /v1/dataroom/analytics/link/{linkId}:
     get:
       description: |-
-        Returns how the link was actually read: total viewing sessions, total page views, and per page the view count, the summed dwell measure and its average.
+        Reports how one share link was actually read: total viewing
+        sessions, total page views, and per page the view count, the summed dwell
+        measure and its average.
 
-        Requires a validated principal; 403 without one. The link is resolved in the caller's OWN tenant store, so another org's link id is a 404 — knowing a link id is enough to open the room it shares, and never enough to read who has been reading it.
-      operationId: get_v1_dataroom_analytics_link_by_linkid
+        The link is resolved in the caller's OWN tenant store, so another org's link id
+        is not found — knowing a link id is enough to OPEN the room it shares, and
+        never enough to read who has been reading it.
+      operationId: v1.dataroom.get_analytics_link_linkId
       parameters:
-      - in: path
+      - description: |-
+          LinkID is the link to report on. It is the path segment, resolved in the
+          caller's own tenant store.
+        in: path
         name: linkId
         required: true
         schema:
           type: string
-      summary: Per-page view analytics for one share link
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomLinkStats'
+          description: ok
+      summary: 'Reports how one share link was actually read: total viewing sessions,
+        total page views, and per page the view count, the summed dwell measure and
+        its average.'
       tags:
       - dataroom
       x-app: dataroom
   /v1/dataroom/datarooms:
     get:
       description: |-
-        Returns every data room in the caller's own tenant store with its short public id, name, description and timestamps, newest first.
+        Returns every data room in the caller org's own store, newest
+        first, with its short public id, name, description and timestamps.
 
-        Requires a validated principal; 403 without one. Documents are not included — a room's contents come from the single-room read.
-      operationId: get_v1_dataroom_datarooms
-      summary: List the org's data rooms, newest first
+        Documents are not included — a room's contents come from reading the single
+        room.
+      operationId: v1.dataroom.get_datarooms
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomRooms'
+          description: ok
+      summary: Returns every data room in the caller org's own store, newest first,
+        with its short public id, name, description and timestamps.
       tags:
       - dataroom
       x-app: dataroom
     post:
       description: |-
-        Creates an empty data room from {name, description} and answers with it, including the short public id it is addressed by.
+        Opens a new data room for the caller org and answers with it,
+        including the short public id it is addressed by.
 
-        Requires a validated principal; 403 without one. `name` is required; without it the call is 400 and the tenant store is untouched, because a dispatch answering 4xx rolls its transaction back. A new room holds no documents and is reachable by nobody until a share link is created over it.
-      operationId: post_v1_dataroom_datarooms
-      summary: Create a data room
+        `name` is required; without it the call is refused and the tenant store is
+        untouched, because a dispatch answering 4xx rolls its transaction back. A new
+        room holds no documents and is reachable by NOBODY until a share link is
+        created over it — opening a room and granting access are two separate acts, so
+        a room cannot leak by existing.
+      operationId: v1.dataroom.post_datarooms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/dataroomCreate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomRoomOne'
+          description: ok
+      summary: Opens a new data room for the caller org and answers with it, including
+        the short public id it is addressed by.
       tags:
       - dataroom
       x-app: dataroom
   /v1/dataroom/datarooms/{id}:
     get:
       description: |-
-        Returns the room and every document attached to it, each carrying its membership id and order index, sorted by that index with unordered documents last and creation time breaking ties — the same order a link's visitor sees.
+        Reads one of the caller org's data rooms together with every
+        document in it, each carrying its membership id and order index.
 
-        Requires a validated principal; 403 without one, and a room id outside the caller's own tenant store is a 404.
-      operationId: get_v1_dataroom_datarooms_by_id
+        The documents are sorted by that index with unordered ones last and creation
+        time breaking ties — the SAME order a link's visitor sees, so this is what the
+        room looks like from the outside. A room id outside the caller's own tenant
+        store is not found.
+      operationId: v1.dataroom.get_datarooms_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the room to read. It is the path segment: the URL is the addressing
+          authority, and the org it is resolved in comes from the caller's principal,
+          so an id from another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Read one data room with its documents in display order
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomRoomDetailOne'
+          description: ok
+      summary: Reads one of the caller org's data rooms together with every document
+        in it, each carrying its membership id and order index.
       tags:
       - dataroom
       x-app: dataroom
   /v1/dataroom/datarooms/{id}/documents:
     post:
       description: |-
-        Adds an already-uploaded document to the room by {documentId} and answers with the new membership id. An optional `orderIndex` fixes its place in the viewer's list.
+        Puts an already-uploaded document into one of the caller
+        org's data rooms and answers with the new membership id.
 
-        Requires a validated principal; 403 without one. Both the room and the document must exist in the caller's own tenant store — either missing is a 404 — and a document already in the room is a 409 rather than a duplicate row. It attaches, it never uploads: the bytes must already be stored.
-      operationId: post_v1_dataroom_datarooms_by_id_documents
+        It ATTACHES, it never uploads: the bytes must already be stored, so the usual
+        order is upload the document, then add it to the room. Both the room and the
+        document must exist in the caller's own store — either missing is not found —
+        and a document already in the room is refused as a conflict rather than
+        duplicated.
+      operationId: v1.dataroom.post_datarooms_id_documents
       parameters:
-      - in: path
+      - description: |-
+          ID is the room to add to. It is the path segment: the URL is the addressing
+          authority, and the org it is resolved in comes from the caller's principal,
+          so an id from another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Attach an existing document to a data room
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/dataroomAddDocument'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomMembership'
+          description: ok
+      summary: Puts an already-uploaded document into one of the caller org's data
+        rooms and answers with the new membership id.
       tags:
       - dataroom
       x-app: dataroom
   /v1/dataroom/documents:
     get:
       description: |-
-        Returns every document in the caller's own tenant store — name, opaque storage key, content type, page count, size and timestamps — ordered newest first.
+        Returns every document in the caller org's own store, newest
+        first — name, opaque storage key, content type, page count, size and
+        timestamps.
 
-        Requires a validated principal; 403 without one. Tenant isolation is the per-org store itself: there is one SQLite file per org and the org is never a parameter, so no input the caller controls can address another tenant's documents. Metadata only — the bytes come from the file route.
-      operationId: get_v1_dataroom_documents
-      summary: List the org's documents, newest first
+        Tenant isolation is the per-org store itself: there is one SQLite file per org
+        and the org is never a parameter, so no input the caller controls can address
+        another tenant's documents. Metadata only — the bytes come from the file route.
+      operationId: v1.dataroom.get_documents
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomDocuments'
+          description: ok
+      summary: Returns every document in the caller org's own store, newest first
+        — name, opaque storage key, content type, page count, size and timestamps.
       tags:
       - dataroom
       x-app: dataroom
@@ -55030,17 +55875,32 @@ paths:
   /v1/dataroom/documents/{id}:
     get:
       description: |-
-        Returns the document's name, opaque storage key, content type, page count, size and timestamps.
+        Reads one of the caller org's documents — its name, opaque storage
+        key, content type, page count, size and timestamps.
 
-        Requires a validated principal; 403 without one. The lookup runs in the caller's own tenant store, so an id belonging to another org is a 404 exactly like one that never existed. Metadata only — the bytes are a separate read.
-      operationId: get_v1_dataroom_documents_by_id
+        The lookup runs in the caller's own tenant store, so an id belonging to another
+        org is not found exactly like one that never existed. Metadata only: the bytes
+        are a separate read.
+      operationId: v1.dataroom.get_documents_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the document to read. It is the path segment: the URL is the
+          addressing authority, and the org it is resolved in comes from the caller's
+          principal, so an id from another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Read one document's metadata
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomDocumentOne'
+          description: ok
+      summary: Reads one of the caller org's documents — its name, opaque storage
+        key, content type, page count, size and timestamps.
       tags:
       - dataroom
       x-app: dataroom
@@ -55076,23 +55936,67 @@ paths:
   /v1/dataroom/links:
     get:
       description: |-
-        Returns every non-archived link with the controls a visitor will meet: whether an address is required, whether a password is set, the allow and deny lists, whether download is permitted, and when the link expires.
+        Returns every live share link in the caller org's own store,
+        newest first, with the controls a visitor will meet: whether an address is
+        required, whether a password is set, the allow and deny lists, whether download
+        is permitted, and when the link expires.
 
-        Requires a validated principal; 403 without one. Archived links are omitted entirely. A link reports only THAT a password is set — the stored form is a bcrypt hash and no route returns it.
-      operationId: get_v1_dataroom_links
-      summary: List the org's live share links and the gates they enforce
+        Archived links are omitted entirely. A link reports only THAT a password is
+        set — the stored form is a bcrypt hash and no route returns it.
+      operationId: v1.dataroom.get_links
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomLinks'
+          description: ok
+      summary: 'Returns every live share link in the caller org''s own store, newest
+        first, with the controls a visitor will meet: whether an address is required,
+        whether a password is set, the allow and deny lists, whether download is permitted,
+        and when the link expires.'
       tags:
       - dataroom
       x-app: dataroom
     post:
       description: |-
-        Mints a public link over one data room (`dataroomId`) or one document (`documentId`) — one of the two is required — and answers with it. The controls are declared here and enforced only on the viewer surface: `password` is hashed with bcrypt before storage and is never readable back, `emailProtected` (on by default) makes a visitor state an address, `allowList`/`denyList` narrow which addresses pass, `allowDownload` (off by default) governs downloads, and `expiresAt` closes the link.
+        Grants access: it mints a public share link over one data
+        room (`dataroomId`) or one document (`documentId`) — one of the two is
+        required — and answers with the link, whose `id` is the token a visitor opens
+        it with.
 
-        Requires a validated principal; 403 without one, and the target room or document must exist in the caller's own tenant store or it is a 404.
+        This is how a party is let in. The controls are declared HERE and enforced on
+        the viewer surface: `password` is hashed with bcrypt before storage and is
+        never readable back, `emailProtected` (on by default) makes a visitor state an
+        address, `allowList`/`denyList` narrow which addresses pass, `allowDownload`
+        (off by default) governs downloads, and `expiresAt` closes the link. The target
+        room or document must exist in the caller's own store or it is not found.
 
-        Creating a link also writes dataroom's ONE cross-tenant row: the link id to owning org mapping an anonymous visitor is routed through. That write is part of the operation — if it fails the call is 500, so a link that no visitor could open is never handed back as usable.
-      operationId: post_v1_dataroom_links
-      summary: Create a share link with its access controls
+        Creating a link also writes dataroom's ONE cross-tenant row: the link id to
+        owning org mapping an anonymous visitor is routed through. That write is part
+        of the operation — if it fails the call is 500 — so a link that no visitor
+        could open is never handed back as usable.
+
+        The address a visitor later states is recorded UNVERIFIED, so a link gated only
+        by email is openable by anyone the link reaches. Use a password for a link that
+        must not travel.
+      operationId: v1.dataroom.post_links
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/dataroomLinkCreate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomLinkOne'
+          description: ok
+      summary: 'Grants access: it mints a public share link over one data room (`dataroomId`)
+        or one document (`documentId`) — one of the two is required — and answers
+        with the link, whose `id` is the token a visitor opens it with.'
       tags:
       - dataroom
       x-app: dataroom
@@ -82717,6 +83621,77 @@ paths:
       tags:
       - orgs
       x-app: entitlements
+  /v1/payments:
+    post:
+      description: |-
+        Takes a payment: charges a single-use card token and credits the caller's org
+        balance, exactly once.
+
+        This is the operation behind "collect money from a customer". It runs the SAME
+        core the console's card top-up runs (commerce billing.TakePayment), so the
+        server-side amount bounds, the idempotency guard and the ledger credit are
+        shared rather than reimplemented — a second charge path would eventually
+        double-charge somebody.
+
+        The ORG is the caller's, taken from the validated principal and never from the
+        input, so a payment can only ever credit the account of whoever made the call.
+
+        Send an idempotencyKey. An agent retries by construction, and the key is what
+        turns a retry into a replay of the first receipt instead of a second charge.
+
+        The answer states whether it settled in SANDBOX or live mode (`test`), and
+        carries the processor's own reference (`processorRef`) so the charge can be
+        reconciled against the processor rather than taken on trust.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: takePayment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOut'
+          description: created
+      summary: Take a card payment and credit the org's balance
+      tags:
+      - payments
+      x-app: commerce
+  /v1/payments/{id}:
+    get:
+      description: |-
+        Reads one settled payment out of the caller's org ledger.
+
+        The org scopes the read by construction — the ledger is namespaced to it — so
+        an id belonging to another tenant is simply not found rather than found and
+        then filtered. A ledger row that is not a payment is likewise not found, so
+        this cannot be used to walk the org's usage debits.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: getPayment
+      parameters:
+      - description: ID is the ledger transaction id a payment returned.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRecord'
+          description: ok
+      summary: Read one settled payment by its id
+      tags:
+      - payments
+      x-app: commerce
   /v1/pipelines:
     get:
       description: 'Returns one pipeline per application in the caller''s org — its
@@ -96182,6 +97157,9 @@ tags:
 - description: 'Package account is your own account: API keys you mint and revoke,
     and org onboarding.'
   name: orgs
+- description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
+    alerts, payment webhooks and the storefront catalog.'
+  name: payments
 - description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
     namespace — builds, releases, environments, logs, custom domains.'
   name: pipelines
