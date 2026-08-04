@@ -49,8 +49,10 @@ var alice = map[string]string{"X-User-Id": "alice", "X-Org-Id": "acme"}
 func pinApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	// MountAccount installs the identity middleware PinBillingSubject relies on; mounting
-	// it keeps the probe on the same trust plane as the real co-resident registration.
+	// compose installs the identity middleware PinBillingSubject relies on; mounting
+	// the real subsystem keeps the probe on the same trust plane as the co-resident
+	// registration.
+	compose(app)
 	if err := MountAccount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
 		t.Fatalf("MountAccount: %v", err)
 	}

@@ -119,14 +119,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // method are projected from. The exception is named at its registration below.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/ads")
-	// The Bridge FIRST, on the subtree ads owns: a typed op receives only a
-	// context, so the validated org has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Listen installs one app-wide too; nesting is harmless (the
-	// inner one is what the handler sees), and having it here is what makes this
-	// package's own tests — which mount on a bare app — exercise the same
-	// tenancy the binary does.
-	g.Use(cloud.Bridge())
+	// A typed op receives only a context, so the validated org it reads is parked
+	// there by cloud.Bridge. This subsystem does not install it: the program's
+	// composer does, once at the root, after the identity check that mints the org
+	// and before any subsystem registers a route — an order only the composer can
+	// hold.
 
 	// Ops are declared ON THE GROUP: every zip.Router is an OpTarget, and the op's
 	// path is the group's prefix composed with the leaf — the identity every

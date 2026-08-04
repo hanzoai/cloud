@@ -101,9 +101,8 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // pass fixed. This subsystem owns TWO top-level nouns, and the /v1/<name> default
 // MountPrefixes falls back to covers only ONE of them — so before the fix the
 // standalone binary attributed half its surface to no subsystem, and any middleware
-// the subsystem installed through its own router (including the typed-op Bridge
-// every op resolves its org through) landed on /v1/entitlements alone and never ran
-// for /v1/orgs/…. The apps/plan defect, in its partial form.
+// the subsystem installed through its own router landed on /v1/entitlements alone
+// and never ran for /v1/orgs/…. The apps/plan defect, in its partial form.
 //
 // It reads the MANIFEST — the same list plugin/entitlements/main.go passes — against
 // the routes the REAL mount serves, so adding a route outside both prefixes goes red
@@ -143,8 +142,8 @@ func TestDeclaredPrefixesCoverEveryServedRoute(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s is served but lies outside every declared prefix %v — cloud.Declare cannot "+
-				"attribute it, and the subsystem's own middleware (the typed-op Bridge included) will "+
-				"not run for it. Add the prefix to manifest/apps.go.", key, prefixes)
+				"attribute it, and the subsystem's own middleware will not run for it. "+
+				"Add the prefix to manifest/apps.go.", key, prefixes)
 		}
 	}
 	// And the default the framework would fall back to must NOT be enough, so the

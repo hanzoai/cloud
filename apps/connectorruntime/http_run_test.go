@@ -14,12 +14,21 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (Mount says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing — and a test that skips it does not
+// test a stricter program, it tests a program where every org-scoped op answers
+// 403 for a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // newApp mounts connectorruntime ALONE — no automations group around it — which is
-// what proves the subsystem self-contained: its own Bridge is the only thing that
-// parks the org the typed op resolves.
+// what proves the subsystem composes on its own.
 func newApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

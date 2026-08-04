@@ -32,7 +32,6 @@ require (
 	github.com/hanzoai/sqlite v0.5.0
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
-	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
@@ -71,7 +70,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -87,6 +85,7 @@ require (
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
 	github.com/hanzos3/go v1.0.0 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
+	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linode/linodego v1.67.0 // indirect
 	github.com/luxfi/filesystem v0.0.1 // indirect
@@ -501,7 +500,7 @@ require (
 	github.com/luxfi/math v1.5.1 // indirect
 	github.com/luxfi/math/big v0.1.0 // indirect
 	github.com/luxfi/mdns v0.1.1 // indirect
-	github.com/luxfi/metric v1.9.0 // indirect
+	github.com/luxfi/metric v1.9.1 // indirect
 	github.com/luxfi/mock v0.1.1 // indirect
 	github.com/luxfi/pq v1.1.0 // indirect
 	github.com/luxfi/pulsar v1.9.2

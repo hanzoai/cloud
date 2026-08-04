@@ -116,6 +116,7 @@ func wireDurable(t *testing.T, dur *org.Durability, w *recorder) (*zip.App, *clo
 	}
 	s.State.derived = w.plane()
 	app := zip.New(zip.Config{Logger: luxlog.New("labeldur"), DisableStartupMessage: true})
+	compose(app)
 	routes(app, s)
 	t.Cleanup(func() { _ = s.State.stores.CloseAll() })
 	return app, s

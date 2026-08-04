@@ -340,11 +340,11 @@ func TestEveryTypedLegalOpIsDescribed(t *testing.T) {
 }
 
 // TestLegalHealthNeedsNoPrincipal pins the ONE route on this surface that does not
-// read a tenant. It is the route the group's cloud.Bridge could most easily have
-// broken: Bridge parks the validated org for every other op, and if it REFUSED a
-// request that carries none, installing it in front of the leaves would have turned
-// liveness into a 403 — the failure mode where a subsystem reports itself down to
-// every prober that (correctly) sends no tenant header.
+// read a tenant. It is the route cloud.Bridge could most easily have broken:
+// Bridge parks the validated org for every other op, and if it REFUSED a request
+// that carries none, the composer's root install would have turned liveness into
+// a 403 — the failure mode where a subsystem reports itself down to every prober
+// that (correctly) sends no tenant header.
 func TestLegalHealthNeedsNoPrincipal(t *testing.T) {
 	app, _ := mount(t)
 	code, out := do(t, app, http.MethodGet, "/v1/legal/health", "", nil)

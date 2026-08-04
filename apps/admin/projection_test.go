@@ -29,6 +29,7 @@ func spec(t *testing.T) (map[string]any, []string) {
 		Logger:  luxlog.New("test"),
 		OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"},
 	})
+	compose(app)
 	routes(app, &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}})
 
 	var live []string

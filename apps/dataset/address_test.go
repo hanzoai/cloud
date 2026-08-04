@@ -48,6 +48,7 @@ const product = "risk"
 func published(t *testing.T) *openapi.Document {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("datasettest"), DisableStartupMessage: true})
+	compose(app)
 	if err := mount(newPlane(&fake{}), app); err != nil {
 		t.Fatalf("mount: %v", err)
 	}

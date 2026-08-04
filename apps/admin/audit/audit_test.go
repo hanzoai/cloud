@@ -34,9 +34,11 @@ func mountWithStore(t *testing.T) (*auditstore.Recorder, func(method, path strin
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin", AuditStore: rec}}
-	// Mirror the real mount: the request bridge, then the typed ops. A typed op sees
-	// the caller only through the bridge, so registering routes without it would test
-	// a wiring that cannot exist.
+	// Stand in for the composer: the principal enrichment at the root, then the
+	// typed ops — the order cloud.App gives every production program. A typed op
+	// sees the caller only through what the enrichment parks, and a group at
+	// /v1/admin would be a node of its own with no routes beneath it, which zip
+	// refuses to compose.
 	app.Use(cloud.Bridge())
 	Routes(app, s)
 	fa := app.Fiber()

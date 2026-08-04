@@ -33,9 +33,16 @@ func (f *fakeProvider) Reconcile(_ context.Context, sy Sync, ev Event) (bool, er
 
 func (f *fakeProvider) count() int { return len(f.reconciled) }
 
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 401 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountSync(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

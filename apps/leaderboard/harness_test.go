@@ -65,9 +65,17 @@ func installFakeDS(t *testing.T, answer func(sql string, args []any) []map[strin
 	return f
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root. In a
+// test the test IS the composer, so it owes the same thing — a test that skips it
+// tests a program where every org-scoped op answers 403 for a reason that would
+// never exist in production. Same helper apps/integrations uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

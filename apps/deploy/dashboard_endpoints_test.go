@@ -28,6 +28,7 @@ import (
 func getJSON(t *testing.T, s *cloud.Service[state], path string) map[string]any {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("X-User-IsAdmin", "true")
@@ -136,6 +137,7 @@ func TestDashProjectsEndpoint_PrefersRealCRs(t *testing.T) {
 // the SuperAdmin claim (fail-closed, no fleet/cluster data to an anonymous caller).
 func TestNewRoutesRequireAdmin(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, fakeService())
 	for _, path := range []string{"/v1/deploy/clusters", "/v1/deploy/projects", "/v1/deploy/stream/applications"} {
 		// EventSource sends Accept: text/event-stream + Sec-Fetch-Dest: empty, so a
@@ -162,6 +164,7 @@ func TestNewRoutesRequireAdmin(t *testing.T) {
 // the writer eagerly on SendStreamWriter — see setStreamHeaders).
 func TestStreamSetsSSEHeaders(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	c := app.TestCtx("GET", "/v1/deploy/stream/applications")
 	setStreamHeaders(c)
 	resp := c.Fiber().Response()
@@ -184,6 +187,7 @@ func TestStreamSetsSSEHeaders(t *testing.T) {
 func TestStreamFailsClosedWithoutCluster(t *testing.T) {
 	noK8s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{initErr: "no kubeconfig"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	c := app.TestCtx("GET", "/v1/deploy/stream/applications")
 	err := dashStreamApps(noK8s, c)
 	if err == nil {

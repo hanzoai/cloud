@@ -172,10 +172,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // a distinct shape (segment count), so none shadows another.
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	o := ops{s: s}
-	// The bridge FIRST: fiber runs middleware in registration order, so one
-	// installed after these leaves would never run — and every org-scoped op below
-	// resolves its tenant through it. Bounded to marketing's own subtree.
-	app.Use(cloud.Bridge())
+	// Every org-scoped op below resolves its tenant from the request on the context,
+	// and whoever composes the app parks it there — at the root, ahead of these
+	// leaves, since fiber runs middleware in registration order. This surface
+	// installs none of its own: one it installed for itself could only hang on a
+	// /v1/marketing node, and every op below registers on zapp, the root app, so
+	// that node would carry middleware over an empty subtree and zip refuses to
+	// compose it.
 
 	zip.Get(zapp, "/v1/marketing/summary", o.summary)
 

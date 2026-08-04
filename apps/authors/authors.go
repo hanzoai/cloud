@@ -186,16 +186,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // SDK method.
 //
 // The two subtrees are declared on their OWN groups, because they are two surfaces:
-// /v1/authors is the tenant's, /v1/admin/authors is the platform's. Both get
-// cloud.Bridge, which is what parks the validated org a typed op reads — never an In
-// field, which is caller-supplied and would be a cross-tenant read the caller
-// asserted for itself. fiber runs middleware in registration order, so each Use
-// precedes its own leaves; nesting under Serve's own Bridge is harmless.
+// /v1/authors is the tenant's, /v1/admin/authors is the platform's. A typed op reads
+// the validated org parked on the context by cloud.Bridge — never an In field, which
+// is caller-supplied and would be a cross-tenant read the caller asserted for itself.
+// The composer owns that install, once at its root; both groups here are bare path
+// prefixes.
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	o := ops{s: s}
 
 	g := app.Group("/v1/authors")
-	g.Use(cloud.Bridge())
 	// The root of the tenant surface, declared on the App with its whole path rather
 	// than on the group with an empty leaf: joining "/v1/authors" with "" yields
 	// "/v1/authors/", a DIFFERENT path from the one it has always served.
@@ -206,7 +205,6 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	zip.Post(g, "/deploys/record", o.recordDeploy)
 
 	ga := app.Group("/v1/admin/authors")
-	ga.Use(cloud.Bridge())
 	zip.Get(zapp, "/v1/admin/authors", o.adminList)
 	zip.Post(ga, "/sweep", o.adminSweep)
 	zip.Post(ga, "/:id/approve", o.adminApprove)

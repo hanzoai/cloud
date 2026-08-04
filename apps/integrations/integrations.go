@@ -794,19 +794,23 @@ func init() {
 // /:provider wildcards).
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	o := ops{s: s}
-	// The bridges first: every typed op below reads its org (cloud.Bridge) and the
-	// remaining identity facts (bridgeFacts) off the request context, and a Use only
-	// runs ahead of routes registered after it.
+	// bridgeFacts first: every typed op below reads the caller's identity facts off
+	// the request context, and a Use only runs ahead of routes registered after it.
 	//
-	// Through the SCOPE, not a Group of the prefix. The routes below register on
-	// zapp at absolute paths, so a Group("/v1/integrations") node never received
-	// one, and middleware whose own subtree is empty is a program zip refuses to
-	// compose — this subsystem exited before it listened and /v1/integrations and
-	// /v1/connectors both answered 503. scope.Use installs once at the root and
-	// gates by path (see scope.go), which confines it to exactly the prefixes the
-	// manifest declares for this subsystem while leaving it on a node that has the
-	// routes.
-	app.Use(cloud.Bridge(), zip.H(bridgeFacts))
+	// The ORG is NOT parked here, and this subsystem does not install cloud.Bridge.
+	// Whoever composes the program installs it once at the root — after the identity
+	// check that mints the validated org and before any subsystem registers a route
+	// (serve.go) — because that order is a property of the whole program and no
+	// subsystem can assert it for itself. A subsystem holding its own copy only ever
+	// covered for a composer that had none, and the cover is what broke this app:
+	// the copy needs a node to hang on, that node has no routes beneath it because
+	// these routes are registered on the root, and zip refuses to compose a program
+	// whose middleware could never run. The app then exits rather than listening.
+	//
+	// bridgeFacts stays because it is integrations' own. scope.Use installs it at
+	// the root and runs it only for the paths manifest/apps.go says this subsystem
+	// answers, so dropping the group costs no confinement.
+	app.Use(zip.H(bridgeFacts))
 
 	zip.Get(zapp, "/v1/integrations", o.list)
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))

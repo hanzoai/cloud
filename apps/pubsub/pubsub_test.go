@@ -10,7 +10,18 @@ import (
 )
 
 func testDeps() cloud.Deps { return cloud.Deps{Logger: luxlog.New("test")} }
-func testApp() *zip.App    { return zip.New(zip.Config{Logger: luxlog.New("test")}) }
+
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 403 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
+func testApp() *zip.App {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	return app
+}
 
 // TestMountServesAndShutsDown: Mount always opens the embedded server (on a
 // random port here) and Shutdown tears it down cleanly.

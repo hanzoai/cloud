@@ -171,11 +171,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/registry")
 	o := ops{s: s}
 
-	// Bridge FIRST: a typed op receives only a context, so the validated
-	// principal reaches it by being parked there — never as an In field, which
-	// is caller-supplied and would be a cross-tenant read the caller asserted
-	// for itself.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is installed by whoever composes the app — the fused host at
+	// its root — never here: the validated principal every op below reads is
+	// parked on the context by that root install.
 
 	zip.Get(g, "/status", o.status)
 	zip.Get(g, "/projects", o.projects)

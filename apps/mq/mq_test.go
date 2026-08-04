@@ -27,6 +27,15 @@ import (
 
 var httpCfg = zip.TestConfig{Timeout: 45 * time.Second, FailOnTimeout: true}
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (Mount says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing — and a test that skips it does not
+// test a stricter program, it tests a program where every org-scoped op answers
+// 403 for a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // plane opens a real embedded broker on a random port and mounts the surface
 // over it, waiting for the client to connect so the first op is never a 503.
 func plane(t *testing.T) *zip.App {
@@ -39,6 +48,7 @@ func plane(t *testing.T) *zip.App {
 	t.Setenv("CLOUD_PUBSUB_URL", srv.ClientURL())
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
@@ -333,6 +343,7 @@ func TestStatus(t *testing.T) {
 func TestDegradedIsHonest(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_URL", "nats://127.0.0.1:1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("mount must not need a live broker: %v", err)
 	}

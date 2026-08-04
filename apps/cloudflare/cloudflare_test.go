@@ -87,6 +87,13 @@ func fakeCF(rec *capture, resultFor func(path string) (int, string)) http.Handle
 	}
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root. In a
+// test the test IS the composer, so it owes the same thing — a test that skips it
+// tests a program where every org-scoped op answers 403 for a reason that would
+// never exist in production. Same helper apps/integrations uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // harness mounts the subsystem against a fake CF and per-org token seam.
 func harness(t *testing.T, tokens map[string]string, rec *capture, resultFor func(string) (int, string)) *zip.App {
 	t.Helper()
@@ -108,6 +115,7 @@ func harness(t *testing.T, tokens map[string]string, rec *capture, resultFor fun
 	t.Cleanup(func() { tokenFor = prev })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

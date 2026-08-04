@@ -372,6 +372,7 @@ func TestCloudflareTokenNeverLogged(t *testing.T) {
 	// Build the app with a buffer-backed logger so we can inspect every log line.
 	logs := &syncBuf{}
 	app := zip.New(zip.Config{Logger: luxlog.NewWriter(logs)})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.NewWriter(logs), DataDir: t.TempDir(), Domain: "api.hanzo.ai", KMS: kc}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)

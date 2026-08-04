@@ -241,6 +241,13 @@ func (f *fakeAuto) handler() http.Handler {
 	})
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // harness mounts the app against a fake upstream and returns both.
 func harness(t *testing.T) (*zip.App, *fakeAuto) {
 	t.Helper()
@@ -250,6 +257,7 @@ func harness(t *testing.T) (*zip.App, *fakeAuto) {
 	t.Setenv("AUTO_UPSTREAM", srv.URL)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("autotest"), DisableStartupMessage: true})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("autotest"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -502,6 +510,7 @@ func TestEngineDown503Relays(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("AUTO_UPSTREAM", srv.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("autotest"), DisableStartupMessage: true})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("autotest"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -522,6 +531,7 @@ func TestStatusIsAnHonestLens(t *testing.T) {
 	}
 
 	down := zip.New(zip.Config{Logger: luxlog.New("autotest"), DisableStartupMessage: true})
+	compose(down)
 	t.Setenv("AUTO_UPSTREAM", "http://127.0.0.1:1") // nothing listens
 	if err := Mount(down, cloud.Deps{Logger: luxlog.New("autotest"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)

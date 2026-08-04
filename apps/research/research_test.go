@@ -455,9 +455,17 @@ func TestSSRFGate(t *testing.T) {
 
 // ── HTTP surface ──────────────────────────────────────────────────────────────
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, and
+// in a test the test is the composer, so it owes the same install. A test that
+// skips it does not test a stricter program — it tests one where every op that
+// reads the org answers a refusal production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountResearch(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

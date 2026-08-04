@@ -150,19 +150,9 @@ func MountAccount(app cloud.Router, deps cloud.Deps) error {
 
 // routesAccount wires the specific self-service routes (order 48).
 func routesAccount(s *cloud.Service[state], app cloud.Router) error {
-	// Bridge FIRST: a typed op receives only a context, so the request facts its
-	// signature drops — here the VALIDATED principal every route resolves its caller
-	// from — reach it by being parked there. fiber runs middleware in registration
-	// order, so this must precede the leaves below. Serve installs one app-wide too
-	// and nesting is harmless (the inner one is what the handler sees); this one is
-	// what makes the subsystem self-sufficient when it is mounted on a bare app,
-	// which is exactly what its own tests do.
-	//
-	// It goes through Use, not Group(prefix, mw): account's routes are spread across
-	// six top-level nouns, so it owns no single prefix to hang a group on — and
-	// Router.Use is the door that fans middleware out over the prefixes the
-	// composition root declared for this subsystem, which is precisely that set.
-	app.Use(cloud.Bridge())
+	// The composer owns cloud.Bridge: the fused host installs it once at its root
+	// and the plugin constructor does the same for a plugin program, so no
+	// subsystem installs it.
 
 	// The typed registrars take the App behind the Router: a typed op is a route
 	// PLUS a registry entry, and the registry lives on the App (scope.go). A

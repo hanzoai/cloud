@@ -67,6 +67,7 @@ var untypedByDesign = map[string]string{
 func pricingOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

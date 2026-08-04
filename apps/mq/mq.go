@@ -110,11 +110,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b = &broker{nc: nc, js: js, mounted: time.Now()}
 
-	// cloud.Bridge parks the VALIDATED org so a typed op — which receives a
-	// context and nothing else — can read it back (callerOf): the ONE source of
-	// the org every handler scopes by. Installed before the leaves it serves,
-	// since fiber runs middleware in registration order.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge — the ONE source of the org every handler scopes by (callerOf
+	// reads what it parks) — is not installed here. Whoever composes the program
+	// installs it once at the root — after the identity check that mints the
+	// validated org and before any subsystem registers a route (serve.go) —
+	// because that order is a property of the whole program and no subsystem can
+	// assert it for itself.
 	g := app.Group("/v1/mq")
 
 	s := streams{b}

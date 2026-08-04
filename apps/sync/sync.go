@@ -135,14 +135,11 @@ func terminal(next zip.Handler) zip.Handler { return cloud.Terminal(next) }
 // "/v1/sync/" — a different address. Composed this way every op's published path is
 // exactly the path the router matches.
 //
-// cloud.Bridge comes FIRST, ahead of every leaf: a typed op receives a
-// context.Context and its decoded In and nothing else, so the validated org crosses
-// on the context. Serve installs the same middleware binary-wide; nesting is harmless
-// (the inner one is the one the handler sees) and declaring it here is what makes the
-// subsystem self-sufficient when a test or a non-Serve composition root mounts it on
-// a bare app.
+// A typed op receives a context.Context and its decoded In and nothing else, so
+// the validated org crosses on the context. cloud.Bridge parks it there, and the
+// composer owns that install — the fused host at its root, a plugin program in
+// its constructor — so this package installs nothing and only reads it.
 func routes(app cloud.Router, s *cloud.Service[state]) error {
-	app.Use(cloud.Bridge())
 	za := cloud.ZipApp(app)
 	if za == nil {
 		return fmt.Errorf("sync.Mount: router exposes no op registry")

@@ -28,7 +28,8 @@ func annApp(t *testing.T) *zip.App {
 	t.Cleanup(func() { _ = store.Close() })
 	s := &annService{store: store, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	// cloud.Bridge FIRST, exactly as MountO11y installs it: a typed op reads its
+	// cloud.Bridge FIRST, standing in for the composer that installs it in the real
+	// process — at the root, ahead of every route it gates: a typed op reads its
 	// validated org off the context, so without this every route here 403s.
 	app.Use(cloud.Bridge())
 	g := app.Group(o11yPrefix)

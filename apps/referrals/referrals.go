@@ -123,15 +123,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := referralOps{s: s}
 	zapp := cloud.ZipApp(app)
 
-	// Bridge FIRST, before the leaves it serves: a typed op receives only a
-	// context, so the validated org reaches it by being parked there — never as an
-	// In field, which is caller-supplied and would be a cross-tenant read the
-	// caller asserted for itself. fiber runs middleware in registration order, so
-	// one installed after its leaves never runs. On a scope, Use is bounded to the
-	// three prefixes the manifest declares for referrals, which is exactly the
-	// three subtrees below.
-	app.Use(cloud.Bridge())
-
 	// THE TWO GATES ARE BOUND BY PATH, one subtree each, and never by a group.
 	//
 	// They used to ride on three app.Group(prefix).Use(...) installs while every

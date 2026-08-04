@@ -203,8 +203,7 @@ func toEventView(e Event) eventView {
 //
 // The typed ops are declared on the GROUP, so each op's path is the group's
 // prefix composed with its leaf — the same composition the router does, and the
-// identity every projection keys on. cloud.Bridge is installed once, at the top
-// of Mount, ahead of this call.
+// identity every projection keys on.
 func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	o := sessionOps{s: s}
 	g := app.Group("/v1/agents")

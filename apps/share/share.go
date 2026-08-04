@@ -41,10 +41,10 @@ func build(b cloud.Base) (state, error) {
 // routes — the ONE registration point. Static before :param.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	// A typed op receives only a context, so the validated org has to be parked
-	// there. Installed BEFORE the leaves — fiber runs middleware in registration
-	// order, so one installed after them never runs.
-	app.Use(cloud.Bridge())
-
+	// there. cloud.Bridge parks it, and the COMPOSER installs it, not this
+	// subsystem: the fused host once at its root (serve.go), and a plugin
+	// program's constructor likewise. An install here would hang middleware on
+	// prefixes with no routes beneath them, a program zip refuses to compose.
 	o := shareOps{s: s}
 	zapp := cloud.ZipApp(app)
 	// The collection ROOT is declared on the app with its whole path, never as an

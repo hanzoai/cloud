@@ -33,13 +33,21 @@ import (
 // the same tenant. If a future Out reorders a key, renames a field, drops one the
 // catalog added, or turns a 404 into something else, this fails.
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge:
+// the program's composer owns it — serve.go at the root of the fused host, the
+// plugin constructor for a plugin program. In a test the test is the composer, so
+// it owes the same install; skipping it drives a program where every org-scoped op
+// answers 403 for a reason production callers never see.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // planApp mounts the REAL subsystem — the real @hanzo/plans bundle and catalog —
-// on a bare zip app, which is what makes the identity path here the production
-// one: Mount installs cloud.Bridge itself, so principal.OrgFrom resolves the same
-// validated org a typed op sees behind Serve.
+// on a bare zip app. compose is what makes the identity path here the production
+// one: the test is the composer, so it installs cloud.Bridge at the root and
+// principal.OrgFrom resolves the same validated org a typed op sees behind Serve.
 func planApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

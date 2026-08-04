@@ -57,6 +57,12 @@ func doorApp(t *testing.T) *zip.App {
 	t.Setenv("O11Y_PROBES", "false")
 	t.Setenv("O11Y_UPSTREAM", runtime.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// Standing in for the composer: cloud.Bridge is installed once at the root,
+	// ahead of the mount, exactly where cloud.Serve puts it. The mount does not
+	// install one — a subsystem cannot know the identity boundary has already run
+	// — so a fixture that means to reproduce production has to supply it here or
+	// the chain it claims to exercise is missing a link.
+	app.Use(cloud.Bridge())
 	if err := MountO11y(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("MountO11y: %v", err)
 	}

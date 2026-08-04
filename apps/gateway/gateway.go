@@ -95,15 +95,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // route, from which the REST route, the OpenAPI operation, the MCP tool, the CLI
 // command and every generated SDK method follow.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Bridge FIRST: a typed op receives only a context, so the validated org and the
-	// request reach it by being parked there. fiber runs middleware in registration
-	// order, so one installed after its leaves never runs. Installed through the
-	// SUBSYSTEM's own router, which scopes it to the prefixes this app declares
-	// (/v1/gateway) rather than the whole binary. Serve installs the same bridge
-	// app-wide; nesting is harmless — the inner one is what the handler sees — and
-	// this keeps the ops working wherever the subsystem is mounted, including a test
-	// app that never calls Serve.
-	app.Use(cloud.Bridge())
+	// The composer owns cloud.Bridge: the fused host installs it once at its root
+	// and the plugin constructor does the same for a plugin program, so no
+	// subsystem installs it.
 
 	// Declared on the GROUP: the op's path is the prefix composed with the leaf,
 	// which is the identity every projection keys on, and cmd/zipdoc resolves the

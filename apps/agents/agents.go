@@ -350,14 +350,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// request that carried one. Serve installs one app-wide, which is why serving
 	// was unaffected and only the tests — which Mount onto a bare app — could see
 	// it; a gate whose absence just one door down is invisible in production is the
-	// kind that stays broken. Under Serve a scope bounds this to the prefixes the
-	// manifest declares, and under a bare Mount it is app-wide, which is what the
-	// subsystem's own door honestly is.
-	//
-	// fiber runs middleware in registration order, so it goes above every route
-	// below, group included.
-	app.Use(cloud.Bridge())
 	g := app.Group("/v1/agents")
+	// cloud.Bridge parks the validated org on the context a typed op receives; it
+	// is the composer's install — once at the root of every program — so this
+	// package does not install its own.
+	//
 	// The root of the surface. Declared on the App with its WHOLE path, not on the
 	// group with an empty leaf: joining "/v1/agents" with "" yields "/v1/agents/",
 	// a different path from the one these two have always served.

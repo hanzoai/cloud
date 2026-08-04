@@ -47,9 +47,20 @@ func newKMS(t *testing.T) *kms.Client {
 	return kc
 }
 
+// compose installs what a HOST installs, and it is the reason every app built in
+// this package is built through a helper. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing — and a test that skips it does not
+// test a stricter program, it tests a program where every org-scoped op answers
+// 403 for a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func newApp(t *testing.T, kc *kms.Client) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.ai"}
 	if kc != nil {
 		deps.KMS = kc

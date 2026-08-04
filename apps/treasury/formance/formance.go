@@ -34,8 +34,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
+	"github.com/hanzoai/cloud/money"
 )
 
 const (
@@ -86,7 +86,9 @@ var _ ledger.Backend = (*Backend)(nil)
 
 // ── policy (native config store; Formance does not model it) ─────────────────
 
-func (b *Backend) Policy(ctx context.Context) (ledger.SharePolicy, error) { return b.policy.Policy(ctx) }
+func (b *Backend) Policy(ctx context.Context) (ledger.SharePolicy, error) {
+	return b.policy.Policy(ctx)
+}
 
 func (b *Backend) SetPolicy(ctx context.Context, bps, now int64) (ledger.SharePolicy, error) {
 	if bps < 0 || bps > 10000 {

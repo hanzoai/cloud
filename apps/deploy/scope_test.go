@@ -48,6 +48,7 @@ func orgAppCR(ns, name, org, project string) *unstructured.Unstructured {
 func getAs(t *testing.T, s *cloud.Service[state], path string, headers map[string]string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	req := httptest.NewRequest("GET", path, nil)
 	for k, v := range headers {
@@ -97,6 +98,7 @@ func appNames(body map[string]any) map[string]bool {
 func probeScope(t *testing.T, headers map[string]string) (scope, bool) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	var got scope
 	var ok bool
 	app.Get("/probe", func(c *zip.Ctx) error {

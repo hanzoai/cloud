@@ -37,9 +37,16 @@ func newStore(t *testing.T) *audit.Recorder {
 	return rec
 }
 
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 401 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountApp(t *testing.T, store *audit.Recorder) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Audit: store}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

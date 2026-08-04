@@ -296,35 +296,30 @@ func init() {
 // routes registers the /v1/deploy/* surface. Every observing/mutating route is
 // SuperAdmin-gated; the health probe is public (real k8s reachability).
 //
-// The first statement is the plane's MIDDLEWARE, hung on the /v1/deploy prefix so
-// it reaches every route below — the typed ops in dashboard.go included, which
-// register their own leaves on the same prefix. It carries the two facts every
-// route beneath it needs:
-//
-//   - cloud.Bridge, which parks the request on the context so a TYPED op — which
-//     receives only a context — can still reach the validated principal its
-//     scope is derived from (typed.go). Serve installs the same bridge for the
-//     whole binary; nesting is harmless (the inner one is what the handler sees)
-//     and this keeps the ops scoped wherever they are mounted, including a test
-//     app that never calls Serve.
-//   - bounce, which turns a REFUSED browser navigation into the sign-in redirect
-//     (scope.go). It is one rule for the typed ops and the raw handlers alike.
+// The first statement is bounce, which turns a REFUSED browser navigation into the
+// sign-in redirect (scope.go) — one rule for the typed ops in dashboard.go and the
+// raw handlers here alike. It is deploy's own presentation rule and nothing else:
+// the request every typed op reads its principal off is parked on the context by
+// whoever composes the app, so this surface installs no bridge of its own.
 //
 // It is installed FIRST: fiber runs middleware in registration order, so one
 // installed after its leaves never runs.
+//
+// It goes on the ROOT rather than on a Group(dashPrefix) node, and cloud.Router
+// confines it by PATH — scope.Use gates every request on the prefixes deploy
+// declares (scope.go, manifest/apps.go). The group form put the middleware on a
+// node of its own: each Group call makes a fresh node, so it stood beside — not
+// above — the node dashboard.go creates for its leaves, and zip judges the node,
+// not the path, so it refuses to compose middleware no route beneath it can reach.
+// Deploy declares its subtree as an explicit list of /v1/deploy/<resource> paths
+// rather than /v1/deploy itself, and that list covers every route registered here:
+// health, login, callback, logout, reconcile, and the dashboard's settings,
+// session/userinfo, version, account/can-i, applications, stream/applications,
+// clusters, projects and gitops. What the change drops is /v1/deploy paths with no
+// route, which answer 404 — and bounce reshapes a 403 and nothing else, so their
+// answer is what it was.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// ON THE ROUTER, not on a Group(dashPrefix) of its own. This read
-	// `app.Group(dashPrefix).Use(...)`, and the routes it meant to wrap are
-	// composed under a DIFFERENT app.Group(dashPrefix) — the one dashboard.go
-	// builds. Group returns a NEW definition on every call, so those are two nodes
-	// at the same path: the middleware sat on the empty one, and NEITHER
-	// cloud.Bridge NOR bounce ever ran for a single route of this surface. Every
-	// prefix this subsystem declares is under dashPrefix (manifest/apps.go), so a
-	// scope bounds this to exactly what the group named, and the plugin binary
-	// serves nothing else — the bound is unchanged, it is now a predicate over the
-	// request rather than a place in the tree that the routes turned out not to be
-	// in.
-	app.Use(cloud.Bridge(), zip.H(bounce))
+	app.Use(zip.H(bounce))
 
 	// Liveness — public (probe-able without a JWT). It stays a RAW handler because
 	// it answers 503 carrying the SAME domain body as its 200 (status + the k8s and

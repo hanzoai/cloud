@@ -54,6 +54,12 @@ type testEnv struct {
 	dataDir string
 }
 
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 403 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // newApp mounts channels exactly as apps.go does. Integrations stays
 // unmounted on purpose: LinkedSubject fails soft (empty UserID),
 // OrgForExternalID / ConnectionFor answer not-found — the fail-closed side
@@ -62,6 +68,7 @@ func newApp(t *testing.T) *testEnv {
 	t.Helper()
 	logs := &syncBuf{}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	dataDir := t.TempDir()
 	deps := cloud.Deps{Logger: luxlog.NewWriter(logs), DataDir: dataDir, Domain: "api.hanzo.ai"}
 	if err := Mount(app, deps); err != nil {

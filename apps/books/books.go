@@ -113,14 +113,13 @@ func Shutdown() error {
 
 func routes(app cloud.Router, s *cloud.Service[*state]) {
 	g := app.Group("/v1/books")
-	// Bridge FIRST, then noStore: fiber runs middleware in registration order, so
-	// one installed after its leaves never runs. Bridge parks the VALIDATED org on
-	// the context, which is the only way a typed op — which receives a context and
-	// its decoded In and nothing else — can resolve its tenant; noStore carries the
-	// Cache-Control every books answer has always sent. Both are prefix-scoped, and
-	// nesting under Serve's own app-wide Bridge is harmless (the inner one is what
-	// the handler sees). See typed.go.
-	g.Use(cloud.Bridge(), noStore())
+	// noStore carries the Cache-Control header every books answer has always sent.
+	// It precedes the leaves because fiber runs middleware in registration order.
+	// cloud.Bridge is not installed here: the composer owns it — the fused host
+	// installs it once at its root, and the plugin constructor does the same for a
+	// plugin program — and typed ops read the validated org it parks on the
+	// context. See typed.go.
+	g.Use(noStore())
 
 	// TYPED ops, declared on the group: the prefix is part of each op's path and
 	// therefore of every projection — the document, the MCP tool, the CLI command,
