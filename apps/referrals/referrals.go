@@ -127,21 +127,50 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// context, so the validated org reaches it by being parked there — never as an
 	// In field, which is caller-supplied and would be a cross-tenant read the
 	// caller asserted for itself. fiber runs middleware in registration order, so
-	// one installed after its leaves never runs.
-	rg := app.Group("/v1/referrals")
-	rg.Use(cloud.Bridge(), requireOrgOnWrite())
+	// one installed after its leaves never runs. On a scope, Use is bounded to the
+	// three prefixes the manifest declares for referrals, which is exactly the
+	// three subtrees below.
+	app.Use(cloud.Bridge())
+
+	// THE TWO GATES ARE BOUND BY PATH, one subtree each, and never by a group.
+	//
+	// They used to ride on three app.Group(prefix).Use(...) installs while every
+	// leaf was registered on the App with its whole path — the roots ARE these
+	// prefixes, and declaring them on their own group with an empty leaf would name
+	// "/v1/referrals/", an address this API has never served. Middleware on a group
+	// wraps what is composed BENEATH it, so all three groups were empty: the write
+	// gate never ran on POST /v1/referrals/claim and requireAdmin never ran on
+	// EITHER admin board. zip refuses to compose that program now, which is how a
+	// gate that had silently stopped running became visible.
+	//
+	// Bound is the honest word for what a group was standing in for. under() is the
+	// same shape apps/commerce already uses for its error envelope
+	// (commerceErrorScope) and that scope.Use uses for a subsystem's own prefixes.
+	app.Use(zip.H(under("/v1/referrals", requireOrgOnWrite())))
 	zip.Get(zapp, "/v1/referrals", o.mine)
 	zip.Post(zapp, "/v1/referrals/claim", o.claim)
 
 	// The one-time-bonus ledger board. The cross-tenant analytics board at
 	// GET /v1/admin/referrals is owned by clients/affiliates (shared spine).
-	bg := app.Group("/v1/admin/referrals/bonuses")
-	bg.Use(cloud.Bridge(), requireAdmin())
+	app.Use(zip.H(under("/v1/admin/referrals/bonuses", requireAdmin())))
 	zip.Get(zapp, "/v1/admin/referrals/bonuses", o.adminList)
 
-	sg := app.Group("/v1/admin/referrals/sweep")
-	sg.Use(cloud.Bridge(), requireAdmin())
+	app.Use(zip.H(under("/v1/admin/referrals/sweep", requireAdmin())))
 	zip.Post(zapp, "/v1/admin/referrals/sweep", o.adminSweep)
+}
+
+// under is h, run only for prefix and what lives inside it, passed over for
+// everything else. It is the bound a group prefix used to imply, stated as the
+// predicate it always was — so a gate covers one subtree whether or not that
+// subtree's routes were composed through a group object.
+func under(prefix string, h zip.Handler) zip.Handler {
+	return func(c *zip.Ctx) error {
+		p := c.Path()
+		if p != prefix && !strings.HasPrefix(p, prefix+"/") {
+			return c.Continue()
+		}
+		return h(c)
+	}
 }
 
 // requireOrgOnWrite refuses a WRITE with no validated principal before zip decodes
