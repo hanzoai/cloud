@@ -303,11 +303,20 @@ func TestBlueprintPathIsSlashless(t *testing.T) {
 			t.Fatalf("PUT %s: want 200, got %d (%s)", p, r.Code, r.Body)
 		}
 	}
-	// The op registry is what every projection reads. The MCP tool list carries the
-	// op name verbatim, so a trailing slash shows up there as a trailing underscore.
+	// The op registry is what every projection reads, so the tool list is where a
+	// trailing slash in the PATH shows up as a trailing separator in the NAME.
+	//
+	// The match is on "blueprint" rather than on a whole name. This asked for the
+	// prefix "get_v1_guide_blueprint", which was the flat tool-naming zip used when
+	// the test was written; names are namespaced now (v1.guide.get_blueprint,
+	// v1.guide.blueprint.get_versions), so the old prefix selected NOTHING and the
+	// assertion passed vacuously — or, once the surface composed again, failed
+	// claiming both tools were missing when both were present. Matching the part of
+	// the name that is about the SUBJECT keeps the test pinned to what it means
+	// rather than to a naming scheme it does not own.
 	var names []string
 	for _, tool := range app.MCPTools() {
-		if n, _ := tool["name"].(string); strings.HasPrefix(n, "get_v1_guide_blueprint") {
+		if n, _ := tool["name"].(string); strings.Contains(n, "blueprint") {
 			names = append(names, n)
 		}
 	}
@@ -315,7 +324,9 @@ func TestBlueprintPathIsSlashless(t *testing.T) {
 		t.Fatalf("want the blueprint root and versions tools, got %v", names)
 	}
 	for _, n := range names {
-		if strings.HasSuffix(n, "_") {
+		// Either separator: a trailing-slash path leaves the last segment empty, and
+		// which character it ends in is the naming scheme's business, not this test's.
+		if strings.HasSuffix(n, "_") || strings.HasSuffix(n, ".") {
 			t.Fatalf("tool %q names a trailing-slash path this API never served", n)
 		}
 	}

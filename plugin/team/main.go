@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the team app.
@@ -18,6 +19,7 @@ import (
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "team",
+		Prefixes: manifest.PrefixesFor("team"),
 		Price:    cloud.Free,
 		Mount:    team.Mount,
 		Shutdown: cloud.CtxShutdown(team.Shutdown),
