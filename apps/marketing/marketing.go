@@ -104,6 +104,15 @@ var statuses = map[string]bool{
 // cloud.Base, reached as s.Log / s.Brand.
 type state struct {
 	store *Store
+	// plans answers "does this org hold a live paid subscription, and which
+	// tier?" — the ONLY source of the plan a promo redemption is recorded
+	// against (promos.go orgPlan), because the alternative is believing what the
+	// request body claims. It is an OPTIONAL capability resolved from
+	// deps.Commerce by type-assertion, exactly as SpendGate resolves it, so the
+	// narrow types.CommerceClient interface stays untouched. nil when commerce
+	// cannot answer (split deploy, disabled stub) — and unlike the spend gate,
+	// which admits on an unreadable authority, a nil here REFUSES the redemption.
+	plans cloud.PlanChecker
 }
 
 // mounted is the active service so Shutdown can release the store, and so the
@@ -136,7 +145,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("marketing.Mount: open store: %w", err)
 	}
 	b := cloud.NewBase(deps, "marketing")
-	s := &cloud.Service[state]{Base: b, State: state{store: store}}
+	// The subscription read is an optional capability on the commerce client; a
+	// build that cannot answer yields nil, and promos.go refuses rather than
+	// guesses. Asserting on a nil deps.Commerce is safe and also yields nil.
+	plans, _ := deps.Commerce.(cloud.PlanChecker)
+	s := &cloud.Service[state]{Base: b, State: state{store: store, plans: plans}}
 	mounted = s
 
 	routes(app, zapp, s)
