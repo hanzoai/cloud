@@ -10,7 +10,7 @@ package risk
 // while the snapshot holds no learned mass, because there is no state to lose —
 // so an organisation that stated a policy before its model had learned anything
 // had that policy silently discarded. This app deploys Recreate at ONE replica,
-// so the very next rollout rebuilt it from [defaultConfig], which is SHADOW: the
+// so the very next rollout rebuilt it from [defaultRegime], which is SHADOW: the
 // organisation had been told live=true, and its model was deciding nothing. No
 // error, no log, nothing to alert on. Decoupling the two is the fix, and the
 // versioned record is what the fix is made of.
@@ -83,6 +83,23 @@ type regime struct {
 	// the default for a model nobody has reviewed yet.
 	Live bool
 }
+
+// defaultRegime is the posture every organisation's model starts under, and it is
+// stated HERE because the regime's owner is this record and not the engine's config.
+//
+// LIVE IS FALSE. A model that has never been reviewed against an organisation's own
+// traffic must not be able to change an outcome, and the way that is guaranteed is
+// that turning it live is an explicit act by that organisation recorded on its own
+// shelf. It is also the posture every failure to read a regime falls back to
+// ([plane.restoreRegime]): refusing to honour a policy is survivable, running live
+// because a policy failed to load is not.
+//
+// The three numbers are what the engine would have filled a zero appetite with, with
+// one exception that is the reason this is stated rather than inherited: the engine
+// leaves a zero SAMPLE at zero, so a default written as "the zero regime" would
+// silently switch off the below-the-line measurement that makes the realised appetite
+// checkable.
+func defaultRegime() regime { return regime{Review: 0.01, Sample: 0.001, Live: false} }
 
 // regimeOf reads the regime out of a Config. It is the one direction that
 // projection is written, so the two cannot drift apart.
@@ -318,18 +335,19 @@ const adopter = "risk-plane:adopted"
 // restoreRegime puts an organisation's own decision regime back in force on a
 // fresh residency, from the policy record — the ONE source of truth for it.
 //
-// legacy is the [anomaly.Config] off the model row, which is where the regime
-// used to live. It is read for exactly one purpose: ADOPTION. An organisation
-// that stated its appetite before this record existed has it on that row and
-// nowhere else, so resolving the regime only from the policy record would return
-// every such organisation to shadow on the first rollout after this ships — the
-// very defect the record exists to fix. The legacy regime is therefore adopted as
-// version 1, durably, and from that moment there is exactly one source.
+// row is the [anomaly.Config] off the resume row, which is where the regime used to
+// live and where it is still braided with the geometry on disk ([legacy]). It is read
+// for exactly one purpose: ADOPTION. An organisation that stated its appetite before
+// this record existed has it on that row and nowhere else, so resolving the regime
+// only from the policy record would return every such organisation to shadow on the
+// first rollout after this ships — the very defect the record exists to fix. The
+// row's regime is therefore adopted as version 1, durably, and from that moment
+// there is exactly one source.
 //
 // EVERY FAILURE KEEPS THE DEFAULT POSTURE, WHICH IS SHADOW, AND SAYS SO. Refusing
 // to honour a policy is survivable; running live because a policy failed to load
 // is not.
-func (p *plane) restoreRegime(r *resident, legacy *anomaly.Config) {
+func (p *plane) restoreRegime(r *resident, row *anomaly.Config) {
 	rec, held, err := p.inForce(r.key)
 	if err != nil {
 		p.log.Warn("policy history unavailable; the tenant keeps the default shadow posture",
@@ -337,10 +355,10 @@ func (p *plane) restoreRegime(r *resident, legacy *anomaly.Config) {
 		return
 	}
 	if !held {
-		if legacy == nil {
+		if row == nil {
 			return // never stated a regime; the default stands, and that is the truth
 		}
-		adopted, _, err := p.enact(r.key, regimeOf(*legacy), adopter, time.Now())
+		adopted, _, err := p.enact(r.key, regimeOf(*row), adopter, time.Now())
 		if err != nil {
 			p.log.Warn("a regime predating the policy record could not be adopted; the tenant keeps the default shadow posture",
 				"tenant", string(r.key), "err", err)
@@ -350,19 +368,21 @@ func (p *plane) restoreRegime(r *resident, legacy *anomaly.Config) {
 			"tenant", string(r.key), "version", adopted.Version, "live", adopted.Regime.Live)
 		rec = adopted
 	}
-	cfg := rec.Regime.applyTo(r.cfg)
-	mod, err := anomaly.New(cfg, r.vel.vel)
+	// THE REGIME AND NOTHING ELSE. The space and the partition are the ones
+	// [plane.plant] built and stay exactly where it put them, so restating a posture is
+	// not a way to move a model into another space.
+	next, err := r.geom.build(r.key, rec.Regime, r.seed, r.vel)
 	if err != nil {
-		// The geometry seed is NOT reset with the posture: r.cfg has to keep
-		// describing the store [plane.plant] built.
+		// Only the POSTURE falls back. The space and the partition are left describing
+		// the model still running, which is the one plant built — at this default
+		// posture, which is why nothing else has to be undone.
 		p.log.Warn("the recorded regime could not be rebuilt; the tenant keeps the default shadow posture",
 			"tenant", string(r.key), "version", rec.Version, "err", err)
-		seed := r.cfg.Seed
-		r.cfg = defaultConfig()
-		r.cfg.Seed, r.cfg.MaxOrgs = seed, 1
+		r.reg = defaultRegime()
 		return
 	}
-	r.cfg, r.mod, r.pol = cfg, mod, rec.Version
+	r.run(next, r.geom)
+	r.reg, r.pol = rec.Regime, rec.Version
 }
 
 // admitRegime refuses a regime no threshold can be derived from. It REFUSES

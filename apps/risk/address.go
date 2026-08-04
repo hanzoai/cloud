@@ -44,9 +44,16 @@ package risk
 // The address covers everything that makes two models answer the same event
 // differently, and nothing else:
 //
-//	shape    the engine's own Digest: layout version, dimension count, trees,
-//	         depth, blend, window, and the feature inventory in order. Masses are
-//	         meaningless against a different one.
+//	family   the KIND of model. It is the first term because every term after it is
+//	         a term of one family's arithmetic: two families' masses are not fitted
+//	         differently, they are different kinds of number. A name that omitted it
+//	         would let a value fitted under one family be adopted into another
+//	         (family.go), which is the one mistake here that cannot be measured
+//	         afterwards.
+//	shape    the family's own digest over its geometry and the feature inventory in
+//	         order — for the half-space family: layout version, dimension count,
+//	         trees, depth, blend, window. Masses are meaningless against a different
+//	         one.
 //	seed     the geometry generator. Identical masses under two seeds are two
 //	         different partitions of the space and score differently, so a name
 //	         that ignored the seed would call them one value.
@@ -115,11 +122,19 @@ import (
 // carries an OrgID, and it is skipped: that field is the SLOT the engine plants
 // into, not part of the mathematics, and it is set from the validated principal on
 // the way in ([plane.adopt]) rather than trusted off a stored row.
-func address(s anomaly.Snapshot, warmed time.Time) string {
+func address(f family, s anomaly.Snapshot, warmed time.Time) string {
 	h := sha256.New()
 	// Domain-separated, so a digest from this plane can never be mistaken for one
 	// from another — apps/dataset writes "hanzo.dataset\x00" for the same reason.
 	h.Write([]byte("hanzo.risk.model\x00"))
+	// AND DOMAIN-SEPARATED BY FAMILY, for the same reason one level in. Every term
+	// below is a term of one family's arithmetic — a digest over its geometry, a seed
+	// that generates its partition, masses that are its kind of number — so without
+	// this the name would claim that a family's terms mean the same thing in every
+	// family. They do not, and two families' masses that happened to agree numerically
+	// would have been named as one value.
+	h.Write([]byte(f))
+	h.Write([]byte{0})
 	h.Write([]byte(s.Digest))
 	h.Write([]byte{0})
 	_ = binary.Write(h, binary.BigEndian, uint32(s.Version))
@@ -261,7 +276,8 @@ type value struct {
 	// Seq is its position in THIS organisation's history, from 1 and contiguous
 	// until retention disposes of the oldest.
 	Seq int64
-	// Shape is the model space the masses are only meaningful against.
+	// Shape NAMES the model space the masses are only meaningful against: the family,
+	// and that family's own digest ([family.qualify]).
 	Shape string
 	// Learned is how many events are behind the masses.
 	Learned int64
@@ -307,12 +323,12 @@ func (p *plane) publish(t tenant) (value, bool, error) {
 		return value{}, false, err
 	}
 	r.mu.Lock()
-	snap, held := r.mod.Snapshot(string(t))
-	// THE SHAPE THE STORE IS ACTUALLY RUNNING, off the residency's own record of it
-	// ([plane.plant] reads it back from the store rather than trusting what it was
-	// handed). A value whose recorded shape does not produce its digest is refused on
-	// adoption, so both must come from one place, and this is that place.
-	m := model{Snapshot: snap, Shape: shapeOf(r.cfg)}
+	snap, held := r.mod.snapshot()
+	// THE SPACE THE MODEL IS ACTUALLY RUNNING IN, off the residency's own record of it —
+	// which [resident.run] sets from the detector itself, so it cannot describe some
+	// other model. A value whose recorded shape does not produce its digest is refused
+	// on adoption, so both must come from one place, and this is that place.
+	m := model{Snapshot: snap, Shape: r.geom}
 	warmed := r.warmed
 	r.mu.Unlock()
 	if !held || snap.Learned == 0 {
@@ -330,6 +346,14 @@ func (p *plane) publish(t tenant) (value, bool, error) {
 // they hand over. The bound, the address, the sequence, the idempotence and the
 // retention are therefore one implementation rather than two that agree today.
 func (p *plane) mint(t tenant, m model, warmed time.Time) (value, bool, error) {
+	// A VALUE RECORDS ITS OWN SPACE OR IT IS NOT MINTED. The family is the first term
+	// of both the name and the adoption gate, so a value minted without one would be a
+	// value nobody could ever put back — and the state it would be put back into would
+	// have to be guessed. Both callers already hand over the space they fitted in; this
+	// refuses the third caller that forgets to.
+	if !m.Shape.stated() {
+		return value{}, false, fmt.Errorf("risk: a model value must record the space its masses describe")
+	}
 	body, err := json.Marshal(m)
 	if err != nil {
 		return value{}, false, fmt.Errorf("risk: encode model value: %w", err)
@@ -346,8 +370,8 @@ func (p *plane) mint(t tenant, m model, warmed time.Time) (value, bool, error) {
 		return value{}, false, err
 	}
 	v := value{
-		Address: address(m.Snapshot, warmed),
-		Shape:   m.Digest,
+		Address: address(m.Shape.family(), m.Snapshot, warmed),
+		Shape:   m.Shape.family().qualify(m.Digest),
 		Learned: m.Learned,
 		Warmed:  warmed.UTC().Truncate(time.Second),
 		At:      p.now().UTC().Truncate(time.Second),

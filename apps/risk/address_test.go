@@ -30,7 +30,7 @@ import (
 func TestAddress_IsAPureFunctionOfTheValue(t *testing.T) {
 	snap := sampleSnapshot()
 	warmed := time.Unix(1_700_000_000, 0).UTC()
-	first := address(snap, warmed)
+	first := address(halfSpace, snap, warmed)
 	if first == "" {
 		t.Fatal("a value has no name")
 	}
@@ -38,7 +38,7 @@ func TestAddress_IsAPureFunctionOfTheValue(t *testing.T) {
 		t.Fatalf("an address is %d characters, want %d", len(first), addressBytes)
 	}
 	for i := 0; i < 4; i++ {
-		if again := address(snap, warmed); again != first {
+		if again := address(halfSpace, snap, warmed); again != first {
 			t.Fatalf("the same value named itself twice: %q then %q", first, again)
 		}
 	}
@@ -53,7 +53,7 @@ func TestAddress_IsAPureFunctionOfTheValue(t *testing.T) {
 // security decision under test, not an omission.
 func TestAddress_CoversEveryTermThatChangesAScore(t *testing.T) {
 	warmed := time.Unix(1_700_000_000, 0).UTC()
-	base := address(sampleSnapshot(), warmed)
+	base := address(halfSpace, sampleSnapshot(), warmed)
 
 	moves := map[string]func(*anomaly.Snapshot){
 		"shape":    func(s *anomaly.Snapshot) { s.Digest = "a different inventory" },
@@ -69,7 +69,7 @@ func TestAddress_CoversEveryTermThatChangesAScore(t *testing.T) {
 	for term, move := range moves {
 		s := sampleSnapshot()
 		move(&s)
-		if got := address(s, warmed); got == base {
+		if got := address(halfSpace, s, warmed); got == base {
 			t.Fatalf("changing %s did not change the value's name, so two models that score "+
 				"differently share one address", term)
 		}
@@ -79,9 +79,17 @@ func TestAddress_CoversEveryTermThatChangesAScore(t *testing.T) {
 	// invisible: two models with identical masses reached by different routes hold
 	// different beliefs about what is left to fold, and one of them re-teaches
 	// history the other does not.
-	if got := address(sampleSnapshot(), warmed.Add(24*time.Hour)); got == base {
+	if got := address(halfSpace, sampleSnapshot(), warmed.Add(24*time.Hour)); got == base {
 		t.Fatal("the fold watermark is not in the address, so a model that will re-teach its " +
 			"own history is named identically to one that will not")
+	}
+
+	// THE FAMILY MOVES IT, and it is the FIRST term for a reason: every term above is
+	// a term of one family's arithmetic, so without this a value fitted under one
+	// family could wear a name minted under another and be adopted through it.
+	if got := address("transformer", sampleSnapshot(), warmed); got == base {
+		t.Fatal("the model family is not in the address, so two families' masses that happen " +
+			"to agree numerically are named as one value")
 	}
 
 	// THE ORGANISATION IS NOT IN IT. Two organisations whose models are literally
@@ -90,7 +98,7 @@ func TestAddress_CoversEveryTermThatChangesAScore(t *testing.T) {
 	// tested below, never the unguessability of this string.
 	mine := sampleSnapshot()
 	mine.OrgID = "brand/some-other-organisation"
-	if got := address(mine, warmed); got != base {
+	if got := address(halfSpace, mine, warmed); got != base {
 		t.Fatal("the address is salted with the organisation, which makes isolation rest on a " +
 			"name being unguessable instead of on the per-organisation store")
 	}
@@ -114,7 +122,7 @@ func TestAddress_MassesAreNamedByTheirBitsAndNotTheirDigits(t *testing.T) {
 	if a.Ref[0][0] == b.Ref[0][0] {
 		t.Skip("this platform cannot represent the two masses apart")
 	}
-	if address(a, warmed) == address(b, warmed) {
+	if address(halfSpace, a, warmed) == address(halfSpace, b, warmed) {
 		t.Fatal("two distinct masses share one address, so the name is over their digits " +
 			"rather than over their bits")
 	}

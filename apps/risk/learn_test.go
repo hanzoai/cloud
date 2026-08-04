@@ -271,13 +271,33 @@ func TestAppetite_KeepsWhatWasLearned(t *testing.T) {
 
 // TestSearch_IsDry: an exhaustive search must not be able to move the live model.
 // A sandbox that can mutate live state is not a sandbox.
+//
+// It is measured against the CONTENT ADDRESS as well as against the counts, because the
+// address is this plane's own oracle for "byte-identical": it covers the space, the
+// partition, the position, every mass and the fold watermark (address.go), so one name
+// before and after a sixty-four-candidate run is the whole state proven unmoved rather
+// than two counters proven equal. The THRESHOLD in force is asserted separately because
+// it is the one number a search is trying to choose and therefore the one an escaping
+// sandbox would move first.
 func TestSearch_IsDry(t *testing.T) {
 	probe.reset(true)
 	p := newTestPlane(t)
+	// The fold tickets are held, so the only thing that could move this model across the
+	// run is the run. A background fold folding this organisation's own surface in is
+	// legitimate learning and would make the byte-identity assertion below measure the
+	// fold rather than the sandbox.
+	holdFolds(t, p)
 	k := key(t, brandA, orgA)
 	hist := stream(400, time.Now().UTC().Add(-4*time.Hour))
 	teach(t, p, k, hist)
 	before, _, _ := p.state(k)
+	was, _, err := p.publish(k)
+	if err != nil {
+		t.Fatalf("publish before the run: %v", err)
+	}
+	if was.Address == "" {
+		t.Fatal("the model published no value, so this test has no byte-identity oracle")
+	}
 
 	rep := p.search(context.Background(), k, "srch_test", hist)
 	if len(rep.Trials) == 0 {
@@ -290,6 +310,24 @@ func TestSearch_IsDry(t *testing.T) {
 	if after.Learned != before.Learned || after.Scored != before.Scored {
 		t.Fatalf("the search moved the LIVE model: learned %d->%d, scored %d->%d",
 			before.Learned, after.Learned, before.Scored, after.Scored)
+	}
+	if after.Cut != before.Cut {
+		t.Fatalf("the search moved the live THRESHOLD: %v -> %v — a sandbox that can choose the "+
+			"cut a live decision is measured against is not a sandbox", before.Cut, after.Cut)
+	}
+	if after.Digest != before.Digest {
+		t.Fatalf("the search moved the live model's space: %s -> %s", before.Digest, after.Digest)
+	}
+	// THE SAME NAME, so the same masses, the same partition, the same position and the
+	// same fold watermark. A republication of an unchanged model is idempotent by
+	// content, so a second value minted here would itself be the refutation.
+	now, minted, err := p.publish(k)
+	if err != nil {
+		t.Fatalf("publish after the run: %v", err)
+	}
+	if minted || now.Address != was.Address {
+		t.Fatalf("the model is not byte-identical across the run: %s -> %s (minted=%v)",
+			was.Address, now.Address, minted)
 	}
 	// Every candidate is ranked and the ranking is stable.
 	for i := 1; i < len(rep.Trials); i++ {
@@ -414,7 +452,7 @@ func (p *plane) snapshotOf(t *testing.T, k tenant) (snap snapshotView, ok bool) 
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	s, held := r.mod.Snapshot(string(k))
+	s, held := r.mod.snapshot()
 	if !held {
 		return snapshotView{}, false
 	}
@@ -770,7 +808,7 @@ func stopAfter(t *testing.T, p *plane, k tenant, cancel context.CancelFunc, n in
 			default:
 			}
 			r.mu.Lock()
-			learned := r.mod.State(string(k)).Learned
+			learned := r.mod.state().Learned
 			r.mu.Unlock()
 			if learned >= int64(n) {
 				cancel()
@@ -961,5 +999,66 @@ func TestRestore_TheGeometryIsUNSPELLABLEFromTheWire(t *testing.T) {
 	}
 	if _, _, err := p.adopt(k, v.Address); err != nil {
 		t.Fatalf("an organisation could not adopt its own published value: %v", err)
+	}
+}
+
+// TestLearn_IsAnIncrementWithNoJobAndNoQueue is the property the whole moat rests on,
+// stated as the experiment that would refute it: there is no training pass, no retained
+// sample and no retraining job, so a tenant's model is current the instant its last
+// event lands and it does not move again until the next one does.
+//
+// Two halves, and each one alone passes with the hole open. NO DRIFT: reading the model
+// repeatedly reports the same count, because nothing in the background is still
+// learning — a queue drained by a worker would show the count climbing between reads
+// with no caller asking. AND AN INCREMENT: a batch of N events moves it by exactly N,
+// synchronously, so the answer a caller gets IS the state the next score runs against.
+//
+// Mutation proof: make [plane.learn] hand the batch to a goroutine and the increment
+// assertion fails against the value it returned.
+func TestLearn_IsAnIncrementWithNoJobAndNoQueue(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	teach(t, p, k, stream(400, time.Now().UTC().Add(-4*time.Hour)))
+
+	// NO DRIFT. Three reads with nothing between them must agree; a background learner
+	// is exactly what would make them disagree.
+	first, _, err := p.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		again, _, err := p.state(k)
+		if err != nil {
+			t.Fatalf("state: %v", err)
+		}
+		if again.Learned != first.Learned {
+			t.Fatalf("the learned count moved with nobody teaching: %d -> %d — something is "+
+				"learning in the background, so what a caller reads is not what the next score runs "+
+				"against", first.Learned, again.Learned)
+		}
+	}
+
+	// AND AN INCREMENT, of exactly the batch, on the call itself. The batch is the TAIL
+	// of a longer stream so every event in it is new: a learn is the batch minus what is
+	// already in this organisation's own record, so a repeat of what it already holds
+	// correctly moves nothing and would prove nothing here.
+	const batch = 7
+	fresh := stream(400+batch, time.Now().UTC().Add(-time.Minute))[400:]
+	learned, err := p.learn(k, fresh...)
+	if err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	if learned != batch {
+		t.Fatalf("a batch of %d reported %d learned", batch, learned)
+	}
+	end, _, err := p.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if end.Learned != first.Learned+batch {
+		t.Fatalf("a batch of %d moved the model by %d — learning is not the increment the whole "+
+			"moat rests on", batch, end.Learned-first.Learned)
 	}
 }
