@@ -208,7 +208,14 @@ func (o ops) putAvatar(c *zip.Ctx) error {
 	// IAM is the system of record for `avatar` — every surface already reads it from
 	// there, so writing it here is what makes the photo appear everywhere instead of
 	// only in whatever called this.
-	if err := o.s.State.iam.setAvatar(c.Context(), cr.id, url); err != nil {
+	//
+	// keyID(), not id: IAM's user ops parse `<owner>/<name>` through
+	// GetOwnerAndNameFromId, and on the direct-Bearer path X-User-Id is a UUID, so
+	// `<owner>/<uuid>` is not a user IAM can find. Measured in production —
+	// `iam non-envelope response (400)` for id hanzo/2d4d67ab-…, the photo stored
+	// and the profile not updated. keyID() is the same composite the key ops
+	// already use for the same reason; on the gateway path the two are identical.
+	if err := o.s.State.iam.setAvatar(c.Context(), cr.keyID(), url); err != nil {
 		switch {
 		case errors.Is(err, errNotConfigured):
 			return zip.Errorf(http.StatusNotImplemented, "identity service is not configured on this deployment")
