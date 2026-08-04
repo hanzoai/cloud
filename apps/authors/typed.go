@@ -147,17 +147,6 @@ func (o ops) myAuthors(ctx context.Context, _ *noInput) (*payload, error) {
 		return nil, zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
 	}
 
-	// Lazy accrual sweep for MY deploying orgs (bounded, best-effort — a commerce
-	// hiccup never fails the page; it simply accrues on the next sweep).
-	if a.Status == StatusApproved {
-		if _, _, serr := sweepAuthor(o.s, ctx, a); serr != nil {
-			o.s.Log.Warn("authors: lazy sweep failed", "author", a.ID, "err", serr)
-		}
-		if refreshed, rerr := o.s.State.store.GetByID(ctx, a.ID); rerr == nil {
-			a = refreshed // pick up any accrual the lazy sweep just latched
-		}
-	}
-
 	repos, err := o.s.State.store.ListRepos(ctx, a.ID, repoLimit)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list repos: %v", err)

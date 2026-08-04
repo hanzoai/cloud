@@ -306,18 +306,6 @@ func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents
 	return out, nil
 }
 
-// CreateCreditGrant forwards a credit-grant request verbatim to commerce's
-// mint-gated POST /v1/billing/credits (CreateCreditGrant), authenticated
-// by the admin service token, with subject as the target-org namespace selector.
-// Commerce is the sole credit-grant ledger; this relays its contract untouched
-// (the raw response is returned to the caller) so the admin surface stays thin.
-func (c *Client) CreateCreditGrant(ctx context.Context, subject string, body []byte, idempotencyKey string) ([]byte, error) {
-	if !c.Ready() {
-		return nil, errUnconfigured
-	}
-	return c.post(ctx, "/v1/billing/credits", subject, body, idempotencyKey)
-}
-
 // post performs one admin-authenticated commerce POST (JSON body) and returns the
 // raw response. The admin S2S service token is the bearer and X-Org-Id=<subject>
 // the per-org namespace selector commerce's EdgeAuth trusts only after verifying

@@ -187,93 +187,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// ── the backed-payout seam (the ONE helper the 3 growth loops call) ──────────
-
-// Reserve backs a payout of amountCents (minor units) for `program` against the
-// platform reserve fund: it posts the double-entry fund→payout:<program> journal
-// entry, idempotently keyed by ref, and reports whether the fund could cover it.
-//
-//   - backed=true  → posted (or already posted for this ref); the caller MUST now
-//     credit the recipient wallet. Fund down, wallet up — reconciled.
-//   - backed=false → INSUFFICIENT RESERVE; the caller MUST NOT credit. The payout is
-//     honestly pending/blocked until a sweep or seed replenishes the fund.
-//
-// When the treasury subsystem is NOT mounted (a partial deploy, or a growth-loop
-// unit test that does not wire treasury) Reserve is a PASSTHROUGH returning
-// backed=true — behaviour identical to before treasury existed, the same
-// degrade-gracefully contract the commerce seam uses. In production the subsystem is
-// always mounted, so the reserve is enforced. entryID is the journal entry id (empty
-// on passthrough), for the caller to record alongside its own payout row.
-func Reserve(ctx context.Context, program, ref, memo string, amountCents int64) (backed bool, entryID string, err error) {
-	s := mounted
-	if s == nil {
-		return true, "", nil // unmounted → passthrough (backward-safe)
-	}
-	entry, backed, created, err := s.State.record.DebitReserve(ctx, program, ref, memo, amountCents, time.Now().Unix())
-	if err != nil {
-		return false, "", err
-	}
-	if backed && created {
-		emitAudit(s, ctx, "treasury.debit", program, entry.ID, map[string]any{
-			"program": program, "ref": ref, "amountCents": amountCents, "entryId": entry.ID,
-		})
-	}
-	return backed, entry.ID, nil
-}
-
-// ReserveCents reports the reserve fund's currently available balance (minor units)
-// and whether the treasury subsystem is mounted. The growth loops use it only to
-// render an honest "X cents available" message when a payout is blocked for lack of
-// reserve — never as an authority (the atomic guard in DebitReserve is the
-// authority). Unmounted → (0, false).
-func ReserveCents(ctx context.Context) (int64, bool) {
-	s := mounted
-	if s == nil {
-		return 0, false
-	}
-	bal, err := s.State.record.ReserveCents(ctx)
-	if err != nil {
-		return 0, true
-	}
-	return bal, true
-}
-
-// Credit is the INBOUND mirror of Reserve: it credits amountCents into the platform
-// reserve fund (revenue:platform → fund:reserve), idempotently keyed by ref. It is
-// the "pay ourselves" seam — when a growth loop's royalty is owed to HANZO itself
-// (a Hanzo-maintained OSS template deployed by another org), the creator share is
-// realized into the treasury reserve instead of paid out to an external wallet.
-//
-// It reuses the ledger-of-record's Seed primitive (a fixed-amount reserve credit,
-// distinct KindSeed, idempotent by ref) — NOT a new ledger. Idempotency by ref makes
-// a retry a no-op: the reserve is credited AT MOST ONCE per ref, the mirror of the
-// loops' at-most-once accrual latch.
-//
-//   - credited=true  → posted (or already posted for this ref). entryID is the
-//     journal entry id (empty on passthrough), for the caller to record.
-//   - credited=false → only on an unexpected ledger error (err set); the caller
-//     leaves its own reservation intact and reconciles.
-//
-// When treasury is NOT mounted (a partial deploy or a growth-loop unit test that does
-// not wire treasury) Credit is a PASSTHROUGH returning credited=true — the same
-// degrade-gracefully contract Reserve uses.
-func Credit(ctx context.Context, program, ref, memo string, amountCents int64) (credited bool, entryID string, err error) {
-	s := mounted
-	if s == nil {
-		return true, "", nil // unmounted → passthrough (backward-safe)
-	}
-	entry, created, err := s.State.record.Seed(ctx, ref, memo, amountCents, time.Now().Unix())
-	if err != nil {
-		return false, "", err
-	}
-	if created {
-		emitAudit(s, ctx, "treasury.credit", program, entry.ID, map[string]any{
-			"program": program, "ref": ref, "amountCents": amountCents, "entryId": entry.ID,
-		})
-	}
-	return true, entry.ID, nil
-}
-
 // ── typed ops ────────────────────────────────────────────────────────────────
 
 // zipdoc lifts the doc comment off each typed op — and off each field of its In
@@ -298,9 +211,14 @@ func planeReserve(ctx context.Context, _ *struct{}) (*plane.Reserved, error) {
 	if !cloud.Who(ctx).Admin {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
-	cents, ok := ReserveCents(ctx)
-	if !ok {
+	// A pure READ of the fund balance, inlined: the package-level payout seam it used
+	// to share is gone, and a read has no business resurrecting it.
+	if mounted == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "treasury store not open")
+	}
+	cents, err := mounted.State.record.ReserveCents(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "reserve balance: %v", err)
 	}
 	return &plane.Reserved{Amount: plane.Amount(money.FromUSD(cents))}, nil
 }

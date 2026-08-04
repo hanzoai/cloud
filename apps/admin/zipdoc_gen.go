@@ -229,11 +229,6 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme","limitCents":100000,"enforce":true}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,"enforce":true},"total":0}`),
 	})
-	zip.Describe("POST /v1/admin/credits", zip.Doc{
-		Description: "Mints credit for one org. It is the ONE admin mint surface, and it\ndoes NOT mint in-process: it forwards the request to commerce's already-mint-gated\nPOST /v1/billing/credits, authenticated by the service token and scoped to the\ntarget org, then writes one tamper-evident compliance record. Commerce stays the sole\ncredit ledger; this is a thin, audited relay so there is exactly one place credit is\ncreated.\n\nThe body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field\nit carries reaches commerce. The only two this layer reads are the target org (`org`,\nor `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth\ntrusts, and `idempotencyKey`, which makes a double-clicked grant credit once.\n\nA FAILED grant is audited too, with the request body attached: an attempted mint is\nexactly as interesting to a compliance auditor as a successful one.",
-		Example:     json.RawMessage(`{"org":"acme","amountCents":50000,"reason":"design partner credit","idempotencyKey":"grant-2026-07-27-acme"}`),
-		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cg_01J","org":"acme","amountCents":50000,"remainingCents":50000}}`),
-	})
 	zip.Describe("POST /v1/admin/services", zip.Doc{
 		Description: "Onboards a hosted service, or edits one, so a new host comes under the\nlaunch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live\nswitch — editing the hosts of a service that is already open must not silently close\nit again.",
 		Fields: map[string]string{
