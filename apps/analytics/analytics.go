@@ -295,6 +295,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 		app.Post(d.path, cloud.Handle(s, d.ingest))
 	}
 
+	// The tag that feeds the canonical door, on the same origin as the door
+	// (tag.go). GET, static, unauthenticated: it is the install path for a
+	// surface with no bundler, and the page supplies the key.
+	app.Get(tagPath, zip.AdaptNetHTTP(http.HandlerFunc(serveTag)))
+
 	// The Sentry error wire, on the SAME door: POST /v1/event/{project}/envelope|store.
 	// The project segment is variable, so the door's owner carries the route and
 	// relays to the o11y PROCESS over the plane socket (plane.ObsErrorPost). It
