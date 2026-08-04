@@ -445,3 +445,51 @@ func TestRunnerRelease_RepoMustBeACloneURL(t *testing.T) {
 	}
 	releasing.Store(false)
 }
+
+// TestRegistryOwnershipIsVerbatim: the registry-namespace lookup is keyed by the
+// SAME value it is compared against — the VERBATIM validated IAM owner
+// (principal.Org, "only trimmed, NEVER lowercased").
+//
+// It folded the org through strings.ToLower on ONE side of the comparison while
+// the other side stayed verbatim. "acme" and "ACME" are DISTINCT IAM tenants
+// (TestMembershipMatchIsByteExact), so a tenant self-serving an org named `Hanzo`
+// — whose own RoleOwner makes IsOrgAdmin true INSIDE it — folded onto the `hanzo`
+// key and inherited the `hanzoai` namespace: push over another brand's production
+// images, and past the release gate onto ghcr.io/hanzoai/cloud, the binary every
+// pod in the fleet runs. A fold on one side of an authorization comparison is not
+// a normalization, it is a collision, and the collision IS the grant.
+func TestRegistryOwnershipIsVerbatim(t *testing.T) {
+	// The real owners keep their namespaces, on both lanes.
+	for _, tc := range []struct{ org, image, repo string }{
+		{"hanzo", "ghcr.io/hanzoai/cloud", "https://github.com/hanzoai/cloud"},
+		{"lux", "ghcr.io/luxfi/node", "https://github.com/luxfi/node"},
+		{"zoo", "ghcr.io/zooai/app", "https://github.com/zooai/app"},
+	} {
+		if !imageInOrgRegistry(tc.image, tc.org) {
+			t.Errorf("org %q lost its own namespace for %q", tc.org, tc.image)
+		}
+		if !repoOwnerInOrg(tc.repo, tc.org) {
+			t.Errorf("org %q lost its own forge owner for %q", tc.org, tc.repo)
+		}
+	}
+	// A case-variant org is a DIFFERENT tenant and owns nothing here — on either
+	// lane, and whatever it is admin of inside itself.
+	for _, org := range []string{"Hanzo", "HANZO", "hanzO", "Lux", "ZOO"} {
+		if imageInOrgRegistry("ghcr.io/hanzoai/cloud", org) {
+			t.Errorf("tenant %q folded onto a brand's REGISTRY namespace — it could "+
+				"overwrite that brand's production images and cut a release of the "+
+				"binary the fleet runs", org)
+		}
+		if repoOwnerInOrg("https://github.com/hanzoai/cloud", org) {
+			t.Errorf("tenant %q folded onto a brand's FORGE owner", org)
+		}
+	}
+	// Trimming stays — whitespace is not an identity, and it never was.
+	if !imageInOrgRegistry("ghcr.io/hanzoai/cloud", "  hanzo  ") {
+		t.Error("surrounding whitespace changed the owner")
+	}
+	// Cross-brand is still refused, which is the check's original job.
+	if imageInOrgRegistry("ghcr.io/hanzoai/cloud", "lux") {
+		t.Error("lux reached the hanzoai namespace")
+	}
+}

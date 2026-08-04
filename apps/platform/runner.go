@@ -144,13 +144,32 @@ func imageInOrgRegistry(image, org string) bool {
 	if !ok {
 		return false
 	}
-	for _, owned := range orgRegistryNamespaces[strings.ToLower(strings.TrimSpace(org))] {
+	for _, owned := range ownedBy(org) {
 		if ns == owned {
 			return true
 		}
 	}
 	return false
 }
+
+// ownedBy is the ONE lookup of an org's registry namespaces, keyed by the VERBATIM
+// validated IAM owner — the same value principal.Org returns, trimmed and nothing
+// else.
+//
+// Both halves of an authorization comparison must be the same value. This lookup
+// folded the org (strings.ToLower) while principal.Org returns it verbatim and
+// never lowercases, precisely because "acme" and "ACME" are DISTINCT IAM tenants
+// (principal.go, and TestMembershipMatchIsByteExact pins it). So a tenant who
+// self-serves an org named `Hanzo` — a different owner from `hanzo`, whose own
+// RoleOwner makes IsOrgAdmin true inside it — folded onto the `hanzo` key and
+// claimed the `hanzoai` namespace: push over another brand's production images,
+// and past the release gate onto ghcr.io/hanzoai/cloud, the binary the whole fleet
+// runs. A fold applied to one side of a comparison is not a normalization, it is a
+// collision, and here the collision IS a cross-tenant privilege grant.
+//
+// The keys are therefore the real IAM owners (brand.Default is "hanzo"); a brand
+// whose owner is spelled otherwise is named here as it is spelled there.
+func ownedBy(org string) []string { return orgRegistryNamespaces[strings.TrimSpace(org)] }
 
 // repoOwnerInOrg is imageInOrgRegistry for the ARTIFACT lane: it reports whether
 // the repo being built belongs to a forge owner the caller's org owns. It reads
@@ -164,7 +183,7 @@ func repoOwnerInOrg(repoURL, org string) bool {
 	if !ok || owner == "" {
 		return false
 	}
-	for _, owned := range orgRegistryNamespaces[strings.ToLower(strings.TrimSpace(org))] {
+	for _, owned := range ownedBy(org) {
 		if strings.EqualFold(owner, owned) {
 			return true
 		}
