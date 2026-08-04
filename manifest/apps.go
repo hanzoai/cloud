@@ -59,7 +59,11 @@ var Apps = []App{
 	// the outward projection of the fleet health probes o11y already runs. It has
 	// to be listed here or the host never routes it to this app and it falls to
 	// commerce's bare "/v1", which does not serve it.
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/summary"}, Eager: true},
+	// /ws/query_progress is the websocket form of the query-progress read. It sits
+	// outside /v1/o11y because the Upgrade handshake is a transport concern, so no
+	// other prefix here reaches it: unlisted, the fleet published the address and
+	// routed it nowhere.
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/summary", "/ws/query_progress"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole
