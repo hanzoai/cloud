@@ -62,7 +62,6 @@ func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
 	app := zip.New(zip.Config{Logger: deps.Logger})
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
-	app.Use(middleware.Logger(deps.Logger))
 	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
 	}

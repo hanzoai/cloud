@@ -76,7 +76,7 @@ func traceable(path string) bool {
 // makes a full agent trace a single tree: request → run → step → chat.
 //
 // It is a plain zip.Handler wrapping c.Continue(), the framework's idiomatic
-// middleware form (the same shape as middleware.Logger); no otelfiber shim is
+// middleware form (a plain request-scoped handler); no otelfiber shim is
 // needed because zip already exposes method/path/status/context.
 func TracingMiddleware() zip.Handler {
 	return func(c *zip.Ctx) error {

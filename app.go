@@ -101,7 +101,10 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	// middleware_tracing.go.
 	app.Use(TracingMiddleware())
 
-	app.Use(middleware.Logger(deps.Logger))
+	// No request logger is installed here: zip reports every request natively —
+	// method, path, status, duration, trace and span, and the caller when the
+	// environment parked one — through the app's own logger. A second line per
+	// request would say less and cost the same.
 
 	// Public site edge (clients/sites). Installed FIRST — after Recover/RequestID/
 	// Logger, BEFORE SanitizeIdentity + BillingGate — so a request whose Host is a
