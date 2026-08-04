@@ -368,25 +368,31 @@ func analyticsIngest(c *zip.Ctx) (func(org string, c *zip.Ctx) error, bool) {
 // quest.hanzo.app/v1/billing/plans returned 200. Same accessor, same failure as
 // commerce's tenant resolver earlier the same night.
 //
-// The parsed host ALWAYS wins. X-Forwarded-Host is consulted only when there is
-// no parsed host at all, which is exactly the ingress case and never a direct
-// request. That ordering is the security property, not a detail: the host picks
-// the ORG here, so a client that could override a real host could serve itself
-// another tenant's site. TestMiddlewareTenantKeyedByHostNotPath pins it — a
-// request that HAS a host ignores the header completely.
+// The parsed host ALWAYS wins. X-Forwarded-Host is consulted only when there is no
+// parsed HOSTNAME at all, which is exactly the ingress case and never a direct
+// request. That ordering is the security property, not a detail: the host picks the
+// ORG here, so a client that could override a real host could serve itself another
+// tenant's site.
+//
+// "Is this a hostname" is the whole question, and it used to be asked as "is this a
+// host we would SERVE" — siteSlug, else customCandidate. Those are not the same
+// question, and the gap between them is precisely OUR OWN domains: api.hanzo.ai
+// names no site, and customCandidate excludes it BY DESIGN (IsSelfHost), so neither
+// arm fired and the client-supplied header won. `Host: login.hanzo.ai` with
+// `X-Forwarded-Host: <any bound custom domain>` served that domain's site — a
+// tenant's content returned for a request addressed to our auth apex, needing no
+// site_hosts row on hanzo.ai at all. The two tests that look like they pinned this
+// both use a host that IS a site, so the early return fired and the header was
+// never read; they proved the property only where it already held.
+//
+// Whether we serve a host has nothing to do with which host was asked for, so this
+// no longer asks: a parsed name with a dot is a hostname and is final. What remains
+// for the header is what it was added for — the ingress case, where fiber parses no
+// host at all — plus bare internal names (`localhost`, a short service name) that
+// no client is addressing us by.
 func (s *Server) requestHost(c *zip.Ctx) string {
-	// A parsed host that names a site (or a bindable custom domain) is the
-	// truth and is never overridden. Anything else — empty behind the ingress,
-	// or the ingress' own service name — is not a host this server can serve,
-	// so the forwarded name is the only candidate left.
-	parsed := hostOnly(c.Fiber().Hostname())
-	if parsed != "" {
-		if _, _, ok := s.siteSlug(parsed); ok {
-			return parsed
-		}
-		if s.customCandidate(parsed) {
-			return parsed
-		}
+	if parsed := hostOnly(c.Fiber().Hostname()); strings.Contains(parsed, ".") {
+		return parsed
 	}
 	// Left-most entry: proxies append, so the first is the client-facing name.
 	fwd := c.Header("X-Forwarded-Host")
