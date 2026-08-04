@@ -91,6 +91,32 @@ func ours(s *cloud.Service[state], host string) bool {
 // it is not forgeable.
 func vouches(c *zip.Ctx) bool { return principal.IsSuperAdmin(c) }
 
+// hostOf is the ONE reading of a custom hostname off a request: canonical form,
+// then the syntax this surface deals in. Bind, verify and release all ask it, so
+// they cannot disagree about what a hostname IS.
+//
+// They did disagree, and the asymmetry was a takeover primitive. Bind required
+// fqdn.Valid; release required only non-empty. But site_hosts also holds each
+// project's BARE SLUG — the structural row deploy.go binds so `<slug>.<apex>`
+// serves — and a bare label is not Valid (nameRE wants labels, a dot and a TLD),
+// so release accepted a row bind could never re-create. The domains panel renders
+// that row like any other, as a live `https://<slug>`, with a delete control beside
+// it: a tenant deleting the odd-looking entry drops its OWN subdomain, which the
+// domains API then cannot restore. Resolution falls back to ResolveUniqueLiveSlug,
+// which refuses once two live projects share the slug, so the subdomain 404s for
+// everyone — and the next tenant holding that slug to deploy takes the freed row,
+// and the subdomain, for good.
+//
+// One predicate closes it in the direction that matters: this surface only ever
+// addresses names it could also have created.
+func hostOf(raw string) (string, error) {
+	host := fqdn.Clean(raw)
+	if !fqdn.Valid(host) {
+		return "", zip.ErrBadRequest("invalid domain: " + raw)
+	}
+	return host, nil
+}
+
 // projectsDomain is one row of a site's domains panel.
 //
 //	live     the edge answers for this host now
@@ -208,12 +234,12 @@ func (o ops) bindDomains(ctx context.Context, in *projectsDomainsBind) (*project
 
 	out := make([]projectsDomain, 0, len(in.Domains))
 	for _, d := range in.Domains {
-		host := fqdn.Clean(d)
-		if host == "" {
-			continue
+		if fqdn.Clean(d) == "" {
+			continue // a blank entry in the list is skipped, never an error
 		}
-		if !fqdn.Valid(host) {
-			return nil, zip.ErrBadRequest("invalid domain: " + d)
+		host, err := hostOf(d)
+		if err != nil {
+			return nil, err
 		}
 		if !vouched && ours(s, host) {
 			return nil, zip.Errorf(http.StatusForbidden,
@@ -270,9 +296,9 @@ func (o ops) releaseDomain(ctx context.Context, in *projectsDomainRef) (*void, e
 	if err != nil {
 		return nil, err
 	}
-	host := fqdn.Clean(in.Host)
-	if host == "" {
-		return nil, zip.ErrBadRequest("host is required")
+	host, err := hostOf(in.Host)
+	if err != nil {
+		return nil, err
 	}
 	if err := o.s.State.store.UnbindHost(ctx, host, org, p.Slug); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "release %q: %v", host, err)
@@ -303,7 +329,10 @@ func (o ops) verifyDomain(ctx context.Context, in *projectsDomainRef) (*projects
 		return nil, err
 	}
 	s := o.s
-	host := fqdn.Clean(in.Host)
+	host, err := hostOf(in.Host)
+	if err != nil {
+		return nil, err
+	}
 	claim, err := s.State.store.HostClaimFor(ctx, host, org, p.Slug)
 	if errors.Is(err, errNotFound) {
 		return nil, zip.ErrNotFound("domain not claimed by this site")
