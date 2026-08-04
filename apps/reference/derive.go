@@ -80,7 +80,7 @@ const deviceWindow = 30 * 24 * time.Hour
 const deviceStatement = `
 	SELECT id, orgs, n FROM (
 	  SELECT anonymous_id AS id, uniqExact(org) AS orgs, count() AS n
-	  FROM event.event
+	  FROM event.fact
 	  WHERE time >= ? AND time < ? AND anonymous_id != '' AND org != ?
 	  GROUP BY anonymous_id
 	)

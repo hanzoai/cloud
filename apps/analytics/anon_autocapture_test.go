@@ -778,7 +778,7 @@ func TestAnonAutocapture_ThePositionCrosses(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatal("want 1 admitted event")
 	}
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
@@ -813,7 +813,7 @@ func TestAnonAutocapture_PositionIsAClosedSet(t *testing.T) {
 			"tenant_id":        "maxpower",
 		},
 	}})
-	f, ok := normalize(publicTenant, time.Now(), out[0])
+	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
@@ -848,7 +848,7 @@ func TestAnonAutocapture_PositionIsFilteredNotClamped(t *testing.T) {
 		if len(out) != 1 {
 			t.Fatalf("%s: the interaction itself must still land", tc.what)
 		}
-		f, ok := normalize(publicTenant, time.Now(), out[0])
+		f, ok := normalize("acme", time.Now(), out[0])
 		if !ok {
 			t.Fatalf("%s: want routable", tc.what)
 		}
