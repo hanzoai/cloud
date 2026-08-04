@@ -18,7 +18,7 @@ import (
 
 // audiences.go is the cohort engine. An Audience is a saved filter over the
 // org's product analytics — "distinct users who did EVENT within the last N
-// days" — evaluated live against the event plane (event.event) through the
+// days" — evaluated live against the event plane (event.fact) through the
 // shared datastore seam (the SAME lens clients/analytics reads).
 //
 // TENANCY & SAFETY. Every query leads with `org = ?` (the IAM org slug, the
@@ -49,10 +49,10 @@ const (
 	audResolveLimit = 100000
 )
 
-// eventsTable is the event plane's product-event table (org column `org`),
+// eventsTable is the event plane's one fact table (org column `org`),
 // honest-empty until the collector emits. DDL owner: hanzoai/o11y — marketing
-// only reads it.
-const eventsTable = "event.event"
+// only reads it. It holds every signal, so a product-event read pins signal='act'.
+const eventsTable = "event.fact"
 
 // Audience is a saved cohort filter. It is also the INPUT of create — the wire
 // shape is the same record either way — with ID/CreatedAt/UpdatedAt assigned by
@@ -178,7 +178,7 @@ func cohortIDs(ctx context.Context, org string, a Audience, limit int) ([]string
 	}
 	sinceLit := time.Now().UTC().AddDate(0, 0, -a.WindowDays).Format("2006-01-02 15:04:05")
 	rows, err := datastore.Query(ctx,
-		"SELECT DISTINCT distinct_id FROM "+eventsTable+" WHERE org = ? AND name = ? AND time >= ? LIMIT ?",
+		"SELECT DISTINCT distinct_id FROM "+eventsTable+" WHERE org = ? AND signal = 'act' AND name = ? AND time >= ? LIMIT ?",
 		org, a.Event, sinceLit, limit)
 	if err != nil {
 		return nil, fmt.Errorf("warehouse query: %w", err)
@@ -366,7 +366,7 @@ func (o ops) deleteAudience(ctx context.Context, in *AudienceRef) (*struct{}, er
 // mails 3 says so, in deliverable and unmatched. Nothing is sent.
 //
 // Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
-// Response: {"available": true, "count": 500, "deliverable": 3, "unmatched": 497, "sample": ["u_1", "u_2"], "source": "event.event"}
+// Response: {"available": true, "count": 500, "deliverable": 3, "unmatched": 497, "sample": ["u_1", "u_2"], "source": "event.fact"}
 func (o ops) previewAudience(ctx context.Context, in *AudienceRef) (*AudiencePreview, error) {
 	org, err := tenant(ctx)
 	if err != nil {
