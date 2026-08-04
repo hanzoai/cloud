@@ -60,13 +60,13 @@ var untypedByDesign = map[string]string{
 	// code and its Prometheus envelope verbatim, and a wire fact about a store we
 	// no longer run cannot keep a route out of the registry. What is still
 	// measured is served typed, at /v1/o11y/availability (availability.go).
-	"POST /v1/o11y/query": "a reverse proxy into the o11y runtime's v3 engine route (builderQueryHandler: " +
-		"zip.AdaptNetHTTP, r.URL.Path rewritten to /api/v3/query). Request body, query string, upstream " +
-		"status, headers and body all ride through untouched; there is no Go type for \"whatever the " +
-		"runtime answered\".",
-	"POST /v1/o11y/query_range": "the same reverse proxy over /api/v3/query_range. It carries the console's " +
-		"v3 composite payload (compositeQuery.{queryType,builderQueries}), which is the engine's shape " +
-		"and not this package's to declare.",
+	// The two builder-query proxies that stood here are GONE, and their absence is
+	// the point. Each rewrote r.URL.Path onto /api/v3/<resource> to pin the
+	// runtime's v3 engine, and the runtime has no such address: it registers every
+	// route at its full public path and dropped prefix-stripping, so it serves no
+	// /api/* route at all, and queryRangeV3 has no caller left. They forwarded into
+	// the runtime's terminal /* catch-all. hanzoai/o11y's v5 querier answers at
+	// POST /v1/o11y/query_range now, typed.
 	"GET /v1/o11y/sessions": "a reverse proxy into the runtime's /api/sessions (sessions.go). The org gate " +
 		"runs at the cloud boundary, then the runtime's llmobstypes.GettableSessions body and its status " +
 		"ride through unchanged.",
@@ -325,11 +325,13 @@ func TestGraftQualifiesEveryPublishedType(t *testing.T) {
 func TestGraftLeavesAddressesAlone(t *testing.T) {
 	served, typed := o11yOps(t)
 	for _, want := range []string{
-		"GET /v1/o11y/logs",         // cloud's own org-pinned read, at its own address
-		"GET /v1/o11y/metrics",      // ditto
-		"POST /v1/o11y/query_range", // ditto — the three both halves claim
-		"GET /v1/o11y/version",      // the module's, relayed to the runtime
-		"POST /v1/o11y/alerts/last", // not a route: the negative control below
+		"GET /v1/o11y/product/metrics", // cloud's own org-pinned RED read, at its own address
+		"GET /v1/o11y/status",          // ditto
+		"GET /v1/o11y/logs",            // the module's log-record read, at the bare name
+		"GET /v1/o11y/metrics",         // the module's metric-name catalog, ditto
+		"POST /v1/o11y/query_range",    // the module's v5 querier, ditto
+		"GET /v1/o11y/version",         // the module's, relayed to the runtime
+		"POST /v1/o11y/alerts/last",    // not a route: the negative control below
 	} {
 		if want == "POST /v1/o11y/alerts/last" {
 			if served[want] {
@@ -358,23 +360,29 @@ func TestGraftLeavesAddressesAlone(t *testing.T) {
 	}
 }
 
-// TestHostRoutesStillWinTheThreeSharedAddresses is the routing fact the graft had
-// to preserve, and the one it made local.
+// TestTheThreeAddressesAreToldApartNotShared is the routing fact that REPLACED
+// the one this test used to pin.
 //
-// cloud's scope.go is the ONE owner of /v1/o11y/{logs,metrics} and
-// /v1/o11y/query_range — it pins the caller's org SERVER-SIDE into the query —
-// and hanzoai/o11y's table declares all three too, relaying them to the runtime
-// unpinned. First-registered is what makes the tenant-pinned handler the one that
-// answers. Before the graft that depended on the host's global mount order; now
-// both halves are registered on one app, in the order written in mount(), and
-// this is the gate on that order.
+// Three addresses were declared by both halves, and while a wildcard hid the
+// overlap the answer was decided by registration order. hanzoai/o11y names every
+// route now, so a second declaration is a refusal to compose — surfaceApp panics
+// — and the whole test file is the gate on that. Naming the addresses as taken
+// (o11y.Claimed) only made the collision explicit; it still suppressed the
+// module's real read at each one. So the three were told apart instead:
 //
-// Each case below is the ANSWER only cloud's half can give, measured on the real
+//   - the per-product RED read moved to /v1/o11y/product/metrics, and the bare
+//     /v1/o11y/metrics is the module's metric-name CATALOG — a different question;
+//   - cloud's /v1/o11y/logs had no caller and is gone, so the address is the
+//     module's real log-record read;
+//   - cloud's POST /v1/o11y/query_range pinned /api/v3/query_range, an address the
+//     runtime no longer serves at all, so it is gone and the module's v5 querier
+//     answers there.
+//
+// Each case below is the ANSWER only that half can give, measured on the real
 // mount. Under surfaceApp there is no datastore and the runtime's upstream is
-// unreachable, so the module's half answers 502 on all three — which is what this
-// distinguishes against, and what it does answer if mount() registers the module
-// first (verified by mutation).
-func TestHostRoutesStillWinTheThreeSharedAddresses(t *testing.T) {
+// unreachable, so the module's half answers 502 — which is exactly what
+// distinguishes it from cloud's own handler's own sentence.
+func TestTheThreeAddressesAreToldApartNotShared(t *testing.T) {
 	app := surfaceApp(t)
 
 	ask := func(t *testing.T, method, path string, org bool) (int, string) {
@@ -397,27 +405,33 @@ func TestHostRoutesStillWinTheThreeSharedAddresses(t *testing.T) {
 		return resp.StatusCode, string(b)
 	}
 
-	// The org-pinned log read answers FROM THE NATIVE STORE: 200 and cloud's own
-	// body, naming the product it was asked for. The relay cannot reach a store.
-	if code, body := ask(t, http.MethodGet, "/v1/o11y/logs?product=kms", true); code != http.StatusOK ||
-		!strings.Contains(body, `"product":"kms"`) {
-		t.Errorf("GET /v1/o11y/logs = %d %s, want 200 from scope.go's org-pinned read", code, body)
+	// CLOUD'S HALF, at its own address: the org-pinned RED read refuses with ITS
+	// OWN sentence about ITS OWN dependency. A 502 here means the module's relay
+	// answered instead — i.e. the move did not take.
+	if code, body := ask(t, http.MethodGet, "/v1/o11y/product/metrics?product=kms", true); !strings.Contains(body, "o11y metrics: datastore not connected") {
+		t.Errorf("GET /v1/o11y/product/metrics = %d %s, want scope.go's own datastore refusal", code, body)
 	}
 
-	// The org-pinned RED read refuses with ITS OWN sentence about ITS OWN
-	// dependency. A 502 here is the relay failing to reach the runtime instead.
-	if code, body := ask(t, http.MethodGet, "/v1/o11y/metrics?product=kms", true); !strings.Contains(body, "o11y metrics: datastore not connected") {
-		t.Errorf("GET /v1/o11y/metrics = %d %s, want scope.go's own datastore refusal", code, body)
-	}
-
-	// query_range is cloud's UNTYPED proxy, so an anonymous caller meets gate()
-	// directly and gets gate's own flat envelope. The module's op is typed, so the
-	// same refusal would arrive re-wrapped as a zip.HTTPError — the two shapes
-	// door_test.go's note describes. The shape is the tell; the status is 403 either
-	// way.
-	if code, body := ask(t, http.MethodPost, "/v1/o11y/query_range", false); code != http.StatusForbidden ||
-		!strings.Contains(body, `"msg"`) {
-		t.Errorf("POST /v1/o11y/query_range = %d %s, want 403 in gate()'s own {\"status\":\"error\",\"msg\":…} "+
-			"envelope — a zip.HTTPError body means the module's typed op answered", code, body)
+	// THE MODULE'S HALF, at the three bare names cloud used to take. Each is a
+	// relay into a runtime that surfaceApp cannot reach, so each answers 502 — and
+	// a 502 is the proof the module's declaration survived, because cloud has no
+	// handler left at any of them that could answer anything.
+	for _, tc := range []struct {
+		method, path string
+	}{
+		{http.MethodGet, "/v1/o11y/logs?limit=1"},
+		{http.MethodGet, "/v1/o11y/metrics"},
+		{http.MethodPost, "/v1/o11y/query_range"},
+	} {
+		code, body := ask(t, tc.method, tc.path, true)
+		if code == http.StatusNotFound {
+			t.Errorf("%s %s = 404 — the module's declaration was suppressed and nothing replaced it",
+				tc.method, tc.path)
+			continue
+		}
+		if strings.Contains(body, "datastore not connected") || strings.Contains(body, `"view":`) {
+			t.Errorf("%s %s = %d %s — cloud's own handler answered at the module's address",
+				tc.method, tc.path, code, body)
+		}
 	}
 }

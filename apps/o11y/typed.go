@@ -43,6 +43,12 @@ import (
 // can never name different subtrees.
 const o11yPrefix = "/v1/o11y"
 
+// productPrefix is the PRODUCT face of that subtree: the reads keyed by a console
+// product slug, which answer a different question from the module's same-named
+// reads over the whole telemetry store. The dimension is in the address so the two
+// never share a name — see scope.go.
+const productPrefix = o11yPrefix + "/product"
+
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
 // and the MCP tool list — Go drops comments at compile time. Run by `make -C
