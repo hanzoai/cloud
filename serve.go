@@ -482,15 +482,6 @@ func Listen(plugins []Plugin, enable []string) error {
 		Logger:         deps.Logger,
 	}))
 
-	// IAM edge — front the standalone Hanzo IAM at /v1/iam/* (org-scoped) so the
-	// one-binary console can read org members + projects. Mounted ONLY when IAM is
-	// not folded in-process (else that subsystem already owns /v1/iam/*, via
-	// MountAll above — no double-mount) and an IAM origin is configured. Before the
-	// console catch-all, so a real IAM segment answers JSON, not the SPA shell.
-	if !cfg.Enabled("iam") && iamHost() != "" {
-		newIamEdge().mount(app)
-	}
-
 	// GET /v1/openapi.json — the THIRD projection of the same route table. ZAP
 	// replays the /v1 handlers, the console renders them, and this DESCRIBES
 	// them; all three read the one router, so none can drift from it. Mounted
