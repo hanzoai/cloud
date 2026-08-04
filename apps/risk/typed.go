@@ -217,11 +217,17 @@ type riskScoreOut struct {
 	// learning and recording what it WOULD have alerted on, and changing no
 	// outcome. It is the default for a model no one has reviewed yet.
 	Shadow bool `json:"shadow"`
-	// Shape is the model space this verdict was reached in: your organisation's
-	// feature inventory in order and the detector's geometry parameters. It is what
-	// pins an adverse decision to a model — a score is only meaningful against the
-	// shape that produced it, and without this the only answer to "which model
-	// decided this" was "the one that was running", which is not an answer.
+	// Shape is the model space this verdict was reached in, as `<family>:<digest>`:
+	// the KIND of model, and that family's own digest over your organisation's feature
+	// inventory in order and the detector's geometry parameters. It is what pins an
+	// adverse decision to a model — a score is only meaningful against the space that
+	// produced it, and without this the only answer to "which model decided this" was
+	// "the one that was running", which is not an answer.
+	//
+	// The family leads it because everything after it is one family's arithmetic. Two
+	// spaces are the same space only if they are the same family, so comparing this
+	// with the `shape` on your model state or on a published value is a comparison
+	// that holds ACROSS families and not only inside one.
 	//
 	// It names the SPACE, not the learned state, and that is deliberate. The masses
 	// at the instant of a score are in-process counters somewhere between two
@@ -332,9 +338,12 @@ type riskModelState struct {
 	// echoed so a reader can see the answer is its own and not a parameter it
 	// passed.
 	Tenant string `json:"tenant"`
-	// Shape is the model's identity: the inventory in order and the detector's
-	// geometry parameters. It is what an auditor pins an alert to, because
-	// learned state is only meaningful against the shape that produced it.
+	// Shape is the model's identity, as `<family>:<digest>`: the KIND of model, and
+	// that family's own digest over the inventory in order and the detector's geometry
+	// parameters. It is what an auditor pins an alert to, because learned state is
+	// only meaningful against the space that produced it — and the family leads it
+	// because two families' masses are not fitted differently, they are different
+	// kinds of number.
 	Shape string `json:"shape"`
 	// Live is false while the model is in shadow — scoring, learning and
 	// recording what it WOULD have alerted on, and changing no outcome. Shadow is
@@ -488,12 +497,18 @@ type riskModelValue struct {
 	// Sequence is this value's place in YOUR organisation's own history, from 1 and
 	// contiguous until retention disposes of the oldest.
 	Sequence int64 `json:"sequence"`
-	// Shape NAMES the model space the masses are only meaningful against — the feature
-	// inventory in order and the detector's geometry parameters, as the engine's own
-	// digest. Compare it with the `shape` on your model state (GET /v1/risk/state):
-	// equal means adopting this value restores masses into the space already running,
-	// and different means adopting it REPLANTS the model into the space this value
-	// describes. That is what makes a searched shape installable.
+	// Shape NAMES the model space the masses are only meaningful against, as
+	// `<family>:<digest>` — the KIND of model, and that family's own digest over the
+	// feature inventory in order and the detector's geometry parameters. Compare it
+	// with the `shape` on your model state (GET /v1/risk/state): equal means adopting
+	// this value restores masses into the space already running, and different means
+	// adopting it REPLANTS the model into the space this value describes. That is what
+	// makes a searched shape installable.
+	//
+	// A DIFFERENT FAMILY IS NOT ADOPTABLE AT ALL, and that is the one difference the
+	// family term makes here: a different geometry in the same family is a replant, and
+	// a different family is a refusal naming both — its masses do not describe your
+	// model in any space.
 	Shape string `json:"shape"`
 	// Learned is how many events are behind the masses.
 	Learned int64 `json:"learned"`
@@ -722,6 +737,11 @@ type riskSearchReport struct {
 
 // riskTopology is one candidate shape of the detector.
 type riskTopology struct {
+	// Family is the KIND of model this candidate is: `halfspace` is an ensemble of
+	// half-space trees whose masses are counters, and it is the family this search
+	// grid ranks. The parameters below are that family's own — a family that does not
+	// partition space with trees has different ones — so read them against this.
+	Family string `json:"family"`
 	// Trees is how many half-space trees the ensemble holds.
 	Trees int `json:"trees"`
 	// Depth is how deep each tree is. With Trees it sets how finely the space is
@@ -1486,9 +1506,14 @@ func searchReport(r report, done bool) riskSearchReport {
 	return out
 }
 
+// wireTrial publishes one trial. The candidate's FAMILY is published beside its
+// parameters, because the parameters only mean anything against it: `trees` is a
+// half-space number and a family that does not partition space with trees would
+// publish its own fields here.
 func wireTrial(t trial) riskTrial {
 	return riskTrial{
-		Topology: riskTopology{Trees: t.Topology.Trees, Depth: t.Topology.Depth,
+		Topology: riskTopology{Family: string(t.Topology.family()),
+			Trees: t.Topology.Trees, Depth: t.Topology.Depth,
 			Window: t.Topology.Window, Blend: t.Topology.Blend, Review: t.Topology.Review},
 		Learned: t.Learned, Scored: t.Scored, Alerted: t.Alerted,
 		Stated: t.Stated, Realised: t.Realised, Warm: t.Warm,

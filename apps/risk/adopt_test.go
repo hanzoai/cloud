@@ -41,8 +41,8 @@ import (
 func otherShape(t *testing.T, from shape) shape {
 	t.Helper()
 	for _, c := range candidates() {
-		if c.shape != from {
-			return c.shape
+		if !c.shape().same(from) {
+			return c.shape()
 		}
 	}
 	t.Fatal("every point of the search grid is the shape already in force, so no test here can " +
@@ -60,7 +60,20 @@ func shapeInForce(t *testing.T, p *plane, k tenant) (shape, string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return shapeOf(r.cfg), r.shape
+	return r.geom, r.shape
+}
+
+// candidateOf is ONE search candidate at a stated shape, so a test can choose the
+// space instead of waiting for the grid to rank sixty-four of them. The assertion
+// inside is the point: the grid is the half-space family's own, so a shape from
+// another family has no candidate here and must not silently become one.
+func candidateOf(t *testing.T, s shape, review float64) topology {
+	t.Helper()
+	g, ok := s.geometry.(halfspace)
+	if !ok {
+		t.Fatalf("the search grid ranks half-space geometries; %q has none here", s.family())
+	}
+	return topology{halfspace: g, Review: review}
 }
 
 // fittedValue teaches an organisation, fits ONE named shape over that history and
@@ -72,7 +85,7 @@ func shapeInForce(t *testing.T, p *plane, k tenant) (shape, string) {
 // reimplemented the publication would be measuring the test.
 func fittedValue(t *testing.T, p *plane, k tenant, s shape, hist []observation) value {
 	t.Helper()
-	v, err := p.fitWinner(k, topology{shape: s, Review: 0.01}, hist, time.Now().UTC())
+	v, err := p.fitWinner(k, candidateOf(t, s, 0.01), hist, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("fitWinner(%s): %v", k, err)
 	}
@@ -263,11 +276,11 @@ func TestAdopt_TheFittedValueIsFitUnderTheOrganisationsOwnGeometry(t *testing.T)
 	// ...and neither of them landed in the grid's REFERENCE partition, which is derived
 	// from a constant and is therefore predictable from source. Measured, not assumed:
 	// the reference partition is whatever ranking A actually plants in.
-	ranked, _, err := replay(a, topology{shape: want, Review: 0.01}, nil, hist)
+	ranked, _, err := replay(a, candidateOf(t, want, 0.01), nil, hist)
 	if err != nil {
 		t.Fatalf("rank under the reference partition: %v", err)
 	}
-	ref, held := ranked.Snapshot(string(a))
+	ref, held := ranked.snapshot()
 	if !held {
 		t.Fatal("the reference sandbox fitted nothing")
 	}
@@ -350,7 +363,7 @@ func TestAdopt_TheFoldWatermarkTravelsWithTheValue(t *testing.T) {
 	// fold would.
 	old := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
 	was, _ := shapeInForce(t, p, k)
-	v, err := p.fitWinner(k, topology{shape: otherShape(t, was), Review: 0.01}, hist, old)
+	v, err := p.fitWinner(k, candidateOf(t, otherShape(t, was), 0.01), hist, old)
 	if err != nil {
 		t.Fatalf("fitWinner: %v", err)
 	}
@@ -396,11 +409,11 @@ func TestAdopt_StillRefusesAValueFromAnotherGeometry(t *testing.T) {
 	// A value fitted under the GRID's reference partition rather than this
 	// organisation's own — which is what a value minted under a shared constant, or
 	// lifted from elsewhere, would be.
-	mod, _, err := replay(k, topology{shape: want, Review: 0.01}, nil, hist)
+	mod, _, err := replay(k, candidateOf(t, want, 0.01), nil, hist)
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
-	snap, held := mod.Snapshot(string(k))
+	snap, held := mod.snapshot()
 	if !held {
 		t.Fatal("the sandbox fitted nothing")
 	}
@@ -445,11 +458,12 @@ func TestAdopt_RefusesAValueWhoseShapeDoesNotProduceItsDigest(t *testing.T) {
 		t.Fatalf("modelAt: ok=%v err=%v", ok, err)
 	}
 
+	w := candidateOf(t, want, 0.01).halfspace
 	for name, broken := range map[string]shape{
 		"no shape":    {},
-		"wrong trees": {Trees: want.Trees + 5, Depth: want.Depth, Window: want.Window, Blend: want.Blend},
-		"wrong depth": {Trees: want.Trees, Depth: want.Depth + 1, Window: want.Window, Blend: want.Blend},
-		"wrong blend": {Trees: want.Trees, Depth: want.Depth, Window: want.Window, Blend: want.Blend / 2},
+		"wrong trees": {halfspace{Trees: w.Trees + 5, Depth: w.Depth, Window: w.Window, Blend: w.Blend}},
+		"wrong depth": {halfspace{Trees: w.Trees, Depth: w.Depth + 1, Window: w.Window, Blend: w.Blend}},
+		"wrong blend": {halfspace{Trees: w.Trees, Depth: w.Depth, Window: w.Window, Blend: w.Blend / 2}},
 	} {
 		body, err := json.Marshal(model{Snapshot: m.Snapshot, Shape: broken})
 		if err != nil {
@@ -501,7 +515,7 @@ func TestModel_TheWidestShapeFitsItsOwnBound(t *testing.T) {
 	probe.reset(true)
 	k := key(t, brandA, orgA)
 
-	widest := shape{}
+	var widest halfspace
 	for _, n := range grid.Trees {
 		if n > widest.Trees {
 			widest.Trees = n
@@ -529,21 +543,21 @@ func TestModel_TheWidestShapeFitsItsOwnBound(t *testing.T) {
 	// covers the reachable space as well as the declared one.
 	for _, c := range candidates() {
 		if c.Trees > widest.Trees || c.Depth > widest.Depth || c.Window > widest.Window {
-			t.Fatalf("candidate %+v is wider than the widest shape the grid declares (%+v)", c.shape, widest)
+			t.Fatalf("candidate %+v is wider than the widest shape the grid declares (%+v)", c.halfspace, widest)
 		}
 	}
 
 	// A real fit at that shape, purely to borrow the engine's own dimensions: the
 	// snapshot format version and the width of the score distribution.
-	mod, _, err := replay(k, topology{shape: widest, Review: 0.01}, nil, stream(64, time.Now().UTC().Add(-time.Hour)))
+	mod, _, err := replay(k, topology{halfspace: widest, Review: 0.01}, nil, stream(64, time.Now().UTC().Add(-time.Hour)))
 	if err != nil {
 		t.Fatalf("fit the widest shape: %v", err)
 	}
-	snap, held := mod.Snapshot(string(k))
+	snap, held := mod.snapshot()
 	if !held {
 		t.Fatal("the widest shape fitted nothing")
 	}
-	sparse, err := json.Marshal(model{Snapshot: snap, Shape: widest})
+	sparse, err := json.Marshal(model{Snapshot: snap, Shape: shape{widest}})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -563,7 +577,7 @@ func TestModel_TheWidestShapeFitsItsOwnBound(t *testing.T) {
 		snap.Hist[i] = float64(i+1) / 7
 	}
 	snap.Cut = 1.0 / 3
-	body, err := json.Marshal(model{Snapshot: snap, Shape: widest})
+	body, err := json.Marshal(model{Snapshot: snap, Shape: shape{widest}})
 	if err != nil {
 		t.Fatalf("encode occupied: %v", err)
 	}
@@ -590,32 +604,58 @@ func TestModel_TheWidestShapeFitsItsOwnBound(t *testing.T) {
 // Braided together in one config — as they were — installing a shape would restate an
 // appetite nobody stated, and restating an appetite would look like a different model.
 // Both directions are asserted, because each one alone is satisfied by a shape that
-// does nothing.
+// does nothing. It is asserted against the DIGEST rather than against a config now,
+// because the digest is what every gate in the adoption path actually compares.
 func TestShape_IsTheHalfOfAConfigThatBelongsToTheState(t *testing.T) {
-	base := anomaly.Config{
-		Trees: 25, Depth: 8, Window: 256, Blend: 0.25,
-		Appetite: anomaly.Appetite{Review: 0.02, Sample: 0.005},
-		Shadow:   true, Seed: 0xfeedface, MaxOrgs: 1,
+	k := key(t, brandA, orgA)
+	quiet := regime{Review: 0.02, Sample: 0.005, Live: false}
+	loud := regime{Review: 0.4, Sample: 0.9, Live: true}
+	wide := shape{halfspace{Trees: 40, Depth: 10, Window: 512, Blend: 0.5}}
+
+	digest := func(g shape, pol regime) string {
+		t.Helper()
+		d, err := g.build(k, pol, 0xfeedface, newRings())
+		if err != nil {
+			t.Fatalf("build %+v: %v", g, err)
+		}
+		return d.digest()
 	}
-	want := shape{Trees: 40, Depth: 10, Window: 512, Blend: 0.5}
-	got := want.applyTo(base)
-	if shapeOf(got) != want {
-		t.Fatalf("applyTo left the space at %+v, want %+v", shapeOf(got), want)
+
+	// THE REGIME IS NOT IN THE SPACE. Two models of one shape under opposite regimes
+	// name the same space, which is what makes a policy change carry the learned state
+	// exactly instead of unlearning it.
+	if a, b := digest(wide, quiet), digest(wide, loud); a != b {
+		t.Fatalf("restating the appetite moved the space: %s -> %s", a, b)
 	}
-	if got.Appetite != base.Appetite || got.Shadow != base.Shadow || got.Seed != base.Seed {
-		t.Fatalf("applying a shape moved the regime or the geometry: appetite %+v shadow %v seed %v",
-			got.Appetite, got.Shadow, got.Seed)
+	// AND THE SHAPE IS. Two shapes under one regime name different spaces, which is what
+	// makes adopting a searched shape a replant rather than a silent no-op.
+	if a, b := digest(wide, quiet), digest(defaultShape(), quiet); a == b {
+		t.Fatalf("two different shapes name one space (%s), so a replant cannot be detected", a)
 	}
-	// A shape that states nothing leaves the config alone, which is what lets a value
-	// recorded before shapes were recorded come back exactly as it was rather than
-	// being replanted onto a guess.
-	if bare := (shape{}).applyTo(base); bare != base {
-		t.Fatalf("a shape that states nothing rewrote the config: %+v", bare)
+
+	// The resume row's braid, which is the ONE place the two are still spelled together:
+	// the shape lands, the regime lands, and neither writes the other's fields.
+	cfg, err := legacy(wide, quiet)
+	if err != nil {
+		t.Fatalf("legacy: %v", err)
+	}
+	if !shapeOf(cfg).same(wide) {
+		t.Fatalf("the resume row records the space as %+v, want %+v", shapeOf(cfg), wide)
+	}
+	if regimeOf(cfg) != quiet {
+		t.Fatalf("the resume row records the regime as %+v, want %+v", regimeOf(cfg), quiet)
+	}
+
+	// A ROW THAT STATES NO GEOMETRY STATES NO SHAPE, and that is the distinction that
+	// lets a value recorded before shapes were recorded come back exactly as it was
+	// rather than being replanted onto a guess.
+	if shapeOf(anomaly.Config{Appetite: anomaly.Appetite{Review: 0.02}}).stated() {
+		t.Fatal("a config with no geometry claims to name a space, so install would replant onto a default")
 	}
 	if (shape{}).stated() {
 		t.Fatal("a zero shape claims to name a space, so install would replant onto a default")
 	}
-	if !want.stated() {
+	if !wide.stated() {
 		t.Fatal("a real shape claims to name no space")
 	}
 }
