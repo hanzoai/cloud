@@ -261,11 +261,13 @@ type resident struct {
 	// that produced it, and recomputing it per score would hash the whole inventory
 	// on the hot path to learn something that cannot change.
 	//
-	// It cannot change for a residency: the digest covers the geometry parameters,
-	// and the only writers of those are [plane.plant], which builds the store, and
-	// [plane.install], which REFUSES a state whose shape differs. Restating a regime
-	// rebuilds the store ([plane.restoreRegime]) but moves only the appetite and the
-	// shadow flag, neither of which the digest covers.
+	// It moves in exactly two places, and it is held here rather than derived so that
+	// every reader of it agrees with the store beside it: [plane.plant], which builds
+	// the store, and [plane.install], which REPLANTS it when the value being adopted
+	// describes a different space — the operation that makes a search winner
+	// something an organisation can actually run. Restating a regime rebuilds the
+	// store too ([plane.restoreRegime]) and cannot move this, because the digest
+	// covers the shape and not the appetite.
 	shape string
 	// pol is the VERSION of the decision regime this model is deciding under, from
 	// the tenant's own policy history (policy.go). It is carried here so every
@@ -547,8 +549,14 @@ func (p *plane) open(t tenant, mine *opening) (r *resident, err error) {
 		p.log.Warn("model state unavailable; tenant starts warming", "tenant", string(t), "err", err)
 	} else {
 		p.restoreRegime(r, cfg)
-		if snap != nil {
-			if err := p.install(r, *snap); err != nil {
+		if snap != nil && cfg != nil {
+			// THE SHAPE COMES BACK WITH THE MASSES, off the same row. A residency is
+			// planted at the deployment's own shape, so an organisation that has adopted a
+			// searched shape would otherwise be handed its own masses in the wrong space —
+			// refused as a shape mismatch, silently returned to warming, and quietly back
+			// on the default shape after every rollout. [plane.install] replants, and the
+			// resume row is the ONE place the shape it replants to comes from.
+			if err := p.install(r, model{Snapshot: *snap, Shape: shapeOf(*cfg)}); err != nil {
 				p.log.Warn("model state rejected; tenant starts warming", "tenant", string(t), "err", err)
 			} else {
 				// The fold watermark comes back WITH the state it describes, and only
@@ -559,12 +567,12 @@ func (p *plane) open(t tenant, mine *opening) (r *resident, err error) {
 			}
 		}
 	}
-	// PLANT BEFORE ANYTHING ELSE CAN. The engine plants a tenant's trees lazily,
-	// so a model that has never been touched has no geometry — and no geometry is
-	// what makes a caller-supplied seed adoptable. State() is the read that plants
-	// it, deterministically from this process's own randomness, and it moves no
-	// counter. After this line every restore has something to be checked against.
-	r.mod.State(string(t))
+	// THE GEOMETRY IS PLANTED LAZILY, on the first learn or restore, and this residency
+	// does not force it. A line here used to read the state in the belief that reading
+	// plants; MEASURED against the engine this binary pins, it does not — the read
+	// answers a zero state for an absent tenant and returns. It is gone rather than left
+	// looking like the guarantee [plane.install]'s seed check was described as resting
+	// on; what that check actually rests on is stated there.
 
 	p.mu.Lock()
 	p.built++
@@ -731,10 +739,79 @@ func (p *plane) surface(t tenant) fold {
 	return f
 }
 
+// ── the model's shape, which is half of a config and all of a value ──────────
+
+// shape is the model SPACE: the four parameters the engine's own Digest covers,
+// which is exactly the set that decides whether two models' masses mean anything
+// against each other.
+//
+// It is the half of an [anomaly.Config] that belongs to the STATE. The other half is
+// the appetite, which belongs to this organisation's own policy record (policy.go)
+// and has its own versions, its own attribution and its own retention. Splitting
+// them is what makes a searched shape adoptable at all: braided together in one
+// Config, installing a shape would silently restate a policy nobody had stated, and
+// a policy change would look like a different model.
+//
+// ONE SPELLING, THREE USERS: the search grid's candidate ([topology] embeds it), the
+// residency's own record of what its store runs ([plane.plant]), and a published
+// value's record of the space its masses describe ([model]).
+type shape struct {
+	// Trees is how many half-space trees partition the space.
+	Trees int `json:"trees"`
+	// Depth is how deep each one cuts, so one tree holds 2^(Depth+1)-1 regions.
+	Depth int `json:"depth"`
+	// Window is how many events one reference window holds before it folds.
+	Window int `json:"window"`
+	// Blend is how much of the open window folds into the reference on a fold.
+	Blend float64 `json:"blend"`
+}
+
+// applyTo puts this shape on a config and touches nothing else — not the appetite,
+// not the posture, not the geometry seed.
+//
+// A parameter this shape leaves at ZERO is left at whatever the config already
+// holds, which is the engine's own rule for a config rather than a special case:
+// zero means "the deployment's own", never "no trees". That is what lets a residency
+// recorded before this plane recorded shapes come back exactly as it was instead of
+// being replanted onto a guess.
+func (s shape) applyTo(c anomaly.Config) anomaly.Config {
+	if s.Trees > 0 {
+		c.Trees = s.Trees
+	}
+	if s.Depth > 0 {
+		c.Depth = s.Depth
+	}
+	if s.Window > 0 {
+		c.Window = s.Window
+	}
+	if s.Blend > 0 {
+		c.Blend = s.Blend
+	}
+	return c
+}
+
+// stated is whether this shape names a space at all. A zero shape is a value that
+// does not record the space its masses describe, and that is a state to REFUSE a
+// replant onto rather than to default.
+func (s shape) stated() bool { return s != shape{} }
+
+// shapeOf reads the shape off a config.
+func shapeOf(c anomaly.Config) shape {
+	return shape{Trees: c.Trees, Depth: c.Depth, Window: c.Window, Blend: c.Blend}
+}
+
 // plant builds a fresh resident with its own random geometry seed. A seed drawn
 // per tenant per process is geometry an outsider cannot predict and therefore
 // cannot probe for a region to hide activity in; a snapshot carries its own seed,
 // so reproducing a past score never needs this one.
+//
+// THE CONFIG IT RECORDS IS THE ONE THE STORE RUNS, read back off the store rather
+// than the one handed in. The engine fills a parameter left at zero with its own
+// default, so a residency built from [defaultConfig] ran 25 trees of 511 regions
+// while its own `cfg` said zero — and that cell is what the resume row is written
+// from and what [shapeOf] reads. A record that does not describe the thing it
+// records is the defect this plane exists to avoid; there is one shape here now, and
+// the store is the one that states it.
 func (p *plane) plant(t tenant, cfg anomaly.Config, vel *rings) (*resident, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -746,6 +823,11 @@ func (p *plane) plant(t tenant, cfg anomaly.Config, vel *rings) (*resident, erro
 	if err != nil {
 		return nil, fmt.Errorf("risk: model for %q: %w", string(t), err)
 	}
+	// Config() withholds the seed by design — it is state, not policy — so it is put
+	// back from the draw above.
+	seed := cfg.Seed
+	cfg = mod.Config()
+	cfg.Seed = seed
 	return &resident{key: t, cfg: cfg, mod: mod, vel: vel, shape: mod.Digest(), advance: make(chan struct{}, 1)}, nil
 }
 
@@ -765,15 +847,56 @@ func (r *resident) hold(ctx context.Context) (func(), error) {
 	}
 }
 
-// install restores learned state into a resident, REFUSING a snapshot that names
-// another tenant.
+// install puts one model value in force on a residency, REPLANTING the store when
+// the value describes a different space — and refusing a value that names another
+// tenant.
 //
-// The engine checks the shape, the version and the mass invariant; it does not
-// check WHOSE state this is, because in its own deployment the caller is the
-// tenant boundary. Here the caller is a request, so the check belongs here: a
-// snapshot naming another organisation is that organisation's learned behaviour,
-// and installing it would put one tenant's activity inside another's model.
-func (p *plane) install(r *resident, snap anomaly.Snapshot) error {
+// # Why it replants, and what that unblocked
+//
+// The engine's Restore checks the shape, the version and the mass invariant; it does
+// not check WHOSE state this is, because in its own deployment the caller is the
+// tenant boundary. Here the caller is a request, so that check belongs here: a value
+// naming another organisation is that organisation's learned behaviour, and
+// installing it would put one tenant's activity inside another's model.
+//
+// It also used to refuse a SHAPE CHANGE outright, and that single fact is what made
+// /v1/risk/search advice nobody could take. A search ranks model spaces and answers
+// with the one that fits an organisation's own history best — a different count of
+// trees, a different depth, a different window — so a winner is BY DEFINITION a
+// different shape from the one in force, and Restore's digest check refused every
+// one of them. The plane could say what shape to run and had no way to run it.
+//
+// So a shape change is now the ordinary path: build the space the value describes,
+// restore the masses into THAT, and swap it in. What used to be a refusal is the
+// whole point of the operation.
+//
+// # Every gate the refusal used to carry is still here
+//
+// The replant is built COMPLETE BEFORE ANYTHING IS SWAPPED, so a value that fails
+// any check leaves the residency exactly as it was rather than half adopted. And
+// three things must hold before the masses are believed:
+//
+//	the TENANT   from the validated principal, checked against this residency.
+//	the SEED     checked against the model this organisation is ALREADY running,
+//	             before the replant, so the check is against a real geometry and not
+//	             against the fresh one this function just built. A value minted under
+//	             a different partition of the space is refused whether or not it also
+//	             changes the shape.
+//
+//	             It is skipped for a model with NO geometry yet, which is a tenant that
+//	             has neither learned nor restored — the engine plants lazily and nothing
+//	             here forces it (see [plane.open]). That is not a gap: the masses being
+//	             protected are the ones a mismatched partition would corrupt, and there
+//	             are none. The state still comes off this organisation's own shelf either
+//	             way, which is the boundary that does the work.
+//	the DIGEST   the engine's digest is a hash OVER the shape, so rebuilding the space
+//	             from the recorded shape and comparing digests PROVES the masses
+//	             describe the space they are about to be restored into. The stored
+//	             numbers are checked, never trusted — and a value that records no
+//	             shape at all is refused rather than defaulted, because "the
+//	             deployment's own shape" is a guess and these are mass counters.
+func (p *plane) install(r *resident, m model) error {
+	snap := m.Snapshot
 	if tenant(snap.OrgID) != r.key {
 		return zip.ErrForbidden("this snapshot names another organisation's model")
 	}
@@ -794,9 +917,39 @@ func (p *plane) install(r *resident, snap anomaly.Snapshot) error {
 	if cur, planted := r.mod.Snapshot(string(r.key)); planted && cur.Seed != snap.Seed {
 		return zip.ErrBadRequest("this snapshot was taken under a different geometry than this organisation's model holds, so its counters do not describe these trees")
 	}
-	if err := r.mod.Restore(snap); err != nil {
+	if snap.Digest == r.mod.Digest() {
+		if err := r.mod.Restore(snap); err != nil {
+			return zip.ErrBadRequest(err.Error())
+		}
+		return nil
+	}
+	// A DIFFERENT SPACE: replant. Everything below builds a whole new store and only
+	// then swaps it in.
+	if !m.Shape.stated() {
+		return zip.ErrBadRequest("this model value does not record the shape its masses describe, so the space they belong in cannot be rebuilt")
+	}
+	// THE SHAPE AND NOTHING ELSE. It goes on the config IN FORCE, so the regime stays
+	// exactly where the policy record put it — the share of the stream that may be
+	// examined, the sample, whether the model is live — and adopting a model is not a
+	// way to restate a policy nobody stated. The store's own seed stays this
+	// residency's too; the TENANT's geometry comes from the snapshot, which the engine
+	// replants the named trees from, the same route every restore has always taken.
+	cfg := m.Shape.applyTo(r.cfg)
+	cfg.MaxOrgs = 1
+	next, err := anomaly.New(cfg, r.vel.vel)
+	if err != nil {
+		return zip.ErrBadRequest("the shape this model value records cannot be built: " + err.Error())
+	}
+	if next.Digest() != snap.Digest {
+		// The recorded numbers do not hash to the recorded digest, so one of the two is
+		// not describing this value. Refused with the fact rather than restored into a
+		// space that is nearly right.
+		return zip.ErrBadRequest("the shape this model value records does not produce the space its masses were taken in")
+	}
+	if err := next.Restore(snap); err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
+	r.cfg, r.mod, r.shape = cfg, next, next.Digest()
 	return nil
 }
 
@@ -1142,12 +1295,31 @@ func (p *plane) appetite(t tenant, review, sample float64, live bool, by string)
 // and [TestAddress_AForeignOrgResolvesNothing]. The organisation is stamped onto
 // the state from the validated principal on the way in, so the stored row's own
 // OrgID is never the thing trusted.
+//
+// IT ADOPTS THE SHAPE AS WELL AS THE MASSES, which is what makes a search winner
+// adoptable ([plane.install] replants). The two arrive together because they are one
+// value: masses are meaningless against a different space, so a door that took one
+// without the other could only ever install into the space that was already running.
+//
+// THE FOLD WATERMARK COMES BACK WITH THEM, off the value's own record. It is in the
+// address for a reason — two models with identical masses reached by different routes
+// disagree about what is left to fold — and leaving it where it was is not a small
+// inaccuracy: a rollback to an older value would keep the newer mark, so the fold
+// between them would never be read again and the adopted model would permanently
+// lack history it believes it already has.
 func (p *plane) adopt(t tenant, addr string) (anomaly.State, strain, error) {
 	r, err := p.resident(t)
 	if err != nil {
 		return anomaly.State{}, strain{}, err
 	}
-	snap, ok, err := p.masses(t, addr)
+	rec, ok, err := p.valueAt(t, addr)
+	if err != nil {
+		return anomaly.State{}, strain{}, err
+	}
+	if !ok {
+		return anomaly.State{}, strain{}, zip.ErrNotFound("this organisation has published no model value by that name")
+	}
+	m, ok, err := p.modelAt(t, addr)
 	if err != nil {
 		return anomaly.State{}, strain{}, err
 	}
@@ -1157,12 +1329,13 @@ func (p *plane) adopt(t tenant, addr string) (anomaly.State, strain, error) {
 	// FROM THE PRINCIPAL, never from the row. The engine plants into the slot the
 	// snapshot names, so the one field that decides whose model this becomes is
 	// taken from the validated tenant and not from stored bytes.
-	snap.OrgID = string(t)
+	m.OrgID = string(t)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := p.install(r, snap); err != nil {
+	if err := p.install(r, m); err != nil {
 		return anomaly.State{}, strain{}, err
 	}
+	r.warmed = rec.Warmed
 	if err := p.persist(r); err != nil {
 		return anomaly.State{}, strain{}, err
 	}
@@ -1407,13 +1580,20 @@ func replayable(rs []row, now time.Time, back time.Duration) (out []observation,
 
 // ── exhaustive search ────────────────────────────────────────────────────────
 
-// topology is one candidate shape of the detector. The grid below is the search
-// space; a run tries every point in it against the tenant's OWN history.
+// topology is one point in the search space: a model SHAPE, and the appetite it is
+// tried at. The grid below is that space; a run tries every point in it against the
+// tenant's OWN history.
+//
+// The shape is EMBEDDED rather than restated, so the four numbers a candidate is
+// ranked on are literally the four numbers a published value records and
+// [plane.install] replants to — one spelling, and no way for the grid's idea of a
+// shape to drift from the store's.
 type topology struct {
-	Trees  int     `json:"trees"`
-	Depth  int     `json:"depth"`
-	Window int     `json:"window"`
-	Blend  float64 `json:"blend"`
+	shape
+	// Review is the appetite the shape is tried at. It is NOT part of the shape: the
+	// engine's digest does not cover it, this organisation's policy record owns it,
+	// and a model value that carried it would be restating a policy every time it was
+	// adopted.
 	Review float64 `json:"review"`
 }
 
@@ -1479,7 +1659,10 @@ func candidates() []topology {
 						if len(out) == maxTrials {
 							return out
 						}
-						out = append(out, topology{Trees: tr, Depth: d, Window: w, Blend: b, Review: rv})
+						out = append(out, topology{
+							shape:  shape{Trees: tr, Depth: d, Window: w, Blend: b},
+							Review: rv,
+						})
 					}
 				}
 			}
@@ -1488,7 +1671,8 @@ func candidates() []topology {
 	return out
 }
 
-// report is one completed search: every trial, and the winner.
+// report is one completed search: every trial, the winner, and the winner FITTED as
+// a value this organisation can adopt.
 type report struct {
 	ID      string    `json:"id"`
 	Tenant  string    `json:"-"`
@@ -1497,11 +1681,23 @@ type report struct {
 	Events  int       `json:"events"`
 	Trials  []trial   `json:"trials"`
 	Winner  *trial    `json:"winner,omitempty"`
+	// Fitted is the winning shape fitted over this organisation's own history and
+	// published as one of its own model values ([plane.fitWinner]). It is what turns
+	// the ranking from advice into something a tenant can install: a trial keeps
+	// counts, not the model that produced them, so without this the report named a
+	// shape nobody could run.
+	Fitted *value `json:"fitted,omitempty"`
 	// Refusal says why a run proves nothing, when it does. An empty history is
 	// REFUSED rather than reported as zero alerts, because "no alerts" is exactly
 	// what a quiet model looks like and choosing a topology on the strength of an
 	// empty replay is the failure a sandbox exists to prevent.
 	Refusal string `json:"refusal,omitempty"`
+	// Gap says why the winning shape could not be fitted and published, when it could
+	// not. It is SEPARATE from Refusal because they are different facts: a refusal
+	// means the ranking proves nothing, a gap means the ranking stands and only the
+	// adoptable value is missing. Reporting one as the other would either discard a
+	// good ranking or offer a value that is not there.
+	Gap string `json:"gap,omitempty"`
 }
 
 // searchDeadline bounds one run end to end.
@@ -1604,7 +1800,11 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, pri
 	if len(hist) > maxHistory {
 		hist = hist[len(hist)-maxHistory:]
 	}
-	grid, err := price("search", len(hist)*len(candidates()))
+	// SIXTY-FIVE PASSES, NOT SIXTY-FOUR: the grid, plus the one that FITS the winner
+	// into a value this organisation can adopt ([plane.fitWinner]). Gated for what the
+	// run will do, because the meter below reports what it did and a meter that can
+	// exceed its own gate is not a bound.
+	grid, err := price("search", len(hist)*(len(candidates())+1))
 	if err != nil {
 		return report{}, err
 	}
@@ -1623,7 +1823,31 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, pri
 		// conflict naming a run that is not running.
 		defer p.unclaim(t)
 		rep := p.search(runCtx, t, id, hist)
-		grid(len(rep.Trials) * rep.Events)
+		passes := len(rep.Trials)
+		// THE WINNER IS FITTED AND PUBLISHED, so the answer is one this organisation can
+		// install rather than one it can only read. A cancelled run does not: the pod is
+		// stopping, the ranking is partial, and spending another pass over the whole
+		// history to publish the best of what ran would hold up the rollout that
+		// cancelled it.
+		switch {
+		case rep.Winner == nil:
+		case runCtx.Err() != nil:
+			rep.Gap = "the run was cancelled before the winning shape could be fitted, so there is nothing to adopt yet"
+		default:
+			v, err := p.fitWinner(t, rep.Winner.Topology, hist, end)
+			if err != nil {
+				// The RANKING STANDS. A fit that could not be published leaves a report that
+				// still says which shape fits; saying so is the difference between "no winner"
+				// and "a winner you cannot install yet".
+				rep.Gap = err.Error()
+				p.log.Warn("the winning shape could not be fitted and published",
+					"tenant", string(t), "run", id, "err", err)
+			} else {
+				rep.Fitted = &v
+				passes++
+			}
+		}
+		grid(passes * rep.Events)
 		if err := p.keep(t, rep); err != nil {
 			p.log.Warn("search finished but could not be saved", "tenant", string(t), "run", id, "err", err)
 		}
@@ -1707,7 +1931,9 @@ func (p *plane) search(ctx context.Context, t tenant, id string, hist []observat
 			rep.Refusal = "the run was cancelled before every candidate was tried"
 			break
 		}
-		tr, err := replay(t, c, hist)
+		// The candidate's own fitted model is discarded HERE: this loop ranks, and
+		// holding sixty-four of them is the memory the winner's single refit avoids.
+		_, tr, err := replay(t, c, nil, hist)
 		if err != nil {
 			continue // a shape the engine refuses to build is not a candidate
 		}
@@ -1722,24 +1948,89 @@ func (p *plane) search(ctx context.Context, t tenant, id string, hist []observat
 	return rep
 }
 
-// replay runs ONE candidate over the history in its own sandbox.
-func replay(t tenant, c topology, hist []observation) (trial, error) {
+// referenceSeed is the geometry every candidate is RANKED under. It is a constant
+// because a comparison between shapes must not also vary the partition of the space
+// — two candidates measured under two geometries are not two measurements of one
+// question.
+//
+// It is emphatically not the seed a winner is FITTED under. Geometry an outsider can
+// predict is geometry it can probe for a region to hide activity in, so the value an
+// organisation adopts is fitted under that organisation's OWN seed
+// ([plane.fitWinner]).
+const referenceSeed = 1
+
+// plantAt plants a sandbox's tenant in the PARTITION OF THE SPACE that `like` names,
+// with nothing learned yet.
+//
+// The engine derives a tenant's geometry from the store's seed mixed with the tenant's
+// own name, which is exactly right for a live store: no two tenants share a partition
+// and neither is derivable from the other without the store's seed. That mixing is not
+// invertible, so a sandbox that must land in a partition ALREADY IN USE cannot get
+// there by choosing a store seed — it has to be planted into it, and restoring a state
+// with nothing in it is how the engine plants from a stated seed.
+//
+// Why it must land there at all: a fitted value's masses are counters over particular
+// trees, so a fit in some other partition describes trees the live model does not have,
+// and [plane.install] refuses it — correctly. The fit satisfies that gate rather than
+// relaxing it.
+//
+// Every dimension of the blank comes from somewhere that already knows it: the shape
+// gives the tree count and the region count, the store gives the digest, and `like` —
+// a snapshot the engine itself produced — gives the format version and the width of the
+// score distribution. Nothing here restates a constant the engine owns.
+func plantAt(mod *anomaly.Store, t tenant, s shape, like anomaly.Snapshot) error {
+	nodes := 1<<(s.Depth+1) - 1
+	blank := anomaly.Snapshot{
+		Version: like.Version,
+		Digest:  mod.Digest(),
+		OrgID:   string(t),
+		Seed:    like.Seed,
+		Cut:     1, // admit nothing until a distribution exists, as a fresh plant does
+		Ref:     make([][]float64, s.Trees),
+		Cur:     make([][]float64, s.Trees),
+		Hist:    make([]float64, len(like.Hist)),
+	}
+	for i := range blank.Ref {
+		blank.Ref[i] = make([]float64, nodes)
+		blank.Cur[i] = make([]float64, nodes)
+	}
+	return mod.Restore(blank)
+}
+
+// replay runs ONE candidate over the history in its own sandbox and MEASURES it,
+// keeping the model it produced.
+//
+// The store comes back because the trial's numbers and the model that produced them
+// are ONE ACT. The grid throws the model away — it is ranking — and the winner's fit
+// keeps it, and those being two functions is exactly how a published value comes to
+// be a different model wearing the winner's numbers.
+//
+// at is WHICH PARTITION of the space to fit in, and it is the difference between
+// ranking and adopting. Nil ranks under the reference geometry — fixed, so a comparison
+// between shapes is a comparison and not also a change of geometry. A snapshot off an
+// organisation's own model fits in the partition that organisation actually runs, which
+// is what makes the result something it can install ([plantAt]).
+func replay(t tenant, c topology, at *anomaly.Snapshot, hist []observation) (*anomaly.Store, trial, error) {
 	if len(hist) == 0 {
-		return trial{}, errors.New("risk: a candidate cannot be tried over an empty history")
+		return nil, trial{}, errors.New("risk: a candidate cannot be tried over an empty history")
 	}
 	// A candidate's aggregates are one tenant's, bounded exactly like a live
 	// tenant's, and thrown away with the trial. [newRings] is the only constructor
 	// in this package, so a sandbox cannot be given a bigger — or a shared — one.
 	vel := newRings()
-	cfg := anomaly.Config{
-		Trees: c.Trees, Depth: c.Depth, Window: c.Window, Blend: c.Blend,
+	cfg := c.applyTo(anomaly.Config{
 		Appetite: anomaly.Appetite{Review: c.Review, Sample: 0},
 		MaxOrgs:  1,
-		Seed:     1, // fixed: a comparison between candidates must not also vary the geometry
-	}
+		Seed:     referenceSeed,
+	})
 	mod, err := anomaly.New(cfg, vel.vel)
 	if err != nil {
-		return trial{}, err
+		return nil, trial{}, err
+	}
+	if at != nil {
+		if err := plantAt(mod, t, c.shape, *at); err != nil {
+			return nil, trial{}, err
+		}
 	}
 	const bands = 10
 	step := len(hist) / bands
@@ -1779,7 +2070,57 @@ func replay(t tenant, c topology, hist []observation) (trial, error) {
 		Saturated: st.Saturated, Blind: st.Blind, Curve: curve,
 	}
 	tr.Fit = fit(tr)
-	return tr, nil
+	return mod, tr, nil
+}
+
+// fitWinner fits the winning shape over this organisation's own history and PUBLISHES
+// it as one of that organisation's own model values — the thing an adoption names.
+//
+// THIS IS WHAT TURNS A SEARCH INTO AN OPERATION. Ranking shapes and being able to run
+// one are different things: a [trial] keeps counts and not the store, so the report on
+// its own named a shape nobody could install. Fitting the winner ONE more time over
+// the same history costs a sixty-fourth of the run and holds ONE model; keeping every
+// candidate's store instead would hold sixty-four, a measured 21 MiB at the default
+// shape and considerably more at the widest point of the grid. The cheap end of that
+// trade is also the honest one — nobody adopts sixty-three losing shapes.
+//
+// THE GEOMETRY IS THIS ORGANISATION'S OWN, read off its residency, and that is
+// load-bearing twice over. A model an organisation runs must partition the space in a
+// way an outsider cannot predict, which [referenceSeed] deliberately does not; and it
+// keeps [plane.install]'s seed gate intact, because the value is then part of this
+// organisation's own lineage rather than something minted under a constant. The
+// consequence is stated rather than hidden: the fitted value's realised rate can
+// differ from the trial's, because the trial measured the same shape under the
+// reference partition.
+//
+// THE FOLD WATERMARK IT RECORDS IS THE SEARCH WINDOW'S END. The fit read this
+// organisation's own surface up to there and nothing older than the window, so the
+// value has learned exactly the history the search replayed — which is what adopting
+// a searched shape means, and why [warm] then carries it forward from that mark
+// instead of re-teaching what it already holds.
+func (p *plane) fitWinner(t tenant, c topology, hist []observation, upto time.Time) (value, error) {
+	r, err := p.resident(t)
+	if err != nil {
+		return value{}, err
+	}
+	r.mu.Lock()
+	cur, planted := r.mod.Snapshot(string(t))
+	r.mu.Unlock()
+	if !planted {
+		// Unreachable through a residency, which plants before it returns; refused rather
+		// than fitted under a seed of this function's own invention.
+		return value{}, errors.New("risk: this organisation's model has no geometry to fit the winning shape under")
+	}
+	mod, _, err := replay(t, c, &cur, hist)
+	if err != nil {
+		return value{}, err
+	}
+	snap, held := mod.Snapshot(string(t))
+	if !held || snap.Learned == 0 {
+		return value{}, errors.New("risk: the winning shape learned nothing over this organisation's history")
+	}
+	v, _, err := p.mint(t, model{Snapshot: snap, Shape: c.shape}, upto)
+	return v, err
 }
 
 // fit ranks a candidate, smaller being better. It is a stated formula rather than

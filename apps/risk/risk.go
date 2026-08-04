@@ -144,14 +144,20 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 		zip.WithOperationID("riskState"),
 		zip.WithSummary("Report your organisation's model: what it learned, and what it realised"),
 		zip.WithTags("risk"))
-	zip.Post(g, "/state/snapshot", o.snapshot,
-		zip.WithOperationID("riskSnapshot"),
-		zip.WithSummary("Pin your organisation's learned state so a decision can be reproduced"),
+	// ONE ADDRESS FOR A MODEL VALUE, minted and put in force. POST mints a value from
+	// the model in force; PUT puts a named value in force. They were
+	// /v1/risk/state/snapshot and /v1/risk/state/restore — two addresses named after
+	// the OPERATION rather than after the thing it operates on, which left a reader
+	// asking what a snapshot is if it is not a value. Same collapse, same reason, as
+	// GET and PUT on /v1/risk/policy.
+	zip.Post(g, "/state/model", o.publish,
+		zip.WithOperationID("riskPublishModel"),
+		zip.WithSummary("Publish your organisation's model as a named, immutable value"),
 		zip.WithStatus(http.StatusCreated),
 		zip.WithTags("risk"))
-	zip.Post(g, "/state/restore", o.restore,
-		zip.WithOperationID("riskRestore"),
-		zip.WithSummary("Install previously pinned state into your organisation's model"),
+	zip.Put(g, "/state/model", o.adopt,
+		zip.WithOperationID("riskAdoptModel"),
+		zip.WithSummary("Put one of your organisation's own published model values in force"),
 		zip.WithTags("risk"))
 	// ONE ADDRESS FOR THE DECISION REGIME, read and written. The write used to be
 	// PUT /v1/risk/state/appetite — a second address for the same plane, named after

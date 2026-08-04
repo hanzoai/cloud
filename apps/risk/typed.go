@@ -382,9 +382,14 @@ type riskModelState struct {
 	Aggregates riskAggregates `json:"aggregates"`
 	// Values is your organisation's own published model values, newest first —
 	// every state it deliberately named, each addressed by its own content and
-	// immutable. This is what POST /v1/risk/state/restore names, so it is reported
+	// immutable. This is what PUT /v1/risk/state/model names, so it is reported
 	// HERE rather than behind an address of its own: they are part of what a review
 	// of one model reads, and a list of names is a few hundred bytes.
+	//
+	// Compare each one's `shape` with the `shape` above: equal means adopting it
+	// restores masses into the space this model already runs, and different means
+	// adopting it REPLANTS the model into the space that value describes — which is how
+	// the shape a search found becomes the shape you are running.
 	//
 	// The working model is NOT in it. Publication is a boundary somebody marked; the
 	// state between two boundaries is in-process counters, and calling those a value
@@ -459,8 +464,9 @@ type riskSurface struct {
 	Gap string `json:"gap,omitempty"`
 }
 
-// riskSnapshotIn takes nothing off the wire.
-type riskSnapshotIn struct{}
+// riskPublishIn takes nothing off the wire. The whole input is the caller's
+// validated principal, which is what decides whose model is published.
+type riskPublishIn struct{}
 
 // riskModelValue names one of the organisation's own published model values.
 //
@@ -482,8 +488,12 @@ type riskModelValue struct {
 	// Sequence is this value's place in YOUR organisation's own history, from 1 and
 	// contiguous until retention disposes of the oldest.
 	Sequence int64 `json:"sequence"`
-	// Shape is the model space the masses are only meaningful against: the feature
-	// inventory in order and the detector's geometry parameters.
+	// Shape NAMES the model space the masses are only meaningful against — the feature
+	// inventory in order and the detector's geometry parameters, as the engine's own
+	// digest. Compare it with the `shape` on your model state (GET /v1/risk/state):
+	// equal means adopting this value restores masses into the space already running,
+	// and different means adopting it REPLANTS the model into the space this value
+	// describes. That is what makes a searched shape installable.
 	Shape string `json:"shape"`
 	// Learned is how many events are behind the masses.
 	Learned int64 `json:"learned"`
@@ -497,8 +507,8 @@ type riskModelValue struct {
 	At string `json:"at"`
 }
 
-// riskSnapshotOut is the value this call published, and whether it minted one.
-type riskSnapshotOut struct {
+// riskPublishOut is the value this call published, and whether it minted one.
+type riskPublishOut struct {
 	// Tenant is whose history it entered.
 	Tenant string `json:"tenant"`
 	// Value is the published value: its name and what it is, never its masses.
@@ -510,12 +520,13 @@ type riskSnapshotOut struct {
 	Minted bool `json:"minted"`
 }
 
-// riskRestoreIn puts one of your own published values back in force, by name.
-type riskRestoreIn struct {
+// riskAdoptIn puts one of your own published values in force, by name.
+type riskAdoptIn struct {
 	// Address is one of YOUR organisation's own published values (GET
-	// /v1/risk/state reports them). An address your organisation has not published
-	// is NOT FOUND — including one another organisation published, because an
-	// address names a value and never authorises reading it.
+	// /v1/risk/state reports them, and a search reports the one it fitted for you).
+	// An address your organisation has not published is NOT FOUND — including one
+	// another organisation published, because an address names a value and never
+	// authorises reading it.
 	Address string `json:"address"`
 }
 
@@ -679,11 +690,34 @@ type riskSearchReport struct {
 	Trials []riskTrial `json:"trials"`
 	// Winner is the best-fitting shape, absent when nothing fit.
 	Winner *riskTrial `json:"winner,omitempty"`
+	// Fitted is the winning shape FITTED over your own history and published as one of
+	// your organisation's own model values. Name its address on PUT
+	// /v1/risk/state/model and the winning shape becomes the model you are running.
+	//
+	// It is why this op answers something you can act on. A trial keeps counts and not
+	// the model that produced them, so a report without this named a shape nobody could
+	// install — and the adoption path refused a shape change besides. Fitting the winner
+	// once is a sixty-fifth pass over the same history; keeping all sixty-four fitted
+	// models resident instead would cost a measured 21 MiB per run for sixty-three
+	// shapes nobody adopts.
+	//
+	// Two things about it are worth knowing before you adopt it. Its realised rate can
+	// differ from the winner's above, because the ranking measures every candidate under
+	// one fixed reference geometry so the comparison is a comparison, while this is
+	// fitted under YOUR geometry — the one an outsider cannot predict. And it has
+	// learned the window this search replayed and nothing older, so adopting it trades
+	// history for fit.
+	Fitted *riskModelValue `json:"fitted,omitempty"`
 	// Refusal says why the run proves nothing, when it does. An empty history is
 	// REFUSED rather than reported as zero alerts: "no alerts" is exactly what a
 	// quiet model looks like, and choosing a shape on the strength of an empty
 	// replay is the failure a sandbox exists to prevent.
 	Refusal string `json:"refusal,omitempty"`
+	// Gap says why the winning shape could not be fitted into an adoptable value, when
+	// it could not. It is separate from Refusal because they are different facts: a
+	// refusal means the ranking below proves nothing, a gap means the ranking stands and
+	// only the value is missing.
+	Gap string `json:"gap,omitempty"`
 }
 
 // riskTopology is one candidate shape of the detector.
@@ -871,7 +905,7 @@ func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error)
 	return &out, nil
 }
 
-// Snapshot publishes your organisation's model as a NAMED VALUE, so a decision
+// PublishModel publishes your organisation's model as a NAMED VALUE, so a decision
 // taken today can be reconstructed tomorrow and a change made today can be undone.
 //
 // It answers with a NAME and not with the state. The masses stay on your
@@ -888,8 +922,14 @@ func (o ops) state(ctx context.Context, _ *riskStateIn) (*riskModelState, error)
 //
 // A model that has learned nothing is refused: planted is not learned, and a value
 // that reproduces nothing is not a value.
-func (o ops) snapshot(ctx context.Context, _ *riskSnapshotIn) (*riskSnapshotOut, error) {
-	pay, err := o.gate(ctx, "snapshot", 1)
+//
+// It is POST and PUT on one address because they are one plane's two verbs over one
+// kind of thing: POST mints a value from the model in force, PUT puts a value in
+// force. They were /v1/risk/state/snapshot and /v1/risk/state/restore — two addresses
+// named after the operation rather than after the thing, which is how a reader ends
+// up asking what the difference between a snapshot and a value is.
+func (o ops) publish(ctx context.Context, _ *riskPublishIn) (*riskPublishOut, error) {
+	pay, err := o.gate(ctx, "publishModel", 1)
 	if err != nil {
 		return nil, err
 	}
@@ -906,11 +946,12 @@ func (o ops) snapshot(ctx context.Context, _ *riskSnapshotIn) (*riskSnapshotOut,
 		return nil, zip.ErrNotFound("this organisation's model has learned nothing yet, so there is no value to publish")
 	}
 	pay(1)
-	return &riskSnapshotOut{Tenant: string(t), Value: modelValueOf(v), Minted: minted}, nil
+	return &riskPublishOut{Tenant: string(t), Value: modelValueOf(v), Minted: minted}, nil
 }
 
-// Restore puts one of your organisation's OWN PUBLISHED VALUES back in force, by
-// name — which is what an instant rollback is, and what promoting a challenger is.
+// AdoptModel puts one of your organisation's OWN PUBLISHED VALUES in force, by name —
+// which is what an instant rollback is, what promoting a challenger is, and what
+// installing the shape a search found is.
 //
 // IT TAKES AN ADDRESS AND NEVER STATE. The masses are read from your own store, so
 // nothing about your model has to be held by whatever is making this call. That
@@ -920,11 +961,24 @@ func (o ops) snapshot(ctx context.Context, _ *riskSnapshotIn) (*riskSnapshotOut,
 // invariant was the only thing standing between a composed body and the model; with
 // an address there is no body to compose.
 //
+// IT ADOPTS THE SHAPE, NOT ONLY THE MASSES. A value records the model space its
+// masses were taken in, and a value whose space differs from the one in force
+// REPLANTS your model into that space before restoring them. That is what makes
+// POST /v1/risk/search actionable: a search answers with the shape that fits your own
+// history best and publishes it fitted, and its address is what you name here. Before
+// this, a winning shape was advice nobody could take — the adoption path refused every
+// shape change, and a winner is a different shape by definition.
+//
+// WHAT ADOPTING A SEARCHED SHAPE COSTS, SAID PLAINLY: the value a search fits has
+// learned the window the search replayed and nothing older, so installing it trades
+// history for fit. Your appetite is untouched — that is your policy record's, with its
+// own versions — and so is the geometry, which stays your own.
+//
 // An address your organisation has not published is NOT FOUND. That includes one
 // another organisation published, and it is not a lookup that failed: the store is
 // per organisation and the address is a name, never an authority.
-func (o ops) restore(ctx context.Context, in *riskRestoreIn) (*riskModelState, error) {
-	pay, err := o.gate(ctx, "restore", 1)
+func (o ops) adopt(ctx context.Context, in *riskAdoptIn) (*riskModelState, error) {
+	pay, err := o.gate(ctx, "adoptModel", 1)
 	if err != nil {
 		return nil, err
 	}
@@ -1387,7 +1441,8 @@ func modelState(t tenant, st anomaly.State, f fold, s strain, policy int) riskMo
 func searchReport(r report, done bool) riskSearchReport {
 	out := riskSearchReport{
 		ID: r.ID, Done: done, Started: r.Started.Format(time.RFC3339),
-		Events: r.Events, Refusal: r.Refusal, Trials: make([]riskTrial, 0, len(r.Trials)),
+		Events: r.Events, Refusal: r.Refusal, Gap: r.Gap,
+		Trials: make([]riskTrial, 0, len(r.Trials)),
 	}
 	if !r.Ended.IsZero() {
 		out.Ended = r.Ended.Format(time.RFC3339)
@@ -1398,6 +1453,13 @@ func searchReport(r report, done bool) riskSearchReport {
 	if r.Winner != nil {
 		w := wireTrial(*r.Winner)
 		out.Winner = &w
+	}
+	// THE SAME PROJECTION every other published value goes through, so the address a
+	// search hands back and the address a state read lists are one shape and cannot
+	// drift into two.
+	if r.Fitted != nil {
+		f := modelValueOf(*r.Fitted)
+		out.Fitted = &f
 	}
 	return out
 }

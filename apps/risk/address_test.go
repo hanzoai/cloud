@@ -189,11 +189,12 @@ func TestAddress_AForeignOrgResolvesNothing(t *testing.T) {
 		t.Fatalf("organisation B read organisation A's published value by name: %+v", v)
 	}
 
-	// DOOR 2 — the masses.
-	if snap, ok, err := p.masses(b, published.Address); err != nil {
-		t.Fatalf("masses(B): %v", err)
+	// DOOR 2 — the model: the masses AND the shape they describe, which is the whole
+	// of what an adoption installs.
+	if m, ok, err := p.modelAt(b, published.Address); err != nil {
+		t.Fatalf("modelAt(B): %v", err)
 	} else if ok {
-		t.Fatalf("organisation B read organisation A's model state by name: learned=%d", snap.Learned)
+		t.Fatalf("organisation B read organisation A's model by name: learned=%d shape=%+v", m.Learned, m.Shape)
 	}
 
 	// DOOR 3 — adoption, which is what an operator rolling a model back actually
@@ -529,10 +530,10 @@ func TestAddress_TwoBrandsShareAFileAndNotAValue(t *testing.T) {
 	} else if ok {
 		t.Fatalf("%s read %s's published value out of the file they share: %+v", za, ha, v)
 	}
-	if snap, ok, err := p.masses(za, mine.Address); err != nil {
-		t.Fatalf("masses %s: %v", za, err)
+	if m, ok, err := p.modelAt(za, mine.Address); err != nil {
+		t.Fatalf("modelAt %s: %v", za, err)
 	} else if ok {
-		t.Fatalf("%s read %s's model state out of the file they share: learned=%d", za, ha, snap.Learned)
+		t.Fatalf("%s read %s's model out of the file they share: learned=%d", za, ha, m.Learned)
 	}
 	if _, _, err := p.adopt(za, mine.Address); err == nil {
 		t.Fatalf("%s adopted %s's model out of the file they share", za, ha)
