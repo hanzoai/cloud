@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/leaderboard"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the leaderboard app.
@@ -17,7 +18,11 @@ import (
 // `leaderboard openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:     "leaderboard",
+		Name: "leaderboard",
+		// Declared: undeclared falls back to /v1/leaderboard, which this app does not
+		// serve — the scope then guards a path with no routes and zip refuses to
+		// compose (see plugin/account/main.go).
+		Prefixes: manifest.PrefixesFor("leaderboard"),
 		Price:    cloud.Free,
 		Mount:    leaderboard.Mount,
 		Shutdown: leaderboard.Shutdown,
