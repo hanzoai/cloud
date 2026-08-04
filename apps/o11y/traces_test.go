@@ -219,3 +219,37 @@ func TestTraceListClaimsTheCollectionAndNotTheDetail(t *testing.T) {
 		}
 	}
 }
+
+// TestTraceFamilyComposesOnTheRealMount is the same fact measured on the router
+// the document is generated from, where a second declaration would have PANICKED
+// the mount rather than answered wrongly. Both halves have to be present at once:
+// the collection typed and ours, the detail and its projections still the
+// module's. Reading the composed document rather than a reconstruction is what
+// makes this evidence — the hole this route fills was a 404 at exactly one
+// address while every address under it answered.
+func TestTraceFamilyComposesOnTheRealMount(t *testing.T) {
+	served, typed := o11yOps(t)
+
+	const list = "GET /v1/o11y/traces"
+	if !served[list] {
+		t.Fatalf("%s is not served by the composed router — the collection is still a 404", list)
+	}
+	if _, ok := typed[list]; !ok {
+		t.Errorf("%s carries no typed registry entry, so it has no schema, no MCP tool, "+
+			"no CLI command and no SDK method", list)
+	}
+	// The module's, beside it and untouched. A missing one means this declaration
+	// suppressed a read that was already working.
+	for _, addr := range []string{
+		"GET /v1/o11y/traces/{traceId}",
+		"GET /v1/o11y/traces/fields",
+		"POST /v1/o11y/traces/fields",
+		"POST /v1/o11y/traces/{traceId}/waterfall",
+		"POST /v1/o11y/traces/{traceId}/aggregations",
+		"POST /v1/o11y/traces/{traceId}/flamegraph",
+	} {
+		if !served[addr] {
+			t.Errorf("%s is no longer served — the trace LIST displaced hanzoai/o11y's own read", addr)
+		}
+	}
+}
