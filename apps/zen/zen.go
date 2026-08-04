@@ -81,7 +81,19 @@ func Mount(a cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("zen: %w", err)
 	}
 	// The one mount: Claim scoped to /v1, ahead of ai's catch-all.
-	a.Group("/v1", z.Claim())
+	//
+	// USE, NOT A MIDDLEWARE-CARRYING GROUP. This used to say
+	// `a.Group("/v1", z.Claim())`, and that shape cannot express what zen means.
+	// A group's middleware wraps the routes in its OWN subtree, and zen registers
+	// none — the routes it guards are ai's, registered by a different definition —
+	// so the group was middleware over an empty subtree, which zip refuses to
+	// compose. Use is the ONE composition verb and it says the true thing: this is
+	// a wrapper over whatever this binary serves beneath the subtrees zen is
+	// granted, which is what a co-resident gate IS.
+	//
+	// The subtree is NOT restated here. It is the grant in zen's plugin spec
+	// (cloud.Plugin.Prefixes = "/v1"), and scope enforces it — one place, not two.
+	a.Use(zip.H(z.Claim()))
 	return nil
 }
 
