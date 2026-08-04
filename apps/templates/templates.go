@@ -233,7 +233,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// inner one is what the handler sees), and having it here is what makes the
 	// subsystem's own tests — which mount on a bare zip.App — exercise the same
 	// tenancy the binary does.
-	app.Group("/v1/templates").Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 
 	o := ops{s: s}
 	zip.Get(zapp, "/v1/templates", o.browse)

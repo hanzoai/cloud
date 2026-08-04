@@ -119,7 +119,7 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	// after these leaves would never run — and every op below takes the request off the
 	// context it parks. Bounded to admin's own subtree. Serve installs one app-wide too;
 	// nesting is harmless, and this is what makes the surface testable on a bare app.
-	app.Group("/v1/admin").Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 
 	// Org-scoped panels — AdmitScoped. Cross-tenant reads are impossible for a
 	// non-super caller.
