@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/namespace"
 
@@ -872,23 +873,6 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	return buildFrontendCmdRev(buildCtx, dockerfile, image, "")
 }
 
-// isCommitSHA reports whether ref is a full 40-hex commit id. A build context may
-// name a BRANCH, and a branch is not a revision: stamping "main" into
-// org.opencontainers.image.revision would make the label look populated while
-// answering a different question than the one anybody reads it for, which is
-// strictly worse than the honest empty it replaces.
-func isCommitSHA(ref string) bool {
-	if len(ref) != 40 {
-		return false
-	}
-	for _, c := range ref {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
-			return false
-		}
-	}
-	return true
-}
-
 // buildFrontendCmdRev is buildFrontendCmd plus the commit being built, which is
 // the difference between an image that can be traced back to source and one that
 // cannot.
@@ -939,9 +923,18 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 		cmd = append(cmd, "--opt", "build-arg:VERSION="+tag)
 		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+strings.TrimPrefix(tag, "v"))
 	}
-	// Empty only for callers that genuinely have no commit (a context that is not
-	// a git ref); a Dockerfile with no `ARG REVISION` ignores it either way.
-	if isCommitSHA(revision) {
+	// A build context may name a BRANCH, and a branch is not a revision: stamping
+	// "main" here would make the label and the binary look populated while
+	// answering a different question than the one anybody reads them for. Empty
+	// only for callers that genuinely have no commit; a Dockerfile with no
+	// `ARG REVISION` ignores it either way.
+	//
+	// cloud.IsCommit, not a private copy, because this is one END of a wire whose
+	// other end applies the same rule to decide what it will REPORT (see
+	// cloud.Revision). Two copies of "what is a commit" that drift apart would let
+	// the builder pass a value the process silently downgrades to "unknown" — the
+	// same silent failure, one layer over.
+	if cloud.IsCommit(revision) {
 		cmd = append(cmd, "--opt", "build-arg:REVISION="+revision)
 	}
 	// REGISTRY LAYER CACHE, both directions. Every build job is a fresh pod with an

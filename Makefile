@@ -28,6 +28,22 @@ LDFLAGS         ?= -s -w
 # .git has nothing to describe. Empty stamps nothing, and cmd/hanzo's
 # resolveVersion then answers from the metadata the toolchain embeds by itself.
 VERSION         ?= $(shell git describe --tags --always --dirty 2>/dev/null)
+# The commit those same bytes were built FROM — the other half of the question,
+# from the same command, in the same -X idiom. `--abbrev=40 --match=''` makes
+# describe report the full object name and nothing else.
+#
+# `--dirty` is load-bearing rather than decorative: on an uncommitted tree it
+# appends `-dirty`, which is not a 40-hex name, so cloud.Revision reports
+# "unknown" instead of naming a commit whose source is NOT what was built. That
+# lie is the one this whole change exists to remove, so the local build must not
+# tell it either. Honest by construction, with no second rule to keep in step.
+REVISION        ?= $(shell git describe --always --abbrev=40 --match='' --dirty 2>/dev/null)
+# What a build says about itself, written ONCE: the tag it was published under
+# and the commit it came from. Appended per-target for the reason above — `make
+# LDFLAGS=...` keeps overriding exactly what it always did — and shared by the
+# host and the plugins, because three copies of a stamp is three chances to
+# stamp one binary and forget the one that answers /v1/health.
+STAMP            = -X github.com/hanzoai/cloud.Version=$(VERSION) -X github.com/hanzoai/cloud.revision=$(REVISION)
 # Path to a hanzoai/console checkout used to build the embedded console bundle.
 CONSOLE_DIR    ?= ../console
 # Path to a hanzoai/openapi checkout — the SOT the agent-skills catalog is generated from.
@@ -121,7 +137,7 @@ build: cloud ## FAST PATH (default): build the light host into ./bin/cloud. Then
 # named cloud — it IS the one real binary, and its ENTRYPOINT the image ships.
 cloud: ## Build the light host into ./bin/cloud (links zip + the manifest, none of the apps).
 	@mkdir -p bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) -X github.com/hanzoai/cloud.Version=$(VERSION)" -o bin/$@ ./cmd/$@
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) $(STAMP)" -o bin/$@ ./cmd/$@
 	@echo ">> bin/cloud — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/cloud | wc -l) packages, $$(du -h bin/cloud | cut -f1)"
 
 # THE RELEASE LAYOUT: the light host plus one dedicated binary per app, all in
@@ -147,7 +163,7 @@ apps: $(APP_BINS) ## Build every app binary into ./bin. Parallelise: make -j app
 $(APP_BINS): bin/%:
 	@test -d plugin/$* || { echo "no plugin/$* — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
 	@mkdir -p bin
-	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o $@ ./plugin/$*
+	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) $(STAMP)" -o $@ ./plugin/$*
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }

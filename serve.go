@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -339,9 +340,11 @@ func Listen(plugins []Plugin, enable []string) error {
 	// refuses the image; that is the right place to say no, before it ships.
 	app.Get("/v1/health", func(c *zip.Ctx) error {
 		if d := Degradations(); len(d) > 0 {
-			return c.JSON(200, map[string]any{"status": "degraded", "degraded": d})
+			b := healthBody("degraded")
+			b["degraded"] = d
+			return c.JSON(200, b)
 		}
-		return c.JSON(200, map[string]any{"status": "ok"})
+		return c.JSON(200, healthBody("ok"))
 	})
 
 	if err := MountAll(app, plugins, cfg, deps); err != nil {
@@ -555,6 +558,31 @@ func procName(plugins []Plugin) string {
 	return "cloud"
 }
 
+// healthBody is THE health payload — the one shape every liveness surface in
+// this process answers with, so a caller gets the same facts wherever it asks
+// and no listener can be stamped while its siblings stay mute. /v1/health (the
+// product API, which is what api.hanzo.ai serves) and /healthz, /readyz,
+// /health on the ops listener all build their body here.
+//
+// `revision` rides on the EXISTING payload rather than on a /v1/version of its
+// own: a second route is a second thing to discover, to route, to exempt from
+// auth and to remember exists. "Which commit is serving me" is the same question
+// as "are you healthy" asked one field further, and health is already
+// unauthenticated, already probed, already in every runbook.
+func healthBody(status string) map[string]any {
+	return map[string]any{"status": status, "revision": Revision()}
+}
+
+// writeHealth is healthBody for the stdlib ops listener — the same map, encoded.
+// The bodies here were fixed byte strings, which is precisely how a payload comes
+// to carry a new field on one surface and not another: a literal cannot pick one
+// up.
+func writeHealth(w http.ResponseWriter, code int, status string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(healthBody(status))
+}
+
 // healthMux is the liveness/readiness + metrics contract on the ops port
 // (HIP-0113). /healthz, /readyz, /health return 200 once the process is up
 // (readiness can grow a real dependency check later); /metrics exposes a
@@ -564,18 +592,14 @@ func procName(plugins []Plugin) string {
 func healthMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	ok := func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		writeHealth(w, http.StatusOK, "ok")
 	}
 	mux.HandleFunc("/healthz", ok) // liveness: stays 200 while draining (finish the drain).
 	// readiness: 503 once draining so K8s marks the pod NotReady — removed from endpoints
 	// AND from every peer's writer election — before it stops serving (graceful handoff).
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		if Draining() {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"status":"draining"}`))
+			writeHealth(w, http.StatusServiceUnavailable, "draining")
 			return
 		}
 		ok(w, r)
