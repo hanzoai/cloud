@@ -58,10 +58,11 @@ func get(t *testing.T, app *zip.App, path, bearer string) (int, []byte) {
 }
 
 // TestKeyGateRunsBeforeTheOp is the assertion the conversion turns on. The bearer
-// check used to be the first statement of each handler; a typed op receives only a
-// context and cannot read a header, so it moved to middleware on the two subtrees.
-// Middleware runs where that statement ran — before the op — so an unset key still
-// 503s, a wrong key still 401s, and the SEARCH key never admits a VECTOR read.
+// arrives as a header field of keyedIn — the typed way an op sees a request
+// header — and requireKey opens every handler, so an unset key still 503s, a
+// wrong key still 401s, and the SEARCH key never admits a VECTOR read. (It was
+// briefly middleware on the two subtrees; product does not OWN those subtrees —
+// provisioning does — so the confinement gate rightly refused that boot.)
 func TestKeyGateRunsBeforeTheOp(t *testing.T) {
 	app := mountApp(t)
 

@@ -10,6 +10,7 @@ func init() {
 	zip.Describe("GET /v1/search/indexes", zip.Doc{
 		Description: "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
 		Fields: map[string]string{
+			"keyedIn.authorization":     "Authorization carries the surface's bearer key (`Bearer <key>`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
 			"searchIndex.createdAt":     "CreatedAt is the index's creation time (RFC 3339); it falls back to now when\nthe index list could not be read.",
 			"searchIndex.docCount":      "DocCount is how many documents the index currently holds.",
 			"searchIndex.lastIndexedAt": "LastIndexedAt is the index's last update time (RFC 3339), null when the\nindex list could not be read.",
@@ -22,6 +23,7 @@ func init() {
 		Fields: map[string]string{
 			"dayCount.count":             "Count is that day's total.",
 			"dayCount.date":              "Date is the day, YYYY-MM-DD.",
+			"keyedIn.authorization":      "Authorization carries the surface's bearer key (`Bearer <key>`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
 			"searchStats.searchesPerDay": "SearchesPerDay is always empty, for the same reason as totalSearches.",
 			"searchStats.totalDocuments": "TotalDocuments is the sum of every index's document count.",
 			"searchStats.totalSearches":  "TotalSearches is always 0: Meilisearch keeps no query-history counter, so\nthis surface reports the honest zero rather than an estimate.",
@@ -31,6 +33,7 @@ func init() {
 	zip.Describe("GET /v1/vector/collections", zip.Doc{
 		Description: "Lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
 		Fields: map[string]string{
+			"keyedIn.authorization":            "Authorization carries the surface's bearer key (`Bearer <key>`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
 			"vectorCollection.createdAt":       "CreatedAt is the collection's creation time (RFC 3339); Qdrant does not\nreport one, so it is empty today.",
 			"vectorCollection.dimension":       "Dimension is the size of one vector in the collection.",
 			"vectorCollection.distanceMetric":  "DistanceMetric is the collection's distance function; \"cosine\" when the\ncollection's detail could not be read.",
@@ -43,6 +46,7 @@ func init() {
 	zip.Describe("GET /v1/vector/stats", zip.Doc{
 		Description: "Totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
 		Fields: map[string]string{
+			"keyedIn.authorization":         "Authorization carries the surface's bearer key (`Bearer <key>`); the bare\nkey is accepted too. Search and vector are two surfaces with two keys.\nIt is not `validate:\"required\"` on purpose: requireKey answers absence\nitself, so an unconfigured surface 503s and a missing bearer 401s — a\nvalidation refusal would rewrite both statuses.",
 			"vectorStats.totalCollections":  "TotalCollections is how many collections the store holds.",
 			"vectorStats.totalStorageBytes": "TotalStorageBytes is the sum of every collection's on-disk size.",
 			"vectorStats.totalVectors":      "TotalVectors is the sum of every collection's point count.",
