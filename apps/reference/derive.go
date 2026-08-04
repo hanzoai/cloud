@@ -81,7 +81,7 @@ const deviceStatement = `
 	SELECT id, orgs, n FROM (
 	  SELECT anonymous_id AS id, uniqExact(org) AS orgs, count() AS n
 	  FROM event.fact
-	  WHERE time >= ? AND time < ? AND anonymous_id != '' AND org != ?
+	  WHERE signal = 'act' AND time >= ? AND time < ? AND anonymous_id != '' AND org != ?
 	  GROUP BY anonymous_id
 	)
 	WHERE orgs >= ? AND n >= ?
@@ -114,6 +114,10 @@ const deviceBudget = `
 	         max_bytes_before_external_group_by = 2000000000,
 	         max_bytes_before_external_sort = 2000000000`
 
+// The plane holds five signals in one table, so a read that does not name one
+// counts errors and spans as product events. This aggregate is the only
+// cross-tenant reader, so a phantom identity inflates both k-anonymity floors.
+//
 // publicTenant is the reserved org the event door files credential-less writes
 // under (apps/analytics/event.go). It is not a customer and it never
 // contributes to an aggregate.
