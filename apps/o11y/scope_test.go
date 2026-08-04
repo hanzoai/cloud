@@ -20,7 +20,7 @@ import (
 func scopeApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Group(o11yPrefix).Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 	mountScopedReads(app)
 	return app
 }
@@ -202,7 +202,7 @@ func TestProductAliasResolution(t *testing.T) {
 // handler, never the sentinel.
 func TestRoutePrecedence_ScopedWinsOverWildcard(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Group(o11yPrefix).Use(cloud.Bridge())
+	app.Use(cloud.Bridge())
 	// order 69: the scoped GET handlers.
 	mountScopedReads(app)
 	// order 70: the hanzoai/o11y catch-all wildcard (SENTINEL: 599).
