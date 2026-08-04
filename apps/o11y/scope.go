@@ -51,16 +51,15 @@ func mountScope(a *zip.App) {
 	// command, the SDK method) follows from this one registration. cmd/zipdoc
 	// resolves the group prefix the same way, so the doc comments below reach the
 	// document and the tool list.
-	g := under{a, o11yPrefix}
-	zip.Get(g, "/logs", handleLogs)
-	zip.Get(g, "/metrics", handleMetrics)
-	zip.Get(g, "/status", handleStatus)
+	zip.Get(a, o11yPrefix+"/logs", handleLogs)
+	zip.Get(a, o11yPrefix+"/metrics", handleMetrics)
+	zip.Get(a, o11yPrefix+"/status", handleStatus)
 	// Platform-sudo fleet availability (availability.go), read from the native
 	// store. This is what remains of the VictoriaMetrics proxy that used to sit at
 	// /v1/o11y/vm/{query,query_range}: the store is gone, so the route named after
 	// it is gone, and the one question inside it we still MEASURE is asked here as
 	// a typed op instead of as three allowlisted PromQL strings.
-	zip.Get(g, "/availability", handleAvailability)
+	zip.Get(a, o11yPrefix+"/availability", handleAvailability)
 	// Flat builder query (query.go): the ONE canonical public path for the console's
 	// composite list query; the upstream engine version (v3) is resolved INTERNALLY.
 	a.Post("/v1/o11y/query", builderQueryHandler("query"))
