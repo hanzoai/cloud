@@ -253,21 +253,24 @@ func TestRunnerBuild_IAMForeignOrgRejected(t *testing.T) {
 	}
 }
 
-// RELEASING IS ORG-SCOPED, NOT CROSS-TENANT.
+// RELEASING IS PLATFORM-SCOPED, AND THE ORG-ADMIN BIT IS NOT A SPELLING OF THAT.
 //
-// Cutting the platform release takes the SAME authority an ordinary build takes:
-// admin of an org that OWNS the registry namespace being published to. It used to
-// take platform SUDO, which is a category error — SuperAdmin is the authority to
-// act in an org you do NOT belong to, and publishing your own org's artifact is
-// not that. The broad scope did not make it safer; it made releasing impossible
-// for the engineers who own the artifact.
+// releaseImage is ghcr.io/hanzoai/cloud — the binary every service in every org
+// runs — so cutting one is an act against SHARED platform state, which is
+// cloud.Super by the definition in gate.go. Owning the registry namespace is what
+// bounds an ordinary PUSH, because a push lands one tenant's own artifact; it
+// cannot bound a release, because a release lands ours on everyone.
 //
-// hanzo owns `hanzoai` (orgRegistryNamespaces), and releaseImage is
-// ghcr.io/hanzoai/cloud, so a hanzo org admin may cut it. Both release seams
-// answer 500, so an AUTHORIZED request can only fail inside the pipeline (502) —
-// reaching that proves the gate let it through, and the stub keeps the case
-// hermetic.
-func TestRunnerRelease_OwningOrgAdminAuthorized(t *testing.T) {
+// `isAdmin` is SELF-SERVICE — the `hanzo` tenant's own admins set it on members of
+// their own org — so admitting "admin of the org that owns hanzoai" delegated the
+// fleet's binary to an authority the platform does not administer. A gate whose far
+// side can enrol its own callers is not a gate.
+//
+// hanzo owns `hanzoai` AND is the deployment's brand org, so this is exactly the
+// caller the old gate admitted, and against the parent it is admitted still: the
+// seams are stubbed to 500, so the request runs the pipeline and returns 502 —
+// the escalation, verbatim.
+func TestRunnerRelease_OwningOrgAdminRefused(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -280,18 +283,17 @@ func TestRunnerRelease_OwningOrgAdminAuthorized(t *testing.T) {
 	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "release": true,
 		"image": "ghcr.io/hanzoai/cloud:v1"})
-	if code == http.StatusForbidden {
-		t.Fatalf("the owning org's admin was refused its own release: %s", body)
-	}
-	if code != http.StatusBadGateway {
-		t.Fatalf("want the pipeline's 502 on a failing seam, got %d (%s)", code, body)
+	if code != http.StatusForbidden {
+		t.Fatalf("EXPLOIT: the brand org's own admin cut a release of %s, the binary the "+
+			"whole fleet runs: %d (%s)", releaseImage, code, body)
 	}
 	releasing.Store(false)
 }
 
-// A DIFFERENT brand's admin may not. lux owns `luxfi`, not `hanzoai`, so this is
-// the same confinement that stops a lux admin pushing ghcr.io/hanzoai/* on the
-// ordinary path — the release gate reuses it rather than inventing a second rule.
+// A DIFFERENT brand's admin may not either, and now for the SAME reason as the
+// owning brand's: not SuperAdmin. It used to be refused by the registry-namespace
+// confinement instead — which is why this case passed while the one above did not.
+// One rule refuses both; a rule that refuses only the foreign org is the bug.
 func TestRunnerRelease_ForeignOrgAdminRefused(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
@@ -303,8 +305,9 @@ func TestRunnerRelease_ForeignOrgAdminRefused(t *testing.T) {
 	}
 }
 
-// A plain MEMBER of the owning org may not — owning the namespace is necessary,
-// not sufficient. Admin of that org is the other half.
+// A plain MEMBER of the owning org may not. Neither the org nor any role inside it
+// is an input to this gate any more — which is precisely why no org can enrol its
+// own callers into it.
 func TestRunnerRelease_PlainMemberRefused(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
