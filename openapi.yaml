@@ -32327,42 +32327,6 @@ components:
           description: SSHURL is the repo's scp-style SSH remote.
           type: string
       type: object
-    railList:
-      properties:
-        rails:
-          description: Rails is every (chain, token, treasury) triple this deployment
-            accepts.
-          items:
-            $ref: '#/components/schemas/railView'
-          type: array
-      type: object
-    railView:
-      properties:
-        chain:
-          description: Chain is the human chain name, e.g. "Base".
-          type: string
-        chainId:
-          description: ChainID is the EIP-155 chain id the wallet must be on.
-          type: integer
-        decimals:
-          description: |-
-            Decimals is the token's decimal places — 6 for USDC, 18 for an 18-decimal
-            token. Cents are derived per-rail from it.
-          type: integer
-        id:
-          description: ID is the stable rail id to name when submitting a transfer,
-            e.g. "base-usdc".
-          type: string
-        symbol:
-          description: Symbol is the display symbol, e.g. "USDC".
-          type: string
-        token:
-          description: Token is the ERC-20 contract address to transfer.
-          type: string
-        treasury:
-          description: Treasury is the address on this chain to send funds to.
-          type: string
-      type: object
     rawOut:
       properties:
         data:
@@ -37547,46 +37511,6 @@ components:
           items:
             $ref: '#/components/schemas/Wallet'
           type: array
-      type: object
-    walletTopupReq:
-      properties:
-        fromAddress:
-          description: |-
-            FromAddress is the wallet the transfer was sent from. Optional; when given it
-            must match the transfer's on-chain sender.
-          type: string
-        rail:
-          description: |-
-            Which accepted rail the transfer was sent on, e.g. "base-usdc". The client
-            names it rather than the server guessing from the tx: the same address can
-            exist on several chains, so inferring would risk crediting against the wrong
-            treasury. It may be omitted only while exactly one rail is enabled.
-          type: string
-        txHash:
-          description: |-
-            TxHash is the hash of the ERC-20 transfer that was already sent to the rail's
-            treasury. The receipt is read from that chain; nothing is credited that the
-            chain did not confirm.
-          type: string
-      type: object
-    walletTopupResp:
-      properties:
-        balance:
-          description: |-
-            Balance is the org's new USD-ledger balance in cents. Best-effort: a read
-            failure reports 0, and the credit has already landed either way.
-          type: integer
-        creditedCents:
-          description: |-
-            CreditedCents is the USD credit recorded, derived from the ON-CHAIN value
-            using the token's own decimals — never a client-supplied number.
-          type: integer
-        status:
-          description: Status is how commerce recorded the payment.
-          type: string
-        txHash:
-          description: TxHash is the transfer that was credited.
-          type: string
       type: object
     workerList:
       properties:
@@ -47701,6 +47625,27 @@ paths:
       tags:
       - billing
       x-app: billing
+  /v1/billing/methods/{id}:
+    delete:
+      description: |-
+        Detaches a card on file: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.
+
+        The id is resolved INSIDE the caller's own org, so it can only ever name a card this org can list. Another tenant's id does not resolve and answers 404 — not 403, because a status that separates 'not yours' from 'not there' turns an id into something worth guessing.
+
+        Removing the card an auto-recharge or a running GPU lease bills leaves that arrangement with nothing to charge; it is the customer's call to make, and this makes it rather than refusing on their behalf.
+
+        401 without a validated principal — the org is the validated owner claim, never a client-supplied field, so this cannot be pointed at another tenant.
+      operationId: delete_v1_billing_methods_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Remove a saved card from the caller's org
+      tags:
+      - billing
+      x-app: billing
   /v1/billing/mode:
     post:
       description: 'Flips the org''s live flag, which is the single authority for
@@ -47740,6 +47685,40 @@ paths:
         what this caller has.
       operationId: get_v1_billing_plans
       summary: The public plan catalog, annotated with the active platform promotion
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/portal/methods:
+    get:
+      description: |-
+        Answers the org's saved payment methods as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system.
+
+        This is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods, and it exists as its own address because the host that publishes that one cannot forward to it — the forward would re-enter its own handler. Both answer the same rows.
+
+        The customer filter is pinned to the VALIDATED caller before the handler runs, so a browser sees only its own subject's cards whatever customerId it sends; only a caller holding the internal service token may name the subject, and the org it may name it within is fixed by the gateway. Cross-tenant is closed by the org namespace for both, so an id or a subject from another org resolves to nothing. A caller who is neither is refused before the read.
+      operationId: get_v1_billing_portal_methods
+      summary: Cards saved against the caller's org, masked — the portal read
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/portal/methods/{id}:
+    delete:
+      description: |-
+        Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.
+
+        The service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is — the host that publishes the customer address proxies here rather than into itself.
+
+        The id is resolved INSIDE the caller's org namespace, so another tenant's card is not found there and answers 404 — never 403, which would confirm the id exists. That bound holds for the service token too: it may act for any subject within the org the gateway pinned, and for no subject outside it.
+
+        Removing the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is the customer's call to make.
+      operationId: delete_v1_billing_portal_methods_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Remove a saved card — the portal detach
       tags:
       - billing
       x-app: commerce
@@ -52554,70 +52533,6 @@ paths:
       tags:
       - commerce
       x-app: commerce
-  /v1/commerce/topup/rails:
-    get:
-      description: |-
-        Lists the accepted (chain, token, treasury) triples, so a browser can
-        render "send USDC here" without the addresses being baked into its bundle.
-
-        This exists because the console previously gated its top-up UI on
-        NEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail
-        therefore meant rebuilding and redeploying the frontend, and with them unset the
-        UI reported "not available yet" no matter what the server could actually accept.
-        Serving the set at runtime keeps ONE source of truth (the server's config) and
-        lets a rail be switched on without shipping a bundle.
-
-        Everything here is public on-chain data; no secret is exposed, and the set is
-        empty on a deployment that accepts no crypto rail.
-      operationId: get_v1_commerce_topup_rails
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/railList'
-          description: ok
-      summary: Lists the accepted (chain, token, treasury) triples, so a browser can
-        render "send USDC here" without the addresses being baked into its bundle.
-      tags:
-      - commerce
-      x-app: account
-  /v1/commerce/topup/wallet:
-    post:
-      description: |-
-        Credits the caller's org for a stablecoin transfer they already sent
-        to the treasury. It reads the receipt from that rail's chain, confirms a mined,
-        successful ERC-20 Transfer to the rail's treasury, derives USD cents from the
-        on-chain value using the token's own decimals, records the credit, and returns
-        the amount plus the new balance.
-
-        The credited amount is the ON-CHAIN value, never a number the caller sends, and
-        the credit lands on the caller's own validated org — there is no way to name a
-        third-party subject. Nothing is credited that the chain did not confirm: a
-        missing, failed or non-matching transaction is refused, and a deployment with no
-        payment rail enabled says so rather than inventing a credit.
-      operationId: post_v1_commerce_topup_wallet
-      requestBody:
-        content:
-          application/json:
-            example:
-              rail: base-usdc
-              txHash: "0x0000000000000000000000000000000000000000000000000000000000000001"
-            schema:
-              $ref: '#/components/schemas/walletTopupReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/walletTopupResp'
-          description: ok
-      summary: Credits the caller's org for a stablecoin transfer they already sent
-        to the treasury.
-      tags:
-      - commerce
-      x-app: account
   /v1/commerce/webhooks/{provider}:
     post:
       description: 'Forwards the provider''s event — body and original signature headers
@@ -95857,7 +95772,7 @@ tags:
     or a webhook.
   name: automations
 - description: 'Package account is your own account: API keys you mint and revoke,
-    org onboarding, and wallet top-up.'
+    and org onboarding.'
   name: avatar
 - description: Package do is the org-scoped private-network surface — /v1/vpcs and
     /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
@@ -95950,7 +95865,7 @@ tags:
     deals in play.'
   name: crm
 - description: 'Package account is your own account: API keys you mint and revoke,
-    org onboarding, and wallet top-up.'
+    and org onboarding.'
   name: csrf
 - description: Package dataroom is a secure document room you share by link and watch
     page by page.
@@ -95992,7 +95907,7 @@ tags:
     move files in and out.'
   name: download
 - description: 'Package account is your own account: API keys you mint and revoke,
-    org onboarding, and wallet top-up.'
+    and org onboarding.'
   name: embed
 - description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
     /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
@@ -96123,7 +96038,7 @@ tags:
     by meaning.
   name: kb
 - description: 'Package account is your own account: API keys you mint and revoke,
-    org onboarding, and wallet top-up.'
+    and org onboarding.'
   name: keys
 - description: 'Package kms is secret custody: your org''s secrets sealed at rest,
     plus threshold signing.'
@@ -96203,7 +96118,7 @@ tags:
     cannot INSTALL.
   name: org
 - description: 'Package account is your own account: API keys you mint and revoke,
-    org onboarding, and wallet top-up.'
+    and org onboarding.'
   name: orgs
 - description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
     namespace — builds, releases, environments, logs, custom domains.'

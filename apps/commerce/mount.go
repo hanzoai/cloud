@@ -388,6 +388,55 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		)
 	}
 
+	// The PORTAL payment-method pair — the address the BILLING app proxies to.
+	//
+	// billing owns the customer address /v1/billing/methods (manifest.Apps), so it
+	// cannot forward there: the forward is its own route and re-enters it (the
+	// depth-8 502 top-up hit). commerce publishes the portal family for exactly that
+	// — the service-token face of the same data — and cloud's billing app has been
+	// asking for /v1/billing/portal/methods all along while NOTHING in the fleet
+	// served it. The proxy forwarded a 404 verbatim and the saved-card list was empty
+	// no matter how many cards were vaulted; the DELETE had no owner at all and the
+	// live edge answered 405, so a customer could add a card and never remove one.
+	//
+	// THE GATE IS THE POINT, and it is not the console chain above. Both handlers key
+	// their finer scope on a value the CALLER supplies — PortalPaymentMethods filters
+	// on ?customerId, DetachPaymentMethod resolves :id — so the chain has to pin the
+	// tenant on BOTH kinds of principal that reach here:
+	//
+	//   - TokenRequired (NOT IAMTokenRequired) authenticates the caller and resolves
+	//     the ORG from the gateway-pinned X-Org-Id into Locals("organization") — the
+	//     namespace GetOrganization reads — for an IAM member AND for the raw
+	//     COMMERCE_SERVICE_TOKEN the billing proxy presents. IAMTokenRequired admits
+	//     only the former and would leave the org unset for the latter (a 500, the
+	//     way GetTier found out). X-Org-Id is stripped from every client request by
+	//     the gateway, so the org is never a caller-supplied value.
+	//   - PinBillingSubject is the IDOR control. TokenRequired ALONE authenticates
+	//     without pinning, and that is the whole hazard: any authenticated browser
+	//     could then read another subject's cards by naming their customerId. The pin
+	//     OVERWRITES every billing-subject key (user/userId/customerId) with the
+	//     VALIDATED caller's own account.Payer subject and drops ?org, so a forged
+	//     query cannot widen scope; it passes the query through ONLY for a caller
+	//     whose bearer constant-time-matches COMMERCE_SERVICE_TOKEN (the billing
+	//     proxy, which pins the subject server-side to readerOrg before it calls);
+	//     and it fail-closes anyone who is neither, BEFORE the handler runs.
+	//
+	// Cross-ORG is the namespace and is closed for both principals — including the
+	// privileged one, which bypasses commerce's intra-org owner guard but never the
+	// namespace (commerce api/billing/payment_methods_tenant_test.go proves it).
+	app.Get("/v1/billing/portal/methods",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.PortalPaymentMethods,
+	)
+	app.Delete("/v1/billing/portal/methods/:id",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.DetachPaymentMethod,
+	)
+
 	// GET /v1/billing/alerts/authorize — the per-request per-scope spend-CAP
 	// VERDICT the request-edge metering gate consumes (clients/metering scopeAuthorize,
 	// pathLimitsAuthorize). It is a SERVICE-token S2S read (COMMERCE_SERVICE_TOKEN +

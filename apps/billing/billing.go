@@ -148,6 +148,35 @@ func (p *commerceProxy) post(ctx context.Context, path, org string, body []byte,
 	return b, resp.StatusCode, nil
 }
 
+// del performs one service-token commerce DELETE scoped to org, returning commerce's
+// raw body + status VERBATIM. Same S2S trust as get and post: the caller's OWN org
+// rides X-Org-Id and the admin service token authorizes the removal. It carries no
+// body and no idempotency key — DELETE of a named resource is idempotent by identity,
+// so a retry removes the same card or 404s, and there is nothing for a guard to add.
+func (p *commerceProxy) del(ctx context.Context, path, org string, q url.Values) ([]byte, int, error) {
+	u := p.base + path
+	if enc := q.Encode(); enc != "" {
+		u += "?" + enc
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("X-Org-Id", org)
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("commerce unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return b, resp.StatusCode, nil
+}
+
 // state is billing's own data; shared deps live in the embedded cloud.Base.
 type state struct {
 	commerce *commerceProxy
@@ -193,6 +222,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// the co-resident commerce app could serve it — the console's save-card call
 	// died there, and with it auto-recharge, which charges the vaulted card.
 	app.Post("/v1/billing/methods", cloud.Handle(s, createPaymentMethod))
+	// Removing a saved card, on the SAME router as the save for the same reason the
+	// save is here: the host claims a prefix for ONE app across every method, so a
+	// sub-resource this app does not register misses on METHOD (405) rather than
+	// falling through to anyone else. It did — a customer could ADD a card and never
+	// REMOVE one.
+	app.Delete("/v1/billing/methods/:id", cloud.Handle(s, deletePaymentMethod))
 
 	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
@@ -329,6 +364,20 @@ func init() {
 			"carrying the processor's own reason — forwarded verbatim, because insufficient funds "+
 			"and a wrong security code are different remedies for the customer.\n\n"+
 			"401 without a validated principal.")
+
+	openapi.Describe("/v1/billing/methods/:id", http.MethodDelete,
+		"Remove a saved card from the caller's org",
+		"Detaches a card on file: the stored reference is removed here AND withdrawn from the "+
+			"processor's vault, so nothing is left that a later charge could bill.\n\n"+
+			"The id is resolved INSIDE the caller's own org, so it can only ever name a card "+
+			"this org can list. Another tenant's id does not resolve and answers 404 — not 403, "+
+			"because a status that separates 'not yours' from 'not there' turns an id into "+
+			"something worth guessing.\n\n"+
+			"Removing the card an auto-recharge or a running GPU lease bills leaves that "+
+			"arrangement with nothing to charge; it is the customer's call to make, and this "+
+			"makes it rather than refusing on their behalf.\n\n"+
+			"401 without a validated principal — the org is the validated owner claim, never a "+
+			"client-supplied field, so this cannot be pointed at another tenant.")
 }
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
@@ -577,6 +626,47 @@ func createPaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
 	body, status, err := s.State.commerce.post(c.Context(), "/v1/billing/methods", org, pinSubjectBody(c.Body(), org), "")
 	if err != nil {
 		s.Log.Warn("commerce save card failed", "org", org, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	}
+	c.SetHeader("Content-Type", "application/json")
+	c.SetHeader("Cache-Control", "no-store")
+	return c.Bytes(status, body)
+}
+
+// deletePaymentMethod → commerce DELETE /v1/billing/portal/methods/{id}: remove a
+// saved card. The twin of paymentMethods, at the twin address and for the same
+// reason — this app OWNS /v1/billing/methods, so it cannot forward there without
+// re-entering itself, and commerce publishes the portal family as the face a host
+// may proxy to.
+//
+// TENANT SCOPE. The org is the VALIDATED principal (principal.Org), never
+// readerOrg: readerOrg additionally admits the trusted in-proc service token, which
+// is right for a READ the ai gate makes on its own behalf and wrong for a MUTATION
+// — the same rule createPaymentMethod and gpuCharge already follow, and the reason
+// they do. The org then rides X-Org-Id, which selects commerce's per-org namespace,
+// so `id` is resolved INSIDE the caller's own tenant: another org's card id is a
+// not-found miss there and comes back 404 (never 403 — an id must not be probeable).
+// A caller can therefore only ever delete a method its own org can list, which is
+// exactly the scope paymentMethods reads.
+//
+// The id is a caller-supplied path segment, so it is percent-escaped into the
+// upstream URL rather than concatenated raw: the value names a resource, it does
+// not get to name a route.
+func deletePaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok {
+		return zip.ErrUnauthorized("sign in to remove a card")
+	}
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		return zip.ErrBadRequest("a payment method id is required")
+	}
+	if !s.State.commerce.configured() {
+		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	}
+	body, status, err := s.State.commerce.del(c.Context(), "/v1/billing/portal/methods/"+url.PathEscape(id), org, scopedBillingQuery(c, org))
+	if err != nil {
+		s.Log.Warn("commerce remove card failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	c.SetHeader("Content-Type", "application/json")
