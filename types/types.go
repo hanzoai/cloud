@@ -118,6 +118,14 @@ type ChatRequest struct {
 	Org        string
 	BillingOrg string
 	Project    string
+
+	// MaxTokens is the ceiling on the COMPLETION the caller is willing to buy.
+	// A prepaid gate cannot price a chat without it: the prompt is known before
+	// the call and the completion is not, so an unbounded completion is an
+	// unbounded charge against a balance that was only ever checked for the
+	// prompt. Zero means the caller stated no ceiling and the meter reserves the
+	// policy default (CLOUD_AI_MAX_COMPLETION_TOKENS) — never zero.
+	MaxTokens int
 }
 
 // ChatResponse mirrors the AI subsystem's chat-completion response. The token

@@ -604,3 +604,100 @@ func TestNotFoundAnswersDataRequestsInType(t *testing.T) {
 		}
 	}
 }
+
+// Behind the ingress the parsed URI host is EMPTY and the only carrier of the
+// customer-facing name is X-Forwarded-Host. Without this, siteSlug("") failed,
+// customCandidate("") failed, and every published site fell through to the API
+// pipeline — <slug>.hanzo.app served the console SPA and mounted the whole cloud
+// API under a customer's own hostname (measured live 2026-08-03).
+func TestMiddlewareResolvesFromForwardedHostWhenParsedHostIsEmpty(t *testing.T) {
+	fr := &fakeResolver{found: false}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+
+	// The shape behind the ingress: the parsed host is not a site host (the
+	// ingress' own name), and the customer-facing name rides X-Forwarded-Host.
+	// NOTE httptest synthesizes "localhost" for an empty Host, so an empty
+	// string cannot be used to express "no parsed host" — measured, not assumed.
+	req := httptest.NewRequest("GET", "http://localhost/index.html", nil)
+	req.Header.Set("X-Forwarded-Host", "quest.hanzo.app")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if resp.Header.Get("X-Sentinel") == "hit" {
+		t.Fatal("a published site fell through to the API pipeline — this is the console-instead-of-site defect")
+	}
+	if got := fr.slugs(); len(got) != 1 || got[0] != "quest" {
+		t.Fatalf("resolver called with %v, want exactly [quest]", got)
+	}
+}
+
+// ...and the fallback must never become an override. A request that HAS a host
+// ignores the header completely — the host picks the ORG, so a client able to
+// override a real host could serve itself another tenant's site.
+func TestMiddlewareForwardedHostNeverOverridesARealHost(t *testing.T) {
+	fr := &fakeResolver{found: false}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+
+	req := httptest.NewRequest("GET", "http://victim.hanzo.app/index.html", nil)
+	req.Header.Set("X-Forwarded-Host", "attacker.hanzo.app")
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if got := fr.slugs(); len(got) != 1 || got[0] != "victim" {
+		t.Fatalf("resolver called with %v, want exactly [victim] — the header must not override a real host", got)
+	}
+}
+
+// The edge must resolve a site when projects is in ANOTHER process.
+//
+// This is the production shape and it is the defect this fallback exists for:
+// the pod boots ~25 single-app processes, so the in-process registry is nil at
+// the edge. A nil resolver is a clean miss, so every published site fell through
+// to the API pipeline and <slug>.hanzo.app served the console SPA — with no
+// error logged anywhere, because nothing had failed.
+func TestFallbackResolverServesWhenProjectsIsElsewhere(t *testing.T) {
+	SetResolver(nil) // projects is NOT in this process — the production case.
+	fb := &fakeResolver{found: false}
+	SetFallbackResolver(fb)
+	defer SetFallbackResolver(nil)
+	app := newTestApp(testServer())
+
+	req := httptest.NewRequest("GET", "http://quest.hanzo.app/index.html", nil)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if resp.Header.Get("X-Sentinel") == "hit" {
+		t.Fatal("fell through to the API pipeline — this is the console-instead-of-site defect")
+	}
+	if got := fb.slugs(); len(got) != 1 || got[0] != "quest" {
+		t.Fatalf("fallback called with %v, want exactly [quest]", got)
+	}
+}
+
+// A co-resident store still answers WITHOUT the hop: the in-process resolver
+// wins whenever it is set, so sharing a process costs nothing.
+func TestInProcessResolverWinsOverTheFallback(t *testing.T) {
+	inproc := &fakeResolver{found: false}
+	fb := &fakeResolver{found: false}
+	SetResolver(inproc)
+	SetFallbackResolver(fb)
+	defer func() { SetResolver(nil); SetFallbackResolver(nil) }()
+	app := newTestApp(testServer())
+
+	req := httptest.NewRequest("GET", "http://quest.hanzo.app/index.html", nil)
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if len(inproc.slugs()) != 1 {
+		t.Errorf("in-process resolver was not used: %v", inproc.slugs())
+	}
+	if n := len(fb.slugs()); n != 0 {
+		t.Errorf("fallback was consulted %d times; the in-process store must win", n)
+	}
+}

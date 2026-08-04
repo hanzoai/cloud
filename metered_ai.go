@@ -46,6 +46,11 @@ type meteredAI struct {
 	meter *ResourceMeter
 	log   luxlog.Logger
 	rate  int64 // micro-USD per 1000 tokens.
+
+	// inflight is what this pod's in-progress calls have COMMITTED but not yet
+	// spent, so a second caller weighs the balance against the first one's
+	// commitment instead of against money that is already being spent.
+	inflight commitments
 }
 
 // meteredAIClient wraps inner so every inference call meters through the ONE
@@ -94,14 +99,16 @@ type meteredAIStream struct{ *meteredAI }
 // streaming can never be a cheaper way to buy inference.
 func (m *meteredAIStream) ChatStream(ctx context.Context, req *types.ChatRequest, emit func(string) error) (*types.ChatResponse, error) {
 	payer := billedOrg(req.BillingOrg, req.Org)
-	if err := m.gate(ctx, payer, req.Project, EstTokens(req.Prompt)); err != nil {
+	h, err := m.reserve(ctx, payer, req.Project, atMost(req))
+	if err != nil {
 		return nil, err
 	}
-	resp, err := m.inner.(types.StreamCompleter).ChatStream(ctx, req, emit)
-	if err != nil {
-		return resp, err
+	defer h.release() // no-op once settlement has taken it; the safety net for every other exit.
+	resp, serr := m.inner.(types.StreamCompleter).ChatStream(ctx, req, emit)
+	if serr != nil {
+		return resp, serr
 	}
-	m.settle(payer, req, resp)
+	m.settle(payer, req, resp, h)
 	return resp, nil
 }
 
@@ -122,14 +129,16 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 	// for its data scope (BYO keys, RAG). billedOrg falls back to req.Org when the
 	// caller did not split them (home==effective for a normal caller).
 	payer := billedOrg(req.BillingOrg, req.Org)
-	if err := m.gate(ctx, payer, req.Project, EstTokens(req.Prompt)); err != nil {
+	h, err := m.reserve(ctx, payer, req.Project, atMost(req))
+	if err != nil {
 		return nil, err
 	}
-	resp, err := m.inner.ChatCompletion(ctx, req)
-	if err != nil {
-		return resp, err
+	defer h.release() // no-op once settlement has taken it; the safety net for every other exit.
+	resp, cerr := m.inner.ChatCompletion(ctx, req)
+	if cerr != nil {
+		return resp, cerr
 	}
-	m.settle(payer, req, resp)
+	m.settle(payer, req, resp, h)
 	return resp, nil
 }
 
@@ -137,7 +146,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 // debit is computed, shared by the buffered and streamed deliveries so they can
 // never price differently. A gateway that omits usage falls back to the same
 // prompt estimate the gate used.
-func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.ChatResponse) {
+func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.ChatResponse, h *hold) {
 	if resp == nil {
 		return
 	}
@@ -152,7 +161,7 @@ func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.Cha
 		PromptTokens:     resp.PromptTokens,
 		CompletionTokens: resp.CompletionTokens,
 		TotalTokens:      total,
-	}, total)
+	}, total, h)
 }
 
 // Embed pre-authorizes + debits on the deterministic input-token estimate (the
@@ -161,16 +170,21 @@ func (m *meteredAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]flo
 	if req == nil || len(req.Inputs) == 0 {
 		return m.inner.Embed(ctx, req) // nothing to bill; let the transport no-op.
 	}
+	// Embeddings are the one call whose cost is fully known BEFORE it runs (the
+	// API returns no usage, so the input estimate is both the reservation and the
+	// charge) — there is no completion to bound.
 	toks := EstTokens(req.Inputs...)
 	payer := billedOrg(req.BillingOrg, req.Org) // HOME org pays; req.Org stays the data scope.
-	if err := m.gate(ctx, payer, req.Project, toks); err != nil {
+	h, err := m.reserve(ctx, payer, req.Project, toks)
+	if err != nil {
 		return nil, err
 	}
-	vecs, err := m.inner.Embed(ctx, req)
-	if err != nil {
-		return vecs, err
+	defer h.release()
+	vecs, eerr := m.inner.Embed(ctx, req)
+	if eerr != nil {
+		return vecs, eerr
 	}
-	m.record(payer, req.Project, req.Model, metering.Usage{TotalTokens: toks}, toks)
+	m.record(payer, req.Project, req.Model, metering.Usage{TotalTokens: toks}, toks, h)
 	return vecs, nil
 }
 
@@ -187,9 +201,32 @@ func billedOrg(billing, effective string) string {
 	return effective
 }
 
-// gate is the pre-call balance/budget/freeze check. tokens is the pre-call cost
-// estimate; a system call (org=="") is not gated (no customer to bill).
-func (m *meteredAI) gate(ctx context.Context, org, project string, tokens int) error {
+// reserve is the pre-call balance/budget/freeze check. It COMMITS the call's
+// worst-case cost before checking, so the balance is weighed against everything
+// this pod already has in flight, and returns the hold the settlement releases.
+//
+// The returned hold is never nil, so a caller may unconditionally defer its
+// release; a system call (org=="") is not gated and holds nothing.
+func (m *meteredAI) reserve(ctx context.Context, org, project string, tokens int) (*hold, error) {
+	if org == "" {
+		return &hold{}, nil
+	}
+	cost := m.cents(tokens)
+	h := &hold{to: &m.inflight, org: org, cost: cost}
+	// Commit FIRST, then weigh. The figure the balance must cover is this call's
+	// cost PLUS every other call already committed — which is what makes two
+	// simultaneous callers see each other instead of both clearing the same cents.
+	committed := m.inflight.commit(org, cost)
+	if err := m.gate(ctx, org, project, committed); err != nil {
+		h.release()
+		return &hold{}, err
+	}
+	return h, nil
+}
+
+// gate asks the ONE metering path whether org can afford cents right now. A
+// system call (org=="") is not gated (no customer to bill).
+func (m *meteredAI) gate(ctx context.Context, org, project string, cents int64) error {
 	if org == "" {
 		return nil
 	}
@@ -197,14 +234,92 @@ func (m *meteredAI) gate(ctx context.Context, org, project string, tokens int) e
 	// server-minted identity claim, so it is unvalidated here → a project-scoped
 	// cap stays soft. The request-edge BillingGate already hardens the validated
 	// project axis for the inbound LLM path.
-	return m.meter.Gate(ctx, org, project, false, AIMeterProvider, m.cents(tokens))
+	return m.meter.Gate(ctx, org, project, false, AIMeterProvider, cents)
+}
+
+// atMost is what a chat could cost at most: the prompt, which is known before
+// the call, plus the most completion the MODEL can produce.
+//
+// The ceiling is per-MODEL and comes from the catalog, never from a constant. A
+// constant is wrong by construction — it caps a 1M-context model at whatever
+// number was typed, and it is one release out of date the moment a model ships.
+// This estate has paid for that twice already: ai/model's deleted name-matching
+// table gave deepseek-v4-pro 16384 and 402'd every long prompt, and glm-5.2
+// dead-ended /compact on a stale 16K fallback. Both were fixed the same way —
+// declare it in models.yaml, resolve it here.
+//
+// It does NOT write the ceiling onto the request. What we reserve is a billing
+// fact; req.MaxTokens is the CALLER's, and forwarding a limit they never asked
+// for silently truncates their answer. The reservation is sound regardless: a
+// model cannot exceed its own max output, so the bound holds whether or not we
+// restate it on the wire.
+func atMost(req *types.ChatRequest) int {
+	out := req.MaxTokens
+	if out <= 0 {
+		out = completionCeiling(req.Model)
+	}
+	return EstTokens(req.Prompt) + out
+}
+
+// ceilingOf resolves a model's max completion length. Installed at wire-up from
+// the model catalog (see SetCompletionCeiling); nil until then.
+var ceilingOf func(model string) int
+
+// SetCompletionCeiling installs the per-model completion-ceiling lookup the
+// prepaid gate reserves against. Called once at startup by the package that
+// links the model catalog (apps/ai), so package cloud states WHAT it needs
+// without importing where the answer lives — the same seam shape the AI module
+// uses for SetContextWindowResolver.
+func SetCompletionCeiling(f func(model string) int) { ceilingOf = f }
+
+// completionCeiling answers the most tokens a completion of `model` can be: the
+// catalog's number when it declares one, else the floor.
+func completionCeiling(model string) int {
+	if ceilingOf != nil {
+		if n := ceilingOf(model); n > 0 {
+			return n
+		}
+	}
+	return maxCompletionTokens()
+}
+
+// defaultMaxCompletionTokens is the FLOOR used when the catalog declares nothing
+// for a model — a deployment with no models.yaml, or a model reaching the
+// gateway before its entry lands. It is not a per-model answer and must never be
+// used as one; MaxOutput in the catalog is the answer.
+//
+// A floor, not a guess, in the same sense as ai/model.DefaultContextLength: the
+// value that is safe across the lineup. It is only ever RESERVED, never charged
+// (settlement debits the exact usage and releases the rest) and never sent
+// upstream, so it cannot truncate an answer. Its only effect is which nearly
+// empty wallets are refused early — so it is set generously. Ops overrides it
+// per deployment with CLOUD_AI_MAX_COMPLETION_TOKENS.
+const defaultMaxCompletionTokens = 32768
+
+// maxCompletionTokens resolves the assumed completion ceiling. A
+// negative/invalid value falls through to the default, so a typo cannot silently
+// un-reserve every completion.
+func maxCompletionTokens() int {
+	s := strings.TrimSpace(os.Getenv("CLOUD_AI_MAX_COMPLETION_TOKENS"))
+	if s == "" {
+		return defaultMaxCompletionTokens
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return defaultMaxCompletionTokens
+	}
+	return n
 }
 
 // record debits the EXACT micro-USD cost to the org's billing account, attributed
 // to the project scope + model. A system call (org=="") is recorded nowhere but
 // logged, so any unattributed inference is detectable rather than silent.
-func (m *meteredAI) record(org, project, model string, u metering.Usage, tokens int) {
+// h, when non-nil, is the pre-call reservation this debit settles: it is released
+// once the debit REACHES the ledger, so the balance the next gate reads has
+// already had this call taken out of it.
+func (m *meteredAI) record(org, project, model string, u metering.Usage, tokens int, h *hold) {
 	if org == "" {
+		h.release()
 		if m.log != nil {
 			m.log.Warn("AI call with no billing org — inference not attributed", "model", model, "tokens", tokens)
 		}
@@ -214,7 +329,7 @@ func (m *meteredAI) record(org, project, model string, u metering.Usage, tokens 
 	u.Project = project
 	u.Model = model
 	u.Service = AIMeterProvider
-	m.meter.MeterUsage(org, AIMeterProvider, u)
+	m.meter.meterUsage(org, AIMeterProvider, u, h.release)
 }
 
 // micros converts a token count to the debit in micro-USD at the configured rate.

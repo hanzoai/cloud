@@ -376,6 +376,27 @@ func (c *Client) List(path, env string) ([]SecretMeta, error) {
 	return out, nil
 }
 
+// Find returns the metadata of every secret in the store under path, across
+// every environment when env is empty. It is what an audit, a rotation or a
+// migration asks; [Client.List] is what the credential broker asks.
+//
+// path is a subtree ROOT and recursive, so a caller enumerating an org sees the
+// whole org. It does not require the master key: nothing is decrypted.
+func (c *Client) Find(path, env string) ([]SecretMeta, error) {
+	if env != "" && !ValidSegment(env, maxEnvLen) {
+		return nil, ErrInvalidKey
+	}
+	secs, err := c.store.find(findQuery{Path: path, Env: env})
+	if err != nil {
+		return nil, fmt.Errorf("kms: find secrets: %w", err)
+	}
+	out := make([]SecretMeta, 0, len(secs))
+	for _, s := range secs {
+		out = append(out, SecretMeta{Name: s.Name, Path: s.Path, Env: s.Env, Scheme: s.Scheme})
+	}
+	return out, nil
+}
+
 // Names is List reduced to the one field the credential broker needs, and is the
 // half of credz.Source that Get does not already satisfy. It exists so credz can
 // enumerate an app's scope without importing this package's SecretMeta — the

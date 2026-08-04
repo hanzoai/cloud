@@ -127,7 +127,7 @@ func OrgForKey(ctx context.Context, key string) (string, bool) {
 // the API-key resolver here and the /v1/iam edge (iam_edge.go), so both
 // authenticate to IAM the same way. Empty cred → a deployment lacking the
 // credential stays safe (the caller treats "" as unconfigured).
-func iamHost() string { return strings.TrimRight(env("IAM_URL", "IAM_INTERNAL_URL"), "/") }
+func iamHost() string { return IAMBase() }
 
 func iamCred() string {
 	id := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID"))

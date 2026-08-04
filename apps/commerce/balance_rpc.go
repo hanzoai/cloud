@@ -9,7 +9,6 @@ import (
 	"github.com/hanzoai/cloud"
 	financeclient "github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/money"
 	"github.com/zap-proto/zip"
 )
 
@@ -98,56 +97,6 @@ func planeBalance(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, err
 		return nil, fmt.Errorf("balance: read %s/%s: %w", org, subject, err)
 	}
 	return &plane.Balance{Amount: plane.Amount(bal.Unwrap())}, nil
-}
-
-// The welcome grant, published for the same reason the balance read is: the ledger
-// has one writer and it lives here.
-//
-// StarterGrant is middleware on EVERY app's chain, and it used to bail the moment
-// it found no local ledger — which, once apps became their own binaries, is every
-// process but this one. So a new account was never funded: it reached tracker or
-// billing, the grant looked for a ledger that was one socket away, and returned
-// silently. An org that should have started with the welcome credit started broke,
-// and the paywall refused it correctly for a reason nobody had chosen.
-//
-// The idempotency key is the ACCOUNT and nothing else, so asking twice — from two
-// processes, after a restart, or concurrently — grants once. That property lives in
-// finance, which dedups inside the same transaction as the insert; this op only
-// carries the question across.
-func exposeStarter() {
-	zip.Post[plane.StarterIn, plane.Granted](cloud.Plane(), "/finance/starter", planeStarter,
-		zip.WithOperationID(plane.FinanceStarter),
-		zip.WithSummary("Issue the opening credit for an org, once"))
-}
-
-// Grants a new account its opening welcome credit and answers the amount granted.
-//
-// GRANTED ONCE, whoever asks. The idempotency key is the ACCOUNT and nothing
-// else, so asking twice — from two processes, after a restart, or concurrently —
-// grants exactly once; that property lives in the ledger, which dedups inside the
-// same transaction as the insert, and this op only carries the question across.
-//
-// The org is the CALLER'S and can never be named in the input; an empty subject
-// grants to the org's own account. It is published because the grant runs as
-// middleware on EVERY app's chain while the ledger has one writer and lives here
-// — a grant that could not reach it left new orgs unfunded and correctly
-// paywalled for a reason nobody had chosen.
-//
-// A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeStarter(ctx context.Context, in *plane.StarterIn) (*plane.Granted, error) {
-	org, err := callerOrg(ctx, "starter")
-	if err != nil {
-		return nil, err
-	}
-	subject := in.Subject
-	if subject == "" {
-		subject = org
-	}
-	cents, err := cloud.GrantStarter(ctx, org, subject)
-	if err != nil {
-		return nil, fmt.Errorf("starter: %w", err)
-	}
-	return &plane.Granted{Amount: plane.Amount(money.FromUSD(cents))}, nil
 }
 
 // usageReadLimit matches what the co-resident reader asks for, so the page a
