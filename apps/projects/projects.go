@@ -89,17 +89,6 @@ type state struct {
 	store *Store
 	blob  *blobStore
 	cf    *sites.Purger
-	// operatorOrgs are the orgs whose ADMINS may bind a CUSTOM domain to their sites
-	// WITHOUT proving they own it, in addition to a SuperAdmin — the platform
-	// operator (the deployment's own brand org) manages customer DNS, so its admin's
-	// bind is the vouch. Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated)
-	// overrides; default is the brand org (hanzo). Keyed by the VERBATIM validated
-	// IAM owner — the same value org() resolves, never a fold (operatorOrgsFromEnv
-	// says why). Membership of one of these orgs grants NOTHING on its own: the set
-	// is one half of a conjunction whose other half is IAM's org-admin bit (see
-	// domains.go vouches). Every OTHER caller self-serves: it claims the host pending
-	// and proves control with the DNS challenge (domains.go).
-	operatorOrgs map[string]bool
 	// resolver reads the custom-domain ownership challenge (domains.go); nil ⇒ the
 	// system resolver. Tests inject a fake so verification is deterministic.
 	resolver fqdn.Resolver
@@ -259,7 +248,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		store:        store,
 		blob:         openBlobStore(),
 		cf:           sites.NewPurger(b.Log),
-		operatorOrgs: operatorOrgsFromEnv(deps.Brand),
 		ai:           deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
 		bill:         cloud.NewResourceMeter(deps, hostingProvider),
 		apex:         env("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
