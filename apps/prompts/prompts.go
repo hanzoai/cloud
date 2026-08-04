@@ -170,19 +170,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // the :name param route so a real prompt can never shadow /metrics (and
 // "metrics"/"new" are reserved names).
 //
-// cloud.Bridge comes FIRST, ahead of every leaf: a typed op receives a
-// context.Context and its decoded In and nothing else, so the validated org crosses
-// on the context. Serve installs the same middleware binary-wide; nesting is harmless
-// (the inner one is the one the handler sees) and declaring it here is what makes the
-// subsystem self-sufficient when a test or a non-Serve composition root mounts it on
-// a bare app.
+// A typed op receives a context.Context and its decoded In and nothing else, so
+// the validated org crosses on the context. cloud.Bridge parks it there, and the
+// COMPOSER installs it, not this subsystem: the fused host once at its root
+// (serve.go), and a plugin program's constructor likewise. An install here would
+// hang middleware on prefixes with no routes beneath them, a program zip refuses
+// to compose.
 //
 // Every op is registered on the App with its WHOLE path rather than on a group: the
 // collection routes ARE /v1/prompts, and a group prefix composed with an empty leaf
 // yields "/v1/prompts/" — a different address. One registrar for all six keeps each
 // op's published path exactly the path the router matches.
 func routes(app cloud.Router, s *cloud.Service[state]) error {
-	app.Use(cloud.Bridge())
 	za := cloud.ZipApp(app)
 	if za == nil {
 		return fmt.Errorf("prompts.Mount: router exposes no op registry")

@@ -149,13 +149,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		zip.WithOperationID(plane.TreasuryReserve),
 		zip.WithSummary("Reserve fund balance"))
 
-	// cloud.Bridge carries into a typed op the request its signature drops — this
-	// surface reads the SuperAdmin bit, the caller's org and two query parameters
-	// off it. On the scoped Router it installs once per DECLARED prefix
-	// (/v1/admin/treasury, /v1/finance/accounts, /v1/finance/treasury) and nowhere
-	// else, and it must precede the leaves below: fiber runs middleware in
-	// registration order. Serve installs one app-wide too; nesting is harmless.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here: the composer owns it — the fused host
+	// installs it once at its root, and the plugin constructor does the same for a
+	// plugin program. This surface reads the SuperAdmin bit, the caller's org and
+	// two query parameters off the request that install parks on the context.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
 		log.Error("treasury: router exposes no op registry; the money surface would serve routes no projection knows")

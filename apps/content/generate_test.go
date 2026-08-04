@@ -108,6 +108,7 @@ func mountWith(t *testing.T, deps cloud.Deps) *zip.App {
 		deps.Domain = "api.test"
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := framework.Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("framework.Mount: %v", err)
 	}

@@ -150,12 +150,9 @@ const (
 // declared, so a NEW field cannot arrive unbounded and be noticed later.
 
 func routes(app cloud.Router, s *cloud.Service[*state]) {
-	// cloud.Bridge FIRST, on the ONE prefix this subsystem owns. serve.go
-	// installs it app-wide already; nesting is harmless and this one is scoped,
-	// so a host that ever stopped installing it globally does not silently turn
-	// every op below into an unauthenticated one.
-	app.Use(cloud.Bridge())
-
+	// cloud.Bridge belongs to the composer — the fused host installs it at its
+	// root, and a plugin program's constructor does the same — so the validated
+	// principal is already parked on the context when these ops run.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
 		s.Log.Error("label: the router exposes no op registry; the ground-truth surface would serve routes no projection knows")

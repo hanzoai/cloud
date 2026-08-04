@@ -15,11 +15,18 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// compose installs what a host installs. A subsystem never installs cloud.Bridge
+// (routes says why): the program's composer owns it — serve.go in production — so
+// a test app owes the same install, else every org-scoped op answers 403 for a
+// reason no composed program has.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mount brings up the index (the store) and the catalog (the lens) on one app,
 // exactly as apps.go orders them.
 func mount(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
 	if err := index.Mount(app, deps); err != nil {
 		t.Fatalf("index.Mount: %v", err)

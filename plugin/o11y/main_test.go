@@ -11,10 +11,12 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -35,7 +37,7 @@ func probeApp(t *testing.T, origins []string) *zip.App {
 	// every client-supplied authority header, and validates nothing — the shape a
 	// deployment has before it is pointed at an issuer, and the one that must not
 	// leave the chain trusting the wire.
-	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol, Logger: luxlog.NewNoOpLogger()})
 	app.Get("/v1/summary", func(c *zip.Ctx) error {
 		return c.JSON(200, map[string]string{"page_title": "Hanzo status"})
 	})
@@ -67,8 +69,14 @@ func TestSummaryReflectsAllowlistedBrandOrigin(t *testing.T) {
 	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "https://insights.hanzo.ai" {
 		t.Fatalf("ACAO = %q, want the reflected origin — a browser cannot read the status document without it", got)
 	}
-	if got := res.Header.Get("Vary"); got != "Origin" {
-		t.Fatalf("Vary = %q, want Origin", got)
+	// CONTAINS, not equals. What matters is that the response declares it varies by
+	// Origin, so a shared cache cannot hand this body to a different origin. Other
+	// middleware in the chain declare their own fields — markdown negotiation adds
+	// Accept — and each owns one member of the set. Pinning the whole value asserts
+	// that this app runs exactly one negotiating middleware, which is a fact about
+	// the chain and not about CORS.
+	if got := res.Header.Get("Vary"); !strings.Contains(got, "Origin") {
+		t.Fatalf("Vary = %q, want it to include Origin — a cache may otherwise cross-serve origins", got)
 	}
 }
 
@@ -134,7 +142,7 @@ func TestSummaryEmitsNothingWhenAllowlistEmpty(t *testing.T) {
 // gates verbatim. The chain must strip them whether or not a token validates.
 func TestChainStripsClientSuppliedAuthority(t *testing.T) {
 	pol, _ := edge.New("", "admin", edge.Policy{})
-	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol, Logger: luxlog.NewNoOpLogger()})
 
 	var seen struct{ org, user, admin string }
 	app.Get("/v1/summary", func(c *zip.Ctx) error {

@@ -21,6 +21,13 @@ import (
 
 const testSecret = "team-http-test-secret"
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (team.go says why): the program's composer installs it once at the root. In a
+// test the test IS the composer, so it owes the same thing — a test that skips it
+// tests a program where every typed op answers 403 for a reason that would never
+// exist in production. Same helper apps/integrations uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountTeam mounts the team subsystem with an in-memory VFS so the files plane
 // round-trips in tests.
 func mountTeam(t *testing.T) *zip.App { return mountTeamVFS(t, newMemVFS()) }
@@ -33,6 +40,7 @@ func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
 	t.Helper()
 	t.Setenv("SERVER_SECRET", testSecret)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: vfs}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -349,6 +357,7 @@ func TestBotsReadRouteTenantGate(t *testing.T) {
 func TestDegradedWithoutSecret(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "") // unset
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount must SUCCEED in degraded mode (health-only), got: %v", err)
 	}
@@ -369,6 +378,7 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	_ = Shutdown()
 	t.Setenv("SERVER_SECRET", "secret")
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app2)
 	if err := Mount(app2, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
 	}
@@ -384,6 +394,7 @@ func TestInsecureHatchRemoved(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "")
 	t.Setenv("TEAM_DEV_INSECURE", "1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

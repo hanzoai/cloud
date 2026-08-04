@@ -48,6 +48,7 @@ func mountWire(t *testing.T) *zip.App {
 	t.Setenv("CLOUD_PUBSUB_PORT", "-1") // random free port
 	t.Setenv("CLOUD_PUBSUB_STORE_DIR", t.TempDir())
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

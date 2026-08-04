@@ -116,15 +116,11 @@ type ops struct{ s *service }
 // calls it, and so do the package's tests, so a test can never exercise a router
 // this binary does not serve.
 func routes(app cloud.Router, s *service) {
-	// Bridge FIRST: a typed op receives only a context, so the validated org and the
-	// request its admin gates read reach it by being parked there. fiber runs
-	// middleware in registration order, so one installed after its leaves never runs.
-	// Installed through the SUBSYSTEM's own router, which scopes it to the prefixes
-	// this app declares — BOTH of them: this surface owns two top-level nouns
-	// (/v1/entitlements and /v1/orgs/:org/entitlements), and the /v1/<name> default
-	// MountPrefixes falls back to covers only the first, so plugin/entitlements/main.go
-	// passes manifest.PrefixesFor("entitlements") rather than relying on it.
-	app.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here: the composer installs it once at the
+	// root, after the identity check that mints the validated org and before any
+	// subsystem registers a route — an order only the whole program can assert.
+	// The ops below read what it parks (the validated org, and the request their
+	// admin gates inspect) off the context.
 
 	// Declared on GROUPS: the op's path is the prefix composed with the leaf, which
 	// is the identity every projection keys on, and cmd/zipdoc resolves the prefix

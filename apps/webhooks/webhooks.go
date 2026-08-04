@@ -132,15 +132,11 @@ func routes(app cloud.Router, s *cloud.Service[*state]) error {
 		return fmt.Errorf("webhooks.Mount: router exposes no zip.App, so no typed op could be registered")
 	}
 	g := app.Group("/v1/webhooks")
-	// The Bridge FIRST, bounded to the subtree webhooks owns: a typed op receives
-	// only a context, so the validated org has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Listen installs one app-wide too; nesting is harmless (the
-	// inner one is what the handler sees), and having it here is what makes this
-	// package's own tests — which mount on a bare app — exercise the same tenancy
-	// the binary does.
-	g.Use(cloud.Bridge())
-
+	// A typed op receives only a context, so the validated org has to be parked
+	// there. cloud.Bridge parks it, and the COMPOSER installs it, not this
+	// subsystem: the fused host once at its root (serve.go), and a plugin
+	// program's constructor likewise. An install here would only repeat the one
+	// the program already carries.
 	o := ops{s: s}
 	zip.Get(zapp, "/v1/webhooks", o.listEndpoints)
 	zip.Post(zapp, "/v1/webhooks", o.createEndpoint, zip.WithStatus(http.StatusCreated))

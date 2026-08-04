@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cek"
-	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
@@ -20,7 +19,6 @@ import (
 	"github.com/hanzoai/cloud/zapface"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
-	"github.com/zap-proto/zip/middleware"
 )
 
 // Serve boots the canonical compose root and mounts the selected subsystems.
@@ -215,142 +213,13 @@ func Listen(plugins []Plugin, enable []string) error {
 	if err != nil {
 		return err
 	}
-	app := zip.New(zip.Config{
-		Logger:         deps.Logger,
-		ReadBufferSize: cfg.ReadBufferSize,
-		BodyLimit:      cfg.BodyLimit,
-		MCP:            zip.MCPConfig{Source: source},
-		// Cloud's refusal renderer, in place of zip's default — which reads only a
-		// *zip.HTTPError and answers 500 for everything else, so a propagated 402
-		// or 403 reached the console as a dead card. See errmap.go.
-		ErrorHandler: ErrorHandler,
-		// Static Server fallback for responses the ProductionHeaders middleware
-		// cannot reach — the transport's own pre-routing errors (431/400) and any
-		// fiber path that bypasses the chain. Set to this deployment's brand so
-		// those bytes read Server: <brand>, never the framework default "zip" or
-		// "fasthttp" (zip>=v1.8.1 propagates this onto the fasthttp transport).
-		// Handled responses are still branded per-Host by ProductionHeaders.
-		ServerHeader: cfg.Brand,
-	})
 
-	// Canonical middleware pipeline. Order matters:
-	//  1. Recover         — panic → JSON 500
-	//  2. RequestID       — generate / propagate X-Request-Id
-	//  3. Tracing         — one OTel SERVER span per /v1/* request, over ZAP
-	//  4. Logger          — request-line log
-	//  5. SanitizeIdentity — establish a VALIDATED principal (see below)
-	app.Use(middleware.Recover())
-	app.Use(middleware.RequestID())
-
-	// Production response-header posture — the Stripe/Cloudflare/GitHub-grade
-	// signals plus a security floor, from ONE home in the framework so every
-	// service inherits the same wire posture. Registered right after RequestID
-	// (before the site edge and the business chain) so its headers ride out on
-	// every response: success, error, 404, AND the public-site static bytes.
-	//   - Server: the white-label brand of the request Host (BrandForHostOK) — a
-	//     lux/zoo caller is never served "hanzo" and no response leaks the
-	//     framework name; an unmatched Host falls back to this deployment's own
-	//     brand (cfg.Brand), never a framework/single-brand default.
-	//   - X-Api-Version: the build version (brand-neutral key) for support correlation.
-	//   - HSTS + nosniff: the always-safe security floor (no X-Frame-Options/CSP
-	//     here — the console SPA owns its own framing rules).
-	// X-Request-Id stays owned by RequestID above; the two compose.
-	app.Use(middleware.ProductionHeaders(middleware.ProductionHeadersConfig{
-		Brand:   func(host string) string { b, _ := BrandForHostOK(host); return b },
-		Neutral: cfg.Brand,
-		Version: cfg.Version,
-		HSTS:    true,
-	}))
-
-	// Markdown content negotiation. Registered here — outermost of the business
-	// chain, just inside Recover/RequestID — so its post-Continue transform sees
-	// the FINAL response body and re-serializes it via zap-proto/md when the
-	// caller asked for markdown (Accept: text/markdown or ?format=md). JSON stays
-	// the default for machines; cfg.MarkdownDefaultPrefixes lets designated
-	// agent endpoints (/v1/code/, /v1/agents/…) default to markdown. Touches NO
-	// handler and fails safe (a render error leaves the JSON intact). See
-	// middleware_markdown.go.
-	app.Use(MarkdownNegotiation(cfg.MarkdownDefaultPrefixes))
-
-	// Request tracing. Sits right after RequestID (so the span carries the
-	// request_id) and BEFORE identity/audit/billing/handlers, so the whole
-	// authenticated pipeline nests under one span and the span CONTEXT it writes
-	// via SetContext parents every downstream span (agent.run → agent.step →
-	// chat) into a single trace. Spans ship over the SAME global provider installed
-	// above by InstallTelemetry, landing in hanzoai/datastore.
-	// Health/readiness/metrics + non-/v1 paths are skipped (see traceable). See
-	// middleware_tracing.go.
-	app.Use(TracingMiddleware())
-
-	app.Use(middleware.Logger(deps.Logger))
-
-	// (A Reader never reaches here — it returns at serveReaderProxy above, opening
-	// no stores and no middleware pipeline. This body is the Writer path only.)
-
-	// Public site edge (clients/sites). Installed FIRST — after Recover/RequestID/
-	// Logger, BEFORE SanitizeIdentity + BillingGate — so a request whose Host is a
-	// published-site host (`<slug>.hanzo.app`) is served the site's static bytes
-	// from OUR S3 and returns HERE, never entering the authenticated/billed API
-	// pipeline. A published site is a PUBLIC artifact: no IAM JWT, no balance gate.
-	// For every other Host this middleware calls Continue() and the pipeline below
-	// runs unchanged. The slug→{org,bucket,prefix} resolver is the projects store,
-	// injected at its Mount via sites.SetResolver; until then a site host 404s
-	// honestly. Org isolation (org+prefix come only from the store keyed by the
-	// validated slug; object keys are rooted-clean) lives in clients/sites.
-	// The edge asks the app that owns the store when it is not in this process,
-	// which in production is always: the pod boots ~25 single-app processes, so
-	// the registry projects.Mount writes is nil here. Co-resident still wins with
-	// no hop — currentResolver prefers the in-process one.
-	sites.SetFallbackResolver(planeSites{})
-	app.Use(sites.New(sites.ConfigFromEnv(cfg.Domain), deps.Logger).Middleware())
-
-	// Edge policy — the "gateway role" cloud absorbs to serve the public
-	// api.hanzo.ai edge directly (no KrakenD gateway hop). Runs BEFORE identity by
-	// design:
-	//   - EdgeCORS answers the browser OPTIONS preflight (which carries no
-	//     credentials) and short-circuits it, so a preflight never reaches auth.
-	//     No-op unless CLOUD_CORS_ORIGINS is set (the shared ingress owns CORS on
-	//     the recommended rollout — enabling both would double the ACAO header).
-	//   - EdgeRateLimit caps an ANONYMOUS per-IP flood before the JWKS/validate/
-	//     downstream work it would trigger — the one gap ScopeRateLimit (which keys
-	//     on the validated org, below) structurally can't see. Keyed on the
-	//     public client IP; in-cluster direct callers (no X-Forwarded-For) are
-	//     exempt, matching the standalone gateway's public-only scope. See
-	//     middleware_edge.go.
-	app.Use(EdgeCORS(deps.GatewayPolicy))
-	app.Use(EdgeRateLimit(deps.GatewayPolicy))
-
-	// Identity trust boundary — cloud strips every client-supplied authority header
-	// and re-injects only what a VALIDATED IAM principal justifies.
-	//
-	// HIP-0519 says identity is verified once, at the edge, and that is the shape
-	// to reach. It rests on ONE assumption: the gateway is the only ingress. That
-	// assumption does not hold here yet, and the estate's own red-team probe says
-	// so — with this middleware removed, a request carrying a forged X-Org-Id,
-	// X-User-Id and X-User-IsAdmin reads another org's secret VALUE from the
-	// in-cluster KMS listener:
-	//
-	//	PROBE (b) forged org + forged X-User-Id + IsAdmin → 200 {"value":"…"}
-	//
-	// So this stays until service listeners are unreachable except through the
-	// gateway. Removing it is a network-policy change first and a code change
-	// second, and doing the code half alone is a cross-tenant secret read.
-	// red_orgscope_isolation_test.go and TestAudit_AnonRequestNotAttributedToForgedOrg
-	// fail the moment it is dropped; they are the gate on that work, not obstacles
-	// to it.
-	app.Use(IdentityMiddleware(cfg))
-
-	// Typed-op bridge. A zip.Get[In, Out] handler receives a context.Context and
-	// its decoded In and nothing else, so the per-request values it still needs —
-	// the validated org, the request a proxying subsystem forwards identity from,
-	// the slot a creator writes 201/202 into — cross on the context. It lives HERE
-	// rather than in each subsystem for two reasons: it must run AFTER the identity
-	// boundary above (the org it parks is only trustworthy once SanitizeIdentity
-	// has minted it) and BEFORE every typed route (fiber runs middleware in
-	// registration order, and MountAll registers routes below), and a subsystem
-	// whose routes are spread across several top-level nouns owns no single prefix
-	// to hang it on. See typed.go.
-	app.Use(Bridge())
+	// The app, and everything a Hanzo program carries, from the ONE constructor —
+	// see app.go. This body used to build it inline, which is why the o11y binary
+	// could assemble a different one by hand and be missing six of these without
+	// anything saying so. procName is what this process calls itself: its single
+	// subsystem's name, or "cloud" when it carries several.
+	app := App(procName(plugins), cfg, deps, source)
 
 	// Console identity = the ONE validated principal, not the embedded casibase account
 	// model. When a principal is present, /v1/get-account reflects it so the operator
@@ -406,7 +275,6 @@ func Listen(plugins []Plugin, enable []string) error {
 	// org by default: it senses and reports, and enforces nothing until an operator
 	// arms that org at PUT /v1/gateway/config.
 	app.Use(AbuseGate(deps, deps.Traffic))
-
 
 	// Billing gate. Sits at the (future) Auth position — after identity is
 	// established by Recover/RequestID/Logger and before any subsystem mounts —

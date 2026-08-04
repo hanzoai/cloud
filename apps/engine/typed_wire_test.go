@@ -150,6 +150,13 @@ func (f *fakeEngine) handler() http.Handler {
 	})
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root. In a
+// test the test IS the composer, so it owes the same thing — a test that skips it
+// tests a program where every op answers 403 for a reason that would never exist
+// in production. Same helper apps/integrations uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // harness mounts the app against a fake upstream and returns both.
 func harness(t *testing.T) (*zip.App, *fakeEngine) {
 	t.Helper()
@@ -160,6 +167,7 @@ func harness(t *testing.T) (*zip.App, *fakeEngine) {
 	t.Setenv("ENGINE_API_KEY", "svc-key-test")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("enginetest"), DisableStartupMessage: true})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("enginetest"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -435,6 +443,7 @@ func TestStatusIsAnHonestLens(t *testing.T) {
 	}
 
 	down := zip.New(zip.Config{Logger: luxlog.New("enginetest"), DisableStartupMessage: true})
+	compose(down)
 	t.Setenv("ENGINE_UPSTREAM", "http://127.0.0.1:1") // nothing listens
 	if err := Mount(down, cloud.Deps{Logger: luxlog.New("enginetest"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)

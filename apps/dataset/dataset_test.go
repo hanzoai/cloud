@@ -83,9 +83,16 @@ func (l *ledger) charged() []int64 {
 	return append([]int64(nil), l.debit...)
 }
 
+// compose installs what the program's composer installs — cloud.Bridge, once at
+// the app root. A subsystem never installs its own, so a test app owes the same
+// root install; without it every org-scoped op answers a 403 no production
+// program would produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountHTTP(t *testing.T, p *plane) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := mount(p, app); err != nil {
 		t.Fatalf("mount: %v", err)
 	}

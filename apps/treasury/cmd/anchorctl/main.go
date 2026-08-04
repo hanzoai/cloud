@@ -43,8 +43,8 @@ import (
 	"strings"
 	"time"
 
-	ethereum "github.com/luxfi/geth"
 	"github.com/luxfi/crypto"
+	ethereum "github.com/luxfi/geth"
 	"github.com/luxfi/geth/common"
 	"github.com/luxfi/geth/core/types"
 	"github.com/luxfi/geth/ethclient"

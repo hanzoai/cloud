@@ -42,10 +42,10 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	mounted = s
 	t.Cleanup(func() { mounted = nil })
 	app := zip.New(zip.Config{Logger: log})
-	// cloud.Bridge FIRST, exactly as Mount installs it: a typed op receives only a
-	// context, so the request its handlers read the SuperAdmin bit and the org off
-	// crosses on that. Registered before the leaves — fiber runs middleware in
-	// registration order.
+	// cloud.Bridge at the root, standing in for the composer that owns it in
+	// production: a typed op receives only a context, so the request its handlers
+	// read the SuperAdmin bit and the org off crosses on that. Registered before
+	// the leaves — fiber runs middleware in registration order.
 	app.Use(cloud.Bridge())
 	o := ops{s: s}
 	zip.Get(app, "/v1/finance/treasury", o.myTreasury)

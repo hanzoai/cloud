@@ -138,15 +138,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// EVERY org and enforcing now would 402 all users. Flip on once the catalog
 	// licenses "world" to a tier (and confirm /v1/world/news may 403 unvalidated —
 	// RequireProduct refuses anonymous callers). See clients/entitlements.
-	// Bridge FIRST: a typed op receives only a context, so the facts its signature
-	// drops — the validated org, and the request the PROJECT claim and the ?project
-	// cross-check ride on — reach it by being parked there. fiber runs middleware in
-	// registration order, so one installed after its leaves never runs. Installed
-	// through the scope's Use, once per declared prefix, so it covers exactly what
-	// this subsystem serves and nothing else; Serve installs the same bridge for the
-	// whole binary and nesting is harmless, which keeps these ops scoped even in a
-	// test app that never calls Serve.
-	app.Use(cloud.Bridge())
+	// A typed op receives only a context, so the facts its signature drops — the
+	// validated org, and the request the PROJECT claim and the ?project
+	// cross-check ride on — reach it by being parked there. cloud.Bridge parks
+	// them, and the composer owns that install — the fused host at its root, a
+	// plugin program in its constructor — so this package only reads them.
 
 	// The ops are declared on the APP with absolute paths rather than on a group,
 	// because one of them IS the prefix: GET /v1/world has no leaf, and a group

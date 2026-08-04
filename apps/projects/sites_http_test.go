@@ -88,6 +88,7 @@ func mountSites(t *testing.T, ai *fakeAI, commerceURL string) *zip.App {
 		t.Fatalf("metering.New: %v", err)
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	var aic cloud.AIClient
 	if ai != nil {
 		aic = ai

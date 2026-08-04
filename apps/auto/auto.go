@@ -118,11 +118,10 @@ func routes(app cloud.Router, s *cloud.Service[struct{}]) {
 	g := app.Group("/v1/auto")
 	o := ops{s: s}
 
-	// Bridge FIRST: a typed op receives only a context, so the validated
-	// principal reaches it by being parked there — never as an In field,
-	// which is caller-supplied and would be a cross-tenant read the caller
-	// asserted for itself.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is not installed here: the composer installs it once at the
+	// root, after the identity check that mints the validated org and before any
+	// subsystem registers a route — an order only the whole program can assert.
+	// The ops below read what it parks off the context.
 
 	zip.Get(g, "/status", o.status)
 	zip.Get(g, "/pieces", o.pieces)

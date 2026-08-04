@@ -90,12 +90,22 @@ func TestSurface_IsOnlyUnderRisk(t *testing.T) {
 // model state and a per-tenant disk write. A note explaining why an expensive op
 // is not metered is worth exactly as much as the plane it defers to.
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (mount says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing — and a test that skips it does not
+// test a stricter program, it tests a program where every org-scoped op answers
+// 403 for a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountApp mounts risk the way plugin/risk does — the whole Mount, so the
 // projection ledgers below read the surface a deployed binary serves and not a
 // test-only subset.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("risktest"), DisableStartupMessage: true})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("risktest"), Brand: brandA, DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)

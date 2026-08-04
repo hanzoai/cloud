@@ -13,9 +13,17 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (Mount says why beside its registrations): the program's composer does, once
+// at the root. In a test the test IS the composer, so it owes the same install —
+// skipping it does not test a stricter program, it tests one where every
+// org-scoped op answers 403 for a reason production could never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mount(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Domain: "api.test"}); err != nil {
 		t.Fatalf("search.Mount: %v", err)
 	}

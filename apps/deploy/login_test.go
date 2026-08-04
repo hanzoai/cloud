@@ -99,6 +99,7 @@ func TestWantsDocument(t *testing.T) {
 // navigation gets bounced to sign-in. Neither is ever served the data.
 func TestGuardRefusesNonAdmin(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, fakeService())
 
 	// API call (no Accept, the shape every API client and the existing e2e sends).
@@ -364,6 +365,7 @@ func TestSignInFailsClosedWithoutPublicOrigin(t *testing.T) {
 		verify: func(string) (cloud.VerifiedIdentity, error) { return cloud.VerifiedIdentity{}, nil },
 	} // publicURL deliberately empty
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, svc)
 
 	// A forged Host must NOT be adopted as the origin.
@@ -613,6 +615,7 @@ func signinApp(t *testing.T, issuer string) (*zip.App, *fakeIAM) {
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, svc)
 	return app, iam
 }

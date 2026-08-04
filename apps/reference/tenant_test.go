@@ -43,6 +43,13 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root. In a
+// test the test IS the composer, so it owes the same thing — a test that skips it
+// tests a program where every org-scoped op answers 403 for a reason that would
+// never exist in production. Same helper apps/integrations uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mount brings the plane up on a bare app with a temp data dir and no
 // warehouse — every test here is about tenancy, precedence and bounds, and none
 // of them needs one.
@@ -57,6 +64,7 @@ func mount(t *testing.T) *zip.App {
 		t.Fatal("mount() is the no-warehouse harness; a test that wants one builds its own service (see plant)")
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

@@ -27,11 +27,20 @@ import (
 
 var httpCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes says why): the program's composer installs it once at the root, after
+// the identity check and before any route registers. In a test the test IS the
+// composer, so it owes the same install — a test that skips it does not test a
+// stricter program, it tests one where every org-scoped op answers 403 for a
+// reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 // mountHTTP puts the flag surface on a bare app over a temp-dir store tree.
 func mountHTTP(t *testing.T) *zip.App {
 	t.Helper()
 	c := newTestClient(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	svc := &cloud.Service[state]{
 		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "flags"),
 		State: state{client: c},

@@ -75,11 +75,10 @@ type ops struct{ s *cloud.Service[state] }
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	// cloud.Bridge carries into a typed op the request its signature drops — here
 	// the validated org, which is the ONLY tenant key this surface may use and can
-	// never be an In field. On the scoped Router it installs once per DECLARED
-	// prefix (/v1/kb/connectors, /v1/kb/graph, /v1/kb/import, /v1/kb/search) and
-	// nowhere else, and it must precede the leaves below: fiber runs middleware in
-	// registration order. Serve installs one app-wide too; nesting is harmless.
-	app.Use(cloud.Bridge())
+	// never be an In field. The COMPOSER installs it, not this subsystem: the
+	// fused host once at its root (serve.go), and a plugin program's constructor
+	// likewise. An install here would hang middleware on declared prefixes with no
+	// routes beneath them, a program zip refuses to compose.
 	g := app.Group("/v1/kb")
 	o := ops{s: s}
 	zip.Post(g, "/search", o.search)                            // RAG entry point

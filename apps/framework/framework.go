@@ -93,12 +93,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	g := app.Group("/v1/framework")
 
-	// The bridges, FIRST: a typed op receives only a context, so every request
-	// fact its signature drops has to be parked there — the validated org by
-	// cloud.Bridge, the two header-only identity facts by bridgeFacts. fiber runs
-	// middleware in registration order, so one installed after its leaves never
-	// runs; and the group bounds them to the subtree this subsystem serves.
-	g.Use(cloud.Bridge(), zip.H(bridgeFacts))
+	// bridgeFacts FIRST: a typed op receives only a context, so the two
+	// header-only identity facts its signature drops have to be parked there.
+	// fiber runs middleware in registration order, so one installed after its
+	// leaves never runs; and the group bounds it to the subtree this subsystem
+	// serves.
+	//
+	// cloud.Bridge is not installed here. Whoever composes the program installs it
+	// once at the root — after the identity check that mints the validated org and
+	// before any subsystem registers a route (serve.go) — because that order is a
+	// property of the whole program and no subsystem can assert it for itself.
+	g.Use(zip.H(bridgeFacts))
 
 	o := ops{s: s}
 

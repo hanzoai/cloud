@@ -216,15 +216,12 @@ func build(b cloud.Base) (state, error) {
 type ops struct{ s *cloud.Service[state] }
 
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Bridge FIRST: a typed op receives only a context, so the validated org — and,
-	// for the three writes, the request their ORG-ADMIN claim and their billing
-	// attribution ride on — reach it by being parked there. fiber runs middleware in
-	// registration order, so one installed after its leaves never runs. Installed
-	// through the scope's Use, once per declared prefix, which is /v1/cloud: this
-	// subsystem is named "venue" and serves /v1/cloud, so the /v1/<name> default
-	// would have covered nothing it registers.
-	app.Use(cloud.Bridge())
-
+	// A typed op receives only a context, so the validated org — and, for the
+	// three writes, the request their ORG-ADMIN claim and their billing
+	// attribution ride on — reach it by being parked there by cloud.Bridge. This
+	// subsystem does not install the bridge: the program's composer does, once at
+	// the root, after the identity check that mints the org and before any
+	// subsystem registers a route — an order only the composer can hold.
 	o := ops{s: s}
 	// Static /v1/cloud/accounts registers before the /:provider wildcards.
 	z := cloud.ZipApp(app)

@@ -63,6 +63,7 @@ var sectionRoutes = map[string]string{
 // them would be gating something it has no business gating.
 func TestSectionsAreByteIdenticalToTheBundle(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -126,6 +127,7 @@ func TestSectionsAreByteIdenticalToTheBundle(t *testing.T) {
 // 403s in admin.go and enablement.go, the 404 from GET /v1/pricing/model/:name).
 func TestSectionsDegradeWithTheBundlesStatus(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

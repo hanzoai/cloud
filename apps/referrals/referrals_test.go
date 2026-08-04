@@ -84,9 +84,17 @@ func mountWith(t *testing.T, c commerce) (*zip.App, *cloud.Service[state]) {
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	return app, s
 }
+
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer installs it once at the root, after
+// the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // req drives one HTTP request. org sets a VALIDATED principal (X-Org-Id +
 // X-User-Id, the tenant() gate); admin additionally sets X-User-IsAdmin.
@@ -579,6 +587,7 @@ func lower(s string) string {
 // against a temp DataDir, proving the package boots as the binary loads it.
 func TestMount(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

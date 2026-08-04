@@ -25,6 +25,7 @@ func fakeGit(t *testing.T, rev string, files []plane.File, fault error) {
 	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
 
 	app := zip.New(zip.Config{AppName: "git", Logger: luxlog.New("gittest")})
+	compose(app)
 	zip.Post[plane.FilesIn, plane.Files](app, "/git/files",
 		func(ctx context.Context, _ *plane.FilesIn) (*plane.Files, error) {
 			if fault != nil {

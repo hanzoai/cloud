@@ -129,14 +129,12 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 }
 
-// TestBridgeIsInstalledOnEveryPrefix is the assertion the conversion turns on, and
-// the latent defect it closed. A typed op reads its tenant from the context, which
-// only cloud.Bridge parks there; without it every op here would see NO org and
-// answer 403 to a perfectly valid request. This subsystem answers on THREE prefixes
-// that share no common root, so one Bridge is not enough — each prefix needs its
-// own, and this proves all three run by asserting that a validated caller is
-// SERVED on every route while an anonymous one is refused.
-func TestBridgeIsInstalledOnEveryPrefix(t *testing.T) {
+// TestValidatedOrgReachesEveryPrefix is the tenant-boundary assertion. A typed op
+// reads its tenant from the context, which only cloud.Bridge parks there — and the
+// composer installs that once at the root (compose in these tests, serve.go in
+// production), so it covers every prefix this subsystem answers on. This proves a
+// validated caller is SERVED on every route while an anonymous one is refused.
+func TestValidatedOrgReachesEveryPrefix(t *testing.T) {
 	f := &fakeZT{
 		services: []map[string]any{{"id": "svc-a", "name": "checkout", "roleAttributes": []string{"org-acme"}}},
 		routers:  []map[string]any{{"id": "er-1", "name": "sfo-1", "roleAttributes": []string{"org-acme"}, "isOnline": true}},
@@ -147,7 +145,7 @@ func TestBridgeIsInstalledOnEveryPrefix(t *testing.T) {
 		"/v1/networks", "/v1/networks/routers", "/v1/networks/org-acme", "/v1/mesh/services",
 	} {
 		if code, body := do(t, app, http.MethodGet, path, "acme"); code != http.StatusOK {
-			t.Errorf("GET %s as a validated caller = %d (%s), want 200 — is cloud.Bridge installed on this prefix?",
+			t.Errorf("GET %s as a validated caller = %d (%s), want 200 — did the root cloud.Bridge park the org?",
 				path, code, body)
 		}
 	}

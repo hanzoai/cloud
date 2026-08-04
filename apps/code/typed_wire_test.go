@@ -219,8 +219,9 @@ func TestSearchDegradedKeyIsConditional(t *testing.T) {
 
 // TestFailsClosedWithoutAValidatedPrincipal is the tenancy claim: no request
 // field can name the tenant, so an anonymous caller reads and writes nothing —
-// and the Bridge routes() installs is what carries the validated org to every op,
-// so this also proves that middleware precedes the leaves.
+// and compose has installed cloud.Bridge at the root exactly as the program's
+// composer does, so each 403 is an op refusing a missing org, never an artifact
+// of a missing install.
 func TestFailsClosedWithoutAValidatedPrincipal(t *testing.T) {
 	app, _ := newTestApp(t)
 	for _, r := range []struct {
