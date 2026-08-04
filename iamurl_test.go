@@ -79,32 +79,37 @@ func TestIAMExternalIsNotTheSameQuestionAsTheAddress(t *testing.T) {
 	}
 }
 
-// A peer one socket away beats a public URL.
+// A SIBLING is reached by name, not by its public URL.
 //
 // `ai` is a plugin of this same binary running as its own process. Resolving it
-// to https://api.hanzo.ai sends the pod out through Cloudflare and back, and
-// makes it mint an OAuth token to authenticate to its own deployment — to reach
-// code it could have called over the plane. The gateway stays as the fallback,
-// so a deployment naming no peer is unchanged.
-func TestAIPrefersTheInClusterPeerOverThePublicGateway(t *testing.T) {
+// to https://api.hanzo.ai sent the pod out through Cloudflare and back, minting
+// an OAuth token to authenticate to its own deployment — to reach code one
+// socket away. Which client a process gets is decided by WHAT IT IS: a process
+// that does not carry `ai` has a sibling and asks the plane; the process that IS
+// `ai` takes the real transport, because asking the plane there would be it
+// calling itself.
+func TestASiblingReachesAIByNameNotByURL(t *testing.T) {
 	log := luxlog.NewNoOpLogger()
 
-	both := &Config{
-		AIZAPAddr:          "/run/hanzo/ai.sock",
+	sibling := &Config{
+		Enable:             []string{"agents"}, // does not carry ai
 		AIBaseURL:          "https://api.hanzo.ai/v1",
 		AIAPIKey:           "sk-live",
 		AIAuthClientID:     "hanzo-cloud",
 		AIAuthClientSecret: "shh",
 	}
-	if got := pickCompletionsClient(both, log); got != nil {
-		if _, isHTTP := got.(interface{ BaseURL() string }); isHTTP {
-			t.Error("a public gateway was chosen while an in-cluster peer was named")
-		}
+	if _, ok := pickCompletionsClient(sibling, log).(peerAI); !ok {
+		t.Error("a sibling took the public gateway while `ai` was one socket away")
 	}
 
-	// No peer named: the gateway still answers, so this is inert by default.
-	gatewayOnly := &Config{AIBaseURL: "https://api.hanzo.ai/v1", AIAPIKey: "sk-live"}
-	if pickCompletionsClient(gatewayOnly, log) == nil {
-		t.Error("no peer and a configured gateway resolved to nothing — the fallback regressed")
+	// The ai process itself must NOT ask the plane — that is a self-call.
+	self := &Config{Enable: []string{"ai"}, AIBaseURL: "https://api.hanzo.ai/v1", AIAPIKey: "sk-live"}
+	if _, ok := pickCompletionsClient(self, log).(peerAI); ok {
+		t.Error("the ai process resolved itself to the plane — it would call itself forever")
+	}
+
+	// Embeddings follow the same rule, so one is not a cheaper way round.
+	if _, ok := pickEmbedClient(sibling, log).(peerAI); !ok {
+		t.Error("embeddings took the public gateway while `ai` was one socket away")
 	}
 }
