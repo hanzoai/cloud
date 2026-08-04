@@ -181,21 +181,19 @@ func TestSourceStampedIntoAttributes(t *testing.T) {
 // ADMITTED one reaches requireDatastore and returns 503 (no datastore in tests).
 // So "not 403" ⇒ the tenant gate admitted the request.
 
-// TestEvent_NoPrincipalNoKeyIsAnonymous: a caller with NO principal and NO key is not
-// refused AT THE GATE — it takes the anonymous lane (public.go), attributed to the
-// reserved public tenant. The canonical-Event wire carries no `type`, so canonicalType
-// folds it to "event", which is not on the anonymous allowlist: nothing is stored, and
-// the door answers 401 ingest_key_required rather than pretending otherwise. What is
-// refused at the GATE is a presented credential that does not resolve — 403
+// TestEvent_NoPrincipalNoKeyIsRefused: a caller with NO principal and NO key is
+// refused AT THE GATE — 401 ingest_key_required, whatever it sent. A pageview is not
+// a special case any more: there is no lane that stores an unattributable event.
+// What a PRESENTED but unresolvable credential gets is 403
 // (TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost).
-func TestEvent_NoPrincipalNoKeyIsAnonymous(t *testing.T) {
+func TestEvent_NoPrincipalNoKeyIsRefused(t *testing.T) {
 	app := mountApp(t)
-	code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"event":"e","distinctId":"d"}`)
-	refusedAnon(t, "no-principal no-key /v1/event", code, body)
-	// A pageview on the same credential-less request IS stored — it reaches the
-	// warehouse (503 here, no datastore in the harness).
-	if code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
-		t.Fatalf("anonymous pageview want 503 (admitted), got %d (%s)", code, body)
+	for _, body := range []string{
+		`{"event":"e","distinctId":"d"}`,
+		`{"batch":[{"type":"pageview"}]}`,
+	} {
+		code, got := doBody(t, app, http.MethodPost, "/v1/event", "", "", body)
+		refusedAnon(t, "no-principal no-key "+body, code, got)
 	}
 }
 
@@ -232,15 +230,13 @@ func TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost(t *testing.T) {
 	}
 }
 
-// TestEvent_NoBrandHostFallback is THE invariant, and it now holds on EVERY door rather
-// than only the canonical one: the request Host NEVER selects a tenant. It used to be a
-// distinction — /v1/event ignored the Host while the deprecated aliases resolved
-// anonymous traffic on a recognized brand host to that BRAND's REAL org, a real tenant
-// picked by a caller-settable header. That was the hole; every door now takes the same
-// anonymous lane, so the Host buys nothing anywhere.
+// TestEvent_NoBrandHostFallback is THE invariant: the request Host NEVER selects a
+// tenant. It used to — the deprecated aliases resolved anonymous traffic on a
+// recognized brand host to that BRAND's REAL org, a real tenant picked by a
+// caller-settable header.
 //
-// A pageview is admitted identically on a brand host and on an unrelated one, and the
-// commerce payload the brand fallback used to wave through is dropped on both.
+// Now a Host buys nothing anywhere because there is nothing to buy: without a
+// credential every door refuses, brand host or not.
 func TestEvent_NoBrandHostFallback(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
@@ -248,11 +244,9 @@ func TestEvent_NoBrandHostFallback(t *testing.T) {
 	commerce := `{"batch":[{"type":"event","event":"order_completed","revenue":999}]}`
 	path := canonDoor
 	for _, host := range []string{"hanzo.ai", "zoo.ngo", "evil.example.com"} {
-		if code, body := doHost(t, app, path, "", "", host, pageview); code != http.StatusServiceUnavailable {
-			t.Fatalf("anonymous pageview %s on host %q want 503 (admitted to the public tenant), got %d (%s)",
-				path, host, code, body)
-		}
-		code, body := doHost(t, app, path, "", "", host, commerce)
+		code, body := doHost(t, app, path, "", "", host, pageview)
+		refusedAnon(t, "anonymous pageview "+path+" on host "+host, code, body)
+		code, body = doHost(t, app, path, "", "", host, commerce)
 		refusedAnon(t, "anonymous commerce "+path+" on host "+host, code, body)
 	}
 }

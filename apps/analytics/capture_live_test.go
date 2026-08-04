@@ -242,10 +242,10 @@ func livePost(t *testing.T, app *zip.App, path, user, org, body string) (int, []
 	return resp.StatusCode, b
 }
 
-// TestLiveAnonymousCapture proves the marketing-site path: an ANONYMOUS pageview
-// (no principal) posted with no credential lands under the reserved public tenant,
-// resolved server-side — never from a client field.
-func TestLiveAnonymousCapture(t *testing.T) {
+// TestLiveAnonymousCaptureIsRefused proves it against the real warehouse: a pageview
+// posted with no credential is refused 401 and writes NO row. A brand Host buys
+// nothing — attribution is the key, and there is no tenant to fall back to.
+func TestLiveAnonymousCaptureIsRefused(t *testing.T) {
 	ready, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := datastore.Wait(ready); err != nil {
@@ -256,35 +256,37 @@ func TestLiveAnonymousCapture(t *testing.T) {
 	landDirect(t)
 	app := liveApp(t)
 
-	// A unique session id lets us find exactly this run's row (an anonymous row
-	// carries no caller properties, so the marker rides a projected column).
+	// A unique session id lets us look for exactly this run's row. Nothing must
+	// carry it.
 	marker := "anon-" + time.Now().UTC().Format("150405.000")
 	body := `{"batch":[{"type":"pageview","distinctId":"visitor-x","sessionId":"` + marker + `","product":"site","path":"/"}]}`
 
 	req := httptest.NewRequest(http.MethodPost, canonDoor, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Host = "hanzo.ai" // brand host buys NOTHING; the row lands under $public
+	req.Host = "hanzo.ai" // a brand host names no tenant
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("anon POST: %v", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("anon capture = %d, want 200", resp.StatusCode)
-	}
+	raw, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anon capture = %d (%s), want 401", resp.StatusCode, raw)
+	}
+	var e struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(raw, &e); err != nil || e.Code != "ingest_key_required" {
+		t.Fatalf("anon capture code = %q (%s), want ingest_key_required", e.Code, raw)
+	}
 
 	rows, err := datastore.Query(ctx,
 		"SELECT org, kind, product FROM "+factTable+" WHERE session_id = ?", marker)
 	if err != nil {
 		t.Fatalf("readback: %v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("anon rows = %d, want 1", len(rows))
-	}
-	tenant := aString(rows[0]["org"])
-	t.Logf("anonymous pageview landed: org=%q kind=%q product=%q",
-		tenant, aString(rows[0]["kind"]), aString(rows[0]["product"]))
-	if tenant != publicTenant {
-		t.Fatalf("anon tenant = %q, want %s (no Host names a tenant)", tenant, publicTenant)
+	if len(rows) != 0 {
+		t.Fatalf("anon rows = %d, want 0 — a refused beacon must reach no partition, got org=%q",
+			len(rows), aString(rows[0]["org"]))
 	}
 }
