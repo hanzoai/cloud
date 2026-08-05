@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,7 +50,7 @@ func gateApp(t *testing.T) *zip.App {
 	t.Helper()
 	// The scorer's socket is resolved under a directory that has none, so
 	// "not deployed" is the state of the world unless a test installs a scorer.
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	shortRuntimeDir(t)
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
@@ -109,7 +110,7 @@ func TestRiskGate_ANotDeployedScorerDoesNotCloseTheCreditDoor(t *testing.T) {
 // property one layer down, where the two facts are actually told apart — and it
 // asserts the SHAPE of the answer, which the status code above cannot see.
 func TestScoreOverPlane_AnUndeployedPeerIsAbsentRatherThanAnOutage(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	shortRuntimeDir(t)
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
 
@@ -131,6 +132,30 @@ func TestScoreOverPlane_AnUndeployedPeerIsAbsentRatherThanAnOutage(t *testing.T)
 	if v.Scored() {
 		t.Error("an absent scorer produced a SCORED verdict — an unscored allow must never read as a clean one")
 	}
+}
+
+// shortRuntimeDir points the fleet's socket scheme at an anonymous, SHORT-named
+// directory and returns nothing, because the address is all the caller needs.
+//
+// A unix socket address is capped near a hundred bytes (104 on darwin), and
+// t.TempDir embeds the calling test's own name — so
+// TestScoreOverPlane_AnUndeployedPeerIsAbsentRatherThanAnOutage produced a
+// sockaddr over the cap and every dial answered `connect: invalid argument`.
+// That reads exactly like the "peer is not deployed" case these tests assert,
+// so the suite was red on any Mac while green in CI, and red for a reason that
+// looked like the thing under test.
+//
+// Same fix, same reason, as servePeerLedger in ledger_peer_test.go. Tests that
+// deliberately want an UNUSABLE address build one explicitly (see
+// unusableRuntimeDir) — this is only for the ones that want a working socket.
+func shortRuntimeDir(t *testing.T) {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Setenv("ZIP_RUNTIME_DIR", dir)
 }
 
 // unusableRuntimeDir points the fleet's socket scheme at a directory whose socket
