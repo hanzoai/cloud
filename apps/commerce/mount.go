@@ -221,7 +221,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// scorer is installed as a plane client — cloud.SetRiskScorer's first producer
 	// (risk.go).
 	installRiskScorer(lg)
-	// THE CREDIT SCREEN, resolved ONCE and composed onto every door that mints.
+	// THE CREDIT SCREEN, resolved ONCE and composed onto the HANDLER of every door
+	// that mints.
 	//
 	// There are two, and they are registered a hundred lines apart: the browser's
 	// POST /v1/billing/topup/token below, and the agent's typed POST /v1/payments in
@@ -229,9 +230,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// so both mint spendable balance from a settled charge — which is why the screen is
 	// named here, at the composition root, and handed to each registration rather than
 	// being reached for at either. A gate fetched independently at each door is a gate
-	// that can be fetched at one of them, and that is exactly the state this closed:
-	// the screen guarded the browser and the typed op ran the same core unscreened, so
-	// the whole control had a second entrance with an MCP tool pointed at it.
+	// that can be fetched at one of them.
+	//
+	// IT GOES ON THE HANDLER, NOT ON THE ROUTER, and that is what makes it a control on
+	// the MINT rather than on a URL. A typed op is recorded once and projected four ways
+	// — REST, MCP tool, by-name call, CLI — and all four dispatch to the op's handler,
+	// while router middleware wraps only the fiber handler REST is served through. The
+	// screen was mounted on a router; `takePayment` is in tools/list; so an agent's
+	// tools/call reached the same authorized deposit unscreened and taught the model
+	// nothing when it settled. Both doors now WRAP THEIR HANDLER with it (risk.go
+	// screen.route, screen.op), which is the one composition point every projection has
+	// to run through.
 	//
 	// It is one VALUE, not one call per door, so there is no arrangement of these two
 	// registrations in which they hold different screens.
@@ -252,9 +261,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// AND A DOOR ONTO THE MINT IS SCREENED, which is why the screen is passed in. The
 	// shared core is the whole argument: POST /v1/payments reaches the same authorized
-	// deposit the top-up does, so leaving it unscreened left the risk gate below with an
-	// unguarded twin — and the twin is the one published as an MCP tool. exposePayments
-	// puts the screen on the WRITE only; the receipt read mints nothing.
+	// deposit the top-up does, and it is published as an MCP tool besides — so the
+	// screen is composed onto its HANDLER, where every projection of the op runs it,
+	// rather than onto the router only REST is served through. exposePayments puts the
+	// screen on the WRITE only; the receipt read mints nothing.
 	exposePayments(zapp, screen)
 	exposeInvoices(zapp)
 
@@ -741,18 +751,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// door onto this same charge core is POST /v1/payments (payments.go), and it holds
 	// the SAME `screen` value — that is what makes the control one control.
 	//
-	// THE CHAIN IS BYTE-FOR-BYTE WHAT IT WAS, screen included and in the same place: the
-	// screen is the ONE value resolved above, handed the chain as its `next`
-	// (screenChain, risk.go). A raw route takes a handler list and a typed op takes none,
-	// so the two doors are WIRED two ways while being SCREENED by one thing — which is
-	// the property that matters, and the one the structural test asserts.
+	// THE SCREEN WRAPS THE HANDLER, at the same point in the same chain it always ran
+	// at: `screen.route(TopupWithToken)` is the last entry, so it still runs after
+	// PinBillingSubject and before any card is authorized. A raw route could carry the
+	// screen as its own chain entry instead — it has one projection, so the two are
+	// equivalent here — and it wraps the handler because the typed door MUST, and one
+	// composition point is what makes "every door onto the mint is screened" a property
+	// the structural test can read rather than a habit.
 	app.Post("/v1/billing/topup/token",
 		accountclient.RequireCSRF(),
 		commercemid.RequestContext(),
 		iammiddleware.IAMTokenRequired(),
 		accountclient.PinBillingSubject(),
-		screenChain(screen),
-		commercebilling.TopupWithToken,
+		screen.route(commercebilling.TopupWithToken),
 	)
 
 	// POST /v1/billing/subscribe/card — the card-on-file MONTHLY subscription: vault a
