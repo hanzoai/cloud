@@ -82,7 +82,9 @@ type OrgConfig struct {
 // max_vms, …) ride out of band and are NOT encoded here.
 type LicenseEntitlement struct {
 	// ProductID is the licensed product the entitlement was checked for
-	// (e.g. "engine", "engine-rocm", a plugin id).
+	// (e.g. "engine", "team", a plugin id). A product is a thing sold, never a
+	// build of it: engine ships CUDA, ROCm and Metal from one SKU, so an
+	// accelerator never appears here.
 	ProductID string
 	// Active reports whether the entitlement is currently valid (paid,
 	// not lapsed/cancelled). Licensing refuses to mint when false.
