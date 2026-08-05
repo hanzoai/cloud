@@ -107,6 +107,73 @@ func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
 	}
 }
 
+// The command door opens on the host's own mount, and answers with the
+// projection of the document served beside it.
+//
+// Asked through spec() — the host's real registration — because the door is not
+// written down anywhere else: openapi.serve registers both addresses, so a change
+// that kept the document and dropped the palette's list would be invisible to
+// every gate in the openapi package, which tests serve directly.
+//
+// WHAT THIS DOES NOT ASK, and where it is asked instead: whether the door beats
+// ai's bare "/v1" on the full host. It is the same trap the spec door fell into
+// — a static path wins RIGHT UP UNTIL an app row claims it exactly, and then
+// fiber merges the patterns and the host's handler sits silently behind a proxy —
+// but the mechanism is a manifest row, and manifest.TestNoAppClaimsAHostDoor asks
+// it there, of openapi.Door, for both doors at once. The full-fleet version
+// belongs here beside TestTheSpecDoorIsTheHostsNotACatchAlls and cannot be
+// written yet: that test is red on this tree because openapi.Fleet refuses the
+// whole weave over a duplicate operationId (get_v1_billing_portal_methods, two
+// billing routes), so the host answers 500 on BOTH doors. Add it in the commit
+// that fixes the weave.
+func TestTheCommandDoorOpensOnTheHostsOwnMount(t *testing.T) {
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	spec(app, []string{"kms", "flags"})
+
+	code, ctype, body := do(t, app, openapi.CommandPath)
+	if code != 200 {
+		t.Fatalf("GET %s = %d, want 200 — the command list must be readable without credentials",
+			openapi.CommandPath, code)
+	}
+	if !strings.Contains(ctype, "application/json") {
+		t.Errorf("GET %s Content-Type = %q, want JSON", openapi.CommandPath, ctype)
+	}
+
+	var cmds []zip.Command
+	if err := json.Unmarshal([]byte(body), &cmds); err != nil {
+		t.Fatalf("GET %s did not answer with a command list (%v): %.120q", openapi.CommandPath, err, body)
+	}
+	if len(cmds) == 0 {
+		t.Fatal("the host serves NO commands — this gate proved nothing")
+	}
+
+	// Every command names an operation the document served beside it carries.
+	// Two addresses, one artifact — that is the whole claim.
+	_, _, doc := do(t, app, openapi.Path)
+	published := paths(t, "the host", []byte(doc))
+	for _, c := range cmds {
+		if _, ok := published[template(c.Path)]; !ok {
+			t.Errorf("command %s %s (%s %s) names a path the served document does not carry",
+				c.Service, c.Name, c.Method, c.Path)
+		}
+	}
+	t.Logf("%d commands over %d served paths", len(cmds), len(published))
+}
+
+// template converts the router's ":name" form back to the document's "{name}".
+func template(path string) string {
+	if !strings.Contains(path, ":") {
+		return path
+	}
+	parts := strings.Split(path, "/")
+	for i, p := range parts {
+		if strings.HasPrefix(p, ":") {
+			parts[i] = "{" + p[1:] + "}"
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
 // TestTheServedDocumentIsTheArtifact is the second question, and the one that
 // keeps the fix from becoming a second source of truth.
 //
@@ -169,8 +236,8 @@ func TestTheDocumentIsScopedToWhatTheDeploymentRuns(t *testing.T) {
 		t.Fatal("a scoped deployment published NOTHING")
 	}
 	for p := range served {
-		if p == openapi.Path {
-			continue // the door itself, which every deployment serves
+		if openapi.Door(p) {
+			continue // the doors themselves, which every deployment serves
 		}
 		if !strings.HasPrefix(p, "/v1/kms") && !strings.HasPrefix(p, "/v1/flags") {
 			t.Errorf("a deployment running only kms and flags publishes %q — an SDK generated "+
