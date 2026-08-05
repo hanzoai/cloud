@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -111,11 +110,22 @@ type anchorStatus struct {
 	Synced     bool   `json:"synced"` // true when the last anchored root == the current root
 }
 
-// status computes the current ledger root and reports whether the chain path is
-// wired + the last committed anchor. It never fabricates an anchored state. The root
-// is computed over WHICHEVER backend is the ledger of record (native or Formance) via
-// the shared ledger.Backend port, so the anchor is backend-agnostic.
-func (a *anchorer) status(ctx context.Context, b ledger.Backend) anchorStatus {
+type rooted interface {
+	// Root is the Merkle root over the journal, plus the entry count it covers.
+	Root(ctx context.Context) ([32]byte, int, error)
+}
+
+// rooted is the ONE thing the anchor needs of a ledger: the Merkle root over its
+// journal, and how many entries went into it.
+//
+// It is declared HERE, by the consumer, and it is one method — where this used to
+// name ledger.Backend, all ELEVEN methods of it, to call Root and nothing else.
+// The parameter said the anchor could accrue revenue, seed the reserve, debit a
+// program and rewrite the revenue-share policy; it can do none of those, and now
+// the type says so. Both backends still satisfy it without adding a line, because
+// a Go interface is satisfied structurally by whoever already has the method —
+// which is exactly why the consumer is the right place to state what it wants.
+func (a *anchorer) status(ctx context.Context, b rooted) anchorStatus {
 	root, count, err := b.Root(ctx)
 	st := anchorStatus{
 		ChainID:          a.chainID,

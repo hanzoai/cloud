@@ -175,7 +175,7 @@ func commerceMasterKey(master []byte, lg log.Logger) []byte {
 // checkout SPA root catch-all, Listen) are skipped by the SharedApp contract.
 // This adapter registers the remaining wire-contract families with commerce's
 // own gate chains (see Prefixes).
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The ledger lives here, so the methods that read and move it are published
 	// here: balance, the prepaid gate, the debit and the credit.
 	exposeBalance()
@@ -187,6 +187,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
+	}
+	// The embedded hanzoai/commerce module and the two typed surfaces below
+	// register on the concrete App — the named hole, cloud.ZipApp, not a widened
+	// Mount signature. commerce's app-wide reach (it wraps ALL of /v1, below) is
+	// DECLARED as Plugin.Global at its composition root instead of being implied
+	// by a parameter type nobody was checking.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("commerce: router is not a zip app — the embedded module has nothing to register on")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("commerce: nil deps.Logger")
@@ -205,8 +214,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// what decides whether an agent can take a payment. They share commerce's ONE
 	// charge core with the browser's card top-up (payments.go), so registering
 	// them here adds a door, never a second money path.
-	exposePayments(app)
-	exposeInvoices(app)
+	exposePayments(zapp)
+	exposeInvoices(zapp)
 
 	// Native zip health endpoint — registered FIRST so probes answer even when
 	// the embed fails below.
@@ -231,7 +240,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		RequireIdentity: false,
 		// THE native co-residence contract: commerce registers its routes on
 		// cloud's own app — no second engine, no net/http adaptation.
-		App: app,
+		App: zapp,
 		// ONE LEDGER: commerce's POST /v1/billing/credit mints into cloud's native
 		// finance ledger (the SAME per-org account the AI spend-gate reads), so a
 		// granted credit is immediately spendable. commercemod.Embed calls

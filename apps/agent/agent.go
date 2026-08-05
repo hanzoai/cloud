@@ -118,11 +118,20 @@ func init() {
 
 // Mount wires POST /v1/agent (+ reads) into cloud, injecting the ai completion and
 // the tool plane. The caller identity comes from cloud's validated principal.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("agent.Mount: nil app")
 	}
-	_, err := hz.Mount(app, hz.Deps{
+	// hanzoai/agent registers TYPED ops, and the op registry lives on the concrete
+	// App — so this is the named hole (cloud.ZipApp), not a widened parameter. The
+	// signature stays the fleet's one MountFunc, and agent installs no app-wide
+	// middleware (hanzoai/agent calls Use nowhere), so it mounts SCOPED: taking the
+	// concrete type used to cost it the whole binary's middleware grant.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("agent.Mount: router is not a zip app — the typed op registry is unreachable")
+	}
+	_, err := hz.Mount(zapp, hz.Deps{
 		Logger:  deps.Logger,
 		DataDir: deps.DataDir,
 		Brand:   deps.Brand,

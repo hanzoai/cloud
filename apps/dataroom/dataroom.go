@@ -53,7 +53,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	hcloud "github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -85,10 +85,10 @@ type state struct {
 }
 
 // mounted is the active service so Shutdown can release the per-tenant stores.
-var mounted *hcloud.Service[state]
+var mounted *cloud.Service[state]
 
 // Mount wires the /v1/dataroom/* surface onto app per HIP-0106.
-func Mount(app hcloud.Router, deps hcloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("dataroom.Mount: nil app")
 	}
@@ -130,7 +130,7 @@ func Mount(app hcloud.Router, deps hcloud.Deps) error {
 		return nil
 	}
 
-	s := &hcloud.Service[state]{Base: hcloud.NewBase(deps, "dataroom"), State: state{host: host, index: index, blob: deps.VFS}}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "dataroom"), State: state{host: host, index: index, blob: deps.VFS}}
 	mounted = s
 	routes(app, s)
 
@@ -160,14 +160,14 @@ func Mount(app hcloud.Router, deps hcloud.Deps) error {
 // validated org a typed op could read, and they are the surface a visitor's
 // browser drives rather than one an agent calls. Health is native and answers
 // before any of this exists.
-func routes(app hcloud.Router, s *hcloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/dataroom")
 	// Bridge FIRST: a typed op receives only a context, so the validated org
 	// reaches it by being parked there — never as an In field, which is
 	// caller-supplied and would be a cross-tenant read the caller asserted for
 	// itself. fiber runs middleware in registration order, so this must precede
 	// the leaves below.
-	g.Use(hcloud.Bridge())
+	g.Use(cloud.Bridge())
 	// Then the bundle's own envelope: a typed op that must answer the bundle's
 	// {"error": …} returns a goja.BundleErr, and this writes those bytes back
 	// verbatim. Also before the leaves, for the same registration-order reason.
@@ -194,8 +194,8 @@ func routes(app hcloud.Router, s *hcloud.Service[state]) {
 	// --- admin surface, untyped: the bytes ------------------------------------
 	// The file IS the body on the way in and a stream on the way out; there is no
 	// In/Out pair for that, and inventing a base64 envelope would change the wire.
-	g.Post("/documents", hcloud.Handle(s, uploadDocument))
-	g.Get("/documents/:id/file", hcloud.Handle(s, adminDownload))
+	g.Post("/documents", cloud.Handle(s, uploadDocument))
+	g.Get("/documents/:id/file", cloud.Handle(s, adminDownload))
 
 	// --- viewer surface (public; org resolved from the link index) -----------
 	// No principal reaches these: the visitor is whoever holds the link id, and
@@ -203,7 +203,7 @@ func routes(app hcloud.Router, s *hcloud.Service[state]) {
 	g.Get("/view/:linkId", viewer(s, "view.link", false))
 	g.Post("/view/:linkId/authenticate", viewer(s, "view.authenticate", true))
 	g.Post("/view/:linkId/pageview", viewer(s, "view.recordPage", true))
-	g.Get("/view/:linkId/document/:documentId/file", hcloud.Handle(s, viewerDownload))
+	g.Get("/view/:linkId/document/:documentId/file", cloud.Handle(s, viewerDownload))
 }
 
 // The prose for the routes that are NOT typed ops — the upload, the two file
@@ -313,7 +313,7 @@ func init() {
 
 // === viewer dispatch (public; org via the link index) ========================
 
-func viewer(s *hcloud.Service[state], route string, readBody bool) zip.Handler {
+func viewer(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
 		linkID := c.Param("linkId")
 		org, ok, err := s.State.index.org(linkID)
@@ -337,7 +337,7 @@ func viewer(s *hcloud.Service[state], route string, readBody bool) zip.Handler {
 // uploadDocument stores the request body (the file bytes) on the object-storage
 // seam, then records the metadata row via the bundle. The file is the raw request
 // body; ?name= names it, Content-Type carries the mime type, ?numPages= is optional.
-func uploadDocument(s *hcloud.Service[state], c *zip.Ctx) error {
+func uploadDocument(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -379,7 +379,7 @@ func uploadDocument(s *hcloud.Service[state], c *zip.Ctx) error {
 }
 
 // adminDownload streams a document's bytes to an authenticated owner.
-func adminDownload(s *hcloud.Service[state], c *zip.Ctx) error {
+func adminDownload(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -394,7 +394,7 @@ func adminDownload(s *hcloud.Service[state], c *zip.Ctx) error {
 }
 
 // viewerDownload streams a document's bytes to an authorised viewer.
-func viewerDownload(s *hcloud.Service[state], c *zip.Ctx) error {
+func viewerDownload(s *cloud.Service[state], c *zip.Ctx) error {
 	linkID := c.Param("linkId")
 	org, ok, err := s.State.index.org(linkID)
 	if err != nil || !ok {
@@ -413,7 +413,7 @@ func viewerDownload(s *hcloud.Service[state], c *zip.Ctx) error {
 
 // streamFile turns a {fileKey,contentType,name} bundle result into a byte stream
 // from object storage. A non-200 bundle result (404/403) passes through as JSON.
-func streamFile(s *hcloud.Service[state], c *zip.Ctx, resp *goja.Response) error {
+func streamFile(s *cloud.Service[state], c *zip.Ctx, resp *goja.Response) error {
 	if resp.Status != http.StatusOK {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(resp.Status, resp.Body)
@@ -441,7 +441,7 @@ func streamFile(s *hcloud.Service[state], c *zip.Ctx, resp *goja.Response) error
 
 // write dispatches one bundle route on the tenant's Base store (one transaction
 // per request) and writes {status, body}.
-func write(s *hcloud.Service[state], c *zip.Ctx, org, route string, params, query map[string]string, body any) error {
+func write(s *cloud.Service[state], c *zip.Ctx, org, route string, params, query map[string]string, body any) error {
 	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{
 		Route: route, Params: params, Query: query, Body: body,
 	})
