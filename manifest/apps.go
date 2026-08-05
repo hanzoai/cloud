@@ -281,6 +281,11 @@ var Apps = []App{
 	{Name: "venue", Prefixes: []string{"/v1/cloud"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
+	// lsp sits next to code because they are two reads of one checkout: code is
+	// the static index, lsp the live language server. Adjacency is documentation,
+	// not routing — /v1/lsp is a deeper static prefix than ai's "/v1", so it wins
+	// on specificity wherever it registers.
+	{Name: "lsp", Prefixes: []string{"/v1/lsp"}},
 	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud

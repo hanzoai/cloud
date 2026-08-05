@@ -1,0 +1,227 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package lsp is live semantic code intelligence — definitions, references, types, hover and diagnostics — over a repository AND its resolved dependencies, served from the cloud with no toolchain on the caller's machine.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "lsp"
+    }
+  ],
+  "paths": {
+    "/v1/lsp": {
+      "post": {
+        "operationId": "post_v1_lsp",
+        "summary": "Resolves one position in one repository through a live language server: definition, references, type, implementation, hover, document symbols, completion or diagnostics — over the repo AND its resolved dependencies, with no toolchain on the caller's machine.",
+        "description": "Resolves one position in one repository through a live language server:\ndefinition, references, type, implementation, hover, document symbols,\ncompletion or diagnostics — over the repo AND its resolved dependencies, with\nno toolchain on the caller's machine.\n\nPositions are the LSP's: line and character are 0-BASED and character counts\nUTF-16 code units, so an editor's 1-based line must have 1 subtracted before it\nis sent. The repository is named by slug and is always one in the caller's own\norg. rev pins a branch, tag or commit sha; empty means the default branch.\n\nThe first query against a (repo, rev) pays a cold start — checkout, dependency\nfetch and the server's first index — and is the billed event; later queries\nagainst the same revision are served from the warm workspace and are free. The\nanswer says which it was.",
+        "tags": [
+          "lsp"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "character": 18,
+                "line": 120,
+                "method": "definition",
+                "path": "apps/lsp/server.go",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Answer": {
+        "properties": {
+          "cold": {
+            "description": "Cold reports that this request paid for a workspace cold start — the\ncheckout, the dependency fetch and the server's first index. It is the\nbilled event, surfaced so a caller can see what it was charged for.",
+            "type": "boolean"
+          },
+          "completions": {
+            "items": {
+              "$ref": "#/components/schemas/Completion"
+            },
+            "type": "array"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array"
+          },
+          "hover": {
+            "type": "string"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/Location"
+            },
+            "type": "array"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "rev": {
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/Symbol"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Completion": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Diagnostic": {
+        "properties": {
+          "code": {
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Range"
+          },
+          "severity": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Location": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Range"
+          }
+        },
+        "type": "object"
+      },
+      "Position": {
+        "properties": {
+          "character": {
+            "type": "integer"
+          },
+          "line": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Query": {
+        "properties": {
+          "character": {
+            "description": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
+            "type": "integer"
+          },
+          "line": {
+            "description": "Line is 0-based, per the LSP specification.",
+            "type": "integer"
+          },
+          "method": {
+            "description": "Method is the question: hover, definition, references, typeDefinition,\nimplementation, documentSymbol, completion or diagnostics.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the repo-relative file, e.g. \"apps/lsp/server.go\".",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository NAME within the caller's own org, e.g. \"cloud\".\nNot a URL and not an owner/name pair: the owner is the validated\nprincipal's org, so this names a repository the caller already owns.",
+            "type": "string"
+          },
+          "rev": {
+            "description": "Rev is a branch, tag or commit sha. Empty means the default branch. A\nworkspace is keyed by revision, so pinning a sha is what makes an answer\nreproducible.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Range": {
+        "properties": {
+          "end": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "start": {
+            "$ref": "#/components/schemas/Position"
+          }
+        },
+        "type": "object"
+      },
+      "Symbol": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Range"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}
