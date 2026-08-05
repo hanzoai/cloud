@@ -205,6 +205,13 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// (org, subject). Registered here — not from link — so it shadows the console
 	// pkg's /v1/billing/* wildcard exactly like the other specific customer routes.
 	app.Get("/v1/billing/usage/accounts", cloud.Handle(s, usageAccounts))
+	// /v1/billing/methods is served CO-RESIDENT by the commerce app, not proxied
+	// from here. These three forwarded over HTTP to commerce, and the proxy is
+	// unconfigured on this deployment (CLOUD_COMMERCE_HTTP_URL unset), so every
+	// saved-card call answered 401/501 while authenticated — a customer could
+	// not list a card, and the checkout's prefill failed on every load. An
+	// internal HTTP hop to a service compiled into the same binary is the wrong
+	// shape regardless; the in-process registration has no hop to misconfigure.
 	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
 	// GPU launch gate + saved cards — the customer half of the prepay-only GPU rule
 	// commerce enforces server-side (api/billing/gpu_charge.go). Same org-scoping as
@@ -215,19 +222,16 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// 401 (route exists) instead of the wildcard's admin-shaped 403.
 	app.Get("/v1/billing/gpu/eligibility", cloud.Handle(s, gpuEligibility))
 	app.Post("/v1/billing/gpu/charge", cloud.Handle(s, gpuCharge))
-	app.Get("/v1/billing/methods", cloud.Handle(s, paymentMethods))
 	// Saving a card must be registered on the SAME router as the read: a specific
 	// route shadows the console pkg's /v1/billing/* wildcard for its whole path, so
 	// a GET-only registration made POST miss on METHOD (405) before the wildcard or
 	// the co-resident commerce app could serve it — the console's save-card call
 	// died there, and with it auto-recharge, which charges the vaulted card.
-	app.Post("/v1/billing/methods", cloud.Handle(s, createPaymentMethod))
 	// Removing a saved card, on the SAME router as the save for the same reason the
 	// save is here: the host claims a prefix for ONE app across every method, so a
 	// sub-resource this app does not register misses on METHOD (405) rather than
 	// falling through to anyone else. It did — a customer could ADD a card and never
 	// REMOVE one.
-	app.Delete("/v1/billing/methods/:id", cloud.Handle(s, deletePaymentMethod))
 
 	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
@@ -333,37 +337,7 @@ func init() {
 			"401 without a validated principal — a customer charging its OWN wallet, so an absent "+
 			"identity is not signed in, never not authorized.")
 
-	openapi.Describe("/v1/billing/methods", http.MethodGet,
-		"Cards saved against the caller's org, masked",
-		"Answers the org's saved payment methods as the portal holds them — brand, last four, "+
-			"expiry, default flag. This is what the GPU launch gate's card-on-file check reads.\n\n"+
-			"NO CARD DATA IS HELD HERE. What the fleet stores is the masked descriptor plus the "+
-			"PROCESSOR's reusable card reference; the number and the CVV live at the processor and "+
-			"never enter this system, so there is nothing here to un-mask.\n\n"+
-			"The customer filter is pinned server-side to the caller's own ORG slug — the upstream "+
-			"400s without one, and this always supplies it — so a caller sees only its own org's "+
-			"methods. A card is SAVED under that same org key, so this list is the one that always "+
-			"matches what was saved; the /v1/finance/payment-methods sibling keys the same store "+
-			"on the resolved WALLET instead, which differs wherever the payer is a person rather "+
-			"than the org pool.\n\n"+
-			"401 without a validated principal. The upstream status forwards verbatim and an "+
-			"unreachable upstream is 502 — never an empty list, because no cards and could not ask "+
-			"must not look alike.")
 
-	openapi.Describe("/v1/billing/methods", http.MethodPost,
-		"Save a card on file for the caller's org",
-		"Vaults the single-use card token the browser produced with the payment processor and "+
-			"attaches the REUSABLE reference it returns to the caller's org, so a later charge — a "+
-			"top-up, auto-recharge, a GPU launch — has something to bill.\n\n"+
-			"WHAT IS STORED IS NOT A CARD. The processor exchanges the one-time token for a "+
-			"card-on-file id; this system keeps that id, the masked brand/last4/expiry the browser "+
-			"sent, and a billing address if one was supplied. No PAN and no CVV, ever.\n\n"+
-			"The owning customer is pinned server-side to the caller's own org on every billing "+
-			"subject key, so a forged body can never attach a card to another tenant. Vaulting "+
-			"VALIDATES the card with the processor, so a card the bank refuses comes back 402 "+
-			"carrying the processor's own reason — forwarded verbatim, because insufficient funds "+
-			"and a wrong security code are different remedies for the customer.\n\n"+
-			"401 without a validated principal.")
 
 	openapi.Describe("/v1/billing/methods/:id", http.MethodDelete,
 		"Remove a saved card from the caller's org",
