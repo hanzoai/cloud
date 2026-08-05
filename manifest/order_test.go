@@ -31,7 +31,7 @@ var frozen = []string{
 	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "crm", "marketing", "ads",
 	"campaign", "validators", "social", "analytics", "git", "sync",
 	"visor", "venue", "captable", "code", "zt", "share",
-	"dataroom", "graph", "security", "integrations", "destinations", "cloudflare",
+	"dataroom", "explorer", "security", "integrations", "destinations", "cloudflare",
 	"sbom", "team", "meet", "settings", "prefs", "notify",
 	"channels", "gateway", "entitlements", "exec", "websearch", "crawl",
 	"index", "catalog", "world", "bot", "authors",
