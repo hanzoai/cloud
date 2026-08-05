@@ -196,6 +196,7 @@ jobs:
 
       - name: go env for private modules
         env:
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
         # GOPRIVATE names exactly the namespace that is private. github.com/hanzoai/*
         # is: ai, account, commerce, orm, xorm, beego, csqlite and ~30 more are
@@ -203,7 +204,30 @@ jobs:
         # that cannot see them. Everything else stays on the public proxy + checksum
         # db, which is what makes a module hash immutable: zap-proto (all 55 repos)
         # and luxfi (all 37 deps here) are public and proxy-served.
+        #
+        # OUR OWN MODULES RESOLVE FROM OUR OWN FORGE. The module PATH stays
+        # github.com/hanzoai/* — that is the package's name, not its address — but
+        # the address git dials is git.hanzo.ai, which is canonical anyway.
+        #
+        # This is not a preference. Every release for nine consecutive commits was
+        # blocked because hanzoai/zen's GitHub collaborator list drifted from its
+        # sibling modules': the token could read ai, commerce, orm and account, and
+        # answered `Repository not found` for zen alone. A private repo denies and
+        # a missing repo denies with the same 404, so the build could not even say
+        # which had happened. Nothing about zen changed; an ACL beside it did, and
+        # it stopped the fleet.
+        #
+        # A checksum makes the substitution safe rather than merely convenient: the
+        # forge mirrors the same objects, so the fetched zip hashes to the h1: line
+        # already committed in go.sum. A forge that served different bytes would
+        # fail the build, loudly, instead of shipping them.
+        #
+        # GH_PAT remains the fallback for a module the forge has not mirrored.
         run: |
+          set -euo pipefail
+          if [ -n "${FORGE_TOKEN:-}" ]; then
+            git config --global url."https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+          fi
           git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
             echo "GOPRIVATE=github.com/hanzoai/*"
@@ -492,6 +516,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/hanzoai/cloud
           secrets: |
             GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
+            FORGE_TOKEN=${{ secrets.FORGE_TOKEN }}
 
       # build-push-action can exit 0 before the manifest resolves, so a green run
       # could still mean a future ImagePullBackOff. Prove it pulls BEFORE the pin
@@ -706,13 +731,19 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Same private-module contract as the containment job: github.com/hanzoai/*
-      # is private, so it must resolve direct+authenticated and skip a sumdb that
-      # cannot see it, while everything else stays on the public proxy.
+      # Same private-module contract as the containment job, including the forge
+      # substitution: our own modules resolve from git.hanzo.ai (the canonical
+      # address) with GitHub as the fallback, so one drifted GitHub ACL cannot
+      # stop a release. go.sum still decides whether the bytes were right.
       - name: go env for private modules
         env:
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
+          set -euo pipefail
+          if [ -n "${FORGE_TOKEN:-}" ]; then
+            git config --global url."https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+          fi
           git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
             echo "GOPRIVATE=github.com/hanzoai/*"
