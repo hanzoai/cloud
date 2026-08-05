@@ -47,16 +47,16 @@ func mountMCPApp(t *testing.T) (*zip.App, *memVFS) {
 // every downstream artifact — SDK method, CLI command, call-plane name — is keyed
 // on, so a change to it is a breaking change rather than a rename.
 var demoOps = []struct{ tool, why string }{
-	{"v1.dataroom.post_datarooms", "open a data room"},
-	{"v1.dataroom.get_datarooms", "list the rooms"},
-	{"v1.dataroom.get_datarooms_id", "read one room with its documents"},
-	{"v1.dataroom.post_datarooms_id_documents", "add a document to a room"},
-	{"v1.dataroom.post_links", "grant a party access"},
-	{"v1.dataroom.get_links", "list the live share links"},
-	{"v1.dataroom.get_documents", "list the documents"},
-	{"v1.dataroom.get_documents_id", "read one document"},
-	{"v1.dataroom.get_analytics_link_linkId", "see how a link was read"},
-	{"v1.dataroom.get_analytics_dataroom_dataroomId", "see how a room was read"},
+	{"post_v1_dataroom_datarooms", "open a data room"},
+	{"get_v1_dataroom_datarooms", "list the rooms"},
+	{"get_v1_dataroom_datarooms_by_id", "read one room with its documents"},
+	{"post_v1_dataroom_datarooms_by_id_documents", "add a document to a room"},
+	{"post_v1_dataroom_links", "grant a party access"},
+	{"get_v1_dataroom_links", "list the live share links"},
+	{"get_v1_dataroom_documents", "list the documents"},
+	{"get_v1_dataroom_documents_by_id", "read one document"},
+	{"get_v1_dataroom_analytics_link_by_linkid", "see how a link was read"},
+	{"get_v1_dataroom_analytics_dataroom_by_dataroomid", "see how a room was read"},
 }
 
 // TestDataroomOpsAreMCPTools is the acceptance test for this whole file: every
@@ -105,7 +105,7 @@ func TestDataroomOpsAreMCPTools(t *testing.T) {
 func TestGrantAccessSchemaDescribesItsLists(t *testing.T) {
 	app, _ := mountMCPApp(t)
 	for _, tool := range app.MCPTools() {
-		if n, _ := tool["name"].(string); n != "v1.dataroom.post_links" {
+		if n, _ := tool["name"].(string); n != "post_v1_dataroom_links" {
 			continue
 		}
 		schema, _ := tool["inputSchema"].(map[string]any)
@@ -337,7 +337,7 @@ func TestAgentOpensADataRoomOverMCP(t *testing.T) {
 	const org = "acme"
 
 	// Open a room.
-	text, isErr := toolsCall(t, app, org, "v1.dataroom.post_datarooms",
+	text, isErr := toolsCall(t, app, org, "post_v1_dataroom_datarooms",
 		`{"name":"Acme Series A","description":"Diligence"}`)
 	if isErr {
 		t.Fatalf("an agent cannot open a data room over MCP: %s", text)
@@ -348,7 +348,7 @@ func TestAgentOpensADataRoomOverMCP(t *testing.T) {
 	}
 
 	// Grant a party access, naming the room by ARGUMENT alone.
-	text, isErr = toolsCall(t, app, org, "v1.dataroom.post_links",
+	text, isErr = toolsCall(t, app, org, "post_v1_dataroom_links",
 		`{"dataroomId":"`+roomID+`","allowList":["partner@sequoiacap.com"],"name":"Sequoia"}`)
 	if isErr {
 		t.Fatalf("an agent cannot grant access over MCP: %s", text)
@@ -358,7 +358,7 @@ func TestAgentOpensADataRoomOverMCP(t *testing.T) {
 	}
 
 	// Read the room back by id — the path-bound op, addressed through arguments.
-	text, isErr = toolsCall(t, app, org, "v1.dataroom.get_datarooms_id", `{"id":"`+roomID+`"}`)
+	text, isErr = toolsCall(t, app, org, "get_v1_dataroom_datarooms_by_id", `{"id":"`+roomID+`"}`)
 	if isErr {
 		t.Fatalf("an agent cannot read a room by id over MCP — the In does not receive "+
 			"id from the arguments object, so the REST wire survived and this did not: %s", text)
@@ -368,12 +368,12 @@ func TestAgentOpensADataRoomOverMCP(t *testing.T) {
 	}
 	// Without the address the SAME tool must not resolve a room, or "found" above
 	// proves nothing.
-	if _, isErr := toolsCall(t, app, org, "v1.dataroom.get_datarooms_id", `{}`); !isErr {
+	if _, isErr := toolsCall(t, app, org, "get_v1_dataroom_datarooms_by_id", `{}`); !isErr {
 		t.Fatal("reading a room with no id must not resolve one — the discriminator is dead")
 	}
 
 	// And the room is listed.
-	text, isErr = toolsCall(t, app, org, "v1.dataroom.get_datarooms", `{}`)
+	text, isErr = toolsCall(t, app, org, "get_v1_dataroom_datarooms", `{}`)
 	if isErr || !strings.Contains(text, roomID) {
 		t.Fatalf("the agent's room is not in the list it reads back: %s", text)
 	}
