@@ -8,6 +8,10 @@
  * NO KEY ⇒ INERT. A keyless beacon is accepted 200 into $public, a reserved
  * tenant the owning org cannot read — a silence that looks like success. Sending
  * nothing is the honest failure, and it is the one this tag picks.
+ *
+ * `hzAnonId` is not defined here: it comes from anon.js, the shared identity
+ * chain vendored from @hanzo/event, which tag.go serves ahead of this file
+ * inside one wrapper. Both halves are the asset; neither runs alone.
  */
 (function () {
   if (window.__hanzoEvent) return
@@ -27,10 +31,14 @@
   var url = src.origin + '/v1/event'
   var product = (el.getAttribute('data-product') || '').trim()
 
-  // Identity uses the SAME storage keys and 30-minute session TTL as
-  // @hanzo/event (ui/pkgs/event/src/storage.ts). A page carrying both clients
-  // resolves to one person, not two.
-  var ANON = 'hz_anon_id'
+  // Identity is hzAnonId, the ONE chain — anon.js, vendored verbatim from
+  // @hanzo/event and served ahead of this file by tag.go. Resolving it here as
+  // well is what made an origin carrying only this tag a separate population:
+  // this read localStorage alone, so it never saw the cookie the other two
+  // clients share and never adopted the id hz.js left behind.
+  //
+  // The session keeps its own resolution: a session is deliberately origin-local
+  // and 30-minute idle-bounded, and nothing about it crosses a surface.
   var SESSION = 'hz_session'
   var SESSION_TTL = 30 * 60 * 1000
 
@@ -45,17 +53,6 @@
     try {
       return window.localStorage
     } catch (e) {} // Safari private mode / blocked storage
-  }
-
-  function anonId() {
-    var s = store()
-    if (!s) return ''
-    var v = s.getItem(ANON)
-    if (!v) {
-      v = uid()
-      s.setItem(ANON, v)
-    }
-    return v
   }
 
   function sessionId() {
@@ -109,7 +106,7 @@
   // (event.fact.host DEFAULT domain(url)), so an event without one is a row
   // nobody can attribute to a site.
   function push(ev) {
-    var anon = anonId()
+    var anon = hzAnonId()
     ev.messageId = uid()
     ev.timestamp = new Date().toISOString()
     ev.distinctId = person || anon
