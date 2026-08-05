@@ -50,6 +50,7 @@ func TestBrandCurriculumResolves(t *testing.T) {
 func TestMountUsesBrandDefault(t *testing.T) {
 	mountBrand := func(brand string) overviewView {
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
+		compose(app)
 		deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: brand}
 		if err := Mount(app, deps); err != nil {
 			t.Fatalf("Mount(brand=%q): %v", brand, err)
