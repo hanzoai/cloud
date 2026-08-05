@@ -159,9 +159,29 @@ func TestEveryProductCloudAsksAboutCanBeGranted(t *testing.T) {
 		len(dead), strings.Join(dead, ", "), appProducts, catalog(g))
 }
 
+// engineLicence is the catalog vocabulary that is NOT the console's.
+//
+// TWO AUTHORITIES LICENSE THINGS HERE, and conflating them is what made this gate
+// wrong rather than strict. The console gate (appProducts, apps/entitlements) asks
+// commerce whether an ORG may open an APP. The engine licence is a different
+// artifact entirely: apps/plan/licence.go stamps these ids into a SIGNED licence
+// ("licensing.product:"+id) that a customer's own engine deployment verifies
+// offline, and apps/commerce/client.go relays it. No console surface reads them and
+// none should — an engine licence is not a door in this product.
+//
+// So an id here being absent from appProducts is the DESIGN, not a defect, and the
+// test below must not demand the console consult it. Anything NOT in this set is
+// still held to the paid-for-nothing rule.
+var engineLicence = map[string]bool{"engine": true, "engine-rocm": true}
+
 // TestEveryProductThePlansGrantIsAskedAbout is the paid-for-nothing direction: a tier
 // that licenses a product no gate consults bills the customer for a grant that opens
 // no door.
+//
+// Scoped to the console's own vocabulary: ids belonging to the engine-licence
+// authority above are excluded, because the consumer that reads them is a signed
+// licence rather than a gate, and requiring the console to consult them asserted a
+// coupling this repo deliberately does not have.
 func TestEveryProductThePlansGrantIsAskedAbout(t *testing.T) {
 	g := grants(t)
 
@@ -171,7 +191,7 @@ func TestEveryProductThePlansGrantIsAskedAbout(t *testing.T) {
 	}
 	var unread []string
 	for _, p := range sorted(g) {
-		if !asked[p] {
+		if !asked[p] && !engineLicence[p] {
 			unread = append(unread, p)
 		}
 	}

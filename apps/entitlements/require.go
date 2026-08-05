@@ -36,6 +36,18 @@ import (
 // @hanzo/plans v1.4.4 licensing.product_ids. This is the ONE source of the app-key
 // set so the projection and any future consumer never re-list it.
 //
+// NOTE: "studio", "bot" and "platform" are no longer here either, and the reason is the
+// same one the catalog states: no plan grants them. They were never enforced — RequireProduct
+// has zero production callers and the three sites that would use it say so in as many words
+// ("DEFERRED — DO NOT ENABLE YET ... flip on once the catalog licenses it") — so the only
+// thing listing them achieved was a projection that reported all three LOCKED to every
+// customer on every tier, enterprise included. A gate may only claim a product some plan can
+// actually grant; claiming one nothing grants is not a stricter gate, it is a false one.
+//
+// When they launch they come back ATOMICALLY — this list and the granting plans in the same
+// change, never half-wired. That is the invariant the contract test enforces, and it is why
+// it caught this.
+//
 // NOTE: "world" is no longer here. It was never a `licensing.product_ids` grant in any
 // catalog version; world access was conveyed by the tier-level `bundles` field pointing
 // at separate world-free/pro/team/enterprise PLANS, and @hanzo/plans carried that at
@@ -50,7 +62,32 @@ import (
 // platform-sudo predicate (principal.IsSuperAdmin / c.IsAdmin), strictly tighter
 // than any purchasable tier — so the projection resolves it separately and it is
 // never handed to CheckEntitlement.
-var appProducts = []string{"studio", "bot", "platform", "team"}
+var appProducts = []string{"team"}
+
+// shellApps is what the projection must ALWAYS answer with: @hanzogui/shell maps
+// over exactly these names, so a key it does not find is a contract break in the
+// console rather than a smaller answer. It is deliberately WIDER than appProducts —
+// the gate governs what is licence-checked, this governs what is reported, and the
+// two stopped being the same list the moment cloud stopped claiming products no plan
+// can grant.
+//
+// FOLLOW-UP (not this change): @hanzogui/shell's APP_ENTITLEMENTS still advertises
+// studio/bot/world/platform to the browser as tier "pro", client-side, against
+// GET /v1/billing/subscriptions. That is a third vocabulary and the only place the
+// product intent is written down. Reconciling the console with the server is its own
+// piece of work.
+var shellApps = []string{"studio", "bot", "world", "platform", "team"}
+
+// gated indexes appProducts: the products the licence authority is actually asked
+// about. Derived, never hand-copied — a product added to appProducts is gated the
+// moment it appears there.
+var gated = func() map[string]bool {
+	m := make(map[string]bool, len(appProducts))
+	for _, p := range appProducts {
+		m[p] = true
+	}
+	return m
+}()
 
 // ── admin switches (the ONE flag engine — clients/flags) ────────────────────────
 

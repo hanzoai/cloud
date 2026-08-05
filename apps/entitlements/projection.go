@@ -67,7 +67,17 @@ func (o ops) projection(ctx context.Context, _ *noArgs) (*projectionView, error)
 	apps := map[string]bool{"admin": superAdmin}
 
 	tier := ""
-	for _, product := range appProducts {
+	for _, product := range shellApps {
+		// A product no plan can grant is NOT LOCKED — nothing gates it. Reporting
+		// false here is what made this projection tell every customer on every tier,
+		// enterprise included, that studio/bot/platform were locked behind a purchase
+		// that does not exist. The key stays because the console shell maps over these
+		// names unconditionally and a missing one is a contract break; only the answer
+		// changes, from a false lock to the truth.
+		if !gated[product] {
+			apps[product] = true
+			continue
+		}
 		active, plan, resolved := o.s.licensed(ctx, org, product)
 		apps[product] = active
 		// The resolved plan slug is the same for every product of one org (it is the
