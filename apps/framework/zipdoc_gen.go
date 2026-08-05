@@ -27,8 +27,8 @@ func init() {
 	zip.Describe("DELETE /v1/framework/roles/:user/:role", zip.Doc{
 		Description: "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
 		Fields: map[string]string{
-			"roleRef.role": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
-			"roleRef.user": "User is the assignee whose grant is being revoked, from the path.",
+			"grant.role": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
+			"grant.user": "User is the assignee whose grant is being revoked, from the path.",
 		},
 		Example: json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
 	})
