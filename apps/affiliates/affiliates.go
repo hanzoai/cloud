@@ -381,7 +381,7 @@ type affiliateStanding struct {
 	// PaidCents is lifetime commission already paid out, in cents.
 	PaidCents *int64 `json:"paidCents,omitempty"`
 	// Payouts is the payout history, newest rows bounded.
-	Payouts *[]payoutView `json:"payouts,omitempty"`
+	Payouts *[]remittance `json:"payouts,omitempty"`
 	// PendingCents is accrued minus paid — what the platform still owes.
 	PendingCents *int64 `json:"pendingCents,omitempty"`
 	// RateBps is the affiliate's own direct commission rate, in basis points.
@@ -442,7 +442,7 @@ func (o ops) standing(ctx context.Context, _ *noInput) (*affiliateStanding, erro
 		AccruedCents:  opt(a.AccruedCents),
 		PendingCents:  opt(a.PendingCents()),
 		PaidCents:     opt(a.PaidCents),
-		Payouts:       opt(payoutViews(payouts)),
+		Payouts:       opt(remittances(payouts)),
 	}, nil
 }
 
@@ -473,7 +473,7 @@ type affiliateSelf struct {
 	Link         *string       `json:"link,omitempty"`
 	MarginBps    *int64        `json:"marginBps,omitempty"`
 	PaidCents    *int64        `json:"paidCents,omitempty"`
-	Payouts      *[]payoutView `json:"payouts,omitempty"`
+	Payouts      *[]remittance `json:"payouts,omitempty"`
 	PendingCents *int64        `json:"pendingCents,omitempty"`
 	RateBps      *int64        `json:"rateBps,omitempty"`
 	// Schedule is the rate schedule quoted to a caller that has not applied.
@@ -546,7 +546,7 @@ func (o ops) self(ctx context.Context, _ *noInput) (*affiliateSelf, error) {
 		AccruedCents:  opt(a.AccruedCents),
 		PendingCents:  opt(a.PendingCents()),
 		PaidCents:     opt(a.PaidCents),
-		Payouts:       opt(payoutViews(payouts)),
+		Payouts:       opt(remittances(payouts)),
 	}, nil
 }
 
@@ -765,7 +765,7 @@ type page struct {
 // plus the fleet summary.
 type directoryData struct {
 	Affiliates []adminAffiliateView `json:"affiliates"`
-	Summary    adminSummary         `json:"summary"`
+	Summary    totals               `json:"summary"`
 }
 
 // directoryOut is the enveloped GET /v1/admin/affiliates answer.
@@ -796,7 +796,7 @@ func (o ops) adminList(ctx context.Context, in *page) (*directoryOut, error) {
 		return nil, zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
 	}
 	views := make([]adminAffiliateView, 0, len(rows))
-	sum := adminSummary{}
+	sum := totals{}
 	for _, a := range rows {
 		sum.add(a)
 		views = append(views, adminViewOf(a, counts[a.ID]))
@@ -817,9 +817,9 @@ type referrerRow struct {
 // topReferrersLimit bounds the leaderboard on the analytics board.
 const topReferrersLimit = 25
 
-// fleetSummary is the analytics board's fleet tally. pendingLiabilityCents is
+// tally is the analytics board's fleet tally. pendingLiabilityCents is
 // what the platform owes but has not paid.
-type fleetSummary struct {
+type tally struct {
 	AccruedLifetimeCents  int64 `json:"accruedLifetimeCents"`
 	Affiliates            int   `json:"affiliates"`
 	Approved              int   `json:"approved"`
@@ -846,7 +846,7 @@ type levelSplit struct {
 type referralBoard struct {
 	AccrualByLevel levelSplit    `json:"accrualByLevel"`
 	Conversion     funnel        `json:"conversion"`
-	Summary        fleetSummary  `json:"summary"`
+	Summary        tally         `json:"summary"`
 	TopReferrers   []referrerRow `json:"topReferrers"`
 }
 
@@ -890,7 +890,7 @@ func (o ops) adminReferrals(ctx context.Context, _ *noInput) (*referralsOut, err
 	}
 
 	// Fleet totals + the top-referrer leaderboard (by lifetime commission accrued).
-	sum := adminSummary{}
+	sum := totals{}
 	leaders := make([]referrerRow, 0, len(rows))
 	for _, a := range rows {
 		sum.add(a)
@@ -909,7 +909,7 @@ func (o ops) adminReferrals(ctx context.Context, _ *noInput) (*referralsOut, err
 		ratePct = float64(converted) / float64(total) * 100
 	}
 	return &referralsOut{Data: referralBoard{
-		Summary: fleetSummary{
+		Summary: tally{
 			Affiliates:            sum.Total,
 			Approved:              sum.Approved,
 			AccruedLifetimeCents:  sum.AccruedCents,
@@ -1054,15 +1054,15 @@ type disbursal struct {
 	Reference string `json:"reference" url:"-"`
 }
 
-// payoutData is the recorded payout beside the affiliate's updated balances.
-type payoutData struct {
+// settlement is the recorded payout beside the affiliate's updated balances.
+type settlement struct {
 	Affiliate adminAffiliateView `json:"affiliate"`
-	Payout    payoutView         `json:"payout"`
+	Payout    remittance         `json:"payout"`
 }
 
 // payoutOut is the enveloped POST /v1/admin/affiliates/:id/payout answer.
 type payoutOut struct {
-	Data payoutData `json:"data"`
+	Data settlement `json:"data"`
 	envelope
 }
 
@@ -1127,20 +1127,20 @@ func (o ops) adminPayout(ctx context.Context, in *disbursal) (*payoutOut, error)
 		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
 		"reference": payout.Reference, "txn": payout.Txn,
 	})
-	return &payoutOut{Data: payoutData{Payout: payoutViewOf(payout), Affiliate: adminViewOf(after, 0)}, envelope: ok()}, nil
+	return &payoutOut{Data: settlement{Payout: remittanceOf(payout), Affiliate: adminViewOf(after, 0)}, envelope: ok()}, nil
 }
 
-// sweepData reports one accrual run: sources swept, new commission accruals, and
+// accruals reports one accrual run: sources swept, new commission accruals, and
 // the OSS-author royalties the same spend read drove.
-type sweepData struct {
+type accruals struct {
 	Accrued          int `json:"accrued"`
 	RoyaltiesAccrued int `json:"royaltiesAccrued"`
 	Swept            int `json:"swept"`
 }
 
-// sweepOut is the enveloped POST /v1/admin/affiliates/sweep answer.
-type sweepOut struct {
-	Data sweepData `json:"data"`
+// accrualsOut is the enveloped POST /v1/admin/affiliates/sweep answer.
+type accrualsOut struct {
+	Data accruals `json:"data"`
 	envelope
 }
 
@@ -1163,7 +1163,7 @@ type sweepOut struct {
 // so the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded
 // per run; a source whose spend cannot be read is skipped and picked up next
 // time, never half-accrued.
-func (o ops) adminSweep(ctx context.Context, _ *noInput) (*sweepOut, error) {
+func (o ops) adminSweep(ctx context.Context, _ *noInput) (*accrualsOut, error) {
 	if !sudo(ctx) {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
@@ -1193,7 +1193,7 @@ func (o ops) adminSweep(ctx context.Context, _ *noInput) (*sweepOut, error) {
 		accrued += n
 		royalties += authors.AccrueForOrg(ctx, src, spend, period, now)
 	}
-	return &sweepOut{Data: sweepData{Swept: swept, Accrued: accrued, RoyaltiesAccrued: royalties}, envelope: ok()}, nil
+	return &accrualsOut{Data: accruals{Swept: swept, Accrued: accrued, RoyaltiesAccrued: royalties}, envelope: ok()}, nil
 }
 
 // ── accrual core (the ONE multi-level walk, shared by sweep + lazy read) ───────
@@ -1310,8 +1310,8 @@ func adminViewOf(a Affiliate, referred int) adminAffiliateView {
 	}
 }
 
-// payoutView is one row of an affiliate's payout history.
-type payoutView struct {
+// remittance is one row of an affiliate's payout history.
+type remittance struct {
 	ID          string `json:"id"`
 	AmountCents int64  `json:"amountCents"`
 	Method      string `json:"method"`
@@ -1320,20 +1320,20 @@ type payoutView struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
-func payoutViewOf(p Payout) payoutView {
-	return payoutView{ID: p.ID, AmountCents: p.AmountCents, Method: p.Method, Reference: p.Reference, Txn: p.Txn, CreatedAt: p.CreatedAt}
+func remittanceOf(p Payout) remittance {
+	return remittance{ID: p.ID, AmountCents: p.AmountCents, Method: p.Method, Reference: p.Reference, Txn: p.Txn, CreatedAt: p.CreatedAt}
 }
 
-func payoutViews(ps []Payout) []payoutView {
-	out := make([]payoutView, 0, len(ps))
+func remittances(ps []Payout) []remittance {
+	out := make([]remittance, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, payoutViewOf(p))
+		out = append(out, remittanceOf(p))
 	}
 	return out
 }
 
-// adminSummary is the fleet tally for the admin directory.
-type adminSummary struct {
+// totals is the fleet tally for the admin directory.
+type totals struct {
 	Total        int   `json:"total"`
 	Applied      int   `json:"applied"`
 	Approved     int   `json:"approved"`
@@ -1343,7 +1343,7 @@ type adminSummary struct {
 	PaidCents    int64 `json:"paidCents"`
 }
 
-func (s *adminSummary) add(a Affiliate) {
+func (s *totals) add(a Affiliate) {
 	s.Total++
 	switch a.Status {
 	case StatusApplied:

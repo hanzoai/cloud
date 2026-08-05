@@ -59,6 +59,45 @@ components:
             $ref: '#/components/schemas/TotalView'
           type: array
       type: object
+    AccountsTotal:
+      properties:
+        accounts:
+          description: Accounts is how many linked accounts the total folds.
+          type: integer
+        completionTokens:
+          description: CompletionTokens is the total completion-token count.
+          type: integer
+        costCents:
+          description: CostCents is the total cost in cents.
+          type: integer
+        promptTokens:
+          description: PromptTokens is the total prompt-token count.
+          type: integer
+        requests:
+          description: Requests is the total request count the gateway routed.
+          type: integer
+        totalTokens:
+          description: TotalTokens is the total token count.
+          type: integer
+      type: object
+    AccountsUsage:
+      properties:
+        accounts:
+          description: Accounts is one row per linked account the gateway actually
+            routed through.
+          items:
+            $ref: '#/components/schemas/RoutedUsage'
+          type: array
+        scope:
+          description: 'Scope is always "user": the caller''s own linked accounts.'
+          type: string
+        source:
+          description: 'Source is always "routed": the gateway''s own routed ledger.'
+          type: string
+        total:
+          $ref: '#/components/schemas/AccountsTotal'
+          description: Total is the honest sum across the rows.
+      type: object
     ActionOut:
       properties:
         data:
@@ -5581,6 +5620,96 @@ components:
             certificate.
           type: boolean
       type: object
+    RouteCandidate:
+      properties:
+        account:
+          description: Account is the provider-side account identifier.
+          type: string
+        available:
+          description: Available reports whether the candidate is routable right now.
+          type: boolean
+        billing:
+          description: |-
+            Billing is the cost consequence of dialing this candidate: plan (the
+            user's own subscription) or commerce (the metered gateway path).
+          type: string
+        headroomPct:
+          description: |-
+            HeadroomPct is the remaining rate-limit capacity, 0..100. A link with no
+            snapshot counts as full headroom.
+          type: number
+        host:
+          description: Host is that machine's hostname label.
+          type: string
+        kind:
+          description: 'Kind is how the account authenticates: subscription or apikey.'
+          type: string
+        linkId:
+          description: LinkID is the underlying link's opaque handle.
+          type: string
+        machine:
+          description: Machine is the machine the account is signed in on.
+          type: string
+        plan:
+          description: Plan is the provider plan label the account is on.
+          type: string
+        provider:
+          description: Provider is the AI provider the candidate account belongs to.
+          type: string
+        reason:
+          description: Reason says why the candidate is not routable, when Available
+            is false.
+          type: string
+      type: object
+    RoutePlan:
+      properties:
+        candidates:
+          description: |-
+            Candidates is every linked account in preference order: subscriptions
+            first, then metered api-key accounts as the backstop.
+          items:
+            $ref: '#/components/schemas/RouteCandidate'
+          type: array
+        generatedAt:
+          description: GeneratedAt is when the plan was computed, RFC 3339 UTC.
+          type: string
+        primary:
+          $ref: '#/components/schemas/RouteCandidate'
+          description: |-
+            Primary is the first available candidate; absent when every account is
+            rate-limited.
+      type: object
+    RoutedUsage:
+      properties:
+        account:
+          description: Account is the provider-side account identifier.
+          type: string
+        billing:
+          description: 'Billing is how the routed inference bills: plan or commerce.'
+          type: string
+        completionTokens:
+          description: CompletionTokens is the routed completion-token count.
+          type: integer
+        costCents:
+          description: CostCents is the routed cost in cents.
+          type: integer
+        kind:
+          description: 'Kind is how the account authenticates: subscription or apikey.'
+          type: string
+        promptTokens:
+          description: PromptTokens is the routed prompt-token count.
+          type: integer
+        provider:
+          description: Provider is the AI provider the row's account belongs to.
+          type: string
+        requests:
+          description: Requests is how many requests the gateway routed through this
+            account.
+          type: integer
+        totalTokens:
+          description: TotalTokens is the routed total token count.
+          type: integer
+      type: object
     Rule:
       properties:
         category:
@@ -7708,6 +7837,19 @@ components:
           description: BalanceCents is that account's signed balance in minor units.
           type: integer
       type: object
+    accounts:
+      properties:
+        accounts:
+          items:
+            $ref: '#/components/schemas/RoutedUsage'
+          type: array
+        scope:
+          type: string
+        source:
+          type: string
+        total:
+          $ref: '#/components/schemas/AccountsTotal'
+      type: object
     accountsOut:
       properties:
         accounts:
@@ -7765,6 +7907,24 @@ components:
         subjectId:
           description: SubjectID names the subject this record is about; it must exist
             within the org.
+          type: string
+      type: object
+    accruals:
+      properties:
+        accrued:
+          type: integer
+        royaltiesAccrued:
+          type: integer
+        swept:
+          type: integer
+      type: object
+    accrualsOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/accruals'
+        msg:
+          type: string
+        status:
           type: string
       type: object
     actionsView:
@@ -7862,6 +8022,35 @@ components:
           description: Project is the project the application lives under, from the
             path.
           type: string
+      type: object
+    adminAffiliateView:
+      properties:
+        accruedCents:
+          type: integer
+        approvedAt:
+          type: integer
+        code:
+          type: string
+        createdAt:
+          type: integer
+        id:
+          type: string
+        org:
+          type: string
+        paidCents:
+          type: integer
+        pendingCents:
+          type: integer
+        rateBps:
+          type: integer
+        referredCount:
+          type: integer
+        requestedCode:
+          type: string
+        status:
+          type: string
+        suspendedAt:
+          type: integer
       type: object
     adminAuthorView:
       properties:
@@ -8096,6 +8285,186 @@ components:
           description: |-
             To is the target stage: structure, founders, payment, documents, esign,
             genesis, import or company.
+          type: string
+      type: object
+    affiliateBoard:
+      properties:
+        leaders:
+          description: Leaders are the top opt-in affiliates, by handle and aggregate
+            figures only.
+          items:
+            $ref: '#/components/schemas/leaderboardRow'
+          type: array
+        total:
+          description: |-
+            Total is the approved population where it is known; omitted where the top
+            page truncated and the caller has no rank to derive it from.
+          type: integer
+        you:
+          $ref: '#/components/schemas/leaderboardRow'
+          description: |-
+            You is the caller's own row with its exact global rank; only an approved
+            affiliate has one.
+      type: object
+    affiliateData:
+      properties:
+        affiliate:
+          $ref: '#/components/schemas/adminAffiliateView'
+      type: object
+    affiliateEarnings:
+      properties:
+        accruedCents:
+          description: AccruedCents is lifetime commission accrued, in cents.
+          type: integer
+        byPeriod:
+          description: |-
+            ByPeriod is the per-period ledger: the margin earned against and the
+            commission taken from it.
+          items:
+            $ref: '#/components/schemas/periodEarningView'
+          type: array
+        byReferredOrg:
+          description: |-
+            ByReferredOrg is each referral's aggregate contribution — the affiliate's
+            OWN share, never the referred org's spend.
+          items:
+            $ref: '#/components/schemas/orgEarningView'
+          type: array
+        isAffiliate:
+          type: boolean
+        marginBps:
+          description: MarginBps is the platform gross-margin fraction commission
+            is a rate OF.
+          type: integer
+        paidCents:
+          description: PaidCents is lifetime commission already paid out, in cents.
+          type: integer
+        pendingCents:
+          description: PendingCents is accrued minus paid — what the platform still
+            owes.
+          type: integer
+      type: object
+    affiliateLinks:
+      properties:
+        isAffiliate:
+          type: boolean
+        links:
+          description: Links is the caller's share links, each with its URL and funnel.
+          items:
+            $ref: '#/components/schemas/codeView'
+          type: array
+        maxLinks:
+          description: MaxLinks is how many share links one affiliate may hold.
+          type: integer
+        status:
+          type: string
+      type: object
+    affiliateOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/affiliateData'
+        msg:
+          type: string
+        status:
+          type: string
+      type: object
+    affiliateSelf:
+      properties:
+        accruedCents:
+          type: integer
+        code:
+          type: string
+        defaultRateBps:
+          type: integer
+        downlineTotal:
+          description: DownlineTotal counts every org in the caller's downline across
+            the levels.
+          type: integer
+        handle:
+          type: string
+        id:
+          type: string
+        isAffiliate:
+          type: boolean
+        levels:
+          description: Levels is the caller's downline per upline level, with the
+            rate paid there.
+          items:
+            $ref: '#/components/schemas/levelView'
+          type: array
+        link:
+          type: string
+        marginBps:
+          type: integer
+        paidCents:
+          type: integer
+        payouts:
+          items:
+            $ref: '#/components/schemas/remittance'
+          type: array
+        pendingCents:
+          type: integer
+        rateBps:
+          type: integer
+        schedule:
+          description: Schedule is the rate schedule quoted to a caller that has not
+            applied.
+          items:
+            $ref: '#/components/schemas/levelView'
+          type: array
+        status:
+          type: string
+      type: object
+    affiliateStanding:
+      properties:
+        accruedCents:
+          description: AccruedCents is lifetime commission accrued, in cents.
+          type: integer
+        code:
+          description: Code is the minted referral code; empty until staff approve.
+          type: string
+        defaultRateBps:
+          description: |-
+            DefaultRateBps is the direct rate a new affiliate would get, answered only
+            to a caller that has not applied.
+          type: integer
+        handle:
+          description: Handle is the opt-in public leaderboard name; empty means opted
+            out.
+          type: string
+        id:
+          type: string
+        isAffiliate:
+          type: boolean
+        link:
+          description: Link is the shareable ?aff URL; empty until a code is minted.
+          type: string
+        marginBps:
+          description: MarginBps is the platform gross-margin fraction commission
+            is a rate OF.
+          type: integer
+        paidCents:
+          description: PaidCents is lifetime commission already paid out, in cents.
+          type: integer
+        payouts:
+          description: Payouts is the payout history, newest rows bounded.
+          items:
+            $ref: '#/components/schemas/remittance'
+          type: array
+        pendingCents:
+          description: PendingCents is accrued minus paid — what the platform still
+            owes.
+          type: integer
+        rateBps:
+          description: RateBps is the affiliate's own direct commission rate, in basis
+            points.
+          type: integer
+        referredCount:
+          description: ReferredCount is how many orgs this affiliate has referred.
+          type: integer
+        requestedCode:
+          type: string
+        status:
           type: string
       type: object
     agentBinding:
@@ -8731,6 +9100,21 @@ components:
         updatedAt:
           type: integer
       type: object
+    application:
+      properties:
+        code:
+          type: string
+        created:
+          type: boolean
+        id:
+          type: string
+        rateBps:
+          type: integer
+        requestedCode:
+          type: string
+        status:
+          type: string
+      type: object
     applicationList:
       properties:
         data:
@@ -8738,6 +9122,25 @@ components:
           items:
             $ref: '#/components/schemas/Application'
           type: array
+      type: object
+    applyRequest:
+      properties:
+        requestedCode:
+          description: |-
+            RequestedCode is the vanity code the applicant asks for; approval may mint
+            a different one if it is taken. Body-only: the URL cannot supply it.
+          type: string
+      type: object
+    approval:
+      properties:
+        code:
+          description: |-
+            Code overrides the minted code; else the requested vanity code, else a
+            derived slug.
+          type: string
+        id:
+          description: ID is the affiliate to approve, from the path.
+          type: string
       type: object
     approvePairingIn:
       properties:
@@ -9141,6 +9544,25 @@ components:
         stream:
           type: boolean
         system:
+          type: string
+      type: object
+    attributeRequest:
+      properties:
+        code:
+          description: |-
+            Code is the affiliate code the referred org arrived with. Body-only: the
+            URL cannot supply it.
+          type: string
+      type: object
+    attribution:
+      properties:
+        code:
+          type: string
+        created:
+          type: boolean
+        createdAt:
+          type: integer
+        id:
           type: string
       type: object
     auditList:
@@ -9570,6 +9992,46 @@ components:
           description: Data is the matching items, most recently updated first.
           items:
             $ref: '#/components/schemas/boardItem'
+          type: array
+      type: object
+    boardResp:
+      properties:
+        account:
+          description: Account is the account the series narrows to, when one was
+            named.
+          type: string
+        available:
+          description: |-
+            Available reports whether the warehouse answered; false is an honest "we
+            have no data", NOT zero usage.
+          type: boolean
+        current:
+          description: Current is the live state of each lane — the dash headline.
+          items:
+            $ref: '#/components/schemas/readingView'
+          type: array
+        from:
+          description: From and To are the resolved [from, to) window, RFC 3339 UTC.
+          type: string
+        provider:
+          description: Provider is the provider whose meter answered.
+          type: string
+        range:
+          description: Range is the resolved period label.
+          type: string
+        scope:
+          description: 'Scope is always "user": the caller''s own linked accounts.'
+          type: string
+        source:
+          description: 'Source is always "account": the provider''s own meter, not
+            a Hanzo charge.'
+          type: string
+        to:
+          type: string
+        windows:
+          description: Windows is every window instance in range, newest first.
+          items:
+            $ref: '#/components/schemas/readingView'
           type: array
       type: object
     botList:
@@ -11248,6 +11710,19 @@ components:
             makes metered spend, then "qualified", then "credited".
           type: string
       type: object
+    clickCount:
+      properties:
+        counted:
+          type: boolean
+      type: object
+    clickRequest:
+      properties:
+        code:
+          description: |-
+            Code is the share-link code that was clicked. Body-only: the URL cannot
+            supply it.
+          type: string
+      type: object
     cloudAccountView:
       properties:
         account:
@@ -11444,6 +11919,23 @@ components:
         region:
           type: string
         status:
+          type: string
+      type: object
+    codeView:
+      properties:
+        clicks:
+          type: integer
+        code:
+          type: string
+        conversions:
+          type: integer
+        createdAt:
+          type: integer
+        label:
+          type: string
+        signups:
+          type: integer
+        url:
           type: string
       type: object
     collabPayload:
@@ -12324,6 +12816,19 @@ components:
         type:
           description: Type is the DigitalOcean load-balancer type. Empty takes DO's
             default (REGIONAL).
+          type: string
+      type: object
+    createLinkRequest:
+      properties:
+        code:
+          description: |-
+            Code is an optional vanity code; it must be free across the whole
+            directory, and omitting it mints a random one. Body-only.
+          type: string
+        label:
+          description: |-
+            Label is cosmetic — trimmed, stripped of control characters, capped — and
+            never part of a code. Body-only: the URL cannot supply it.
           type: string
       type: object
     createReq:
@@ -13213,6 +13718,34 @@ components:
           description: VerifyURL is the page the user opens to enter UserCode.
           type: string
       type: object
+    deviceView:
+      properties:
+        accounts:
+          description: Accounts is every account the caller has signed in on this
+            machine.
+          items:
+            $ref: '#/components/schemas/linkView'
+          type: array
+        activeSessions:
+          description: |-
+            ActiveSessions is how many agent sessions the caller currently has running
+            on this machine; 0 where the agent plane is not mounted.
+          type: integer
+        host:
+          description: Host is the machine's hostname label, from its most-recently-seen
+            account.
+          type: string
+        lastSeen:
+          description: LastSeen is when any account on this machine last reported,
+            RFC 3339 UTC.
+          type: string
+        machine:
+          description: Machine is the stable machine identifier.
+          type: string
+        os:
+          description: OS is the machine's operating system label.
+          type: string
+      type: object
     digitalocean.Snapshot:
       properties:
         ID:
@@ -13221,6 +13754,46 @@ components:
           type: string
         SizeGiB:
           type: integer
+      type: object
+    directoryData:
+      properties:
+        affiliates:
+          items:
+            $ref: '#/components/schemas/adminAffiliateView'
+          type: array
+        summary:
+          $ref: '#/components/schemas/totals'
+      type: object
+    directoryOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/directoryData'
+        msg:
+          type: string
+        status:
+          type: string
+      type: object
+    disbursal:
+      properties:
+        amountCents:
+          description: |-
+            AmountCents is the payout, integer cents; it must be positive and can
+            never exceed the affiliate's pending commission. Body-only (`url:"-"`,
+            like every money field here): a payout must never ride the URL into
+            access logs, and the raw handler read only the body.
+          type: integer
+        id:
+          description: ID is the affiliate to pay, from the path.
+          type: string
+        method:
+          description: |-
+            Method decides whether money moves: `credits` issues a commerce grant,
+            every other method (wire, paypal, …) is record-only.
+          type: string
+        reference:
+          description: Reference is the operator's settlement note (a bank id, a ledger
+            ref).
+          type: string
       type: object
     disconnectOut:
       properties:
@@ -13558,6 +14131,39 @@ components:
             reachable (the server's own build identity — it publishes no semver).
           type: string
       type: object
+    enrollReq:
+      properties:
+        account:
+          description: Account is the provider-side account identifier.
+          type: string
+        host:
+          description: Host is the machine's human hostname label.
+          type: string
+        kind:
+          description: |-
+            Kind decides how the account's inference BILLS and defaults to
+            subscription: a subscription account bills the user's own monthly plan and
+            is metered here for visibility only, while an apikey account bills through
+            commerce on the gateway path.
+          type: string
+        machine:
+          description: Machine is the stable machine identifier. Required, length-bounded.
+          type: string
+        os:
+          description: OS is the machine's operating system label.
+          type: string
+        plan:
+          description: Plan is the provider plan label (e.g. "Claude Max").
+          type: string
+        provider:
+          description: Provider is the AI provider the account belongs to. Required,
+            length-bounded.
+          type: string
+        usage:
+          description: |-
+            Usage is an optional usage snapshot, clamped and re-serialized to known
+            fields; omitting it keeps the last good one.
+      type: object
     enrolment:
       properties:
         created:
@@ -13839,6 +14445,106 @@ components:
             "DE".
           type: string
       type: object
+    financeBalanceView:
+      properties:
+        asOf:
+          type: string
+        availableCents:
+          type: integer
+        currency:
+          type: string
+        dueCents:
+          type: integer
+        pendingCents:
+          type: integer
+      type: object
+    financeCredit:
+      properties:
+        cents:
+          type: integer
+        expiresAt:
+          type: string
+        grantedAt:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        remainingCents:
+          type: integer
+      type: object
+    financeInvoice:
+      properties:
+        cents:
+          type: integer
+        currency:
+          type: string
+        date:
+          type: string
+        dueDate:
+          type: string
+        id:
+          type: string
+        number:
+          type: string
+        status:
+          type: string
+        url:
+          type: string
+      type: object
+    financeLedgerEntry:
+      properties:
+        account:
+          type: string
+        balanceCents:
+          type: integer
+        cents:
+          type: integer
+        currency:
+          type: string
+        date:
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+      type: object
+    financePaymentMethod:
+      properties:
+        brand:
+          type: string
+        expMonth:
+          type: integer
+        expYear:
+          type: integer
+        id:
+          type: string
+        isDefault:
+          type: boolean
+        last4:
+          type: string
+        type:
+          type: string
+      type: object
+    financeUsageView:
+      properties:
+        currency:
+          type: string
+        end:
+          type: string
+        lines:
+          items:
+            $ref: '#/components/schemas/usageLine'
+          type: array
+        series:
+          items:
+            $ref: '#/components/schemas/sample'
+          type: array
+        start:
+          type: string
+        totalCents:
+          type: integer
+      type: object
     flagsOut:
       properties:
         data:
@@ -14018,6 +14724,15 @@ components:
           items:
             $ref: '#/components/schemas/Founder'
           type: array
+      type: object
+    funnel:
+      properties:
+        convertedOrgs:
+          type: integer
+        ratePct:
+          type: number
+        referredOrgs:
+          type: integer
       type: object
     fwdRule:
       properties:
@@ -14445,19 +15160,39 @@ components:
             $ref: '#/components/schemas/graphNode'
           type: array
       type: object
+    handleRequest:
+      properties:
+        handle:
+          description: |-
+            Handle is the public leaderboard display name; empty opts out. Body-only:
+            the URL cannot supply it.
+          type: string
+      type: object
+    handleSet:
+      properties:
+        handle:
+          type: string
+      type: object
     healthLens:
       properties:
         available:
+          description: Available reports whether that table exists in the warehouse
+            right now.
           type: boolean
         table:
+          description: Table is the fully-qualified warehouse table the lens reads.
           type: string
       type: object
     healthLenses:
       properties:
         events:
           $ref: '#/components/schemas/healthLens'
+          description: |-
+            Events is the web/commerce lens (event.fact, signal='act'), honest-empty until the
+            collector emits.
         llm:
           $ref: '#/components/schemas/healthLens'
+          description: LLM is the live per-org usage ledger lens (hanzo.cloud_usage).
       type: object
     healthOut:
       properties:
@@ -14471,31 +15206,69 @@ components:
     healthPlane:
       properties:
         bus:
+          description: Bus is the address this process reaches the plane at.
           type: string
         ready:
+          description: Ready reports whether an ingest would succeed right now. False
+            is a 503.
           type: boolean
         reason:
+          description: Reason is the plane's own failure text, present only when Ready
+            is false.
           type: string
         stream:
+          description: Stream is the JetStream stream every signal lands on.
           type: string
       type: object
     healthReport:
       properties:
         datastore:
+          description: |-
+            Datastore reports whether the shared warehouse client has a live connection.
+            It is load-bearing for the READ path: false is one of the two ways this
+            answers 503.
           type: boolean
         lenses:
           $ref: '#/components/schemas/healthLenses'
+          description: |-
+            Lenses is per-lens table availability, probed only when connected — so it is
+            absent from a degraded report, which has nothing to say about tables it could
+            not reach.
         lost:
           $ref: '#/components/schemas/loss'
+          description: |-
+            Lost is the count of facts the sink irrecoverably dropped since boot
+            (warehouse.go). It is reported on the DEGRADED report too, and deliberately: a
+            warehouse that is unreachable is exactly when facts start failing their
+            deliveries, so suppressing the number here would hide it precisely when it
+            moves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the door already
+            answered 200 for.
         plane:
           $ref: '#/components/schemas/healthPlane'
+          description: |-
+            Plane reports the event plane — the bus and the stream every accepted event is
+            published to BEFORE any of it reaches the warehouse. It is load-bearing for the
+            WRITE path, and it is here because its absence was a real outage: this endpoint
+            answered 200/ok on warehouse connectivity alone while every POST /v1/event 503'd
+            on a stream that could not bind, so 100% ingest loss was invisible to monitoring.
+            A probe that cannot see the write path cannot report the write path.
         reason:
+          description: Reason is the human-readable cause, present only on a degraded
+            report.
           type: string
         service:
+          description: |-
+            Service names the subsystem answering, so a probe aggregating several health
+            endpoints can attribute a degraded one.
           type: string
         status:
+          description: |-
+            Status is ok or degraded. Degraded is the 503 and means EITHER load-bearing
+            dependency is down — the warehouse this subsystem reads, or the event plane it
+            writes. It is not moved by a missing lens table, which is honest-empty.
           type: string
         warehouse:
+          description: Warehouse names the datastore database every lens reads.
           type: string
       type: object
     healthView:
@@ -17937,6 +18710,76 @@ components:
             write still stands.
           type: boolean
       type: object
+    ingestReq:
+      properties:
+        account:
+          type: string
+        cachedInputTokens:
+          type: integer
+        confidence:
+          type: string
+        costCents:
+          type: integer
+        costLimitCents:
+          type: integer
+        currency:
+          type: string
+        inputTokens:
+          type: integer
+        kind:
+          type: string
+        lane:
+          type: string
+        machine:
+          type: string
+        outputTokens:
+          type: integer
+        plan:
+          type: string
+        provider:
+          type: string
+        requests:
+          type: integer
+        resetsAt:
+          type: string
+        samples:
+          description: |-
+            Samples is the batch form, up to 256 samples; leave it empty to send one
+            sample inline on the same fields.
+          items:
+            $ref: '#/components/schemas/readingReq'
+          type: array
+        synthetic:
+          type: boolean
+        totalTokens:
+          type: integer
+        usedPct:
+          type: number
+        window:
+          type: string
+        windowMinutes:
+          type: integer
+        windowStart:
+          type: string
+      type: object
+    ingestResp:
+      properties:
+        accepted:
+          description: Accepted is how many samples this report landed.
+          type: integer
+        links:
+          description: |-
+            Links is the link row each distinct (machine, provider, account) in the
+            batch refreshed.
+          items:
+            $ref: '#/components/schemas/linkView'
+          type: array
+        stored:
+          description: |-
+            Stored reports whether history was durably written; false means the
+            warehouse was unavailable and only the link rows were refreshed.
+          type: boolean
+      type: object
     ingressMiddlewares:
       properties:
         middlewares:
@@ -18406,6 +19249,19 @@ components:
         type:
           type: string
       type: object
+    leaderboardRow:
+      properties:
+        accruedCents:
+          type: integer
+        handle:
+          type: string
+        isYou:
+          type: boolean
+        rank:
+          type: integer
+        referredCount:
+          type: integer
+      type: object
     legalFiling:
       properties:
         createdAt:
@@ -18466,6 +19322,24 @@ components:
         version:
           type: integer
       type: object
+    levelSplit:
+      properties:
+        l1Cents:
+          type: integer
+        l2Cents:
+          type: integer
+        l3Cents:
+          type: integer
+      type: object
+    levelView:
+      properties:
+        downlineCount:
+          type: integer
+        level:
+          type: integer
+        rateBps:
+          type: integer
+      type: object
     limitsBlock:
       properties:
         apiRateLimit:
@@ -18504,6 +19378,86 @@ components:
           description: 'Unit names what the two rate numbers are counted in: requests/minute.'
           type: string
       type: object
+    linkList:
+      properties:
+        devices:
+          description: |-
+            Devices is the same rows folded per machine — the cross-machine "AI
+            Providers / Accounts" view.
+          items:
+            $ref: '#/components/schemas/deviceView'
+          type: array
+        links:
+          description: |-
+            Links is every link the caller registered, newest first. Revoked links are
+            INCLUDED rather than dropped, because a logged-out account keeps its usage
+            history and audit trail.
+          items:
+            $ref: '#/components/schemas/linkView'
+          type: array
+      type: object
+    linkMint:
+      properties:
+        link:
+          $ref: '#/components/schemas/codeView'
+      type: object
+    linkView:
+      properties:
+        account:
+          description: Account is the provider-side account identifier, when the collector
+            knows it.
+          type: string
+        billing:
+          description: |-
+            Billing is how this account's inference bills — plan (the user's own
+            subscription, metered here for visibility only) or commerce (the gateway
+            path). Derived from Kind, never stored.
+          type: string
+        createdAt:
+          description: CreatedAt is when the link was first registered, RFC 3339 UTC.
+          type: string
+        host:
+          description: Host is the machine's human hostname label, from its most recent
+            report.
+          type: string
+        id:
+          description: ID is the link's opaque handle ("link_" + 32 hex chars).
+          type: string
+        kind:
+          description: 'Kind is how the account authenticates: subscription or apikey.'
+          type: string
+        lastSeen:
+          description: LastSeen is when the account last reported, RFC 3339 UTC.
+          type: string
+        machine:
+          description: Machine is the stable machine identifier the collector reports.
+          type: string
+        os:
+          description: OS is the machine's operating system label.
+          type: string
+        plan:
+          description: Plan is the provider plan label (e.g. "Claude Max").
+          type: string
+        provider:
+          description: Provider is the AI provider this account belongs to (claude,
+            openai, hanzo…).
+          type: string
+        status:
+          description: Status is linked or revoked. Revoked rows are retained for
+            history.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the link was last refreshed, RFC 3339 UTC.
+          type: string
+        usage:
+          description: |-
+            Usage is the last good usage snapshot, clamped and re-serialized to known
+            fields at ingest.
+        user:
+          description: User is the owning subject — the validated caller who registered
+            the link.
+          type: string
+      type: object
     listOut:
       properties:
         providers:
@@ -18523,11 +19477,24 @@ components:
             $ref: '#/components/schemas/Listing'
           type: array
       type: object
+    liveness:
+      properties:
+        service:
+          description: Service names the answering subsystem; it is always commerce.
+          type: string
+        status:
+          description: 'Status is always ok: mounted is the only state that can answer.'
+          type: string
+      type: object
     loss:
       properties:
         exhausted:
+          description: Exhausted counts facts the bus abandoned after maxDeliver failed
+            inserts.
           type: integer
         undecodable:
+          description: Undecodable counts messages acked without landing because they
+            did not parse.
           type: integer
       type: object
     machineList:
@@ -18687,6 +19654,20 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    meetHealth:
+      properties:
+        ready:
+          description: Ready reports whether this deployment can mint join tokens.
+            False is the 503.
+          type: boolean
+        service:
+          description: Service names the subsystem answering — always "meet".
+          type: string
+        status:
+          description: Status is "ok" when tokens can be minted and "degraded" when
+            they cannot.
           type: string
       type: object
     meshServiceList:
@@ -19197,6 +20178,60 @@ components:
           description: Status is "ok"; the route answers 200 whenever the subsystem
             is mounted.
           type: string
+      type: object
+    notifySend:
+      properties:
+        body:
+          description: Body is the message text, sent verbatim when present — the
+            no-template path.
+          type: string
+        channel:
+          description: |-
+            Channel selects the delivery channel, sms or email. The per-channel routes
+            (/send/sms, /send/email) pin it, overriding whatever the body names; on the
+            generic route it is required.
+          type: string
+        event:
+          description: |-
+            Event is the event name, which doubles as the template id when TemplateID is
+            empty — the IAM OTP path sends event=iam.otp_sent and nothing else.
+          type: string
+        provider:
+          description: |-
+            Provider pins a provider service name (twilio, plivo, twilio_email, mail).
+            Empty picks the one whose org credentials are actually configured in KMS.
+          type: string
+        subject:
+          description: Subject is the message subject, carried on the email channel
+            only.
+          type: string
+        sync:
+          description: |-
+            Sync must be exactly "true": delivery here is synchronous, and anything else
+            answers 503 because the queue plane that would run an async dispatch is owned
+            elsewhere. Over REST it rides as ?sync=true (the URL binds over the body); a
+            by-name call states it in its arguments.
+          type: string
+        template_id:
+          description: TemplateID selects a built-in template when Body is empty.
+          type: string
+        template_vars:
+          description: |-
+            TemplateVars carries the values the selected template renders against, as
+            a raw JSON object. Raw on purpose: the by-name call plane computes an
+            input's layout before reading any payload and refuses a map field
+            outright, which would make every typed call to these ops fail — and that
+            call is the reason they are typed at all (IAM's OTP sender). deliver
+            decodes it right before the template renders, so REST bodies decode
+            byte-identically to the map this replaced.
+        to:
+          description: |-
+            To is the destination address per recipient — a phone number for sms, an
+            email address for email. Several recipients fan out into one provider call
+            each, and the response shape follows the count (see the items field).
+          items:
+            type: string
+          type: array
       type: object
     o11y.AWSAccountConfig:
       properties:
@@ -31401,6 +32436,13 @@ components:
             $ref: '#/components/schemas/oracleView'
           type: array
       type: object
+    orgEarningView:
+      properties:
+        commissionCents:
+          type: integer
+        referredOrg:
+          type: string
+      type: object
     orgOptinReq:
       properties:
         display:
@@ -31697,6 +32739,15 @@ components:
           $ref: '#/components/schemas/payoutView'
           description: Payout is the recorded payout, including where it settled.
       type: object
+    payoutOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/settlement'
+        msg:
+          type: string
+        status:
+          type: string
+      type: object
     payoutRequest:
       properties:
         amountCents:
@@ -31749,6 +32800,15 @@ components:
             settlement legible as internal accounting.
           type: string
         txn:
+          type: string
+      type: object
+    periodEarningView:
+      properties:
+        commissionCents:
+          type: integer
+        marginCents:
+          type: integer
+        period:
           type: string
       type: object
     pickOut:
@@ -33421,6 +34481,18 @@ components:
           description: SSHURL is the repo's scp-style SSH remote.
           type: string
       type: object
+    rateSet:
+      properties:
+        id:
+          description: ID is the affiliate whose direct rate moves, from the path.
+          type: string
+        rateBps:
+          description: |-
+            RateBps is the direct commission rate, in basis points of Hanzo's margin;
+            capped so the whole L1+L2+L3 schedule never exceeds the margin. Body-only
+            (`url:"-"`): a money parameter must never ride the URL into access logs.
+          type: integer
+      type: object
     rawOut:
       properties:
         data:
@@ -33463,6 +34535,151 @@ components:
             it cannot.
           type: string
       type: object
+    readingReq:
+      properties:
+        account:
+          description: Account is the provider-side account the sample belongs to.
+          type: string
+        cachedInputTokens:
+          description: CachedInputTokens is the window's cached-prompt-token count.
+          type: integer
+        confidence:
+          description: Confidence says how real the counters are, as the meter graded
+            itself.
+          type: string
+        costCents:
+          description: CostCents is the window's spend in cents, as the provider's
+            meter states it.
+          type: integer
+        costLimitCents:
+          description: CostLimitCents is the window's spend cap in cents, when the
+            meter knows one.
+          type: integer
+        currency:
+          description: Currency is the ISO currency the cost fields are stated in.
+          type: string
+        inputTokens:
+          description: InputTokens is the window's prompt-token count.
+          type: integer
+        kind:
+          description: Kind is subscription or apikey; anything else is refused.
+          type: string
+        lane:
+          description: Lane names the meter's own lane label for this measurement.
+          type: string
+        machine:
+          description: Machine is the machine the collector observed the account on.
+            Required.
+          type: string
+        outputTokens:
+          description: OutputTokens is the window's completion-token count.
+          type: integer
+        plan:
+          description: Plan is the provider plan label the account is on.
+          type: string
+        provider:
+          description: Provider is the AI provider whose meter reported this sample.
+            Required.
+          type: string
+        requests:
+          description: Requests is the window's request count.
+          type: integer
+        resetsAt:
+          description: ResetsAt is when the window resets, RFC 3339, bounded.
+          type: string
+        synthetic:
+          description: Synthetic marks a sample the collector derived rather than
+            observed.
+          type: boolean
+        totalTokens:
+          description: TotalTokens is the window's total token count.
+          type: integer
+        usedPct:
+          description: UsedPct is how much of the window's allowance is consumed,
+            clamped 0..100.
+          type: number
+        window:
+          description: |-
+            Window is the window class, one of 6h, day, week, month; anything else is
+            refused rather than silently reclassified.
+          type: string
+        windowMinutes:
+          description: WindowMinutes is the window's length as the meter reported
+            it.
+          type: integer
+        windowStart:
+          description: |-
+            WindowStart is when the measured window opened, RFC 3339, bounded to a
+            sane interval around now.
+          type: string
+      type: object
+    readingView:
+      properties:
+        account:
+          description: Account is the provider-side account the sample belongs to.
+          type: string
+        cachedInputTokens:
+          description: CachedInputTokens is the window's cached-prompt-token count.
+          type: integer
+        confidence:
+          description: |-
+            Confidence says whether the counters that remain mean anything, as the
+            meter graded itself.
+          type: string
+        costCents:
+          description: CostCents is the window's spend in cents, as the provider's
+            meter states it.
+          type: integer
+        costLimitCents:
+          description: CostLimitCents is the window's spend cap in cents, when the
+            meter knows one.
+          type: integer
+        currency:
+          description: Currency is the ISO currency the cost fields are stated in.
+          type: string
+        inputTokens:
+          description: InputTokens is the window's prompt-token count.
+          type: integer
+        lane:
+          description: Lane names the meter's own lane label for this measurement.
+          type: string
+        machine:
+          description: Machine is the machine the collector observed the account on.
+          type: string
+        outputTokens:
+          description: OutputTokens is the window's completion-token count.
+          type: integer
+        plan:
+          description: Plan is the provider plan label the account is on.
+          type: string
+        requests:
+          description: Requests is the window's request count.
+          type: integer
+        resetsAt:
+          description: ResetsAt is when the window resets, RFC 3339 UTC.
+          type: string
+        synthetic:
+          description: Synthetic marks a sample the collector derived rather than
+            observed.
+          type: boolean
+        totalTokens:
+          description: TotalTokens is the window's total token count.
+          type: integer
+        usedPct:
+          description: UsedPct is how much of the window's allowance is consumed,
+            0..100.
+          type: number
+        window:
+          description: 'Window is the window class: 6h, day, week or month.'
+          type: string
+        windowMinutes:
+          description: WindowMinutes is the window's length as the meter reported
+            it.
+          type: integer
+        windowStart:
+          description: WindowStart is when the measured window opened, RFC 3339 UTC.
+          type: string
+      type: object
     readmeJSON:
       properties:
         content:
@@ -33503,6 +34720,43 @@ components:
           type: string
         sha:
           description: SHA is the full commit hash the ref resolves to.
+          type: string
+      type: object
+    referralBoard:
+      properties:
+        accrualByLevel:
+          $ref: '#/components/schemas/levelSplit'
+        conversion:
+          $ref: '#/components/schemas/funnel'
+        summary:
+          $ref: '#/components/schemas/tally'
+        topReferrers:
+          items:
+            $ref: '#/components/schemas/referrerRow'
+          type: array
+      type: object
+    referralsOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/referralBoard'
+        msg:
+          type: string
+        status:
+          type: string
+      type: object
+    referrerRow:
+      properties:
+        accruedCents:
+          type: integer
+        code:
+          type: string
+        org:
+          type: string
+        pendingCents:
+          type: integer
+        referredCount:
+          type: integer
+        status:
           type: string
       type: object
     refreshOut:
@@ -33792,6 +35046,21 @@ components:
         version:
           description: Version is the released image tag, or v<n> when the image carries
             none.
+          type: string
+      type: object
+    remittance:
+      properties:
+        amountCents:
+          type: integer
+        createdAt:
+          type: integer
+        id:
+          type: string
+        method:
+          type: string
+        reference:
+          type: string
+        txn:
           type: string
       type: object
     replaceKitIn:
@@ -34136,6 +35405,24 @@ components:
           items:
             $ref: '#/components/schemas/waiting'
           type: array
+      type: object
+    revokeResp:
+      properties:
+        links:
+          description: |-
+            Links is each revoked row with its new status — retained, not deleted, so
+            usage history and the audit trail survive the log-out.
+          items:
+            $ref: '#/components/schemas/linkView'
+          type: array
+        revoked:
+          description: Revoked is how many links this call revoked.
+          type: integer
+        sessionsStopped:
+          description: |-
+            SessionsStopped is how many of the caller's own agent sessions stopped. A
+            stop that fails does not fail the revoke, so this may honestly report fewer.
+          type: integer
       type: object
     revokedKey:
       properties:
@@ -36220,6 +37507,13 @@ components:
             in wei.
           type: string
       type: object
+    sample:
+      properties:
+        cents:
+          type: integer
+        date:
+          type: string
+      type: object
     sampleAccepted:
       properties:
         recorded:
@@ -36884,6 +38178,13 @@ components:
             when nothing has been saved.
           type: string
       type: object
+    settlement:
+      properties:
+        affiliate:
+          $ref: '#/components/schemas/adminAffiliateView'
+        payout:
+          $ref: '#/components/schemas/remittance'
+      type: object
     shareView:
       properties:
         backend:
@@ -37088,6 +38389,23 @@ components:
         source:
           description: Source is the dependency that failed, named as an operator
             names it.
+          type: string
+      type: object
+    sourceState:
+      properties:
+        available:
+          description: |-
+            Available reports whether this ledger answered; false is honest
+            "unavailable", never a zero that would read as no usage.
+          type: boolean
+        note:
+          description: Note says in prose what the ledger's numbers mean.
+          type: string
+        scope:
+          description: 'Scope is whose usage the ledger measures: user or org.'
+          type: string
+        source:
+          description: Source is the table of record behind the ledger.
           type: string
       type: object
     sourceToolList:
@@ -37647,6 +38965,32 @@ components:
             available (its leverage) — the primary ranking key.
           type: integer
       type: object
+    summaryResp:
+      properties:
+        account:
+          $ref: '#/components/schemas/sourceState'
+          description: |-
+            Account and Hanzo report each ledger's own availability, so a partial
+            warehouse never fabricates the other half.
+        from:
+          description: From and To are the one [from, to) window BOTH halves resolved,
+            RFC 3339 UTC.
+          type: string
+        hanzo:
+          $ref: '#/components/schemas/sourceState'
+        range:
+          description: Range is the resolved period label.
+          type: string
+        rows:
+          description: |-
+            Rows is the union of both ledgers, each row labelled by source and scope —
+            concatenated, NEVER summed: a plan's percentage is not money.
+          items:
+            $ref: '#/components/schemas/totalView'
+          type: array
+        to:
+          type: string
+      type: object
     summaryView:
       properties:
         doctypes:
@@ -37823,6 +39167,19 @@ components:
         updatedAt:
           description: bumped on every reconcile — the last-synced time
           type: string
+      type: object
+    tally:
+      properties:
+        accruedLifetimeCents:
+          type: integer
+        affiliates:
+          type: integer
+        approved:
+          type: integer
+        paidLifetimeCents:
+          type: integer
+        pendingLiabilityCents:
+          type: integer
       type: object
     targetDeleted:
       properties:
@@ -38012,6 +39369,58 @@ components:
             Result is the tool's own output, verbatim — its shape is the tool's, not
             this plane's.
           type: object
+      type: object
+    totalView:
+      properties:
+        confidence:
+          description: Confidence says how real the row's numbers are.
+          type: string
+        costCents:
+          description: CostCents is the period's spend in cents, in the row's own
+            ledger.
+          type: integer
+        provider:
+          description: Provider is the provider the row totals.
+          type: string
+        requests:
+          description: Requests is the period's request count.
+          type: integer
+        scope:
+          description: 'Scope is whose usage the row measures: user or org.'
+          type: string
+        source:
+          description: 'Source is whose meter the row came from: account or hanzo.'
+          type: string
+        tokens:
+          description: Tokens is the period's total token count.
+          type: integer
+        usedPct:
+          description: UsedPct is the plan consumption percentage, on the account
+            side.
+          type: number
+        window:
+          description: Window is the window class the row totals, on the account side.
+          type: string
+        windows:
+          description: Windows is how many window instances the row folds.
+          type: integer
+      type: object
+    totals:
+      properties:
+        accruedCents:
+          type: integer
+        applied:
+          type: integer
+        approved:
+          type: integer
+        paidCents:
+          type: integer
+        pendingCents:
+          type: integer
+        suspended:
+          type: integer
+        total:
+          type: integer
       type: object
     trackerProject:
       properties:
@@ -38294,6 +39703,17 @@ components:
           type: array
         totals:
           $ref: '#/components/schemas/usageTotals'
+      type: object
+    usageLine:
+      properties:
+        cents:
+          type: integer
+        label:
+          type: string
+        tokens:
+          type: integer
+        units:
+          type: integer
       type: object
     usageOut:
       properties:
@@ -39085,13 +40505,24 @@ paths:
       x-app: iam
   /_/commerce/healthz:
     get:
-      description: 'Answers ok whenever the commerce subsystem is mounted. It is registered
-        BEFORE the module embed boots, so it keeps answering even when the embed failed
-        and every business route is serving a fail-closed 503 — which is the point:
-        it reports that the process is reachable, never that the money plane is healthy.
-        Unauthenticated, and under /_ so the ingress does not expose it publicly.'
+      description: |-
+        Answers ok whenever the commerce subsystem is mounted. It is registered
+        before the module embed boots, so it keeps answering even when the embed
+        failed and every business route serves the fail-closed 503 — which is the
+        point: it reports that the process is reachable, never that the money plane
+        is healthy. Unauthenticated, and under /_ so the ingress withholds it
+        publicly.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
       operationId: get___commerce_healthz
-      summary: Liveness for the commerce subsystem
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/liveness'
+          description: ok
+      summary: Answers ok whenever the commerce subsystem is mounted.
       x-app: commerce
   /_/commerce/providers:
     get:
@@ -39831,102 +41262,234 @@ paths:
   /v1/admin/affiliates:
     get:
       description: |-
-        Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents.
+        Lists every affiliate across the fleet with its ORG exposed, plus a
+        fleet summary of lifetime accrued, still-pending and paid commission in
+        integer cents.
 
-        PLATFORM SUDO ONLY, and a non-admin is refused outright. This is the cross-tenant view and it names orgs — exactly what the partner-facing leaderboard refuses to do. There is deliberately no org-scoped variant of this read; a partner sees its own standing through its own dashboard. Bounded per request.
+        PLATFORM SUDO ONLY, and a non-admin is refused outright. This is the
+        cross-tenant view and it names orgs — exactly what the partner-facing
+        leaderboard refuses to do. There is deliberately no org-scoped variant of this
+        read; a partner sees its own standing through its own dashboard. Bounded per
+        request.
       operationId: get_v1_admin_affiliates
-      summary: Every affiliate in the fleet, with a summary
+      parameters:
+      - description: |-
+          Limit caps the rows returned. Absent or non-positive means the default of
+          500; anything above 1000 is clamped to 1000.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/directoryOut'
+          description: ok
+      summary: Lists every affiliate across the fleet with its ORG exposed, plus a
+        fleet summary of lifetime accrued, still-pending and paid commission in integer
+        cents.
       tags:
       - admin
       x-app: affiliates
   /v1/admin/affiliates/{id}/approve:
     post:
       description: |-
-        Approves an affiliate and MINTS its referral code — the moment the partner has a working share link and starts accruing.
+        Approves an affiliate and MINTS its referral code — the moment
+        the partner has a working share link and starts accruing.
 
-        The code is taken from the body if one is given, else the vanity code the applicant requested, else a slug derived for them. Codes are ONE global namespace, so a taken code is a 409 and nothing is approved. The minted code is also mirrored as a link row so click tracking is uniform across every code the affiliate holds; that mirror is best-effort and its failure never fails the approval.
+        The code is taken from the body if one is given, else the vanity code the
+        applicant requested, else a slug derived for them. Codes are ONE global
+        namespace, so a taken code is a 409 and nothing is approved. The minted code
+        is also mirrored as a link row so click tracking is uniform across every code
+        the affiliate holds; that mirror is best-effort and its failure never fails
+        the approval.
 
-        Approval is what makes an affiliate eligible: before it, attribution against its code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY. Audited.
-      operationId: post_v1_admin_affiliates_by_id_approve
+        Approval is what makes an affiliate eligible: before it, attribution against
+        its code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY.
+        Audited.
+      operationId: v1.admin.affiliates.post_id_approve
       parameters:
-      - in: path
+      - description: ID is the affiliate to approve, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Approve an affiliate and mint its code
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/approval'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateOut'
+          description: ok
+      summary: Approves an affiliate and MINTS its referral code — the moment the
+        partner has a working share link and starts accruing.
       tags:
       - admin
       x-app: affiliates
   /v1/admin/affiliates/{id}/payout:
     post:
       description: |-
-        Pays out accrued commission and answers the payout row with the affiliate's updated balances.
+        Pays out accrued commission and answers the payout row with the
+        affiliate's updated balances.
 
-        TWO reservations guard it, both taken before any money moves. First the amount is reserved atomically against the affiliate's PENDING commission — accrued minus paid — so a payout can never exceed what is owed. Then it must be BACKED by the platform treasury reserve; if it is not, the pending reservation is voided and the call is refused with the available reserve quoted, so an unbacked payout leaves neither a row nor a phantom liability.
+        The amount is reserved atomically against the affiliate's PENDING commission —
+        accrued minus paid — so a payout can never exceed what is owed. The METHOD
+        decides whether money actually moves: `credits` issues a commerce grant into
+        the affiliate ORG's own wallet, tagged so the ledger can tell an affiliate
+        payout apart from an admin or referral grant; every other method — wire,
+        paypal and the rest — is RECORD-ONLY: the payout row and the balances move,
+        the cash is disbursed out of band.
 
-        The METHOD decides whether money actually moves. `credits` issues a commerce grant into the affiliate ORG's own wallet, tagged so the ledger can tell an affiliate payout apart from an admin or referral grant. Every other method — wire, paypal and the rest — is RECORD-ONLY: the payout row and the balances move, the cash is disbursed out of band.
-
-        The amount is integer cents and must be positive. A grant that fails after both reservations is logged loudly and never silently retried; the payout row and the audit entry are what an operator reconciles from. PLATFORM SUDO ONLY.
-      operationId: post_v1_admin_affiliates_by_id_payout
+        The amount is integer cents and must be positive. PLATFORM SUDO ONLY.
+        Audited.
+      operationId: v1.admin.affiliates.post_id_payout
       parameters:
-      - in: path
+      - description: ID is the affiliate to pay, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Pay out an affiliate's accrued commission
+      requestBody:
+        content:
+          application/json:
+            example:
+              amountCents: 1200
+              method: credits
+              reference: ledger-1
+            schema:
+              $ref: '#/components/schemas/disbursal'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/payoutOut'
+          description: ok
+      summary: Pays out accrued commission and answers the payout row with the affiliate's
+        updated balances.
       tags:
       - admin
       x-app: affiliates
   /v1/admin/affiliates/{id}/rate:
     post:
       description: |-
-        Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's margin.
+        Sets one affiliate's DIRECT commission rate, in basis points of
+        Hanzo's margin.
 
-        The rate is CAPPED so that the direct rate plus the platform-wide second- and third-level rates can never exceed the whole margin — the structural guarantee that everything paid on one source event stays inside the margin actually earned. The cap is resolved from the rates in force at the moment of the call and quoted in the refusal, because those switches move; a hardcoded bound would start lying the moment somebody edits the schedule.
+        The rate is CAPPED so that the direct rate plus the platform-wide second- and
+        third-level rates can never exceed the whole margin — the structural guarantee
+        that everything paid on one source event stays inside the margin actually
+        earned. The cap is resolved from the rates in force at the moment of the call
+        and quoted in the refusal, because those switches move; a hardcoded bound
+        would start lying the moment somebody edits the schedule.
 
-        Only the direct level is per-affiliate. The second and third levels are platform switches and are not settable here. The change applies to FUTURE accruals — commission already latched for a period is not recomputed. PLATFORM SUDO ONLY. Audited.
-      operationId: post_v1_admin_affiliates_by_id_rate
+        Only the direct level is per-affiliate. The second and third levels are
+        platform switches and are not settable here. The change applies to FUTURE
+        accruals — commission already latched for a period is not recomputed. PLATFORM
+        SUDO ONLY. Audited.
+      operationId: v1.admin.affiliates.post_id_rate
       parameters:
-      - in: path
+      - description: ID is the affiliate whose direct rate moves, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Set an affiliate's direct commission rate
+      requestBody:
+        content:
+          application/json:
+            example:
+              rateBps: 2500
+            schema:
+              $ref: '#/components/schemas/rateSet'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateOut'
+          description: ok
+      summary: Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's
+        margin.
       tags:
       - admin
       x-app: affiliates
   /v1/admin/affiliates/{id}/suspend:
     post:
       description: |-
-        Suspends an affiliate: it stops accruing on the next sweep, and its code stops resolving for new attributions.
+        Suspends an affiliate: it stops accruing on the next sweep, and
+        its code stops resolving for new attributions.
 
-        It CLAWS NOTHING BACK. Commission already accrued stays accrued and stays payable, and existing attribution edges are left standing — suspension ends earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.
-      operationId: post_v1_admin_affiliates_by_id_suspend
+        It CLAWS NOTHING BACK. Commission already accrued stays accrued and stays
+        payable, and existing attribution edges are left standing — suspension ends
+        earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.
+      operationId: v1.admin.affiliates.post_id_suspend
       parameters:
-      - in: path
+      - description: ID is the affiliate's server-minted handle, "aff_"-prefixed.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Suspend an affiliate
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateOut'
+          description: ok
+      summary: 'Suspends an affiliate: it stops accruing on the next sweep, and its
+        code stops resolving for new attributions.'
       tags:
       - admin
       x-app: affiliates
   /v1/admin/affiliates/sweep:
     post:
       description: |-
-        Runs the accrual: for each referred org it reads that org's metered spend for the current period and accrues commission to every affiliate up its referral chain, then answers how many sources were swept and how many NEW accruals landed.
+        Runs the accrual: for each referred org it reads that org's metered
+        spend for the current period and accrues commission to every affiliate up its
+        referral chain, then answers how many sources were swept and how many NEW
+        accruals landed.
 
-        This is the cron path, and it is LATCHED at most once per affiliate, source org and period — so re-running it inside the same period accrues nothing further. Safe to retry, and safe to run by hand beside the schedule.
+        This is the cron path, and it is LATCHED at most once per affiliate, source
+        org and period — so re-running it inside the same period accrues nothing
+        further. Safe to retry, and safe to run by hand beside the schedule.
 
-        Commission is a rate of Hanzo's MARGIN on that spend, never of the customer's gross bill, so every level's share summed over one source event stays within the margin actually earned and the customer's charge is untouched. Nothing accrues past the third upline level, and only an APPROVED affiliate accrues at all.
+        Commission is a rate of Hanzo's MARGIN on that spend, never of the customer's
+        gross bill, so every level's share summed over one source event stays within
+        the margin actually earned and the customer's charge is untouched. Nothing
+        accrues past the third upline level, and only an APPROVED affiliate accrues at
+        all.
 
-        The same spend read drives the OSS author royalty — one read, both programs — so the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded per run; a source whose spend cannot be read is skipped and picked up next time, never half-accrued.
-      operationId: post_v1_admin_affiliates_sweep
-      summary: Accrue this period's commission for every referred org
+        The same spend read drives the OSS author royalty — one read, both programs —
+        so the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded
+        per run; a source whose spend cannot be read is skipped and picked up next
+        time, never half-accrued.
+      operationId: v1.admin.affiliates.post_sweep
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accrualsOut'
+          description: ok
+      summary: 'Runs the accrual: for each referred org it reads that org''s metered
+        spend for the current period and accrues commission to every affiliate up
+        its referral chain, then answers how many sources were swept and how many
+        NEW accruals landed.'
       tags:
       - admin
       x-app: affiliates
@@ -42321,13 +43884,30 @@ paths:
   /v1/admin/referrals:
     get:
       description: |-
-        The referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.
+        Answers the referral board: the top referrers by lifetime
+        commission, the funnel conversion rate (referred orgs that have actually
+        produced commission, over all referred orgs), and the accrual LIABILITY the
+        platform owes, broken out by upline level.
 
-        Read the liability figure carefully — it is commission accrued and NOT yet paid, so it is money owed, not money spent, and the per-level split says how much of it comes from direct referrals versus the second and third levels.
+        Read the liability figure carefully — it is commission accrued and NOT yet
+        paid, so it is money owed, not money spent, and the per-level split says how
+        much of it comes from direct referrals versus the second and third levels.
 
-        PLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single attribution spine the accrual itself walks, so the board and the ledger cannot disagree. Amounts are integer cents.
+        PLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single
+        attribution spine the accrual itself walks, so the board and the ledger cannot
+        disagree. Amounts are integer cents.
       operationId: get_v1_admin_referrals
-      summary: 'Referral analytics: top referrers, conversion, and liability'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/referralsOut'
+          description: ok
+      summary: 'Answers the referral board: the top referrers by lifetime commission,
+        the funnel conversion rate (referred orgs that have actually produced commission,
+        over all referred orgs), and the accrual LIABILITY the platform owes, broken
+        out by upline level.'
       tags:
       - admin
       x-app: affiliates
@@ -43381,93 +44961,247 @@ paths:
   /v1/affiliates:
     get:
       description: |-
-        Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history.
+        Answers the caller org's OWN affiliate standing: status, referral
+        code and share link, commission rate, how many orgs it has referred, and its
+        lifetime accrued, still-pending and already-paid commission in integer cents,
+        with its payout history.
 
-        An org that never applied gets an honest `isAffiliate:false` and the default rate rather than a 404 — the console renders the apply form off that answer.
+        An org that never applied gets an honest `isAffiliate:false` and the default
+        rate rather than a 404 — the console renders the apply form off that answer.
 
-        The affiliate is resolved from the VALIDATED org, never from a field, so this can only ever read the caller's own row; without a principal it is refused. For an approved affiliate the read first runs the accrual sweep over its own downline, so the dashboard is self-updating — bounded and best-effort, so a commerce hiccup shows slightly stale numbers instead of failing the page. Commission is earned on Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes what that customer pays.
+        The affiliate is resolved from the VALIDATED org, never from a field, so this
+        can only ever read the caller's own row; without a principal it is refused. It
+        is a PURE READ: nothing accrues until the sweep runs. Commission is earned on
+        Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes
+        what that customer pays.
       operationId: get_v1_affiliates
-      summary: Your org's affiliate standing and commission dashboard
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateStanding'
+          description: ok
+      summary: 'Answers the caller org''s OWN affiliate standing: status, referral
+        code and share link, commission rate, how many orgs it has referred, and its
+        lifetime accrued, still-pending and already-paid commission in integer cents,
+        with its payout history.'
       tags:
       - affiliates
       x-app: affiliates
   /v1/affiliates/apply:
     post:
       description: |-
-        Enrolls the caller's OWN org as an affiliate at status `applied`, optionally requesting a vanity code, and answers the record — 201 on the first apply, 200 with `created:false` afterwards.
+        Enrolls the caller's OWN org as an affiliate at status `applied`,
+        optionally requesting a vanity code, and answers the record — 201 on the first
+        apply, 200 with `created:false` afterwards.
 
-        IDEMPOTENT, first apply wins: one affiliate per org, so re-applying never creates a second row and never resets an existing approval. Applying is not joining — no code is minted and nothing accrues until staff approve, which is where both the code and the commission rate come from.
+        IDEMPOTENT, first apply wins: one affiliate per org, so re-applying never
+        creates a second row and never resets an existing approval. Applying is not
+        joining — no code is minted and nothing accrues until staff approve, which is
+        where both the code and the commission rate come from.
 
-        The org is the validated caller's, never a field. A malformed vanity code is refused up front; the code is only REQUESTED here, and approval may mint a different one if the requested code is taken.
+        The org is the validated caller's, never a field. A malformed vanity code is
+        refused up front; the code is only REQUESTED here, and approval may mint a
+        different one if the requested code is taken.
       operationId: post_v1_affiliates_apply
-      summary: Enroll your org in the partner program
+      requestBody:
+        content:
+          application/json:
+            example:
+              requestedCode: acme
+            schema:
+              $ref: '#/components/schemas/applyRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/application'
+          description: ok
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/application'
+          description: created
+      summary: Enrolls the caller's OWN org as an affiliate at status `applied`, optionally
+        requesting a vanity code, and answers the record — 201 on the first apply,
+        200 with `created:false` afterwards.
       tags:
       - affiliates
       x-app: affiliates
   /v1/affiliates/attribute:
     post:
       description: |-
-        Records the first-touch edge every later commission is computed from: the caller's org was referred by the affiliate that owns this code.
+        Records the first-touch edge every later commission is computed
+        from: the caller's org was referred by the affiliate that owns this code.
 
-        The REFERRED org is the validated caller, never a field. A caller that could name the referred org could attach itself to somebody else's revenue. The affiliate is resolved from the code, and only an APPROVED affiliate's code resolves.
+        The REFERRED org is the validated caller, never a field. A caller that could
+        name the referred org could attach itself to somebody else's revenue. The
+        affiliate is resolved from the code, and only an APPROVED affiliate's code
+        resolves.
 
-        FIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post answers the existing edge with `created:false` rather than moving the attribution. Self-attribution is refused, and so is a code that would make a cycle in the upline chain. An unknown code is a 404, deliberately: an affiliate code IS a public shareable link, so whether one is real is public by design, and the caller legitimately needs to know its link resolved.
+        FIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post
+        answers the existing edge with `created:false` rather than moving the
+        attribution. Self-attribution is refused, and so is a code that would make a
+        cycle in the upline chain. An unknown code is a 404, deliberately: an
+        affiliate code IS a public shareable link, so whether one is real is public by
+        design, and the caller legitimately needs to know its link resolved.
 
-        A user-level mirror of the edge is written best-effort; a conflict there never fails the org attribution, which is the money-bearing one.
+        A user-level mirror of the edge is written best-effort; a conflict there never
+        fails the org attribution, which is the money-bearing one.
       operationId: post_v1_affiliates_attribute
-      summary: Record that your org arrived through an affiliate's code
+      requestBody:
+        content:
+          application/json:
+            example:
+              code: acme
+            schema:
+              $ref: '#/components/schemas/attributeRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/attribution'
+          description: ok
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/attribution'
+          description: created
+      summary: 'Records the first-touch edge every later commission is computed from:
+        the caller''s org was referred by the affiliate that owns this code.'
       tags:
       - affiliates
       x-app: affiliates
   /v1/affiliates/click:
     post:
       description: |-
-        Counts a click on a share link. PUBLIC — it takes no principal, because a visitor clicking a shareable link has no session yet.
+        Counts a click on a share link. PUBLIC — it takes no principal, because
+        a visitor clicking a shareable link has no session yet.
 
-        The ping folds into an in-memory buffer and NEVER writes the money database synchronously, so a click flood cannot contend with the accrual and payout write path; tallies are flushed in one batch on the next authenticated links read and at shutdown. Clicks are a vanity metric: no accrual and no payout ever reads them — those key on real metered spend — so click inflation cannot move money.
+        The ping folds into an in-memory buffer and NEVER writes the money database
+        synchronously, so a click flood cannot contend with the accrual and payout
+        write path; tallies are flushed in one batch on the next authenticated links
+        read and at shutdown. Clicks are a vanity metric: no accrual and no payout
+        ever reads them — those key on real metered spend — so click inflation cannot
+        move money.
 
-        Any well-formed code is accepted WITHOUT checking that it exists, deliberately: this is not a code-existence oracle. `counted` reports that the buffer took the ping, not that the code is real; an unknown code simply no-ops at flush time.
+        Any well-formed code is accepted WITHOUT checking that it exists,
+        deliberately: this is not a code-existence oracle. `counted` reports that the
+        buffer took the ping, not that the code is real; an unknown code simply no-ops
+        at flush time.
       operationId: post_v1_affiliates_click
-      summary: Count a click on a share link
+      requestBody:
+        content:
+          application/json:
+            example:
+              code: acme
+            schema:
+              $ref: '#/components/schemas/clickRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/clickCount'
+          description: ok
+      summary: Counts a click on a share link.
       tags:
       - affiliates
       x-app: affiliates
   /v1/affiliates/leaderboard:
     get:
       description: |-
-        The top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.
+        Answers the top affiliates by lifetime accrued commission, shown by
+        OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.
 
-        It never discloses an org identity and never a referred org's usage. An affiliate that has set no handle still OCCUPIES its rank but is not listed — so opting out hides the name, not the position, and the visible board must not be read as a complete roster.
+        It never discloses an org identity and never a referred org's usage. An
+        affiliate that has set no handle still OCCUPIES its rank but is not listed —
+        so opting out hides the name, not the position, and the visible board must not
+        be read as a complete roster.
 
-        The caller's own row carries its exact GLOBAL rank, computed over the whole approved set rather than over the page, so it is right well outside the top of the board. Only an approved affiliate has a rank. Requires a validated principal; a signed-in non-affiliate may read the board but gets no personal row.
+        The caller's own row carries its exact GLOBAL rank, computed over the whole
+        approved set rather than over the page, so it is right well outside the top of
+        the board. Only an approved affiliate has a rank. Requires a validated
+        principal; a signed-in non-affiliate may read the board but gets no personal
+        row.
       operationId: get_v1_affiliates_leaderboard
-      summary: The partner leaderboard, plus your own rank
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateBoard'
+          description: ok
+      summary: Answers the top affiliates by lifetime accrued commission, shown by
+        OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.
       tags:
       - affiliates
       x-app: affiliates
   /v1/affiliates/me:
     get:
       description: |-
-        The richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there.
+        Answers the richer self-view: the same lifetime accrued, pending and paid
+        commission and payout history, plus the caller's downline broken out by upline
+        LEVEL — direct, second, third — each with the rate paid at that level and how
+        many orgs sit there.
 
-        Commission is MULTI-LEVEL: a referred org's spend pays up its referral chain, three levels deep and no further. The direct level is the affiliate's own negotiated rate; the second and third are platform-wide switches, read live, so the schedule shown is the one actually in force rather than one compiled in. A caller that has not applied still gets that schedule alongside `isAffiliate:false`, so the console can show what it would earn.
+        Commission is MULTI-LEVEL: a referred org's spend pays up its referral chain,
+        three levels deep and no further. The direct level is the affiliate's own
+        negotiated rate; the second and third are platform-wide switches, read live,
+        so the schedule shown is the one actually in force rather than one compiled
+        in. A caller that has not applied still gets that schedule alongside
+        `isAffiliate:false`, so the console can show what it would earn.
 
-        Scoped to the validated org and nothing else, and refused without a principal. An approved affiliate's figures are refreshed by a bounded, best-effort sweep before the read.
+        Scoped to the validated org and nothing else, and refused without a
+        principal. A PURE READ — it reports the downline but accrues nothing.
       operationId: get_v1_affiliates_me
-      summary: Your affiliate self-view, with the downline broken out by level
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateSelf'
+          description: ok
+      summary: 'Answers the richer self-view: the same lifetime accrued, pending and
+        paid commission and payout history, plus the caller''s downline broken out
+        by upline LEVEL — direct, second, third — each with the rate paid at that
+        level and how many orgs sit there.'
       tags:
       - affiliates
       x-app: affiliates
   /v1/affiliates/me/earnings:
     get:
       description: |-
-        The caller's own commission ledger: per period, the margin it earned against and the commission taken from that margin; and per referred org, that referral's aggregate contribution. Integer cents throughout.
+        Answers the caller's own commission ledger: per period, the margin it
+        earned against and the commission taken from that margin; and per referred
+        org, that referral's aggregate contribution. Integer cents throughout.
 
-        The per-org view deliberately carries the affiliate's OWN earned share and NOT the referred org's spend or margin. An affiliate is entitled to what it earned, not to a restatement of its customer's usage — the period view is where the margin base appears, aggregated across every referral.
+        The per-org view deliberately carries the affiliate's OWN earned share and NOT
+        the referred org's spend or margin. An affiliate is entitled to what it
+        earned, not to a restatement of its customer's usage — the period view is
+        where the margin base appears, aggregated across every referral.
 
-        Scoped server-side to the validated caller's affiliate; a caller that is not one gets `isAffiliate:false`. An approved affiliate's ledger is refreshed by a bounded, best-effort sweep first, so the figures are current.
+        Scoped server-side to the validated caller's affiliate; a caller that is not
+        one gets `isAffiliate:false`.
       operationId: get_v1_affiliates_me_earnings
-      summary: Your commission ledger, by period and by referred org
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateEarnings'
+          description: ok
+      summary: 'Answers the caller''s own commission ledger: per period, the margin
+        it earned against and the commission taken from that margin; and per referred
+        org, that referral''s aggregate contribution.'
       tags:
       - affiliates
       x-app: affiliates
@@ -43476,36 +45210,94 @@ paths:
       description: |-
         Sets the caller's public leaderboard display name, or clears it.
 
-        The handle IS the opt-in. An empty handle opts out: the affiliate keeps its rank and can still see its own row, it simply stops being listed to anyone else. That is the whole privacy control — there is no separate visibility flag, and no way to be listed without choosing a name.
+        The handle IS the opt-in. An empty handle opts out: the affiliate keeps its
+        rank and can still see its own row, it simply stops being listed to anyone
+        else. That is the whole privacy control — there is no separate visibility
+        flag, and no way to be listed without choosing a name.
 
-        Requires a validated principal and an existing affiliate record; apply first. The handle is bounded and restricted to letters, digits, space, hyphen, underscore and dot.
+        Requires a validated principal and an existing affiliate record; apply first.
+        The handle is bounded and restricted to letters, digits, space, hyphen,
+        underscore and dot.
       operationId: post_v1_affiliates_me_handle
-      summary: Set or clear your public leaderboard name
+      requestBody:
+        content:
+          application/json:
+            example:
+              handle: acme partners
+            schema:
+              $ref: '#/components/schemas/handleRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/handleSet'
+          description: ok
+      summary: Sets the caller's public leaderboard display name, or clears it.
       tags:
       - affiliates
       x-app: affiliates
   /v1/affiliates/me/links:
     get:
       description: |-
-        The caller's share links, each with its URL and its funnel: clicks tracked, signups — orgs attributed with that code — and conversions, meaning how many of those signups have actually produced commission.
+        Answers the caller's share links, each with its URL and its funnel:
+        clicks tracked, signups — orgs attributed with that code — and conversions,
+        meaning how many of those signups have actually produced commission.
 
-        Signups and conversions are DERIVED from the commission ledger and never stored, so they cannot drift from the money. Clicks are the one stored counter and the one that is pure vanity.
+        Signups and conversions are DERIVED from the commission ledger and never
+        stored, so they cannot drift from the money. Clicks are the one stored counter
+        and the one that is pure vanity.
 
-        Any pending public click pings are folded into the store before the read, in one batch — which is how the counters stay current without a database write per click. Scoped to the validated caller's own affiliate; a non-affiliate gets `isAffiliate:false` and the link cap.
+        Any pending public click pings are folded into the store before the read, in
+        one batch — which is how the counters stay current without a database write
+        per click. Scoped to the validated caller's own affiliate; a non-affiliate
+        gets `isAffiliate:false` and the link cap.
       operationId: get_v1_affiliates_me_links
-      summary: Your share links and their funnel
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliateLinks'
+          description: ok
+      summary: 'Answers the caller''s share links, each with its URL and its funnel:
+        clicks tracked, signups — orgs attributed with that code — and conversions,
+        meaning how many of those signups have actually produced commission.'
       tags:
       - affiliates
       x-app: affiliates
     post:
       description: |-
-        Mints a new share link for the caller's own affiliate and answers it with its full URL, 201.
+        Mints a new share link for the caller's own affiliate and answers it
+        with its full URL, 201.
 
-        APPROVAL IS REQUIRED: an org that has applied but is not approved is refused, because a link that cannot accrue is a link that quietly loses the referral. A requested vanity code must be valid and free across the WHOLE directory — codes are one global namespace, so a taken code is a 409 rather than a silent alias. Omit the code and a random one is minted.
+        APPROVAL IS REQUIRED: an org that has applied but is not approved is refused,
+        because a link that cannot accrue is a link that quietly loses the referral. A
+        requested vanity code must be valid and free across the WHOLE directory —
+        codes are one global namespace, so a taken code is a 409 rather than a silent
+        alias. Omit the code and a random one is minted.
 
-        Bounded per affiliate. The label is cosmetic: it is trimmed, stripped of control characters and capped, and it is never part of a code.
+        Bounded per affiliate. The label is cosmetic: it is trimmed, stripped of
+        control characters and capped, and it is never part of a code.
       operationId: post_v1_affiliates_me_links
-      summary: Mint a new share link
+      requestBody:
+        content:
+          application/json:
+            example:
+              label: twitter
+            schema:
+              $ref: '#/components/schemas/createLinkRequest'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/linkMint'
+          description: created
+      summary: Mints a new share link for the caller's own affiliate and answers it
+        with its full URL, 201.
       tags:
       - affiliates
       x-app: affiliates
@@ -47282,27 +49074,59 @@ paths:
   /v1/analytics/health:
     get:
       description: |-
-        Reports the analytics subsystem's own liveness in BOTH directions: `plane` is the event plane it WRITES (the bus and the JetStream stream every accepted event is published to, both named in the report), and `datastore` is the warehouse it READS, with each read lens's table reported as it is provisioned (the LLM usage ledger and the product-event table).
+        Health reports whether the event plane can take a write and the warehouse can
+        answer a read.
 
-        EITHER ONE DOWN IS A 503, and the report says WHICH — they are probed independently and never collapse into a single bit. This endpoint used to report the read half only, and answered 200/ok while every POST /v1/event failed on a stream that could not bind: a total ingest outage behind a green probe. A readiness gate wired here now gates on the write path too.
+        It reports the analytics subsystem's own liveness in BOTH directions: plane is
+        the event plane it WRITES (the bus and the JetStream stream every accepted
+        event is published to, both named in the report), and datastore is the
+        warehouse it READS, with each read lens's table reported as it is provisioned
+        (the LLM usage ledger and the product-event table).
 
-        `plane.ready` IS A REAL PROBE and walks the ingest path itself — the same connection and the same stream a publish uses — so it cannot answer ready while a publish would 503. `plane.reason` carries the plane's own error text when it is false.
+        EITHER ONE DOWN IS A 503, and the report says WHICH — they are probed
+        independently and never collapse into a single bit. This endpoint used to
+        report the read half only, and answered 200/ok while every POST /v1/event
+        failed on a stream that could not bind: a total ingest outage behind a green
+        probe. A readiness gate here now gates on the write path too.
 
-        `datastore` IS NOT PROBED WITH A QUERY. It is the state of the process's own shared client — established, and not since closed — so a warehouse accepting connections and failing reads still reports true. Degraded CARRIES the report (status, the failing half, reason) as its body rather than an error envelope, so a gate reads the cause off the same object it got at 200.
+        plane.ready IS A REAL PROBE and walks the ingest path itself — the same
+        connection and the same stream a publish uses — so it cannot answer ready while
+        a publish would 503. plane.reason carries the plane's own error text when it is
+        false.
 
-        A MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens reported available:false answers honest-empty rather than erroring, so a fresh deployment whose collector has not emitted yet is legitimately 200 with the product-event lens unavailable. The lens block is reported whenever the warehouse is REACHABLE — including on a report degraded by the plane, where the tables genuinely were probed — and is absent only when the warehouse is not, having nothing to say about tables it could not reach.
+        datastore IS NOT PROBED WITH A QUERY. It is the state of the process's own
+        shared client — established, and not since closed — so a warehouse accepting
+        connections and failing reads still reports true. Degraded CARRIES the report
+        (status, the failing half, reason) as its body rather than an error envelope,
+        so a gate reads the cause off the same object it got at 200.
 
-        Unauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant data: table existence and stream presence only, never a row and never an event.
+        A MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens
+        reported available:false answers honest-empty rather than erroring, so a fresh
+        deployment whose collector has not emitted yet is legitimately 200 with the
+        product-event lens unavailable. The lens block is reported whenever the
+        warehouse is REACHABLE — including on a report degraded by the plane, where the
+        tables genuinely were probed — and is absent only when the warehouse is not,
+        having nothing to say about tables it could not reach.
+
+        Unauthenticated on purpose — liveness has to be probe-able — and it reads NO
+        tenant data: table existence and stream presence only, never a row and never an
+        event.
       operationId: get_v1_analytics_health
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/healthReport'
-          description: Success
-      summary: Whether the event plane can take a write and the warehouse can answer
-        a read
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/healthReport'
+          description: service unavailable
+      summary: Health reports whether the event plane can take a write and the warehouse
+        can answer a read.
       tags:
       - analytics
       x-app: analytics
@@ -49505,15 +51329,40 @@ paths:
   /v1/billing/usage/accounts:
     get:
       description: |-
-        Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum.
+        Answers per-account totals for the linked provider accounts the
+        gateway ROUTED this caller's traffic through — requests, prompt and completion
+        tokens, recorded cost — plus their honest sum.
 
-        This is the one read in the billing namespace scoped to the PERSON, not the org. Rows are keyed on (validated org, validated user), so a caller sees the accounts THEY linked and never a colleague's, even inside one org — everything else under /v1/billing is org-wide. Neither key is ever read from the request.
+        This is the one read in the billing namespace scoped to the PERSON, not the
+        org. Rows are keyed on (validated org, validated user), so a caller sees the
+        accounts THEY linked and never a colleague's, even inside one org — everything
+        else under /v1/billing is org-wide. Neither key is ever read from the request
+        body or the query.
 
-        It is a ROUTING counter, not the money ledger. `costCents` is 0 for an account billed by its own subscription (`billing: "plan"`), where the plan pays the provider directly, so these totals do not reconcile against what the org was charged. /v1/billing/usage is the charged ledger.
+        It is a ROUTING counter, not the money ledger. `costCents` is 0 for an account
+        billed by its own subscription, where the plan pays the provider directly, so
+        these totals do not reconcile against what the org was charged.
+        /v1/billing/usage is the charged ledger.
 
-        401 without a validated principal. Where the linked-account plane is not resident the answer is an honest 501 — never an empty breakdown, which would read as no usage.
+        401 without a validated principal. Where the linked-account plane is not
+        resident the answer is an honest 501 — never an empty breakdown, which would
+        read as no usage.
       operationId: get_v1_billing_usage_accounts
-      summary: Traffic through the accounts the CALLER linked, per account
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accounts'
+          description: ok
+          headers:
+            Cache-Control:
+              description: Set by GET /v1/billing/usage/accounts.
+              schema:
+                type: string
+      summary: Answers per-account totals for the linked provider accounts the gateway
+        ROUTED this caller's traffic through — requests, prompt and completion tokens,
+        recorded cost — plus their honest sum.
       tags:
       - billing
       x-app: billing
@@ -59747,73 +61596,218 @@ paths:
   /v1/finance/balance:
     get:
       description: |-
-        Answers the org's spendable prepaid balance typed for the finance surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf` instant it was read.
+        Answers the org's spendable prepaid balance typed for the
+        finance surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf`
+        instant it was read.
 
-        It is the SAME wallet read /v1/billing/balance answers — one function, called by both, so the two surfaces cannot drift into disagreeing about a customer's money. Reshaped, never re-metered. Co-resident the number comes straight out of the org's own double-entry ledger file.
+        It is the SAME wallet read /v1/billing/balance answers — one function, called
+        by both, so the two surfaces cannot drift into disagreeing about a customer's
+        money. Reshaped, never re-metered. Co-resident the number comes straight out
+        of the org's own double-entry ledger file.
 
-        `dueCents` is a structural 0: this is a PREPAID wallet with no open-invoice debt, so nothing is ever owed and a non-zero value here would be an invention. `pendingCents` is 0 on the co-resident ledger, where authorization holds are never posted; only a split-deploy upstream reports holds, and there spendable is the balance NET of them, floored at 0 — a fully-held wallet reports 0 rather than money the gate would refuse.
+        `dueCents` is a structural 0: this is a PREPAID wallet with no open-invoice
+        debt, so nothing is ever owed and a non-zero value here would be an invention.
+        `pendingCents` is 0 on the co-resident ledger, where authorization holds are
+        never posted; only a split-deploy upstream reports holds, and there spendable
+        is the balance NET of them, floored at 0 — a fully-held wallet reports 0
+        rather than money the gate would refuse.
 
-        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own org from the validated IAM owner claim; 401 without a validated principal, and a balance that cannot be read is 502 — never 0, because unknown is not broke.
+        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
+        caller's own org from the validated IAM owner claim; 401 without a validated
+        principal, and a balance that cannot be read is 502 — never 0, because unknown
+        is not broke.
       operationId: get_v1_finance_balance
-      summary: Spendable prepaid for the caller's org, in the finance shape
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/financeBalanceView'
+          description: ok
+          headers:
+            Cache-Control:
+              description: Set by GET /v1/finance/balance.
+              schema:
+                type: string
+      summary: 'Answers the org''s spendable prepaid balance typed for the finance
+        surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf` instant
+        it was read.'
       tags:
       - finance
       x-app: billing
   /v1/finance/credits:
     get:
       description: |-
-        Answers the money PUT IN to the org's wallet — each staff grant, promo and settled top-up as a positive row with its id, label, cents and grant time.
+        Answers the money PUT IN to the org's wallet — each staff
+        grant, promo and settled top-up as a positive row with its id, label, cents
+        and grant time.
 
-        Spend is not a credit. A posting counts here only when it moved money IN; debits belong to /v1/finance/usage (aggregated) and /v1/finance/ledger (signed). All three project ONE read of the same ledger through ONE vocabulary for what a posting means, so they cannot disagree about a row — nor silently drop one, which is what an empty credits page against a funded wallet was.
+        Spend is not a credit. A posting counts here only when it moved money IN;
+        debits belong to /v1/finance/usage (aggregated) and /v1/finance/ledger
+        (signed). All three project ONE read of the same ledger through ONE vocabulary
+        for what a posting means, so they cannot disagree about a row — nor silently
+        drop one, which is what an empty credits page against a funded wallet was.
 
-        `label` falls back through the posting's notes, then its tags, then a bare Credit — it is a description, never an identifier. `remainingCents` is OMITTED: the wallet is one running balance, not per-grant buckets, so no grant has a remainder to report and spend cannot be attributed to the credit that funded it.
+        `label` falls back through the posting's notes, then its tags, then a bare
+        Credit — it is a description, never an identifier. `remainingCents` is
+        OMITTED: the wallet is one running balance, not per-grant buckets, so no grant
+        has a remainder to report and spend cannot be attributed to the credit that
+        funded it.
 
-        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own org; 401 without a validated principal. An org with no grants gets an empty array — honest, never a fabricated figure.
+        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
+        caller's own org; 401 without a validated principal. An org with no grants
+        gets an empty array — honest, never a fabricated figure.
       operationId: get_v1_finance_credits
-      summary: Credit grants and top-ups on the caller's org wallet
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/financeCredit'
+                type: array
+          description: ok
+          headers:
+            Cache-Control:
+              description: Set by GET /v1/finance/credits.
+              schema:
+                type: string
+      summary: Answers the money PUT IN to the org's wallet — each staff grant, promo
+        and settled top-up as a positive row with its id, label, cents and grant time.
       tags:
       - finance
       x-app: billing
   /v1/finance/invoices:
     get:
       description: |-
-        Answers an empty typed array, always. The fleet bills a PREPAID wallet — money in, metered debits out — and issues no customer invoices, so there is no invoice ledger to project. Nothing here is a fabricated figure and nothing is hidden behind a filter.
+        Answers an empty typed array, always. The fleet bills a
+        PREPAID wallet — money in, metered debits out — and issues no customer
+        invoices, so there is no invoice ledger to project. Nothing here is a
+        fabricated figure and nothing is hidden behind a filter.
 
-        The shape is fixed, so the finance UI renders this lane today and the day an invoice ledger exists it fills with ZERO client change. Spend that actually happened is /v1/finance/usage; money in and out is /v1/finance/ledger; what is left to spend is /v1/finance/balance.
+        The shape is fixed, so the finance UI renders this lane today and the day an
+        invoice ledger exists it fills with ZERO client change. Spend that actually
+        happened is /v1/finance/usage; money in and out is /v1/finance/ledger; what is
+        left to spend is /v1/finance/balance.
 
-        The gate is real even though the body is empty: 401 without a validated principal. It is the only finance read that touches no store, so it is also the only one that cannot 502.
+        The gate is real even though the body is empty: 401 without a validated
+        principal. It is the only finance read that touches no store, so it is also
+        the only one that cannot 502.
       operationId: get_v1_finance_invoices
-      summary: Issued invoices — none exist, and that is the honest answer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/financeInvoice'
+                type: array
+          description: ok
+          headers:
+            Cache-Control:
+              description: Set by GET /v1/finance/invoices.
+              schema:
+                type: string
+      summary: Answers an empty typed array, always.
       tags:
       - finance
       x-app: billing
   /v1/finance/ledger:
     get:
       description: |-
-        Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS it (negative, account `usage:<org>`), described by its notes or its tags. The sign is the posting's own meaning, read through ONE vocabulary shared with the ledger that wrote it — a reader with its own spelling for `deposit` rendered a customer's grant as a charge.
+        Answers the org's own postings inside `range=`, each as a signed
+        entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and
+        every other posting DEBITS it (negative, account `usage:<org>`), described by
+        its notes or its tags. The sign is the posting's own meaning, read through ONE
+        vocabulary shared with the ledger that wrote it — a reader with its own
+        spelling for `deposit` rendered a customer's grant as a charge.
 
-        This is the closest projection of the truth. The org's double-entry postings are the source of record — balanced, only ever appended, one file per org — and this lane is that list, widest of the three: /v1/finance/credits is its deposit half and /v1/finance/usage is its withdrawal half rolled up. All three come from ONE read, which is why they cannot contradict each other, and all three answer 501 where no commerce link is configured rather than reporting an empty wallet.
+        This is the closest projection of the truth. The org's double-entry postings
+        are the source of record — balanced, only ever appended, one file per org —
+        and this lane is that list, widest of the three: /v1/finance/credits is its
+        deposit half and /v1/finance/usage is its withdrawal half rolled up. All three
+        come from ONE read, which is why they cannot contradict each other, and all
+        three answer 501 where no commerce link is configured rather than reporting an
+        empty wallet.
 
-        `range` is 24h, 7d, 30d or 90d, defaulting to 30d. A row whose timestamp will not parse is KEPT rather than dropped — a malformed date must show up in a money list, not vanish from it. `balanceCents` is omitted: these are MOVEMENTS, and the standing balance is /v1/finance/balance.
+        A row whose timestamp will not parse is KEPT rather than dropped — a malformed
+        date must show up in a money list, not vanish from it. `balanceCents` is
+        omitted: these are MOVEMENTS, and the standing balance is /v1/finance/balance.
 
-        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own org, where the org's ledger file is the tenant boundary; 401 without a validated principal.
+        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
+        caller's own org, where the org's ledger file is the tenant boundary; 401
+        without a validated principal.
       operationId: get_v1_finance_ledger
-      summary: Money in and out of the caller's org wallet, signed
+      parameters:
+      - description: |-
+          Range is the window: 24h, 7d, 30d or 90d. Anything else — including
+          absent — is 30d, so a typo silently widens the window to a month rather
+          than failing.
+        example: 30d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/financeLedgerEntry'
+                type: array
+          description: ok
+          headers:
+            Cache-Control:
+              description: Set by GET /v1/finance/ledger.
+              schema:
+                type: string
+      summary: 'Answers the org''s own postings inside `range=`, each as a signed
+        entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and
+        every other posting DEBITS it (negative, account `usage:<org>`), described
+        by its notes or its tags.'
       tags:
       - finance
       x-app: billing
   /v1/finance/payment-methods:
     get:
       description: |-
-        Answers the masked card descriptors for the caller's resolved WALLET — id, brand, last four, expiry, default flag — reshaped into the finance contract.
+        Answers the masked card descriptors for the caller's resolved
+        WALLET — id, brand, last four, expiry, default flag — reshaped into the
+        finance contract.
 
-        It re-masks defensively: whatever the upstream sends, at most the trailing four DIGITS survive into `last4`. No card number, no security code and no processor token exists in this shape at all, so an over-returning upstream still cannot leak one through this lane.
+        It re-masks defensively: whatever the upstream sends, at most the trailing
+        four DIGITS survive into `last4`. No card number, no security code and no
+        processor token exists in this shape at all, so an over-returning upstream
+        still cannot leak one through this lane.
 
-        Read the sibling difference before trusting a mismatch. This keys the store on the resolved wallet; /v1/billing/methods keys it on the org SLUG, which is also the key a card is SAVED under — identical for an org paying from its shared pool, different wherever the payer is a person. When the two lists disagree, the billing one is what was saved.
+        Read the sibling difference before trusting a mismatch. This keys the store on
+        the resolved wallet; /v1/billing/methods keys it on the org SLUG, which is
+        also the key a card is SAVED under — identical for an org paying from its
+        shared pool, different wherever the payer is a person. When the two lists
+        disagree, the billing one is what was saved.
 
-        401 without a validated principal. An upstream that answers non-2xx or cannot be reached is 502 — never an empty list, because no cards and could not ask must not look alike.
+        401 without a validated principal. An upstream that answers non-2xx or cannot
+        be reached is 502 — never an empty list, because no cards and could not ask
+        must not look alike.
       operationId: get_v1_finance_payment-methods
-      summary: Saved cards for the wallet the caller pays from
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/financePaymentMethod'
+                type: array
+          description: ok
+          headers:
+            Cache-Control:
+              description: Set by GET /v1/finance/payment-methods.
+              schema:
+                type: string
+      summary: Answers the masked card descriptors for the caller's resolved WALLET
+        — id, brand, last four, expiry, default flag — reshaped into the finance contract.
       tags:
       - finance
       x-app: billing
@@ -59841,15 +61835,48 @@ paths:
   /v1/finance/usage:
     get:
       description: |-
-        Answers metered spend inside `range=`: the window total, a time series to plot, and one line per usage TAG. Aggregated from the same charged ledger the balance comes off — projected, never re-metered.
+        Answers metered spend inside `range=`: the window total, a time
+        series to plot, and one line per usage TAG. Aggregated from the same charged
+        ledger the balance comes off — projected, never re-metered.
 
-        Only DEBIT postings count; deposits are credits and are excluded. `range` is 24h, 7d, 30d or 90d, and anything else — including absent — is 30d, so a typo silently widens the window to a month rather than failing. Buckets are hourly at 24h and daily otherwise, in UTC; a posting whose timestamp will not parse is dropped rather than mis-bucketed.
+        Only DEBIT postings count; deposits are credits and are excluded. Buckets are
+        hourly at 24h and daily otherwise, in UTC; a posting whose timestamp will not
+        parse is dropped rather than mis-bucketed.
 
-        Lines group by the posting's tag (`Usage` where it carries none) and `units` counts POSTINGS, not tokens. The dimensions here are time and tag. For per-request rows and a per-PRODUCT breakdown, read /v1/billing/usage instead — the same money, cut a different way.
+        Lines group by the posting's tag (`Usage` where it carries none) and `units`
+        counts POSTINGS, not tokens. The dimensions here are time and tag. For
+        per-request rows and a per-PRODUCT breakdown, read /v1/billing/usage instead —
+        the same money, cut a different way.
 
-        Cents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of sub-cent token calls totals LOW here. Scoped to the caller's own org; 401 without a validated principal.
+        Cents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of
+        sub-cent token calls totals LOW here. Scoped to the caller's own org; 401
+        without a validated principal.
       operationId: get_v1_finance_usage
-      summary: What the caller's org spent over a window, as a series and by tag
+      parameters:
+      - description: |-
+          Range is the window: 24h, 7d, 30d or 90d. Anything else — including
+          absent — is 30d, so a typo silently widens the window to a month rather
+          than failing.
+        example: 24h
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/financeUsageView'
+          description: ok
+          headers:
+            Cache-Control:
+              description: Set by GET /v1/finance/usage.
+              schema:
+                type: string
+      summary: 'Answers metered spend inside `range=`: the window total, a time series
+        to plot, and one line per usage TAG.'
       tags:
       - finance
       x-app: billing
@@ -70328,161 +72355,374 @@ paths:
       x-app: licensing
   /v1/links:
     get:
-      description: 'Answers the caller''s own links plus a `devices` projection of
-        the same rows folded per machine — the cross-machine "AI Providers / Accounts"
-        view. A device is a projection, not a stored entity: its labels come from
-        its most-recently-seen account, so there is no device to create and none to
+      description: |-
+        Lists your linked accounts and the devices they sit on.
+
+        It answers the caller's own links plus a devices projection of the same rows
+        folded per machine — the cross-machine "AI Providers / Accounts" view. A
+        device is a projection, not a stored entity: its labels come from its
+        most-recently-seen account, so there is no device to create and none to
         garbage-collect. Revoked links are INCLUDED rather than dropped, because a
         logged-out account keeps its usage history and audit trail. Scoped to the
-        caller: a validated principal and a non-empty org, else 403. Both org and
-        subject are bound predicates on every statement, so a caller reads and writes
-        only their OWN accounts within their own org — the org is never a parameter,
-        and there is no path to another user''s links.'
+        caller: a validated principal and a non-empty org, else 403.
       operationId: get_v1_links
-      summary: List your linked accounts and the devices they sit on
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/linkList'
+          description: ok
+      summary: Lists your linked accounts and the devices they sit on.
       tags:
       - links
       x-app: link
     post:
       description: |-
-        Records that a developer has signed into one provider account on one machine — a Claude Max or ChatGPT Plus subscription, a Hanzo key, a raw provider key — and answers with the stored link. Re-reporting the same (machine, provider, account) UPDATES that link rather than creating a second, so a collector may call this on every heartbeat.
+        Registers a signed-in AI provider account on a machine.
 
-        NO SECRET IS SENT OR STORED. The provider's OAuth token or API key stays on the device; this registry holds link metadata and usage snapshots only, and the caller authenticates with their own Hanzo bearer. `kind` decides how the account's inference BILLS and defaults to `subscription`: a subscription account bills the user's own monthly plan and is metered here for visibility only, while an `apikey` account bills through commerce on the gateway path. An optional `usage` snapshot is clamped and re-serialized to known fields; omitting it keeps the last good one.
-
-        `machine` and `provider` are required (400 otherwise), as is a valid kind, and every field is length-bounded. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
+        It records that a developer has signed into one provider account on one
+        machine — a Claude Max or ChatGPT Plus subscription, a Hanzo key, a raw
+        provider key — and answers 201 with the stored link. Re-reporting the same
+        (machine, provider, account) UPDATES that link rather than creating a second,
+        so a collector may call this on every heartbeat. machine and provider are
+        required (400 otherwise), as is a valid kind, and every field is
+        length-bounded. Scoped to the caller: a validated principal and a non-empty
+        org, else 403, so a caller writes only their OWN accounts within their own org.
       operationId: post_v1_links
-      summary: Register a signed-in AI provider account on a machine
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/enrollReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/linkView'
+          description: created
+      summary: Registers a signed-in AI provider account on a machine.
       tags:
       - links
       x-app: link
   /v1/links/{id}:
     delete:
       description: |-
-        Revokes a single linked account and stops the agent sessions that ran under it, answering with the revoked row and how many sessions stopped. The link is RETAINED with a revoked status rather than deleted, so its usage history and the audit trail survive the log-out — which also means a revoked account still appears in the list, and is excluded from the route plan rather than absent from it.
+        Logs out one account and stops the sessions it was running.
 
-        The session stop is narrowed to the revoking user's own sessions on that device, provider and account, and a stop that fails does not fail the revoke: the revoked row is the durable truth. An id that does not exist, or belongs to another user or org, is the same 404. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
-      operationId: delete_v1_links_by_id
+        It revokes a single linked account and stops the agent sessions that ran under
+        it, answering with the revoked row and how many sessions stopped. The link is
+        RETAINED with a revoked status rather than deleted, so its usage history and
+        the audit trail survive the log-out — which also means a revoked account still
+        appears in the list, and is excluded from the route plan rather than absent
+        from it. The session stop is narrowed to the revoking user's own sessions on
+        that device, provider and account, and a stop that fails does not fail the
+        revoke: the revoked row is the durable truth. An id that does not exist, or
+        belongs to another user or org, is the same 404.
+      operationId: delete_v1_links_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the link to act on, from the path. It is scoped to the caller, so
+          another user's or org's id is a 404.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Log out one account and stop the sessions it was running
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/revokeResp'
+          description: ok
+      summary: Logs out one account and stops the sessions it was running.
       tags:
       - links
       x-app: link
     get:
       description: |-
-        Answers a single link — its device, provider, account, plan, how it bills, its status and its latest usage snapshot. An id that does not exist, or belongs to another user or org, is the same 404: the scope is a bound predicate on the read, so a wrong id and a foreign id are indistinguishable and neither confirms the other's existence.
+        Reads one linked account.
 
-        The static paths on this collection — route, usage, devices — are registered BEFORE this one and win first-match, so a link whose id collided with one of those words could not be addressed here. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
-      operationId: get_v1_links_by_id
+        It answers a single link — its device, provider, account, plan, how it bills,
+        its status and its latest usage snapshot. An id that does not exist, or
+        belongs to another user or org, is the same 404: the scope is a bound
+        predicate on the read, so a wrong id and a foreign id are indistinguishable
+        and neither confirms the other's existence. The static paths on this
+        collection — route, usage, devices — register before this one and win
+        first-match, so a link whose id collided with one of those words could not be
+        addressed here.
+      operationId: get_v1_links_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the link to act on, from the path. It is scoped to the caller, so
+          another user's or org's id is a 404.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Read one linked account
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/linkView'
+          description: ok
+      summary: Reads one linked account.
       tags:
       - links
       x-app: link
   /v1/links/devices/{machine}:
     get:
-      description: 'Answers one device — its host and OS labels, every account the
-        caller has signed in on that machine with its latest usage, and how many agent
-        sessions the caller currently has running on it. The device labels come from
-        the most-recently-seen account, since a device is a projection of its links
-        rather than a row of its own. A machine with none of the caller''s accounts
-        is 404, which is also the answer when the machine belongs to someone else
-        — the scope makes the two indistinguishable, deliberately. The session count
-        reports 0 where the agent plane is not mounted rather than failing the read.
-        Scoped to the caller: a validated principal and a non-empty org, else 403.
-        Both org and subject are bound predicates on every statement, so a caller
-        reads and writes only their OWN accounts within their own org — the org is
-        never a parameter, and there is no path to another user''s links.'
-      operationId: get_v1_links_devices_by_machine
+      description: |-
+        Shows one machine: its accounts, usage and live sessions.
+
+        It answers one device — its host and OS labels, every account the caller has
+        signed in on that machine with its latest usage, and how many agent sessions
+        the caller currently has running on it. The device labels come from the
+        most-recently-seen account, since a device is a projection of its links rather
+        than a row of its own. A machine with none of the caller's accounts is 404,
+        which is also the answer when the machine belongs to someone else — the scope
+        makes the two indistinguishable, deliberately. The session count reports 0
+        where the agent plane is not mounted rather than failing the read.
+      operationId: get_v1_links_devices_machine
       parameters:
-      - in: path
+      - description: |-
+          Machine is the machine to act on, from the path. It is scoped to the
+          caller, so a machine with none of the caller's accounts is a 404.
+        in: path
         name: machine
         required: true
         schema:
           type: string
-      summary: 'See one machine: its accounts, usage and live sessions'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deviceView'
+          description: ok
+      summary: 'Shows one machine: its accounts, usage and live sessions.'
       tags:
       - links
       x-app: link
   /v1/links/devices/{machine}/revoke:
     post:
       description: |-
-        Revokes every one of the caller's accounts on one machine and stops the agent sessions they were running, answering with how many of each. This is the "I lost that laptop" button.
+        Logs out every account on one machine and stops its sessions.
 
-        Revoked links are RETAINED, not deleted, so usage history and the audit trail survive a log-out — the rows come back in the response with their new status. The session stop reaches only the REVOKING user's own sessions, so a shared machine name can never be used to stop a co-tenant's work, and a stop that fails does not fail the revoke: the revoked row is the durable truth and the count then honestly reports fewer. A machine with nothing left to revoke is 404. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
-      operationId: post_v1_links_devices_by_machine_revoke
+        It revokes every one of the caller's accounts on one machine and stops the
+        agent sessions they were running, answering with how many of each. This is the
+        "I lost that laptop" button. Revoked links are RETAINED, not deleted, so usage
+        history and the audit trail survive a log-out — the rows come back in the
+        response with their new status. The session stop reaches only the REVOKING
+        user's own sessions, so a shared machine name can never be used to stop a
+        co-tenant's work, and a stop that fails does not fail the revoke: the revoked
+        row is the durable truth and the count then honestly reports fewer. A machine
+        with nothing left to revoke is 404.
+      operationId: post_v1_links_devices_machine_revoke
       parameters:
-      - in: path
+      - description: |-
+          Machine is the machine to act on, from the path. It is scoped to the
+          caller, so a machine with none of the caller's accounts is a 404.
+        in: path
         name: machine
         required: true
         schema:
           type: string
-      summary: Log out every account on one machine and stop its sessions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/revokeResp'
+          description: ok
+      summary: Logs out every account on one machine and stops its sessions.
       tags:
       - links
       x-app: link
   /v1/links/route:
     get:
       description: |-
-        Answers an ordered redundancy plan over the caller's LINKED (not revoked) accounts: each candidate with its remaining rate-limit headroom, whether it is routable right now, how it BILLS (`plan` or `commerce`), and a reason when it is not — plus the primary to try first. It is what lets a router fail over from one subscription to another and fall back to the metered API as the always-available backstop, knowing the cost consequence before it dials.
+        Gets the failover order across your linked accounts.
 
-        It is POLICY, not execution: the plan is computed purely from the usage snapshots already in the registry, never by probing a provider, so it is a total function of the links and costs nothing to ask for. Actually dialing, detecting a live 429 and advancing to the next candidate belongs to the caller. A link with no snapshot counts as full headroom. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
+        It answers an ordered redundancy plan over the caller's LINKED (not revoked)
+        accounts: each candidate with its remaining rate-limit headroom, whether it is
+        routable right now, how it BILLS (plan or commerce), and a reason when it is
+        not — plus the primary to try first. It is what lets a router fail over from
+        one subscription to another and fall back to the metered API as the
+        always-available backstop, knowing the cost consequence before it dials.
+
+        It is POLICY, not execution: the plan is computed purely from the usage
+        snapshots already in the registry, never by probing a provider, so it is a
+        total function of the links and costs nothing to ask for. Actually dialing,
+        detecting a live 429 and advancing to the next candidate belongs to the
+        caller. A link with no snapshot counts as full headroom.
       operationId: get_v1_links_route
-      summary: Get the failover order across your linked accounts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutePlan'
+          description: ok
+      summary: Gets the failover order across your linked accounts.
       tags:
       - links
       x-app: link
   /v1/links/usage:
     get:
       description: |-
-        Answers the time series for a SINGLE provider account — the windows in range plus the currently-open ones — as that provider's own meter reported it. `provider` is required; `account` narrows to one account when a user has several with the same provider; `window` selects a window class (6h, day, week or month) and `range` the period (1h, 24h, 7d or 30d, default 24h). An unknown window class or range is 400, never a quiet fallback to a different one.
+        Shows one provider account's own usage dashboard.
 
-        When no series is available the response is a 200 with `available: false` and empty lists — an honest "we have no data", which is a different claim from zero usage. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
+        It answers the time series for a SINGLE provider account — the windows in
+        range plus the currently-open ones — as that provider's own meter reported it:
+        "my plan is 47% through its 6h window, resets at 14:20". current is the newest
+        instance of each lane (the headline); windows is the history behind it, both
+        computed from ONE deduped read. provider is required; an unknown window class
+        or range is 400, never a quiet fallback to a different one. When no series is
+        available the response is a 200 with available:false and empty lists — an
+        honest "we have no data", which is a different claim from zero usage.
       operationId: get_v1_links_usage
-      summary: See one provider account's own usage dashboard
+      parameters:
+      - description: Provider is the provider whose meter to read. Required.
+        in: query
+        name: provider
+        required: false
+        schema:
+          type: string
+      - description: Account narrows to one account when a user has several with the
+          provider.
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description: 'Window selects a window class: 6h, day, week or month. Empty
+          reads all.'
+        in: query
+        name: window
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Range is the period, one of 1h, 24h, 7d or 30d; empty means 24h, and an
+          unknown label is 400, never a quiet fallback.
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/boardResp'
+          description: ok
+      summary: Shows one provider account's own usage dashboard.
       tags:
       - links
       x-app: link
     post:
       description: |-
-        Ingests a batch of usage samples from the on-device collector and answers with how many were accepted, whether history was durably stored, and the links they refreshed. A report also REFRESHES one link per distinct (machine, provider, account) it names, so a running collector keeps the accounts overview current without a separate registration call.
+        Reports usage samples from the device collector.
 
-        A caller can only ever report for THEMSELVES: org and subject come from the validated bearer, never from the body, so no sample can be attributed to another user or tenant. History is FAIL-SOFT and `stored` says which happened — a warehouse outage still accepts the report and refreshes the links rather than failing the device, and answers 202 either way.
+        It ingests a batch of usage samples and answers with how many were accepted,
+        whether history was durably stored, and the links they refreshed. A report
+        also REFRESHES one link per distinct (machine, provider, account) it names, so
+        a running collector keeps the accounts overview current without a separate
+        registration call.
 
-        Send either one sample inline or up to 256 in `samples`; an empty batch or an over-long one is 400, as is a provider, window class or kind outside the closed vocabulary — an unrecognized window is refused rather than rewritten, because a silently reclassified sample would fill a dashboard with a class nobody reported. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
+        A caller can only ever report for THEMSELVES: org and subject come from the
+        validated bearer, never from the body, so no sample can be attributed to
+        another user or tenant. History is FAIL-SOFT and stored says which happened —
+        a warehouse outage still accepts the report and refreshes the links rather
+        than failing the device, and answers 202 either way. Send either one sample
+        inline or up to 256 in samples; an empty batch or an over-long one is 400, as
+        is a provider, window class or kind outside the closed vocabulary — an
+        unrecognized window is refused rather than rewritten, because a silently
+        reclassified sample would fill a dashboard with a class nobody reported.
       operationId: post_v1_links_usage
-      summary: Report usage samples from the device collector
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ingestReq'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ingestResp'
+          description: accepted
+      summary: Reports usage samples from the device collector.
       tags:
       - links
       x-app: link
   /v1/links/usage/accounts:
     get:
       description: |-
-        Answers one row per linked account the GATEWAY actually routed through, plus their total — requests, prompt and completion tokens, and cost. This is the routed ledger, the read twin of the counter the router writes, and it is distinct from both of its neighbours: not the device collector's plan snapshots, and not the org money ledger. The `source` and `scope` fields on the response say so on every payload.
+        Breaks down what the gateway routed through each of your accounts.
 
-        The same shape answers in the billing namespace, from one shaping function, so the two mounts cannot drift. Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
+        It answers one row per linked account the GATEWAY actually routed through,
+        plus their total — requests, prompt and completion tokens, and cost. This is
+        the routed ledger, the read twin of the counter the router writes, and it is
+        distinct from both of its neighbours: not the device collector's plan
+        snapshots, and not the org money ledger. The source and scope fields on the
+        response say so on every payload. The same shape answers in the billing
+        namespace, from one shaping function, so the two mounts cannot drift.
       operationId: get_v1_links_usage_accounts
-      summary: Break down what the gateway routed through each of your accounts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsUsage'
+          description: ok
+      summary: Breaks down what the gateway routed through each of your accounts.
       tags:
       - links
       x-app: link
   /v1/links/usage/summary:
     get:
       description: |-
-        Answers the global usage board over one window: the caller's own linked accounts, metered from each provider's own login, alongside their org's Hanzo-routed inference. These come from different ledgers and mean different things, so every row is LABELLED by source, by scope and by availability, and THE TWO ARE NEVER SUMMED — a plan's percentage is not money, and a provider's own spend is not a Hanzo charge. The rows sit side by side and say what they are.
+        Shows plan consumption and Hanzo spend side by side.
 
-        One resolver fixes the window for both halves, so the two sets always cover the same period. `range` is one of 1h, 24h, 7d or 30d and defaults to 24h; anything else is 400 rather than a silent substitution. A ledger that cannot answer reports `available: false` instead of a zero that would read as "no usage". Scoped to the caller: a validated principal and a non-empty org, else 403. Both org and subject are bound predicates on every statement, so a caller reads and writes only their OWN accounts within their own org — the org is never a parameter, and there is no path to another user's links.
+        It answers the global usage board over one window: the caller's own linked
+        accounts, metered from each provider's own login, alongside their org's
+        Hanzo-routed inference. These come from different ledgers and mean different
+        things, so every row is LABELLED by source, by scope and by availability, and
+        THE TWO ARE NEVER SUMMED — a plan's percentage is not money, and a provider's
+        own spend is not a Hanzo charge. The rows sit side by side and say what they
+        are.
+
+        One resolver fixes the window for both halves, so the two sets always cover
+        the same period. range is one of 1h, 24h, 7d or 30d and defaults to 24h;
+        anything else is 400 rather than a silent substitution. A ledger that cannot
+        answer reports available:false instead of a zero that would read as "no usage".
       operationId: get_v1_links_usage_summary
-      summary: See plan consumption and Hanzo spend side by side
+      parameters:
+      - description: |-
+          Range is the period, one of 1h, 24h, 7d or 30d; empty means 24h, and an
+          unknown label is 400, never a silent substitution.
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/summaryResp'
+          description: ok
+      summary: Shows plan consumption and Hanzo spend side by side.
       tags:
       - links
       x-app: link
@@ -72111,11 +74351,32 @@ paths:
   /v1/meet/health:
     get:
       description: |-
-        Reports whether this deployment holds the LiveKit key pair it needs. `ready:true` with 200 when tokens can be minted; the SAME body with `ready:false`, `status:"degraded"` and 503 when they cannot, so a probe and a dashboard both read the degraded state instead of someone grepping a boot log.
+        Health reports whether the office can mint join tokens.
 
-        It takes no credential and is reachable on every public host, so it withholds both the reason and the signing key's name on purpose: `ready` is the whole dashboard fact, and the reason — which names the key file and the Secret — is written to the boot log where an operator already is.
+        It reports whether this deployment holds the LiveKit key pair it needs:
+        ready:true with 200 when tokens can be minted, the SAME body with ready:false,
+        status "degraded" and 503 when they cannot — so a probe and a dashboard both
+        read the degraded state instead of someone grepping a boot log.
+
+        It takes no credential and is reachable on every public host, so it withholds
+        both the reason and the signing key's name on purpose: ready is the whole
+        dashboard fact, and the reason — which names the key file and the Secret — is
+        written to the boot log where an operator already is.
       operationId: get_v1_meet_health
-      summary: Whether the office can mint join tokens
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/meetHealth'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/meetHealth'
+          description: service unavailable
+      summary: Health reports whether the office can mint join tokens.
       tags:
       - meet
       x-app: meet
@@ -72997,65 +75258,97 @@ paths:
       x-app: notify
   /v1/notify/send:
     post:
-      description: 'Delivers a message to each address in `to` over the channel the
-        body names — sms or email — using the CALLER ORG''S own provider credential,
-        read from KMS at orgs/<org>/notify/<service>/<key> and never from the environment.
-        The org is the validated principal''s, never a client-supplied header, so
-        a caller can only ever send as their own tenant; an unauthenticated caller
-        gets 401. Naming no provider picks the one whose credentials are actually
-        configured (Twilio, then Plivo for SMS; Twilio Email, then SMTP for email)
-        and fails closed when none is. Delivery is synchronous and per recipient:
-        one recipient answers the bare {messageId,status} SendResponse, several answer
-        the {items:[…]} envelope. A terminal provider failure is a 200 whose status
-        is failed with the reason in error, never a transport error. ?sync=true is
-        REQUIRED — an async dispatch answers 503, because the queue plane that would
-        run it is owned elsewhere and is not folded in here. The message body wins
-        verbatim when present; otherwise template_id (or the event name) selects a
-        built-in template rendered against template_vars.'
+      description: |-
+        Delivers one transactional message by email or SMS through the caller
+        org's own provider credential.
+
+        The channel comes from the body — sms or email — and the provider credential is
+        read from KMS at orgs/<org>/notify/<service>/<key>, never from the environment.
+        The org is the validated principal's, never a client-supplied value, so a caller
+        can only ever send as their own tenant; an unauthenticated caller gets 401.
+        Naming no provider picks the one whose credentials are actually configured
+        (Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed
+        when none is. Delivery is synchronous and per recipient: one recipient answers
+        the bare {message_id,status} outcome, several answer the {items:[…]} envelope. A
+        terminal provider failure is a 200 whose status is failed with the reason in
+        error, never a transport error. sync=true is REQUIRED — an async dispatch
+        answers 503, because the queue plane that would run it is owned elsewhere. The
+        message body wins verbatim when present; otherwise template_id (or the event
+        name) selects a built-in template rendered against template_vars.
       operationId: post_v1_notify_send
-      summary: Send one transactional message by email or SMS through your org's own
-        provider credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/notifySend'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Delivers one transactional message by email or SMS through the caller
+        org's own provider credential.
       tags:
       - notify
       x-app: notify
   /v1/notify/send/email:
     post:
-      description: 'The channel-pinned form of the generic send: identical in every
-        respect except that the channel is fixed to email, OVERRIDING whatever the
-        body names — so a body that says sms still goes out as mail. The provider
-        is the org''s own email credential from KMS (Twilio Email, then SMTP), resolved
-        for the validated principal''s org and never from a client-supplied header;
-        an unauthenticated caller gets 401. Subject is carried on the email channel
-        only. Delivery is synchronous and per recipient: one recipient answers the
-        bare {messageId,status} SendResponse, several answer the {items:[…]} envelope.
-        A terminal provider failure is a 200 whose status is failed with the reason
-        in error, never a transport error. ?sync=true is REQUIRED — an async dispatch
-        answers 503, because the queue plane that would run it is owned elsewhere
-        and is not folded in here. The message body wins verbatim when present; otherwise
-        template_id (or the event name) selects a built-in template rendered against
-        template_vars.'
+      description: |-
+        Delivers one transactional email through the caller org's own
+        provider credential.
+
+        It is the channel-pinned form of the generic send: identical in every respect
+        except that the channel is fixed to email, OVERRIDING whatever the body names —
+        so a body that says sms still goes out as mail. The provider is the org's own
+        email credential from KMS (Twilio Email, then SMTP), resolved for the validated
+        principal's org; an unauthenticated caller gets 401. Subject is carried on the
+        email channel only.
       operationId: post_v1_notify_send_email
-      summary: Send one transactional email through your org's own provider credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/notifySend'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Delivers one transactional email through the caller org's own provider
+        credential.
       tags:
       - notify
       x-app: notify
   /v1/notify/send/sms:
     post:
-      description: 'The channel-pinned form of the generic send: identical in every
-        respect except that the channel is fixed to sms, OVERRIDING whatever the body
-        names — so a body that says email still goes out as a text message. The provider
-        is the org''s own SMS credential from KMS (Twilio, then Plivo), resolved for
-        the validated principal''s org and never from a client-supplied header; an
-        unauthenticated caller gets 401. Delivery is synchronous and per recipient:
-        one recipient answers the bare {messageId,status} SendResponse, several answer
-        the {items:[…]} envelope. A terminal provider failure is a 200 whose status
-        is failed with the reason in error, never a transport error. ?sync=true is
-        REQUIRED — an async dispatch answers 503, because the queue plane that would
-        run it is owned elsewhere and is not folded in here. The message body wins
-        verbatim when present; otherwise template_id (or the event name) selects a
-        built-in template rendered against template_vars.'
+      description: |-
+        Delivers one transactional SMS through the caller org's own provider
+        credential.
+
+        It is the channel-pinned form of the generic send: identical in every respect
+        except that the channel is fixed to sms, OVERRIDING whatever the body names —
+        so a body that says email still goes out as a text message. The provider is the
+        org's own SMS credential from KMS (Twilio, then Plivo), resolved for the
+        validated principal's org; an unauthenticated caller gets 401.
       operationId: post_v1_notify_send_sms
-      summary: Send one transactional SMS through your org's own provider credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/notifySend'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Delivers one transactional SMS through the caller org's own provider
+        credential.
       tags:
       - notify
       x-app: notify

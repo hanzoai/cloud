@@ -34,8 +34,20 @@
     "/_/commerce/healthz": {
       "get": {
         "operationId": "get___commerce_healthz",
-        "summary": "Liveness for the commerce subsystem",
-        "description": "Answers ok whenever the commerce subsystem is mounted. It is registered BEFORE the module embed boots, so it keeps answering even when the embed failed and every business route is serving a fail-closed 503 — which is the point: it reports that the process is reachable, never that the money plane is healthy. Unauthenticated, and under /_ so the ingress does not expose it publicly."
+        "summary": "Answers ok whenever the commerce subsystem is mounted.",
+        "description": "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated, and under /_ so the ingress withholds it\npublicly.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/liveness"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/_/commerce/providers": {
@@ -1825,6 +1837,19 @@
           },
           "userId": {
             "description": "UserID identifies the customer being billed, within the caller's own org.\nRequired — an invoice with no addressee is not an invoice.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "liveness": {
+        "properties": {
+          "service": {
+            "description": "Service names the answering subsystem; it is always commerce.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always ok: mounted is the only state that can answer.",
             "type": "string"
           }
         },
