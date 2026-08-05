@@ -26,12 +26,17 @@ cd apps/admin-tracker
 ../../node_modules/.bin/tsc --noEmit     # typecheck gate
 ../../node_modules/.bin/vite build       # → dist/  (base=/tracker/, api=/v1/tracker)
 
-rsync -a --delete apps/admin-tracker/dist/ <cloud>/apps/tracker/ui/dist/
+rsync -a --delete --exclude='.sync-stamp' apps/admin-tracker/dist/ <cloud>/apps/tracker/ui/dist/
 ```
 
 Then `go build ./plugin/tracker` re-embeds it. Do NOT hand-edit files under
-`dist/` — they are content-addressed Vite output. Keep `.sync-stamp` truthful
-(source repo + commit).
+`dist/` — they are content-addressed Vite output. Update `.sync-stamp` to name
+the commit you built from.
+
+`--exclude='.sync-stamp'` is not optional. The source `dist/` has no copy of the
+stamp, so a plain `--delete` removes it — and no test can catch that, because
+what `embed_test.go` asserts is precisely that the stamp is NOT in the binary.
+It went missing twice before the flag was written down here.
 
 `embed_test.go` pins the two things a bad sync breaks silently: that the bundle
 was built for `/tracker/` (a wrong base resolves every chunk to a path nothing
