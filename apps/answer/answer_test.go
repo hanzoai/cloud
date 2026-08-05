@@ -25,7 +25,7 @@ func TestRankRelevanceOrder(t *testing.T) {
 		{URL: "https://en.wikipedia.org/wiki/Rich_Hickey", Title: "Rich Hickey - Wikipedia", Content: "Rich Hickey is the creator of Clojure.", Engine: "bing"},
 		{URL: "https://clojure.org/about", Title: "About Clojure", Content: "Clojure was created by Rich Hickey.", Engine: "ddg"},
 	}
-	out := rank("who is Rich Hickey", in, 6)
+	out := rank("who is Rich Hickey", in, 6, 1)
 	if len(out) != 3 {
 		t.Fatalf("want 3 sources, got %d", len(out))
 	}
@@ -47,7 +47,7 @@ func TestRankDedupeURLAndHost(t *testing.T) {
 		{URL: "https://example.com/b", Title: "B same host", Content: "x"},
 		{URL: "https://other.com/c", Title: "C", Content: "x"},
 	}
-	if out := rank("A B C", in, 10); len(out) != 2 {
+	if out := rank("A B C", in, 10, 1); len(out) != 2 {
 		t.Fatalf("want 2 after URL+host dedupe, got %d: %+v", len(out), out)
 	}
 }
@@ -57,8 +57,103 @@ func TestRankCap(t *testing.T) {
 	for _, h := range []string{"a.com", "b.com", "c.com", "d.com", "e.com"} {
 		in = append(in, websearch.Result{URL: "https://" + h + "/x", Title: h, Content: "term"})
 	}
-	if got := rank("term", in, 3); len(got) != 3 {
+	if got := rank("term", in, 3, 1); len(got) != 3 {
 		t.Fatalf("cap not applied: want 3, got %d", len(got))
+	}
+}
+
+// TestRankHostCap proves the mode dial: one page per host is right for a
+// six-source answer and wrong for research, where several pages from an
+// authoritative domain are the point. hostCap<=1 must reproduce the old set.
+func TestRankHostCap(t *testing.T) {
+	in := []websearch.Result{
+		{URL: "https://docs.example/a", Title: "term a"},
+		{URL: "https://docs.example/b", Title: "term b"},
+		{URL: "https://docs.example/c", Title: "term c"},
+		{URL: "https://docs.example/d", Title: "term d"},
+		{URL: "https://other.example/e", Title: "term e"},
+	}
+	if got := rank("term", in, 10, 3); len(got) != 4 {
+		t.Fatalf("hostCap 3 admits 3 from one host plus the other host, got %d: %+v", len(got), got)
+	}
+	for _, cap := range []int{1, 0, -5} {
+		if got := rank("term", in, 10, cap); len(got) != 2 {
+			t.Fatalf("hostCap %d must be one-per-host, got %d", cap, len(got))
+		}
+	}
+}
+
+// TestCleanTitle proves citations read as document names, not as search-engine
+// furniture — and that a wholly-bracketed title survives rather than collapsing
+// to a bare hostname.
+func TestCleanTitle(t *testing.T) {
+	cases := map[string]string{
+		"[PDF] Clojure for the Brave": "Clojure for the Brave",
+		"Rich Hickey (Official Site)": "Rich Hickey",
+		"  spaced   out  ":            "spaced out",
+		"[PDF]":                       "[PDF]",
+		"(entirely parenthesized)":    "(entirely parenthesized)",
+		"About Clojure - clojure.org": "About Clojure - clojure.org",
+	}
+	for in, want := range cases {
+		if got := cleanTitle(in); got != want {
+			t.Fatalf("cleanTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// It applies inside rank, where the citation text is actually built.
+	got := rank("clojure", []websearch.Result{{URL: "https://x.example/p", Title: "[PDF] Clojure"}}, 5, 1)
+	if got[0].Title != "Clojure" {
+		t.Fatalf("rank must clean the citation title, got %q", got[0].Title)
+	}
+}
+
+// TestJoinerKeepsLinksWhole proves the streamed-delta fix: a markdown link split
+// across model deltas is released as one piece, the text is never altered, and
+// nothing is held past the end of the answer.
+func TestJoinerKeepsLinksWhole(t *testing.T) {
+	run := func(deltas ...string) []string {
+		var out []string
+		j := &joiner{emit: func(s string) { out = append(out, s) }}
+		for _, d := range deltas {
+			j.write(d)
+		}
+		j.flush()
+		return out
+	}
+
+	got := run("Made by ", "[Rich", " Hickey](https://clo", "jure.org) in 2007.")
+	if strings.Join(got, "") != "Made by [Rich Hickey](https://clojure.org) in 2007." {
+		t.Fatalf("the joiner must never alter the text, got %q", strings.Join(got, ""))
+	}
+	for _, d := range got {
+		if o, c := strings.Count(d, "["), strings.Count(d, ")"); (o > 0) != (c > 0) {
+			t.Fatalf("a link was released half-open: %q (all: %v)", d, got)
+		}
+	}
+	// Plain prose passes straight through, delta for delta — the joiner must not
+	// coarsen a stream that has no link in it.
+	if got := run("a ", "b ", "c"); len(got) != 3 {
+		t.Fatalf("prose must pass through unbuffered, got %v", got)
+	}
+	// A lone '[' that never closes is released at the window rather than stalling.
+	if got := run("[" + strings.Repeat("x", joinWindow)); len(got) != 1 {
+		t.Fatalf("an unclosed bracket must release at the window, got %d frames", len(got))
+	}
+	// Nothing is ever emitted empty.
+	for _, d := range run("", "[a](b)", "") {
+		if d == "" {
+			t.Fatal("the joiner must never emit an empty delta")
+		}
+	}
+	// A discarded completion's buffer must not leak into the next model's stream.
+	var out []string
+	j := &joiner{emit: func(s string) { out = append(out, s) }}
+	j.write("half [a link")
+	j.reset()
+	j.write("clean start")
+	j.flush()
+	if strings.Join(out, "") != "half clean start" {
+		t.Fatalf("reset must drop only the held buffer, got %q", strings.Join(out, ""))
 	}
 }
 
@@ -90,12 +185,14 @@ func TestQueryTermsStopwordsAndDedupe(t *testing.T) {
 // ── pricing policy (money: bounded, configurable, per-mode) ───────────────────
 
 func TestFeeCentsDefaultsAndOverrides(t *testing.T) {
-	if got := feeCents("research", modes["research"].feeCents); got != 10 {
-		t.Fatalf("research default fee: want 10, got %d", got)
-	}
-	t.Setenv("CLOUD_ASK_FEE_CENTS_RESEARCH", "25")
+	// 25¢, not 10¢: research now ITERATES — up to maxRounds gathering rounds, each
+	// with its own decision call and page reads. The price follows the work.
 	if got := feeCents("research", modes["research"].feeCents); got != 25 {
-		t.Fatalf("per-mode override: want 25, got %d", got)
+		t.Fatalf("research default fee: want 25, got %d", got)
+	}
+	t.Setenv("CLOUD_ASK_FEE_CENTS_RESEARCH", "40")
+	if got := feeCents("research", modes["research"].feeCents); got != 40 {
+		t.Fatalf("per-mode override: want 40, got %d", got)
 	}
 	t.Setenv("CLOUD_ASK_FEE_CENTS", "7")
 	if got := feeCents("search", modes["search"].feeCents); got != 7 {
@@ -180,7 +277,7 @@ func TestSynthModelsPerModeDefaults(t *testing.T) {
 	if got := synthModels("", modes["research"], ""); got[0] != "zen5" {
 		t.Fatalf("research must lead with zen5, got %v", got)
 	}
-	if got := synthModels("", modes["deep"], ""); got[0] != "zen5" {
+	if got := synthModels("", resolveMode("deep"), ""); got[0] != "zen5" {
 		t.Fatalf("deep must lead with zen5, got %v", got)
 	}
 	if got := synthModels("", modes["search"], ""); got[0] != "zen5-flash" {
@@ -392,16 +489,29 @@ func TestSynthesizeAllModelsDownDegradesHonestly(t *testing.T) {
 }
 
 type recSink struct {
-	order  []string
-	srcs   []Source
-	buf    strings.Builder
-	texts  []string
-	follow []string
-	answer string
+	order   []string
+	details map[string][]string // stage → the details it was emitted with
+	snaps   [][]Source          // every `sources` frame, in order
+	srcs    []Source
+	buf     strings.Builder
+	texts   []string
+	follow  []string
+	answer  string
 }
 
-func (r *recSink) status(stage, _ string) { r.order = append(r.order, "status:"+stage) }
-func (r *recSink) sources(s []Source)     { r.order = append(r.order, "sources"); r.srcs = s }
+func (r *recSink) status(stage, detail string) {
+	r.order = append(r.order, "status:"+stage)
+	if r.details == nil {
+		r.details = map[string][]string{}
+	}
+	r.details[stage] = append(r.details[stage], detail)
+}
+
+func (r *recSink) sources(s []Source) {
+	r.order = append(r.order, "sources")
+	r.srcs = s
+	r.snaps = append(r.snaps, append([]Source(nil), s...))
+}
 func (r *recSink) text(d string) {
 	r.order = append(r.order, "text")
 	r.texts = append(r.texts, d)
@@ -431,6 +541,8 @@ func baseParams(m mode) Params {
 		q: "who created clojure and why", webQuery: "who created clojure and why",
 		mode: m, model: "test-model",
 		maxSources: m.maxSources, maxQueries: m.maxQueries, readTop: m.readTop,
+		rounds: min(m.rounds, maxRounds), hostCap: m.hostCap,
+		deadline: m.deadline, tokenCeiling: m.tokenCeiling,
 		followUps: true, system: m.system, payer: "acme", dataOrg: "acme",
 	}
 }

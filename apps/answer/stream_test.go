@@ -188,7 +188,7 @@ func assertSourceShape(t *testing.T, frame int, v any) {
 func TestSSEEmptySourcesStillTerminates(t *testing.T) {
 	noNetworkSearch(t)
 	fakeCrawl(t, nil)
-	evs, wire := frames(t, newEngine(&loopAI{answer: "No sources, honest answer."}), baseParams(modes["deep"]))
+	evs, wire := frames(t, newEngine(&loopAI{answer: "No sources, honest answer."}), baseParams(resolveMode("deep")))
 	for _, ev := range evs {
 		if ev["type"] == "status" && ev["stage"] == "reading" {
 			t.Fatal("reading must not be claimed when there is nothing to read")
@@ -207,5 +207,96 @@ func TestSSESourcesAndFollowUpsNeverNull(t *testing.T) {
 	_, wire := frames(t, newEngine(&loopAI{answer: "A."}), baseParams(modes["search"]))
 	if strings.Contains(wire, "null") {
 		t.Fatalf("no frame may carry null:\n%s", wire)
+	}
+}
+
+// TestSSEFrameOrderingInvariant pins the SEQUENCE, not just the shapes. A survey
+// interleaves searching/sources/reading/planning across many rounds, so the one
+// rule a client can rely on is a phase order: everything gathered before the
+// answer opens, the answer before the follow-ups, `done` last, `[DONE]` after it.
+//
+// It also pins the absence that matters: the server NEVER emits the union's
+// `error` variant. That variant is the client's — a transport failure it
+// observes. A server that emitted it would tell a client the run failed when the
+// loop's contract is that it always degrades to a terminal `done`.
+func TestSSEFrameOrderingInvariant(t *testing.T) {
+	stubSearch(t, map[string]string{
+		"https://clojure.org/about":                 "About Clojure",
+		"https://en.wikipedia.org/wiki/Rich_Hickey": "Rich Hickey",
+	})
+	fakeCrawl(t, map[string]string{"https://clojure.org/about": "# Clojure\n\nCreated by Rich Hickey."})
+
+	e := newEngine(&loopAI{answer: "Created by [Rich Hickey](https://clojure.org/about) in 2007."})
+	evs, wire := frames(t, e, baseParams(modes["research"]))
+
+	// phase(frame) is monotonic: gathering(0) → answering(1) → follow-ups(2) → done(3).
+	phase := func(ev map[string]any) int {
+		switch ev["type"] {
+		case "status":
+			if ev["stage"] == "answering" {
+				return 1
+			}
+			return 0
+		case "sources":
+			return 0
+		case "text":
+			return 1
+		case "follow_ups":
+			return 2
+		case "done":
+			return 3
+		}
+		return -1
+	}
+
+	high := 0
+	var sawSources, sawText bool
+	for i, ev := range evs {
+		if ev["type"] == "error" {
+			t.Fatalf("frame %d: the server must never emit the union's error variant:\n%s", i, wire)
+		}
+		p := phase(ev)
+		if p < 0 {
+			t.Fatalf("frame %d: unknown type %v", i, ev["type"])
+		}
+		if p < high {
+			t.Fatalf("frame %d (%v) went backwards: phase %d after %d\n%s", i, ev["type"], p, high, wire)
+		}
+		high = p
+		switch ev["type"] {
+		case "sources":
+			sawSources = true
+			if sawText {
+				t.Fatalf("frame %d: sources must not arrive after the answer began\n%s", i, wire)
+			}
+		case "text":
+			sawText = true
+			if !sawSources {
+				t.Fatalf("frame %d: the answer must not begin before its sources\n%s", i, wire)
+			}
+		}
+	}
+	if high != 3 {
+		t.Fatalf("the stream must reach done, ended at phase %d\n%s", high, wire)
+	}
+}
+
+// TestSSEMarkdownLinkNeverSplits proves the joiner on the real wire: a citation
+// arriving as separate model deltas is delivered as one frame, so a reader never
+// watches `[Rich Hickey](htt` appear and rewrite itself.
+func TestSSEMarkdownLinkNeverSplits(t *testing.T) {
+	noNetworkSearch(t)
+	fakeCrawl(t, nil)
+	e := newEngine(&streamAI{loopAI: loopAI{answer: "Made by [Rich Hickey](https://clojure.org/about) in 2007."}})
+	evs, wire := frames(t, e, baseParams(modes["search"]))
+
+	for i, ev := range evs {
+		if ev["type"] != "text" {
+			continue
+		}
+		d, _ := ev["delta"].(string)
+		if o, c := strings.Count(d, "["), strings.Count(d, ")"); (o > 0) != (c > 0) {
+			t.Fatalf("frame %d: a markdown link split across deltas: %q\n%s", i, d, wire)
+		}
 	}
 }

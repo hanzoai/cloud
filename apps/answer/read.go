@@ -20,11 +20,15 @@ import (
 )
 
 const (
-	// maxRead is the hard ceiling on pages fetched for one answer, whatever a mode
-	// asks for — the read stage's cost bound inside the loop's 90s budget.
+	// maxRead is the hard ceiling on pages fetched per CALL, whatever a mode or a
+	// survey round asks for — the read stage's cost bound inside the wall clock. A
+	// survey may call read once per round, so the run's total is maxRead × rounds,
+	// itself bounded by maxRounds.
 	maxRead = 6
-	// maxPageText caps the fetched page text (runes) that replaces a snippet, so a
-	// long page cannot blow the synthesis prompt's token budget.
+	// maxPageText caps the fetched page text (runes) that replaces a snippet for a
+	// SINGLE gathering pass, so a long page cannot blow the synthesis prompt's
+	// token budget. An iterated survey passes the tighter surveyClip instead: many
+	// sources × a long page is the one way this loop could overrun a context window.
 	maxPageText = 6000
 )
 
@@ -40,33 +44,40 @@ type Page struct {
 // fake and no test ever dials the crawl service.
 var crawl = crawlPages
 
-// read fetches the top sources and swaps each Snippet for the page's markdown.
-// top<=0 (search/news) is a no-op — those modes ground on snippets and stay fast.
-// Never returns an error: every failure path yields the sources unchanged.
-func read(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, srcs []Source, top int) []Source {
-	if top <= 0 || len(srcs) == 0 {
+// read fetches exactly the URLs it is given and swaps the matching Sources'
+// Snippet for the page's markdown, clipped to limit. An empty url list is a
+// no-op. Never returns an error: every failure path yields the sources unchanged.
+//
+// WHICH urls is the CALLER's decision, not a mode lookup in here — the opening
+// round reads the best-ranked pages, a later round reads what the model asked
+// for, and read stays one function either way.
+//
+// onRead is the per-source reading progress. It fires for every URL BEFORE the
+// batch dispatches, which is the same instant crawlPages would spawn that URL's
+// worker: the workers all launch in one uninterrupted loop, so emitting here is
+// observably identical and keeps the callback off the crawl seam a test swaps.
+func read(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, srcs []Source, urls []string, limit int, onRead func(host string)) []Source {
+	if len(urls) == 0 || len(srcs) == 0 {
 		return srcs
 	}
-	if top > maxRead {
-		top = maxRead
+	if len(urls) > maxRead {
+		urls = urls[:maxRead]
 	}
-	if top > len(srcs) {
-		top = len(srcs)
-	}
-	urls := make([]string, 0, top)
-	for _, s := range srcs[:top] {
-		urls = append(urls, s.URL)
+	if onRead != nil {
+		for _, u := range urls {
+			onRead(hostOf(u))
+		}
 	}
 
-	text := make(map[string]string, top)
+	text := make(map[string]string, len(urls))
 	for _, p := range crawl(ctx, log, scope, urls) {
 		if md := strings.TrimSpace(p.Markdown); md != "" {
 			text[p.URL] = md
 		}
 	}
-	for i := range srcs[:top] {
+	for i := range srcs {
 		if md, ok := text[srcs[i].URL]; ok {
-			srcs[i].Snippet = clip(md, maxPageText)
+			srcs[i].Snippet = clip(md, limit)
 		}
 	}
 	return srcs
