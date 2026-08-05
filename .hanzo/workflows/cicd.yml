@@ -46,6 +46,7 @@ name: CI/CD
 # same bytes" as success. A failed car leaves a hole in the receipt, and the
 # receipt is the definition of shipped.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
@@ -299,7 +300,12 @@ jobs:
   # what makes a tag a receipt for an image that booted.
   image:
     needs: [gate, containment]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # github.ref arrives NULL on an API rerun (act_runner drops it), which
+    # skipped the image on the first fully green gate pass this pipeline ever
+    # had. A rerun keeps event_name and the workflow only triggers from main
+    # pushes/tags/dispatch, so refuse PRs and accept ref==main OR the rerun's
+    # null-ref shape.
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == '' || github.ref == null)
     runs-on: [hanzo-build-linux-amd64]
     # cloud builds ~28 subsystems and has run 15m, 17m and 20m42s.
     timeout-minutes: 60
