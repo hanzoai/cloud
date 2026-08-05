@@ -116,10 +116,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 
 	routes(app, s)
-	// The lexical read, published for the processes that do NOT own this store —
-	// `catalog` is one, and without this its browse is a permanent 503
-	// (query_rpc.go).
-	exposeQuery()
+	// The read AND the write, published for the processes that do NOT own this
+	// store. `catalog` is one, and it needs both: without the read its browse is a
+	// permanent 503, and without the write there is nothing for the browse to find
+	// (rpc.go).
+	expose()
 
 	b.Log.Info("index mounted", "brand", deps.Brand)
 	return nil
