@@ -137,7 +137,12 @@ func TestCandidates(t *testing.T) {
 		}
 	}
 	eq("", "index.html")
-	eq("docs", "docs", "docs/index.html")
+	// The flat `.html` spelling is what Next's `output: export` writes without
+	// `trailingSlash`, and omitting it made every route but the homepage 404 on a
+	// Next site. The directory-index form stays for Hugo/Jekyll/trailingSlash
+	// exports — both conventions are legitimate, so both are tried.
+	eq("docs", "docs", "docs.html", "docs/index.html")
+	eq("zen/models", "zen/models", "zen/models.html", "zen/models/index.html")
 	eq("assets/app.js", "assets/app.js")
 }
 
