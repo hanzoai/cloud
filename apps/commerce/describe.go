@@ -164,9 +164,9 @@ func describeBilling() {
 			"and the processor's reusable reference. No card number and no security code exist "+
 			"here to return; both live at the processor and never enter this system.\n\n"+
 			"This is the SERVICE-TOKEN face of the same list a customer reads at "+
-			"/v1/billing/methods, and it exists as its own address because the host that "+
-			"publishes that one cannot forward to it — the forward would re-enter its own "+
-			"handler. Both answer the same rows.\n\n"+
+			"/v1/billing/methods. Both are served here, in this process, and answer the same "+
+			"rows; they are two addresses because they admit two different principals, not "+
+			"because either forwards to the other.\n\n"+
 			"The customer filter is pinned to the VALIDATED caller before the handler runs, so a "+
 			"browser sees only its own subject's cards whatever customerId it sends; only a "+
 			"caller holding the internal service token may name the subject, and the org it may "+
@@ -179,14 +179,116 @@ func describeBilling() {
 		"Detaches the addressed card: the stored reference is removed here AND withdrawn from "+
 			"the processor's vault, so nothing is left that a later charge could bill.\n\n"+
 			"The service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own "+
-			"address for the same reason the portal list is — the host that publishes the "+
-			"customer address proxies here rather than into itself.\n\n"+
+			"address for the same reason the portal list is — a different principal, on the same "+
+			"rows, in this same process.\n\n"+
 			"The id is resolved INSIDE the caller's org namespace, so another tenant's card is "+
 			"not found there and answers 404 — never 403, which would confirm the id exists. "+
 			"That bound holds for the service token too: it may act for any subject within the "+
 			"org the gateway pinned, and for no subject outside it.\n\n"+
 			"Removing the card an auto-recharge or a running lease bills leaves that arrangement "+
 			"with nothing to charge; that is the customer's call to make.")
+
+	// ---- the CUSTOMER face of the same three cards ----
+	//
+	// One family of rows, two doors, both served in THIS process: /v1/billing/*
+	// admits a signed-in browser (IAM identity), /v1/billing/portal/* admits the
+	// internal service token acting for a subject. Neither forwards to the other,
+	// and the prose on each pair must keep saying so — an earlier round published
+	// the portal's sentences verbatim at the customer address, where "the
+	// SERVICE-TOKEN face of the list a customer reads at /v1/billing/methods"
+	// read as a description of itself.
+
+	openapi.Describe("/v1/billing/methods", http.MethodGet,
+		"Your saved cards, masked — the customer read",
+		"Answers the cards saved against your own account as masked descriptors: brand, last "+
+			"four, expiry and the processor's reusable reference. No card number and no security "+
+			"code exist here to return; both live at the processor and never enter this system. "+
+			"It is what a checkout prefills its payment step from.\n\n"+
+			"The customer face of the list a service token reads at /v1/billing/portal/methods — "+
+			"same rows, different principal, no hop between them.\n\n"+
+			"The subject filter is pinned to the VALIDATED caller before the handler runs, so the "+
+			"answer is your own account's cards whatever customerId the request carries, and "+
+			"another org's rows are outside the namespace entirely. A caller who is not signed in "+
+			"is refused before the read.")
+
+	openapi.Describe("/v1/billing/methods", http.MethodPost,
+		"Save a card for later charges",
+		"Vaults the card the processor already holds — you send its one-time reference, never a "+
+			"card number — as a reusable card on file, and stores the billing address with it. "+
+			"That vaulted card is what a subscription renewal or an auto-recharge charges later, "+
+			"which is why saving one is the step that makes a monthly plan billable at all.\n\n"+
+			"It charges nothing. Saving a card moves no money; the first charge is whatever "+
+			"arrangement you then attach it to.\n\n"+
+			"The subject is pinned from the validated caller and OVERWRITES the customerId in the "+
+			"body while leaving the card fields untouched, so a card can only ever be attached to "+
+			"the caller's OWN account whatever the body claims. That pin is the whole control on "+
+			"this write, not decoration: this is the one handler in the family that reads its "+
+			"subject from the body.")
+
+	openapi.Describe("/v1/billing/methods/:id", http.MethodDelete,
+		"Remove one of your saved cards",
+		"Detaches the addressed card: the stored reference is removed here AND withdrawn from "+
+			"the processor's vault, so nothing is left that a later charge could bill.\n\n"+
+			"The customer twin of DELETE /v1/billing/portal/methods/{id}. The id is resolved "+
+			"INSIDE your own org namespace, so a card that is not yours is simply not found "+
+			"there and answers 404 — never 403, which would confirm the id exists.\n\n"+
+			"Removing the card an auto-recharge or a running lease bills leaves that arrangement "+
+			"with nothing to charge; that is yours to decide.")
+
+	openapi.Describe("/v1/billing/portal/methods", http.MethodPost,
+		"Save a card on a subject's behalf — the portal attach",
+		"The service-token twin of POST /v1/billing/methods: it vaults the processor's one-time "+
+			"reference as a reusable card on file for the named subject, with its billing "+
+			"address, and moves no money doing it.\n\n"+
+			"It exists so an internal caller can complete the family it can already read and "+
+			"detach. The subject it may name is pinned to the org the gateway fixed, so the "+
+			"service token acts WITHIN one tenant and never across tenants; a caller holding no "+
+			"service token is refused before the write.")
+
+	// ---- the top-up rails: how money gets IN, other than a card ----
+
+	openapi.Describe("/v1/billing/wire", http.MethodGet,
+		"Where to wire funds, and the reference that credits them to you",
+		"Answers the receiving bank details for the brand this deployment serves — the account "+
+			"the funds actually land in, hydrated per brand rather than hard-coded — together "+
+			"with the payment reference to put on the transfer.\n\n"+
+			"THE REFERENCE IS THE POINT. It carries your own billing key, and it is how an "+
+			"arriving wire is attributed to your account; a transfer sent without it arrives as "+
+			"an unidentified receipt. That is why this read is gated at all: an unpinned caller "+
+			"would be handed an unattributable reference.\n\n"+
+			"Reading it credits nothing and reserves nothing. A wire is settled by an operator "+
+			"when the bank shows the funds, so the balance moves on receipt, not on this call.")
+
+	openapi.Describe("/v1/billing/crypto/options", http.MethodGet,
+		"Which chains and tokens a crypto top-up can use",
+		"Answers the custody processor's LIVE capability list — the chains and the tokens on "+
+			"each that this deployment can actually take a deposit on. A payment page renders its "+
+			"asset picker straight from it rather than from a list of its own, so a chain the "+
+			"processor stops supporting disappears from the picker instead of minting an address "+
+			"nothing watches.\n\n"+
+			"It is a capability read, not an account read: it says what may be paid with, never "+
+			"anything about this caller's balance or deposits.")
+
+	openapi.Describe("/v1/billing/crypto/deposit", http.MethodPost,
+		"Get a deposit address for a crypto top-up",
+		"Mints a deposit address held by the MPC signer fleet — no single party holds the key — "+
+			"on the chain and token you name, and returns it with the intent that tracks it.\n\n"+
+			"The account credited is the PINNED caller's, never a value in the body, so a deposit "+
+			"cannot be aimed at someone else's balance. A caller who already has an open intent "+
+			"gets that same address back rather than a new one, so reloading the page cannot "+
+			"spray keygens across the signer fleet.\n\n"+
+			"NO BALANCE MOVES HERE. This hands out an address; the chain watcher credits the "+
+			"account when a real transfer confirms, which is also why an address handed out and "+
+			"never funded costs nothing and expires nothing.")
+
+	openapi.Describe("/v1/billing/crypto/deposit/:id", http.MethodGet,
+		"Follow one crypto deposit to settlement",
+		"Answers the addressed deposit intent's current state — pending until a transfer is "+
+			"seen, confirming while the chain buries it, succeeded once it is credited — so a "+
+			"payment page can poll one deposit rather than the whole balance.\n\n"+
+			"Scoped to the caller: an intent belonging to another payer is not found and answers "+
+			"404, never another account's state. The credit itself is the chain watcher's to "+
+			"make; this read reports it and never performs it.")
 
 	openapi.Describe("/v1/billing/alerts", http.MethodGet,
 		"List your org's spend caps and rate limits",
@@ -405,35 +507,6 @@ func describePublic() {
 			"default-namespace read shared by every tenant rather than per-org data, and it is "+
 			"public and cacheable.")
 
-	openapi.Describe("/v1/commerce/deposits", http.MethodPost,
-		"Open a deposit against the tenant's own backend",
-		"Forwards the deposit request to the backend belonging to the tenant the request HOST "+
-			"resolves to, and answers that backend's status and body verbatim. The upstream is "+
-			"always taken from the resolved tenant's configured backend and never from the Host "+
-			"header itself, so a spoofed host cannot redirect the forward; only the Authorization "+
-			"and Content-Type headers are carried forward, so cookies and custom headers never "+
-			"leak to the backend. An unknown host is 404 with no echo of the host, a caller with "+
-			"no Authorization is 401, a tenant with no backend configured is 503, and an "+
-			"unreachable backend is 502.")
-
-	openapi.Describe("/v1/commerce/deposits/:id/confirm", http.MethodPost,
-		"Confirm a deposit that needed a second step",
-		"Forwards the confirmation for the addressed deposit to the resolved tenant's own "+
-			"backend and answers that backend's reply verbatim. The tenant comes from the request "+
-			"host, the upstream from that tenant's configured backend, and an Authorization "+
-			"header is required — the confirmation is the caller's, and this service only relays "+
-			"it. An unknown host is 404, a missing deposit id 400, a tenant with no backend "+
-			"configured 503 and an unreachable backend 502.")
-
-	openapi.Describe("/v1/commerce/deposits/:id/status", http.MethodGet,
-		"Poll a deposit's state until it settles",
-		"Returns the deposit's state as the tenant's own backend reports it — pending, "+
-			"processing, settled or failed — which is what the checkout page polls until a "+
-			"terminal state or timeout. The tenant is resolved from the request host and the read "+
-			"is forwarded to that tenant's configured backend with the caller's Authorization "+
-			"carried through; without that header the answer is 401. An unknown host is 404, a "+
-			"tenant with no backend 503 and an unreachable backend 502.")
-
 	openapi.Describe("/v1/commerce/tenant", http.MethodGet,
 		"The public tenant configuration a checkout page boots from",
 		"Answers the branding, identity issuer and client id, identity-verification config, "+
@@ -446,16 +519,6 @@ func describePublic() {
 			"projected. An unresolvable host answers a constant 404 that does not echo the host, "+
 			"so the endpoint cannot be used to enumerate tenants; a successful answer is cacheable "+
 			"for a minute.")
-
-	openapi.Describe("/v1/commerce/webhooks/:provider", http.MethodPost,
-		"Relay a payment provider's webhook to the tenant's own backend",
-		"Forwards the provider's event — body and original signature headers intact — to the "+
-			"backend of the tenant the request host resolves to, so that backend can verify it "+
-			"with its own tenant-scoped signing key. Commerce deliberately does NOT verify the "+
-			"signature here: the keys live with the tenant backend, and holding a second copy "+
-			"would be a second place to rotate and a stale cache that rejects live webhooks. A "+
-			"provider outside the known set is 404, as is an unresolvable host; a tenant with no "+
-			"backend configured is 503.")
 }
 
 // ---- /v1/plans — the platform-admin subscription plan authority ----

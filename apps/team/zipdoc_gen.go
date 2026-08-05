@@ -56,7 +56,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/team/transactor/api/v1/statistics", zip.Doc{
-		Description: "Statistics returns the transactor's live sessions for the workspace the\ncaller's token names — the endpoint the front's workspace switcher and server\npanel poll on the transactor base. The token is verified exactly like the\nWebSocket upgrade is, and activeSessions carries ONLY that token's own\nworkspace, never another tenant's sessions. An invalid or expired token is\n401.",
+		Description: "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
 		Fields: map[string]string{
 			"statsIn.token":                "Token is the workspace token minted by selectWorkspace.",
 			"statsOut.admin":               "Admin is the upstream service's server-panel flag, always false here.",
@@ -68,7 +68,7 @@ func init() {
 		Example: json.RawMessage(`{"token":"eyJhbGciOiJIUzI1NiJ9…"}`),
 	})
 	zip.Describe("GET /v1/team/transactor/statistics", zip.Doc{
-		Description: "Statistics returns the transactor's live sessions for the workspace the\ncaller's token names — the endpoint the front's workspace switcher and server\npanel poll on the transactor base. The token is verified exactly like the\nWebSocket upgrade is, and activeSessions carries ONLY that token's own\nworkspace, never another tenant's sessions. An invalid or expired token is\n401.",
+		Description: "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
 		Fields: map[string]string{
 			"statsIn.token":                "Token is the workspace token minted by selectWorkspace.",
 			"statsOut.admin":               "Admin is the upstream service's server-panel flag, always false here.",
@@ -92,6 +92,15 @@ func init() {
 			"collabResult.error":       "Error carries a SEMANTIC refusal, which this RPC reports under 200 because\nthe client throws on result.error — auth and tenancy failures are HTTP\nstatuses instead.",
 		},
 		Example: json.RawMessage(`{"documentId":"6579…|tracker:class:Issue|issue-1|description","method":"getContent","payload":{"source":"issue-1-description-1730000000000"}}`),
+	})
+	zip.Describe("POST /team/member", zip.Doc{
+		Fields: map[string]string{
+			"Member.account":     "Account is the team AccountUuid the subject resolved to — the identity the\nasking process attributes the person by, so it never derives one itself.",
+			"Member.member":      "Member reports whether the subject holds a row in that workspace.",
+			"Member.role":        "Role is the workspace role on that row (owner | admin | member | guest).",
+			"MemberIn.subject":   "Subject is the IAM subject, NOT a team account id. team owns the join from\none to the other — it is the join that created the rows — so a peer that\ncomputed its own would be a second derivation of the same address, which is\nhow two layers end up naming different accounts for one person.",
+			"MemberIn.workspace": "Workspace is the workspace uuid, scoped to the caller's org on the read.",
+		},
 	})
 	zip.Describe("POST /v1/team/bots/sync", zip.Doc{
 		Description: "SyncBots re-projects the caller org's agents as workspace members into EVERY\nworkspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a workspace's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
