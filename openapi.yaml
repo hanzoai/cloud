@@ -64367,10 +64367,9 @@ paths:
         (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
         is safe to ship in client JS and resolves to an org, never a principal.
 
-        It writes the schema.Key row that the resolvers actually read. It used to stamp the
-        secret on schema.User.AccessKey, which nothing resolves — so the minted key
-        authenticated nobody AND overwrote any working legacy hk- in the same field,
-        locking the holder out with no recovery through the UI.
+        It writes the schema.Key row that the resolvers actually read. schema.User.AccessKey
+        is not a credential and nothing resolves it, so a key stamped there would
+        authenticate nobody.
       operationId: post_v1_iam_keys_mint
       summary: (re)generates the target user's key of the requested TYPE and returns
         it once, over the shared authorizeMinter + mintTarget seam.
@@ -64382,9 +64381,8 @@ paths:
       description: |-
         Clears the target user's key of the requested TYPE (immediate
         revoke). Scoped by the same `?type` field mint takes, so revoking the browser key
-        leaves the server key working. For a secret key the stored value is sk- for anything
-        minted since the key seam was unified, and hk- only for the legacy population that
-        has not been re-keyed.
+        leaves the server key working. A secret key's stored value is the sk- in its
+        schema.Key row.
       operationId: post_v1_iam_keys_revoke
       summary: Clears the target user's key of the requested TYPE (immediate revoke).
       tags:
@@ -64544,10 +64542,9 @@ paths:
         (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
         is safe to ship in client JS and resolves to an org, never a principal.
 
-        It writes the schema.Key row that the resolvers actually read. It used to stamp the
-        secret on schema.User.AccessKey, which nothing resolves — so the minted key
-        authenticated nobody AND overwrote any working legacy hk- in the same field,
-        locking the holder out with no recovery through the UI.
+        It writes the schema.Key row that the resolvers actually read. schema.User.AccessKey
+        is not a credential and nothing resolves it, so a key stamped there would
+        authenticate nobody.
       operationId: post_v1_iam_mint-user-keys
       summary: (re)generates the target user's key of the requested TYPE and returns
         it once, over the shared authorizeMinter + mintTarget seam.
@@ -64560,9 +64557,16 @@ paths:
         Starts a sign-in — the address you send a browser to, and the
         beginning of every OAuth and OpenID Connect flow.
 
-        It shows the person the right way to sign in for the application they are
-        signing in to, hands off to another identity provider if that is what they
-        pick, and ends by returning them to the application with a one-time code.
+        If the person is ALREADY signed in here, it does not ask them again: it
+        returns them to the application with a one-time code and they never see this
+        page. Otherwise it shows the right way to sign in for the application they are
+        signing in to, or hands off to another identity provider if that is what they
+        pick.
+
+        A client can say what it wants with `prompt`: `none` means answer without any
+        screen at all — with the code if a session exists, with an error if not, but
+        never with a page; `login` means ask for the password again even if a session
+        exists; `select_account` means let the person choose which identity to use.
 
         It returns only to an address the application has registered. That check
         happens before anything else, so a request naming an unregistered address is
@@ -64578,9 +64582,16 @@ paths:
         Starts a sign-in — the address you send a browser to, and the
         beginning of every OAuth and OpenID Connect flow.
 
-        It shows the person the right way to sign in for the application they are
-        signing in to, hands off to another identity provider if that is what they
-        pick, and ends by returning them to the application with a one-time code.
+        If the person is ALREADY signed in here, it does not ask them again: it
+        returns them to the application with a one-time code and they never see this
+        page. Otherwise it shows the right way to sign in for the application they are
+        signing in to, or hands off to another identity provider if that is what they
+        pick.
+
+        A client can say what it wants with `prompt`: `none` means answer without any
+        screen at all — with the code if a session exists, with an error if not, but
+        never with a page; `login` means ask for the password again even if a session
+        exists; `select_account` means let the person choose which identity to use.
 
         It returns only to an address the application has registered. That check
         happens before anything else, so a request naming an unregistered address is
@@ -64677,27 +64688,61 @@ paths:
   /v1/iam/oauth/logout:
     get:
       description: |-
-        Ends a sign-in session and sends the browser back to your
-        application. Accepts GET or POST, so it works as a plain link.
+        Ends a sign-in and sends the browser somewhere sensible. Accepts
+        GET or POST, so it works as a plain link.
 
-        It returns only to an address the application has registered, and only when
-        the request carries an id_token whose signature verifies — so nobody can turn
-        your logout link into a redirect to a site of their choosing.
+        It ACTUALLY signs you out, which is worth stating because the endpoint spent a
+        release not doing it: the whole body computed a redirect and answered
+        {"status":"ok"} unconditionally — no session ended, no token revoked. A logout
+        that reports success while leaving the session live is worse than no logout at
+        all, because the person on the shared machine believes it worked. Three things
+        happen here now, in this order:
+
+         1. The browser session dies — sid revoked server-side AND the cookie expired
+            (sessions.Clear). Server-side revocation is the load-bearing half: a copy
+            of the cookie taken before logout must not still resolve.
+         2. The relying party's tokens are revoked when an id_token_hint names it, so
+            the refresh token cannot mint a fresh access token after the human left.
+            Revocation state is authoritative — a JWT's `exp` still reads valid for
+            days, so expiry is necessary but never sufficient.
+         3. Only then is a redirect considered, and only to a REGISTERED uri.
+
+        The open-redirect guard is unchanged: a redirect happens only when a VERIFIED
+        id_token_hint identifies the application and that application has registered
+        the target. Anything else refuses to redirect — nobody can turn your logout
+        link into a redirect to a site of their choosing.
       operationId: get_v1_iam_oauth_logout
-      summary: Ends a sign-in session and sends the browser back to your application.
+      summary: Ends a sign-in and sends the browser somewhere sensible.
       tags:
       - iam
       x-app: iam
     post:
       description: |-
-        Ends a sign-in session and sends the browser back to your
-        application. Accepts GET or POST, so it works as a plain link.
+        Ends a sign-in and sends the browser somewhere sensible. Accepts
+        GET or POST, so it works as a plain link.
 
-        It returns only to an address the application has registered, and only when
-        the request carries an id_token whose signature verifies — so nobody can turn
-        your logout link into a redirect to a site of their choosing.
+        It ACTUALLY signs you out, which is worth stating because the endpoint spent a
+        release not doing it: the whole body computed a redirect and answered
+        {"status":"ok"} unconditionally — no session ended, no token revoked. A logout
+        that reports success while leaving the session live is worse than no logout at
+        all, because the person on the shared machine believes it worked. Three things
+        happen here now, in this order:
+
+         1. The browser session dies — sid revoked server-side AND the cookie expired
+            (sessions.Clear). Server-side revocation is the load-bearing half: a copy
+            of the cookie taken before logout must not still resolve.
+         2. The relying party's tokens are revoked when an id_token_hint names it, so
+            the refresh token cannot mint a fresh access token after the human left.
+            Revocation state is authoritative — a JWT's `exp` still reads valid for
+            days, so expiry is necessary but never sufficient.
+         3. Only then is a redirect considered, and only to a REGISTERED uri.
+
+        The open-redirect guard is unchanged: a redirect happens only when a VERIFIED
+        id_token_hint identifies the application and that application has registered
+        the target. Anything else refuses to redirect — nobody can turn your logout
+        link into a redirect to a site of their choosing.
       operationId: post_v1_iam_oauth_logout
-      summary: Ends a sign-in session and sends the browser back to your application.
+      summary: Ends a sign-in and sends the browser somewhere sensible.
       tags:
       - iam
       x-app: iam
@@ -64713,6 +64758,21 @@ paths:
 
         A token that is not yours, or that never existed, answers success and does
         nothing — so the endpoint cannot be used to discover which tokens are real.
+
+        PUBLIC clients revoke too, and must: sign-out is the only control a long-lived
+        refresh token has. hanzo-cli is a public PKCE client holding a 30-day rotating
+        refresh token, so a confidential-only revocation endpoint made `hanzo auth
+        logout` a LOCAL DELETE — the credential it dropped stayed spendable at
+        hanzo.id for the rest of the month, with nothing able to kill it. Measured
+        2026-08-01: revoke answered 401 invalid_client and the refresh token went on
+        minting access tokens.
+
+        Widening authentication does not widen authority. The caller must still POSSESS
+        the token — and possession already permits USE, of which revocation is the
+        strict opposite — and the row must belong to the client that presents it, so a
+        public client_id buys the ability to destroy exactly what its holder could
+        otherwise spend. RFC 6749 §3.2.1 is the same reading: a client with no
+        credentials identifies itself with client_id.
       operationId: post_v1_iam_oauth_revoke
       summary: Retires a token before it expires — what you call when someone signs
         out or a credential may have leaked.
@@ -65384,9 +65444,8 @@ paths:
       description: |-
         Clears the target user's key of the requested TYPE (immediate
         revoke). Scoped by the same `?type` field mint takes, so revoking the browser key
-        leaves the server key working. For a secret key the stored value is sk- for anything
-        minted since the key seam was unified, and hk- only for the legacy population that
-        has not been re-keyed.
+        leaves the server key working. A secret key's stored value is the sk- in its
+        schema.Key row.
       operationId: post_v1_iam_revoke-user-keys
       summary: Clears the target user's key of the requested TYPE (immediate revoke).
       tags:
