@@ -133,6 +133,27 @@ const (
 	// collision, not the fix.
 	IndexQuery = "index_query"
 
+	// The lexical index's WRITE, across that same boundary and for that same
+	// reason — because Reconcile serves out of the same process-level global the
+	// read did, and the read is the only half that was ever given a way across.
+	//
+	// The half that was left behind is the half that FILLS the corpus. `catalog`
+	// reconciles hourly from GitHub and the sites table, and every pass since the
+	// split ended at "index: not mounted" — so the corpus was never written once,
+	// and GET /v1/catalog answered 200 with {"data":[],"total":0}. A well-formed
+	// page of nothing reads as a young platform rather than a broken one, which is
+	// why it went unnoticed far longer than the 503 the read leg failed with.
+	//
+	// Fixing the read alone could not have shown a single row: it was reading a
+	// store nothing had ever put anything into.
+	//
+	// ONE writer, still. The swap runs inside the process that owns the file,
+	// exactly as it always did — only the request for it crosses the boundary.
+	// The index is asked, not opened, and that is precisely what keeps the single
+	// writer single: a second process opening that SQLite to write it is the
+	// collision, not the fix.
+	IndexReconcile = "index_reconcile"
+
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
 	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
@@ -565,6 +586,34 @@ type IndexQueryIn struct {
 // that produced the bytes.
 type IndexQueryOut struct {
 	Rows []json.RawMessage `json:"rows"`
+}
+
+// IndexReconcileIn is one index's WHOLE corpus, swapped in a single call: every
+// document upserted, every key no longer present pruned. The ORG is the
+// caller's, never an argument — the same rule the read follows, so a corpus can
+// only ever be written under the tenant the call was made as.
+type IndexReconcileIn struct {
+	// UID is the index within the org, exactly as on the read.
+	UID string `json:"uid" validate:"required"`
+	// PrimaryKey names the field each document is keyed by. It is what makes the
+	// swap idempotent — a re-published document updates in place instead of
+	// accumulating a duplicate — and what the prune reads to find the keys that
+	// left upstream.
+	PrimaryKey string `json:"primaryKey" validate:"required"`
+	// Docs is the corpus, relayed verbatim for the same reason IndexQueryOut.Rows
+	// is raw: the documents belong to the app that assembled them, and a struct
+	// here would be a second copy of a type this package does not own, free to
+	// drift from the one that produced the bytes.
+	Docs []json.RawMessage `json:"docs,omitempty"`
+}
+
+// IndexReconcileOut is what the swap did: how many documents are live now, and
+// how many stale keys it pruned. Both are worth returning because together they
+// are the sync's own health check — a pass that keeps zero, or prunes the whole
+// corpus, is a source that failed rather than a corpus that emptied.
+type IndexReconcileOut struct {
+	Kept    int `json:"kept"`
+	Removed int `json:"removed"`
 }
 
 // ---- tasks.activities — the durable engine, one page at a time -------------
