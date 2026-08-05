@@ -22,6 +22,7 @@ package risk
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -33,6 +34,8 @@ import (
 	"github.com/luxfi/aml/pkg/anomaly"
 	"github.com/luxfi/aml/pkg/types"
 	"github.com/luxfi/aml/pkg/velocity"
+
+	"github.com/hanzoai/cloud"
 )
 
 // TestPlane_HoldsNoSharedTenantState is the STRUCTURAL half: the plane may hold
@@ -466,7 +469,7 @@ func TestRecord_IsBoundedPerTenant(t *testing.T) {
 }
 
 // recorded is how many observations a tenant's own record holds.
-func recorded(t *testing.T, p *plane, k tenant) int {
+func recorded(t testing.TB, p *plane, k tenant) int {
 	t.Helper()
 	sh, err := p.for_(k)
 	if err != nil {
@@ -664,5 +667,275 @@ func TestLearn_ARetriedBatchConvergesInMemoryToo(t *testing.T) {
 	}
 	if got := velocityOf(t, p, k, batch[0]); got != len(batch) {
 		t.Fatalf("the subject's 24h count is %d after a retried %d-event batch", got, len(batch))
+	}
+}
+
+// ── what the aggregates already hold ─────────────────────────────────────────
+//
+// Everything above holds the aggregates as the MODEL's eight dimensions. These
+// hold them as a RULE's two plain counts, which is a different reader with a
+// different failure: a model reading blind is a refusal an operator can see, and
+// a rule reading zero is a control that allowed.
+
+// TestPrior_ReadsTheNarrowestWindowAndNotAWiderOne.
+//
+// The count bound is a BURST bound, so it has to be read over the finest window
+// the aggregates keep. Read over the widest one, sixty events in a month would
+// trip a bound written for sixty events in an hour, and the rule would review the
+// organisation's ordinary customers instead of its fast ones.
+//
+// Mutation proof: take the widest window in [rings.pace] instead of the narrowest
+// and this fails, because the events a fortnight back are counted.
+func TestPrior_ReadsTheNarrowestWindowAndNotAWiderOne(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	now := time.Now().UTC()
+
+	// Three inside the burst window, three well outside it and inside the widest.
+	far := []observation{
+		ob(t, "far-1", kindAccount, "u_1", 10, now.Add(-20*24*time.Hour)),
+		ob(t, "far-2", kindAccount, "u_1", 10, now.Add(-15*24*time.Hour)),
+		ob(t, "far-3", kindAccount, "u_1", 10, now.Add(-10*24*time.Hour)),
+	}
+	near := []observation{
+		ob(t, "near-1", kindAccount, "u_1", 10, now.Add(-4*time.Minute)),
+		ob(t, "near-2", kindAccount, "u_1", 10, now.Add(-3*time.Minute)),
+		ob(t, "near-3", kindAccount, "u_1", 10, now.Add(-2*time.Minute)),
+	}
+	// Oldest first, which is the order the rings only move forward in.
+	if _, err := p.learn(k, append(far, near...)...); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+
+	seen, err := p.prior(k, near[0])
+	if err != nil {
+		t.Fatalf("prior: %v", err)
+	}
+	if len(seen.Pace) == 0 {
+		t.Fatal("the reading names no axis at all, so no bound over it can fire")
+	}
+	got := seen.Pace[0]
+	if got.Axis != axisSubject {
+		t.Fatalf("the first axis is %q, want %q — [anomaly.Keys] leads with the account", got.Axis, axisSubject)
+	}
+	if got.Events != len(near) {
+		t.Errorf("the burst window counts %d of %d recent events, with %d older ones on the same "+
+			"subject — the bound is written for one window and read over another",
+			got.Events, len(near), len(far))
+	}
+	// And it says which window it was read over, so the bound and the reading
+	// cannot be about two different spans.
+	if got.Span != time.Hour {
+		t.Errorf("the narrowest window is %s, and every bound in [onPace] is stated for the burst "+
+			"window — a change here changes what those numbers mean", got.Span)
+	}
+	if want := nanoOfUSD(float64(10 * len(near))); got.Nano != want {
+		t.Errorf("the burst window accrued %d nano, want %d", got.Nano, want)
+	}
+}
+
+// TestPrior_CountsTheDistinctSubjectsSharingAnIdentifier.
+//
+// The fan-out is a count of SUBJECTS and never of events. Counted without
+// DISTINCT it is a second and worse velocity rule: one busy account reaches the
+// bound on its own device, and every ordinary customer is a farm.
+//
+// Mutation proof: drop DISTINCT from [sharedByDevice] and the busy subject alone
+// reaches the bound; drop the LIMIT and the count runs past it.
+func TestPrior_CountsTheDistinctSubjectsSharingAnIdentifier(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	at := time.Now().UTC().Add(-time.Hour)
+
+	// ONE subject, many events, one device — a busy customer and not a farm.
+	busy := make([]observation, 0, fanSubjects*2)
+	for i := 0; i < fanSubjects*2; i++ {
+		busy = append(busy, ob(t, "busy_"+itoa(i), kindAccount, "u_busy", 1,
+			at.Add(time.Duration(i)*time.Second), "", "d_one"))
+	}
+	if _, err := p.learn(k, busy...); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	seen, err := p.prior(k, busy[0])
+	if err != nil {
+		t.Fatalf("prior: %v", err)
+	}
+	if len(seen.Shared) != 1 || seen.Shared[0].Axis != axisDevice {
+		t.Fatalf("the reading's links are %+v, want the one device the event carries", seen.Shared)
+	}
+	if seen.Shared[0].Subjects != 1 {
+		t.Fatalf("%d events from ONE subject on one device read as %d subjects — the fan-out counts "+
+			"subjects, and a busy customer is not a network", len(busy), seen.Shared[0].Subjects)
+	}
+	if d := onFan(seen); d.fired() {
+		t.Errorf("a busy customer's own device was found shared: %+v", d)
+	}
+
+	// And now a real one: distinct subjects, one event apiece, the same device.
+	farm := make([]observation, 0, 2*fanSubjects)
+	for i := 0; i < 2*fanSubjects; i++ {
+		farm = append(farm, ob(t, "farm_"+itoa(i), kindAccount, "u_farm_"+itoa(i), 1,
+			at.Add(time.Duration(i)*time.Second), "", "d_farm"))
+	}
+	if _, err := p.learn(k, farm...); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	seen, err = p.prior(k, farm[0])
+	if err != nil {
+		t.Fatalf("prior: %v", err)
+	}
+	// AT THE BOUND AND NOT PAST IT. Twice as many subjects share the device, and
+	// the rule asks only whether the bound was reached: counting further is work
+	// with no reader, and the LIMIT is what stops it.
+	if seen.Shared[0].Subjects != fanSubjects {
+		t.Fatalf("%d distinct subjects on one device read as %d, want the bound %d",
+			len(farm), seen.Shared[0].Subjects, fanSubjects)
+	}
+	if d := onFan(seen); !d.fired() {
+		t.Errorf("%d distinct subjects on one device determined nothing", len(farm))
+	}
+}
+
+// TestPrior_ReadsNoIdentifierTheEventDoesNotCarry.
+//
+// An absent device is ABSENT and never the empty string. Counted as one, every
+// anonymous event in the organisation pools into a single identifier that reaches
+// any bound immediately — a rule that reviews the whole product because of the
+// events that named nothing. It is [anomaly.Keys]' own rule, applied to the link
+// identifiers it does not key.
+//
+// Mutation proof: drop the empty check in [plane.prior] and this fails.
+func TestPrior_ReadsNoIdentifierTheEventDoesNotCarry(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	at := time.Now().UTC().Add(-time.Hour)
+
+	// Many subjects, none of them naming a device or a counterparty.
+	batch := make([]observation, 0, fanSubjects*2)
+	for i := 0; i < fanSubjects*2; i++ {
+		batch = append(batch, ob(t, "anon_"+itoa(i), kindAccount, "u_anon_"+itoa(i), 1,
+			at.Add(time.Duration(i)*time.Second)))
+	}
+	if _, err := p.learn(k, batch...); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	seen, err := p.prior(k, batch[0])
+	if err != nil {
+		t.Fatalf("prior: %v", err)
+	}
+	if len(seen.Shared) != 0 {
+		t.Fatalf("an event naming no device and no counterparty produced %+v — every anonymous "+
+			"event in the organisation would pool into one identifier", seen.Shared)
+	}
+	if d := onFan(seen); d.fired() {
+		t.Errorf("the fan-out fired on identifiers nobody stated: %+v", d)
+	}
+}
+
+// TestPrior_IsScopedToTheAskingTenant. The reading is a SECOND thing on the decide
+// path that reads a tenant's own history, so it is a second thing that could read
+// somebody else's. Both halves are held: the rings belong to one resident, and the
+// record query carries the qualified tenant as its leading predicate.
+//
+// IT RUNS THE SHARED-FILE CROSSING, and that is what makes it a test rather than a
+// tautology. Two ORGANISATIONS have two shelf FILES, so a query with no tenant
+// predicate at all still cannot cross between them — a reader who only tried that
+// pair would prove nothing about the predicate. Two BRANDS' identically named
+// organisations share ONE file ([TestRecord_TwoBrandsShareAFileAndNotARecord]),
+// and the qualified tenant is the only thing that tells their rows apart. So the
+// farm is planted under the other BRAND, in the victim's own file.
+//
+// Mutation proof: drop `tenant = ?` from [sharedByDevice] and the other brand's
+// farm is found from this brand's first event.
+func TestPrior_IsScopedToTheAskingTenant(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	victim, other := key(t, brandA, orgA), key(t, brandB, orgA) // SAME org slug, two brands
+	if victim.org() != other.org() {
+		t.Fatal("the two keys do not share an org slug — the test is not exercising the shared file")
+	}
+	at := time.Now().UTC().Add(-time.Hour)
+
+	// One tenant runs a farm on a device, at burst speed and at real value.
+	loud := make([]observation, 0, burstEvents)
+	for i := 0; i < burstEvents; i++ {
+		loud = append(loud, ob(t, "loud_"+itoa(i), kindAccount, "u_loud_"+itoa(i%fanSubjects), 500,
+			at.Add(time.Duration(i)*time.Second), "", "d_shared"))
+	}
+	if _, err := p.learn(other, loud...); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	// The other tenant's ONE event names the same device and the same subject
+	// spelling, in the same file. Nothing about the first may be found from it.
+	quiet := ob(t, "quiet-1", kindAccount, "u_loud_0", 1, at, "", "d_shared")
+	if _, err := p.learn(victim, quiet); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	seen, err := p.prior(victim, quiet)
+	if err != nil {
+		t.Fatalf("prior: %v", err)
+	}
+	for _, w := range seen.Pace {
+		if w.Events > 1 {
+			t.Errorf("axis %q reads %d events for a tenant that sent one — another tenant's "+
+				"traffic is in its aggregates", w.Axis, w.Events)
+		}
+	}
+	for _, s := range seen.Shared {
+		if s.Subjects > 1 {
+			t.Errorf("%q reads %d subjects for a tenant that has one — another tenant's record "+
+				"answered its query", s.Axis, s.Subjects)
+		}
+	}
+	if d := determine("US", 1, seen); d.fired() {
+		t.Errorf("a tenant that sent ONE small event was determined %+v on another tenant's history", d)
+	}
+	// And the crossing is REAL for the tenant that owns it: the same query against
+	// the other key finds the farm. Without this the assertions above could pass on
+	// a query that finds nothing for anybody.
+	loudSeen, err := p.prior(other, loud[0])
+	if err != nil {
+		t.Fatalf("prior(other): %v", err)
+	}
+	if d := onFan(loudSeen); !d.fired() {
+		t.Fatalf("the farm is not found by the tenant that ran it (%+v) — the assertions above "+
+			"prove nothing", loudSeen.Shared)
+	}
+}
+
+// TestNanoOfUSD_SaturatesRatherThanWrapping. The aggregates accrue in float USD
+// and every stated bound is written in int64 nano, so this conversion is on the
+// path of every pace determination. One that wrapped would turn the largest
+// accrual there is into a small — or negative — one, and the rule would read the
+// worst event it will ever see as unremarkable.
+func TestNanoOfUSD_SaturatesRatherThanWrapping(t *testing.T) {
+	for _, tc := range []struct {
+		usd  float64
+		want int64
+	}{
+		{0, 0},
+		{-1, 0},         // an aggregate cannot owe money, and zero is the honest reading
+		{math.NaN(), 0}, // and NaN is neither greater nor less than zero
+		{10_000, freezeNano},
+		{50_000, reviewNano},
+		{1e30, math.MaxInt64},        // past the ceiling: the largest bound there is
+		{math.Inf(1), math.MaxInt64}, //
+	} {
+		if got := nanoOfUSD(tc.usd); got != tc.want {
+			t.Errorf("nanoOfUSD(%v) = %d, want %d", tc.usd, got, tc.want)
+		}
+	}
+	// The DIRECTION is what matters: a saturated value can only make a bound fire.
+	d := onPace(reading{Pace: []paced{{Axis: axisSubject, Events: burstEvents, Nano: nanoOfUSD(1e30)}}})
+	if d.Action != cloud.ActionRestrict {
+		t.Errorf("a burst accruing past the int64 ceiling determined %q, want %q",
+			d.Action, cloud.ActionRestrict)
 	}
 }
