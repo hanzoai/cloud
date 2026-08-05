@@ -459,8 +459,8 @@ func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, err
 
 // ---- Roles ----
 
-// roleRef addresses one role assignment by the (user, role) pair in the URL.
-type roleRef struct {
+// grant addresses one role assignment by the (user, role) pair in the URL.
+type grant struct {
 	// User is the assignee whose grant is being revoked, from the path.
 	User string `json:"user"`
 	// Role is the role to revoke, from the path. A role name containing a space
@@ -503,7 +503,7 @@ func (o ops) assignRole(ctx context.Context, in *Role) (*Role, error) {
 // Answers 204; a grant that does not exist is not found.
 //
 // Example: {"user": "u_alice", "role": "System Manager"}
-func (o ops) revokeRole(ctx context.Context, in *roleRef) (*noContent, error) {
+func (o ops) revokeRole(ctx context.Context, in *grant) (*noContent, error) {
 	err := o.s.State.eng.RevokeRole(ctx, callerOf(ctx), decodeSeg(in.User), decodeSeg(in.Role))
 	if err != nil {
 		return nil, fail(err, "role assignment not found")
