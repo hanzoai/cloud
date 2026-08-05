@@ -15603,6 +15603,25 @@ components:
         zipCode:
           type: string
       type: object
+    iam.Answer:
+      properties:
+        code:
+          type: string
+        data:
+          type: object
+        data2:
+          type: object
+        data3:
+          type: object
+        msg:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        sub:
+          type: string
+      type: object
     iam.Application:
       properties:
         affiliationUrl:
@@ -17854,6 +17873,15 @@ components:
         user:
           type: string
       type: object
+    iam.bulk:
+      properties:
+        maxOperations:
+          type: integer
+        maxPayloadSize:
+          type: integer
+        supported:
+          type: boolean
+      type: object
     iam.certs.DeleteOutput:
       properties:
         deleted:
@@ -17874,6 +17902,38 @@ components:
           type: string
         owner:
           type: string
+      type: object
+    iam.config:
+      properties:
+        authenticationSchemes:
+          items:
+            $ref: '#/components/schemas/iam.scheme'
+          type: array
+        bulk:
+          $ref: '#/components/schemas/iam.bulk'
+        changePassword:
+          $ref: '#/components/schemas/iam.toggle'
+        documentationUri:
+          type: string
+        etag:
+          $ref: '#/components/schemas/iam.toggle'
+        filter:
+          $ref: '#/components/schemas/iam.filter'
+        patch:
+          $ref: '#/components/schemas/iam.toggle'
+        schemas:
+          items:
+            type: string
+          type: array
+        sort:
+          $ref: '#/components/schemas/iam.toggle'
+      type: object
+    iam.filter:
+      properties:
+        maxResults:
+          type: integer
+        supported:
+          type: boolean
       type: object
     iam.invitations.DeleteOutput:
       properties:
@@ -17945,6 +18005,23 @@ components:
             $ref: '#/components/schemas/iam.Provider'
           type: array
       type: object
+    iam.listResponse:
+      properties:
+        Resources:
+          items:
+            type: object
+          type: array
+        itemsPerPage:
+          type: integer
+        schemas:
+          items:
+            type: string
+          type: array
+        startIndex:
+          type: integer
+        totalResults:
+          type: integer
+      type: object
     iam.listTokensOut:
       properties:
         tokens:
@@ -17985,6 +18062,25 @@ components:
         owner:
           type: string
       type: object
+    iam.person:
+      properties:
+        displayName:
+          type: string
+        email:
+          type: string
+        isAdmin:
+          type: boolean
+        name:
+          type: string
+        owner:
+          type: string
+        password:
+          type: string
+        passwordType:
+          type: string
+        phone:
+          type: string
+      type: object
     iam.projects.DeleteOutput:
       properties:
         deleted:
@@ -18020,6 +18116,81 @@ components:
       properties:
         provider:
           $ref: '#/components/schemas/iam.Provider'
+      type: object
+    iam.registration:
+      properties:
+        cert:
+          type: string
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+        displayName:
+          type: string
+        expireInHours:
+          description: |-
+            ExpireInHours and RefreshExpireInHours are the application's token
+            lifetimes. They are the ONLY declarative way to say that a refresh token
+            must OUTLIVE its access token: with neither stated, oidc.refreshTTL clamps
+            the refresh lifetime to the access lifetime, so the refresh_token grant the
+            registration advertises expires at the same instant as the token it was
+            meant to renew and can never be exercised. `hanzo-cli` sat in exactly that
+            state — a browser re-login every hour, and a live refresh returning 401.
+
+            POINTERS, for the same reason as IsShared: a plain float would read as 0 on
+            every reconcile that says nothing and reset a deliberate lifetime back to
+            the default. Nil means "not stated, leave it".
+          type: number
+        grantTypes:
+          items:
+            type: string
+          type: array
+        isShared:
+          description: |-
+            IsShared declares that this application serves EVERY organization, not only
+            the one named in Organization. It is the honest description of a brand app —
+            hanzo-id, hanzo-chat, a brand console — whose customers each live in their own
+            tenant: self-service onboarding moves a founder OUT of the brand org, so
+            `user.Owner != app.Organization` is the steady state and the app really does
+            serve every org. Application.ServesOrg reads it as one of the three ways to
+            say yes.
+
+            A POINTER because omission must PRESERVE. This upsert is the operator's
+            steady-state reconcile and most callers say nothing about sharing; a plain
+            bool would read as false on every one of them and silently un-share an app —
+            the same shape of accident that de-secreted apps through update-application.
+            Nil means "not stated, leave it"; only an explicit true or false moves it.
+          type: boolean
+        name:
+          type: string
+        organization:
+          type: string
+        public:
+          description: |-
+            Public declares a client that CANNOT hold a credential — a browser SPA,
+            a CLI, a desktop app. It proves itself with PKCE instead, and the token
+            endpoint treats "no stored secret" as exactly that (token.go: a secret is
+            verified only when one is stored). Without this flag every upsert minted
+            a secret, so a public client could never be registered at all and its
+            browser code->token exchange 401'd `invalid_client` forever.
+          type: boolean
+        redirectUris:
+          items:
+            type: string
+          type: array
+        refreshExpireInHours:
+          type: number
+      type: object
+    iam.reply:
+      properties:
+        action:
+          type: string
+        data:
+          type: object
+        msg:
+          type: string
+        status:
+          type: string
       type: object
     iam.roles.DeleteOutput:
       properties:
@@ -18072,6 +18243,22 @@ components:
           type: string
         owner:
           type: string
+      type: object
+    iam.scheme:
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        primary:
+          type: boolean
+        type:
+          type: string
+      type: object
+    iam.toggle:
+      properties:
+        supported:
+          type: boolean
       type: object
     iam.tokenKey:
       properties:
@@ -66199,7 +66386,44 @@ paths:
         It says which of the two it did. Leave the client secret out and the existing
         one is kept — so re-running your deployment does not rotate a credential your
         running services are holding.
-      operationId: post_v1_iam_admin_applications_upsert
+      operationId: upsertApplication
+      parameters:
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.registration'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: internal server error
       summary: Creates an application or updates it in place, so a deployment can
         declare the applications it needs and run the same declaration on every environment
         and on every redeploy.
@@ -66231,7 +66455,44 @@ paths:
 
         Passwords are hashed before they are stored. Leave the password out and their
         current one is kept, so a redeploy never locks somebody out.
-      operationId: post_v1_iam_admin_users_upsert
+      operationId: upsertUser
+      parameters:
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.person'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.reply'
+          description: internal server error
       summary: Creates a person or updates them in place, so a deployment can declare
         the accounts it needs and re-run that declaration safely.
       tags:
@@ -66624,6 +66885,37 @@ paths:
         The client secret is masked. Read before anyone has signed in, so it carries
         only what is safe for a browser to see.
       operationId: get_v1_iam_auth_application
+      parameters:
+      - description: |-
+          ClientId is the application's OAuth client id — the one field that selects
+          which login screen this is.
+        in: query
+        name: clientId
+        required: false
+        schema:
+          type: string
+      - description: |-
+          ResponseType is the OAuth response type the screen will ask for. Only "code"
+          is served; anything else is refused here rather than at the authorize leg,
+          where the person has already typed a password.
+        in: query
+        name: responseType
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
       summary: 'Returns everything a login screen needs to draw itself for one application:
         its branding, and each sign-in method it offers with the provider details
         that method needs.'
@@ -66640,6 +66932,26 @@ paths:
         Public by design: it is read before anyone has signed in, and it exposes only
         which methods exist, never their credentials.
       operationId: get_v1_iam_auth_methods
+      parameters:
+      - description: ClientId is the application's OAuth client id.
+        in: query
+        name: clientId
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
       summary: Returns the sign-in methods one application actually has switched on,
         so a login screen can render the right buttons for it without you hard-coding
         a list that drifts the moment you add a provider.
@@ -66775,7 +67087,8 @@ paths:
       description: |-
         Returns the calling person's own privacy and communication
         choices. Somebody who has never set them gets the defaults rather than
-        nothing, so a consent screen always has something to show.
+        nothing, so a consent screen always has something to show — insights on, and
+        training UNANSWERED, which is the state that means the screen still has to ask.
       operationId: get_v1_iam_consent
       summary: Returns the calling person's own privacy and communication choices.
       tags:
@@ -66786,8 +67099,12 @@ paths:
         Records the calling person's privacy and communication
         choices. Only their own — there is no way to set consent for somebody else.
 
-        It merges rather than replaces, so saving a consent screen never discards a
-        preference some other screen set at the same moment.
+        Send only the answers you are changing. A question you leave out keeps the
+        answer it already had, so a screen that saves one switch never revokes the
+        other, and two screens saving at once do not undo each other.
+
+        An answer this version does not recognize is refused here rather than stored,
+        so nothing is ever persisted for a later reader to have to interpret.
       operationId: put_v1_iam_consent
       summary: Records the calling person's privacy and communication choices.
       tags:
@@ -67031,6 +67348,37 @@ paths:
         The client secret is masked. Read before anyone has signed in, so it carries
         only what is safe for a browser to see.
       operationId: get_v1_iam_get-app-login
+      parameters:
+      - description: |-
+          ClientId is the application's OAuth client id — the one field that selects
+          which login screen this is.
+        in: query
+        name: clientId
+        required: false
+        schema:
+          type: string
+      - description: |-
+          ResponseType is the OAuth response type the screen will ask for. Only "code"
+          is served; anything else is refused here rather than at the authorize leg,
+          where the person has already typed a password.
+        in: query
+        name: responseType
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
       summary: 'Returns everything a login screen needs to draw itself for one application:
         its branding, and each sign-in method it offers with the provider details
         that method needs.'
@@ -67189,6 +67537,33 @@ paths:
         widen it — a membership row names who may act and spend in an org, so a
         cross-tenant read is a customer roster leak.
       operationId: get_v1_iam_get-memberships
+      parameters:
+      - description: User is "<homeOrg>/<username>" — which organizations that identity
+          may act in.
+        in: query
+        name: user
+        required: false
+        schema:
+          type: string
+      - description: Org is an organization — who may act in it.
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
       summary: 'Answers either question about who belongs where: which organizations
         one person can act in, or who can act in one organization.'
       tags:
@@ -67804,6 +68179,33 @@ paths:
         widen it — a membership row names who may act and spend in an org, so a
         cross-tenant read is a customer roster leak.
       operationId: get_v1_iam_memberships
+      parameters:
+      - description: User is "<homeOrg>/<username>" — which organizations that identity
+          may act in.
+        in: query
+        name: user
+        required: false
+        schema:
+          type: string
+      - description: Org is an organization — who may act in it.
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
       summary: 'Answers either question about who belongs where: which organizations
         one person can act in, or who can act in one organization.'
       tags:
@@ -68931,7 +69333,14 @@ paths:
         Returns the kinds of record this directory provisions and
         the address of each, so your identity provider discovers them rather than
         having them configured by hand.
-      operationId: get_v1_iam_scim_v2_resourcetypes
+      operationId: get_v1_iam_scim_v2_ResourceTypes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.listResponse'
+          description: ok
       summary: Returns the kinds of record this directory provisions and the address
         of each, so your identity provider discovers them rather than having them
         configured by hand.
@@ -68941,13 +69350,24 @@ paths:
   /v1/iam/scim/v2/ResourceTypes/{name}:
     get:
       description: Returns one provisionable record kind in full.
-      operationId: get_v1_iam_scim_v2_resourcetypes_by_name
+      operationId: get_v1_iam_scim_v2_ResourceTypes_name
       parameters:
       - in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+        "404":
+          content:
+            application/json:
+              schema: {}
+          description: not found
       summary: Returns one provisionable record kind in full.
       tags:
       - iam
@@ -68958,7 +69378,14 @@ paths:
         Returns the attribute definitions this directory understands, so
         your identity provider knows which fields it may send and what they mean
         before it sends any.
-      operationId: get_v1_iam_scim_v2_schemas
+      operationId: get_v1_iam_scim_v2_Schemas
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.listResponse'
+          description: ok
       summary: Returns the attribute definitions this directory understands, so your
         identity provider knows which fields it may send and what they mean before
         it sends any.
@@ -68968,13 +69395,24 @@ paths:
   /v1/iam/scim/v2/Schemas/{id}:
     get:
       description: Returns one attribute definition in full.
-      operationId: get_v1_iam_scim_v2_schemas_by_id
+      operationId: get_v1_iam_scim_v2_Schemas_id
       parameters:
       - in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+        "404":
+          content:
+            application/json:
+              schema: {}
+          description: not found
       summary: Returns one attribute definition in full.
       tags:
       - iam
@@ -68987,7 +69425,14 @@ paths:
 
         Filtering and partial updates are supported. Bulk operations, sorting and
         entity tags are not — an IdP that reads this will not attempt them.
-      operationId: get_v1_iam_scim_v2_serviceproviderconfig
+      operationId: get_v1_iam_scim_v2_ServiceProviderConfig
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.config'
+          description: ok
       summary: Tells your identity provider which parts of SCIM this directory supports,
         so it configures itself instead of you filling in a form.
       tags:
@@ -69139,6 +69584,42 @@ paths:
         slice — the set per org is small, so a dedicated count query is overkill
         (v1 service_account.go:296-307).
       operationId: get_v1_iam_service-accounts
+      parameters:
+      - description: Organization is the organization whose service accounts to list.
+          Required.
+        in: query
+        name: organization
+        required: false
+        schema:
+          type: string
+      - description: |-
+          P is the 1-indexed page to return. Paging takes both p and pageSize —
+          leave either out, or send something that is not a number, and the whole
+          list comes back.
+        in: query
+        name: p
+        required: false
+        schema:
+          type: integer
+      - description: Size is how many accounts a page holds.
+        in: query
+        name: pageSize
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
       summary: Returns your organization's service accounts — what each is called
         and when it was created.
       tags:
