@@ -406,6 +406,16 @@ func slackOIDCExchange(s *cloud.Service[state], ctx context.Context, code string
 	})
 }
 
+// errLinkRejected marks IAM REFUSING the credential itself — a revoked, expired
+// or already-spent grant — as opposed to IAM being unreachable.
+//
+// The two need opposite advice and only one is worth waiting for, so they cannot
+// share an error. Telling someone to try again shortly for a credential that is
+// never coming back is a loop with no exit; telling someone to re-link because a
+// pod could not reach hanzo.id for a second is a lie that costs them a browser
+// round trip. A 4xx or an OAuth `error` is the grant; anything else is the trip.
+var errLinkRejected = errors.New("slack: the linked Hanzo account was refused")
+
 // slackOIDCToken performs an OAuth2 token request. The secrets (code /
 // client_secret) are POST-form only and never logged.
 func slackOIDCToken(ctx context.Context, form url.Values) (slackTokenSet, error) {
@@ -423,6 +433,9 @@ func slackOIDCToken(ctx context.Context, form url.Values) (slackTokenSet, error)
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, slackMaxBody))
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode < http.StatusInternalServerError {
+			return slackTokenSet{}, fmt.Errorf("%w: IAM token status %d", errLinkRejected, resp.StatusCode)
+		}
 		return slackTokenSet{}, fmt.Errorf("slack: IAM token status %d", resp.StatusCode)
 	}
 	var out struct {
@@ -435,7 +448,7 @@ func slackOIDCToken(ctx context.Context, form url.Values) (slackTokenSet, error)
 		return slackTokenSet{}, fmt.Errorf("slack: IAM token decode: %w", err)
 	}
 	if out.Error != "" {
-		return slackTokenSet{}, fmt.Errorf("slack: IAM token: %s", out.Error)
+		return slackTokenSet{}, fmt.Errorf("%w: %s", errLinkRejected, out.Error)
 	}
 	if out.AccessToken == "" {
 		return slackTokenSet{}, fmt.Errorf("slack: IAM token: empty access_token")
