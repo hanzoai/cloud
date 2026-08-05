@@ -141,7 +141,19 @@ type determination struct {
 // fired reports whether the rule reached anything at all. An allow from this rule
 // is the absence of a finding, not a clean bill of health — the model's answer is
 // what stands in that case.
-func (d determination) fired() bool { return d.Action != "" && d.Action != cloud.ActionAllow }
+//
+// IT IS THE SEVERITY THAT ANSWERS, not a comparison against two spellings, because
+// the vocabulary is a ranking and this question is about rank: has this rule
+// reached something STRICTER than proceeding. Asked as "not empty and not allow" it
+// answered yes for a string outside the vocabulary — which [severest] then let LEAD
+// (it is only ever compared against other fired determinations) and [fuse] then let
+// stand, contradicting the one thing both of them document: that an unrecognised
+// action ranks below allow ([cloud.Severity] returns -1) and can never become the
+// answer. Nothing in this package mints one today; the guarantee is worth having
+// from the predicate rather than from the fact that nobody has broken it yet.
+func (d determination) fired() bool {
+	return cloud.Severity(d.Action) > cloud.Severity(cloud.ActionAllow)
+}
 
 // determine is the DETERMINATION: the severest of what this event's own stated
 // facts say about it and what this organisation's own aggregates already held
