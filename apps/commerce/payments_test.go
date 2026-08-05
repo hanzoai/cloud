@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -27,10 +28,12 @@ import (
 func toolsFor(t *testing.T) map[string]map[string]any {
 	t.Helper()
 	app := zip.New(zip.Config{})
-	// The screen is the identity middleware here: this reads the REGISTRY projection,
-	// and a gate composed around a handler changes nothing a tool description can see.
-	// What holds the real screen to the real op is TestPayments_TheTypedDoorIsScreened.
-	exposePayments(app, func(next zip.Handler) zip.Handler { return next })
+	// The REAL screen, because there is no other kind now and because that is the
+	// point: the screen is inside the op's handler, so this projection is taken off
+	// exactly the registration an agent calls. The description, the schema and the name
+	// are properties of the op's declared types and its doc comment, which a wrapped
+	// handler does not touch — proven here by these tests still reading them.
+	exposePayments(app, riskGate(luxlog.New("tooltest")))
 	exposeInvoices(app)
 	out := map[string]map[string]any{}
 	for _, tool := range app.MCPTools() {
@@ -125,10 +128,21 @@ func TestPaymentToolsDescribeThemselves(t *testing.T) {
 // there is no validated principal, so there is no org — and the honest answer to
 // "whose card is this and whose balance goes up" is nobody, not the platform's.
 // A default here would be a money write attributed to a tenant nobody proved.
+//
+// BOTH LAYERS ARE ASKED, so neither is the only one refusing: the REGISTERED handler
+// (the screened one every projection dispatches to) and the money core underneath it.
+// A context with no request behind it is exactly the CLI's LocalInvoke, and it is also
+// the state a screen cannot resolve a payer in — screened as that state, then refused
+// by the core's own gate, never waved past because the screen had nothing to judge.
 func TestPaymentOpsRefuseAnonymousCallers(t *testing.T) {
 	o := paymentOps{}
-	if _, err := o.take(context.Background(), &PaymentIn{SourceID: "cnon:card-nonce-ok", AmountCents: 500}); err == nil {
-		t.Fatal("take accepted a call with no validated org — a payment must never be attributed to a guess")
+	in := &PaymentIn{SourceID: "cnon:card-nonce-ok", AmountCents: 500}
+	if _, err := o.take(riskGate(luxlog.New("tooltest")))(context.Background(), in); err == nil {
+		t.Fatal("the registered payment op accepted a call with no validated org — a payment must " +
+			"never be attributed to a guess")
+	}
+	if _, err := o.charge(context.Background(), in); err == nil {
+		t.Fatal("the money core accepted a call with no validated org")
 	}
 	if _, err := o.get(context.Background(), &PaymentRef{ID: "whatever"}); err == nil {
 		t.Fatal("get accepted a call with no validated org")
