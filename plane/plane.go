@@ -178,6 +178,24 @@ const (
 	// LLM-obs sink first; it retired with that sink.
 	ObsErrorPost = "obs_error_post" // the Sentry envelope/store wire
 
+	// RiskDecide judges one subject at one lifecycle moment against that
+	// organisation's OWN model, for a gate running in another binary.
+	//
+	// It is on the plane for the reason ObsErrorPost is, and it is the same
+	// mistake caught one layer earlier. cloud.SetRiskScorer hands a scoring
+	// FUNCTION to a process-global, so it arms the process that installs it and
+	// no other — and the risk model is in-process mutable state (apps/risk: one
+	// binary learns and scores, or two hold different masses and answer one
+	// question two ways), so the app that can install it is the app no other
+	// process links. Every gate that is not the risk child therefore read nil and
+	// allowed, unscored, fleet-wide.
+	//
+	// So the scorer is REACHED rather than linked: one model, one process, asked
+	// over the socket. cloud.Decide's fail policy is unchanged by the distance —
+	// a peer that is not deployed is ABSENT and allows, a peer that is here and
+	// does not answer is an outage and denies a privileged grant.
+	RiskDecide = "risk_decide"
+
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
 )
@@ -781,6 +799,122 @@ type CreditIn struct {
 // Credited reports what the credit wrote.
 type Credited struct {
 	Amount Money `json:"amount"`
+}
+
+// ---- risk.decide — the scorer, from the process that holds the model --------
+
+// Signal is one fact the asking gate observed, as a LIST element rather than a
+// map entry — for the reason [Header] is one: a map cannot cross this plane at
+// all (zapenc refuses it at encode), and a signal map would have failed inside
+// zip.Call before it reached the socket.
+//
+// Free-form by design. The vocabulary belongs to the scorer's feature inventory
+// rather than to the gate, so a gate states what it saw and the scorer reads the
+// names it understands.
+type Signal struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// The subject KINDS, and they are here rather than in either half because a
+// subject kind is what NAMESPACES a subject: a person and an account sharing an
+// identifier are two subjects, so a gate and a scorer that spell a kind
+// differently do not disagree about a name, they judge a different entity. The
+// scorer refuses a kind outside this set, which makes a misspelling a refused
+// call rather than a verdict about nobody.
+const (
+	// KindPerson is the identified end user across the product surface.
+	KindPerson = "person"
+	// KindSession is one session of that surface.
+	KindSession = "session"
+	// KindAccount is the org's own user in the metered plane — the subject whose
+	// spend velocity is what pay-as-you-go abuse moves.
+	KindAccount = "account"
+)
+
+// The signal names the scorer READS. Every other name a gate observes still
+// travels and is still reported with the decision; these four are the ones that
+// name a coordinate of the model's own event, so they are spelled in the package
+// both halves import rather than agreed by convention — a gate and a scorer that
+// spell "nano" differently do not fail, they quietly score every payment as
+// moving no money.
+const (
+	// SignalNano is the value moved, in nano-USD. Absent means the event moves no
+	// money and the value features read BLIND, which is a different fact from zero.
+	SignalNano = "nano"
+	// SignalPeer is the counterparty, if any — an aggregation axis of its own.
+	SignalPeer = "peer"
+	// SignalDevice is the device fingerprint, if any — the axis that surfaces
+	// several nominally unrelated subjects acting as one.
+	SignalDevice = "device"
+	// SignalAt is when it happened, RFC 3339. Absent means now.
+	SignalAt = "at"
+)
+
+// RiskDecideIn is one question for the scorer: what is being judged, at which
+// lifecycle moment, and what the asking gate saw.
+//
+// There is no org here and there cannot be, exactly as everywhere else in this
+// file: the organisation whose model answers is the CALLER's. A caller able to
+// name it would be choosing which organisation's model judges its own request —
+// and every model is trained on one organisation's own behaviour, so that choice
+// is a cross-tenant read of the only thing this plane holds.
+//
+// It does not carry the seam's Privileged bit either. Whether silence must deny
+// is the ASKING gate's rule and cloud.Decide applies it on the caller's side; a
+// scorer that received it could only be tempted to answer differently for the
+// same evidence.
+//
+// NOR THE GATE'S GUESS AT THE LANE. cloud.RiskQuery carries an Agency the scorer
+// may overrule; this scorer has no opinion on agency, so it does not receive one
+// and does not answer one, and the asking gate's own lane stands. A gate that
+// wants it recorded states it as a signal like any other observation.
+type RiskDecideIn struct {
+	// Stage is the lifecycle moment, from cloud's closed set: signup, usage or
+	// payment. The scorer REFUSES a stage it does not recognise rather than
+	// judging a moment it does not model — the two ends of this call must agree on
+	// what is being asked before the answer means anything.
+	Stage string `json:"stage" validate:"required"`
+	// Kind is whose behaviour this is — person, session or account. It namespaces
+	// the subject, so a person and an account sharing an identifier stay two
+	// subjects.
+	Kind string `json:"kind" validate:"required"`
+	// Subject is the identifier on that kind, within the caller's own tenant.
+	Subject string `json:"subject" validate:"required"`
+	// Signals are the facts the gate observed. The scorer reads the names above;
+	// the rest are the asking gate's own record of why it asked.
+	Signals []Signal `json:"signals,omitempty"`
+}
+
+// RiskDecided is the scorer's answer: what to do, and what makes the decision
+// defensible after the fact.
+//
+// SCORE IS ONLY MEANINGFUL WHEN THERE IS NO REFUSAL. A model that declined has a
+// populated score in its own engine — the arithmetic runs before the warm check —
+// and publishing that number would turn "the model has no opinion" into "the model
+// says this is fine". So a refusal carries no score, and Refusal is the field to
+// read first.
+type RiskDecided struct {
+	// Action is what to do, from cloud's action vocabulary: allow, review,
+	// challenge, restrict or block.
+	Action string `json:"action" validate:"required"`
+	// Refusal names why this is NOT a scored answer — warming, unusable or
+	// unidentified — and is empty when it is one. None of them is a clean bill of
+	// health.
+	Refusal string `json:"refusal,omitempty"`
+	// Score is where the event sat in that organisation's own density, in [0,1].
+	// Present only on a scored answer.
+	Score float64 `json:"score,omitempty"`
+	// Cause is the scorer's short reason, for the record the gate writes.
+	Cause string `json:"cause,omitempty"`
+	// Shape is the model SPACE the verdict was reached in, `<family>:<digest>`. It
+	// is what pins an adverse decision to a model: a score is only meaningful
+	// against the space that produced it.
+	Shape string `json:"shape,omitempty"`
+	// Policy is the version of that organisation's decision regime the verdict was
+	// reached under. Zero means no regime was ever stated and the default posture —
+	// shadow — was in force.
+	Policy int `json:"policy"`
 }
 
 // ---- host.start — waking a lazy app ----------------------------------------
