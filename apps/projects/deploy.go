@@ -506,7 +506,6 @@ func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*pro
 	return &out, nil
 }
 
-
 // failureOwnsProject reports whether a FAILED deployment is entitled to mark the
 // whole project broken. Only the deployment a project is actually pointing at can
 // — plus the case where it points at nothing, because a first deploy that fails
