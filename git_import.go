@@ -6,7 +6,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// git_import.go is the INBOUND half of the GitHub-App bidirectional-sync seam —
+// git_import.go is the INBOUND half of the GitHub-App bidirectional sync —
 // the companion of RegisterPushBuilder / RegisterLifecycleSubscriber. The
 // integrations plane (clients/integrations/github*) owns the GitHub App:
 // installation-token minting, the repo list, webhook signature verification. The
@@ -59,7 +59,7 @@ type GitRepoStatus struct {
 	LastSyncedAt int64 // unix seconds of the last import/sync (0 = never)
 }
 
-// GitImporter is the git object-plane seam clients/git registers at Mount.
+// GitImporter is what clients/git registers at Mount.
 type GitImporter interface {
 	ImportRepo(ctx context.Context, req GitImportReq) error
 	InboundSync(ctx context.Context, req GitInboundReq) (GitSyncResult, error)
@@ -85,7 +85,7 @@ func ImportGitRepo(ctx context.Context, req GitImportReq) error {
 		return gitImporter.ImportRepo(ctx, req)
 	}
 	// Not co-resident: this process is not the one that owns the git store, so the
-	// in-process seam is nil and the request travels the internal plane instead.
+	// in-process call is nil and the request travels the internal plane instead.
 	// Every subsystem runs as its own process, so the app that DECIDES to import
 	// (integrations, holding the provider credential) is never the app that holds
 	// the repos — an import answered "git importer not registered" while both were
@@ -127,7 +127,7 @@ func InboundGitSync(ctx context.Context, req GitInboundReq) (GitSyncResult, erro
 // GitRepoStatuses returns the per-repo import + sync status for names (org-scoped).
 //
 // Absent co-residency it asks the git app, like the two calls above. It used to
-// return ErrGitImporterUnavailable here, which was honest about the seam and
+// return ErrGitImporterUnavailable here, which was honest about this process and
 // wrong about the world: the statuses exist, in the process next door, and the
 // console repo list rendered every repo as never-imported because the app that
 // draws the list is not the app that owns the repos.

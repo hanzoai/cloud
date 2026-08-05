@@ -7,19 +7,19 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// tracker_seam.go is the inversion layer between the native TRACKER (clients/tracker)
+// tracker.go is the inversion layer between the native TRACKER (clients/tracker)
 // and the surfaces that FEED it work items without importing it — today the GitHub
 // App webhook + backfill (clients/integrations), tomorrow any provider that mirrors
-// external issues into the one Hanzo work-item store. It is the SAME idiom as
-// sync_seam.go's SyncFunc and git_import.go's GitImporter: the tracker registers its
+// external issues into the one Hanzo work-item store. It is the same idiom as
+// sync.go's SyncFunc and git_import.go's GitImporter: the tracker registers its
 // sink here at Mount; feeders call UpsertIssue with NO import of the tracker package,
-// so nothing imports tracker except apps (which mounts it). One seam, one direction,
+// so nothing imports tracker except apps (which mounts it). One direction,
 // no cycles.
 
 // IssueUpsert is a provider-agnostic external work item mirrored into the native
 // tracker, keyed idempotently by ExtRef so a webhook redelivery or a backfill re-run
 // UPDATES the same row instead of duplicating it. Flat + string-typed so it crosses
-// the feeder→tracker seam without importing the tracker's domain types.
+// from feeder to tracker without importing the tracker's domain types.
 //
 //   - Org         the tenant (resolved from the signed installation, never a header).
 //   - Project     the IAM project scope; "" ⇒ the org's default project store.
