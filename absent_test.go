@@ -69,14 +69,14 @@ var kinds = map[string]struct {
 		"builds the embedded client, exactly like the KMS factory above"},
 }
 
-// calls is every remote capability, as a call. Each runs with nothing
+// probes is every remote capability, as a call. Each runs with nothing
 // registered, no socket and no router — what a process sees when the app it
 // wants is simply not deployed beside it.
 //
 // The signatures differ, so each adapts its own to error. One that returns a
 // value and an error returns both; the test reads the error, since a call that
 // answered honestly cannot also have produced a usable value.
-var calls = []struct {
+var probes = []struct {
 	from string // the Register* it belongs to, so a failure names what to fix
 	name string
 	call func(context.Context) error
@@ -136,7 +136,7 @@ func TestAbsentErrors(t *testing.T) {
 	isolate(t)
 	unregister(t)
 
-	for _, c := range calls {
+	for _, c := range probes {
 		t.Run(c.name, func(t *testing.T) {
 			err := c.call(context.Background())
 			if err == nil {
@@ -156,7 +156,7 @@ func TestAbsentIsNoPeer(t *testing.T) {
 	isolate(t)
 	unregister(t)
 
-	for _, c := range calls {
+	for _, c := range probes {
 		t.Run(c.name, func(t *testing.T) {
 			err := c.call(context.Background())
 			if err == nil {
@@ -175,7 +175,7 @@ func TestAbsentIsNoPeer(t *testing.T) {
 // It reads the package's own source for func Register* and fails if one is
 // missing from kinds. A new one cannot be added without its author writing down
 // whether it crosses a process boundary; if it does, it must also appear in
-// calls, which is checked below. Adding a silent one now means deleting a test
+// probes, which is checked below. Adding a silent one now means deleting a test
 // that says not to.
 func TestAllListed(t *testing.T) {
 	found := registers(t)
@@ -204,12 +204,12 @@ func TestAllListed(t *testing.T) {
 	// Every remote one must actually be called by the tests above. One that is
 	// listed and never called is a claim, not a guarantee.
 	called := map[string]bool{}
-	for _, c := range calls {
+	for _, c := range probes {
 		called[c.from] = true
 	}
 	for name, k := range kinds {
 		if k.where == remote && !called[name] {
-			t.Errorf("%s is listed remote but nothing in calls exercises it.\n"+
+			t.Errorf("%s is listed remote but nothing in probes exercises it.\n"+
 				"Add one, or its loud-failure property is asserted nowhere.", name)
 		}
 	}
