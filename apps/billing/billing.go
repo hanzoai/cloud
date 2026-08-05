@@ -336,22 +336,6 @@ func init() {
 			"holds 18-decimal USD, so the cents asked for are the cents taken.\n\n"+
 			"401 without a validated principal — a customer charging its OWN wallet, so an absent "+
 			"identity is not signed in, never not authorized.")
-
-
-
-	openapi.Describe("/v1/billing/methods/:id", http.MethodDelete,
-		"Remove a saved card from the caller's org",
-		"Detaches a card on file: the stored reference is removed here AND withdrawn from the "+
-			"processor's vault, so nothing is left that a later charge could bill.\n\n"+
-			"The id is resolved INSIDE the caller's own org, so it can only ever name a card "+
-			"this org can list. Another tenant's id does not resolve and answers 404 — not 403, "+
-			"because a status that separates 'not yours' from 'not there' turns an id into "+
-			"something worth guessing.\n\n"+
-			"Removing the card an auto-recharge or a running GPU lease bills leaves that "+
-			"arrangement with nothing to charge; it is the customer's call to make, and this "+
-			"makes it rather than refusing on their behalf.\n\n"+
-			"401 without a validated principal — the org is the validated owner claim, never a "+
-			"client-supplied field, so this cannot be pointed at another tenant.")
 }
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
@@ -572,80 +556,6 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 // slug), so the gate reads exactly the wallet gpu-charge debits.
 func gpuEligibility(s *cloud.Service[state], c *zip.Ctx) error {
 	return proxy(s, c, "/v1/billing/gpu/eligibility", "amountCents", "minPrepaidCents", "currency")
-}
-
-// paymentMethods → commerce GET /v1/billing/portal/methods: the org's saved cards
-// as the masked descriptor commerce returns (brand + last4 + expiry — never a PAN/CVV/
-// token). The console requests the same-origin /v1/billing/methods (mounted here);
-// this proxies to commerce's admin-group PORTAL read, which filters CustomerId on the
-// pinned subject (commerce 400s without a customerId — proxy always pins it), so a caller
-// sees ONLY its OWN org's methods. Backs the launch gate's card-on-file check.
-func paymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
-	return proxy(s, c, "/v1/billing/portal/methods")
-}
-
-// createPaymentMethod → commerce POST /v1/billing/methods: vault the Square
-// card token the browser produced as a card-on-file. Same discipline as gpuCharge —
-// the billing SUBJECT is pinned server-side to the caller's OWN org, so a forged body
-// can never attach a card to another tenant — and commerce's status is forwarded
-// VERBATIM (a 402 decline keeps its reason) rather than 500-masked.
-func createPaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to save a card")
-	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
-	}
-	body, status, err := s.State.commerce.post(c.Context(), "/v1/billing/methods", org, pinSubjectBody(c.Body(), org), "")
-	if err != nil {
-		s.Log.Warn("commerce save card failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
-	}
-	c.SetHeader("Content-Type", "application/json")
-	c.SetHeader("Cache-Control", "no-store")
-	return c.Bytes(status, body)
-}
-
-// deletePaymentMethod → commerce DELETE /v1/billing/portal/methods/{id}: remove a
-// saved card. The twin of paymentMethods, at the twin address and for the same
-// reason — this app OWNS /v1/billing/methods, so it cannot forward there without
-// re-entering itself, and commerce publishes the portal family as the face a host
-// may proxy to.
-//
-// TENANT SCOPE. The org is the VALIDATED principal (principal.Org), never
-// readerOrg: readerOrg additionally admits the trusted in-proc service token, which
-// is right for a READ the ai gate makes on its own behalf and wrong for a MUTATION
-// — the same rule createPaymentMethod and gpuCharge already follow, and the reason
-// they do. The org then rides X-Org-Id, which selects commerce's per-org namespace,
-// so `id` is resolved INSIDE the caller's own tenant: another org's card id is a
-// not-found miss there and comes back 404 (never 403 — an id must not be probeable).
-// A caller can therefore only ever delete a method its own org can list, which is
-// exactly the scope paymentMethods reads.
-//
-// The id is a caller-supplied path segment, so it is percent-escaped into the
-// upstream URL rather than concatenated raw: the value names a resource, it does
-// not get to name a route.
-func deletePaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to remove a card")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	if id == "" {
-		return zip.ErrBadRequest("a payment method id is required")
-	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
-	}
-	body, status, err := s.State.commerce.del(c.Context(), "/v1/billing/portal/methods/"+url.PathEscape(id), org, scopedBillingQuery(c, org))
-	if err != nil {
-		s.Log.Warn("commerce remove card failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
-	}
-	c.SetHeader("Content-Type", "application/json")
-	c.SetHeader("Cache-Control", "no-store")
-	return c.Bytes(status, body)
 }
 
 // pinSubjectBody overwrites every commerce billing-subject key on a top-level JSON object
