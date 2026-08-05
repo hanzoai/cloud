@@ -9,6 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/money"
 )
 
@@ -46,7 +47,7 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 	ctx, cancel := context.WithTimeout(For(ctx, org), peerCallTimeout)
 	defer cancel()
 
-	v, err := Ask[plane.AuthorizeIn, plane.Verdict](ctx, peerCommerce, plane.FinanceAuthorize, &in)
+	v, err := commerce.FinanceAuthorize(ctx, &in)
 	if err != nil {
 		// The biller is unreachable. Unknown, never allowed.
 		return fmt.Errorf("gate: commerce unreachable: %w", err)
@@ -97,7 +98,7 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted fu
 		// whatever ran last.
 		ctx, cancel := context.WithTimeout(For(context.Background(), org), peerCallTimeout)
 		defer cancel()
-		if _, err := Ask[plane.RecordIn, plane.Recorded](ctx, peerCommerce, plane.FinanceRecord, &in); err != nil && log != nil {
+		if _, err := commerce.FinanceRecord(ctx, &in); err != nil && log != nil {
 			log.Error("resource debit failed over the internal plane (resource created, not billed)",
 				"org", org, "kind", kind, "amount", u.Money().String(), "err", err)
 		}
