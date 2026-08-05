@@ -837,4 +837,27 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(200, body)
 	})
+	// The command projection reads the SAME render, so both addresses are two
+	// readings of one artifact. Here rather than in either mount, because both
+	// document sources go through serve and the fifth projection belongs to
+	// whichever one this deployment has (command.go).
+	serveCommands(app, render)
 }
+
+// Door reports whether path is one [serve] registers — the document and its
+// command projection.
+//
+// The doors are the host's, and they are the only operations that belong to NO
+// app: they are declared in this package rather than beside any subsystem, no
+// manifest row names them, and EVERY deployment serves them whatever subset of
+// the fleet it runs. Three gates need exactly that fact and each had written it
+// as the one literal that was true when it was written:
+//
+//	Complete                     skips a description no app can own
+//	cmd/cloud/openapi_test.go    exempts them from a scoped deployment's surface
+//	manifest/openapi_test.go     refuses an app row that claims one
+//
+// So it is stated once, beside the code that makes it true. The second door
+// arrived and all three were wrong the same afternoon — the cost of a literal is
+// that it is right until it isn't and says nothing when it stops.
+func Door(path string) bool { return path == Path || path == CommandPath }
