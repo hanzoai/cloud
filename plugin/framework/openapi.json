@@ -81,7 +81,7 @@
     },
     "/v1/framework/doctypes/{name}": {
       "delete": {
-        "operationId": "delete_v1_framework_doctypes_name",
+        "operationId": "delete_v1_framework_doctypes_by_name",
         "summary": "Removes a DocType and every document stored under it.",
         "description": "Removes a DocType and every document stored under it. The\ndefinition and its data go together — a document with no schema can be neither\nvalidated nor read back — so there is no undo. Manager-only. Answers 204.",
         "tags": [
@@ -106,7 +106,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_framework_doctypes_name",
+        "operationId": "get_v1_framework_doctypes_by_name",
         "summary": "Returns one DocType definition — its fields, naming rule, permissions and lifecycle flags.",
         "description": "Returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags. Scoped to the caller's org, so another\ntenant's DocType of the same name is simply not found.",
         "tags": [
@@ -138,7 +138,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_framework_doctypes_name",
+        "operationId": "put_v1_framework_doctypes_by_name",
         "summary": "Replaces a DocType definition wholesale (PUT semantics): the stored definition becomes the body.",
         "description": "Replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",
         "tags": [
@@ -212,7 +212,7 @@
     },
     "/v1/framework/modules/{module}": {
       "get": {
-        "operationId": "get_v1_framework_modules_module",
+        "operationId": "get_v1_framework_modules_by_module",
         "summary": "Returns one app lane's install state for the caller's org: the DocTypes the lane declares, and which of them already exist in the org.",
         "description": "Returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org. That\nis the honest \"set up\" versus \"installed\" answer a console renders.",
         "tags": [
@@ -246,7 +246,7 @@
     },
     "/v1/framework/modules/{module}/install": {
       "post": {
-        "operationId": "post_v1_framework_modules_module_install",
+        "operationId": "post_v1_framework_modules_by_module_install",
         "summary": "Creates an app lane's DocTypes in the caller's org.",
         "description": "Creates an app lane's DocTypes in the caller's org. Idempotent\nand create-if-absent: a DocType the org already has is reported as existing\nand never replaced, so re-installing cannot clobber a definition the org has\nsince edited. Manager-only.",
         "tags": [
@@ -336,7 +336,7 @@
     },
     "/v1/framework/roles/{user}/{role}": {
       "delete": {
-        "operationId": "delete_v1_framework_roles_user_role",
+        "operationId": "delete_v1_framework_roles_by_user_by_role",
         "summary": "Removes one (user, role) grant in the caller's org.",
         "description": "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
         "tags": [
@@ -395,7 +395,7 @@
     },
     "/v1/framework/{doctype}": {
       "get": {
-        "operationId": "get_v1_framework_doctype",
+        "operationId": "get_v1_framework_by_doctype",
         "summary": "Returns the caller org's documents of one DocType, filtered, ordered and projected by the query.",
         "description": "Returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
         "tags": [
@@ -486,7 +486,7 @@
     },
     "/v1/framework/{doctype}/{name}": {
       "delete": {
-        "operationId": "delete_v1_framework_doctype_name",
+        "operationId": "delete_v1_framework_by_doctype_by_name",
         "summary": "Removes one document, after its on_trash hooks agree.",
         "description": "Removes one document, after its on_trash hooks agree. A\nSUBMITTED document cannot be deleted — cancel it first. Answers 204.",
         "tags": [
@@ -521,7 +521,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_framework_doctype_name",
+        "operationId": "get_v1_framework_by_doctype_by_name",
         "summary": "Returns one document by name, with Password fields redacted.",
         "description": "Returns one document by name, with Password fields redacted.",
         "tags": [
@@ -594,7 +594,7 @@
     },
     "/v1/framework/{doctype}/{name}/cancel": {
       "post": {
-        "operationId": "post_v1_framework_doctype_name_cancel",
+        "operationId": "post_v1_framework_by_doctype_by_name_cancel",
         "summary": "Moves a submitted document to cancelled (docstatus 1 → 2) after its on_cancel hooks agree.",
         "description": "Moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
         "tags": [
@@ -641,7 +641,7 @@
     },
     "/v1/framework/{doctype}/{name}/submit": {
       "post": {
-        "operationId": "post_v1_framework_doctype_name_submit",
+        "operationId": "post_v1_framework_by_doctype_by_name_submit",
         "summary": "Moves a draft to submitted (docstatus 0 → 1) after its on_submit hooks agree.",
         "description": "Moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree. A submitted document is IMMUTABLE: further writes and\ndeletes are refused until it is cancelled. Only a submittable DocType has this\nlifecycle; any other docstatus is an illegal transition.",
         "tags": [

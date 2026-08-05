@@ -111,7 +111,7 @@
     },
     "/v1/connectors/{id}": {
       "delete": {
-        "operationId": "delete_v1_connectors_id",
+        "operationId": "delete_v1_connectors_by_id",
         "summary": "Forgets a connector: every custodied secret, then the row.",
         "description": "Forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
         "tags": [
@@ -148,7 +148,7 @@
     },
     "/v1/connectors/{id}/refresh": {
       "post": {
-        "operationId": "post_v1_connectors_id_refresh",
+        "operationId": "post_v1_connectors_by_id_refresh",
         "summary": "Forces a token rotation for a connected connector, ahead of the automatic rotation a token read would do inside the expiry window.",
         "description": "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
         "tags": [
@@ -197,7 +197,7 @@
     },
     "/v1/connectors/{id}/token": {
       "get": {
-        "operationId": "get_v1_connectors_id_token",
+        "operationId": "get_v1_connectors_by_id_token",
         "summary": "Hands the custodied access token to its owner — the ONE place custody exits.",
         "description": "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
         "tags": [
@@ -237,7 +237,7 @@
     },
     "/v1/connectors/{provider}/credential": {
       "post": {
-        "operationId": "post_v1_connectors_provider_credential",
+        "operationId": "post_v1_connectors_by_provider_credential",
         "summary": "Is the direct intake path: a customer-held token/setup-token (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE (Adopt).",
         "description": "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
         "tags": [
@@ -301,7 +301,7 @@
     },
     "/v1/connectors/{provider}/device": {
       "post": {
-        "operationId": "post_v1_connectors_provider_device",
+        "operationId": "post_v1_connectors_by_provider_device",
         "summary": "Begins a device sign-in and returns the code to show the user plus how to poll for completion.",
         "description": "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
         "tags": [
@@ -356,7 +356,7 @@
     },
     "/v1/connectors/{provider}/device/{flow}/poll": {
       "post": {
-        "operationId": "post_v1_connectors_provider_device_flow_poll",
+        "operationId": "post_v1_connectors_by_provider_device_by_flow_poll",
         "summary": "Advances a device sign-in.",
         "description": "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
         "tags": [
@@ -618,7 +618,7 @@
     },
     "/v1/integrations/github/repos/{repo}/pages": {
       "delete": {
-        "operationId": "delete_v1_integrations_github_repos_repo_pages",
+        "operationId": "delete_v1_integrations_github_repos_by_repo_pages",
         "summary": "Deletes the repo's Pages site.",
         "description": "Deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\".",
         "tags": [
@@ -654,7 +654,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_integrations_github_repos_repo_pages",
+        "operationId": "get_v1_integrations_github_repos_by_repo_pages",
         "summary": "Returns the repo's Pages status, live URL, custom domain and build source.",
         "description": "Returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site.",
         "tags": [
@@ -699,7 +699,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_integrations_github_repos_repo_pages",
+        "operationId": "post_v1_integrations_github_repos_by_repo_pages",
         "summary": "Creates the repo's Pages site and answers 201 Created with it.",
         "description": "Creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",
         "tags": [
@@ -758,7 +758,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_integrations_github_repos_repo_pages",
+        "operationId": "put_v1_integrations_github_repos_by_repo_pages",
         "summary": "Sets or clears the custom domain (cname) and updates HTTPS enforcement, build type, or source.",
         "description": "Sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention.",
         "tags": [
@@ -811,7 +811,7 @@
     },
     "/v1/integrations/github/repos/{repo}/pages/builds": {
       "post": {
-        "operationId": "post_v1_integrations_github_repos_repo_pages_builds",
+        "operationId": "post_v1_integrations_github_repos_by_repo_pages_builds",
         "summary": "Requests a Pages rebuild and returns the queued build's status.",
         "description": "Requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
         "tags": [
@@ -1005,7 +1005,7 @@
     },
     "/v1/integrations/{provider}": {
       "get": {
-        "operationId": "get_v1_integrations_provider",
+        "operationId": "get_v1_integrations_by_provider",
         "summary": "Returns ONE provider with this org's connection status — the same view list carries, for a single id.",
         "description": "Returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
         "tags": [
@@ -1067,7 +1067,7 @@
     },
     "/v1/integrations/{provider}/connect": {
       "post": {
-        "operationId": "post_v1_integrations_provider_connect",
+        "operationId": "post_v1_integrations_by_provider_connect",
         "summary": "Acquires the org's credential for one provider.",
         "description": "Acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
         "tags": [
@@ -1123,7 +1123,7 @@
     },
     "/v1/integrations/{provider}/disconnect": {
       "post": {
-        "operationId": "post_v1_integrations_provider_disconnect",
+        "operationId": "post_v1_integrations_by_provider_disconnect",
         "summary": "Revokes (best-effort) and forgets an org's connection: it deletes every custodied KMS secret and the connection row.",
         "description": "Revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
         "tags": [
@@ -1160,7 +1160,7 @@
     },
     "/v1/integrations/{provider}/verify": {
       "post": {
-        "operationId": "post_v1_integrations_provider_verify",
+        "operationId": "post_v1_integrations_by_provider_verify",
         "summary": "Re-checks a CONNECTED apikey connector's stored credential against the provider, live (`hanzo connector verify`).",
         "description": "Re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
         "tags": [
