@@ -34,29 +34,58 @@
     "/_/commerce/healthz": {
       "get": {
         "operationId": "get___commerce_healthz",
-        "summary": "Liveness for the commerce subsystem",
-        "description": "Answers ok whenever the commerce subsystem is mounted. It is registered BEFORE the module embed boots, so it keeps answering even when the embed failed and every business route is serving a fail-closed 503 \u2014 which is the point: it reports that the process is reachable, never that the money plane is healthy. Unauthenticated, and under /_ so the ingress does not expose it publicly."
+        "summary": "Answers ok whenever the commerce subsystem is mounted.",
+        "description": "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated, and under /_ so the ingress withholds it\npublicly.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/liveness"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/_/commerce/providers": {
       "get": {
         "operationId": "get___commerce_providers",
         "summary": "List the payment providers configured for your own tenant",
-        "description": "Returns the caller's own tenant row projected to a public view with the KMS paths stripped, so a provider's name and enabled flag are visible and its credential location never is. The tenant is derived from the IAM owner claim and from nothing else \u2014 there is no tenant parameter to supply, so a cross-tenant read is not expressible. A tenant admin or a platform admin may call it; a plain authenticated user is refused 403 and an anonymous one 401. A caller whose owner claim has no tenant row gets a 404 byte-identical to the one a cross-tenant probe would get."
+        "description": "Returns the caller's own tenant row projected to a public view with the KMS paths stripped, so a provider's name and enabled flag are visible and its credential location never is. The tenant is derived from the IAM owner claim and from nothing else — there is no tenant parameter to supply, so a cross-tenant read is not expressible. A tenant admin or a platform admin may call it; a plain authenticated user is refused 403 and an anonymous one 401. A caller whose owner claim has no tenant row gets a 404 byte-identical to the one a cross-tenant probe would get."
+      }
+    },
+    "/_/commerce/providers/{name}": {
+      "put": {
+        "operationId": "put___commerce_providers_by_name",
+        "summary": "Turn one payment rail on or off for your own tenant",
+        "description": "Flips the enabled flag on the named provider in the caller's own tenant row, so a rail can be taken out of service — or put back — without touching its credentials. The KMS paths are never read, written or echoed here; this verb owns exactly one bit.\n\nDisabling is what a checkout page sees immediately: only ENABLED providers are listed by the public tenant read, so a rail turned off here stops being offered rather than failing at authorization time. Re-enabling restores the same stored credential, which is why this is a switch and not a delete.\n\nThe tenant is derived from the IAM owner claim and from nothing else — there is no tenant parameter to supply, so a cross-tenant write is not expressible. A tenant admin or a platform admin may call it; a plain authenticated user is refused 403 and an anonymous one 401. A provider name with no row on that tenant is 404, the same answer a cross-tenant probe gets.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/_/commerce/tenants": {
       "post": {
         "operationId": "post___commerce_tenants",
         "summary": "Create a checkout tenant: hostnames, brand, IAM, IDV, providers and backend",
-        "description": "Registers a new hosted-checkout tenant so its hostnames resolve to their own branding, identity config, payment providers and broker backend. PLATFORM admin only \u2014 the reserved admin org's owner claim; an org owner with the org-level admin bit is refused 403 and an anonymous caller 401, so a tenant can never be minted from inside a tenant. A duplicate name is 409 and a malformed hostname 400. The response echoes only the identity and timestamps, never the provider records the caller just sent, and the mutation is audited by hash rather than by content so a credential that slips into the body is not replayable from the log."
+        "description": "Registers a new hosted-checkout tenant so its hostnames resolve to their own branding, identity config, payment providers and broker backend. PLATFORM admin only — the reserved admin org's owner claim; an org owner with the org-level admin bit is refused 403 and an anonymous caller 401, so a tenant can never be minted from inside a tenant. A duplicate name is 409 and a malformed hostname 400. The response echoes only the identity and timestamps, never the provider records the caller just sent, and the mutation is audited by hash rather than by content so a credential that slips into the body is not replayable from the log."
       }
     },
     "/v1/billing/alerts": {
       "get": {
         "operationId": "get_v1_billing_alerts",
         "summary": "List your org's spend caps and rate limits",
-        "description": "Returns the caps and alerts keyed to the caller's own billing subject, each with its threshold, enforcement flag, soft-warning percentage and current period spend. Any authenticated member of the org may read them \u2014 only the writes require an admin. The rows are keyed on the org subject the enforcement gate itself reads, which is why a cap created here is the one that actually binds. A caller with no resolvable org or subject gets an empty list, never another tenant's caps.",
+        "description": "Returns the caps and alerts keyed to the caller's own billing subject, each with its threshold, enforcement flag, soft-warning percentage and current period spend. Any authenticated member of the org may read them — only the writes require an admin. The rows are keyed on the org subject the enforcement gate itself reads, which is why a cap created here is the one that actually binds. A caller with no resolvable org or subject gets an empty list, never another tenant's caps.",
         "tags": [
           "billing"
         ]
@@ -64,7 +93,7 @@
       "post": {
         "operationId": "post_v1_billing_alerts",
         "summary": "Set a spend cap or rate limit on your org",
-        "description": "Creates a cap for the caller's own org and answers the stored row with its current period spend. A spend cap is a FINANCIAL SAFETY control, so writing one requires an ORG ADMIN, a platform admin, or the internal service token \u2014 a plain authenticated member is refused 403, because a member who could delete the cap could uncap the org's spend and a member who could set a one-cent enforcing cap could deny the whole org. The cap is always keyed to the caller's own billing subject: a userId in the body is overwritten, never honored, so a cap cannot be planted on another subject. At least one of a positive threshold or a positive rateLimitRpm is required, softPct must be within 0 to 100, and an org that has reached its row limit is refused 400.",
+        "description": "Creates a cap for the caller's own org and answers the stored row with its current period spend. A spend cap is a FINANCIAL SAFETY control, so writing one requires an ORG ADMIN, a platform admin, or the internal service token — a plain authenticated member is refused 403, because a member who could delete the cap could uncap the org's spend and a member who could set a one-cent enforcing cap could deny the whole org. The cap is always keyed to the caller's own billing subject: a userId in the body is overwritten, never honored, so a cap cannot be planted on another subject. At least one of a positive threshold or a positive rateLimitRpm is required, softPct must be within 0 to 100, and an org that has reached its row limit is refused 400.",
         "tags": [
           "billing"
         ]
@@ -74,7 +103,7 @@
       "get": {
         "operationId": "get_v1_billing_alerts_authorize",
         "summary": "The per-request spend-cap verdict the metering gate consumes",
-        "description": "Answers allow, reason, capCents, spentCents and warnPct for a proposed amount against a (project, service) scope \u2014 the verdict the request-edge metering gate reads before admitting a call. It evaluates EVERY covering cap and the most restrictive enforcing one wins; soft caps and an enforcing project cap whose project axis is not validated never block, they only raise the warning utilization. It is a service-to-service read authenticated by the internal service token with the org pinned by the gateway, not a browser call. Two rules matter: the spend it scores comes from the finance ledger's current-month total, and it FAILS OPEN on unknown spend \u2014 a transient read failure allows rather than denies, so a backend blip never bills-blocks an under-cap customer, while a known overage still denies.",
+        "description": "Answers allow, reason, capCents, spentCents and warnPct for a proposed amount against a (project, service) scope — the verdict the request-edge metering gate reads before admitting a call. It evaluates EVERY covering cap and the most restrictive enforcing one wins; soft caps and an enforcing project cap whose project axis is not validated never block, they only raise the warning utilization. It is a service-to-service read authenticated by the internal service token with the org pinned by the gateway, not a browser call. Two rules matter: the spend it scores comes from the finance ledger's current-month total, and it FAILS OPEN on unknown spend — a transient read failure allows rather than denies, so a backend blip never bills-blocks an under-cap customer, while a known overage still denies.",
         "tags": [
           "billing"
         ]
@@ -84,7 +113,7 @@
       "delete": {
         "operationId": "delete_v1_billing_alerts_by_id",
         "summary": "Remove one of your org's spend caps",
-        "description": "Deletes the addressed cap and answers 204. Requires an ORG ADMIN, a platform admin, or the internal service token \u2014 deleting a cap uncaps the org's spend, so a plain member is refused 403. Ownership is checked per row and a cap the caller does not own is refused as 404 rather than 403, so the response cannot confirm that another org's id exists.",
+        "description": "Deletes the addressed cap and answers 204. Requires an ORG ADMIN, a platform admin, or the internal service token — deleting a cap uncaps the org's spend, so a plain member is refused 403. Ownership is checked per row and a cap the caller does not own is refused as 404 rather than 403, so the response cannot confirm that another org's id exists.",
         "tags": [
           "billing"
         ],
@@ -102,7 +131,7 @@
       "patch": {
         "operationId": "patch_v1_billing_alerts_by_id",
         "summary": "Change one of your org's spend caps",
-        "description": "Applies only the fields the body actually carries \u2014 title, threshold, project, service, enforce, softPct, rateLimitRpm \u2014 and leaves the rest as stored, answering the merged row with its current period spend. Requires an ORG ADMIN, a platform admin, or the internal service token, for the same reason creation does: a member who could edit the cap could raise it to nothing or drop it to a punitive floor. Ownership is checked per row and a cap the caller does not own is refused as 404, never 403, so the id space cannot be probed.",
+        "description": "Applies only the fields the body actually carries — title, threshold, project, service, enforce, softPct, rateLimitRpm — and leaves the rest as stored, answering the merged row with its current period spend. Requires an ORG ADMIN, a platform admin, or the internal service token, for the same reason creation does: a member who could edit the cap could raise it to nothing or drop it to a punitive floor. Ownership is checked per row and a cap the caller does not own is refused as 404, never 403, so the id space cannot be probed.",
         "tags": [
           "billing"
         ],
@@ -122,7 +151,47 @@
       "get": {
         "operationId": "get_v1_billing_credits",
         "summary": "List the credit grants on your org's balance",
-        "description": "Returns the caller org's credit grants \u2014 each with its original amount, what remains and when it expires \u2014 so a customer can see what was given and what is left before metered spend draws it down. It is a READ of the caller's own subject, pinned before the handler runs, so a grant belonging to another tenant is simply absent. Granting credit is not this route and never has been: minting lands on the mint-gated POST /v1/billing/credit, which no browser can reach. Reading an empty balance is an empty array, not an error.",
+        "description": "Returns the caller org's credit grants — each with its original amount, what remains and when it expires — so a customer can see what was given and what is left before metered spend draws it down. It is a READ of the caller's own subject, pinned before the handler runs, so a grant belonging to another tenant is simply absent. Granting credit is not this route and never has been: minting lands on the mint-gated POST /v1/billing/credit, which no browser can reach. Reading an empty balance is an empty array, not an error.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/crypto/deposit": {
+      "post": {
+        "operationId": "post_v1_billing_crypto_deposit",
+        "summary": "Get a deposit address for a crypto top-up",
+        "description": "Mints a deposit address held by the MPC signer fleet — no single party holds the key — on the chain and token you name, and returns it with the intent that tracks it.\n\nThe account credited is the PINNED caller's, never a value in the body, so a deposit cannot be aimed at someone else's balance. A caller who already has an open intent gets that same address back rather than a new one, so reloading the page cannot spray keygens across the signer fleet.\n\nNO BALANCE MOVES HERE. This hands out an address; the chain watcher credits the account when a real transfer confirms, which is also why an address handed out and never funded costs nothing and expires nothing.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/crypto/deposit/{id}": {
+      "get": {
+        "operationId": "get_v1_billing_crypto_deposit_by_id",
+        "summary": "Follow one crypto deposit to settlement",
+        "description": "Answers the addressed deposit intent's current state — pending until a transfer is seen, confirming while the chain buries it, succeeded once it is credited — so a payment page can poll one deposit rather than the whole balance.\n\nScoped to the caller: an intent belonging to another payer is not found and answers 404, never another account's state. The credit itself is the chain watcher's to make; this read reports it and never performs it.",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/billing/crypto/options": {
+      "get": {
+        "operationId": "get_v1_billing_crypto_options",
+        "summary": "Which chains and tokens a crypto top-up can use",
+        "description": "Answers the custody processor's LIVE capability list — the chains and the tokens on each that this deployment can actually take a deposit on. A payment page renders its asset picker straight from it rather than from a list of its own, so a chain the processor stops supporting disappears from the picker instead of minting an address nothing watches.\n\nIt is a capability read, not an account read: it says what may be paid with, never anything about this caller's balance or deposits.",
         "tags": [
           "billing"
         ]
@@ -172,7 +241,7 @@
       "get": {
         "operationId": "getInvoice",
         "summary": "Read one invoice",
-        "description": "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction \u2014 the store is namespaced to it \u2014 so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "description": "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
         "tags": [
           "billing"
         ],
@@ -205,7 +274,7 @@
       "post": {
         "operationId": "collectInvoice",
         "summary": "Collect an issued invoice from credits, balance, then card",
-        "description": "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file \u2014 the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable \u2014 and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "description": "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file — the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable — and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
         "tags": [
           "billing"
         ],
@@ -271,7 +340,7 @@
       "get": {
         "operationId": "get_v1_billing_invoices_by_id_pdf",
         "summary": "Download one invoice as a PDF attachment",
-        "description": "Renders the addressed invoice as a single-page PDF and answers it as an attachment named after the invoice number. The render is a pure function of the invoice \u2014 no timestamps, no random ids \u2014 so the same invoice always produces identical bytes and a re-download is stable. The invoice is resolved inside the caller org's own namespace, so an id belonging to another tenant is simply absent and reads as 404; a caller with no validated org gets 401 rather than a document.",
+        "description": "Renders the addressed invoice as a single-page PDF and answers it as an attachment named after the invoice number. The render is a pure function of the invoice — no timestamps, no random ids — so the same invoice always produces identical bytes and a re-download is stable. The invoice is resolved inside the caller org's own namespace, so an id belonging to another tenant is simply absent and reads as 404; a caller with no validated org gets 401 rather than a document.",
         "tags": [
           "billing"
         ],
@@ -291,7 +360,7 @@
       "post": {
         "operationId": "voidInvoice",
         "summary": "Void a draft or issued invoice",
-        "description": "Voids a draft or issued invoice \u2014 the cancel.\n\nA paid invoice cannot be voided: money has moved, and the correction for that\nis a refund, not an erasure. The state machine refuses it and that refusal is\nthe answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "description": "Voids a draft or issued invoice — the cancel.\n\nA paid invoice cannot be voided: money has moved, and the correction for that\nis a refund, not an erasure. The state machine refuses it and that refusal is\nthe answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
         "tags": [
           "billing"
         ],
@@ -322,9 +391,17 @@
     },
     "/v1/billing/methods": {
       "get": {
-        "operationId": "get_v1_billing_portal_methods",
-        "summary": "Cards saved against the caller's org, masked \u2014 the portal read",
-        "description": "Answers the org's saved payment methods as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system.\n\nThis is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods, and it exists as its own address because the host that publishes that one cannot forward to it \u2014 the forward would re-enter its own handler. Both answer the same rows.\n\nThe customer filter is pinned to the VALIDATED caller before the handler runs, so a browser sees only its own subject's cards whatever customerId it sends; only a caller holding the internal service token may name the subject, and the org it may name it within is fixed by the gateway. Cross-tenant is closed by the org namespace for both, so an id or a subject from another org resolves to nothing. A caller who is neither is refused before the read.",
+        "operationId": "get_v1_billing_methods",
+        "summary": "Your saved cards, masked — the customer read",
+        "description": "Answers the cards saved against your own account as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system. It is what a checkout prefills its payment step from.\n\nThe customer face of the list a service token reads at /v1/billing/portal/methods — same rows, different principal, no hop between them.\n\nThe subject filter is pinned to the VALIDATED caller before the handler runs, so the answer is your own account's cards whatever customerId the request carries, and another org's rows are outside the namespace entirely. A caller who is not signed in is refused before the read.",
+        "tags": [
+          "billing"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_billing_methods",
+        "summary": "Save a card for later charges",
+        "description": "Vaults the card the processor already holds — you send its one-time reference, never a card number — as a reusable card on file, and stores the billing address with it. That vaulted card is what a subscription renewal or an auto-recharge charges later, which is why saving one is the step that makes a monthly plan billable at all.\n\nIt charges nothing. Saving a card moves no money; the first charge is whatever arrangement you then attach it to.\n\nThe subject is pinned from the validated caller and OVERWRITES the customerId in the body while leaving the card fields untouched, so a card can only ever be attached to the caller's OWN account whatever the body claims. That pin is the whole control on this write, not decoration: this is the one handler in the family that reads its subject from the body.",
         "tags": [
           "billing"
         ]
@@ -332,9 +409,9 @@
     },
     "/v1/billing/methods/{id}": {
       "delete": {
-        "operationId": "delete_v1_billing_portal_methods_by_id",
-        "summary": "Remove a saved card \u2014 the portal detach",
-        "description": "Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is \u2014 the host that publishes the customer address proxies here rather than into itself.\n\nThe id is resolved INSIDE the caller's org namespace, so another tenant's card is not found there and answers 404 \u2014 never 403, which would confirm the id exists. That bound holds for the service token too: it may act for any subject within the org the gateway pinned, and for no subject outside it.\n\nRemoving the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is the customer's call to make.",
+        "operationId": "delete_v1_billing_methods_by_id",
+        "summary": "Remove one of your saved cards",
+        "description": "Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe customer twin of DELETE /v1/billing/portal/methods/{id}. The id is resolved INSIDE your own org namespace, so a card that is not yours is simply not found there and answers 404 — never 403, which would confirm the id exists.\n\nRemoving the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is yours to decide.",
         "tags": [
           "billing"
         ],
@@ -354,7 +431,7 @@
       "post": {
         "operationId": "post_v1_billing_mode",
         "summary": "Move an org between sandbox and live billing",
-        "description": "Flips the org's live flag, which is the single authority for both the payment environment and the ledger bucket its transactions land in. This is a money-MINT control, not a customer action: it is gated on the internal service token AND platform scope, so an ORG ADMIN CANNOT move their own org \u2014 otherwise a tenant could drop itself into sandbox and stop paying. The rule most callers get wrong is the default: an org that has never been flipped transacts in SANDBOX, which is why a production-credentialled deployment can still hand a buyer a sandbox card form. When the deployment pins the payment environment explicitly, that pin governs and this flag only marks the transactions.",
+        "description": "Flips the org's live flag, which is the single authority for both the payment environment and the ledger bucket its transactions land in. This is a money-MINT control, not a customer action: it is gated on the internal service token AND platform scope, so an ORG ADMIN CANNOT move their own org — otherwise a tenant could drop itself into sandbox and stop paying. The rule most callers get wrong is the default: an org that has never been flipped transacts in SANDBOX, which is why a production-credentialled deployment can still hand a buyer a sandbox card form. When the deployment pins the payment environment explicitly, that pin governs and this flag only marks the transactions.",
         "tags": [
           "billing"
         ]
@@ -374,7 +451,7 @@
       "get": {
         "operationId": "get_v1_billing_plans",
         "summary": "The public plan catalog, annotated with the active platform promotion",
-        "description": "Returns every subscription tier a buyer can choose, each carrying the platform promo currently in effect, optionally narrowed with the category query. Prices come from the admin-editable plan authority in the database; the embedded catalog is only a loud-failing fallback, so a failed seed or a query error serves the known plans rather than a silently blank list. It is a catalog read, not an entitlement read \u2014 it says what may be bought, never what this caller has.",
+        "description": "Returns every subscription tier a buyer can choose, each carrying the platform promo currently in effect, optionally narrowed with the category query. Prices come from the admin-editable plan authority in the database; the embedded catalog is only a loud-failing fallback, so a failed seed or a query error serves the known plans rather than a silently blank list. It is a catalog read, not an entitlement read — it says what may be bought, never what this caller has.",
         "tags": [
           "billing"
         ]
@@ -383,8 +460,16 @@
     "/v1/billing/portal/methods": {
       "get": {
         "operationId": "get_v1_billing_portal_methods",
-        "summary": "Cards saved against the caller's org, masked \u2014 the portal read",
-        "description": "Answers the org's saved payment methods as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system.\n\nThis is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods, and it exists as its own address because the host that publishes that one cannot forward to it \u2014 the forward would re-enter its own handler. Both answer the same rows.\n\nThe customer filter is pinned to the VALIDATED caller before the handler runs, so a browser sees only its own subject's cards whatever customerId it sends; only a caller holding the internal service token may name the subject, and the org it may name it within is fixed by the gateway. Cross-tenant is closed by the org namespace for both, so an id or a subject from another org resolves to nothing. A caller who is neither is refused before the read.",
+        "summary": "Cards saved against the caller's org, masked — the portal read",
+        "description": "Answers the org's saved payment methods as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system.\n\nThis is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods. Both are served here, in this process, and answer the same rows; they are two addresses because they admit two different principals, not because either forwards to the other.\n\nThe customer filter is pinned to the VALIDATED caller before the handler runs, so a browser sees only its own subject's cards whatever customerId it sends; only a caller holding the internal service token may name the subject, and the org it may name it within is fixed by the gateway. Cross-tenant is closed by the org namespace for both, so an id or a subject from another org resolves to nothing. A caller who is neither is refused before the read.",
+        "tags": [
+          "billing"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_billing_portal_methods",
+        "summary": "Save a card on a subject's behalf — the portal attach",
+        "description": "The service-token twin of POST /v1/billing/methods: it vaults the processor's one-time reference as a reusable card on file for the named subject, with its billing address, and moves no money doing it.\n\nIt exists so an internal caller can complete the family it can already read and detach. The subject it may name is pinned to the org the gateway fixed, so the service token acts WITHIN one tenant and never across tenants; a caller holding no service token is refused before the write.",
         "tags": [
           "billing"
         ]
@@ -393,8 +478,8 @@
     "/v1/billing/portal/methods/{id}": {
       "delete": {
         "operationId": "delete_v1_billing_portal_methods_by_id",
-        "summary": "Remove a saved card \u2014 the portal detach",
-        "description": "Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is \u2014 the host that publishes the customer address proxies here rather than into itself.\n\nThe id is resolved INSIDE the caller's org namespace, so another tenant's card is not found there and answers 404 \u2014 never 403, which would confirm the id exists. That bound holds for the service token too: it may act for any subject within the org the gateway pinned, and for no subject outside it.\n\nRemoving the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is the customer's call to make.",
+        "summary": "Remove a saved card — the portal detach",
+        "description": "Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is — a different principal, on the same rows, in this same process.\n\nThe id is resolved INSIDE the caller's org namespace, so another tenant's card is not found there and answers 404 — never 403, which would confirm the id exists. That bound holds for the service token too: it may act for any subject within the org the gateway pinned, and for no subject outside it.\n\nRemoving the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is the customer's call to make.",
         "tags": [
           "billing"
         ],
@@ -424,7 +509,7 @@
       "get": {
         "operationId": "get_v1_billing_settings",
         "summary": "The public payment-provider config your card form needs to initialize",
-        "description": "Answers the Square application id, location id, environment and live flag the browser's card iframe boots against \u2014 public values only, never a secret. Resolution lives in one place shared with the public tenant projection, so the card form can never initialize against a different Square application than the one commerce will actually charge. It deliberately does NOT hydrate credentials from KMS: the dialog blocks on this call, so it answers from the org and the deployment environment without a round trip, and an org with no per-org credentials gets the deployment's own public app id.",
+        "description": "Answers the Square application id, location id, environment and live flag the browser's card iframe boots against — public values only, never a secret. Resolution lives in one place shared with the public tenant projection, so the card form can never initialize against a different Square application than the one commerce will actually charge. It deliberately does NOT hydrate credentials from KMS: the dialog blocks on this call, so it answers from the org and the deployment environment without a round trip, and an org with no per-org credentials gets the deployment's own public app id.",
         "tags": [
           "billing"
         ]
@@ -434,7 +519,7 @@
       "post": {
         "operationId": "post_v1_billing_subscribe_card",
         "summary": "Subscribe to a paid plan with a card, charged for the first period immediately",
-        "description": "Vaults the tokenized card as a reusable card-on-file, charges the first period, and creates the subscription \u2014 answering the subscription and invoice ids with the amount charged. The price is SERVER-AUTHORITATIVE: it is the plan's catalog price times billable seats and a client-supplied amount is never consulted, so a scripted request cannot underpay; a per-seat plan below its minimum seats is refused, and a free plan is refused outright because this address is the paid path. The card PAN never reaches this service \u2014 the browser tokenizes it and only the single-use nonce arrives here. The subject is the caller's own org, with an in-org user honored only inside that bound, and an idempotency key (or, absent one, the nonce itself) makes a retry replay the first result instead of charging twice.",
+        "description": "Vaults the tokenized card as a reusable card-on-file, charges the first period, and creates the subscription — answering the subscription and invoice ids with the amount charged. The price is SERVER-AUTHORITATIVE: it is the plan's catalog price times billable seats and a client-supplied amount is never consulted, so a scripted request cannot underpay; a per-seat plan below its minimum seats is refused, and a free plan is refused outright because this address is the paid path. The card PAN never reaches this service — the browser tokenizes it and only the single-use nonce arrives here. The subject is the caller's own org, with an in-org user honored only inside that bound, and an idempotency key (or, absent one, the nonce itself) makes a retry replay the first result instead of charging twice.",
         "tags": [
           "billing"
         ]
@@ -454,7 +539,7 @@
       "post": {
         "operationId": "post_v1_billing_subscriptions_by_id_cancel",
         "summary": "Cancel a subscription, at period end by default",
-        "description": "Cancels the addressed subscription and answers its updated state, emitting the cancellation event the rest of the platform keys on. The default is to cancel AT PERIOD END \u2014 a body that fails to parse falls back to it \u2014 so the customer keeps what they paid for unless atPeriodEnd is explicitly false. The subscription is resolved inside the caller's own org namespace, so another tenant's id is a 404, and the write carries the browser anti-CSRF gate because it is reachable with an ambient cookie.",
+        "description": "Cancels the addressed subscription and answers its updated state, emitting the cancellation event the rest of the platform keys on. The default is to cancel AT PERIOD END — a body that fails to parse falls back to it — so the customer keeps what they paid for unless atPeriodEnd is explicitly false. The subscription is resolved inside the caller's own org namespace, so another tenant's id is a 404, and the write carries the browser anti-CSRF gate because it is reachable with an ambient cookie.",
         "tags": [
           "billing"
         ],
@@ -494,7 +579,7 @@
       "get": {
         "operationId": "get_v1_billing_tier",
         "summary": "The subject's plan tier and the balance a metered call is admitted on",
-        "description": "Answers one subject's resolved tier \u2014 name, display name, agent ceiling and allowed models \u2014 with the balance that admits their next metered call: prepaidAvailable, creditsRemaining, dailyRemaining and the effectiveAvailable those fold into. The ai router reads it per request to pick that caller's rate-limit tier. It sits on the org-resolving chain because a tier is org state, and the subject keys are pinned to the validated caller before the handler runs, so a browser read is always the caller's own; user is required, which only a service-to-service caller can omit and be refused 400 for. The tier is an upstream tier claim, or an explicit tier override, when either is present \u2014 that is the service-to-service contract \u2014 and is otherwise DERIVED from the org's active and trialing subscriptions, the highest one winning, its paid-ness read from the plan catalog by slug rather than from the subscription's own stored copy. The rule to get right is effectiveAvailable and not prepaidAvailable: granted credits spend too, credits first, so an account funded only by a grant reads zero prepaid while holding real spendable credit \u2014 and with the daily term zero on every tier there is no free allowance behind it, so a zero-balance account is gated. A subscription-store error answers 500 rather than downgrading to free, so a transient failure never reports a paid subscriber as unsubscribed.",
+        "description": "Answers one subject's resolved tier — name, display name, agent ceiling and allowed models — with the balance that admits their next metered call: prepaidAvailable, creditsRemaining, dailyRemaining and the effectiveAvailable those fold into. The ai router reads it per request to pick that caller's rate-limit tier. It sits on the org-resolving chain because a tier is org state, and the subject keys are pinned to the validated caller before the handler runs, so a browser read is always the caller's own; user is required, which only a service-to-service caller can omit and be refused 400 for. The tier is an upstream tier claim, or an explicit tier override, when either is present — that is the service-to-service contract — and is otherwise DERIVED from the org's active and trialing subscriptions, the highest one winning, its paid-ness read from the plan catalog by slug rather than from the subscription's own stored copy. The rule to get right is effectiveAvailable and not prepaidAvailable: granted credits spend too, credits first, so an account funded only by a grant reads zero prepaid while holding real spendable credit — and with the daily term zero on every tier there is no free allowance behind it, so a zero-balance account is gated. A subscription-store error answers 500 rather than downgrading to free, so a transient failure never reports a paid subscriber as unsubscribed.",
         "tags": [
           "billing"
         ]
@@ -504,7 +589,7 @@
       "post": {
         "operationId": "post_v1_billing_topup_token",
         "summary": "Add credit to your balance by charging a tokenized card once",
-        "description": "Charges the single-use card token for the given amount and credits the caller's own balance, answering the transaction id and the new balance \u2014 the one-time top-up path, with no payment method saved. The amount is bounded SERVER-SIDE (roughly a one dollar floor and a five thousand dollar ceiling by deployment policy) and the check runs before any money moves, because the browser cap is not a control against a scripted request. The credit lands on the caller's OWN billing subject \u2014 the same key the usage gate debits \u2014 and can never be redirected outside the caller's org. Retries are safe: an idempotency key, or absent one the amount within a short window, replays the first result, and if that guard store is unreachable the call is refused with 503 rather than risking a second real charge.",
+        "description": "Charges the single-use card token for the given amount and credits the caller's own balance, answering the transaction id and the new balance — the one-time top-up path, with no payment method saved. The amount is bounded SERVER-SIDE (roughly a one dollar floor and a five thousand dollar ceiling by deployment policy) and the check runs before any money moves, because the browser cap is not a control against a scripted request. The credit lands on the caller's OWN billing subject — the same key the usage gate debits — and can never be redirected outside the caller's org. Retries are safe: an idempotency key, or absent one the amount within a short window, replays the first result, and if that guard store is unreachable the call is refused with 503 rather than risking a second real charge.",
         "tags": [
           "billing"
         ]
@@ -514,7 +599,7 @@
       "post": {
         "operationId": "post_v1_billing_webhooks_by_provider",
         "summary": "Payment-provider webhook intake for settlement and subscription lifecycle events",
-        "description": "Accepts a payment provider's event, verifies it, records it for audit, and applies subscription lifecycle changes to the matching local row. There is no bearer here and there cannot be: the provider's SIGNATURE over the body IS the authentication, so a request with no recognized signature header is 400 and one whose signature does not verify is 401. The provider path segment is only a hint for dashboard configuration \u2014 verification picks the processor regardless of what the URL says. Redelivery is safe: an event id already recorded is acknowledged as a duplicate without re-applying any side effect, which matters because providers retry for days until they see a 2xx.",
+        "description": "Accepts a payment provider's event, verifies it, records it for audit, and applies subscription lifecycle changes to the matching local row. There is no bearer here and there cannot be: the provider's SIGNATURE over the body IS the authentication, so a request with no recognized signature header is 400 and one whose signature does not verify is 401. The provider path segment is only a hint for dashboard configuration — verification picks the processor regardless of what the URL says. Redelivery is safe: an event id already recorded is acknowledged as a duplicate without re-applying any side effect, which matters because providers retry for days until they see a 2xx.",
         "tags": [
           "billing"
         ],
@@ -530,11 +615,21 @@
         ]
       }
     },
+    "/v1/billing/wire": {
+      "get": {
+        "operationId": "get_v1_billing_wire",
+        "summary": "Where to wire funds, and the reference that credits them to you",
+        "description": "Answers the receiving bank details for the brand this deployment serves — the account the funds actually land in, hydrated per brand rather than hard-coded — together with the payment reference to put on the transfer.\n\nTHE REFERENCE IS THE POINT. It carries your own billing key, and it is how an arriving wire is attributed to your account; a transfer sent without it arrives as an unidentified receipt. That is why this read is gated at all: an unpinned caller would be handed an unattributable reference.\n\nReading it credits nothing and reserves nothing. A wire is settled by an operator when the bank shows the funds, so the balance moves on receipt, not on this call.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/catalog/entries": {
       "get": {
         "operationId": "get_v1_catalog_entries",
         "summary": "The raw catalog entries, including the unpublished ones",
-        "description": "Returns every catalog row as stored \u2014 the admin view, which unlike the public projection includes entries that are not published. It is cross-tenant platform data, so the gate is a PLATFORM admin: an org-level admin is refused 403 no matter how privileged they are inside their own org, enforced by the handler itself and not only by the route's token middleware.",
+        "description": "Returns every catalog row as stored — the admin view, which unlike the public projection includes entries that are not published. It is cross-tenant platform data, so the gate is a PLATFORM admin: an org-level admin is refused 403 no matter how privileged they are inside their own org, enforced by the handler itself and not only by the route's token middleware.",
         "tags": [
           "catalog"
         ]
@@ -542,7 +637,7 @@
       "post": {
         "operationId": "post_v1_catalog_entries",
         "summary": "Add a catalog entry",
-        "description": "Creates a catalog row from the body and answers it at 201. The slug is required and is the globally-unique catalog key, so a second entry claiming a slug already in use is refused 409 rather than shadowing the first. PLATFORM admin only \u2014 this is cross-tenant pricing and packaging data, and an org-level admin is refused 403.",
+        "description": "Creates a catalog row from the body and answers it at 201. The slug is required and is the globally-unique catalog key, so a second entry claiming a slug already in use is refused 409 rather than shadowing the first. PLATFORM admin only — this is cross-tenant pricing and packaging data, and an org-level admin is refused 403.",
         "tags": [
           "catalog"
         ]
@@ -552,7 +647,7 @@
       "delete": {
         "operationId": "delete_v1_catalog_entries_by_wildcard1",
         "summary": "Remove a catalog entry",
-        "description": "Deletes the entry with the addressed slug and answers 204. The slug is matched as a trailing wildcard, not a single segment, because a model slug contains a slash. PLATFORM admin only \u2014 an org-level admin is refused 403 \u2014 and an unknown slug is 404, so the call is safe to repeat but not silently idempotent.",
+        "description": "Deletes the entry with the addressed slug and answers 204. The slug is matched as a trailing wildcard, not a single segment, because a model slug contains a slash. PLATFORM admin only — an org-level admin is refused 403 — and an unknown slug is 404, so the call is safe to repeat but not silently idempotent.",
         "tags": [
           "catalog"
         ],
@@ -570,7 +665,7 @@
       "put": {
         "operationId": "put_v1_catalog_entries_by_wildcard1",
         "summary": "Replace a catalog entry, keeping its slug",
-        "description": "Loads the addressed entry, applies the body over it and answers the stored result. The slug is the entry's IDENTITY and is re-stamped from the path after decoding, so a slug in the body is ignored and a rename is impossible through this address. The slug is matched as a trailing wildcard rather than one path segment because a model's slug IS its callable id and those contain a slash \u2014 a segment parameter would stop at it and leave most catalog rows unaddressable. PLATFORM admin only; an unknown slug is 404.",
+        "description": "Loads the addressed entry, applies the body over it and answers the stored result. The slug is the entry's IDENTITY and is re-stamped from the path after decoding, so a slug in the body is ignored and a rename is impossible through this address. The slug is matched as a trailing wildcard rather than one path segment because a model's slug IS its callable id and those contain a slash — a segment parameter would stop at it and leave most catalog rows unaddressable. PLATFORM admin only; an unknown slug is 404.",
         "tags": [
           "catalog"
         ],
@@ -590,7 +685,7 @@
       "post": {
         "operationId": "post_v1_catalog_models",
         "summary": "Land a syncer's view of the model catalog: upstream costs and machine facts",
-        "description": "Takes a batch of model rows and upserts each one's upstream COST and machine-observable facts, answering what was created and changed. It deliberately touches nothing a human owns \u2014 not the retail price, not the markup, not the entitlement tier \u2014 so a sync can never overwrite an administrator's pricing decision. The gate is a PLATFORM principal rather than a platform ADMIN, because the caller is normally a scheduled job holding the internal service token, which carries platform scope but no admin claim.",
+        "description": "Takes a batch of model rows and upserts each one's upstream COST and machine-observable facts, answering what was created and changed. It deliberately touches nothing a human owns — not the retail price, not the markup, not the entitlement tier — so a sync can never overwrite an administrator's pricing decision. The gate is a PLATFORM principal rather than a platform ADMIN, because the caller is normally a scheduled job holding the internal service token, which carries platform scope but no admin claim.",
         "tags": [
           "catalog"
         ]
@@ -600,7 +695,7 @@
       "post": {
         "operationId": "post_v1_catalog_models_refresh",
         "summary": "Refresh the model catalog by reading the upstream provider",
-        "description": "Pulls the upstream model list and lands it through the same upsert the push door uses, so the rule that a sync owns cost and an administrator owns price holds no matter which door a row came through. It takes no body \u2014 the upstream is READ rather than told. If that upstream cannot be read the call answers 502 and writes NOTHING: a sync that cannot see its source must never conclude the source is empty, because that conclusion would withdraw every model on sale. The gate is a PLATFORM principal so the scheduled job's service token qualifies.",
+        "description": "Pulls the upstream model list and lands it through the same upsert the push door uses, so the rule that a sync owns cost and an administrator owns price holds no matter which door a row came through. It takes no body — the upstream is READ rather than told. If that upstream cannot be read the call answers 502 and writes NOTHING: a sync that cannot see its source must never conclude the source is empty, because that conclusion would withdraw every model on sale. The gate is a PLATFORM principal so the scheduled job's service token qualifies.",
         "tags": [
           "catalog"
         ]
@@ -610,7 +705,7 @@
       "post": {
         "operationId": "post_v1_catalog_seed",
         "summary": "Seed the embedded catalog, without disturbing edits already made",
-        "description": "Upserts the shipped catalog seed and answers how many entries it created. It is idempotent and non-destructive \u2014 an entry an administrator has since edited is left alone \u2014 so it is safe to run against a live catalog to fill in what is missing. PLATFORM admin only; an org-level admin is refused 403.",
+        "description": "Upserts the shipped catalog seed and answers how many entries it created. It is idempotent and non-destructive — an entry an administrator has since edited is left alone — so it is safe to run against a live catalog to fill in what is missing. PLATFORM admin only; an org-level admin is refused 403.",
         "tags": [
           "catalog"
         ]
@@ -620,7 +715,7 @@
       "get": {
         "operationId": "get_v1_commerce_admin_catalog",
         "summary": "The catalog projection with cost and margin included",
-        "description": "Returns the brand-scoped catalog carrying the administrative economics the public projection withholds \u2014 upstream cost and margin percentage \u2014 for the margin surface the platform console administrates. The brand comes from the query and defaults to hanzo. PLATFORM admin only, enforced by the handler on top of the route's IAM gate: an ORG-level admin is refused 403 precisely so upstream cost and margin never reach a tenant.",
+        "description": "Returns the brand-scoped catalog carrying the administrative economics the public projection withholds — upstream cost and margin percentage — for the margin surface the platform console administrates. The brand comes from the query and defaults to hanzo. PLATFORM admin only, enforced by the handler on top of the route's IAM gate: an ORG-level admin is refused 403 precisely so upstream cost and margin never reach a tenant.",
         "tags": [
           "commerce"
         ]
@@ -630,7 +725,7 @@
       "get": {
         "operationId": "get_v1_commerce_catalog",
         "summary": "The public product catalog projection for a brand",
-        "description": "Returns the brand's published catalog \u2014 the shared source docs, the console sidebar and the pricing pages all read \u2014 with the brand taken from the query and defaulting to hanzo. It is public and cacheable, and it is the projection that deliberately omits cost and margin; those live only on the platform-admin projection.",
+        "description": "Returns the brand's published catalog — the shared source docs, the console sidebar and the pricing pages all read — with the brand taken from the query and defaulting to hanzo. It is public and cacheable, and it is the projection that deliberately omits cost and margin; those live only on the platform-admin projection.",
         "tags": [
           "commerce"
         ]
@@ -650,7 +745,7 @@
       "get": {
         "operationId": "get_v1_commerce_tenant",
         "summary": "The public tenant configuration a checkout page boots from",
-        "description": "Answers the branding, identity issuer and client id, identity-verification config, enabled payment providers, return-URL allowlist and public payment application config for the tenant the request HOST resolves to. It is genuinely public and unauthenticated \u2014 a checkout page calls it before anyone has signed in \u2014 and it carries the same public payment config the authenticated config read does, so the card iframe can never initialize against a different application than the one that will be charged. Only ENABLED providers are listed and no credential path is ever projected. An unresolvable host answers a constant 404 that does not echo the host, so the endpoint cannot be used to enumerate tenants; a successful answer is cacheable for a minute.",
+        "description": "Answers the branding, identity issuer and client id, identity-verification config, enabled payment providers, return-URL allowlist and public payment application config for the tenant the request HOST resolves to. It is genuinely public and unauthenticated — a checkout page calls it before anyone has signed in — and it carries the same public payment config the authenticated config read does, so the card iframe can never initialize against a different application than the one that will be charged. Only ENABLED providers are listed and no credential path is ever projected. An unresolvable host answers a constant 404 that does not echo the host, so the endpoint cannot be used to enumerate tenants; a successful answer is cacheable for a minute.",
         "tags": [
           "commerce"
         ]
@@ -660,7 +755,7 @@
       "post": {
         "operationId": "takePayment",
         "summary": "Take a card payment and credit the org's balance",
-        "description": "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented \u2014 a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "description": "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nA payment is RISK-SCREENED before the card is charged, so this can be refused\nwithout any money moving: 403 means the screen did not authorise it, and 503 means\nthe screen could not reach a decision — that one is worth retrying, and no charge\nwas attempted either way.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named builder, not a closure, so zipdoc can lift this prose into the registry.\n\nIt BUILDS the handler rather than being it, because the screen has to sit inside\nthe value every projection of this op dispatches to — see exposePayments. `charge`\nis the money move, `take` is the screened door onto it, and the only registrable\none is the second.",
         "tags": [
           "payments"
         ],
@@ -692,7 +787,7 @@
       "get": {
         "operationId": "getPayment",
         "summary": "Read one settled payment by its id",
-        "description": "Reads one settled payment out of the caller's org ledger.\n\nThe org scopes the read by construction \u2014 the ledger is namespaced to it \u2014 so\nan id belonging to another tenant is simply not found rather than found and\nthen filtered. A ledger row that is not a payment is likewise not found, so\nthis cannot be used to walk the org's usage debits.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "description": "Reads one settled payment out of the caller's org ledger.\n\nThe org scopes the read by construction — the ledger is namespaced to it — so\nan id belonging to another tenant is simply not found rather than found and\nthen filtered. A ledger row that is not a payment is likewise not found, so\nthis cannot be used to walk the org's usage debits.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
         "tags": [
           "payments"
         ],
@@ -725,7 +820,7 @@
       "get": {
         "operationId": "get_v1_plans_entries",
         "summary": "The raw plan authority rows",
-        "description": "Returns every plan row as stored \u2014 the administrative view behind the public plan catalog. The plan authority is cross-tenant pricing data, so the gate is a PLATFORM admin enforced by the handler itself: an org-level admin is refused 403 no matter what they may do inside their own org.",
+        "description": "Returns every plan row as stored — the administrative view behind the public plan catalog. The plan authority is cross-tenant pricing data, so the gate is a PLATFORM admin enforced by the handler itself: an org-level admin is refused 403 no matter what they may do inside their own org.",
         "tags": [
           "plans"
         ]
@@ -733,7 +828,7 @@
       "post": {
         "operationId": "post_v1_plans_entries",
         "summary": "Add a subscription plan",
-        "description": "Creates a plan from the body and answers it at 201. The slug is required and globally unique \u2014 a duplicate is 409 \u2014 and the row is marked authoritative on creation, so the corrective seed will leave it alone. Price, annual price and the contact-sales flag are stored exactly as sent, never coerced, so the difference between a free plan and a quote-only plan survives. PLATFORM admin only.",
+        "description": "Creates a plan from the body and answers it at 201. The slug is required and globally unique — a duplicate is 409 — and the row is marked authoritative on creation, so the corrective seed will leave it alone. Price, annual price and the contact-sales flag are stored exactly as sent, never coerced, so the difference between a free plan and a quote-only plan survives. PLATFORM admin only.",
         "tags": [
           "plans"
         ]
@@ -743,7 +838,7 @@
       "delete": {
         "operationId": "delete_v1_plans_entries_by_slug",
         "summary": "Remove a plan from the authority",
-        "description": "Deletes the addressed plan and answers 204. It removes the plan from the catalog buyers choose from; it does not touch subscriptions already sold against it, which keep their stored plan id. PLATFORM admin only \u2014 an org-level admin is refused 403 \u2014 and an unknown slug is 404.",
+        "description": "Deletes the addressed plan and answers 204. It removes the plan from the catalog buyers choose from; it does not touch subscriptions already sold against it, which keep their stored plan id. PLATFORM admin only — an org-level admin is refused 403 — and an unknown slug is 404.",
         "tags": [
           "plans"
         ],
@@ -761,7 +856,7 @@
       "put": {
         "operationId": "put_v1_plans_entries_by_slug",
         "summary": "Edit a plan, leaving the fields you omit alone",
-        "description": "Loads the addressed plan, applies the body over it and answers the stored result, so a partial edit never silently zeroes a price or the contact-sales flag. The slug is IMMUTABLE: a body naming a different slug is rejected outright before anything is written, because a rename would orphan every subscription that stored the old id \u2014 deprecate and create instead. An admin edit marks the row authoritative so the seed stops correcting it. PLATFORM admin only; an unknown slug is 404.",
+        "description": "Loads the addressed plan, applies the body over it and answers the stored result, so a partial edit never silently zeroes a price or the contact-sales flag. The slug is IMMUTABLE: a body naming a different slug is rejected outright before anything is written, because a rename would orphan every subscription that stored the old id — deprecate and create instead. An admin edit marks the row authoritative so the seed stops correcting it. PLATFORM admin only; an unknown slug is 404.",
         "tags": [
           "plans"
         ],
@@ -781,7 +876,7 @@
       "post": {
         "operationId": "post_v1_plans_seed",
         "summary": "Seed the embedded plan catalog, without overwriting administrative edits",
-        "description": "Upserts the shipped plan rows and answers how many were created and how many corrected. It is idempotent and non-destructive \u2014 a row an administrator authored or edited is left as it stands \u2014 so it is safe against a live authority and fills only what is missing or has drifted. PLATFORM admin only, and a deployment with no seed source wired answers 500 rather than quietly seeding nothing.",
+        "description": "Upserts the shipped plan rows and answers how many were created and how many corrected. It is idempotent and non-destructive — a row an administrator authored or edited is left as it stands — so it is safe against a live authority and fills only what is missing or has drifted. PLATFORM admin only, and a deployment with no seed source wired answers 500 rather than quietly seeding nothing.",
         "tags": [
           "plans"
         ]
@@ -791,7 +886,7 @@
       "get": {
         "operationId": "get_v1_store",
         "summary": "List your org's storefronts as a page",
-        "description": "Answers a pagination envelope \u2014 page, display, the rows, and a total count \u2014 read from the caller org's OWN namespaced database, so one tenant can never list another's stores. Sorting defaults to the store slug and is overridable with sort; display is the page size and page applies only alongside it, and either one that is not a positive integer is refused rather than silently ignored. The limit query overrides the reported COUNT only and never the rows returned. A request that resolves no org namespace is served an empty page, never an unscoped scan. Readable with an admin token, a store-scoped token, or the anonymous published storefront key.",
+        "description": "Answers a pagination envelope — page, display, the rows, and a total count — read from the caller org's OWN namespaced database, so one tenant can never list another's stores. Sorting defaults to the store slug and is overridable with sort; display is the page size and page applies only alongside it, and either one that is not a positive integer is refused rather than silently ignored. The limit query overrides the reported COUNT only and never the rows returned. A request that resolves no org namespace is served an empty page, never an unscoped scan. Readable with an admin token, a store-scoped token, or the anonymous published storefront key.",
         "tags": [
           "store"
         ]
@@ -809,7 +904,7 @@
       "get": {
         "operationId": "get_v1_store_access",
         "summary": "Whether a store is entitled to trade, and why",
-        "description": "Answers allowed, the store id, and a status of trial, active, payment_required, store_required or unavailable \u2014 the entitlement check a merchant surface gates on. The rule that surprises people is that entitlement is PER STORE, not per org: the store needs its own current subscription on the entry plan, either trialing with a trial end still ahead or active with a period end still ahead, so an org-wide balance or a sibling store's plan unlocks nothing here. The store comes from the X-Store-Id header and otherwise falls back to the org's first store; neither resolving is store_required with allowed false, and a backing-store failure is 503 with status unavailable \u2014 a retry signal, not a denial.",
+        "description": "Answers allowed, the store id, and a status of trial, active, payment_required, store_required or unavailable — the entitlement check a merchant surface gates on. The rule that surprises people is that entitlement is PER STORE, not per org: the store needs its own current subscription on the entry plan, either trialing with a trial end still ahead or active with a period end still ahead, so an org-wide balance or a sibling store's plan unlocks nothing here. The store comes from the X-Store-Id header and otherwise falls back to the org's first store; neither resolving is store_required with allowed false, and a backing-store failure is 503 with status unavailable — a retry signal, not a denial.",
         "tags": [
           "store"
         ]
@@ -819,7 +914,7 @@
       "get": {
         "operationId": "get_v1_store_current",
         "summary": "Resolve your org's active storefront without naming an id",
-        "description": "Returns the caller org's store resolved FROM THE AUTHENTICATED ORG rather than from a path id \u2014 which is how an admin dashboard or a storefront edge learns the store id it should then read and write against. An X-Store-Id header selects a specific store, resolved only inside the caller's own namespace, so a foreign id cannot cross the tenant boundary and answers 404 instead. With no header the org's first store is returned, and an org that has none yet has its canonical default provisioned lazily and idempotently, carrying no payment credentials. Only when there is no org in context, or provisioning fails, does it fall back to a placeholder store literally named default, which a storefront edge should treat as unconfigured.",
+        "description": "Returns the caller org's store resolved FROM THE AUTHENTICATED ORG rather than from a path id — which is how an admin dashboard or a storefront edge learns the store id it should then read and write against. An X-Store-Id header selects a specific store, resolved only inside the caller's own namespace, so a foreign id cannot cross the tenant boundary and answers 404 instead. With no header the org's first store is returned, and an org that has none yet has its canonical default provisioned lazily and idempotently, carrying no payment credentials. Only when there is no org in context, or provisioning fails, does it fall back to a placeholder store literally named default, which a storefront edge should treat as unconfigured.",
         "tags": [
           "store"
         ]
@@ -829,7 +924,7 @@
       "post": {
         "operationId": "post_v1_store_token",
         "summary": "Mint your org's least-privilege storefront read key",
-        "description": "Answers a freshly minted token carrying ONLY the published-read permission \u2014 enough for a logged-out shopper's storefront to read your published catalog and nothing more, with no write and no admin scope. It is org-bound, signed with the org's own secret and subject to the org id, so unlike a shared service token it can never act on another tenant. Minting ROTATES rather than accumulates: the previous storefront token is dropped first and is invalid immediately, so re-minting is how you revoke. Admin is enforced by the handler as well as the route, because the route's token gate does not apply on the identity path and a plain member must not be able to mint their org's key.",
+        "description": "Answers a freshly minted token carrying ONLY the published-read permission — enough for a logged-out shopper's storefront to read your published catalog and nothing more, with no write and no admin scope. It is org-bound, signed with the org's own secret and subject to the org id, so unlike a shared service token it can never act on another tenant. Minting ROTATES rather than accumulates: the previous storefront token is dropped first and is invalid immediately, so re-minting is how you revoke. Admin is enforced by the handler as well as the route, because the route's token gate does not apply on the identity path and a plain member must not be able to mint their org's key.",
         "tags": [
           "store"
         ]
@@ -875,7 +970,7 @@
       "patch": {
         "operationId": "patch_v1_store_by_storeid",
         "summary": "Change part of a storefront",
-        "description": "Loads the stored store and decodes the body over it, so only the fields the body names change and everything else keeps its stored value \u2014 the difference from the full replace, which clears what it is not told. Answers the merged entity. The id is resolved inside the caller org's own namespace, so an unknown or foreign id is 404. Requires an admin token, or one holding both store read and store write.",
+        "description": "Loads the stored store and decodes the body over it, so only the fields the body names change and everything else keeps its stored value — the difference from the full replace, which clears what it is not told. Answers the merged entity. The id is resolved inside the caller org's own namespace, so an unknown or foreign id is 404. Requires an admin token, or one holding both store read and store write.",
         "tags": [
           "store"
         ],
@@ -951,7 +1046,7 @@
       "post": {
         "operationId": "post_v1_store_by_storeid_authorize_by_orderid",
         "summary": "Authorize an order that already exists, holding the funds without settling them",
-        "description": "Continues the order named in the path rather than minting a new one, holding funds for it. The order is loaded from the caller org's own store, so an id belonging to another tenant is a 404. The rule most callers get wrong is that the body's order object is MERGED onto the loaded order before the tally \u2014 this is not a read-only reference, and a field sent here overwrites what is stored. The gate, the store resolution and the currency override behave exactly as on the bodiless-id sibling, and settling is still the capture call's job.",
+        "description": "Continues the order named in the path rather than minting a new one, holding funds for it. The order is loaded from the caller org's own store, so an id belonging to another tenant is a 404. The rule most callers get wrong is that the body's order object is MERGED onto the loaded order before the tally — this is not a read-only reference, and a field sent here overwrites what is stored. The gate, the store resolution and the currency override behave exactly as on the bodiless-id sibling, and settling is still the capture call's job.",
         "tags": [
           "store"
         ],
@@ -979,7 +1074,7 @@
       "get": {
         "operationId": "get_v1_store_by_storeid_bundle_by_key",
         "summary": "Fetch a bundle as this storefront sells it",
-        "description": "Returns the stored bundle with the store's listing for it laid over the top \u2014 every non-empty listing field wins, and the currency is forced to the store's own \u2014 so the caller reads what this storefront actually sells rather than the catalog-wide record. The overlay is keyed by the item's ID: a listing filed only under a slug or SKU does not reach it, unlike the listing reads, which do fall back to those. An unknown store or key is 404. Readable with an admin token or the anonymous published storefront key.",
+        "description": "Returns the stored bundle with the store's listing for it laid over the top — every non-empty listing field wins, and the currency is forced to the store's own — so the caller reads what this storefront actually sells rather than the catalog-wide record. The overlay is keyed by the item's ID: a listing filed only under a slug or SKU does not reach it, unlike the listing reads, which do fall back to those. An unknown store or key is 404. Readable with an admin token or the anonymous published storefront key.",
         "tags": [
           "store"
         ],
@@ -1007,7 +1102,7 @@
       "post": {
         "operationId": "post_v1_store_by_storeid_capture_by_orderid",
         "summary": "Capture a previously authorized order and settle the payment",
-        "description": "Settles the order named in the path \u2014 the second half of the two-step flow \u2014 and answers the updated order with a Location header. Dispatch follows the order's STORED payment type, and a successful capture is the moment the rest of the system learns about the sale: order and payment rows are updated, coupon redemptions, referral, cart and stats are written, the confirmation email goes out, and the paid and completed events are emitted. A capture failure releases the order's inventory reservations and answers 400, so a failed settlement never leaves items held.",
+        "description": "Settles the order named in the path — the second half of the two-step flow — and answers the updated order with a Location header. Dispatch follows the order's STORED payment type, and a successful capture is the moment the rest of the system learns about the sale: order and payment rows are updated, coupon redemptions, referral, cart and stats are written, the confirmation email goes out, and the paid and completed events are emitted. A capture failure releases the order's inventory reservations and answers 400, so a failed settlement never leaves items held.",
         "tags": [
           "store"
         ],
@@ -1035,7 +1130,7 @@
       "post": {
         "operationId": "post_v1_store_by_storeid_charge",
         "summary": "Authorize and capture a new order in one call",
-        "description": "Runs authorization and capture back to back against a freshly created order \u2014 the one-step flow for callers with no reason to hold funds. It takes the authorize body and inherits every authorize rule: the store's currency wins over the body, the items are reserved before the processor is called, and the amount bounds the processor enforces still apply. There is no order id on this address, so it can never continue an existing order. Either half failing answers 400, and the capture side effects \u2014 confirmation email, redemptions, stats, the paid and completed events \u2014 run only when both halves succeed.",
+        "description": "Runs authorization and capture back to back against a freshly created order — the one-step flow for callers with no reason to hold funds. It takes the authorize body and inherits every authorize rule: the store's currency wins over the body, the items are reserved before the processor is called, and the amount bounds the processor enforces still apply. There is no order id on this address, so it can never continue an existing order. Either half failing answers 400, and the capture side effects — confirmation email, redemptions, stats, the paid and completed events — run only when both halves succeed.",
         "tags": [
           "store"
         ],
@@ -1054,7 +1149,7 @@
     "/v1/store/{storeid}/checkout/authorize": {
       "post": {
         "operationId": "post_v1_store_by_storeid_checkout_authorize",
-        "summary": "Authorize a new order against a storefront, holding the funds \u2014 the checkout spelling",
+        "summary": "Authorize a new order against a storefront, holding the funds — the checkout spelling",
         "description": "Authorizes a new order for the addressed store and holds the funds, answering the saved order with a Location header. It binds the identical handler as the shorter authorize address, so the two are ONE operation at two spellings and not two behaviours; the checkout prefix is the newer one. Every rule carries over: admin or published scope on the token, the store loaded first with its currency overriding the body, items reserved before the processor call, and reservations released with the order persisted cancelled on failure. Nothing is settled here.",
         "tags": [
           "store"
@@ -1074,8 +1169,8 @@
     "/v1/store/{storeid}/checkout/authorize/{orderid}": {
       "post": {
         "operationId": "post_v1_store_by_storeid_checkout_authorize_by_orderid",
-        "summary": "Authorize an existing order, holding the funds \u2014 the checkout spelling",
-        "description": "Continues the order named in the path rather than minting one, and shares its handler byte for byte with the unprefixed authorize-by-id address. The order is loaded from the caller org's own store, so another tenant's id is a 404, and the body's order object is merged onto the loaded row before the tally \u2014 a field sent here overwrites what is stored. Store resolution, the token gate and the currency override behave as on every other authorize address; settle with the capture address and the same order id.",
+        "summary": "Authorize an existing order, holding the funds — the checkout spelling",
+        "description": "Continues the order named in the path rather than minting one, and shares its handler byte for byte with the unprefixed authorize-by-id address. The order is loaded from the caller org's own store, so another tenant's id is a 404, and the body's order object is merged onto the loaded row before the tally — a field sent here overwrites what is stored. Store resolution, the token gate and the currency override behave as on every other authorize address; settle with the capture address and the same order id.",
         "tags": [
           "store"
         ],
@@ -1102,8 +1197,8 @@
     "/v1/store/{storeid}/checkout/capture/{orderid}": {
       "post": {
         "operationId": "post_v1_store_by_storeid_checkout_capture_by_orderid",
-        "summary": "Capture a previously authorized order and settle it \u2014 the checkout spelling",
-        "description": "Settles the authorized order named in the path and answers the updated order with a Location header, running the same handler as the unprefixed capture address. Dispatch follows the order's stored payment type. Success is what triggers the downstream work \u2014 order and payment updates, redemptions, referral, cart and stats, the confirmation email, and the paid and completed events \u2014 while a failure releases the order's inventory reservations and answers 400.",
+        "summary": "Capture a previously authorized order and settle it — the checkout spelling",
+        "description": "Settles the authorized order named in the path and answers the updated order with a Location header, running the same handler as the unprefixed capture address. Dispatch follows the order's stored payment type. Success is what triggers the downstream work — order and payment updates, redemptions, referral, cart and stats, the confirmation email, and the paid and completed events — while a failure releases the order's inventory reservations and answers 400.",
         "tags": [
           "store"
         ],
@@ -1130,7 +1225,7 @@
     "/v1/store/{storeid}/checkout/charge": {
       "post": {
         "operationId": "post_v1_store_by_storeid_checkout_charge",
-        "summary": "Authorize and capture a new order in one call \u2014 the checkout spelling",
+        "summary": "Authorize and capture a new order in one call — the checkout spelling",
         "description": "Performs authorization and capture back to back against a newly created order for the addressed store, on the same handler as the unprefixed charge address. It takes the authorize body and inherits every authorize rule, including the store's currency winning over the body and the items being reserved before the processor is called. There is no order id on this address, so it can never continue an existing order. Either half failing answers 400, and the capture side effects run only when both succeed.",
         "tags": [
           "store"
@@ -1150,7 +1245,7 @@
     "/v1/store/{storeid}/checkout/paypal/cancel/{payKey}": {
       "post": {
         "operationId": "post_v1_store_by_storeid_checkout_paypal_cancel_by_paykey",
-        "summary": "PayPal cancel by pay key \u2014 refuses, exactly as the unprefixed address does",
+        "summary": "PayPal cancel by pay key — refuses, exactly as the unprefixed address does",
         "description": "Meant to void the payments carrying the given pay key, stamp them cancelled and cancel the order, but the shared checkout handler resolves its order from an ORDER ID path parameter this route does not carry. The result is an untyped order and a cancel dispatch that refuses with 400 before the pay key lookup ever runs. Token gate, namespacing and store resolution happen first, so a missing token is still 401 and an unloadable store still 500. It is the same handler as the unprefixed cancel address, with the same outcome.",
         "tags": [
           "store"
@@ -1178,7 +1273,7 @@
     "/v1/store/{storeid}/checkout/paypal/confirm/{payKey}": {
       "post": {
         "operationId": "post_v1_store_by_storeid_checkout_paypal_confirm_by_paykey",
-        "summary": "PayPal confirm by pay key \u2014 refuses, exactly as the unprefixed address does",
+        "summary": "PayPal confirm by pay key — refuses, exactly as the unprefixed address does",
         "description": "Meant to mark the payments carrying the given pay key as paid and set the order to paid, it cannot reach that work from this address: the shared checkout handler takes its order from an ORDER ID path parameter this route does not carry, so the order is always fresh and untyped and the confirm dispatch refuses with 400 before the pay key is queried. The token gate, the namespace middleware and the store lookup all run ahead of that, so authentication and store failures surface first. Behaviour is identical to the unprefixed confirm address; the checkout prefix changes nothing here.",
         "tags": [
           "store"
@@ -1206,8 +1301,8 @@
     "/v1/store/{storeid}/checkout/paypal/pay": {
       "post": {
         "operationId": "post_v1_store_by_storeid_checkout_paypal_pay",
-        "summary": "Start a PayPal authorization for a new order \u2014 the checkout spelling",
-        "description": "Begins a PayPal authorization by running the ordinary store authorize flow, since the route binds that exact handler \u2014 body, store resolution, tally, reservations and failure behaviour are the authorize address's, unchanged. The processor is chosen from the body's payment type, so this path reaches PayPal only when that type says so. A successful PayPal authorization stamps a pay key onto the payment, which is the key the confirm and cancel addresses filter on. Build against the plain authorize address instead.",
+        "summary": "Start a PayPal authorization for a new order — the checkout spelling",
+        "description": "Begins a PayPal authorization by running the ordinary store authorize flow, since the route binds that exact handler — body, store resolution, tally, reservations and failure behaviour are the authorize address's, unchanged. The processor is chosen from the body's payment type, so this path reaches PayPal only when that type says so. A successful PayPal authorization stamps a pay key onto the payment, which is the key the confirm and cancel addresses filter on. Build against the plain authorize address instead.",
         "tags": [
           "store"
         ],
@@ -1227,7 +1322,7 @@
       "get": {
         "operationId": "get_v1_store_by_storeid_listing",
         "summary": "The storefront's whole listing override map",
-        "description": "Returns every override this store applies to catalog items \u2014 name, price, list price, media, availability and the hidden flag \u2014 keyed by product or variant id, in one read. A listing is an OVERRIDE, not a product: the catalog item exists independently and this map only says how this storefront presents it. Read from the caller org's own namespaced database, so a store id belonging to another tenant is 404. Readable with an admin token or the anonymous published storefront key.",
+        "description": "Returns every override this store applies to catalog items — name, price, list price, media, availability and the hidden flag — keyed by product or variant id, in one read. A listing is an OVERRIDE, not a product: the catalog item exists independently and this map only says how this storefront presents it. Read from the caller org's own namespaced database, so a store id belonging to another tenant is 404. Readable with an admin token or the anonymous published storefront key.",
         "tags": [
           "store"
         ],
@@ -1273,7 +1368,7 @@
       "get": {
         "operationId": "get_v1_store_by_storeid_listing_by_key",
         "summary": "Fetch one listing override, by item id or by its slug or SKU",
-        "description": "Looks the key up in the store's listing map first and, failing that, matches it against each listing's slug and then its SKU \u2014 so a storefront holding only a product's URL slug can still resolve the override. That fallback is unique to the listing reads; the item overlay routes match by id alone. A key matching none of the three is 404, as is a store id outside the caller org's namespace. Readable with an admin token or the anonymous published storefront key.",
+        "description": "Looks the key up in the store's listing map first and, failing that, matches it against each listing's slug and then its SKU — so a storefront holding only a product's URL slug can still resolve the override. That fallback is unique to the listing reads; the item overlay routes match by id alone. A key matching none of the three is 404, as is a store id outside the caller org's namespace. Readable with an admin token or the anonymous published storefront key.",
         "tags": [
           "store"
         ],
@@ -1299,7 +1394,7 @@
       "patch": {
         "operationId": "patch_v1_store_by_storeid_listing_by_key",
         "summary": "Confirm a listing override exists and re-save the store",
-        "description": "Requires the key to already be present \u2014 an absent one is 404 \u2014 and answers the store's listing map at 200. Read the behaviour before relying on it: the decoded body is applied to a COPY taken out of the map and is never assigned back, so the stored listing is unchanged and the map returned is exactly the map that was already there. An actual edit to an existing listing has to go through the upsert, which does write its result back into the store. A body that fails to decode is still 400. Admin-gated and namespaced to the caller's org.",
+        "description": "Requires the key to already be present — an absent one is 404 — and answers the store's listing map at 200. Read the behaviour before relying on it: the decoded body is applied to a COPY taken out of the map and is never assigned back, so the stored listing is unchanged and the map returned is exactly the map that was already there. An actual edit to an existing listing has to go through the upsert, which does write its result back into the store. A body that fails to decode is still 400. Admin-gated and namespaced to the caller's org.",
         "tags": [
           "store"
         ],
@@ -1325,7 +1420,7 @@
       "post": {
         "operationId": "post_v1_store_by_storeid_listing_by_key",
         "summary": "Add a listing override under a new key",
-        "description": "Creates the override and answers the store's ENTIRE listing map at 201 with a Location header \u2014 not just the entry that was added. A key already present is refused 400: creation never silently overwrites, so changing an existing listing has to be an explicit replace. The stored listing has its currency stamped from the store's own, which the replace path does not do. The key is matched exactly here, with none of the slug or SKU fallback the read allows. Admin-gated and resolved inside the caller org's namespace.",
+        "description": "Creates the override and answers the store's ENTIRE listing map at 201 with a Location header — not just the entry that was added. A key already present is refused 400: creation never silently overwrites, so changing an existing listing has to be an explicit replace. The stored listing has its currency stamped from the store's own, which the replace path does not do. The key is matched exactly here, with none of the slug or SKU fallback the read allows. Admin-gated and resolved inside the caller org's namespace.",
         "tags": [
           "store"
         ],
@@ -1378,7 +1473,7 @@
     "/v1/store/{storeid}/paypal/cancel/{payKey}": {
       "post": {
         "operationId": "post_v1_store_by_storeid_paypal_cancel_by_paykey",
-        "summary": "PayPal cancel by pay key \u2014 refuses, because a pay key alone does not identify the order",
+        "summary": "PayPal cancel by pay key — refuses, because a pay key alone does not identify the order",
         "description": "Intended to void the payments carrying the given pay key, stamp them cancelled and cancel the order, it never reaches that work: the shared checkout handler reads its order from an ORDER ID path parameter this route does not carry, leaving an untyped order that the cancel dispatch refuses with 400 before the pay key lookup runs. Authentication, namespacing and store resolution happen ahead of the refusal, so a missing token is 401 and an unloadable store 500. Cancelling a real PayPal authorization needs an address that carries the order id.",
         "tags": [
           "store"
@@ -1406,7 +1501,7 @@
     "/v1/store/{storeid}/paypal/confirm/{payKey}": {
       "post": {
         "operationId": "post_v1_store_by_storeid_paypal_confirm_by_paykey",
-        "summary": "PayPal confirm by pay key \u2014 refuses, because a pay key alone does not identify the order",
+        "summary": "PayPal confirm by pay key — refuses, because a pay key alone does not identify the order",
         "description": "Intended to mark every payment carrying the given pay key as paid and flip the order to paid, it cannot do that from this address and does not pretend to: the shared checkout handler resolves its order from an ORDER ID path parameter that this route does not carry, so it always works against a fresh untyped order and the confirm dispatch refuses it with 400 before the pay key is ever queried. The token gate, the namespace and the store lookup all run ahead of that, so a missing token is still 401 and an unloadable store still 500. Drive a PayPal return through an address that carries the order id.",
         "tags": [
           "store"
@@ -1435,7 +1530,7 @@
       "post": {
         "operationId": "post_v1_store_by_storeid_paypal_pay",
         "summary": "Start a PayPal authorization for a new order",
-        "description": "Runs the ordinary store authorize flow \u2014 the route binds that very handler, so the body, the store resolution, the tally, the reservations and the failure behaviour are the authorize address's, unchanged. It reaches PayPal only when the body's payment type says so; nothing about this path forces the processor, so a card-typed payment posted here authorizes on the card processor instead. A successful PayPal authorization stamps a pay key onto the payment, which is the key the confirm and cancel addresses filter on. It is the older entry point; the plain authorize address is the one to build against.",
+        "description": "Runs the ordinary store authorize flow — the route binds that very handler, so the body, the store resolution, the tally, the reservations and the failure behaviour are the authorize address's, unchanged. It reaches PayPal only when the body's payment type says so; nothing about this path forces the processor, so a card-typed payment posted here authorizes on the card processor instead. A successful PayPal authorization stamps a pay key onto the payment, which is the key the confirm and cancel addresses filter on. It is the older entry point; the plain authorize address is the one to build against.",
         "tags": [
           "store"
         ],
@@ -1455,7 +1550,7 @@
       "get": {
         "operationId": "get_v1_store_by_storeid_product_by_key",
         "summary": "Fetch a product as this storefront sells it",
-        "description": "Returns the stored product with the store's listing for it laid over the top \u2014 non-empty listing fields replace the catalog values and the currency is forced to the store's own \u2014 which is what lets two storefronts sell the same catalog product at their own price, name and media. The overlay is keyed by the product's ID, so a listing filed only under a slug or SKU does not apply here. An unknown store or key is 404. Readable with an admin token or the anonymous published storefront key.",
+        "description": "Returns the stored product with the store's listing for it laid over the top — non-empty listing fields replace the catalog values and the currency is forced to the store's own — which is what lets two storefronts sell the same catalog product at their own price, name and media. The overlay is keyed by the product's ID, so a listing filed only under a slug or SKU does not apply here. An unknown store or key is 404. Readable with an admin token or the anonymous published storefront key.",
         "tags": [
           "store"
         ],
@@ -1483,7 +1578,7 @@
       "post": {
         "operationId": "post_v1_store_by_storeid_trial",
         "summary": "Start this store's no-card trial on the entry plan",
-        "description": "Creates a trialing subscription for the addressed store on the entry plan and grants that plan's trial credit, answering 201 when this call actually started one and 200 with a reason otherwise \u2014 not_new when the store already has billing history, trial_not_configured when no entry plan is wired. The window is always the SEVEN-DAY no-card trial, because this address never presents a card; the longer card-present window is reached only by adding a card afterwards. Entitlement is per store while the billing subject is the org, so every store an org owns takes its own trial. Admin-gated and namespaced to the caller's org: no resolvable store is 404 with store_required, and a backing-store failure is 503.",
+        "description": "Creates a trialing subscription for the addressed store on the entry plan and grants that plan's trial credit, answering 201 when this call actually started one and 200 with a reason otherwise — not_new when the store already has billing history, trial_not_configured when no entry plan is wired. The window is always the SEVEN-DAY no-card trial, because this address never presents a card; the longer card-present window is reached only by adding a card afterwards. Entitlement is per store while the billing subject is the org, so every store an org owns takes its own trial. Admin-gated and namespaced to the caller's org: no resolvable store is 404 with store_required, and a backing-store failure is 503.",
         "tags": [
           "store"
         ],
@@ -1503,7 +1598,7 @@
       "get": {
         "operationId": "get_v1_store_by_storeid_variant_by_key",
         "summary": "Fetch a variant as this storefront sells it",
-        "description": "Returns the stored variant with the store's listing for it overlaid \u2014 non-empty listing fields replace the catalog values and the currency is forced to the store's own \u2014 which is what makes per-storefront pricing of a shared variant possible. The overlay is keyed by the variant's ID, never by its slug or SKU. An unknown store or key is 404. Readable with an admin token or the anonymous published storefront key.",
+        "description": "Returns the stored variant with the store's listing for it overlaid — non-empty listing fields replace the catalog values and the currency is forced to the store's own — which is what makes per-storefront pricing of a shared variant possible. The overlay is keyed by the variant's ID, never by its slug or SKU. An unknown store or key is 404. Readable with an admin token or the anonymous published storefront key.",
         "tags": [
           "store"
         ],
@@ -1546,14 +1641,14 @@
           },
           "invoice": {
             "$ref": "#/components/schemas/InvoiceOut",
-            "description": "Invoice is the invoice AFTER the attempt \u2014 its status is the authority on\nwhat happened, not this struct's other fields."
+            "description": "Invoice is the invoice AFTER the attempt — its status is the authority on\nwhat happened, not this struct's other fields."
           },
           "paid": {
             "description": "Paid reports whether the invoice is now settled in full. A false here with\nno error is a DECLINE: the invoice stays open and may be collected again.",
             "type": "boolean"
           },
           "processorRef": {
-            "description": "ProcessorRef is the processor's reference for any card charge \u2014 the field\nthat proves money moved at the gateway rather than only in our ledger.",
+            "description": "ProcessorRef is the processor's reference for any card charge — the field\nthat proves money moved at the gateway rather than only in our ledger.",
             "type": "string"
           },
           "reason": {
@@ -1570,7 +1665,7 @@
             "type": "integer"
           },
           "description": {
-            "description": "Description is the human-readable line, e.g. \"Advisory retainer \u2014 August\".",
+            "description": "Description is the human-readable line, e.g. \"Advisory retainer — August\".",
             "type": "string"
           },
           "quantity": {
@@ -1607,7 +1702,7 @@
             "type": "string"
           },
           "id": {
-            "description": "ID is the invoice id \u2014 what the issue, collect and void ops address.",
+            "description": "ID is the invoice id — what the issue, collect and void ops address.",
             "type": "string"
           },
           "lines": {
@@ -1643,7 +1738,7 @@
       "PaymentIn": {
         "properties": {
           "amountCents": {
-            "description": "AmountCents is the amount to charge, in whole cents (5000 is $50.00).\nServer-side bounds apply and are authoritative \u2014 the default floor is $1\nand the ceiling $5,000, so a fat-fingered or hostile amount is refused\nbefore any money moves.",
+            "description": "AmountCents is the amount to charge, in whole cents (5000 is $50.00).\nServer-side bounds apply and are authoritative — the default floor is $1\nand the ceiling $5,000, so a fat-fingered or hostile amount is refused\nbefore any money moves.",
             "type": "integer"
           },
           "currency": {
@@ -1672,7 +1767,7 @@
             "type": "string"
           },
           "processorRef": {
-            "description": "ProcessorRef is the payment processor's own reference for the charge\n(Square's payment id). It is the field that proves money actually moved at\nthe gateway rather than only in our ledger \u2014 the thing to quote when\nreconciling against a processor dashboard.",
+            "description": "ProcessorRef is the payment processor's own reference for the charge\n(Square's payment id). It is the field that proves money actually moved at\nthe gateway rather than only in our ledger — the thing to quote when\nreconciling against a processor dashboard.",
             "type": "string"
           },
           "status": {
@@ -1734,14 +1829,27 @@
             "type": "string"
           },
           "lines": {
-            "description": "Lines are the charges. The invoice subtotal and amount due are COMPUTED\nfrom these \u2014 there is no total field to send, because a total that\ndisagreed with its own lines would bill a number nobody could derive.",
+            "description": "Lines are the charges. The invoice subtotal and amount due are COMPUTED\nfrom these — there is no total field to send, because a total that\ndisagreed with its own lines would bill a number nobody could derive.",
             "items": {
               "$ref": "#/components/schemas/InvoiceLineIn"
             },
             "type": "array"
           },
           "userId": {
-            "description": "UserID identifies the customer being billed, within the caller's own org.\nRequired \u2014 an invoice with no addressee is not an invoice.",
+            "description": "UserID identifies the customer being billed, within the caller's own org.\nRequired — an invoice with no addressee is not an invoice.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "liveness": {
+        "properties": {
+          "service": {
+            "description": "Service names the answering subsystem; it is always commerce.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always ok: mounted is the only state that can answer.",
             "type": "string"
           }
         },
