@@ -143,7 +143,14 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 	// ([anomaly.Assessment.Shadow], set on every path the engine returns by), not a
 	// fresh read of the regime: it is the posture this verdict was actually reached
 	// under, which is the same reason [decided] carries its policy version.
-	return fuse(answer(d), determine(signal(in.Signals, contract.SignalCountry), ev.Nano, seen), d.A.Shadow), nil
+	out := fuse(answer(d), determine(signal(in.Signals, contract.SignalCountry), ev.Nano, seen), d.A.Shadow)
+	// AND THE DECISION IS STATED ON THE SHARED EVENT PLANE, so it is answerable in
+	// the same query as the traffic that produced it (emit.go). It happens AFTER
+	// the verdict is computed and it is detached, bounded and droppable: this op
+	// answers the credit door, so nothing about making a decision visible may be
+	// able to refuse one.
+	emit(ctx, s.Log, t, decision(t, in, ev.Nano, d, out))
+	return out, nil
 }
 
 // planeTenant mints the tenant a PLANE call acts for: the org the CALLER stated,
