@@ -31,9 +31,21 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// deployReq is what to deploy. Commit and Tag carry `url:"-"` because the URL
+// addresses the APP and this route has never taken the artifact off the query
+// string; without the opt-out `?tag=other` would silently redeploy something the
+// body did not ask for.
 type deployReq struct {
-	Commit string `json:"commit"` // git commit/ref to build (git-source)
-	Tag    string `json:"tag"`    // image tag to deploy (image-source)
+	// Project is the project the application lives under, from the path.
+	Project string `json:"project"`
+	// App is the application's slug, from the path.
+	App string `json:"app"`
+	// Commit is the git commit or ref to build, for a git-source app. Defaults to
+	// the app's branch.
+	Commit string `json:"commit" url:"-"`
+	// Tag is the image tag to deploy, for an image-source app. Defaults to the
+	// app's tag, then `latest`.
+	Tag string `json:"tag" url:"-"`
 }
 
 // inflightGate bounds concurrent in-flight SYNCHRONOUS image deploys PER ORG (L1).
@@ -77,20 +89,38 @@ func (g *inflightGate) release(org string) {
 	g.n[org]--
 }
 
-func deploy(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deploy deploys the app — building it first if it comes from git.
+//
+// It starts a new, monotonically versioned deployment of the app and answers 202
+// with the deployment record. A 202 is an ACCEPTED deployment, not a live one.
+//
+// An IMAGE app deploys the tag you name (falling back to the app's tag, then
+// `latest`) by writing its operator Service CR; the operator reconciles it to
+// running. A GIT app launches an in-cluster BuildKit Job at `commit` — or the app's
+// branch — and comes back in `building`; the Service CR is applied later, by the
+// reconciler, once the Job succeeds. The reconciler is restart-safe, so a build in
+// flight survives a cloud restart.
+//
+// Deploys are bounded per org: over the concurrent-deploy cap is 429 and NOTHING is
+// recorded, so a rejected deploy leaves no phantom in the history. An unreachable
+// cluster is 503 but still records an honest `error` deployment, because a deploy
+// that was attempted and failed must not be indistinguishable from one never made.
+// Every other failure is likewise recorded in its real terminal state.
+//
+// This is metered work: a git build is billed to the org's ledger in wall-clock
+// build minutes once the Job finishes, and the running deployment is billed for its
+// compute per tick for as long as it stays live. Requires a validated principal; 403
+// without one, and everything is written into that org's own `tenant-<org>`
+// namespace.
+func (o ops) deploy(ctx context.Context, body *deployReq) (*deploymentView, error) {
+	s := o.s
+	c, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	project, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	var body deployReq
-	if len(c.Body()) > 0 {
-		if err := c.Bind(&body); err != nil {
-			return err
-		}
+	project, a, err := loadApp(s, ctx, org, body.Project, body.App)
+	if err != nil {
+		return nil, err
 	}
 
 	// Fail closed if the cluster is unreachable — but still record an honest
@@ -98,18 +128,18 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	clusterErr := s.State.k8s.ready()
 
 	now := time.Now().Unix()
-	depID, version, err := nextDeployment(s, c.Context(), a.ID)
+	depID, version, err := nextDeployment(s, ctx, a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
 	}
 
 	switch a.Source {
 	case "image":
-		return deployImage(s, c, org, project, a, depID, version, now, body, clusterErr)
+		return deployImage(s, ctx, c, org, project, a, depID, version, now, *body, clusterErr)
 	case "git":
-		return deployGit(s, c, org, a, depID, version, now, body, clusterErr)
+		return deployGit(s, ctx, c, org, a, depID, version, now, *body, clusterErr)
 	default:
-		return zip.ErrBadRequest("application has an unknown source; recreate it with source git|image")
+		return nil, zip.ErrBadRequest("application has an unknown source; recreate it with source git|image")
 	}
 }
 
@@ -132,16 +162,17 @@ func nextDeployment(s *cloud.Service[state], ctx context.Context, appID string) 
 // image-deploy core (deployTagCore), mapping its (deployment, status) result onto
 // the /deploy response — 202 + the deployment view on success, the honest status +
 // message on failure.
-func deployImage(s *cloud.Service[state], c *zip.Ctx, org, project string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) error {
+func deployImage(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, org, project string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) (*deploymentView, error) {
 	tag := firstNonEmpty(strings.TrimSpace(body.Tag), a.ImageTag, "latest")
 	image := a.ImageRepo + ":" + tag
-	d, status, err := deployTagCore(s, c.Context(), org, project, a, depID, version, now, image, tag, "image", "", clusterErr)
+	d, status, err := deployTagCore(s, ctx, org, project, a, depID, version, now, image, tag, "image", "", clusterErr)
 	if err != nil {
-		return zip.Errorf(status, "%s", err.Error())
+		return nil, zip.Errorf(status, "%s", err.Error())
 	}
 	s.Log.Info("deployed (image)", "org", org, "app", a.Slug, "ns", tenantNamespace(org), "image", image,
 		"actor", c.User(), "requestID", c.RequestID())
-	return c.JSON(status, toDeploymentView(d))
+	v := toDeploymentView(d)
+	return &v, nil
 }
 
 // deployTagCore is the ctx-only core that deploys an ALREADY-BUILT image ref
@@ -193,14 +224,15 @@ func deployTagCore(s *cloud.Service[state], ctx context.Context, org, project st
 // deployGit is the HTTP deploy for a git-source app: it maps the shared build
 // core (startGitBuild) onto the /v1/platform/.../deploy response — 202 + the
 // deployment view on success, the honest status + message on failure.
-func deployGit(s *cloud.Service[state], c *zip.Ctx, org string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) error {
-	d, jobName, status, err := startGitBuild(s, c.Context(), org, a, depID, version, now, body.Commit, clusterErr)
+func deployGit(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, org string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) (*deploymentView, error) {
+	d, jobName, status, err := startGitBuild(s, ctx, org, a, depID, version, now, body.Commit, clusterErr)
 	if err != nil {
-		return zip.Errorf(status, "%s", err.Error())
+		return nil, zip.Errorf(status, "%s", err.Error())
 	}
 	s.Log.Info("build launched (git)", "org", org, "app", a.Slug, "job", jobName, "image", d.Image,
 		"actor", c.User(), "requestID", c.RequestID())
-	return c.JSON(status, toDeploymentView(d))
+	v := toDeploymentView(d)
+	return &v, nil
 }
 
 // startGitBuild is the ctx-only core of a git deploy: persist the build +
@@ -330,126 +362,187 @@ func deployErrStatus(err error) int {
 
 // ── start / stop ─────────────────────────────────────────────────────────────
 
-func stop(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// stop stops an app without deleting it.
+//
+// It scales the app's Service to zero replicas and marks it stopped, answering the
+// updated application. Nothing else is removed — the record, its env, its domains
+// and its deployment history all survive, and /start brings it back at the same
+// replica count.
+//
+// An app that is not deployed has no Service CR to scale and is 404. An
+// unreachable cluster is 503 and a cluster that refuses the scale is 502. Because
+// the pods stop, so does the compute metering. Requires a validated principal; 403
+// without one.
+func (o ops) stop(ctx context.Context, in *appRef) (*appView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
 	}
 	if err := s.State.k8s.ready(); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "cluster unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "cluster unavailable: %v", err)
 	}
-	if err := s.State.k8s.scaleService(c.Context(), org, a.Slug, 0); err != nil {
+	if err := s.State.k8s.scaleService(ctx, org, a.Slug, 0); err != nil {
 		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("application is not deployed (no Service CR to stop)")
+			return nil, zip.ErrNotFound("application is not deployed (no Service CR to stop)")
 		}
-		return zip.Errorf(http.StatusBadGateway, "scale to zero: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "scale to zero: %v", err)
 	}
 	a.Status, a.UpdatedAt = "stopped", time.Now().Unix()
-	if err := s.State.store.UpdateApplication(c.Context(), a); err != nil {
+	if err := s.State.store.UpdateApplication(ctx, a); err != nil {
 		s.Log.Warn("persist stop failed (continuing)", "app", a.Slug, "err", err)
 	}
-	return c.JSON(http.StatusOK, toAppView(a))
+	v := toAppView(a)
+	return &v, nil
 }
 
-func start(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// start starts a stopped app back up.
+//
+// It scales the app's Service back to its configured replica count and marks it
+// live, answering the updated application. It does not redeploy: the image already
+// on the Service CR is what comes back.
+//
+// The billing watermark is reset to now as part of starting, so the org is charged
+// for THIS live span and never for the gap the app spent stopped. An app with no
+// Service CR is 404, an unreachable cluster is 503, and a cluster that refuses the
+// scale is 502. Requires a validated principal; 403 without one.
+func (o ops) start(ctx context.Context, in *appRef) (*appView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
 	}
 	if err := s.State.k8s.ready(); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "cluster unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "cluster unavailable: %v", err)
 	}
-	if err := s.State.k8s.scaleService(c.Context(), org, a.Slug, max1(a.Replicas)); err != nil {
+	if err := s.State.k8s.scaleService(ctx, org, a.Slug, max1(a.Replicas)); err != nil {
 		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("application is not deployed (no Service CR to start)")
+			return nil, zip.ErrNotFound("application is not deployed (no Service CR to start)")
 		}
-		return zip.Errorf(http.StatusBadGateway, "scale up: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "scale up: %v", err)
 	}
 	a.Status, a.UpdatedAt = "live", time.Now().Unix()
-	if err := s.State.store.UpdateApplication(c.Context(), a); err != nil {
+	if err := s.State.store.UpdateApplication(ctx, a); err != nil {
 		s.Log.Warn("persist start failed (continuing)", "app", a.Slug, "err", err)
 	}
 	// Reset the compute watermark to now so the meter bills only THIS live span,
 	// never the stopped gap the app just resumed from (FinalizeLive does the same for
 	// the deploy→live path).
-	if err := s.State.store.StampComputeMeter(c.Context(), a.Org, a.ID, a.UpdatedAt); err != nil {
+	if err := s.State.store.StampComputeMeter(ctx, a.Org, a.ID, a.UpdatedAt); err != nil {
 		s.Log.Warn("stamp compute meter failed (continuing)", "app", a.Slug, "err", err)
 	}
-	return c.JSON(http.StatusOK, toAppView(a))
+	v := toAppView(a)
+	return &v, nil
 }
 
 // ── deployment history + logs ────────────────────────────────────────────────
 
-func listDeployments(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	rows, err := s.State.store.ListDeployments(c.Context(), org, a.ID)
+// deploymentList is one app's deployment history as a list answers it — a bare
+// JSON array, named so the document can describe it.
+type deploymentList []deploymentView
+
+// listDeployments returns an app's deployment history.
+//
+// It lists every deployment recorded for one of the caller org's applications,
+// newest version first, each with its version, status, source, commit and image.
+// Failed and superseded attempts are included — that is the point of a history.
+// Requires a validated principal; 403 without one.
+func (o ops) listDeployments(ctx context.Context, in *appRef) (*deploymentList, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+		return nil, err
 	}
-	out := make([]deploymentView, 0, len(rows))
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.State.store.ListDeployments(ctx, org, a.ID)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+	}
+	out := make(deploymentList, 0, len(rows))
 	for _, d := range rows {
 		out = append(out, toDeploymentView(d))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-func getDeployment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getDeployment returns one deployment of one app.
+//
+// It returns a single deployment by id, scoped to the named application of the
+// caller's org — so an id belonging to another app or another tenant is 404, not a
+// read. Requires a validated principal; 403 without one.
+func (o ops) getDeployment(ctx context.Context, in *deploymentRef) (*deploymentView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
 	}
-	d, err := s.State.store.GetDeployment(c.Context(), org, a.ID, strings.TrimSpace(c.Param("id")))
+	d, err := s.State.store.GetDeployment(ctx, org, a.ID, strings.TrimSpace(in.ID))
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("deployment not found")
+		return nil, zip.ErrNotFound("deployment not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
 	}
-	return c.JSON(http.StatusOK, toDeploymentView(d))
+	v := toDeploymentView(d)
+	return &v, nil
 }
 
-// deploymentLogs returns REAL logs for a deployment: the recorded status timeline
-// PLUS the live pod logs streamed from the cluster — the build pod's logs while a
-// git build runs, and the running app pod's logs once deployed. Every cluster read
-// is org-scoped (build logs by the deterministic job-name label in the build ns; app
-// logs from tenant-<org>) and time-boxed; when a pod is not yet present or the
-// cluster is unreachable it degrades to the recorded timeline and says so honestly —
-// it NEVER fabricates log content. The `source` field tells the console what the
-// `logs` body is (build|app|none) so it can label the pane.
-func deploymentLogs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deployLogs is what one deployment's log read answers: the recorded timeline plus
+// whatever live pod output was reachable, and which pod that output came from.
+type deployLogs struct {
+	// DeploymentID is the deployment these logs belong to.
+	DeploymentID string `json:"deploymentId"`
+	// Source says which pod the log body carries — `build`, `app`, or `none` when
+	// neither pod was reachable — so a console can label the pane honestly.
+	Source string `json:"source"`
+	// Logs is the recorded status timeline followed by the streamed pod output,
+	// newline-separated.
+	Logs string `json:"logs"`
+}
+
+// deploymentLogs returns real logs for a deployment — the build's, then the app's.
+//
+// It returns the deployment's recorded status timeline together with LIVE pod logs
+// pulled from the cluster: the build pod's output while a git build is running, and
+// the running app's output once it is deployed. The `source` field says which of
+// the two the body is — `build`, `app` or `none` — so a console can label the pane
+// honestly.
+//
+// It never fabricates log content. When no pod exists yet, or the cluster is
+// unreachable, it degrades to the recorded timeline and says so. Every cluster read
+// is confined to the caller org's own namespaces and time-boxed. Requires a
+// validated principal; 403 without one.
+func (o ops) deploymentLogs(ctx context.Context, in *deploymentRef) (*deployLogs, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
 	}
-	d, err := s.State.store.GetDeployment(c.Context(), org, a.ID, strings.TrimSpace(c.Param("id")))
+	d, err := s.State.store.GetDeployment(ctx, org, a.ID, strings.TrimSpace(in.ID))
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("deployment not found")
+		return nil, zip.ErrNotFound("deployment not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
 	}
 
 	// Recorded timeline (always real, always present).
@@ -465,9 +558,9 @@ func deploymentLogs(s *cloud.Service[state], c *zip.Ctx) error {
 	// APP pod's logs. "none" when neither pod is reachable yet.
 	source := "none"
 	if d.Source == "git" && d.BuildID != "" {
-		if b, bErr := s.State.store.GetBuild(c.Context(), org, d.BuildID); bErr == nil {
+		if b, bErr := s.State.store.GetBuild(ctx, org, d.BuildID); bErr == nil {
 			var streamed bool
-			lines, streamed = buildLogContext(s, c.Context(), d, b, lines)
+			lines, streamed = buildLogContext(s, ctx, d, b, lines)
 			if streamed {
 				source = "build"
 			}
@@ -478,7 +571,7 @@ func deploymentLogs(s *cloud.Service[state], c *zip.Ctx) error {
 	// the runtime signal the user needs after a deploy. Appended after the build
 	// context so a git deploy shows both build and runtime when both exist.
 	if a.Status == "live" || a.Status == "deploying" || d.Source == "image" {
-		if logs, ok := s.State.k8s.appLogs(c.Context(), org, a.Slug); ok {
+		if logs, ok := s.State.k8s.appLogs(ctx, org, a.Slug); ok {
 			lines = append(lines, "── app logs ("+tenantNamespace(org)+"/"+a.Slug+") ──", logs)
 			source = "app"
 		}
@@ -487,11 +580,7 @@ func deploymentLogs(s *cloud.Service[state], c *zip.Ctx) error {
 	if d.Message != "" {
 		lines = append(lines, "message: "+d.Message)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"deploymentId": d.ID,
-		"source":       source,
-		"logs":         strings.Join(lines, "\n"),
-	})
+	return &deployLogs{DeploymentID: d.ID, Source: source, Logs: strings.Join(lines, "\n")}, nil
 }
 
 // shortTag derives a short, image-tag-safe token from a git ref/commit.
