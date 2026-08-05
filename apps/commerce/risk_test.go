@@ -56,7 +56,8 @@ func gateApp(t *testing.T) *zip.App {
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
-	app.Post("/v1/billing/topup/token", riskGate(luxlog.New("gatetest")), charged)
+	// The screen in the CHAIN position, exactly as mount.go registers the browser door.
+	app.Post("/v1/billing/topup/token", screenChain(riskGate(luxlog.New("gatetest"))), charged)
 	return app
 }
 
@@ -423,10 +424,10 @@ func TestRiskGate_JudgesThePayerThatWillBeCredited(t *testing.T) {
 	}
 }
 
-// TestTopupSignals_AnAmountThatIsNotUSDIsNotStated. Nano is nano-USD, so a minor
+// TestPaymentSignals_AnAmountThatIsNotUSDIsNotStated. Nano is nano-USD, so a minor
 // unit in another currency read as cents is a different amount of money. Absent
 // beats wrong: the value features read blind, and blind is counted.
-func TestTopupSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
+func TestPaymentSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
 	for _, tc := range []struct{ name, body, nano string }{
 		{"usd", `{"amountCents":4200,"currency":"USD"}`, "42000000000"},
 		{"no currency is usd", `{"amountCents":500}`, "5000000000"},
@@ -440,7 +441,7 @@ func TestTopupSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
 			app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
 			var got map[string]string
 			app.Post("/probe", func(c *zip.Ctx) error {
-				got = cloud.Facts(topupSignals(c))
+				got = cloud.Facts(paymentSignals(c))
 				return c.JSON(http.StatusOK, "ok")
 			})
 			r := httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader(tc.body))
