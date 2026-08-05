@@ -254,7 +254,7 @@ var Apps = []App{
 	{Name: "zt", Prefixes: []string{"/v1/mesh/services", "/v1/networks"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}},
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
-	{Name: "graph", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},
+	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
 	{Name: "integrations", Prefixes: []string{"/v1/connector/github/webhook", "/v1/connectors", "/v1/integrations"}},
 	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
