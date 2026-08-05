@@ -371,23 +371,32 @@ docker-push: docker ## Push the Docker image to ghcr.io. Requires docker login.
 # BEFORE composition, and reading it as a pass is exactly how a broken build was
 # twice reported shipped.
 #
-# Each app gets a writable data dir and its OWN four ports. Without them it dies on
-# `mkdir /var/lib/cloud/orgs` or on binding :8080/:9653/:9090/:8081 long before it
-# reaches the router — and an early death looks like silence, which reads as a pass.
-# CONCURRENT, because the timeout is the cost and it is paid per app: run one at a
-# time and $(words $(APPS)) apps take most of an hour, which is a check nobody runs
-# — and a check nobody runs is how all of this reached production. Each app already
-# has its own dir and its own port block, so they do not contend; xargs -P just
-# stops them queueing. Failures are written to files rather than raced onto stdout.
+# Each app gets a writable data dir and PORT ZERO on all four listeners. Without a
+# data dir it dies on `mkdir /var/lib/cloud/orgs`, and without free ports it dies on
+# binding :8080/:9653/:9090/:8081 — either way long before it reaches the router, and
+# an early death looks like silence, which reads as a pass.
+#
+# :0 RATHER THAN A COMPUTED PORT BLOCK. This handed out 41000+index*10 and it was
+# accidental complexity: the question is "does this binary compose", and answering it
+# does not require owning a port namespace. Worse, it answered WRONG — a second run
+# inside sixty seconds collided with the first run's sockets in TIME_WAIT, which
+# `ss -lnt` does not show, and reported up to 16 healthy apps as DIED. A check that
+# invents failures gets ignored exactly as fast as one that misses them. The kernel
+# already allocates ports correctly; asking it removes the bookkeeping, the stride,
+# the TIME_WAIT window and the cap on concurrency in one move.
+#
+# CONCURRENT, because the timeout is the cost and it is paid per app: one at a time,
+# $(words $(APPS)) apps take most of an hour, and a check nobody runs is how all of
+# this reached production. Failures go to files rather than racing onto stdout.
 COMPOSE_DIR  ?= .compose
 COMPOSE_JOBS ?= 8
 compose: apps ## Prove every app binary BOOTS — the compose check `go build` cannot do.
 	@rm -rf $(COMPOSE_DIR) && mkdir -p $(COMPOSE_DIR)
-	@printf '%s\n' $(APPS) | nl -ba | xargs -P$(COMPOSE_JOBS) -n2 sh -c '\
-	  a=$$1; d=$(COMPOSE_DIR)/$$1; p=$$((41000 + $$0 * 10)); mkdir -p $$d/rt; \
+	@printf '%s\n' $(APPS) | xargs -P$(COMPOSE_JOBS) -n1 sh -c '\
+	  a=$$0; d=$(COMPOSE_DIR)/$$0; mkdir -p $$d/rt; \
 	  out=$$(CLOUD_DATA_DIR=$$d ZIP_RUNTIME_DIR=$$d/rt \
-	         CLOUD_LISTEN=:$$p CLOUD_ZAP_LISTEN=:$$((p+1)) \
-	         CLOUD_HEALTH_LISTEN=:$$((p+2)) CLOUD_ADMIN_LISTEN=:$$((p+3)) \
+	         CLOUD_LISTEN=:0 CLOUD_ZAP_LISTEN=:0 \
+	         CLOUD_HEALTH_LISTEN=:0 CLOUD_ADMIN_LISTEN=:0 \
 	         timeout 25 ./bin/$$a 2>&1); rc=$$?; \
 	  if printf "%s" "$$out" | grep -q "does not compose"; then \
 	    { echo "PANIC $$a"; printf "%s\n" "$$out" | grep -E "zip: (the group|GET|POST|PUT|PATCH|DELETE)" | sed "s/^/    /" | head -4; } > $$d.fail; \
