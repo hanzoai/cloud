@@ -99,7 +99,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		s.State.plane = p
 	}
 	mount(s, app)
-	mounted = s.State.plane
+	mounted = s
+	// The internal scorer, published AFTER the state is built and the surface is
+	// registered, so a peer that can reach the socket can reach a working model.
+	// It is what arms every gate in every OTHER process — see risk_rpc.go.
+	exposeDecide()
 	s.Log.Info("risk model plane mounted", "brand", deps.Brand, "env", deps.Env, "plane", s.State.plane != nil)
 	return nil
 }
@@ -244,19 +248,25 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 // composition root builds it with the deployment's own budget in it, so the plane
 // has no business inventing a bound of its own — or, as it did, waiting with none.
 func Shutdown(ctx context.Context) error {
-	if mounted == nil {
+	s := mounted
+	mounted = nil
+	if s == nil || s.State.plane == nil {
 		return nil
 	}
-	err := mounted.close(ctx)
-	mounted = nil
-	return err
+	return s.State.plane.close(ctx)
 }
 
-// mounted is the plane this binary mounted, so the composition root's Shutdown
-// can reach it. Mount and Shutdown are two independent functions the plugin wires
-// separately, so the value they share is held here rather than smuggled through a
-// closure — one binary, one mount, one plane. Same shape as apps/dataroom.
-var mounted *plane
+// mounted is the service this binary mounted, so the two entry points that are
+// not Mount can reach what Mount built: the composition root's Shutdown, which
+// snapshots every resident model, and the internal scorer (risk_rpc.go), which
+// needs the plane AND the brand its tenant key is qualified by. Mount, Shutdown
+// and the plane op are wired separately by the plugin, so the value they share is
+// held here rather than smuggled through a closure — one binary, one mount, one
+// service. Same shape as apps/dataroom.
+//
+// It is the SERVICE and not the plane because two globals for one mount is two
+// facts that can disagree about whether this process holds a model.
+var mounted *cloud.Service[state]
 
 // residents is how many tenants' models are held right now, how many residencies
 // have been BUILT, how many have been evicted to hold that bound, and how many of

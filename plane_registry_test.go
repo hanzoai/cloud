@@ -20,7 +20,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce"
+	"github.com/hanzoai/cloud/apps/risk"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	riskpeer "github.com/hanzoai/cloud/plane/risk"
 	"github.com/zap-proto/zip"
 )
 
@@ -69,6 +71,39 @@ func TestGeneratedSurfaceIsTheLiveSurface(t *testing.T) {
 	for i := range live {
 		if generated[i] != live[i] {
 			t.Fatalf("op %d: generated %q, commerce serves %q\n  fix: go run ./plane/gen",
+				i, generated[i], live[i])
+		}
+	}
+}
+
+// TestGeneratedRiskSurfaceIsTheLiveSurface holds the SCORER to the same gate, and
+// it is the one op where the gate earns its keep twice over.
+//
+// The scorer is reached by a gate in another binary and by nothing else: there is
+// no HTTP route behind it and no caller who would notice it missing until a
+// payment is being screened. An op that stopped being registered — a Mount that
+// no longer calls exposeDecide, a rename on one side — would leave every gate in
+// the fleet reading the absent exemption and allowing unscored, silently, which is
+// precisely the failure this whole seam exists to end. So the registration itself
+// is asserted, from the running registry.
+func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
+	live := liveOps(t, riskpeer.App, risk.Mount, false)
+	t.Cleanup(func() { _ = risk.Shutdown(t.Context()) })
+
+	generated := append([]string(nil), riskpeer.Ops...)
+	sort.Strings(generated)
+
+	if len(live) == 0 {
+		t.Fatal("risk registered no plane ops at all — every gate in the fleet reads an absent scorer, " +
+			"allows unscored, and nothing says so. Mount must call exposeDecide.")
+	}
+	if len(generated) != len(live) {
+		t.Fatalf("generated %d ops, risk serves %d\n  generated: %v\n  live:      %v\n"+
+			"  fix: go run ./plane/gen", len(generated), len(live), generated, live)
+	}
+	for i := range live {
+		if generated[i] != live[i] {
+			t.Fatalf("op %d: generated %q, risk serves %q\n  fix: go run ./plane/gen",
 				i, generated[i], live[i])
 		}
 	}
