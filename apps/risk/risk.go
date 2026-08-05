@@ -113,6 +113,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// registered, so a peer that can reach the socket can reach a working model.
 	// It is what arms every gate in every OTHER process — see risk_rpc.go.
 	exposeDecide()
+	// And the other half of the same seam. A plane that can be ASKED about a payment
+	// and cannot be TOLD one settled leaves the pace and fan-out rules reading an
+	// empty history for every self-serve organisation — see [planeObserve].
+	exposeObserve()
 	s.Log.Info("risk model plane mounted", "brand", deps.Brand, "env", deps.Env, "plane", s.State.plane != nil)
 	return nil
 }

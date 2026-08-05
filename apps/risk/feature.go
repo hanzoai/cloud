@@ -207,11 +207,20 @@ const (
 	// (hanzo.cloud_usage.user_id) — the subject whose spend velocity is what
 	// pay-as-you-go abuse moves.
 	kindAccount = contract.KindAccount
+	// kindPayer is the party that PAYS — the billing subject a settled charge
+	// credits. NO ROLLUP WRITES IT, and that is the point: it is taught only by a
+	// settlement this deployment watched happen ([plane.RiskObserve]), so the
+	// aggregates under it hold payments and nothing else.
+	//
+	// It exists because [kindAccount] holds metered SPEND, and a value bound stated
+	// as a payments appetite cannot be read over a population that is mostly
+	// inference bills. See [contract.KindPayer] for the whole argument.
+	kindPayer = contract.KindPayer
 )
 
 // kinds is the closed set, in one place, so a rollup cannot write a kind a read
 // cannot name.
-var kinds = []string{kindPerson, kindSession, kindAccount}
+var kinds = []string{kindPerson, kindSession, kindAccount, kindPayer}
 
 // featureTable and baselineTable are this plane's own tables. Everything else
 // this file touches belongs to another owner and is READ ONLY.

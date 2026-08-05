@@ -231,6 +231,34 @@ const (
 	// does not answer is an outage and denies a privileged grant.
 	RiskDecide = "risk_decide"
 
+	// RiskObserve teaches one organisation's own model from something that
+	// HAPPENED, for a gate running in another binary.
+	//
+	// It is RiskDecide's other half and the plane needs both, because a model that
+	// is only ever asked is a model that never learns. The published learn door
+	// (POST /v1/risk/learn) is an ORGANISATION teaching its own model over HTTP; it
+	// is the wrong door for the fact this op carries. A settled payment is observed
+	// by the process that took the money, in the same request, and what it observed
+	// must reach the model from a source the PAYER cannot move:
+	//
+	//	THE SERVER STATES IT, not a body. The value is the amount that SETTLED, the
+	//	moment is the server's clock, and the subject is the one the charge
+	//	credited. A payer who could state these could state a small payment for a
+	//	large charge, which is the velocity bound switched off by the party it
+	//	exists to bound.
+	//
+	//	IT IS KEYED ON THE SETTLEMENT. Settlement is at-least-once — a retried
+	//	request, a replayed webhook, a redelivered event — so the observation
+	//	carries the settlement's own identifier and the model's record
+	//	deduplicates on it. Velocity that double-counted a retry would freeze a
+	//	customer for paying once.
+	//
+	// Without it the aggregate halves of the credit door's rule are structurally
+	// dead: a fresh organisation is its own payer, so nothing it does teaches the
+	// model anything, and pace and fan-out read an empty history for exactly the
+	// self-serve fraudster they were built for.
+	RiskObserve = "risk_observe"
+
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
 )
@@ -865,6 +893,24 @@ const (
 	// KindAccount is the org's own user in the metered plane — the subject whose
 	// spend velocity is what pay-as-you-go abuse moves.
 	KindAccount = "account"
+	// KindPayer is the party that PAYS: the billing subject a settled charge
+	// credits.
+	//
+	// It is a kind of its own and not KindAccount, because the two name different
+	// populations and a bound stated over one of them cannot be read over both. An
+	// account's learned history is its metered INFERENCE SPEND; a payer's is the
+	// money it moved IN. Judged under one kind they share one set of aggregates, so
+	// a customer with a large inference bill accrues value on the very key a
+	// PAYMENTS appetite is read from — a big spender trips a payments bound without
+	// having paid anything, and the bound cannot be restated to fix it because one
+	// number over two populations is two numbers.
+	//
+	// Naming the payer separately is the mechanism this file already relies on
+	// ("a person and an account sharing an identifier are two subjects") applied to
+	// the one place it was missing. It also makes the model's question at a credit
+	// door answerable: a payment is scored against the payer's own payment history
+	// rather than against a spend distribution it has nothing to do with.
+	KindPayer = "payer"
 )
 
 // The signal names the scorer READS. Every other name a gate observes still
@@ -959,6 +1005,51 @@ type RiskDecided struct {
 	// reached under. Zero means no regime was ever stated and the default posture —
 	// shadow — was in force.
 	Policy int `json:"policy"`
+}
+
+// ---- risk.observe — one thing that HAPPENED, into the caller's own model -----
+
+// RiskObserveIn is one settled fact for the calling organisation's own model.
+//
+// It is [RiskDecideIn]'s shape plus the one field a question does not need and a
+// record cannot do without: the SETTLEMENT this observation is of. Everything
+// else is deliberately identical, so the gate that asked about an event teaches
+// the model from the same values it asked with — a screen and a record that
+// resolved their subject by two different rules are two subjects, and the
+// velocity of one of them is always empty.
+//
+// THERE IS NO ORG HERE for [RiskDecideIn]'s reason: the model this lands in is
+// the CALLER's, minted from the plane principal. A field naming one would be a
+// peer teaching another organisation's model, which is worse than reading it.
+type RiskObserveIn struct {
+	// Stage is the lifecycle moment this happened at, from cloud's closed set.
+	Stage string `json:"stage" validate:"required"`
+	// Kind is whose behaviour this is. A settled payment is KindPayer.
+	Kind string `json:"kind" validate:"required"`
+	// Subject is the identifier on that kind, within the caller's own tenant.
+	Subject string `json:"subject" validate:"required"`
+	// Settlement identifies what settled, and it is the IDEMPOTENCY KEY: the
+	// model's own record deduplicates on it, so a retried request or a replayed
+	// webhook converges instead of counting the same money twice.
+	//
+	// It must be the SETTLEMENT's own identifier — the processor's reference for
+	// the charge, or the ledger receipt where the processor states none — and never
+	// a counter, a timestamp or anything a caller of the settling door chose. A key
+	// the payer can predict is a key the payer can claim first, after which the
+	// real observation is inert.
+	Settlement string `json:"settlement" validate:"required"`
+	// Signals are the facts the settling process observed, in the scorer's own
+	// vocabulary: the value that moved, the counterparty, the device, when.
+	Signals []Signal `json:"signals,omitempty"`
+}
+
+// RiskObserved is what the model learned. Zero with no error means the
+// settlement was ALREADY in that organisation's record — the idempotent answer,
+// and a different fact from nothing having been sent.
+type RiskObserved struct {
+	// Learned is how many observations entered the model on this call: one, or zero
+	// for a settlement already recorded.
+	Learned int `json:"learned"`
 }
 
 // ---- event.capture — one occurrence, onto the shared event plane ------------
