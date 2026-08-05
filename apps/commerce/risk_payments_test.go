@@ -31,9 +31,11 @@ package commerce
 
 import (
 	"context"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,8 +59,18 @@ import (
 // next one gets caught.
 var creditDoors = []string{"/v1/billing/topup/token", "/v1/payments"}
 
+// screenIsAValue anchors the structural check below to the REAL screen. The check
+// works over identifiers, so a rename of the type or of its resolver would silently
+// empty the set it reads and leave it green over nothing; this line stops compiling
+// first, which is the only kind of anchor an AST test can have.
+var screenIsAValue screen = riskGate(luxlog.New("guard"))
+
+// screenType is the screen's own type name, which is what makes an identifier in the
+// source recognisable AS the screen. Held to the real one by [screenIsAValue].
+const screenType = "screen"
+
 // TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen — the STRUCTURAL half,
-// and the one that guards the door this file's behavioural tests cannot reach.
+// and the one that guards the doors this file's behavioural tests cannot reach.
 //
 // The behavioural tests drive registrations: exposePayments is called directly, so the
 // typed door's wiring is real. Mount's own registration of the browser door is not —
@@ -69,21 +81,45 @@ var creditDoors = []string{"/v1/billing/topup/token", "/v1/payments"}
 // So the rule is checked by READING THE SOURCE rather than by remembering it, exactly as
 // apps/risk checks that an observation has one constructor.
 //
-// IT ACCEPTS EITHER WIRING because the two doors are registered two different ways while
-// being screened by one thing: a typed op is composed at registration
-// (zip.Post(<router>.With(screen), …)) and a raw route carries the screen in its handler
-// LIST (screenChain(screen)). What is asserted is that ONE of those two spellings is
-// present on every credit door — never that both doors are spelled alike, which is a fact
-// about zip's registrars and not about the control.
+// # It asserts the screen VALUE reaches the HANDLER, and that is the whole upgrade
+//
+// The check this replaces asserted that one of two SPELLINGS — a `.With(…)` or a
+// `screenChain(…)` — appeared somewhere in the registration. Both were satisfied by
+// `zip.Post(app.With(screen), "/payments", o.take)`, and that registration was the
+// bug: router middleware wraps the fiber handler the REST route is served through, and
+// a typed op is dispatched to its HANDLER by four projections. `takePayment` is in
+// tools/list, so an agent's tools/call ran commerce's card money move with the screen
+// standing beside it. A check that reads route names and middleware spellings cannot
+// see that; one that reads WHERE THE VALUE WENT can.
+//
+// So two properties, and each is a way the bypass comes back:
+//
+//	THE HANDLER CARRIES THE SCREEN. The expression a registration hands zip as its
+//	handler — the last argument of a raw route, args[2] of a typed op — must be built
+//	from an identifier that holds the screen. That is the one composition point every
+//	projection of an op runs through.
+//
+//	NOTHING COMPOSES IT AS ROUTER MIDDLEWARE. A `.With(screen)` anywhere is the old
+//	bug by construction: it screens REST and publishes an unscreened tool. It is
+//	checked over EVERY registration rather than only the credit doors, because the
+//	next mint op is not on the list yet.
+//
+// WHAT HOLDS THE SCREEN is not a name this test knows: it is every identifier the
+// package binds to [riskGate]'s answer, plus every parameter DECLARED to be one
+// ([screenValues]). A door reached through a differently-named local, or through a
+// second function that takes the screen, is therefore read correctly — and a door that
+// invents its own screen is not, which is the point.
 //
 // AND IT COMPOSES THE ADDRESS, because zip does: a route's path is its router's prefix
-// joined with its leaf, so the typed door is registered as `/v1` + `/payments` and no
-// single literal in the source spells it. Matching literals alone would have found no
-// registration of that door at all — which is why the found-set is asserted below.
-// Reading only what the framework reads is the difference between a check and a habit.
+// joined with its leaf, so a door declared on a group is spelled by no single literal
+// in the source. Matching literals alone would find no registration at all — which is
+// why the found-set is asserted below. Reading only what the framework reads is the
+// difference between a check and a habit.
 //
-// Mutation proof: remove `screen` from either registration and this names the file, the
-// line and the door.
+// Mutation proof: register the typed op as `zip.Post(app, "/v1/payments", o.charge, …)`
+// — the money core with no wrap — and this names the file, the line and the door.
+// Restore the old `zip.Post(app.With(screen).Group("/v1"), "/payments", o.charge)` and
+// it fails twice: once for the unscreened handler, once for the router composition.
 func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 	fset := token.NewFileSet()
 	// The whole package, not mount.go: a door registered from any other file would
@@ -101,6 +137,12 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 	// once.
 	held := map[string]bool{}
 	for _, pkg := range pkgs {
+		values := screenValues(pkg.Files)
+		if len(values) == 0 {
+			t.Fatal("this check found no identifier holding the screen, so it is reading nothing " +
+				"and would stay green however the credit doors are wired — the screen's type or " +
+				"its resolver was renamed and screenType/riskGate must move with it")
+		}
 		groups := groupRouters(pkg.Files)
 		for _, file := range pkg.Files {
 			ast.Inspect(file, func(n ast.Node) bool {
@@ -109,7 +151,26 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 					return true
 				}
 				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok || sel.Sel.Name != "Post" {
+				if !ok {
+					return true
+				}
+				// THE SCREEN IS NEVER ROUTER MIDDLEWARE. Checked over every registration in
+				// the package, not only the credit doors: this spelling guards one
+				// projection of four, so an op wired that way is unscreened on the plane an
+				// agent calls whether or not its address is on the list yet.
+				if sel.Sel.Name == "With" {
+					for _, arg := range call.Args {
+						if carries(arg, values) {
+							t.Errorf("%s composes the screen as ROUTER middleware — that wraps only the "+
+								"fiber handler the REST route is served through, so a typed op registered "+
+								"this way publishes an MCP tool and a by-name op that reach the money core "+
+								"unscreened. Wrap the HANDLER instead (screen.route / screen.op).",
+								fset.Position(call.Pos()))
+						}
+					}
+					return true
+				}
+				if sel.Sel.Name != "Post" {
 					return true
 				}
 				door := doorOf(call, sel, groups)
@@ -117,17 +178,14 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 					return true
 				}
 				held[door] = true
-				// The WHOLE registration is read — the router it is made on and the handler
-				// list — because the screen legitimately appears in either place, and a
-				// NAMED router is followed to where it was built. Neither form can be the
-				// one nobody reads.
-				if carriesScreen(call) || screenedRouter(call, sel, groups) {
+				h := handlerOf(call, sel)
+				if h != nil && carries(h, values) {
 					return true
 				}
-				t.Errorf("%s registers the credit door %s WITHOUT the screen — this address reaches "+
-					"commerce's card money move, so an unscreened one is the whole risk gate "+
-					"bypassed by calling the other URL",
-					fset.Position(call.Pos()), door)
+				t.Errorf("%s registers the credit door %s with a handler the screen VALUE never "+
+					"reached — this address ends in commerce's card money move, and a screen that "+
+					"is not inside the handler is absent from every projection of it except the "+
+					"one HTTP route", fset.Position(call.Pos()), door)
 				return true
 			})
 		}
@@ -140,6 +198,93 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 				"however the door is wired", door)
 		}
 	}
+}
+
+// screenValues is every identifier in the package that HOLDS the screen — the answer
+// to "what does the screen look like in this source", asked of the source instead of
+// remembered.
+//
+// Two ways an identifier comes to hold one, and they are the only two the package has:
+// it was bound to [riskGate]'s answer (the composition root's `screen := riskGate(lg)`),
+// or it was DECLARED to be one as a parameter (`func exposePayments(app *zip.App, s
+// screen)`). Following the parameter is what lets a door be registered in a different
+// function from the one that resolved the screen, which is exactly how the typed door
+// is wired — and it is why this reads a value's travel rather than a fixed name.
+func screenValues(files map[string]*ast.File) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range files {
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch v := n.(type) {
+			case *ast.AssignStmt:
+				if len(v.Lhs) != 1 || len(v.Rhs) != 1 || !isRiskGate(v.Rhs[0]) {
+					return true
+				}
+				if id, ok := v.Lhs[0].(*ast.Ident); ok {
+					out[id.Name] = true
+				}
+			case *ast.FuncDecl:
+				if v.Type.Params == nil {
+					return true
+				}
+				for _, p := range v.Type.Params.List {
+					id, ok := p.Type.(*ast.Ident)
+					if !ok || id.Name != screenType {
+						continue
+					}
+					for _, name := range p.Names {
+						out[name.Name] = true
+					}
+				}
+			}
+			return true
+		})
+	}
+	return out
+}
+
+// isRiskGate reports whether an expression is the call that resolves the screen.
+func isRiskGate(e ast.Expr) bool {
+	call, ok := ast.Unparen(e).(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	id, ok := call.Fun.(*ast.Ident)
+	return ok && id.Name == "riskGate"
+}
+
+// carries reports whether an expression is BUILT FROM one of the screen's identifiers
+// — as a receiver (`screen.route(h)`), as an argument (`o.take(screen)`), or nested in
+// either. It is the whole of "the value reached here".
+func carries(n ast.Node, values map[string]bool) bool {
+	found := false
+	ast.Inspect(n, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && values[id.Name] {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// handlerOf is the expression a registration hands zip as its HANDLER — the one value
+// every projection of the route dispatches to.
+//
+// The two registrars put it in different places and both are read, because a check
+// that knew only one of them would be blind to exactly the other door: a typed op is
+// zip.Post(target, path, handler, opts…) so the handler is args[2] and the options
+// follow it, while a raw route is <router>.Post(path, handlers…) whose handler is the
+// LAST of a chain.
+func handlerOf(call *ast.CallExpr, sel *ast.SelectorExpr) ast.Expr {
+	if id, ok := sel.X.(*ast.Ident); ok && id.Name == "zip" {
+		if len(call.Args) < 3 {
+			return nil
+		}
+		return call.Args[2]
+	}
+	if len(call.Args) < 2 {
+		return nil
+	}
+	return call.Args[len(call.Args)-1]
 }
 
 // doorOf returns the credit door a registration addresses, or "" for a route that is not
@@ -168,32 +313,16 @@ func doorOf(call *ast.CallExpr, sel *ast.SelectorExpr, groups map[string]router)
 	return ""
 }
 
-// router is a registration target as this check can read it: where it sits, and whether
-// the screen is already on it.
-type router struct {
-	prefix   string
-	screened bool
-}
+// router is a registration target as this check can read it: where it sits. Whether
+// the screen is on it is no longer a property worth recording — a screen on a ROUTER is
+// the bug, and it is reported where it is found rather than credited here.
+type router struct{ prefix string }
 
 // routersOf is where a registration's target can be. zip.Post takes it as the first
 // ARGUMENT; a method call carries it as the RECEIVER. Both are consulted, so neither
 // registrar is the one nobody reads.
 func routersOf(call *ast.CallExpr, sel *ast.SelectorExpr) []ast.Expr {
 	return []ast.Expr{sel.X, firstNonLiteral(call.Args)}
-}
-
-// screenedRouter reports whether the registration's target was BUILT with the screen —
-// the typed door's case, where `mint := app.With(screen).Group("/v1")` puts the screen on
-// the router and the Post that uses it names only `mint`. A check that read the Post alone
-// would call that door unscreened, which is a false alarm; one that stopped looking at the
-// Post would miss the raw door, which is a false pass.
-func screenedRouter(call *ast.CallExpr, sel *ast.SelectorExpr, groups map[string]router) bool {
-	for _, r := range routersOf(call, sel) {
-		if resolve(r, groups).screened {
-			return true
-		}
-	}
-	return false
 }
 
 // resolve reads a router expression: a named group as this package recorded it, or an
@@ -231,10 +360,10 @@ func firstNonLiteral(args []ast.Expr) ast.Expr {
 	return nil
 }
 
-// groupRouters records every group ASSIGNED a name in this package — its prefix and
-// whether it was built with the screen. A named group is the form zipdoc also requires of
-// a router a typed op is declared on, so it is the form this package uses and therefore
-// the form this check has to follow.
+// groupRouters records every group ASSIGNED a name in this package, and its prefix. A
+// named group is the form zipdoc also requires of a router a typed op is declared on,
+// so it is the form this package uses and therefore the form this check has to follow —
+// and the reason a door's ADDRESS is composed rather than matched as a literal.
 func groupRouters(files map[string]*ast.File) map[string]router {
 	out := map[string]router{}
 	for _, f := range files {
@@ -256,8 +385,7 @@ func groupRouters(files map[string]*ast.File) map[string]router {
 	return out
 }
 
-// groupCall reads `<router>.Group("<literal>")` into its prefix, and reports whether the
-// chain that built it composed the screen.
+// groupCall reads `<router>.Group("<literal>")` into its prefix.
 func groupCall(e ast.Expr) (router, bool) {
 	call, ok := e.(*ast.CallExpr)
 	if !ok || len(call.Args) == 0 {
@@ -271,38 +399,7 @@ func groupCall(e ast.Expr) (router, bool) {
 	if !ok || lit.Kind != token.STRING {
 		return router{}, false
 	}
-	return router{
-		prefix: strings.Trim(lit.Value, `"`),
-		// The screen is composed on the RECEIVER of Group, which is what
-		// `app.With(screen).Group("/v1")` means.
-		screened: carriesScreen(sel.X),
-	}, true
-}
-
-// carriesScreen reports whether a registration puts the screen on the route, in either of
-// the two spellings the two registrars admit: a `.With(…)` composing it onto the router a
-// typed op is declared on, or [screenChain] in a raw route's handler list.
-//
-// Both names are load-bearing, so both are asserted by NAME. That is the point of a
-// structural check: it reads what the source says rather than what the reader remembers,
-// and a rename that moved the screen without moving this would fail here rather than in
-// production.
-func carriesScreen(n ast.Node) bool {
-	found := false
-	ast.Inspect(n, func(n ast.Node) bool {
-		switch v := n.(type) {
-		case *ast.SelectorExpr:
-			if v.Sel.Name == "With" {
-				found = true
-			}
-		case *ast.Ident:
-			if v.Name == "screenChain" {
-				found = true
-			}
-		}
-		return !found
-	})
-	return found
+	return router{prefix: strings.Trim(lit.Value, `"`)}, true
 }
 
 // paymentsDoor is the typed door's address.
@@ -354,14 +451,37 @@ func settledPayment(ref func() string) func(context.Context, *PaymentIn) (*Payme
 	}
 }
 
-// typedDoor is the typed credit door, composed the way mount.go composes it and
-// answering at the 201 the op DECLARES. It stands in for the handler and for nothing
-// else: the registration form, the response type and the status are the shipped ones.
-func typedDoor(t *testing.T, app *zip.App, screen zip.Middleware, ref func() string) {
+// payApp is a test app wired the way the binary is: the app-wide Bridge FIRST, because
+// it is what parks the request a typed op reads its payer off ([cloud.Request]), and it
+// must precede every route it serves — fiber runs middleware in registration order.
+func payApp(t *testing.T) *zip.App {
 	t.Helper()
-	zip.Post(app.With(screen), paymentsDoor, settledPayment(ref),
+	isolate(t)
+	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
+	app.Use(zip.H(cloud.Bridge()))
+	return app
+}
+
+// typedDoor is the typed credit door, composed the way exposePayments composes it and
+// answering at the 201 the op DECLARES: the screen WRAPS THE HANDLER, so the registered
+// op is the screened one and every projection of it runs the screen. It stands in for
+// the money core and for nothing else — the registration form, the response type and
+// the status are the shipped ones.
+func typedDoor(t *testing.T, app *zip.App, s screen, ref func() string) {
+	t.Helper()
+	zip.Post(app, paymentsDoor, s.op(settledPayment(ref)),
 		zip.WithOperationID("takePaymentProbe"),
 		zip.WithStatus(http.StatusCreated))
+}
+
+// browserDoor is the RAW credit door, composed the way mount.go composes it: the screen
+// wrapping the handler that answers like commerce's top-up.
+func browserDoor(app *zip.App, s screen, ref func() string) {
+	app.Post("/v1/billing/topup/token", s.route(func(c *zip.Ctx) error {
+		c.Fiber().Response().Header.Set("Content-Type", "application/json")
+		return c.Bytes(http.StatusOK,
+			[]byte(`{"transactionId":"txn_b","status":"ok","processorRef":"`+ref()+`"}`))
+	}))
 }
 
 // pay posts the credit door's own body to a door, as a validated customer. The body is
@@ -385,18 +505,31 @@ func pay(t *testing.T, app *zip.App, door string) (int, string) {
 }
 
 // realPaymentsApp registers the SHIPPED payment surface — exposePayments itself — with
-// the shipped screen, plus the app-wide Bridge that parks the validated org a typed op
-// reads. Without a screen refusal the request reaches paymentOps.take, which refuses
-// with its OWN 503 because commerce is not co-resident in a test binary; that
-// difference in STATUS is what tells "the screen refused" apart from "the screen
-// allowed and the handler ran".
-func realPaymentsApp(t *testing.T, screen zip.Middleware) *zip.App {
+// the shipped screen. Without a screen refusal the request reaches paymentOps.charge,
+// which refuses with its OWN 503 because commerce is not co-resident in a test binary;
+// that difference in STATUS is what tells "the screen refused" apart from "the screen
+// allowed and the money core ran".
+func realPaymentsApp(t *testing.T, s screen) *zip.App {
 	t.Helper()
-	isolate(t)
+	app := payApp(t)
+	exposePayments(app, s)
+	return app
+}
 
-	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
-	app.Use(zip.H(cloud.Bridge()))
-	exposePayments(app, screen)
+// unscreenedPaymentsApp IS THE MUTATION, kept as a fixture: the money core registered
+// as the op's handler with no wrap — `zip.Post(app, "/v1/payments", o.charge, …)` —
+// which is what exposePayments would be if the screen were dropped from it, and what
+// the composition looked like from the MCP plane's point of view while the screen was
+// router middleware.
+//
+// It is the CONTROL FOR EVERY SCREEN ASSERTION in this file: a refusal only proves the
+// screen if the same request walks through without it.
+func unscreenedPaymentsApp(t *testing.T) *zip.App {
+	t.Helper()
+	app := payApp(t)
+	zip.Post(app, paymentsDoor, paymentOps{}.charge,
+		zip.WithOperationID("takePayment"),
+		zip.WithStatus(http.StatusCreated))
 	return app
 }
 
@@ -443,7 +576,7 @@ func TestPayments_TheTypedDoorIsScreened(t *testing.T) {
 	// money core — which is what makes the case above evidence of the gate rather than
 	// evidence of the fixture.
 	t.Run("unscreened — the same request reaches the money core", func(t *testing.T) {
-		app := realPaymentsApp(t, func(next zip.Handler) zip.Handler { return next })
+		app := unscreenedPaymentsApp(t)
 		cloud.SetRiskScorer(frozen)
 
 		code, body := pay(t, app, paymentsDoor)
@@ -457,22 +590,224 @@ func TestPayments_TheTypedDoorIsScreened(t *testing.T) {
 	})
 }
 
+// tool invokes one MCP tools/call against the app's own /mcp door — the SAME door
+// api.hanzo.ai publishes and the SAME dispatch an agent's call takes: zip finds the op
+// by name and runs op.invoke, which is the typed op's HANDLER and nothing around it.
+//
+// It answers what the model would see: the JSON-RPC result's text content, and whether
+// the tool reported a failure. An MCP error is CONTENT with isError, not a transport
+// error, so a refused payment arrives as a 200 carrying the refusal — which is exactly
+// why a status-code assertion cannot see this plane and this helper has to read the
+// envelope.
+func tool(t *testing.T, app *zip.App, name, args string) (text string, isError bool) {
+	t.Helper()
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + name + `","arguments":` + args + `}}`
+	r := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Org-Id", gateOrg)
+	r.Header.Set("X-User-Id", gateUser)
+	resp, err := app.Test(r)
+	if err != nil {
+		t.Fatalf("tools/call %s: %v", name, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var out struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("tools/call %s answered %s, which is not JSON-RPC: %v", name, raw, err)
+	}
+	if out.Error != nil {
+		t.Fatalf("tools/call %s was refused by the MCP door itself (%s) — the tool has to be "+
+			"REACHABLE for this file to say anything about whether it is screened", name, out.Error.Message)
+	}
+	for _, c := range out.Result.Content {
+		text += c.Text
+	}
+	return text, out.Result.IsError
+}
+
+// TestPayments_TheAgentsToolIsScreened — THE BYPASS THIS BATCH CLOSED, at the plane it
+// was open on.
+//
+// `takePayment` is in tools/list. The screen was ROUTER middleware, and zip composes
+// router middleware around the fiber handler its REST route is served through — while
+// a typed op is dispatched to its HANDLER by four projections. So a payment the model
+// froze was refused at the URL and MINTED through the tool, and the settlement the
+// model should have learned from was never taught: the whole control present on the
+// browser's door and absent on the agent's, silently, with every HTTP test green.
+//
+// Two halves, and the second is the one that has no status code to hide behind — an
+// MCP failure is content, not a transport error, so an unscreened tool answers 200
+// either way and only what the model READS tells the two apart.
+//
+// Mutation proof, and it is the exact regression: register the op without the wrap
+// (unscreenedPaymentsApp — `zip.Post(app, "/v1/payments", o.charge, …)`, which is what
+// the handler looked like from this plane while the screen sat on the router) and the
+// frozen payment reaches the money core. That control runs below, in this test, so a
+// pass here is evidence about the screen rather than about the fixture.
+func TestPayments_TheAgentsToolIsScreened(t *testing.T) {
+	lg := luxlog.New("paytest")
+	frozen := func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
+		return cloud.RiskVerdict{Action: cloud.ActionBlock, Score: 0.99, Cause: "above the cut"}, nil
+	}
+
+	t.Run("screened — the frozen payment never reaches the money core", func(t *testing.T) {
+		app := realPaymentsApp(t, riskGate(lg))
+		cloud.SetRiskScorer(frozen)
+
+		text, isError := tool(t, app, "takePayment", gateBody)
+		if !isError {
+			t.Fatalf("the tool answered %s with no error — a payment the screen froze settled "+
+				"through the MCP plane, which is the whole risk gate bypassed by an agent "+
+				"calling the tool instead of the URL", text)
+		}
+		if !strings.Contains(text, "not authorised") {
+			t.Errorf("the refusal is not the screen's: %s", text)
+		}
+		// AND THE MONEY CORE NEVER RAN. Its own refusal names co-residence; seeing that
+		// sentence would mean the screen let a frozen payment through and only the test
+		// environment stopped it.
+		if strings.Contains(text, "co-resident") {
+			t.Errorf("the frozen payment reached the money core through the tool: %s", text)
+		}
+	})
+
+	// THE CONTROL FOR THE CONTROL: the op registered with no wrap — the state the MCP
+	// plane was in — reaches the core with the same frozen verdict installed.
+	t.Run("unscreened — the same tool call reaches the money core", func(t *testing.T) {
+		app := unscreenedPaymentsApp(t)
+		cloud.SetRiskScorer(frozen)
+
+		text, _ := tool(t, app, "takePayment", gateBody)
+		if strings.Contains(text, "not authorised") {
+			t.Fatalf("the ungated tool refused, so the refusal above proves nothing: %s", text)
+		}
+		if !strings.Contains(text, "co-resident") {
+			t.Fatalf("want the money core's own refusal, got %s — this fixture must REACH "+
+				"paymentOps.charge or it cannot show what the screen prevents", text)
+		}
+	})
+}
+
+// TestPayments_TheAgentsToolJudgesAndTeachesThePayer — the OTHER half, and the one the
+// bypass made invisible: an agent's settled payment has to accrue on the same subject
+// the browser's does, or the velocity bound sees half the money and a stolen card is
+// laundered through the tool.
+//
+// It pins every fact the two planes must agree on, each against the SAME rule the HTTP
+// test asserts rather than against the other plane's answer — matching each other would
+// pass just as well if both were wrong:
+//
+//	THE PAYER RESOLVES HERE TOO. A tools/call is an ordinary HTTP request carrying the
+//	gateway's identity headers, and the app-wide Bridge parks it for /mcp exactly as
+//	for a REST route — so [payerOrg] and [principal.Subject] answer, and the org and
+//	the wallet key are the browser door's.
+//
+//	THE VALUE IS STATED. Over MCP the request body is a JSON-RPC envelope and the
+//	payment is inside `arguments`, so a screen that read the wire would state no
+//	amount at all — the sharpest axis a credit door has, blind on exactly the plane an
+//	agent uses. It is read off the DECODED input instead.
+//
+//	AND THE SETTLEMENT TEACHES. Over MCP the op's answer is wrapped in a tools/call
+//	result and no HTTP response exists when the handler returns, so a screen that read
+//	the response bytes would watch an agent's payment settle and teach nothing. It is
+//	read off the RETURNED receipt instead.
+//
+// Mutation proof: register the op without the wrap and this fails on the await timeout
+// — the tool payment settles and the model is never told.
+func TestPayments_TheAgentsToolJudgesAndTeachesThePayer(t *testing.T) {
+	seen := watchTeaching(t)
+	app := payApp(t)
+
+	var asked cloud.RiskQuery
+	var forOrg string
+	cloud.SetRiskScorer(func(_ context.Context, org string, q cloud.RiskQuery) (cloud.RiskVerdict, error) {
+		forOrg, asked = org, q
+		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
+	})
+	typedDoor(t, app, riskGate(luxlog.New("paytest")), func() string { return settledRef })
+
+	text, isError := tool(t, app, "takePaymentProbe", gateBody)
+	if isError {
+		t.Fatalf("the tool payment did not settle: %s", text)
+	}
+
+	want := account.Payer(account.Credential{Owner: gateOrg, Name: gateUser}).Subject()
+
+	// THE QUESTION. Same tenant, same stage, same kind, same subject, same privileged
+	// bit, same value as the browser door asks with.
+	if forOrg != gateOrg {
+		t.Errorf("the model asked was %q's, want %q's — the payer does not resolve on the "+
+			"MCP plane, so the screen is judging nobody there", forOrg, gateOrg)
+	}
+	if asked.Stage != cloud.StagePayment {
+		t.Errorf("stage %q, want %q", asked.Stage, cloud.StagePayment)
+	}
+	if asked.Subject.Kind != plane.KindPayer || asked.Subject.ID != want {
+		t.Errorf("judged %q/%q, want %q/%q — an agent's payments must accrue on the same key "+
+			"a browser's do or the tool is a way to spend a bound twice",
+			asked.Subject.Kind, asked.Subject.ID, plane.KindPayer, want)
+	}
+	if !asked.Privileged {
+		t.Error("the query is not privileged — a scorer outage mints spendable balance through the tool")
+	}
+	if got := asked.Signals[plane.SignalNano]; got != "42000000000" {
+		t.Errorf("nano %q, want %q — the amount was not observed on the MCP plane, so the value "+
+			"axis is blind on exactly the door an agent calls", got, "42000000000")
+	}
+
+	// AND THE RECORD, which the bypass left structurally missing at this plane.
+	got := await(t, seen)
+	if got.org != gateOrg {
+		t.Errorf("the observation was filed under %q, want %q", got.org, gateOrg)
+	}
+	if got.in.Kind != plane.KindPayer || got.in.Subject != want {
+		t.Errorf("taught %q/%q, want %q/%q", got.in.Kind, got.in.Subject, plane.KindPayer, want)
+	}
+	if got.in.Settlement != settledRef {
+		t.Errorf("settlement %q, want the processor's own reference %q — a tool payment that "+
+			"teaches under a different key is a burst the accrual cannot see whole",
+			got.in.Settlement, settledRef)
+	}
+	var nano string
+	for _, s := range got.in.Signals {
+		if s.Name == plane.SignalNano {
+			nano = s.Value
+		}
+	}
+	if nano != "42000000000" {
+		t.Errorf("taught nano %q, want %q", nano, "42000000000")
+	}
+}
+
 // TestPayments_TheReceiptReadIsNotScreened. A gate belongs on the act it can prevent.
 // GET /v1/payments/:id reads a receipt out of the caller's own ledger namespace and
 // mints nothing, so screening it would spend a scorer round trip — and, whenever a
 // scorer is present and mute, refuse a customer their own receipt — to guard a mint that
 // is not there.
 //
-// Mutation proof: register the read through app.With(screen) too and this fails.
+// The SCORER is what is watched, not a stand-in middleware, because the scorer round
+// trip is the cost the read must not pay: a screen that ran without asking anything
+// would be a screen this test could not see.
+//
+// Mutation proof: wrap the read's handler with the screen too and this fails.
 func TestPayments_TheReceiptReadIsNotScreened(t *testing.T) {
 	var asked atomic.Bool
-	watch := func(next zip.Handler) zip.Handler {
-		return func(c *zip.Ctx) error {
-			asked.Store(true)
-			return next(c)
-		}
-	}
-	app := realPaymentsApp(t, watch)
+	app := realPaymentsApp(t, riskGate(luxlog.New("paytest")))
+	cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
+		asked.Store(true)
+		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
+	})
 
 	r := httptest.NewRequest(http.MethodGet, paymentsDoor+"/txn_1", nil)
 	r.Header.Set("X-Org-Id", gateOrg)
@@ -496,8 +831,7 @@ func TestPayments_TheReceiptReadIsNotScreened(t *testing.T) {
 // surface widens the RECORD, and a control that is not installed must not decide whether
 // a product works.
 func TestPayments_ANotDeployedScorerDoesNotCloseTheTypedDoor(t *testing.T) {
-	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
-	isolate(t)
+	app := payApp(t)
 	typedDoor(t, app, riskGate(luxlog.New("paytest")), refs("sq_pay_"))
 
 	// No producer at all — the state of every process before the gate existed.
@@ -522,8 +856,7 @@ func TestPayments_ANotDeployedScorerDoesNotCloseTheTypedDoor(t *testing.T) {
 // Mutation proof: drop `Privileged: true` from the query in [riskGate] and this answers
 // 201 — a scorer outage mints spendable balance through the agent's door.
 func TestPayments_APresentScorerThatCannotAnswerMakesTheTypedGrantWait(t *testing.T) {
-	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
-	isolate(t)
+	app := payApp(t)
 	typedDoor(t, app, riskGate(luxlog.New("paytest")), refs("sq_pay_"))
 
 	cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
@@ -551,8 +884,7 @@ func TestPayments_APresentScorerThatCannotAnswerMakesTheTypedGrantWait(t *testin
 // watch it settle, and teach nothing.
 func TestPayments_TheTypedDoorJudgesAndTeachesThePayer(t *testing.T) {
 	seen := watchTeaching(t)
-	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
-	isolate(t)
+	app := payApp(t)
 
 	var asked cloud.RiskQuery
 	var forOrg string
@@ -615,8 +947,7 @@ func TestPayments_TheTypedDoorJudgesAndTeachesThePayer(t *testing.T) {
 // whose processor stated no reference — silently, at the door an agent calls.
 func TestPayments_TheTypedReceiptCarriesTheFallbackKey(t *testing.T) {
 	seen := watchTeaching(t)
-	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
-	isolate(t)
+	app := payApp(t)
 	cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 	})
@@ -658,20 +989,14 @@ func TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual(t *testing.T) {
 	const each = 3
 	seen := watchTeaching(t)
 
-	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
-	isolate(t)
+	app := payApp(t)
 	cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 	})
 
 	screen := riskGate(luxlog.New("paytest"))
-	// ONE screen value on BOTH registrations, exactly as mount.go composes it.
-	browser := refs("sq_pay_browser_")
-	app.With(screen).Post("/v1/billing/topup/token", func(c *zip.Ctx) error {
-		c.Fiber().Response().Header.Set("Content-Type", "application/json")
-		return c.Bytes(http.StatusOK,
-			[]byte(`{"transactionId":"txn_b","status":"ok","processorRef":"`+browser()+`"}`))
-	})
+	// ONE screen value wrapping BOTH handlers, exactly as mount.go composes it.
+	browserDoor(app, screen, refs("sq_pay_browser_"))
 	typedDoor(t, app, screen, refs("sq_pay_typed_"))
 
 	for i := 0; i < each; i++ {
@@ -737,8 +1062,7 @@ func TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual(t *testing.T) {
 // receipts even for one payment.
 func TestPayments_OnePaymentThroughTwoDoorsIsOneObservation(t *testing.T) {
 	seen := watchTeaching(t)
-	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
-	isolate(t)
+	app := payApp(t)
 	cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 	})
@@ -747,11 +1071,7 @@ func TestPayments_OnePaymentThroughTwoDoorsIsOneObservation(t *testing.T) {
 	// ONE gateway payment id, reached through both addresses. Each door still writes its
 	// OWN ledger receipt, which is exactly the trap: keyed on the receipt this is two
 	// observations of one payment.
-	app.With(screen).Post("/v1/billing/topup/token", func(c *zip.Ctx) error {
-		c.Fiber().Response().Header.Set("Content-Type", "application/json")
-		return c.Bytes(http.StatusOK,
-			[]byte(`{"transactionId":"txn_browser_1","status":"ok","processorRef":"`+settledRef+`"}`))
-	})
+	browserDoor(app, screen, func() string { return settledRef })
 	typedDoor(t, app, screen, func() string { return settledRef })
 
 	if code, body := pay(t, app, "/v1/billing/topup/token"); code != http.StatusOK {
