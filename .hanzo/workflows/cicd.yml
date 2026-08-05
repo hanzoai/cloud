@@ -46,7 +46,6 @@ name: CI/CD
 # same bytes" as success. A failed car leaves a hole in the receipt, and the
 # receipt is the definition of shipped.
 on:
-  workflow_dispatch:
   push:
     branches: [main]
     # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
