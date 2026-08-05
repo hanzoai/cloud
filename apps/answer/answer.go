@@ -11,17 +11,19 @@
 // second route. The package registers no routes of its own: clients/ask owns the
 // door and delegates web modes here.
 //
-// THE FIVE VALUES, one home each:
+// THE SIX VALUES, one home each:
 //
-//	plan       → plan()        → []string            (≤ maxQueries, best-effort)
+//	plan       → plan()        → []topic              (≤5 topics × 3–5 todos, best-effort)
 //	search     → websearch.Search → []websearch.Result (in-process, keyless)
-//	rank       → rank()        → []Source             (dedupe URL+host, relevance, cap)
-//	read       → read()        → []Source (enriched)  (the ONE crawl, ai/object)
+//	rank       → rank()        → []Source             (dedupe URL, host cap, relevance)
+//	read       → read()        → []Source (enriched)  (the ONE crawl, apps/crawl)
+//	survey     → survey()      → []Source             (search+read applied to a plan, ITERATED)
 //	synthesize → synthesize()  → string               (streamed through the Sink)
 //
-// BOUNDED. ≤3 LLM calls (1 plan + 1 synthesis + 1 follow-up), ≤maxQueries search
-// passes, ≤maxRead page fetches, a 90s wall clock, and a token ceiling past which
-// the optional follow-up call is skipped. It is never an open agent loop.
+// BOUNDED. The fast modes make ≤3 LLM calls (1 plan + 1 synthesis + 1 follow-up)
+// over one gathering pass. A survey adds ONE decision call per extra round, itself
+// bounded by mode.rounds (hard-capped at maxRounds), mode.deadline, mode.tokenCeiling,
+// and saturation. It is never an open agent loop.
 //
 // METERED ONCE. Every answer debits the resolved payer through the per-org
 // ResourceMeter (Base.Bill) — the ONE revenue debit, since the in-process AI path
@@ -38,22 +40,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	crawlpkg "github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
-)
-
-const (
-	// timeout bounds the whole loop so a hung upstream cannot wedge a request.
-	timeout = 90 * time.Second
-	// maxTotalTokens is the loop's token ceiling: once the running LLM token total
-	// crosses it, the optional follow-up call is skipped. With the fixed call count
-	// (≤1 plan + 1 synth + 1 follow-up) this keeps one request's cost bounded — the
-	// "can't run away" guard.
-	maxTotalTokens = 120_000
 )
 
 // Engine is the answer engine value: the shared Base (logger + the ONE per-org
@@ -83,14 +73,24 @@ type Request struct {
 // Params is the fully-owned per-request plan handed to Run(): safe to use after
 // the Ctx is recycled (SSE) and retained by the async meter.
 type Params struct {
-	q, webQuery  string
-	mode         mode
-	model        string   // primary synthesis model (chain head)
-	fallbacks    []string // synthesis models tried, in order, after model
-	language     string
-	maxSources   int
-	maxQueries   int
-	readTop      int
+	q, webQuery string
+	mode        mode
+	model       string   // primary synthesis model (chain head)
+	fallbacks   []string // synthesis models tried, in order, after model
+	language    string
+	maxSources  int
+	maxQueries  int
+	readTop     int
+	// rounds is the survey's round budget: 0 is a SINGLE gathering pass (the fast
+	// modes, unchanged), >0 iterates. hostCap is how many pages one host may
+	// contribute to the ranked set. deadline and tokenCeiling are the wall clock
+	// and the token spend this request may not cross — both per-mode, because a
+	// research pass legitimately costs more than a search and one global constant
+	// had to be sized for the cheaper of the two.
+	rounds       int
+	hostCap      int
+	deadline     time.Duration
+	tokenCeiling int
 	followUps    bool
 	system       string
 	dataOrg      string // effective org — data scope (RAG/BYO keys) on the ChatRequest
@@ -142,6 +142,10 @@ func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 		maxSources:   clampPositive(in.MaxSources, m.maxSources),
 		maxQueries:   clampPositive(in.MaxQueries, m.maxQueries),
 		readTop:      m.readTop,
+		rounds:       min(m.rounds, maxRounds), // NOT clampPositive: 0 rounds is a single pass, not "unset"
+		hostCap:      m.hostCap,
+		deadline:     m.deadline,
+		tokenCeiling: m.tokenCeiling,
 		followUps:    in.FollowUps == nil || *in.FollowUps,
 		system:       pickSystem(in.System, m.system),
 		dataOrg:      dataOrg,
@@ -156,7 +160,7 @@ func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 	if wantsStream(c, in) {
 		setStreamHeaders(c)
 		return c.SendStreamWriter(func(w *bufio.Writer) {
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			ctx, cancel := context.WithTimeout(context.Background(), p.deadline)
 			defer cancel()
 			_, _ = w.WriteString(": ask stream open\n\n")
 			_ = w.Flush()
@@ -164,7 +168,7 @@ func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 		})
 	}
 
-	ctx, cancel := context.WithTimeout(c.Context(), timeout)
+	ctx, cancel := context.WithTimeout(c.Context(), p.deadline)
 	defer cancel()
 	buf := &bufferSink{}
 	e.Run(ctx, p, buf)
@@ -192,47 +196,34 @@ func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 func (e Engine) Run(ctx context.Context, p Params, out Sink) {
 	var tok tokens
 
-	// 1) PLAN — research/deep expand the question into focused sub-queries; search/
-	// news use the single (news-biased) query. Bounded by p.maxQueries.
-	queries := []string{p.webQuery}
+	// 1) PLAN — research expands the question into titled topics with concrete
+	// todos; search/news carry the single (news-biased) query as a one-topic plan,
+	// so the survey below has exactly ONE shape to consume. Best-effort: a failed
+	// plan call falls back to that same seed.
+	plan := []topic{{Title: p.q, Todos: []string{p.webQuery}}}
 	if p.mode.plan {
 		out.status("planning", "")
-		qs, u := e.plan(ctx, p)
+		got, u := e.plan(ctx, p)
 		tok.add(u)
-		if len(qs) > 0 {
-			queries = qs
+		if len(got) > 0 {
+			plan = got
 		}
 	}
 
-	// 2) SEARCH — run each query through the in-process native meta-search seam
-	// (no HTTP loopback). Emit progress per query so the live UI shows the plan.
-	var found []websearch.Result
-	for _, q := range queries {
-		out.status("searching", q)
-		found = append(found, websearch.Search(ctx, q, p.language)...)
-	}
+	// 2) SURVEY — search and read applied to the plan and iterated under the mode's
+	// bounds. rounds==0 is the single pass the fast modes always did; rounds>0 is
+	// deep research. ONE code path, parameterized — never a second engine.
+	srcs, stok := e.survey(ctx, p, plan, out)
+	tok.merge(stok)
 
-	// 3) RANK — dedupe (one per URL and per host) and rank by query relevance
-	// server-side, then cap. Off-topic hits sink before anything is fetched.
-	srcs := rank(p.q, found, p.maxSources)
-	out.sources(srcs)
-
-	// 4) READ — fetch the top pages so the deeper modes ground on the PAGE, not a
-	// 600-char snippet. search/news read nothing (readTop 0) and stay fast; a dead
-	// crawl service degrades to the snippets and never breaks the stream.
-	if p.readTop > 0 && len(srcs) > 0 {
-		out.status("reading", "")
-		srcs = read(ctx, e.Log, crawlpkg.Scope{Org: p.dataOrg, Project: p.project}, srcs, p.readTop)
-	}
-
-	// 5) SYNTHESIZE — one grounded completion over the numbered sources, with
+	// 3) SYNTHESIZE — one grounded completion over the numbered sources, with
 	// inline markdown citations, streamed to the client as it is produced.
 	out.status("answering", "")
 	answer, synth := e.synthesize(ctx, p, srcs, out.text)
 	tok.add(synth)
 
-	// 6) FOLLOW-UPS — one cheap call, skipped past the token ceiling (cost guard).
-	if p.followUps && tok.total < maxTotalTokens {
+	// 4) FOLLOW-UPS — one cheap call, skipped past the token ceiling (cost guard).
+	if p.followUps && tok.total < p.tokenCeiling {
 		qs, fu := e.followUpQuestions(ctx, p, answer)
 		tok.add(fu)
 		if len(qs) > 0 {
@@ -240,10 +231,10 @@ func (e Engine) Run(ctx context.Context, p Params, out Sink) {
 		}
 	}
 
-	// 7) DONE — terminal envelope frame with the accumulated answer + sources.
+	// 5) DONE — terminal envelope frame with the accumulated answer + sources.
 	out.done(answer, srcs)
 
-	// 8) METER — the SINGLE revenue debit for this answer, on the caller's ledger,
+	// 6) METER — the SINGLE revenue debit for this answer, on the caller's ledger,
 	// ONLY when a real answer was synthesized (synth != nil). The internal AI calls
 	// were balance-exempt (binary M2M), so this is the only charge; a model outage
 	// degrades to an honest note and is NOT billed. Token counts ride along.
@@ -281,23 +272,79 @@ func (t *tokens) add(r *cloud.ChatResponse) {
 	t.total += r.TotalTokens
 }
 
-// plan asks the model to break the question into up to maxQueries focused
-// web-search queries. On any failure it returns nil, so the caller falls back to
+// merge folds a sub-loop's accumulated usage in, so the one debit still prices
+// every call the request made.
+func (t *tokens) merge(o tokens) {
+	t.prompt += o.prompt
+	t.completion += o.completion
+	t.total += o.total
+}
+
+// topic is one strand of the research plan: what to establish, and the concrete
+// todos that establish it. The plan is carried VERBATIM into every survey round's
+// decision prompt, which is what keeps a long gather on the question instead of
+// drifting into whatever the last page happened to be about.
+type topic struct {
+	Title string   `json:"title"`
+	Todos []string `json:"todos"`
+}
+
+// plan asks the model to break the question into a few titled research topics
+// with concrete todos. On any failure it returns nil, so the caller falls back to
 // the single original query — planning is best-effort, never a hard dependency.
-func (e Engine) plan(ctx context.Context, p Params) ([]string, *cloud.ChatResponse) {
+func (e Engine) plan(ctx context.Context, p Params) ([]topic, *cloud.ChatResponse) {
 	prompt := fmt.Sprintf(
-		"Break the user's question into up to %d focused web-search queries that together cover it. "+
-			"Reply ONLY as compact JSON: {\"queries\":[\"...\"]}.\n\nQuestion: %s",
-		p.maxQueries, p.q)
+		"Break the question into 1–%d research topics, each with 3–5 concrete todos "+
+			"(each todo phrased as a web-search query). "+
+			"Reply ONLY as compact JSON: {\"plan\":[{\"title\":\"...\",\"todos\":[\"...\"]}]}.\n\nQuestion: %s",
+		maxTopics, p.q)
 	resp := e.chat(ctx, p, p.model, prompt, nil)
 	if resp == nil {
 		return nil, nil
 	}
-	qs := parseStringList(resp.Content, "queries")
-	if len(qs) > p.maxQueries {
-		qs = qs[:p.maxQueries]
+	got := parsePlan(resp.Content)
+	if len(got) > maxTopics {
+		got = got[:maxTopics]
 	}
-	return qs, resp
+	return got, resp
+}
+
+// maxTopics bounds the plan's breadth. Five strands is as wide as a bounded
+// survey can actually cover; more only dilutes the round budget.
+const maxTopics = 5
+
+// parsePlan leniently reads the plan out of a reply that may be fenced or chatty.
+// It also accepts the flat {"queries":[...]} shape — one topic per query — so a
+// model that answers in the older form still produces a usable plan rather than
+// none.
+func parsePlan(content string) []topic {
+	if obj := sliceBetween(content, '{', '}'); obj != "" {
+		var wrapper struct {
+			Plan []topic `json:"plan"`
+		}
+		if json.Unmarshal([]byte(obj), &wrapper) == nil {
+			out := make([]topic, 0, len(wrapper.Plan))
+			for _, t := range wrapper.Plan {
+				todos := trimAll(t.Todos)
+				if len(todos) == 0 {
+					continue
+				}
+				title := strings.TrimSpace(t.Title)
+				if title == "" {
+					title = todos[0]
+				}
+				out = append(out, topic{Title: title, Todos: todos})
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+	var out []topic
+	for _, q := range parseStringList(content, "queries") {
+		out = append(out, topic{Title: q, Todos: []string{q}})
+	}
+	return out
 }
 
 // synthesize produces the grounded answer over the numbered sources, trying the
@@ -314,10 +361,18 @@ func (e Engine) synthesize(ctx context.Context, p Params, srcs []Source, emit fu
 		"\nToday is " + time.Now().UTC().Format("2006-01-02") + "." +
 		"\n\nQuestion: " + p.q +
 		"\n\nWeb sources:\n" + sourcesBlock(srcs)
+	// The joiner holds a markdown link back until its closing paren arrives, so a
+	// citation never renders as raw `[title](htt` mid-stream. It wraps emit HERE and
+	// nowhere else: it is a delivery property of the answer text, not of the loop.
+	j := &joiner{emit: emit}
 	for _, model := range append([]string{p.model}, p.fallbacks...) {
-		if resp := e.chat(ctx, p, model, prompt, emit); resp != nil && strings.TrimSpace(resp.Content) != "" {
+		if resp := e.chat(ctx, p, model, prompt, j.write); resp != nil && strings.TrimSpace(resp.Content) != "" {
+			j.flush()
 			return resp.Content, resp
 		}
+		// A model that failed mid-link must not leak its half-frame into the next
+		// model's stream; its Content was discarded, so its buffer is too.
+		j.reset()
 	}
 	note := "I couldn't generate an answer right now — the model is unavailable. Please try again."
 	emit(note)
@@ -326,7 +381,7 @@ func (e Engine) synthesize(ctx context.Context, p Params, srcs []Source, emit fu
 
 // followUpQuestions asks for a few distinct next questions. Best-effort: empty on failure.
 func (e Engine) followUpQuestions(ctx context.Context, p Params, answer string) ([]string, *cloud.ChatResponse) {
-	prompt := "Given a question and its answer, propose 3 concise, distinct follow-up questions a curious user would ask next. " +
+	prompt := "Given a question and its answer, propose 3 to 5 concise, distinct follow-up questions a curious user would ask next. " +
 		"Reply ONLY as compact JSON: {\"questions\":[\"...\"]}.\n\nQuestion: " + p.q +
 		"\n\nAnswer:\n" + clip(answer, 4000)
 	resp := e.chat(ctx, p, p.model, prompt, nil)
@@ -334,11 +389,14 @@ func (e Engine) followUpQuestions(ctx context.Context, p Params, answer string) 
 		return nil, nil
 	}
 	qs := parseStringList(resp.Content, "questions")
-	if len(qs) > 4 {
-		qs = qs[:4]
+	if len(qs) > maxFollowUps {
+		qs = qs[:maxFollowUps]
 	}
 	return qs, resp
 }
+
+// maxFollowUps caps the out-of-band next-question list at five.
+const maxFollowUps = 5
 
 // chat runs ONE completion with the given model, carrying the billing/data scope.
 // Org is the effective (data) org, BillingOrg the payer, Project the attribution
