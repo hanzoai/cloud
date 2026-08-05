@@ -271,6 +271,24 @@ func payerOrg(c *zip.Ctx) string {
 // The amount is the fact that matters at a credit door — value velocity is the
 // axis a stolen card moves — and it is the one signal the model reads as a
 // coordinate. The rest are the gate's record of why it asked.
+//
+// THE COUNTRY IS THE ADDRESS'S, NOT THE PAYER'S, and that is a limitation this
+// door cannot fix from here. The jurisdiction worth judging is the account's
+// billing or KYC one, and no part of it reaches this process: the top-up body is
+// a Square nonce, an amount and a currency; the card is tokenised in the browser
+// and its PAN never touches this binary, so there is no billing address to read;
+// the validated principal carries an org, a user, a name and an email and no
+// geography; and there is no customer or KYC record here holding one. Stating a
+// billing country from any of that would be inventing the one fact the rule turns
+// on.
+//
+// So this states the strongest thing that IS true — the jurisdiction our own edge
+// resolved from the connecting address, and only when the peer is one of our own
+// hops ([cloud.ClientCountry]) — and the scorer's rule is documented as reading a
+// weak signal. It is spoofable by a VPN, which means it can be evaded DOWNWARD
+// into silence; it cannot be forged upward into somebody else's freeze, and
+// silence is the state this door was already in. Wiring the billing or KYC
+// jurisdiction, when there is one to wire, replaces this signal at this one line.
 func topupSignals(c *zip.Ctx) map[string]string {
 	var body struct {
 		AmountCents int64  `json:"amountCents"`
@@ -284,6 +302,12 @@ func topupSignals(c *zip.Ctx) map[string]string {
 	signals := map[string]string{
 		"ip":       cloud.ClientIP(c),
 		"currency": strings.ToLower(strings.TrimSpace(body.Currency)),
+	}
+	// Omitted when nothing trustworthy stated one. An absent country is a fact the
+	// rule reads as "the geography half cannot judge"; an empty string sent as a
+	// value would be a gate claiming to have looked.
+	if country := cloud.ClientCountry(c); country != "" {
+		signals[plane.SignalCountry] = country
 	}
 	// NANO IS USD. A minor unit in another currency converted as though it were
 	// cents would be a number the value features read as a different amount of
