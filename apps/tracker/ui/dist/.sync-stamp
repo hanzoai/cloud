@@ -1,0 +1,6 @@
+# Provenance of this embedded Tracker SPA build. See ../README.md to regenerate.
+app=@hanzo/tracker (admin-tracker)
+base=/tracker/
+api_prefix=/v1/tracker
+source=hanzoai/admin:apps/admin-tracker@57d91fd (blue/tracker-ui)
+built=tsc --noEmit (clean) + vite build
