@@ -198,13 +198,21 @@ func build(b cloud.Base) (state, error) {
 // routes registers the customer-facing /v1/billing/* read surface plus the
 // /v1/finance/* projection (same commerceProxy).
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+
+	// Raw: serves bytes — the split-deploy leg forwards commerce's ledger status
+	// and rows, which this handler then enriches (each row is stamped with its
+	// canonical metadata.product, ?product= filters, ?groupBy=product rolls rows
+	// up), and the co-resident leg writes the same envelope straight from the
+	// finance ledger. Commerce's shape either way, never one declared here.
 	app.Get("/v1/billing/usage", cloud.Handle(s, usage))
 	// The per-account routed-usage breakdown the dashboard reads, in the billing
 	// namespace beside /v1/billing/usage. The data is owned by clients/link (the
-	// linked-account plane); this thin handler asks it, scoped to the caller's OWN
+	// linked-account plane); this thin op asks it, scoped to the caller's OWN
 	// (org, subject). Registered here — not from link — so it shadows the console
 	// pkg's /v1/billing/* wildcard exactly like the other specific customer routes.
-	app.Get("/v1/billing/usage/accounts", cloud.Handle(s, usageAccounts))
+	zip.Get(cloud.ZipApp(app), "/v1/billing/usage/accounts", o.usageAccounts,
+		zip.WithResponseHeader("Cache-Control"))
 	// /v1/billing/methods is served CO-RESIDENT by the commerce app, not proxied
 	// from here. These three forwarded over HTTP to commerce, and the proxy is
 	// unconfigured on this deployment (CLOUD_COMMERCE_HTTP_URL unset), so every
@@ -212,6 +220,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// not list a card, and the checkout's prefill failed on every load. An
 	// internal HTTP hop to a service compiled into the same binary is the wrong
 	// shape regardless; the in-process registration has no hop to misconfigure.
+	//
+	// Raw: serves bytes — the split-deploy leg forwards commerce's body and
+	// status, and the co-resident leg writes the same envelope from the ledger.
 	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
 	// GPU launch gate + saved cards — the customer half of the prepay-only GPU rule
 	// commerce enforces server-side (api/billing/gpu_charge.go). Same org-scoping as
@@ -220,7 +231,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// another tenant's. These SPECIFIC customer routes register before (and so shadow)
 	// the console pkg's /v1/billing/* wildcard, giving an unauthenticated call an honest
 	// 401 (route exists) instead of the wildcard's admin-shaped 403.
+	//
+	// Raw: serves bytes — forwards commerce's body and status verbatim.
 	app.Get("/v1/billing/gpu/eligibility", cloud.Handle(s, gpuEligibility))
+	// Raw: serves bytes — the split-deploy leg forwards commerce's body and status
+	// verbatim, and the co-resident refusal answers 402 in commerce's own envelope.
 	app.Post("/v1/billing/gpu/charge", cloud.Handle(s, gpuCharge))
 	// Saving a card must be registered on the SAME router as the read: a specific
 	// route shadows the console pkg's /v1/billing/* wildcard for its whole path, so
@@ -236,16 +251,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
 	// + per-org subject-pinning; the treasury lane owns /v1/finance/treasury alongside it.
-	mountFinance(s, app)
+	mountFinance(app, o)
 }
 
-// The PROSE for the routes above. Not one of them can be a typed op — each is a raw
-// *zip.Ctx handler that forwards commerce's body and STATUS verbatim (a 402 decline
-// keeps its reason) or writes an envelope built to match commerce's wire, and a typed
-// op's only refusal is a returned error. zipdoc lifts prose from a typed op's doc
-// comment, so these have nowhere else to state it, and without a Describe the document
-// publishes an operationId and NOTHING else — an SDK method for a MONEY endpoint that
-// cannot say whose ledger it reads, and a CLI command with no help.
+// The PROSE for the raw routes above. Each survivor is a raw *zip.Ctx handler
+// because it SERVES BYTES: it forwards commerce's body and STATUS (a 402 decline
+// keeps its reason), enriches it, or writes an envelope built to match
+// commerce's shape — always commerce's contract, never a shape declared here,
+// and a typed op owns its shape where these deliberately do not. zipdoc lifts
+// prose from a typed op's doc comment, so these
+// have nowhere else to state it, and without a Describe the document publishes an
+// operationId and NOTHING else — an SDK method for a MONEY endpoint that cannot
+// say whose ledger it reads, and a CLI command with no help.
 //
 // Declared through the same registry Register uses, so a description renders only while
 // the router actually serves the route: prose is additive metadata on routes that
