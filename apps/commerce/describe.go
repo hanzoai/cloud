@@ -55,6 +55,21 @@ func describeAdmin() {
 			"user is refused 403 and an anonymous one 401. A caller whose owner claim has no "+
 			"tenant row gets a 404 byte-identical to the one a cross-tenant probe would get.")
 
+	openapi.Describe("/_/commerce/providers/:name", http.MethodPut,
+		"Turn one payment rail on or off for your own tenant",
+		"Flips the enabled flag on the named provider in the caller's own tenant row, so a rail "+
+			"can be taken out of service — or put back — without touching its credentials. The "+
+			"KMS paths are never read, written or echoed here; this verb owns exactly one bit.\n\n"+
+			"Disabling is what a checkout page sees immediately: only ENABLED providers are listed "+
+			"by the public tenant read, so a rail turned off here stops being offered rather than "+
+			"failing at authorization time. Re-enabling restores the same stored credential, which "+
+			"is why this is a switch and not a delete.\n\n"+
+			"The tenant is derived from the IAM owner claim and from nothing else — there is no "+
+			"tenant parameter to supply, so a cross-tenant write is not expressible. A tenant "+
+			"admin or a platform admin may call it; a plain authenticated user is refused 403 and "+
+			"an anonymous one 401. A provider name with no row on that tenant is 404, the same "+
+			"answer a cross-tenant probe gets.")
+
 	openapi.Describe("/_/commerce/tenants", http.MethodPost,
 		"Create a checkout tenant: hostnames, brand, IAM, IDV, providers and backend",
 		"Registers a new hosted-checkout tenant so its hostnames resolve to their own branding, "+
