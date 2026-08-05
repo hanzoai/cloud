@@ -44,7 +44,10 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 		Service:          rm.provider,
 		ProjectValidated: projectValidated,
 	}
-	ctx, cancel := context.WithTimeout(For(ctx, org), peerCallTimeout)
+	// Subject is the WALLET, For() names the BOOKS that hold it — the same two
+	// halves the co-resident path splits (booksOf). Passing the wallet key as the
+	// tenant would ask commerce for an org named "hanzo/stranger", which is no org.
+	ctx, cancel := context.WithTimeout(For(ctx, booksOf(org)), peerCallTimeout)
 	defer cancel()
 
 	v, err := commerce.FinanceAuthorize(ctx, &in)
@@ -96,7 +99,7 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted fu
 		// The debit acts FOR the org with no request behind it, so it states the
 		// tenant explicitly — the books it writes to are chosen here, not by
 		// whatever ran last.
-		ctx, cancel := context.WithTimeout(For(context.Background(), org), peerCallTimeout)
+		ctx, cancel := context.WithTimeout(For(context.Background(), booksOf(org)), peerCallTimeout)
 		defer cancel()
 		if _, err := commerce.FinanceRecord(ctx, &in); err != nil && log != nil {
 			log.Error("resource debit failed over the internal plane (resource created, not billed)",

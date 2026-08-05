@@ -265,13 +265,39 @@ func TestDefaultPrice(t *testing.T) {
 			t.Errorf("DefaultPrice(%q) = %d, want %d (%s)", tc.path, got, tc.want, tc.why)
 		}
 	}
+
+	// A READ of the very same priced path costs nothing. This is the rule that made a
+	// positive declaration possible at all: DefaultPrice priced by PATH alone, so a
+	// surface declared at 7¢ charged 7¢ to list its own contents, and the only safe
+	// declaration was Free — which is what all 95 surfaces chose. It is asserted
+	// against the SAME path the row above charges for, so the two can never be
+	// reconciled by weakening one of them.
+	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
+		if got := priceForMethod(t, m, "/v1/probe/thing"); got != 0 {
+			t.Errorf("DefaultPrice(%s /v1/probe/thing) = %d, want 0 — a read spends nothing, "+
+				"so it costs nothing (Consumes)", m, got)
+		}
+	}
+	// And the write still does, measured through the same helper — otherwise the
+	// three zeros above are satisfied by a price that is broken for every method.
+	if got := priceForMethod(t, http.MethodPost, "/v1/probe/thing"); got != 7 {
+		t.Errorf("DefaultPrice(POST /v1/probe/thing) = %d, want 7", got)
+	}
 }
 
-// priceForPath routes a real request at path p through a one-shot handler that
+// priceForPath is priceForMethod on a WRITE. The table above asks what a surface
+// COSTS, and only a consuming request costs anything (Consumes, price.go) — so a
+// read would answer 0 for every row and make the whole table unfalsifiable.
+func priceForPath(t *testing.T, p string) int64 {
+	t.Helper()
+	return priceForMethod(t, http.MethodPost, p)
+}
+
+// priceForMethod routes a real request at path p through a one-shot handler that
 // evaluates DefaultPrice against the genuine zip.Ctx and captures the result.
 // The price is read INSIDE the handler (never after Test returns) because Fiber
 // recycles its context once the handler completes.
-func priceForPath(t *testing.T, p string) int64 {
+func priceForMethod(t *testing.T, method, p string) int64 {
 	t.Helper()
 	var got int64
 	done := make(chan struct{})
@@ -281,7 +307,7 @@ func priceForPath(t *testing.T, p string) int64 {
 		close(done)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	}))
-	req := httptest.NewRequest(http.MethodGet, p, nil)
+	req := httptest.NewRequest(method, p, nil)
 	if _, err := app.Test(req); err != nil {
 		t.Fatalf("Test(%q): %v", p, err)
 	}
