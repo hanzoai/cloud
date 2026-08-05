@@ -1383,6 +1383,44 @@ func caller(ctx context.Context) string {
 	return c.User()
 }
 
+// admitArming refuses to take an organisation's model LIVE for a caller who is not
+// an admin of it.
+//
+// ARMING IS NOT TUNING, and only one of the two is self-service. Restating the
+// appetite moves how much of an organisation's own stream it examines; arming
+// decides whether the model may change an OUTCOME at all — a payment frozen, a
+// grant refused — for every customer that organisation has. That is a governance
+// act, and before this the whole regime was one write behind [ops.gate]'s billing
+// check and [ops.admit]'s tenant guard, neither of which asks anything about
+// authority: any member of an org could PUT {"live":true} and arm it.
+//
+// ORG-ADMIN, AND DELIBERATELY NOT SUPERADMIN. The organisation is arming ITSELF,
+// so its own admin is exactly the right authority and requiring platform sudo
+// would make every customer's governance decision Hanzo's to take. [cloud.Admin]
+// is that scope — the org's own admin, with SuperAdmin as the stated superset —
+// read through the platform's ONE predicate set rather than a fourth spelling of
+// it.
+//
+// DISARMING IS LEFT SELF-SERVICE, which is the scope of the finding and not an
+// oversight worth hiding: returning a model to shadow cannot freeze a payment, and
+// today no organisation is armed at all.
+//
+// Off the HTTP path there is no principal, so there is no authority and no arming
+// — the same fail-closed answer [caller] gives, for the same reason. It lives
+// beside [ops.gate] and [caller] because this package reaches for the raw request
+// in ONE file or in as many as nobody is counting.
+func admitArming(ctx context.Context, live bool) error {
+	if !live {
+		return nil
+	}
+	c, ok := cloud.Request(ctx)
+	if !ok || !cloud.Admin.Admits(cloud.AuthorityOf(c)) {
+		return zip.ErrForbidden("taking this organisation's model live is an act for an admin of " +
+			"this organisation; stating the appetite is not")
+	}
+	return nil
+}
+
 // window validates a day count and returns it as a duration. 400 days is the
 // surface's own retention, so asking for more asks for rows that do not exist.
 func window(days int) (time.Duration, error) {
