@@ -2903,6 +2903,57 @@ components:
           description: nvidia | amd | apple | intel | ...
           type: string
       type: object
+    GenerateInput:
+      properties:
+        brief:
+          description: the brief/goal driving copy generation
+          type: string
+        channels:
+          description: target channels (SocialPost)
+          type: string
+        design:
+          description: studio design slug (asset source)
+          type: string
+        doctype:
+          description: Campaign | SocialPost | Asset
+          type: string
+        kind:
+          description: 'asset kind: ecom|product|lifestyle|hover|hero'
+          type: string
+        model:
+          description: optional zen model override (copy)
+          type: string
+        product:
+          description: commerce product handle (copy context)
+          type: string
+        project:
+          description: brand/site sub-scope (billing + tenancy axis)
+          type: string
+        source_media:
+          description: asset source image (design CAD/photo)
+          type: string
+        title:
+          description: optional explicit title
+          type: string
+        tone:
+          description: tone override for a single draft
+          type: string
+        voice:
+          description: brand-voice guidance for the copy director
+          type: string
+      type: object
+    GenerateResult:
+      properties:
+        doctype:
+          description: the marketing type the draft was filed as
+          type: string
+        name:
+          description: the new document's name — its address for every later call
+          type: string
+        status:
+          description: always "draft"; the lifecycle owns the initial state
+          type: string
+      type: object
     Genesis:
       properties:
         at:
@@ -58425,16 +58476,60 @@ paths:
   /v1/content/generate:
     post:
       description: |-
-        Answers 201 with the created draft's identity — {doctype, name, status} — and the document itself lands in the CMS through the SAME validate and lifecycle-hook pipeline an ordinary create runs. This is a WRITE, not a preview: there is no dry-run, and every call that succeeds leaves a document behind.
+        Draft a piece of marketing content and file it in the CMS as a draft.
 
-        `doctype` picks which of two generation planes runs, and they are the only two. Campaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by default, overridable per request with `model` or per deployment); Asset is a studio image render the AI plane never sees. Everything else about the call is identical.
+        Answers 201 with the created draft's identity — {doctype, name, status} — and the
+        document itself lands in the CMS through the SAME validate and lifecycle-hook
+        pipeline an ordinary create runs. This is a WRITE, not a preview: there is no
+        dry-run, and every call that succeeds leaves a document behind.
 
-        MONEY, metered in exactly one place per mode and never both. Copy rides the platform's own inference meter — the org's balance is authorised before the model call and debited at the exact token cost after — so content never re-bills it. A studio render is invisible to that meter, so content is the sole meter for it: the org is gated BEFORE the GPU compute and refused 402 when out of funds or over its spend cap, and the debit is recorded only once the render actually returns, because the billable event is the consumed compute and not the CMS row. `project` rides the BODY rather than a server-minted identity claim, so it attributes spend but a project-scoped cap stays soft on it — the org is the value that is enforced.
+        `doctype` picks which of two generation planes runs, and they are the only two.
+        Campaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by
+        default, overridable per request with `model` or per deployment); Asset is a studio
+        image render the AI plane never sees. Everything else about the call is identical.
 
-        The org is the caller's own, resolved once from the validated principal and never read from the body; a caller without one is refused 403. Status is not the generator's to choose: a generated item is ALWAYS a draft, and the storage-boundary hook enforces that a second time.
+        MONEY, metered in exactly one place per mode and never both. Copy rides the
+        platform's own inference meter — the org's balance is authorised before the model
+        call and debited at the exact token cost after — so content never re-bills it. A
+        studio render is invisible to that meter, so content is the sole meter for it: the
+        org is gated BEFORE the GPU compute and refused 402 when out of funds or over its
+        spend cap, and the debit is recorded only once the render actually returns, because
+        the billable event is the consumed compute and not the CMS row. `project` rides the
+        BODY rather than a server-minted identity claim, so it attributes spend but a
+        project-scoped cap stays soft on it — the org is the value that is enforced.
 
-        It fails closed rather than inventing anything. An unknown content type is 404 and a deployment whose marketing module is not installed is 409 naming the install call. An AI plane or studio that is unconfigured or unreachable, a graph the studio rejects, and a render that does not return in time all degrade to 503 — never fabricated copy, never a fake render. A `source_media` that fails the SSRF and traversal validator is 400 raised before the billing gate and before the studio is contacted, so a hostile source never costs the caller anything.
+        The org is the caller's own, resolved once from the validated principal and never
+        read from the body; a caller without one is refused 403. Status is not the
+        generator's to choose: a generated item is ALWAYS a draft, and the storage-boundary
+        hook enforces that a second time.
+
+        It fails closed rather than inventing anything. An unknown content type is 404 and a
+        deployment whose marketing module is not installed is 409 naming the install call.
+        An AI plane or studio that is unconfigured or unreachable, a graph the studio
+        rejects, and a render that does not return in time all degrade to 503 — never
+        fabricated copy, never a fake render. A `source_media` that fails the SSRF and
+        traversal validator is 400 raised before the billing gate and before the studio is
+        contacted, so a hostile source never costs the caller anything.
       operationId: post_v1_content_generate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResult'
+          description: created
+        "402":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResult'
+          description: payment required
       summary: Draft a piece of marketing content and file it in the CMS as a draft.
       tags:
       - content
