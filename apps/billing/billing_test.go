@@ -69,6 +69,9 @@ func mountApp(t *testing.T, base, token string) *zip.App {
 	t.Setenv("CLOUD_COMMERCE_HTTP_URL", base)
 	t.Setenv("COMMERCE_SERVICE_TOKEN", token)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// The composer's install, once at the root, ahead of every route it serves:
+	// cloud.Bridge parks the validated org on the context for the typed finance ops.
+	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

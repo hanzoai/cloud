@@ -95,6 +95,9 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// The composer's install, once at the root, ahead of every route it serves:
+	// cloud.Bridge parks the validated org on the context for the typed ops.
+	app.Use(cloud.Bridge())
 	routes(app, s)
 	return app, s, fc
 }
