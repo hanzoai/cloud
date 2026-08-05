@@ -131,8 +131,20 @@ COPY go.mod go.sum ./
 # and resolves fine from a clean cache. That is exactly what wedged the release
 # on otel-collector v0.144.10. BUMP THE SUFFIX (-v4 -> -v5) to force a cold
 # module cache the next time a phantom pin poisons it.
+# FORGE_TOKEN, when supplied, points our OWN modules at git.hanzo.ai. The module
+# path stays github.com/hanzoai/* — a name, not an address — and git dials the
+# canonical forge instead. The longer prefix wins in git, so only hanzoai/* is
+# redirected and every other github.com module still goes to GitHub. go.sum is
+# unchanged and still authoritative: the forge mirrors the same objects, so the
+# zip hashes to the committed h1: line, and a forge serving different bytes fails
+# the build rather than shipping them. Both secrets are optional; absent either,
+# this falls back to exactly the previous behaviour.
 RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
+    --mount=type=secret,id=FORGE_TOKEN \
     --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    if [ -s /run/secrets/FORGE_TOKEN ]; then \
+      git config --global url."https://x:$(cat /run/secrets/FORGE_TOKEN)@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"; \
+    fi && \
     if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
     fi && \
