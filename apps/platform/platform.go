@@ -152,7 +152,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
 	// serves repos at this host), so a self-hosted-git app builds with no env.
-	selfGitHost = strings.ToLower(strings.TrimSpace(deps.Domain))
+	//
+	// The APEX, not deps.Domain verbatim. deps.Domain is this deployment's own
+	// host — "api.hanzo.ai" — and the forge is "git.hanzo.ai": a SIBLING, not a
+	// child. hostAllowed matches selfGitHost or a subdomain OF it, so handing it
+	// the API host made the self-hosted-git allowance unreachable: every native
+	// build was refused with `host "git.hanzo.ai" is not an allowed git
+	// provider`, and the estate fell back to GitHub. Taking the registrable apex
+	// ("hanzo.ai") admits every sibling the deployment owns — git., ci., cd. —
+	// for hanzo.ai, lux.network, zoo.network and any white-label domain alike,
+	// with no list to maintain per brand.
+	selfGitHost = apexOf(deps.Domain)
 
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
