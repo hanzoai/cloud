@@ -176,6 +176,10 @@ func stopSink() {
 func Shutdown(context.Context) error {
 	stopSink()
 	closeBus()
+	// The replay door's Kafka client (replay.go) is the subsystem's OTHER outbound
+	// connection, and it is released here for the same reason the bus is: Mount does
+	// not return a handle, so what the package opened the package has to close.
+	closeProducer()
 	return nil
 }
 
@@ -285,6 +289,19 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	}))
 	app.Post("/v1/event/:project/envelope", obsError)
 	app.Post("/v1/event/:project/store", obsError)
+
+	// The session-replay snapshot door (replay.go). Registered HERE, by hand, for
+	// the same reason the Sentry wire above is: it is not an entry in `doors`, and
+	// it cannot be. A door in that table is a wire that decodes to []CaptureEvent
+	// and flows through the ONE write core onto the event plane; a snapshot batch is
+	// an opaque rrweb recording bound for a different consumer on a different
+	// transport, and it lands no row in the warehouse at all.
+	//
+	// What it DOES share is the thing worth sharing: admission. replayIngest
+	// resolves its credential through eventTenant and refuses through the same
+	// cannotAttribute/cannotWrite vocabulary as every door, so there is no second
+	// resolver on this surface.
+	app.Post(replayPath, cloud.Handle(s, replayIngest))
 
 	// /v1/errors is the type:'error' read lens over the same rows — a validated
 	// principal, since a read never accepts the write-only publishable key. MINTING is
