@@ -22,7 +22,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/internal/iamtest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -593,6 +595,54 @@ func TestSigningUsesTheFilesSecretVerbatim(t *testing.T) {
 
 // ── the tenant boundary, at the level that enforces it ───────────────────────
 
+// admitsOn drives one request through THE REAL IDENTITY BOUNDARY and runs
+// st.admits against its live context — which is pooled and recycled the moment the
+// handler returns, so the call has to happen inside it.
+//
+// boundary selects what a test is modelling, and the distinction is the whole
+// point of these cases:
+//
+//   - true  — cloud.IdentityMiddleware installed, exactly as Serve installs it.
+//     Client-sent identity headers are STRIPPED and the attestation is minted from
+//     the token or not at all.
+//   - false — no boundary, which is what apps/meet's own plugin main actually runs.
+//     Nothing strips anything, so every identity header on the wire is the
+//     client's. A lane that reads one here is reading whatever was typed.
+func admitsOn(t *testing.T, st state, room, auth string, headers map[string]string, boundary bool) (j joiner, ok bool) {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if boundary {
+		app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
+	}
+	app.Use(cloud.Bridge())
+	app.Get("/probe", func(c *zip.Ctx) error {
+		j, ok = st.admits(c, room)
+		return c.String(http.StatusOK, "ok")
+	})
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	if _, err := app.Test(req); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	return j, ok
+}
+
+// jwksURL is where the per-test issuer publishes; set by iamIssuer below.
+var jwksURL string
+
+// iamIssuer stands up the signing issuer these tests mint IAM tokens with.
+func iamIssuer(t *testing.T) *iamtest.Issuer0 {
+	t.Helper()
+	iss := iamtest.New(t)
+	jwksURL = iss.URL
+	return iss
+}
+
 // TestAdmitsBindsRoomToTheSignedWorkspace tests `admits`, NOT the workspace() helper.
 // That distinction is the whole point: TestWorkspaceOfRoom pins the parse in isolation
 // and constrains nothing about how admits USES it, so mutating the comparison from
@@ -614,16 +664,16 @@ func TestAdmitsBindsRoomToTheSignedWorkspace(t *testing.T) {
 		workspaceA + "-evil_standup_1",         // suffixed segment
 		workspaceA + workspaceA + "_standup_1", // segment 0 starts with the real uuid
 	} {
-		if _, ok := st.admits(room, member(workspaceA)); ok {
+		if _, ok := admitsOn(t, st, room, member(workspaceA), nil, false); ok {
 			t.Errorf("admitted room %q for workspace %q — segment 0 is not an exact match", room, workspaceA)
 		}
 	}
 	// The exact segment is admitted, so the test discriminates rather than always failing.
-	if _, ok := st.admits(roomIn(workspaceA), member(workspaceA)); !ok {
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), member(workspaceA), nil, false); !ok {
 		t.Fatal("refused the exact-workspace room; the check is not discriminating")
 	}
 	// And the converse direction: a member of A cannot enter B's room.
-	if _, ok := st.admits(roomIn(workspaceB), member(workspaceA)); ok {
+	if _, ok := admitsOn(t, st, roomIn(workspaceB), member(workspaceA), nil, false); ok {
 		t.Error("a member of workspace A was admitted to a workspace B room")
 	}
 }
@@ -637,16 +687,16 @@ func TestAdmitsRefusesUnboundSession(t *testing.T) {
 	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
 	unbound := "Bearer " + session(t, "", teamSecret, nil, hour)
 	for _, room := range []string{"_standup_1", "_", "_anything"} {
-		if _, ok := st.admits(room, unbound); ok {
+		if _, ok := admitsOn(t, st, room, unbound, nil, false); ok {
 			t.Errorf("an unbound session was admitted to %q", room)
 		}
 	}
 	// It is also refused for a normal room, and a BOUND session is admitted — so the
 	// refusal is about the empty claim, not about rooms in general.
-	if _, ok := st.admits(roomIn(workspaceA), unbound); ok {
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), unbound, nil, false); ok {
 		t.Error("an unbound session was admitted to a real workspace room")
 	}
-	if _, ok := st.admits(roomIn(workspaceA), "Bearer "+session(t, workspaceA, teamSecret, nil, hour)); !ok {
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), "Bearer "+session(t, workspaceA, teamSecret, nil, hour), nil, false); !ok {
 		t.Fatal("a bound member was refused; the test is not discriminating")
 	}
 }
@@ -838,4 +888,124 @@ func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestForgedIdentityHeadersBuyNothing is the F1 regression, and it is the reason
+// these tests run the real boundary.
+//
+// meet used to select its IAM lane on `c.Org() != "" && c.User() != ""` — two
+// HEADERS. In a process with no identity boundary installed nothing strips them,
+// and apps/meet's own plugin main is exactly such a process. So any caller could
+// name themselves, take the lane, and be issued a LiveKit seat under a chosen
+// identity — and LiveKit EVICTS an existing participant on a duplicate `sub`, so
+// the forgery ejected a colleague from a live call and impersonated them to the
+// room.
+//
+// The lane now selects on the boundary's own attestation, which no header can
+// create. Both shapes are pinned: with no boundary the headers are inert, and with
+// the boundary they are stripped before anything reads them.
+func TestForgedIdentityHeadersBuyNothing(t *testing.T) {
+	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
+	iamIssuer(t)
+	forged := map[string]string{
+		"X-Org-Id":  "acme",
+		"X-User-Id": "11111111-2222-4333-8444-555555555555",
+	}
+	for _, boundary := range []bool{false, true} {
+		if j, ok := admitsOn(t, st, roomIn(workspaceA), "", forged, boundary); ok {
+			t.Fatalf("SECURITY (boundary=%v): forged identity headers bought a seat as %q", boundary, j.account)
+		}
+	}
+	// And they do not upgrade a caller who holds nothing else, nor downgrade one who
+	// holds a real HS256 session: the headers are simply not an input.
+	hour := time.Now().Add(time.Hour).Unix()
+	good := "Bearer " + session(t, workspaceA, teamSecret, nil, hour)
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), good, forged, false); !ok {
+		t.Fatal("forged headers displaced a valid HS256 session")
+	}
+}
+
+// TestIAMLaneTakesTheAttestedPrincipalAndFailsClosed proves the other half: a REAL
+// IAM access token, through the REAL boundary, does take the IAM lane — and on that
+// lane the authority is apps/team over the internal plane. There is no team peer
+// here, so the ask cannot be answered, and an authority that cannot answer is a
+// refusal rather than an assumption of membership.
+func TestIAMLaneTakesTheAttestedPrincipalAndFailsClosed(t *testing.T) {
+	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
+	iss := iamIssuer(t)
+	hour := time.Now().Add(time.Hour).Unix()
+
+	// A token that WOULD be admitted on the HS256 arm, presented by the same caller,
+	// so the refusal below is about the lane and not about the credential.
+	good := "Bearer " + session(t, workspaceA, teamSecret, nil, hour)
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), good, nil, true); !ok {
+		t.Fatal("the HS256 arm refused a bound member; the test is not discriminating")
+	}
+	iamTok := "Bearer " + iss.Sign(t, iamtest.Claims{Sub: "11111111-2222-4333-8444-555555555555", Owner: "acme"})
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), iamTok, nil, true); ok {
+		t.Fatal("the IAM lane admitted a caller with no answer from the workspace rows")
+	}
+	// A room that names no workspace is refused before anything is asked.
+	if _, ok := admitsOn(t, st, "no-separator", iamTok, nil, true); ok {
+		t.Fatal("the IAM lane admitted a room that names no workspace")
+	}
+}
+
+// TestPrivilegedIsFailClosed pins the role predicate the IAM lane grants on. It is
+// the same vocabulary token.Privileged reads, over a role the SERVER read: a guest
+// is reduced, and an absent or unrecognised role is not privileged, so a role added
+// to the invite set tomorrow starts without a seat in a colleague's meeting.
+func TestPrivilegedIsFailClosed(t *testing.T) {
+	for _, role := range []string{token.RoleOwner, token.RoleAdmin, token.RoleMember, " owner "} {
+		if !privileged(role) {
+			t.Errorf("privileged(%q) = false, want true", role)
+		}
+	}
+	for _, role := range []string{"guest", "", "   ", "GUEST", "Owner", "auditor"} {
+		if privileged(role) {
+			t.Errorf("privileged(%q) = true — an unproven role must not confer a seat", role)
+		}
+	}
+}
+
+// TestMachineCredentialIsNotAPerson is the F6/F7 regression.
+//
+// The identity boundary stamps an org AND a user for an sk- API key, so a lane
+// selected on "has an org and a user" put a MACHINE on the lane whose whole
+// question is which human is in this room — and LiveKit seats a participant under
+// whatever identity it is handed, evicting the live one on a duplicate. A key
+// principal carries no `sub`, so requiring one refuses it structurally rather than
+// by trying to enumerate credential kinds.
+func TestMachineCredentialIsNotAPerson(t *testing.T) {
+	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
+	iamIssuer(t)
+	// The shape a key principal has after the boundary: an attested org and user,
+	// and no subject.
+	for _, p := range []principal.Principal{
+		{Org: "acme", User: "sk-key-user"},              // API key: no sub
+		{Org: "acme", User: "hanzo/robot", Subject: ""}, // client_credentials
+		{Org: "", User: "u", Subject: "has-a-sub"},      // no tenant
+	} {
+		if _, ok := admitsWithPrincipal(t, st, roomIn(workspaceA), p); ok {
+			t.Fatalf("SECURITY: a principal with no human subject was admitted: %+v", p)
+		}
+	}
+}
+
+// admitsWithPrincipal mints an attestation directly — the one way to model what the
+// boundary produces for a credential kind this test cannot mint (an API key is
+// resolved against IAM, not signed). principal.Mint is the boundary's own call, so
+// this exercises exactly the value admits() reads.
+func admitsWithPrincipal(t *testing.T, st state, room string, p principal.Principal) (j joiner, ok bool) {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Get("/probe", func(c *zip.Ctx) error {
+		principal.Mint(c, p)
+		j, ok = st.admits(c, room)
+		return c.String(http.StatusOK, "ok")
+	})
+	if _, err := app.Test(httptest.NewRequest(http.MethodGet, "/probe", nil)); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	return j, ok
 }

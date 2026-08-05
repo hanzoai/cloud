@@ -349,6 +349,43 @@ func (s *accountStore) Membership(ctx context.Context, workspaceID, account stri
 	return role, true
 }
 
+// AccountForSubject is the ONE answer to "which team account is this IAM
+// identity?", and the store is deliberately the one that gives it.
+//
+// The subject is the `sub` claim VERBATIM and nothing else. It is NOT the
+// canonical user id: that one falls back sub → preferred_username → name, so a
+// token carrying no sub presents its USERNAME there — and accountID returns a
+// UUID-shaped input verbatim, so a username that is a colleague's account uuid
+// would have resolved to the colleague. Subject-only closes that, and an empty
+// subject is refused exactly as the OAuth callback's userinfo() refuses one.
+//
+// It then CONFIRMS the derived id against the rows instead of asserting it. The
+// derivation (accountID) is the same function establishSession stores the rows
+// under — one derivation, not two — but a login is what CREATES those rows, so an
+// id that matches none is an identity this deployment has never seen, and the
+// honest answer is "no account" rather than an account-shaped string every later
+// query would then scope by. That is what makes the caller's refusal true rather
+// than merely documented.
+//
+// The existence check is org-scoped: a member row is only this org's if its
+// workspace is. So a subject known in org A resolves to nothing in org B, and the
+// answer cannot be used to probe another tenant.
+func (s *accountStore) AccountForSubject(ctx context.Context, org, subject string) (string, bool) {
+	account := accountID(strings.TrimSpace(subject))
+	if account == "" || strings.TrimSpace(org) == "" {
+		return "", false
+	}
+	var found string
+	err := s.db.Select("m.user_id").From("members m").
+		InnerJoin("workspaces w", query.NewExp("w.id = m.workspace_id")).
+		Where(query.HashExp{"w.owner_org": org, "m.user_id": account}).
+		Limit(1).WithContext(ctx).Row(&found)
+	if err != nil || found == "" {
+		return "", false
+	}
+	return found, true
+}
+
 // MembersForWorkspaceUUID returns the member rows of a workspace, resolved by
 // (org, workspace uuid) so a foreign tenant's uuid returns nothing. This is the
 // human half of the roster reconcile.
