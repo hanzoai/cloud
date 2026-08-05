@@ -59,6 +59,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -256,21 +257,73 @@ var defaultJurisdictions = reference.Jurisdictions{
 	Monitoring: []string{"HT", "LY", "SS", "VE", "YE"},
 }
 
+// listing is the jurisdiction listing in force, and the account of how it was
+// resolved. The two travel together because "which listing decided this" is part
+// of what makes a freeze defensible, and because the ONE state an operator cannot
+// see for themselves — a listing they stated that cannot decide anything — has to
+// be reportable rather than merely survivable.
+type listing struct {
+	reference.Jurisdictions
+	// Operator is whether this is the OPERATOR's listing rather than the compiled
+	// default.
+	Operator bool
+	// Gap is why a stated operator listing was NOT taken. Empty when none was
+	// stated, or when the one stated is in force.
+	Gap string
+}
+
 // jurisdictions is the listing the rule evaluates against: the OPERATOR's if they
-// stated one, and [defaultJurisdictions] otherwise.
+// stated a usable one, and [defaultJurisdictions] otherwise.
 //
 // The operator's wins whole rather than merging, because a merged listing is one
 // nobody stated and nobody can reproduce. It is resolved once per process —
-// membership is not something a request may move — and [reference.Jurisdictions]
-// itself refuses to answer from a listing that is empty or undated, so a
-// mis-stated one degrades to "cannot assess" and says so, rather than to "nowhere
-// is risky".
-var jurisdictions = sync.OnceValue(func() reference.Jurisdictions {
-	if j := reference.JurisdictionsFromEnv(); len(j.Action) > 0 || len(j.Monitoring) > 0 {
-		return j
+// membership is not something a request may move.
+//
+// A STATED LISTING WITH NO DATE IS NOT A LISTING, and this is the correction.
+// [reference.Jurisdictions] refuses to answer from an undated one — rightly, since
+// "not listed" from a listing of unknown currency is not a fact — so preferring one
+// whole on the strength of its MEMBERSHIP alone put a listing in force that then
+// errored on every country. Every determination fell to the unplaced branch, the
+// ACTION tier became unreachable, and the freeze the rule exists for vanished:
+// what remained was review at or past the freeze value, which looks exactly like a
+// rule that is working. The operator sees no error, because the one that matters is
+// swallowed per-country by design.
+//
+// So the date is part of what makes an operator listing USABLE, it is checked
+// where the listing is chosen, and an unusable one loses to the dated compiled
+// default instead of disarming the half of the rule it was stated to arm. The
+// reason is carried out on [listing.Gap] rather than logged from in here: this is
+// resolved once, lazily, and a control that switched itself off must be visible
+// from OUTSIDE the process — [Mount] says it at startup and /v1/risk/health keeps
+// saying it.
+//
+// UNSET and MALFORMED are left exactly as they were. [reference.JurisdictionsFromEnv]
+// answers the empty listing for both, the empty listing falls to the default here,
+// and the default is dated — so neither ever reaches the rule as a listing that
+// cannot decide.
+var jurisdictions = sync.OnceValue(func() listing { return resolve(reference.JurisdictionsFromEnv()) })
+
+// resolve chooses the listing in force from whatever the operator stated. It is
+// separated from the memoization above because they are two things: reading the
+// environment happens once per process, and CHOOSING is a rule — one that has to be
+// exercised against every shape an operator can stated, which a value resolved once
+// at first use cannot be.
+func resolve(stated reference.Jurisdictions) listing {
+	switch {
+	case len(stated.Action) == 0 && len(stated.Monitoring) == 0:
+		// Unset, or malformed JSON: [reference.JurisdictionsFromEnv] answers the empty
+		// listing for both, and both correctly take the dated default.
+		return listing{Jurisdictions: defaultJurisdictions}
+	case stated.AsOf.IsZero():
+		return listing{
+			Jurisdictions: defaultJurisdictions,
+			Gap: "AML_JURISDICTIONS states " + strconv.Itoa(len(stated.Action)+len(stated.Monitoring)) +
+				" countries with no `as_of` date, so no country can be assessed against it; " +
+				"the compiled default listing of " + listedAsOf.Format("2006-01-02") + " is in force",
+		}
 	}
-	return defaultJurisdictions
-})
+	return listing{Jurisdictions: stated, Operator: true}
+}
 
 // policyWindow is the rolling window the rate bound is measured over.
 const policyWindow = 24 * time.Hour
