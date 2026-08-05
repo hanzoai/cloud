@@ -265,7 +265,26 @@ func TestNoInputCarriesAnOrganisation(t *testing.T) {
 
 // ── the wire ─────────────────────────────────────────────────────────────────
 
+// req calls as an ordinary MEMBER of org — the authority every tenant surface
+// admits, and the one nearly every op here needs.
 func req(t *testing.T, app *zip.App, method, path, org, user, body string) (int, []byte) {
+	t.Helper()
+	return call(t, app, method, path, org, user, body, false)
+}
+
+// reqAdmin calls as an ADMIN OF THAT ORG: the org-scoped, self-service authority
+// the identity boundary mints as X-User-IsOrgAdmin, which [admitArming] requires to
+// take an organisation's model live.
+//
+// It is deliberately not SuperAdmin. An organisation arming its own model is its
+// own decision, and a test that reached for platform sudo to make it would be
+// asserting the wrong rule.
+func reqAdmin(t *testing.T, app *zip.App, method, path, org, user, body string) (int, []byte) {
+	t.Helper()
+	return call(t, app, method, path, org, user, body, true)
+}
+
+func call(t *testing.T, app *zip.App, method, path, org, user, body string, orgAdmin bool) (int, []byte) {
 	t.Helper()
 	var r *http.Request
 	if body == "" {
@@ -279,6 +298,11 @@ func req(t *testing.T, app *zip.App, method, path, org, user, body string) (int,
 	}
 	if user != "" {
 		r.Header.Set("X-User-Id", user)
+	}
+	if orgAdmin {
+		// The bit the identity boundary mints from the caller's role in its OWN org,
+		// which is the one principal.IsOrgAdmin reads.
+		r.Header.Set("X-User-IsOrgAdmin", "true")
 	}
 	resp, err := app.Test(r)
 	if err != nil {
