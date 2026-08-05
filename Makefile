@@ -258,7 +258,12 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 	# does, one package at a time — whole-module loading extracts differently
 	# (zap-proto/zip zipdoc: single-vs-module load divergence) and a gate must
 	# never disagree with the generator it polices.
-	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; 	done
+	# A dot-directory is not this module's source. An agent worktree at
+	# .claude/worktrees/<id>/ is a whole second checkout of this repository, and
+	# the walk read it: 203 packages where there are 104, and it went red on a
+	# copy's o11y while nothing here had changed. Same rule the source-walking
+	# gates in Go state (typed_request_gate_test.go, orgns_test.go).
+	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; 	done
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 	# The drift gate: regenerate the document FROM SOURCE and fail on any diff.
 	# The weave above proves the subsets compose; this proves they are still the
@@ -276,7 +281,7 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
 	@echo ">>            a route added without regenerating will pass here and fail CI."
 	@echo ">>            the real gate:  make -f mk/fleet.mk surface-check"
-	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
+	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
 	done
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
