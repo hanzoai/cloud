@@ -286,11 +286,28 @@ func wakeScorer(lg log.Logger) {
 // resolved those separately would judge one key and teach another — leaving the
 // judged one's velocity empty forever, however many payments settled. Resolved once
 // per payment by [seen] and handed to both halves.
+//
+// TWO ORGS, NEVER ONE. A card top-up names two organisations and they are the same
+// string for every caller but one, which is exactly why holding a single value here
+// was wrong: the charge is WRITTEN in one org's books ([chargedOrg]) and the balance
+// it funds belongs to another's ([payerOrg]). A platform SuperAdmin acting inside a
+// customer's org is the caller that separates them — commerce writes the receipt
+// under the org being acted in, and the spend gate reads the admin's own wallet — so
+// one value doing both jobs read the receipt out of a namespace it was never in.
+// They are named the way [principal] names them: `org` is the data namespace, and
+// `ledger` is the billing key.
 type payment struct {
-	// org is the organisation whose ledger this credits, and therefore the one whose
-	// model judges it ([payerOrg]).
+	// org is the organisation the charge is WRITTEN under — the commerce namespace
+	// holding the receipt the money core produced ([chargedOrg], the EFFECTIVE org).
+	// It is what both doors' handlers charge through: the browser route's org comes
+	// from iammiddleware.IAMTokenRequired and the typed op's from [payingOrg], and
+	// both are that same effective org.
 	org string
-	// subject is the payer's wallet key inside that ledger ([principal.Subject]).
+	// ledger is the organisation whose BALANCE this credits, and therefore the one
+	// whose model judges it ([payerOrg]). It is org for every caller except a
+	// masquerading SuperAdmin, which spends its own books.
+	ledger string
+	// subject is the payer's wallet key inside that LEDGER ([principal.Subject]).
 	subject string
 	// door is the ADDRESS of the mint this payment was taken at — the op's own path,
 	// not the transport's. One screen answers for two doors and a record that does
@@ -380,18 +397,36 @@ func (s screen) route(next zip.Handler) zip.Handler {
 			return nil
 		}
 		ref, receipt := settlementOf(res.Body())
-		// THE MONEY BEFORE THE RECORD, and unlike the record it can refuse the door:
-		// commerce's card core credits its own transaction store, which nothing in this
-		// binary spends from, so this is where the settlement reaches the ledger every
-		// gate actually reads (settle.go). A 200 written by the handler is overwritten by
-		// the error, because answering success to a customer whose money went nowhere is
-		// the defect, not the report of it.
-		if err := s.settle(c.Context(), p, ref, receipt); err != nil {
-			return err
-		}
-		s.learn(p, ref)
-		return nil
+		return s.record(c.Context(), p, ref, receipt)
 	}
+}
+
+// record is what a door does with a charge that CLEARED: the money, then the model.
+//
+// THE MONEY GOES FIRST, and unlike the model it can refuse the door: commerce's card
+// core credits its own transaction store, which nothing in this binary spends from, so
+// [screen.settle] is where the settlement reaches the ledger every gate actually reads
+// (settle.go). A 2xx already written by the handler is overwritten by that error,
+// because answering success to a customer whose money went nowhere is the defect, not
+// the report of it.
+//
+// THE MODEL LEARNS EITHER WAY, and that is the ordering this function exists to hold.
+// Teaching is telemetry about a payment that HAPPENED — the card cleared, whatever this
+// process managed to do about it afterwards — so gating it on the credit inverted the
+// rule that a settled charge is never dropped from the accrual: a top-up refused for a
+// currency this ledger does not hold, or for a receipt it could not read, was a real
+// payment that vanished from the payer's velocity, and a caller who could provoke the
+// refusal could pay all day without accruing anything. [screen.learn] cannot fail the
+// payment (it is detached, bounded and dropped under pressure), so nothing about
+// running it on the refusal path can reach the customer.
+//
+// It is ONE function because both doors run the same two halves in the same order and
+// the order is the whole point: a second call site is a second chance to write them the
+// other way round.
+func (s screen) record(ctx context.Context, p payment, ref, id string) error {
+	credit := s.settle(ctx, p, ref, id)
+	s.learn(p, ref)
+	return credit
 }
 
 // op composes the screen onto a TYPED op's handler — the form that reaches every
@@ -444,14 +479,13 @@ func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandle
 		// answer's own fields are the settlement fact the raw door has to read its
 		// response bytes for.
 		ref, _ := firstRef(out.ProcessorRef, out.ID)
-		// The same two halves in the same order as the raw door: the ledger the gate
-		// reads, then the model. A credit that cannot be posted refuses the op and the
-		// receipt is withheld, so an agent is never told a balance exists that does not
-		// (settle.go).
-		if err := s.settle(ctx, p, ref, out.ID); err != nil {
+		// The same two halves in the same order as the raw door, through the same value
+		// ([screen.record]): the ledger the gate reads, then the model. A credit that
+		// cannot be posted refuses the op and the receipt is withheld, so an agent is
+		// never told a balance exists that does not (settle.go).
+		if err := s.record(ctx, p, ref, out.ID); err != nil {
 			return nil, err
 		}
-		s.learn(p, ref)
 		return out, nil
 	}
 }
@@ -480,7 +514,12 @@ func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandle
 // It is never a 402. Out of funds is what a 402 means at this door and this is
 // not that — the whole point of the door is that the caller has no funds yet.
 func (s screen) decide(ctx context.Context, p payment) error {
-	v := cloud.Decide(ctx, p.org, cloud.RiskQuery{
+	// THE TENANT IS THE LEDGER, not the namespace the charge is written in: the model
+	// that judges a payment is the model of the organisation whose balance it funds,
+	// which is the same key the accrual [screen.learn] writes is filed under. A
+	// masquerading SuperAdmin is screened against its OWN history because it is its own
+	// books being credited.
+	v := cloud.Decide(ctx, p.ledger, cloud.RiskQuery{
 		Stage: cloud.StagePayment,
 		// THE PAYER, not the account. They are different populations and this door
 		// judges the first: an account's learned history is its metered inference
@@ -502,8 +541,8 @@ func (s screen) decide(ctx context.Context, p payment) error {
 	// because one door is now reached over three: a mint reached at /mcp is the fact
 	// this record exists to make visible.
 	s.lg.Info("credit door screened",
-		"door", p.door, "via", p.via,
-		"org", p.org, "action", v.Action, "scored", v.Scored(), "refusal", v.Refusal,
+		"door", p.door, "via", p.via, "org", p.org,
+		"ledger", p.ledger, "action", v.Action, "scored", v.Scored(), "refusal", v.Refusal,
 		"cause", v.Cause, "score", v.Score, "shape", v.Shape, "policy", v.Policy)
 	if v.Allowed() {
 		return nil
@@ -540,15 +579,21 @@ func (s screen) decide(ctx context.Context, p payment) error {
 // would be two payers wearing one name, and a burst split across them would halve
 // every velocity bound with the screen still switched on.
 //
+// THE OTHER ORG IS RESOLVED HERE TOO, in the same one place and off the same request:
+// where the charge is written ([chargedOrg]) is a different fact from whose balance it
+// funds, and a settlement that had to re-derive either later would be deriving it from
+// a request the door has already answered.
+//
 // The AMOUNT is a parameter because it is the one fact the transports carry
 // differently: the raw door has bytes and reads them with [wireAmount], the typed op
 // is handed them decoded. Everything else comes off the request, which every
 // projection with a connection behind it has.
 func seen(c *zip.Ctx, door string, amountCents int64, currency string) payment {
-	org := payerOrg(c)
+	ledger := payerOrg(c)
 	return payment{
-		org:     org,
-		subject: principal.Subject(c, org),
+		org:     chargedOrg(c),
+		ledger:  ledger,
+		subject: principal.Subject(c, ledger),
 		door:    door,
 		via:     c.Path(),
 		facts:   paymentSignals(c, amountCents, currency),
@@ -646,7 +691,10 @@ const teachBudget = 5 * time.Second
 // on the event plane, for the same reason. A telemetry row is expendable; a settled
 // payment is not.
 func (s screen) learn(p payment, ref string) {
-	if p.org == "" || p.subject == "" {
+	// THE LEDGER IS THE KEY, matching [screen.decide]'s tenant exactly: an accrual filed
+	// under a different org from the one the screen reads is a history the screen can
+	// never see.
+	if p.ledger == "" || p.subject == "" {
 		return
 	}
 	if ref == "" {
@@ -654,7 +702,7 @@ func (s screen) learn(p payment, ref string) {
 		// rather than minting a key: an observation under an invented id counts the same
 		// money again on the next retry, which is worse than the one it did not record.
 		s.lg.Warn("a settled payment could not be taught to the risk model: the answer named no settlement",
-			"door", p.door, "via", p.via, "org", p.org)
+			"door", p.door, "via", p.via, "ledger", p.ledger)
 		return
 	}
 	nano := p.facts[plane.SignalNano]
@@ -662,7 +710,7 @@ func (s screen) learn(p payment, ref string) {
 		// No amount this door could state in USD ([paymentSignals]). The event still
 		// happened, so it is still taught — the value features read blind, which is a
 		// different and honest fact from a payment of nothing.
-		s.lg.Debug("teaching a settled payment with no stated value", "door", p.door, "org", p.org)
+		s.lg.Debug("teaching a settled payment with no stated value", "door", p.door, "ledger", p.ledger)
 	}
 	in := &plane.RiskObserveIn{
 		Stage:      cloud.StagePayment,
@@ -678,7 +726,7 @@ func (s screen) learn(p payment, ref string) {
 			plane.SignalPeer: p.facts[plane.SignalPeer],
 		}),
 	}
-	lg, org := s.lg, p.org
+	lg, org := s.lg, p.ledger
 	select {
 	case teaching <- struct{}{}:
 	default:
@@ -810,6 +858,35 @@ func payerOrg(c *zip.Ctx) string {
 	if org := principal.Ledger(c); org != "" {
 		return org
 	}
+	return serviceOrg(c)
+}
+
+// chargedOrg is the org the CHARGE IS WRITTEN UNDER — the commerce namespace the money
+// core's receipt lives in, which is [principal.Org], the EFFECTIVE org.
+//
+// It is [payerOrg]'s twin and the two differ in exactly one caller: a platform
+// SuperAdmin acting inside a customer's org. Both doors charge through the effective
+// org — the browser route resolves it in iammiddleware.IAMTokenRequired and the typed
+// op in [payingOrg], and both read the same validated X-Org-Id — while the balance a
+// SuperAdmin funds is its OWN (principal.BillingOrg substitutes the home org for
+// exactly that identity, because platform sudo is not a statement about who pays).
+// Reading the receipt out of the payer's org therefore looked in the admin's books for
+// a row commerce had written in the customer's, found nothing, and refused a charge
+// that had already cleared — a card taken and a balance that could never be credited.
+//
+// Its fallback is the service token's, for [serviceOrg]'s reason.
+func chargedOrg(c *zip.Ctx) string {
+	if org, ok := principal.Org(c); ok {
+		return org
+	}
+	return serviceOrg(c)
+}
+
+// serviceOrg is the org a trusted COMMERCE_SERVICE_TOKEN named for itself — the one
+// lane admitted at these doors that carries no validated user, so neither principal
+// resolver answers for it. Both facts are the same org on that lane: a service token
+// names one organisation, charges in it and credits it, and cannot masquerade.
+func serviceOrg(c *zip.Ctx) string {
 	if accountclient.IsServiceToken(c) {
 		return strings.TrimSpace(c.Org())
 	}

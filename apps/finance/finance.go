@@ -180,6 +180,15 @@ func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency stri
 // the same non-empty Ref is a no-op returning the ORIGINAL entry id (checked inside the
 // same transaction as the insert), so a fixed-ref backfill/settlement credits AT MOST
 // ONCE. An empty Ref takes a fresh id, so grants stay additive (they stack).
+//
+// AND A DEPOSIT THAT FAILS ON MONEY ALREADY IN THE BOOKS ANSWERS WITH IT. The
+// in-transaction dedup covers the replay it can see; it cannot cover a transaction that
+// never reached its own read — the write it lost to a concurrent poster of the same Ref,
+// or the request context that died between the charge and the post. Both leave the same
+// state: the ref is credited and this caller was handed an error for it, which at a
+// credit door is a 500 on a card that cleared. So a failed transaction asks the only
+// question it has left — is the money there under this ref? — and a yes is the same
+// answer the replay branch gives ([creditedUnder]).
 func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (string, error) {
 	if in.Amount.Sign() <= 0 {
 		return "", fmt.Errorf("finance: deposit amount must be positive, got %s", in.Amount)
@@ -222,9 +231,46 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 		}
 		return tx.Insert(e, postings)
 	}); err != nil {
+		if posted, ok := creditedUnder(ctx, store, in.Ref); ok {
+			return posted, nil
+		}
 		return "", fmt.Errorf("finance: deposit: %w", err)
 	}
 	return entryID, nil
+}
+
+// creditReadBudget bounds the one read a failed deposit is allowed to make. It is short
+// because the caller is already past its own deadline in the case this exists for.
+const creditReadBudget = 5 * time.Second
+
+// creditedUnder answers whether ref is ALREADY a posted deposit in store, and under
+// which entry. An empty ref is never idempotent — an empty-Ref deposit takes a fresh one
+// and stacks — so it is never "already credited".
+//
+// It reads on a context DETACHED from the caller's, bounded on its own, and that is the
+// whole point rather than a detail: the caller's context is exactly what may have just
+// died, and a question that can only be asked while the asker is still waiting cannot
+// answer the case it was written for. Nothing is written here, the read is a single
+// indexed lookup, and its failure is simply "no" — a deposit that cannot prove the money
+// landed still reports the error it had.
+func creditedUnder(ctx context.Context, store *sqlstore.Store, ref string) (string, bool) {
+	if ref == "" {
+		return "", false
+	}
+	ask, cancel := context.WithTimeout(context.WithoutCancel(ctx), creditReadBudget)
+	defer cancel()
+	var id string
+	if err := store.Tx(ask, func(tx ledger.Tx) error {
+		e, ok, err := tx.EntryByRef(string(KindDeposit), "", ref)
+		if err != nil || !ok {
+			return err
+		}
+		id = e.ID
+		return nil
+	}); err != nil {
+		return "", false
+	}
+	return id, id != ""
 }
 
 // usageHook, when set, is called (async, best-effort) after a successful usage debit.

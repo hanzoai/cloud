@@ -39,11 +39,26 @@ package commerce
 //
 // # The address: the wallet the gate will debit, never the org pool by default
 //
-// (Org, Subject) IS the money's address. Both are taken from the [payment] the
+// (Ledger, Subject) IS the money's address. Both are taken from the [payment] the
 // door already resolved ONCE for the screen — payerOrg then principal.Subject —
 // which is byte-for-byte the pair principal.WalletOf hands the spend gate and
 // apps/billing hands GET /v1/billing/balance. Credit and spend therefore name one
 // wallet by construction rather than by two call sites that happen to agree.
+//
+// # And the RECEIPT is read from the org the charge was WRITTEN in, which is not it
+//
+// Those are two different organisations for one caller — a platform SuperAdmin acting
+// inside a customer's org — and holding one value for both was a card taken with no
+// way to credit it. commerce writes the receipt under the EFFECTIVE org (the org being
+// acted in: iammiddleware.IAMTokenRequired resolves it for the browser route,
+// [payingOrg] for the typed op), while principal.BillingOrg funds the SuperAdmin's own
+// books, because platform sudo is not a statement about who pays. Reading the receipt
+// out of the payer's namespace therefore looked in the admin's books for a row written
+// in the customer's, found nothing, and refused — permanently, since the retry replays
+// the same receipt into the same absent namespace and a fresh idempotency key charges
+// the card again. So the read is keyed on [payment.org] (where the money core wrote)
+// and the deposit on [payment.ledger] (whose balance it funds): one value was doing two
+// jobs, and they are two values now.
 //
 // This is also what closes the divergence payments.go records at exposePayments:
 // commerce's typed door credits its store under the ORG POOL (org.Name), while for
@@ -119,14 +134,17 @@ type settlement struct {
 	memo string
 }
 
-// receiptOf reads that record out of the PAYER'S OWN books.
+// receiptOf reads that record out of the books the CHARGE WAS WRITTEN IN.
 //
 // It is [commercebilling.ReadPayment] — the module's own published read of the row
 // its money core wrote — resolved through commerce's own org resolver, which is the
-// same binding the charge itself used. The org is the payer's, so the read doubles
-// as a check that the money core credited the tenant this deposit is about to
-// credit: a receipt that is not in the payer's namespace is not found, and a
-// not-found receipt refuses rather than funding a wallet on an unverified amount.
+// same binding the charge itself used. The org is [payment.org], the effective org the
+// handler charged through, so the read doubles as a check that the money core really
+// wrote this receipt in the namespace the door was acting in: a receipt that is not
+// there is not found, and a not-found receipt refuses rather than funding a wallet on
+// an unverified amount. It is NOT the payer's org — see the package note; those are
+// the same string for every caller but a masquerading SuperAdmin, and naming the payer
+// here is what made that caller's top-up permanently uncreditable.
 //
 // It is held on the screen rather than called directly for the one thing that
 // buys: a door test can state what settled without standing up a commerce
@@ -165,13 +183,14 @@ func receiptOf(ctx context.Context, org, id string) (settlement, error) {
 // because a top-up that quietly credits nothing is the defect this file exists to
 // end. There is no branch here that returns nil without a deposit.
 func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
-	// The payer, resolved once per payment by [seen]. Both halves are required: an
-	// org names the ledger and a subject names the wallet in it, and a deposit that
-	// guessed either would fund an address no gate reads. Neither can be empty at a
-	// door that settled a charge — the screen ahead of this refuses a payment it
-	// cannot resolve a payer for — so this is the boundary check saying so, not a
-	// fallback.
-	if p.org == "" || p.subject == "" {
+	// The payment's three names, resolved once by [seen]. All are required: `org` says
+	// which books hold the receipt this credit is sized from, `ledger` names the ledger
+	// the deposit lands in and `subject` the wallet inside it — and a deposit that
+	// guessed any of them would fund an address no gate reads off an amount nobody
+	// wrote. None can be empty at a door that settled a charge (the screen ahead of
+	// this refuses a payment it cannot resolve a payer for, and a resolved payer means
+	// a resolved namespace), so this is the boundary check saying so, not a fallback.
+	if p.org == "" || p.ledger == "" || p.subject == "" {
 		return s.uncredited(p, ref, "the door settled a payment whose payer this process could not resolve")
 	}
 	// No settlement identity, no idempotent deposit. Depositing under an invented
@@ -207,7 +226,9 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 		return s.uncredited(p, ref, "%v", err)
 	}
 	entry, err := fin.Deposit(ctx, types.DepositInput{
-		Org:      p.org,
+		// THE LEDGER, not the namespace the receipt came out of. This half of the pair
+		// is principal.WalletOf's answer and the spend gate's debit key.
+		Org:      p.ledger,
 		Subject:  p.subject,
 		Amount:   money.FromCents(got.cents),
 		Currency: cur,
@@ -222,7 +243,8 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 		return s.uncredited(p, ref, "the deposit failed: %v", err)
 	}
 	s.lg.Info("a settled card payment credited the spendable ledger",
-		"door", p.door, "via", p.via, "org", p.org, "subject", p.subject,
+		"door", p.door, "via", p.via, "org", p.org,
+		"ledger", p.ledger, "subject", p.subject,
 		"cents", got.cents, "currency", cur, "test", got.test,
 		"settlement", ref, "receipt", id, "entry", entry)
 	return nil
@@ -231,8 +253,9 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 // uncredited is the ONE answer to "the card was charged and the balance was not".
 //
 // It is loud in both directions on purpose. The OPERATOR gets a RECONCILE line
-// naming the settlement, the payer and why, because that pair is what a manual
-// credit needs and a silent 200 would leave nobody anything to look for. The
+// naming the settlement, BOTH orgs and why — the books the charge is in are where the
+// receipt is found and the ledger is where the credit belongs, and a manual credit
+// needs both — and a silent 200 would leave nobody anything to look for. The
 // CUSTOMER gets a 500 and the settlement reference — their own payment's id, which
 // the receipt already returns to them — because the honest answer to "did my
 // top-up work" is no, and because quoting the reference is what makes support able
@@ -240,7 +263,8 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 // and re-runs the deposit, so the customer's own retry is the recovery path.
 func (s screen) uncredited(p payment, ref, why string, args ...any) error {
 	s.lg.Error("RECONCILE: a card payment settled and the spendable balance was NOT credited",
-		"door", p.door, "via", p.via, "org", p.org, "subject", p.subject,
+		"door", p.door, "via", p.via, "org", p.org,
+		"ledger", p.ledger, "subject", p.subject,
 		"settlement", ref, "why", fmt.Sprintf(why, args...))
 	if ref == "" {
 		return zip.Errorf(http.StatusInternalServerError,
