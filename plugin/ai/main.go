@@ -41,7 +41,11 @@ func main() {
 	}, {
 		Name:  "ai",
 		Price: cloud.Metered,
-		App:   ai.Mount,
+		Mount: ai.Mount,
+		// ai's embedded module installs its gate across /v1 (hanzoai/ai mount.go
+		// registers one All("/v1/*") door plus the completion gate), so the grant
+		// is real. It is now DECLARED here rather than implied by the signature.
+		Global: true,
 	}}, []string{"zen", "ai"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
