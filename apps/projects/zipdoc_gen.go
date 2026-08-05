@@ -181,6 +181,9 @@ func init() {
 	zip.Describe("POST /projects/resolve-key", zip.Doc{
 		Description: "Answers which (org, project) a key names. Not-found is\n`Found:false`, never an error: the door turns that into an honest refusal, and\nan error into a 5xx. Collapsing them would refuse every live site's beacons\nduring a transient failure of this app.",
 	})
+	zip.Describe("POST /sites/live", zip.Doc{
+		Description: "Answers the cross-org directory read for the process that\nassembles the catalog, which is never this one.\n\nLiveSites returns nil when this package is unmounted, on the reasoning that a\ndeployment which hosts nothing is not a fault. That reads correctly here — the\nprocess that owns the store is the one answering — and read WRONG in the\ncatalog process, where nil meant \"ask somewhere else\" and was silently\npublished as \"nothing is live\". Every demo URL, the whole `site` kind, and the\ntemplate lane's deployed starters left the corpus without an error anywhere.\n\nNo org, on purpose, exactly like the resolve above. This is the one cross-org\nread in the package and the visibility rule that makes it safe lives in its\nquery, not in its caller.",
+	})
 	zip.Describe("POST /sites/resolve", zip.Doc{
 		Description: "Answers the multi-tenant product URL (<slug>.hanzo.app) and\nbound custom domains. Not-found is `Found:false`, never an error: the edge\nturns that into an honest 404, and an error into a 503. Collapsing the two\nwould serve 404s for real live sites during a transient failure.",
 	})
