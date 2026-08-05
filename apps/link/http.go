@@ -273,10 +273,10 @@ func devicesOf(links []Link) []deviceView {
 
 // ---- handlers ----
 
-// registerReq records one signed-in provider account on one machine. NO SECRET
+// enrollReq records one signed-in provider account on one machine. NO SECRET
 // IS SENT OR STORED — the provider's OAuth token or API key stays on the device,
 // and the caller authenticates with their own Hanzo bearer.
-type registerReq struct {
+type enrollReq struct {
 	// Machine is the stable machine identifier. Required, length-bounded.
 	Machine string `json:"machine"`
 	// Host is the machine's human hostname label.
@@ -309,7 +309,7 @@ type registerReq struct {
 // required (400 otherwise), as is a valid kind, and every field is
 // length-bounded. Scoped to the caller: a validated principal and a non-empty
 // org, else 403, so a caller writes only their OWN accounts within their own org.
-func (o ops) upsertLink(ctx context.Context, in *registerReq) (*linkView, error) {
+func (o ops) upsertLink(ctx context.Context, in *enrollReq) (*linkView, error) {
 	org, user, err := scope(ctx)
 	if err != nil {
 		return nil, err
