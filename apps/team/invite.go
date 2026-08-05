@@ -260,22 +260,21 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 }
 
 // getMemberships is the account RPC "getMemberships" — the mid-session membership
-// refresh. It reads the caller's LIVE org set from IAM (via the extra.user id the
-// session token carries) so a user invited into a new org mid-session sees it
-// without re-logging-in. On any IAM error, or a legacy token without extra.user,
-// it falls back to the session's own signed orgs set — the refresh is best-effort
-// and never strands the user.
+// refresh. It reads the caller's LIVE org set from IAM (via the caller's
+// `<owner>/<name>` id) so a user invited into a new org mid-session sees it without
+// re-logging-in. On any IAM error, or a credential that names no username, it falls
+// back to the caller's own verified org set — the refresh is best-effort and never
+// strands the user.
 func (g *api) getMemberships(c *zip.Ctx) error {
-	t, _, err := sessionToken(c, g.cfg.serverSecret)
+	cl, err := g.ident.who(c)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
 	}
-	session := orgsFromExtra(t.Extra)
-	user, _ := t.Extra["user"].(string)
-	if user == "" {
-		return g.ok(c, session) // legacy token: no IAM id to refresh against
+	session := cl.orgs
+	if cl.user == "" {
+		return g.ok(c, session) // no IAM id to refresh against
 	}
-	live, err := g.iamGetMemberships(c.Context(), user)
+	live, err := g.iamGetMemberships(c.Context(), cl.user)
 	if err != nil || len(live) == 0 {
 		if err != nil {
 			g.log.Warn("team: getMemberships — IAM refresh failed, serving session set", "err", err)

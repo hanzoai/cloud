@@ -56,8 +56,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 	"gopkg.in/yaml.v3"
 )
@@ -342,16 +344,17 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	if room == "" {
 		return zip.ErrBadRequest("roomName required")
 	}
-	// Say what was actually checked. meet performs NO membership lookup — it has
-	// no members table, no store, and makes no call to IAM. Membership was decided
-	// upstream, at the IAM login that minted this session, and is already signed
-	// into the token as `workspace`. All that happens here is a refusal to WIDEN
-	// that: the room asked for must belong to the workspace the token already
-	// names. Claiming "not a member" describes a determination this code never
-	// makes, and reads as a second authorization system where there is none.
-	t, ok := st.admits(room, c.Header("Authorization"))
+	// Say what was actually checked, and it is now one of two things. On the HS256
+	// arm meet performs no membership lookup: membership was decided upstream at
+	// the login that minted the session and is signed into the token as
+	// `workspace`, and all that happens here is a refusal to WIDEN it. On the IAM
+	// lane there is no such claim, so the workspace rows are asked directly — and
+	// then "not a member" IS the determination being made. One message covers both
+	// because it names the fact, not the mechanism: this caller is not admitted to
+	// this room.
+	j, ok := st.admits(c, room)
 	if !ok {
-		return zip.Errorf(http.StatusUnauthorized, "token workspace does not match this room")
+		return zip.Errorf(http.StatusUnauthorized, "not admitted to this room")
 	}
 	// THE IDENTITY IS THE TOKEN'S, NOT THE BODY'S. LiveKit uses `sub` as the
 	// participant identity and EJECTS an existing participant on a duplicate — so
@@ -364,7 +367,7 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	// checked: verifying it belongs to the caller would need the person<->account
 	// mapping from apps/team, whereas the token already carries an identity that IS
 	// the caller. One fewer seam, and no lookup to get wrong.
-	identity := strings.TrimSpace(t.Account)
+	identity := j.account
 	if identity == "" {
 		return zip.Errorf(http.StatusUnauthorized, "token carries no account")
 	}
@@ -384,8 +387,45 @@ func workspace(room string) string {
 	return ws
 }
 
-// admits decides whether the bearer may join room. Every clause is a refusal; there
-// is no branch that admits by default.
+// joiner is who may join, once a lane has decided it: the account LiveKit takes as
+// the participant identity, and nothing else. A lane that cannot fill it does not
+// admit anyone.
+type joiner struct{ account string }
+
+// admits decides whether the caller may join room, on either of two lanes. Every
+// clause is a refusal; there is no branch that admits by default.
+//
+// IAM LANE, selected on the boundary's OWN ATTESTATION (principal.Minted) and on
+// nothing else. It used to select on `c.Org() != "" && c.User() != ""`, and both
+// disjuncts are forgeable — the same defect agency.go names and fixed: X-Org-Id
+// survives the boundary on the anonymous path by design, and in a process where
+// the boundary is not installed at all (a hand-written plugin main, which is
+// exactly what this app has) NOTHING strips either header, so both are the
+// client's. Here that bought a LiveKit seat under a chosen identity, and LiveKit
+// EVICTS an existing participant on a duplicate `sub` — so a forged header ejected
+// a colleague from a live call and impersonated them to the room. The attestation
+// is absent when no boundary ran, which falls through to the HS256 arm and refuses
+// rather than admitting whatever was typed.
+//
+// The org and the SUBJECT are read from that attestation, never off c.Org()/
+// c.User() and never off the body. p.Subject is the `sub` claim verbatim: p.User
+// falls back to preferred_username, so two identities can present the same User and
+// a lookup keyed on it can be handed one token and address another's row.
+//
+// A MACHINE CREDENTIAL IS NOT A PERSON, and the subject requirement is what
+// excludes one. The boundary stamps an org and a user for an sk- API key too, so
+// "has an org and a user" would have put a machine on the lane whose whole question
+// is "which human is in this room" — and LiveKit would then seat it under whatever
+// identity the account lookup returned. A key principal carries no `sub`, so
+// requiring one refuses it structurally rather than by naming credential kinds.
+//
+// The verdict says nothing about a workspace, so the workspace ROWS decide: apps/team
+// owns them and answers over the internal plane (plane.TeamMember) with the caller's
+// role and the account id it joined the subject to. A caller with no row, or one
+// whose role is not privileged, is refused, and so is a peer that cannot answer —
+// an unreachable authority is a refusal, never an assumption.
+//
+// HS256 ARM, unchanged, and deleted with the rest of the second bearer authority:
 //
 //   - the token must VERIFY against SERVER_SECRET (signature, exp, nbf) — so a forged
 //     or stale session is not a member;
@@ -401,22 +441,58 @@ func workspace(room string) string {
 //     check was inert and every guest was admitted. selectWorkspace now signs the real
 //     workspace role, and an ABSENT role is unprivileged, so a token that has not
 //     proven a role is refused rather than assumed to be a member.
-func (s state) admits(room, auth string) (*token.Token, bool) {
-	raw := bearer(auth)
+func (s state) admits(c *zip.Ctx, room string) (joiner, bool) {
+	if p, ok := principal.Minted(c); ok && p.Subject != "" && p.Org != "" {
+		return s.admitsMember(c, room, p)
+	}
+	raw := bearer(c.Header("Authorization"))
 	if raw == "" {
-		return nil, false
+		return joiner{}, false
 	}
 	t, err := token.Decode(raw, s.teamSecret, true)
 	if err != nil {
-		return nil, false
+		return joiner{}, false
 	}
 	if t.Workspace == "" || t.Workspace != workspace(room) {
-		return nil, false
+		return joiner{}, false
 	}
 	if !t.Privileged() {
-		return nil, false
+		return joiner{}, false
 	}
-	return t, true
+	return joiner{account: strings.TrimSpace(t.Account)}, true
+}
+
+// admitsMember is the IAM lane's authorization: ask the process that owns the
+// workspace rows. Both halves of the question come from the ATTESTED principal —
+// the org rides the caller (never an argument, so a caller cannot ask about another
+// tenant's workspace) and the subject is the attested `sub`.
+func (s state) admitsMember(c *zip.Ctx, room string, p principal.Principal) (joiner, bool) {
+	ws := workspace(room)
+	if ws == "" {
+		return joiner{}, false
+	}
+	m, err := cloud.Ask[plane.MemberIn, plane.Member](cloud.As(c, p.Org), "team", plane.TeamMember,
+		&plane.MemberIn{Workspace: ws, Subject: p.Subject})
+	if err != nil || m == nil || !m.Member {
+		return joiner{}, false
+	}
+	if !privileged(m.Role) {
+		return joiner{}, false
+	}
+	return joiner{account: strings.TrimSpace(m.Account)}, true
+}
+
+// privileged is token.Privileged over a role the SERVER read rather than one a
+// token signed. Same vocabulary, same fail-closed shape: an unknown or absent role
+// is not privileged, so a role added to the invite set tomorrow starts without a
+// seat in a colleague's meeting instead of silently holding one.
+func privileged(role string) bool {
+	switch strings.TrimSpace(role) {
+	case token.RoleOwner, token.RoleAdmin, token.RoleMember:
+		return true
+	default:
+		return false
+	}
 }
 
 // bearer extracts the token from an "Authorization: Bearer <t>" header (scheme

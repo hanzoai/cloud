@@ -92,6 +92,16 @@ const (
 
 	IAMMailable = "iam_mailable"
 
+	// TeamMember answers "what is this person's role in that workspace?" for a
+	// caller that holds an IAM identity and no workspace claim.
+	//
+	// It is on the plane because the process that DECIDES a room join (meet) and
+	// the process that owns the workspace membership rows (team) are different
+	// ones. Before it, meet could only read a role a workspace token had signed —
+	// which is the second bearer authority the estate is retiring, so the decision
+	// had nowhere else to come from.
+	TeamMember = "team_member"
+
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
 	GitInbound = "git_inbound"
@@ -363,6 +373,33 @@ type Recipient struct {
 // Roster is who an org may mail.
 type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
+}
+
+// ---- team ------------------------------------------------------------------
+
+// MemberIn names the workspace and the person a membership question is about.
+// The ORG is not here and cannot be: it is the tenancy key of every workspace
+// row, so a caller able to pass it could read another tenant's roster.
+type MemberIn struct {
+	// Workspace is the workspace uuid, scoped to the caller's org on the read.
+	Workspace string `json:"workspace"`
+	// Subject is the IAM subject, NOT a team account id. team owns the join from
+	// one to the other — it is the join that created the rows — so a peer that
+	// computed its own would be a second derivation of the same address, which is
+	// how two layers end up naming different accounts for one person.
+	Subject string `json:"subject"`
+}
+
+// Member is what the rows say. Role and Account are empty exactly when Member is
+// false, so a caller cannot mistake "no row" for a role or an identity.
+type Member struct {
+	// Member reports whether the subject holds a row in that workspace.
+	Member bool `json:"member"`
+	// Role is the workspace role on that row (owner | admin | member | guest).
+	Role string `json:"role"`
+	// Account is the team AccountUuid the subject resolved to — the identity the
+	// asking process attributes the person by, so it never derives one itself.
+	Account string `json:"account"`
 }
 
 // ---- git -------------------------------------------------------------------

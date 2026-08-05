@@ -432,6 +432,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 
 	g := &api{
 		accounts: store,
+		ident:    testIdent(store),
 		cfg:      config{serverSecret: testSecret, iamEndpoint: iamSrv.URL, iamClientID: "hanzo-team", iamClientSecret: "team-secret", provider: "openid"},
 		log:      luxlog.New("test"),
 	}
@@ -502,6 +503,7 @@ func TestSendInviteRequiresAdmin(t *testing.T) {
 
 	g := &api{
 		accounts: store,
+		ident:    testIdent(store),
 		cfg:      config{serverSecret: testSecret, iamEndpoint: iamSrv.URL, iamClientID: "hanzo-team", iamClientSecret: "team-secret"},
 		log:      luxlog.New("test"),
 	}
@@ -555,6 +557,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	g := &api{
 		accounts: store,
+		ident:    testIdent(store),
 		cfg:      config{serverSecret: testSecret, iamEndpoint: iamSrv.URL, iamClientID: "hanzo-team", iamClientSecret: "team-secret"},
 		log:      luxlog.New("test"),
 	}

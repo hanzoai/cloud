@@ -77,7 +77,7 @@ type billingService struct {
 	accounts *accountStore
 	commerce types.CommerceClient
 	planEnt  func(context.Context, string) (map[string]any, error)
-	secret   string
+	ident    *identity
 	degraded bool
 }
 
@@ -128,7 +128,7 @@ func (b *billingService) readPlan(ctx context.Context, _ *none) (*planInfo, erro
 	if b.degraded {
 		return nil, unavailable()
 	}
-	_, org, err := sessionOf(ctx, b.secret)
+	_, org, err := sessionOf(ctx, b.ident)
 	if err != nil {
 		return nil, zip.ErrUnauthorized("sign in to view billing")
 	}
@@ -161,7 +161,7 @@ func (b *billingService) readPlan(ctx context.Context, _ *none) (*planInfo, erro
 // index.html (the SPA shell). Session-gated — an anonymous caller gets 401,
 // never the page. Fingerprinted assets/ cache hard; the shell never caches.
 func (b *billingService) ui(c *zip.Ctx) error {
-	if _, _, err := orgPrincipal(c, b.secret); err != nil {
+	if _, _, err := orgPrincipal(c, b.ident); err != nil {
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
 	root := wallet.FS()
@@ -196,18 +196,17 @@ func walletContentType(name string) string {
 	return "application/octet-stream"
 }
 
-// orgPrincipal resolves (account, org) from the request's VERIFIED session or
-// workspace token (bearer or the HttpOnly account cookie), refusing a token
-// that carries no org — the ONE token→tenant resolution the files and billing
-// planes share.
-func orgPrincipal(c *zip.Ctx, secret string) (account, org string, err error) {
-	t, _, err := sessionToken(c, secret)
+// orgPrincipal resolves (account, org) from the request's VERIFIED caller
+// (identity.who — an IAM access token, else team's own HS256 token, on a header or
+// a cookie), refusing one that carries no org — the ONE credential→tenant
+// resolution the files and billing planes share.
+func orgPrincipal(c *zip.Ctx, id *identity) (account, org string, err error) {
+	cl, err := id.who(c)
 	if err != nil {
 		return "", "", err
 	}
-	org = t.Org()
-	if org == "" {
+	if cl.org == "" {
 		return "", "", errNoOrg
 	}
-	return t.Account, org, nil
+	return cl.account, cl.org, nil
 }

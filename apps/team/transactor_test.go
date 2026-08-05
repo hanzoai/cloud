@@ -160,8 +160,16 @@ func TestEnvelopeWrapsRPC(t *testing.T) {
 }
 
 // TestOriginAllowed is the WS-upgrade Origin allow-list table: absent Origin
-// (non-browser) and the team/hanzo surfaces are admitted; everything else —
-// including lookalike registered domains — is refused before the upgrade.
+// (non-browser) and the NAMED team surfaces are admitted; everything else — a
+// lookalike registered domain, and any other first-party host — is refused before
+// the upgrade.
+//
+// console.hanzo.ai USED to be admitted, by a `.hanzo.ai` suffix arm. A WebSocket is
+// exempt from CORS, so this list is the socket's access control rather than a hint
+// about it, and a wildcard over the registrable domain put every first-party host
+// inside the workspace data plane's trust boundary: one page anywhere in the estate
+// running attacker script reads and writes the whole stream. A host that genuinely
+// needs the socket is named here on purpose.
 func TestOriginAllowed(t *testing.T) {
 	cases := []struct {
 		origin, host string
@@ -172,14 +180,16 @@ func TestOriginAllowed(t *testing.T) {
 		{"https://hanzo.team", "api.hanzo.ai", true},      // team surface
 		{"https://team.hanzo.ai", "hanzo.team", true},     // team surface
 		{"https://api.hanzo.team", "hanzo.team", true},    // team surface
-		{"https://console.hanzo.ai", "hanzo.team", true},  // *.hanzo.ai
+		{"https://console.hanzo.ai", "hanzo.team", false}, // first-party, but NOT a team surface
 		{"https://hanzo.ai", "hanzo.team", true},          // apex
 		{"http://localhost:8087", "localhost:8000", true}, // local dev
 		{"https://evil.example", "hanzo.team", false},     // foreign origin
 		{"https://evilhanzo.ai", "hanzo.team", false},     // suffix lookalike
 		{"https://hanzo.ai.evil.example", "hanzo.team", false},
-		{"null", "hanzo.team", false},   // opaque origin
-		{"://bad", "hanzo.team", false}, // unparseable
+		{"https://chat.hanzo.ai", "hanzo.team", false}, // no wildcard: the socket is not chat's
+		{"https://api.hanzo.ai", "api.hanzo.ai", true}, // its own host still serves itself
+		{"null", "hanzo.team", false},                  // opaque origin
+		{"://bad", "hanzo.team", false},                // unparseable
 	}
 	for _, c := range cases {
 		if got := originAllowed(c.origin, c.host); got != c.want {
