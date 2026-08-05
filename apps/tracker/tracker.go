@@ -223,6 +223,11 @@ func init() {
 			"validated org. Free by default, on the same balance gate as the board create — an epic, "+
 			"a pull request and an issue are priced identically, since the fee is per work item rather "+
 			"than per kind.")
+
+	// The board's two addresses. Bound with All(), so they publish every method
+	// the generator knows and none of them can lift prose from a handler — a
+	// static bundle has no typed op. The ONE helper every embedded SPA uses.
+	openapi.DescribeSPA("/tracker", "tracker board")
 }
 
 // routes registers the tracker surface. Literal routes register before their

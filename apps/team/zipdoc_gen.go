@@ -102,6 +102,17 @@ func init() {
 			"MemberIn.workspace": "Workspace is the workspace uuid, scoped to the caller's org on the read.",
 		},
 	})
+	zip.Describe("POST /team/workspaces", zip.Doc{
+		Fields: map[string]string{
+			"Space.name":           "Name is the human label for a picker.",
+			"Space.role":           "Role is the role on the caller's member row (owner | admin | member | guest).",
+			"Space.uuid":           "UUID is the workspace's stable id — and, in meet, the leading segment of\nevery room name bound to it.",
+			"Spaces.account":       "Account is the team AccountUuid the subject resolved to — the same identity\nMember.Account carries, from the same derivation.",
+			"Spaces.items":         "Items is every workspace the person is in, newest membership first. Empty is\na real answer, not an error.",
+			"Spaces.name":          "Name is the display name on the caller's member rows, empty when they have\nnot set one. A DISPLAY name only: meet passes it as the LiveKit participant\nlabel, which is decoration, never identity.",
+			"WorkspacesIn.subject": "Subject is the IAM subject, NOT a team account id — team owns the join from\none to the other, exactly as in MemberIn.",
+		},
+	})
 	zip.Describe("POST /v1/team/bots/sync", zip.Doc{
 		Description: "SyncBots re-projects the caller org's agents as workspace members into EVERY\nworkspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a workspace's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
 		Fields: map[string]string{
