@@ -60,7 +60,7 @@
     },
     "/v1/help/articles/{slug}": {
       "get": {
-        "operationId": "get_v1_help_articles_slug",
+        "operationId": "get_v1_help_articles_by_slug",
         "summary": "Returns one public article by slug, with its body.",
         "description": "Returns one public article by slug, with its body. A missing, Draft,\nor internal (non-public) article is 404 — fail-closed, so this route is no\nexistence oracle for anything beyond \"published and public\".",
         "tags": [

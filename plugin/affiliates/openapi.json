@@ -54,7 +54,7 @@
     },
     "/v1/admin/affiliates/sweep": {
       "post": {
-        "operationId": "v1.admin.affiliates.post_sweep",
+        "operationId": "post_v1_admin_affiliates_sweep",
         "summary": "Runs the accrual: for each referred org it reads that org's metered spend for the current period and accrues commission to every affiliate up its referral chain, then answers how many sources were swept and how many NEW accruals landed.",
         "description": "Runs the accrual: for each referred org it reads that org's metered\nspend for the current period and accrues commission to every affiliate up its\nreferral chain, then answers how many sources were swept and how many NEW\naccruals landed.\n\nThis is the cron path, and it is LATCHED at most once per affiliate, source\norg and period — so re-running it inside the same period accrues nothing\nfurther. Safe to retry, and safe to run by hand beside the schedule.\n\nCommission is a rate of Hanzo's MARGIN on that spend, never of the customer's\ngross bill, so every level's share summed over one source event stays within\nthe margin actually earned and the customer's charge is untouched. Nothing\naccrues past the third upline level, and only an APPROVED affiliate accrues at\nall.\n\nThe same spend read drives the OSS author royalty — one read, both programs —\nso the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded\nper run; a source whose spend cannot be read is skipped and picked up next\ntime, never half-accrued.",
         "tags": [
@@ -76,7 +76,7 @@
     },
     "/v1/admin/affiliates/{id}/approve": {
       "post": {
-        "operationId": "v1.admin.affiliates.post_id_approve",
+        "operationId": "post_v1_admin_affiliates_by_id_approve",
         "summary": "Approves an affiliate and MINTS its referral code — the moment the partner has a working share link and starts accruing.",
         "description": "Approves an affiliate and MINTS its referral code — the moment\nthe partner has a working share link and starts accruing.\n\nThe code is taken from the body if one is given, else the vanity code the\napplicant requested, else a slug derived for them. Codes are ONE global\nnamespace, so a taken code is a 409 and nothing is approved. The minted code\nis also mirrored as a link row so click tracking is uniform across every code\nthe affiliate holds; that mirror is best-effort and its failure never fails\nthe approval.\n\nApproval is what makes an affiliate eligible: before it, attribution against\nits code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY.\nAudited.",
         "tags": [
@@ -119,7 +119,7 @@
     },
     "/v1/admin/affiliates/{id}/payout": {
       "post": {
-        "operationId": "v1.admin.affiliates.post_id_payout",
+        "operationId": "post_v1_admin_affiliates_by_id_payout",
         "summary": "Pays out accrued commission and answers the payout row with the affiliate's updated balances.",
         "description": "Pays out accrued commission and answers the payout row with the\naffiliate's updated balances.\n\nThe amount is reserved atomically against the affiliate's PENDING commission —\naccrued minus paid — so a payout can never exceed what is owed. The METHOD\ndecides whether money actually moves: `credits` issues a commerce grant into\nthe affiliate ORG's own wallet, tagged so the ledger can tell an affiliate\npayout apart from an admin or referral grant; every other method — wire,\npaypal and the rest — is RECORD-ONLY: the payout row and the balances move,\nthe cash is disbursed out of band.\n\nThe amount is integer cents and must be positive. PLATFORM SUDO ONLY.\nAudited.",
         "tags": [
@@ -167,7 +167,7 @@
     },
     "/v1/admin/affiliates/{id}/rate": {
       "post": {
-        "operationId": "v1.admin.affiliates.post_id_rate",
+        "operationId": "post_v1_admin_affiliates_by_id_rate",
         "summary": "Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's margin.",
         "description": "Sets one affiliate's DIRECT commission rate, in basis points of\nHanzo's margin.\n\nThe rate is CAPPED so that the direct rate plus the platform-wide second- and\nthird-level rates can never exceed the whole margin — the structural guarantee\nthat everything paid on one source event stays inside the margin actually\nearned. The cap is resolved from the rates in force at the moment of the call\nand quoted in the refusal, because those switches move; a hardcoded bound\nwould start lying the moment somebody edits the schedule.\n\nOnly the direct level is per-affiliate. The second and third levels are\nplatform switches and are not settable here. The change applies to FUTURE\naccruals — commission already latched for a period is not recomputed. PLATFORM\nSUDO ONLY. Audited.",
         "tags": [
@@ -213,7 +213,7 @@
     },
     "/v1/admin/affiliates/{id}/suspend": {
       "post": {
-        "operationId": "v1.admin.affiliates.post_id_suspend",
+        "operationId": "post_v1_admin_affiliates_by_id_suspend",
         "summary": "Suspends an affiliate: it stops accruing on the next sweep, and its code stops resolving for new attributions.",
         "description": "Suspends an affiliate: it stops accruing on the next sweep, and\nits code stops resolving for new attributions.\n\nIt CLAWS NOTHING BACK. Commission already accrued stays accrued and stays\npayable, and existing attribution edges are left standing — suspension ends\nearning, it does not unwind history. PLATFORM SUDO ONLY. Audited.",
         "tags": [

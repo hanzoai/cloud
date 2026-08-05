@@ -41062,7 +41062,7 @@ paths:
         and the caller must be a member of it. An unknown workspace, another tenant's
         workspace and a workspace the caller is not in all answer the same 404, so a
         probe learns nothing about what exists.
-      operationId: post_collaborator_rpc_documentId
+      operationId: post_collaborator_rpc_by_documentid
       parameters:
       - description: |-
           DocumentID addresses the document field, as
@@ -41726,7 +41726,7 @@ paths:
         Approval is what makes an affiliate eligible: before it, attribution against
         its code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY.
         Audited.
-      operationId: v1.admin.affiliates.post_id_approve
+      operationId: post_v1_admin_affiliates_by_id_approve
       parameters:
       - description: ID is the affiliate to approve, from the path.
         in: path
@@ -41768,7 +41768,7 @@ paths:
 
         The amount is integer cents and must be positive. PLATFORM SUDO ONLY.
         Audited.
-      operationId: v1.admin.affiliates.post_id_payout
+      operationId: post_v1_admin_affiliates_by_id_payout
       parameters:
       - description: ID is the affiliate to pay, from the path.
         in: path
@@ -41815,7 +41815,7 @@ paths:
         platform switches and are not settable here. The change applies to FUTURE
         accruals — commission already latched for a period is not recomputed. PLATFORM
         SUDO ONLY. Audited.
-      operationId: v1.admin.affiliates.post_id_rate
+      operationId: post_v1_admin_affiliates_by_id_rate
       parameters:
       - description: ID is the affiliate whose direct rate moves, from the path.
         in: path
@@ -41852,7 +41852,7 @@ paths:
         It CLAWS NOTHING BACK. Commission already accrued stays accrued and stays
         payable, and existing attribution edges are left standing — suspension ends
         earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.
-      operationId: v1.admin.affiliates.post_id_suspend
+      operationId: post_v1_admin_affiliates_by_id_suspend
       parameters:
       - description: ID is the affiliate's server-minted handle, "aff_"-prefixed.
         in: path
@@ -41894,7 +41894,7 @@ paths:
         so the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded
         per run; a source whose spend cannot be read is skipped and picked up next
         time, never half-accrued.
-      operationId: v1.admin.affiliates.post_sweep
+      operationId: post_v1_admin_affiliates_sweep
       responses:
         "200":
           content:
@@ -42243,7 +42243,7 @@ paths:
         rewrite what was already owed.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: post_v1_admin_authors_id_approve
+      operationId: post_v1_admin_authors_by_id_approve
       parameters:
       - description: ID is the author to approve, from the path.
         example: aut_1f…
@@ -42287,7 +42287,7 @@ paths:
         slice was actually returned) — plus period when one was requested.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: get_v1_admin_authors_id_basis
+      operationId: get_v1_admin_authors_by_id_basis
       parameters:
       - description: ID is the author record's handle, from the path.
         example: aut_1f…
@@ -42333,7 +42333,7 @@ paths:
         wallet, and every payout row discloses which of the three it was.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: post_v1_admin_authors_id_payout
+      operationId: post_v1_admin_authors_by_id_payout
       parameters:
       - description: ID is the author to pay, from the path.
         example: aut_1f…
@@ -42371,7 +42371,7 @@ paths:
         owed, and it does not delete the evidence behind it.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: post_v1_admin_authors_id_suspend
+      operationId: post_v1_admin_authors_by_id_suspend
       parameters:
       - description: ID is the author record's handle, "aut_"-prefixed.
         in: path
@@ -42676,7 +42676,7 @@ paths:
         Answers the new effective overlay, so a console needs no second read.
 
         SuperAdmin only.
-      operationId: patch_v1_admin_catalog_providers_name
+      operationId: patch_v1_admin_catalog_providers_by_name
       parameters:
       - description: Name is the provider the overlay belongs to, from the URL.
         in: path
@@ -45251,7 +45251,7 @@ paths:
         no body. It deletes the stored record only: a campaign already launched keeps
         running on the ad network, which must be stopped there. An id another org owns
         reads as not found.
-      operationId: delete_v1_ads_campaigns_id
+      operationId: delete_v1_ads_campaigns_by_id
       parameters:
       - example: camp_2f9c1d
         in: path
@@ -45270,7 +45270,7 @@ paths:
       description: |-
         Returns one of the caller org's campaigns. An id another org owns
         reads as not found, so the response cannot confirm that it exists.
-      operationId: get_v1_ads_campaigns_id
+      operationId: get_v1_ads_campaigns_by_id
       parameters:
       - example: camp_2f9c1d
         in: path
@@ -45296,7 +45296,7 @@ paths:
         field is written from the request, so an omitted one is cleared. externalId is
         launch-owned and is never touched here, so editing a campaign cannot break its
         link to a live provider execution.
-      operationId: put_v1_ads_campaigns_id
+      operationId: put_v1_ads_campaigns_by_id
       parameters:
       - example: camp_2f9c1d
         in: path
@@ -45825,7 +45825,7 @@ paths:
   /v1/agents/{ref}:
     delete:
       description: Removes an agent and every run recorded against it. Answers 204.
-      operationId: delete_v1_agents_ref
+      operationId: delete_v1_agents_by_ref
       parameters:
       - description: |-
           Ref is the agent's public id (the agent_… handle create and list return) or
@@ -45848,7 +45848,7 @@ paths:
         Returns one agent with its system prompt and its 20 most recent runs.
         The ref is the agent's public id or its org-unique name — a created agent is
         immediately gettable by whatever create handed back.
-      operationId: get_v1_agents_ref
+      operationId: get_v1_agents_by_ref
       parameters:
       - description: |-
           Ref is the agent's public id (the agent_… handle create and list return) or
@@ -45877,7 +45877,7 @@ paths:
         re-validated together, so a partial update can never leave a long-running
         agent without the cron the scheduler needs to fire it, and a transition INTO
         long-running counts against the per-org cap on scheduled agents.
-      operationId: patch_v1_agents_ref
+      operationId: patch_v1_agents_by_ref
       parameters:
       - description: Ref is the agent to update — its public id or org-unique name,
           from the path.
@@ -45934,7 +45934,7 @@ paths:
         Returns one agent's execution history, newest first — each run's
         input, its output or its error, and how long it took. Every row is a run that
         actually happened.
-      operationId: get_v1_agents_ref_runs
+      operationId: get_v1_agents_by_ref_runs
       parameters:
       - description: Ref is the agent's public id or its org-unique name, from the
           path.
@@ -46023,7 +46023,7 @@ paths:
         published, which is what makes it safe to be anonymous. An unpublished session
         is invisible here no matter who asks; its owner reads it through the org-scoped
         /v1/agents/sessions routes, which need a validated principal.
-      operationId: get_v1_agents_builds_org_project
+      operationId: get_v1_agents_builds_by_org_by_project
       parameters:
       - description: Org is the org that published the build, from the path.
         example: hanzo
@@ -46174,7 +46174,7 @@ paths:
       description: |-
         Returns one session with its direct child sessions and its 50 most
         recent events, oldest of those first.
-      operationId: get_v1_agents_sessions_id
+      operationId: get_v1_agents_sessions_by_id
       parameters:
       - description: ID is the session to act on, from the path.
         example: sess_1
@@ -46203,7 +46203,7 @@ paths:
         done/error run would fabricate liveness — and publishing is refused unless the
         session names the project it built, because the public build route is keyed on
         (org, project).
-      operationId: patch_v1_agents_sessions_id
+      operationId: patch_v1_agents_sessions_by_id
       parameters:
       - description: ID is the session to update, from the path.
         example: sess_1
@@ -46244,7 +46244,7 @@ paths:
         commands to an execution engine — consumes what the dashboard posted. Read-only
         and bounded at 200 per poll, so a steady poll is cheap and an applied command is
         never redelivered.
-      operationId: get_v1_agents_sessions_id_control
+      operationId: get_v1_agents_sessions_by_id_control
       parameters:
       - description: ID is the session whose commands are being drained, from the
           path.
@@ -46436,7 +46436,7 @@ paths:
         its children, their children, each node carrying its own event count. One
         indexed read pulls the whole flow (every node of a flow shares a root id), so
         the shape is assembled in memory rather than by walking the store per node.
-      operationId: get_v1_agents_sessions_id_tree
+      operationId: get_v1_agents_sessions_by_id_tree
       parameters:
       - description: ID is the session to act on, from the path.
         example: sess_1
@@ -46524,7 +46524,7 @@ paths:
         Deregisters one machine. Only its owner, or an org admin, may
         remove it; an unknown id, a cross-org id and a machine owned by someone else
         all answer the same not-found, so a probe learns nothing about what exists.
-      operationId: delete_v1_agents_targets_id
+      operationId: delete_v1_agents_targets_by_id
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -46546,7 +46546,7 @@ paths:
       x-app: agents
     get:
       description: Returns one registered machine, with its live session load.
-      operationId: get_v1_agents_targets_id
+      operationId: get_v1_agents_targets_by_id
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -46571,7 +46571,7 @@ paths:
         Updates one machine in place. Every field is optional; a field the
         request omits is left alone. A metrics patch IS a heartbeat — the server stamps
         its own clock, so a client can neither forge nor backdate staleness.
-      operationId: patch_v1_agents_targets_id
+      operationId: patch_v1_agents_targets_by_id
       parameters:
       - description: ID is the target to update, from the path.
         example: tgt_1
@@ -46612,7 +46612,7 @@ paths:
         TWO independent proofs are required and both fail closed to the same 403: the
         caller must own this machine (or be an org admin) AND present its claim key in
         X-Target-Key. A run offered to one machine is unreachable from another's claim.
-      operationId: post_v1_agents_targets_id_claim
+      operationId: post_v1_agents_targets_by_id_claim
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -46643,7 +46643,7 @@ paths:
         SHA-256 hash is stored. Rotating supersedes any prior daemon, so only the
         machine's owner — or an org admin — may call it; every other caller gets the
         same not-found an unknown id gets, and learns nothing about what exists.
-      operationId: post_v1_agents_targets_id_key
+      operationId: post_v1_agents_targets_by_id_key
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -46674,7 +46674,7 @@ paths:
         run it legitimately holds. Idempotent — a report for an unknown or
         already-finished run answers delivered:false rather than failing, because the
         session's terminal state was already set by the machine's own stream.
-      operationId: post_v1_agents_targets_id_runs_runId_report
+      operationId: post_v1_agents_targets_by_id_runs_by_runid_report
       parameters:
       - description: ID is the machine reporting, from the path.
         example: tgt_1
@@ -50139,7 +50139,7 @@ paths:
       description: |-
         Deletes one of the caller's flows. A foreign id answers 404 and
         deletes nothing.
-      operationId: delete_v1_auto_flows_flow
+      operationId: delete_v1_auto_flows_by_flow
       parameters:
       - description: Flow is the flow's id, taken from the path.
         in: path
@@ -50162,7 +50162,7 @@ paths:
         Flow reads one of the caller's flows — the full record, graph included. A
         flow outside the caller's org answers 404, indistinguishable from one that
         does not exist.
-      operationId: get_v1_auto_flows_flow
+      operationId: get_v1_auto_flows_by_flow
       parameters:
       - description: Flow is the flow's id, taken from the path.
         in: path
@@ -50184,7 +50184,7 @@ paths:
       description: |-
         Patches one of the caller's flows: the name, the graph, or both
         — only the stated fields move.
-      operationId: patch_v1_auto_flows_flow
+      operationId: patch_v1_auto_flows_by_flow
       parameters:
       - description: Flow is the flow's id, taken from the path.
         in: path
@@ -50217,7 +50217,7 @@ paths:
         Publish snapshots the flow's current graph as its next immutable version
         and arms the flow's triggers. Past versions stay addressable in the product
         for rollback; runs always execute the graph as it was dispatched.
-      operationId: post_v1_auto_flows_flow_publish
+      operationId: post_v1_auto_flows_by_flow_publish
       parameters:
       - description: Flow is the flow's id, taken from the path.
         in: path
@@ -50319,7 +50319,7 @@ paths:
         Run reads one run record: status, input, output (each executed node's
         result keyed by node id once completed), error detail if it failed, and
         timestamps. A run outside the caller's org answers 404.
-      operationId: get_v1_auto_runs_run
+      operationId: get_v1_auto_runs_by_run
       parameters:
       - description: Run is the run's id, taken from the path.
         in: path
@@ -50384,7 +50384,7 @@ paths:
         failed (or an action name the connector does not have) answers ok:false with
         the failure message, not an HTTP error; an unknown connector is 404 and a
         missing action 422.
-      operationId: post_v1_automations_connectors_id_run
+      operationId: post_v1_automations_connectors_by_id_run
       parameters:
       - description: ID is the connector to run, from the path.
         example: notion
@@ -50478,7 +50478,7 @@ paths:
       description: |-
         Deletes one automation, its versions and its run history. It answers
         no content, and a flow of another org answers not-found.
-      operationId: delete_v1_automations_flows_id
+      operationId: delete_v1_automations_flows_by_id
       parameters:
       - description: ID is the flow to act on, from the path.
         example: flow_1
@@ -50498,7 +50498,7 @@ paths:
       description: |-
         Returns one automation and its latest version. That is the flow record
         plus the step tree the builder edits; a flow of another org answers not-found.
-      operationId: get_v1_automations_flows_id
+      operationId: get_v1_automations_flows_by_id
       parameters:
       - description: ID is the flow to act on, from the path.
         example: flow_1
@@ -50523,7 +50523,7 @@ paths:
         Updates one automation's metadata in place. Every field is optional; a
         field the request omits is left alone. Publishing a version pins which one runs,
         and is refused unless that version belongs to this flow.
-      operationId: patch_v1_automations_flows_id
+      operationId: patch_v1_automations_flows_by_id
       parameters:
       - description: ID is the flow to update, from the path.
         example: flow_1
@@ -50558,7 +50558,7 @@ paths:
         Disarms a flow's trigger and marks it DISABLED. Its schedule and its
         event subscriptions are dropped, so a disabled flow is never a live target; runs
         already in flight are unaffected, and it can still be started on demand.
-      operationId: post_v1_automations_flows_id_disable
+      operationId: post_v1_automations_flows_by_id_disable
       parameters:
       - description: ID is the flow to act on, from the path.
         example: flow_1
@@ -50585,7 +50585,7 @@ paths:
         cron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the
         routing index, so an inbound event starts it; a MANUAL trigger arms nothing and
         still runs on demand.
-      operationId: post_v1_automations_flows_id_enable
+      operationId: post_v1_automations_flows_by_id_enable
       parameters:
       - description: ID is the flow to act on, from the path.
         example: flow_1
@@ -50631,7 +50631,7 @@ paths:
         The run is bounded by the org's per-minute run-start budget and its in-flight
         concurrency ceiling; over either, or with the engine not ready, no run is started
         and no run id is burned.
-      operationId: post_v1_automations_flows_id_run
+      operationId: post_v1_automations_flows_by_id_run
       parameters:
       - description: ID is the flow to act on, from the path.
         example: flow_1
@@ -50656,7 +50656,7 @@ paths:
       description: |-
         Returns one flow's versions, newest first. The optional `limit`
         query bounds the page.
-      operationId: get_v1_automations_flows_id_versions
+      operationId: get_v1_automations_flows_by_id_versions
       parameters:
       - description: ID is the flow whose versions to list, from the path.
         example: flow_1
@@ -50687,7 +50687,7 @@ paths:
         Adds a new DRAFT version to a flow. The version is created invalid
         unless it carries a trigger, and it does not become the running version until it
         is published (PATCH the flow's publishedVersionId) or becomes the latest.
-      operationId: post_v1_automations_flows_id_versions
+      operationId: post_v1_automations_flows_by_id_versions
       parameters:
       - description: ID is the flow to add a version to, from the path.
         example: flow_1
@@ -50796,7 +50796,7 @@ paths:
         Returns one run. A run that has not reached a terminal status is refreshed
         from the durable engine first — scoped to the org's own namespace — so the caller
         sees live progress rather than the last status that happened to be persisted.
-      operationId: get_v1_automations_runs_id
+      operationId: get_v1_automations_runs_by_id
       parameters:
       - description: ID is the run to read, from the path.
         example: run_1
@@ -50943,7 +50943,7 @@ paths:
         204. Ownership is confirmed by re-fetching the resource before anything is
         deleted, so a cross-tenant id is a 404 rather than a delete of another org's
         load balancer.
-      operationId: delete_v1_balancers_id
+      operationId: delete_v1_balancers_by_id
       parameters:
       - description: ID is the DigitalOcean resource id (a UUID), from the path.
         in: path
@@ -50963,7 +50963,7 @@ paths:
         Returns one of the caller org's load balancers by id. One that
         exists in another org's namespace is reported 404, never 403 — the same
         existence-oracle guard the VPC read applies.
-      operationId: get_v1_balancers_id
+      operationId: get_v1_balancers_by_id
       parameters:
       - description: ID is the DigitalOcean resource id (a UUID), from the path.
         in: path
@@ -52962,7 +52962,7 @@ paths:
         Absence is honoured ONLY when the runtime answers it. A runtime that does not
         serve stop reports nothing about the run, and reporting "stopped" on that basis
         would be a stop that cannot fail — so it is a 502.
-      operationId: post_v1_bots_runId_stop
+      operationId: post_v1_bots_by_runid_stop
       parameters:
       - in: path
         name: runId
@@ -53103,7 +53103,7 @@ paths:
         It deletes the RECORD, not the executions: a campaign whose channels are live
         on a provider should be paused first, or those executions keep running with
         nothing here to report them.
-      operationId: delete_v1_campaign_id
+      operationId: delete_v1_campaign_by_id
       parameters:
       - description: ID is the campaign's server-minted handle, "cmp_"-prefixed.
         in: path
@@ -53123,7 +53123,7 @@ paths:
         Returns one campaign of the caller's org — its name, audience,
         creatives, channels with their per-channel launch state, schedule, budget and
         status. 404 when the org has no campaign with that id.
-      operationId: get_v1_campaign_id
+      operationId: get_v1_campaign_by_id
       parameters:
       - description: ID is the campaign's server-minted handle, "cmp_"-prefixed.
         in: path
@@ -53152,7 +53152,7 @@ paths:
         launched its channels carry provider state (an external id, a live status), so
         they are added and removed explicitly through the channels sub-resource
         instead; a whole-object write would silently orphan a running execution.
-      operationId: put_v1_campaign_id
+      operationId: put_v1_campaign_by_id
       parameters:
       - description: ID is the campaign to update, from the path.
         in: path
@@ -53191,7 +53191,7 @@ paths:
         executor: adding a second "paid" channel would mean two ad accounts running one
         campaign with no way to tell their results apart. The new channel starts
         "pending" — adding it does not launch it.
-      operationId: post_v1_campaign_id_channels
+      operationId: post_v1_campaign_by_id_channels
       parameters:
       - description: ID is the campaign to add the channel to, from the path.
         example: cmp_1f…
@@ -53232,7 +53232,7 @@ paths:
         It removes the channel from the PLAN. A channel that is live at its provider
         should be paused first — dropping the row here leaves nothing to pause it with
         afterwards.
-      operationId: delete_v1_campaign_id_channels_kind
+      operationId: delete_v1_campaign_by_id_channels_by_kind
       parameters:
       - description: ID is the campaign, from the path.
         in: path
@@ -53290,7 +53290,7 @@ paths:
         not emitting yet degrades to available:false with zeroes — honest-empty, never a
         500 and never a fabricated number. When the campaign runs more than one creative
         and an experiment is wired, abTest carries the A/B analysis.
-      operationId: get_v1_campaign_id_metrics
+      operationId: get_v1_campaign_by_id_metrics
       parameters:
       - description: ID is the campaign to report on, from the path.
         example: cmp_1f…
@@ -53508,7 +53508,7 @@ paths:
         Removes one of the caller org's convertible notes, taking its
         principal out of the cap table's unconverted-instrument totals. An id this org
         does not hold is not found.
-      operationId: delete_v1_captable_convertibles_id
+      operationId: delete_v1_captable_convertibles_by_id
       parameters:
       - description: ID is the convertible note to delete.
         in: path
@@ -53582,7 +53582,7 @@ paths:
         Removes one of the caller org's option grants, taking its shares
         out of the cap table's granted-options and fully-diluted counts. An id this org
         does not hold is not found.
-      operationId: delete_v1_captable_options_id
+      operationId: delete_v1_captable_options_by_id
       parameters:
       - description: ID is the option grant to delete.
         in: path
@@ -53669,7 +53669,7 @@ paths:
         investment written into it, oldest first. A round id that does not exist in the
         caller's org is not found — including one that exists in another tenant, since
         the org comes from the caller's principal and is part of the lookup.
-      operationId: get_v1_captable_rounds_id
+      operationId: get_v1_captable_rounds_by_id
       parameters:
       - description: |-
           ID is the round to read. It is the path segment: the URL is the addressing
@@ -53699,7 +53699,7 @@ paths:
         close date and moving its status to CLOSED. Only an OPEN round can be closed:
         a round that is already closed — like an id this org does not hold — is not
         found. Closing a round does not change what was invested in it.
-      operationId: post_v1_captable_rounds_id_close
+      operationId: post_v1_captable_rounds_by_id_close
       parameters:
       - description: |-
           ID is the round to close. It is the path segment: the URL is the
@@ -53785,7 +53785,7 @@ paths:
         Removes one of the caller org's SAFEs, taking its capital out of the
         cap table's unconverted-instrument totals. An id this org does not hold is not
         found.
-      operationId: delete_v1_captable_safes_id
+      operationId: delete_v1_captable_safes_by_id
       parameters:
       - description: ID is the SAFE to delete.
         in: path
@@ -53841,7 +53841,7 @@ paths:
         Removes one of the caller org's share certificates, taking its
         shares out of the cap table's outstanding and fully-diluted counts. An id this
         org does not hold is not found.
-      operationId: delete_v1_captable_shares_id
+      operationId: delete_v1_captable_shares_by_id
       parameters:
       - description: ID is the share certificate to delete.
         in: path
@@ -53913,7 +53913,7 @@ paths:
         orphan issued equity: a holder that still holds share certificates or option
         grants cannot be deleted, and answers 400 saying so — release or transfer the
         holdings first. An id this org does not hold is not found.
-      operationId: delete_v1_captable_stakeholders_id
+      operationId: delete_v1_captable_stakeholders_by_id
       parameters:
       - description: ID is the stakeholder to delete.
         in: path
@@ -53942,7 +53942,7 @@ paths:
         The values are stored as sent. Unlike adding a stakeholder, this route does
         not check the email's shape or the type and relationship vocabularies, so it
         can record a value that adding one would have rejected.
-      operationId: patch_v1_captable_stakeholders_id
+      operationId: patch_v1_captable_stakeholders_by_id
       parameters:
       - description: |-
           ID is the stakeholder to update. It is the path segment: the URL is the
@@ -54369,7 +54369,7 @@ paths:
         order is fixed, so a console can render the same rows every time. A policy that
         cannot be read leaves that channel's policy fields empty rather than failing
         the whole listing.
-      operationId: v1.get_channels
+      operationId: get_v1_channels
       responses:
         "200":
           content:
@@ -54413,7 +54413,7 @@ paths:
         allowlisted or disabled, the config-managed DM and group allow entries, the
         senders approved through PAIRING (read-only here), and the org's named access
         groups. An unknown channel is a 404.
-      operationId: v1.channels.get_allowlist
+      operationId: get_v1_channels_allowlist
       parameters:
       - description: |-
           Channel is the transport to read: discord, slack, teams or telegram.
@@ -54447,7 +54447,7 @@ paths:
         alone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries
         — senders approved through pairing belong to the approval flow, so a policy
         edit can never revoke one. An unknown channel is a 404.
-      operationId: v1.channels.put_allowlist
+      operationId: put_v1_channels_allowlist
       requestBody:
         content:
           application/json:
@@ -54479,7 +54479,7 @@ paths:
         into. It is a CURSOR feed, not a search: pass the returned cursor back as
         `since` to get only what has arrived since. Only this org's messages are
         stored under this org, so the feed can never carry another tenant's chat.
-      operationId: v1.channels.get_inbox
+      operationId: get_v1_channels_inbox
       parameters:
       - description: |-
           Since is the exclusive cursor: only messages with a higher row id come
@@ -54520,7 +54520,7 @@ paths:
         "pairing" and who is not allowed yet. Each row carries the CODE an org admin
         passes to POST /v1/channels/pairing/approve. Expired requests are not
         returned. Codes are capability strings: they are shown here, and never logged.
-      operationId: v1.channels.get_pairing
+      operationId: get_v1_channels_pairing
       responses:
         "200":
           content:
@@ -54543,7 +54543,7 @@ paths:
         bootstraps that sender as the channel's owner, which the answer reports. An
         unknown or expired code is a 404, and a code always belongs to exactly one
         org, so it can never approve someone into another tenant.
-      operationId: v1.channels.post_pairing_approve
+      operationId: post_v1_channels_pairing_approve
       requestBody:
         content:
           application/json:
@@ -54619,7 +54619,7 @@ paths:
 
         Re-linking a label that already exists re-seals its credential and re-folds it, so
         this is how a rotated token is replaced. Requires org admin.
-      operationId: post_v1_cloud_provider_accounts
+      operationId: post_v1_cloud_by_provider_accounts
       parameters:
       - description: |-
           Provider is the cloud being linked, from the path: digitalocean, aws, gcp
@@ -54660,7 +54660,7 @@ paths:
         does not hold answers exactly the same as one it just removed. A cluster that
         fails to detach is logged and the unlink continues, so a dead provider cannot
         strand a credential. Requires org admin.
-      operationId: delete_v1_cloud_provider_accounts_label
+      operationId: delete_v1_cloud_by_provider_accounts_by_label
       parameters:
       - description: |-
           Provider is the cloud the account belongs to: digitalocean, aws, gcp or
@@ -54703,7 +54703,7 @@ paths:
         It is idempotent, it reads the credential already sealed at link time, and a
         discovery failure leaves the existing fold set alone rather than mass-detaching
         it. An account this org has not linked is not found. Requires org admin.
-      operationId: post_v1_cloud_provider_accounts_label_sync
+      operationId: post_v1_cloud_by_provider_accounts_by_label_sync
       parameters:
       - description: |-
           Provider is the cloud the account belongs to: digitalocean, aws, gcp or
@@ -54839,7 +54839,7 @@ paths:
       description: |-
         Deletes a D1 database and everything stored in it. Requires
         org admin.
-      operationId: delete_v1_cloudflare_d1_databases_database
+      operationId: delete_v1_cloudflare_d1_databases_by_database
       parameters:
       - description: Database is the Cloudflare D1 database id or name.
         example: orders
@@ -54958,7 +54958,7 @@ paths:
       description: |-
         KVNamespaceDelete deletes a Workers KV namespace and every key in it. Requires
         org admin.
-      operationId: delete_v1_cloudflare_kv_namespaces_namespace
+      operationId: delete_v1_cloudflare_kv_namespaces_by_namespace
       parameters:
       - description: Namespace is the Cloudflare KV namespace id.
         example: 0123456789abcdef0123456789abcdef
@@ -54981,7 +54981,7 @@ paths:
     delete:
       description: KVValueDelete removes one key from a Workers KV namespace. Requires
         org admin.
-      operationId: delete_v1_cloudflare_kv_namespaces_namespace_values_key
+      operationId: delete_v1_cloudflare_kv_namespaces_by_namespace_values_by_key
       parameters:
       - description: Namespace is the Cloudflare KV namespace id.
         example: 0123456789abcdef0123456789abcdef
@@ -55100,7 +55100,7 @@ paths:
       description: |-
         Deletes a Cloudflare Pages project, and with it every deployment it
         has ever made. Requires org admin.
-      operationId: delete_v1_cloudflare_pages_projects_project
+      operationId: delete_v1_cloudflare_pages_projects_by_project
       parameters:
       - description: Project is the Pages project name.
         example: marketing-site
@@ -55124,7 +55124,7 @@ paths:
       description: |-
         Reads one Cloudflare Pages project — its build config, deployment
         configs and latest deployment. Any org member may read.
-      operationId: get_v1_cloudflare_pages_projects_project
+      operationId: get_v1_cloudflare_pages_projects_by_project
       parameters:
       - description: Project is the Pages project name.
         example: marketing-site
@@ -55177,7 +55177,7 @@ paths:
       description: |-
         Attaches a custom domain to a Cloudflare Pages project. Requires
         org admin. Cloudflare owns validation and certificate issuance from here on.
-      operationId: post_v1_cloudflare_pages_projects_project_domains
+      operationId: post_v1_cloudflare_pages_projects_by_project_domains
       parameters:
       - description: Project is the Pages project name, from the path.
         example: marketing-site
@@ -55210,7 +55210,7 @@ paths:
       description: |-
         Detaches a custom domain from a Cloudflare Pages project.
         Requires org admin.
-      operationId: delete_v1_cloudflare_pages_projects_project_domains_domain
+      operationId: delete_v1_cloudflare_pages_projects_by_project_domains_by_domain
       parameters:
       - description: Project is the Pages project name.
         example: marketing-site
@@ -55311,7 +55311,7 @@ paths:
       description: |-
         Deletes an R2 bucket. Requires org admin. Cloudflare refuses a
         bucket that still holds objects, and that refusal is relayed.
-      operationId: delete_v1_cloudflare_r2_buckets_bucket
+      operationId: delete_v1_cloudflare_r2_buckets_by_bucket
       parameters:
       - description: Bucket is the R2 bucket name.
         example: assets
@@ -55351,7 +55351,7 @@ paths:
       description: |-
         Removes a Worker script from the org's Cloudflare account.
         Requires org admin. Routes bound to the script stop serving it.
-      operationId: delete_v1_cloudflare_workers_scripts_script
+      operationId: delete_v1_cloudflare_workers_scripts_by_script
       parameters:
       - description: Script is the Worker script name.
         example: edge-router
@@ -55402,7 +55402,7 @@ paths:
       description: |-
         Publishes or withdraws one Worker script on the
         account's workers.dev subdomain. Requires org admin.
-      operationId: post_v1_cloudflare_workers_scripts_script_subdomain
+      operationId: post_v1_cloudflare_workers_scripts_by_script_subdomain
       parameters:
       - description: Script is the Worker script name, from the path.
         example: edge-router
@@ -55454,7 +55454,7 @@ paths:
         Lists the Worker routes bound within one zone — the URL
         patterns that dispatch to a script. Any org member may read. Routes are
         zone-scoped, so no account is resolved.
-      operationId: get_v1_cloudflare_workers_zones_zone_routes
+      operationId: get_v1_cloudflare_workers_zones_by_zone_routes
       parameters:
       - description: Zone is the 32-hex Cloudflare zone id.
         example: 0123456789abcdef0123456789abcdef
@@ -55478,7 +55478,7 @@ paths:
       description: |-
         Binds a URL pattern in a zone to a Worker script. Requires
         org admin — a route is what puts a script in front of live traffic.
-      operationId: post_v1_cloudflare_workers_zones_zone_routes
+      operationId: post_v1_cloudflare_workers_zones_by_zone_routes
       parameters:
       - description: Zone is the 32-hex Cloudflare zone id, from the path.
         example: 0123456789abcdef0123456789abcdef
@@ -55512,7 +55512,7 @@ paths:
       description: |-
         Unbinds a Worker route, so its pattern stops dispatching to a
         script. Requires org admin.
-      operationId: delete_v1_cloudflare_workers_zones_zone_routes_route
+      operationId: delete_v1_cloudflare_workers_zones_by_zone_routes_by_route
       parameters:
       - description: Zone is the 32-hex Cloudflare zone id.
         example: 0123456789abcdef0123456789abcdef
@@ -55603,7 +55603,7 @@ paths:
       description: |-
         Reads one Cloudflare zone the org's token can see. Any org member may
         read. A zone id the token cannot see is Cloudflare's own not-found, relayed.
-      operationId: get_v1_cloudflare_zones_zone
+      operationId: get_v1_cloudflare_zones_by_zone
       parameters:
       - description: Zone is the 32-hex Cloudflare zone id.
         example: 0123456789abcdef0123456789abcdef
@@ -55630,7 +55630,7 @@ paths:
 
         A zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's
         OWN error, never a fabricated success.
-      operationId: get_v1_cloudflare_zones_zone_analytics
+      operationId: get_v1_cloudflare_zones_by_zone_analytics
       parameters:
       - description: Zone is the 32-hex Cloudflare zone id.
         example: 0123456789abcdef0123456789abcdef
@@ -55687,7 +55687,7 @@ paths:
         Exactly one selector is required. Cloudflare treats a body with neither as a
         no-op and answers 200, which reads as "purged" to a caller that never purged
         anything — the failure we refuse to pass through.
-      operationId: post_v1_cloudflare_zones_zone_purge
+      operationId: post_v1_cloudflare_zones_by_zone_purge
       parameters:
       - description: Zone is the 32-hex Cloudflare zone id, from the path.
         example: 0123456789abcdef0123456789abcdef
@@ -57219,7 +57219,7 @@ paths:
   /v1/compliance/accreditation/{id}:
     get:
       description: Returns one tracked accreditation record.
-      operationId: get_v1_compliance_accreditation_id
+      operationId: get_v1_compliance_accreditation_by_id
       parameters:
       - description: ID is the accreditation record to read, from the path.
         example: acc_1
@@ -57249,7 +57249,7 @@ paths:
         reviewer's identity is recorded as ReviewerSub and audited. Human-in-the-loop:
         the platform never confirms on its own, and even a provider_verified state
         carries the reviewer who recorded it.
-      operationId: post_v1_compliance_accreditation_id_decision
+      operationId: post_v1_compliance_accreditation_by_id_decision
       parameters:
       - description: ID is the accreditation record to decide, from the path.
         example: acc_1
@@ -57436,7 +57436,7 @@ paths:
         Returns one subject WITH its contact PII — the only surface that
         returns it, and only to the owning org. The response is never cached by any
         intermediary.
-      operationId: get_v1_compliance_subjects_id
+      operationId: get_v1_compliance_subjects_by_id
       parameters:
       - description: ID is the subject to read, from the path.
         example: sub_1
@@ -57515,7 +57515,7 @@ paths:
       description: |-
         Returns one verification — its opaque subject reference and
         provider-reported status, no subject PII.
-      operationId: get_v1_compliance_verifications_id
+      operationId: get_v1_compliance_verifications_by_id
       parameters:
       - description: ID is the verification to act on, from the path.
         example: chk_1
@@ -57546,7 +57546,7 @@ paths:
         webhook or a reconcile), and it is ROLE-GATED (an org admin or platform reviewer)
         AND ATTRIBUTED (the reviewer's user id is DecidedBy), so a manual pass is always
         accountable.
-      operationId: post_v1_compliance_verifications_id_decision
+      operationId: post_v1_compliance_verifications_by_id_decision
       parameters:
       - description: ID is the verification to decide, from the path.
         example: chk_1
@@ -57584,7 +57584,7 @@ paths:
         records it, ATTRIBUTED to the provider — the internal PULL reconcile. For the
         Manual provider the check stays pending; for a hosted provider it reflects the
         provider's settled status. A poll error is a 502, never a verification.
-      operationId: post_v1_compliance_verifications_id_refresh
+      operationId: post_v1_compliance_verifications_by_id_refresh
       parameters:
       - description: ID is the verification to act on, from the path.
         example: chk_1
@@ -57826,7 +57826,7 @@ paths:
         Idempotent — dropping a never-connected id still answers {disconnected:true}
         (disconnect() parity). No provider Revoke: none of the user-plane providers
         exposes a revoke endpoint.
-      operationId: delete_v1_connectors_id
+      operationId: delete_v1_connectors_by_id
       parameters:
       - description: |-
           ID is the connector id, provider + ":" + label ("openai:default") — the
@@ -57856,7 +57856,7 @@ paths:
         Forces a token rotation for a connected connector, ahead of the
         automatic rotation a token read would do inside the expiry window. Only
         providers that declare a Refresh support it.
-      operationId: post_v1_connectors_id_refresh
+      operationId: post_v1_connectors_by_id_refresh
       parameters:
       - description: |-
           ID is the connector id, provider + ":" + label ("openai:default") — the
@@ -57899,7 +57899,7 @@ paths:
         id is simply "no row" → 404. fresh() auto-rotates within the refreshSkew
         window; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh
         tokens are NEVER returned — custody keeps the sink. The token is never logged.
-      operationId: get_v1_connectors_id_token
+      operationId: get_v1_connectors_by_id_token
       parameters:
       - description: |-
           ID is the connector id, provider + ":" + label ("openai:default") — the
@@ -57934,7 +57934,7 @@ paths:
         (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE
         (Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING
         is persisted (connectByCredential's fail-closed order).
-      operationId: post_v1_connectors_provider_credential
+      operationId: post_v1_connectors_by_provider_credential
       parameters:
       - description: Provider is the user-scoped provider's registry id, from the
           path.
@@ -57986,7 +57986,7 @@ paths:
         the user at poll-done (connect() parity), and the per-provider connector cap is
         checked before the provider is called. The provider's device code is persisted
         only in the encrypted grants table and is NEVER returned.
-      operationId: post_v1_connectors_provider_device
+      operationId: post_v1_connectors_by_provider_device
       parameters:
       - description: Provider is the user-scoped provider's registry id, from the
           path.
@@ -58030,7 +58030,7 @@ paths:
         (verifyConn {active:false} discipline) — the status set is closed:
         pending|connected|denied|expired. pollSlow collapses to "pending" on the
         wire; the raised cadence rides interval.
-      operationId: post_v1_connectors_provider_device_flow_poll
+      operationId: post_v1_connectors_by_provider_device_by_flow_poll
       parameters:
       - description: Provider is the user-scoped provider's registry id, from the
           path.
@@ -58111,7 +58111,7 @@ paths:
         re-validates it at the storage boundary. Distribution is best effort: its honest
         state is reported on the result and a distribution failure never rolls the status
         change back.
-      operationId: post_v1_content_doctype_name_transition
+      operationId: post_v1_content_by_doctype_by_name_transition
       parameters:
       - description: DocType is the content type to act on, from the path.
         example: SocialPost
@@ -58370,7 +58370,7 @@ paths:
       description: |-
         Returns one Startup Program application with its AI screen and stage history.
         An id belonging to another org reads as not found.
-      operationId: get_v1_crm_applications_id
+      operationId: get_v1_crm_applications_by_id
       parameters:
       - description: ID is the record to act on, from the path.
         example: appl_1
@@ -58399,7 +58399,7 @@ paths:
         reject from any non-rejected stage, or reopen a rejected application to
         `applied`; anything else is refused. Rejecting requires a reason. A note with
         no stage change is still recorded.
-      operationId: patch_v1_crm_applications_id
+      operationId: patch_v1_crm_applications_by_id
       parameters:
       - description: ID is the application to move, from the path.
         example: appl_1
@@ -58484,7 +58484,7 @@ paths:
         Removes one of the caller org's companies and answers 204. Any
         contact or opportunity in the org that referenced it keeps existing with the
         reference cleared, so nothing is left pointing at a company that is gone.
-      operationId: delete_v1_crm_companies_id
+      operationId: delete_v1_crm_companies_by_id
       parameters:
       - description: ID is the record to act on, from the path.
         example: comp_1
@@ -58504,7 +58504,7 @@ paths:
       description: |-
         Returns one of the caller org's companies. An id belonging to
         another org reads as not found.
-      operationId: get_v1_crm_companies_id
+      operationId: get_v1_crm_companies_by_id
       parameters:
       - description: ID is the record to act on, from the path.
         example: comp_1
@@ -58529,7 +58529,7 @@ paths:
         Replaces one of the caller org's companies. Every writable
         field is taken from the request, so a field the request omits is CLEARED —
         send the whole record. A name is required.
-      operationId: put_v1_crm_companies_id
+      operationId: put_v1_crm_companies_by_id
       parameters:
       - description: |-
           ID names the company to update and comes from the path. A create ignores
@@ -58624,7 +58624,7 @@ paths:
         Removes one of the caller org's contacts and answers 204. Any
         opportunity in the org that named it point of contact keeps existing with
         that reference cleared.
-      operationId: delete_v1_crm_contacts_id
+      operationId: delete_v1_crm_contacts_by_id
       parameters:
       - description: ID is the record to act on, from the path.
         example: cont_1
@@ -58644,7 +58644,7 @@ paths:
       description: |-
         Returns one of the caller org's contacts. An id belonging to
         another org reads as not found.
-      operationId: get_v1_crm_contacts_id
+      operationId: get_v1_crm_contacts_by_id
       parameters:
       - description: ID is the record to act on, from the path.
         example: cont_1
@@ -58669,7 +58669,7 @@ paths:
         Replaces one of the caller org's contacts. Every writable field
         is taken from the request, so a field the request omits is CLEARED — send the
         whole record. One of firstName, lastName or email is required.
-      operationId: put_v1_crm_contacts_id
+      operationId: put_v1_crm_contacts_by_id
       parameters:
       - description: |-
           ID names the contact to update and comes from the path. A create ignores
@@ -58763,7 +58763,7 @@ paths:
   /v1/crm/opportunities/{id}:
     delete:
       description: Removes one of the caller org's deals and answers 204.
-      operationId: delete_v1_crm_opportunities_id
+      operationId: delete_v1_crm_opportunities_by_id
       parameters:
       - description: ID is the record to act on, from the path.
         example: oppo_1
@@ -58783,7 +58783,7 @@ paths:
       description: |-
         Returns one of the caller org's deals. An id belonging to
         another org reads as not found.
-      operationId: get_v1_crm_opportunities_id
+      operationId: get_v1_crm_opportunities_by_id
       parameters:
       - description: ID is the record to act on, from the path.
         example: oppo_1
@@ -58809,7 +58809,7 @@ paths:
         field is taken from the request, so a field the request omits is CLEARED —
         send the whole record. A name is required and the stage must be a pipeline
         stage.
-      operationId: put_v1_crm_opportunities_id
+      operationId: put_v1_crm_opportunities_by_id
       parameters:
       - description: |-
           ID names the opportunity to update and comes from the path. A create
@@ -58893,7 +58893,7 @@ paths:
         A room id outside the caller's own tenant store is not found. Only links that
         NAME the room are counted — a link created over a single document contributes
         nothing here, even when that document also sits in the room.
-      operationId: get_v1_dataroom_analytics_dataroom_dataroomId
+      operationId: get_v1_dataroom_analytics_dataroom_by_dataroomid
       parameters:
       - description: |-
           DataroomID is the room to report on. It is the path segment, resolved in
@@ -58925,7 +58925,7 @@ paths:
         The link is resolved in the caller's OWN tenant store, so another org's link id
         is not found — knowing a link id is enough to OPEN the room it shares, and
         never enough to read who has been reading it.
-      operationId: get_v1_dataroom_analytics_link_linkId
+      operationId: get_v1_dataroom_analytics_link_by_linkid
       parameters:
       - description: |-
           LinkID is the link to report on. It is the path segment, resolved in the
@@ -59008,7 +59008,7 @@ paths:
         time breaking ties — the SAME order a link's visitor sees, so this is what the
         room looks like from the outside. A room id outside the caller's own tenant
         store is not found.
-      operationId: get_v1_dataroom_datarooms_id
+      operationId: get_v1_dataroom_datarooms_by_id
       parameters:
       - description: |-
           ID is the room to read. It is the path segment: the URL is the addressing
@@ -59042,7 +59042,7 @@ paths:
         document must exist in the caller's own store — either missing is not found —
         and a document already in the room is refused as a conflict rather than
         duplicated.
-      operationId: post_v1_dataroom_datarooms_id_documents
+      operationId: post_v1_dataroom_datarooms_by_id_documents
       parameters:
       - description: |-
           ID is the room to add to. It is the path segment: the URL is the addressing
@@ -59115,7 +59115,7 @@ paths:
         The lookup runs in the caller's own tenant store, so an id belonging to another
         org is not found exactly like one that never existed. Metadata only: the bytes
         are a separate read.
-      operationId: get_v1_dataroom_documents_id
+      operationId: get_v1_dataroom_documents_by_id
       parameters:
       - description: |-
           ID is the document to read. It is the path segment: the URL is the
@@ -59370,7 +59370,7 @@ paths:
         instance bound to it back to Base BEFORE tearing down the org's dedicated
         instance, then deletes the sealed credential and removes the metadata row.
         Answers 204 with no body; a second call is a 404.
-      operationId: delete_v1_datastore_name
+      operationId: delete_v1_datastore_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -59394,7 +59394,7 @@ paths:
         warehouse's status, its instance address and the admin user the instance
         booted with — never the password. A still-booting instance reads
         "provisioning", reconciled from the operator's live view rather than the row.
-      operationId: get_v1_datastore_name
+      operationId: get_v1_datastore_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -59475,7 +59475,7 @@ paths:
         FOUND rather than refused: a 403 would confirm the application exists, so the
         route would become a cross-tenant existence oracle. A name that is not a
         DNS-1123 label is a 400 before any cluster read.
-      operationId: get_v1_deploy_applications_name
+      operationId: get_v1_deploy_applications_by_name
       parameters:
       - description: |-
           Name is the application to read, from the path. It must be a DNS-1123 label
@@ -59512,7 +59512,7 @@ paths:
         Secrets are DELIBERATELY not walked, so no materialized environment can ever
         appear in the tree. Tenant-scoped exactly like the application read: another
         org's name is not found, a malformed name is a 400.
-      operationId: get_v1_deploy_applications_name_resource-tree
+      operationId: get_v1_deploy_applications_by_name_resource-tree
       parameters:
       - description: |-
           Name is the application to read, from the path. It must be a DNS-1123 label
@@ -59556,7 +59556,7 @@ paths:
         is echoed back.
 
         Tenant-scoped exactly like the application read.
-      operationId: get_v1_deploy_applications_name_revisions_revision_metadata
+      operationId: get_v1_deploy_applications_by_name_revisions_by_revision_metadata
       parameters:
       - description: Name is the application to read, from the path. It must be a
           DNS-1123 label.
@@ -59632,7 +59632,7 @@ paths:
         application is still resolved first, so a name that is not the caller's is not
         found rather than handed the static body — the endpoint discloses nothing about
         another tenant's fleet.
-      operationId: get_v1_deploy_applications_name_syncwindows
+      operationId: get_v1_deploy_applications_by_name_syncwindows
       parameters:
       - description: |-
           Name is the application to read, from the path. It must be a DNS-1123 label
@@ -59936,7 +59936,7 @@ paths:
       description: |-
         Forgets a destination for the caller's org: every credential held in
         KMS, then the stored config. Idempotent, and it requires org admin.
-      operationId: delete_v1_destinations_platform
+      operationId: delete_v1_destinations_by_platform
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
@@ -59964,7 +59964,7 @@ paths:
         Reports one destination's card for the caller's org — its config fields,
         its connection state, and whether a credential resolves right now. A platform
         this deployment does not carry is not found.
-      operationId: get_v1_destinations_platform
+      operationId: get_v1_destinations_by_platform
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
@@ -60033,7 +60033,7 @@ paths:
         and reports what the platform said. A send the platform refuses is reported as
         data — {"ok": false, "error": …} at 200 — so the console shows the platform's
         own words rather than an error about Hanzo. It requires org admin.
-      operationId: post_v1_destinations_platform_test
+      operationId: post_v1_destinations_by_platform_test
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
@@ -60256,7 +60256,7 @@ paths:
         bound to it back to Base BEFORE tearing down the org's dedicated FerretDB
         instance, then deletes the sealed credential and removes the metadata row.
         Answers 204 with no body; a second call is a 404.
-      operationId: delete_v1_docdb_name
+      operationId: delete_v1_docdb_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -60280,7 +60280,7 @@ paths:
         database's status, its instance address and the SCRAM user the instance was
         set up with — never the password. A still-booting instance reads
         "provisioning", reconciled from the operator's live view.
-      operationId: get_v1_docdb_name
+      operationId: get_v1_docdb_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -62669,7 +62669,7 @@ paths:
       description: |-
         Removes one flag definition by key and records the
         deletion in the change log. A key the caller's store does not hold is a 404.
-      operationId: delete_v1_flags_defs_key
+      operationId: delete_v1_flags_defs_by_key
       parameters:
       - description: Key is the flag key to act on, from the path.
         in: path
@@ -62693,7 +62693,7 @@ paths:
       description: |-
         Returns one flag definition by key, or 404 when the caller's
         store has none under that key.
-      operationId: get_v1_flags_defs_key
+      operationId: get_v1_flags_defs_by_key
       parameters:
       - description: Key is the flag key to act on, from the path.
         in: path
@@ -62721,7 +62721,7 @@ paths:
         "key" is forced to the key in the URL, so a document can never be filed under a
         name other than the one it was addressed by. Every write bumps the version and
         appends to the change log under the caller's identity.
-      operationId: put_v1_flags_defs_key
+      operationId: put_v1_flags_defs_by_key
       parameters:
       - description: Key is the flag key to write, from the path.
         example: new-editor
@@ -63197,7 +63197,7 @@ paths:
       description: |-
         Deletes one of the caller's workflows and its runs. Ownership
         is verified first; a foreign id answers 404 and deletes nothing.
-      operationId: delete_v1_flow_workflows_workflow
+      operationId: delete_v1_flow_workflows_by_workflow
       parameters:
       - description: Workflow is the workflow's UUID, taken from the path.
         in: path
@@ -63220,7 +63220,7 @@ paths:
         Workflow reads one of the caller's workflows — the full record, graph
         included. A workflow outside the caller's org answers 404, indistinguishable
         from one that does not exist.
-      operationId: get_v1_flow_workflows_workflow
+      operationId: get_v1_flow_workflows_by_workflow
       parameters:
       - description: Workflow is the workflow's UUID, taken from the path.
         in: path
@@ -63244,7 +63244,7 @@ paths:
         Patches one of the caller's workflows: name, description,
         graph, or the locked flag — only the stated fields move. Ownership is
         verified before the patch reaches the product.
-      operationId: patch_v1_flow_workflows_workflow
+      operationId: patch_v1_flow_workflows_by_workflow
       parameters:
       - description: Workflow is the workflow's UUID, taken from the path.
         in: path
@@ -63279,7 +63279,7 @@ paths:
         the same permission gate the list itself uses — because the query is validated
         against its schema: a filter, sort or field name the DocType does not declare
         is refused rather than reaching the store.
-      operationId: get_v1_framework_doctype
+      operationId: get_v1_framework_by_doctype
       parameters:
       - description: DocType is the DocType to list, from the path.
         example: Task
@@ -63362,7 +63362,7 @@ paths:
       description: |-
         Removes one document, after its on_trash hooks agree. A
         SUBMITTED document cannot be deleted — cancel it first. Answers 204.
-      operationId: delete_v1_framework_doctype_name
+      operationId: delete_v1_framework_by_doctype_by_name
       parameters:
       - description: DocType is the document's DocType, from the path.
         example: Task
@@ -63390,7 +63390,7 @@ paths:
       x-app: framework
     get:
       description: Returns one document by name, with Password fields redacted.
-      operationId: get_v1_framework_doctype_name
+      operationId: get_v1_framework_by_doctype_by_name
       parameters:
       - description: DocType is the document's DocType, from the path.
         example: Task
@@ -63453,7 +63453,7 @@ paths:
         Moves a submitted document to cancelled (docstatus 1 → 2) after
         its on_cancel hooks agree. Cancelling is terminal — a cancelled document
         cannot be re-submitted — but it CAN then be deleted.
-      operationId: post_v1_framework_doctype_name_cancel
+      operationId: post_v1_framework_by_doctype_by_name_cancel
       parameters:
       - description: DocType is the document's DocType, from the path.
         example: Task
@@ -63493,7 +63493,7 @@ paths:
         on_submit hooks agree. A submitted document is IMMUTABLE: further writes and
         deletes are refused until it is cancelled. Only a submittable DocType has this
         lifecycle; any other docstatus is an illegal transition.
-      operationId: post_v1_framework_doctype_name_submit
+      operationId: post_v1_framework_by_doctype_by_name_submit
       parameters:
       - description: DocType is the document's DocType, from the path.
         example: Task
@@ -63583,7 +63583,7 @@ paths:
         Removes a DocType and every document stored under it. The
         definition and its data go together — a document with no schema can be neither
         validated nor read back — so there is no undo. Manager-only. Answers 204.
-      operationId: delete_v1_framework_doctypes_name
+      operationId: delete_v1_framework_doctypes_by_name
       parameters:
       - description: |-
           Name is the DocType's name, from the path. A name containing a space
@@ -63607,7 +63607,7 @@ paths:
         Returns one DocType definition — its fields, naming rule,
         permissions and lifecycle flags. Scoped to the caller's org, so another
         tenant's DocType of the same name is simply not found.
-      operationId: get_v1_framework_doctypes_name
+      operationId: get_v1_framework_doctypes_by_name
       parameters:
       - description: |-
           Name is the DocType's name, from the path. A name containing a space
@@ -63637,7 +63637,7 @@ paths:
         stored definition becomes the body. The name in the URL is authoritative over
         the body's, and documents already stored under the DocType are left intact.
         Manager-only.
-      operationId: put_v1_framework_doctypes_name
+      operationId: put_v1_framework_doctypes_by_name
       parameters:
       - example: Task
         in: path
@@ -63693,7 +63693,7 @@ paths:
         Returns one app lane's install state for the caller's org: the
         DocTypes the lane declares, and which of them already exist in the org. That
         is the honest "set up" versus "installed" answer a console renders.
-      operationId: get_v1_framework_modules_module
+      operationId: get_v1_framework_modules_by_module
       parameters:
       - description: Module is the lane's registered name ("cms", "erp"), from the
           path.
@@ -63722,7 +63722,7 @@ paths:
         and create-if-absent: a DocType the org already has is reported as existing
         and never replaced, so re-installing cannot clobber a definition the org has
         since edited. Manager-only.
-      operationId: post_v1_framework_modules_module_install
+      operationId: post_v1_framework_modules_by_module_install
       parameters:
       - description: Module is the lane's registered name ("cms", "erp"), from the
           path.
@@ -63793,7 +63793,7 @@ paths:
       description: |-
         Removes one (user, role) grant in the caller's org. Manager-only.
         Answers 204; a grant that does not exist is not found.
-      operationId: delete_v1_framework_roles_user_role
+      operationId: delete_v1_framework_roles_by_user_by_role
       parameters:
       - description: User is the assignee whose grant is being revoked, from the path.
         example: u_alice
@@ -64362,7 +64362,7 @@ paths:
         Removes a registered SSH key, scoped to the caller's org: an org can
         only delete its own, and a key id it does not own is not found. Answers 204
         with no body. Once removed the key no longer authenticates any SSH git access.
-      operationId: delete_v1_git_keys_id
+      operationId: delete_v1_git_keys_by_id
       parameters:
       - description: ID is the key's identifier ("gitkey_…"), from the :id path segment.
         example: gitkey_4a1b
@@ -64445,7 +64445,7 @@ paths:
         no body. The metadata row is the source of truth for existence, so a storage
         purge that fails is logged and the delete still succeeds — and a second call
         is a 404, not a second delete.
-      operationId: delete_v1_git_repos_name
+      operationId: delete_v1_git_repos_by_name
       parameters:
       - description: |-
           Name is the repo's org-unique handle, from the :name path segment. A
@@ -64469,7 +64469,7 @@ paths:
         resolved HEAD commit. Both are read from the object store on each call, so an
         empty repo reports no branches and an empty head rather than failing. A repo
         outside the caller's scope is not found.
-      operationId: get_v1_git_repos_name
+      operationId: get_v1_git_repos_by_name
       parameters:
       - description: |-
           Name is the repo's org-unique handle, from the :name path segment. A
@@ -64497,7 +64497,7 @@ paths:
         Flips a repo's public bit, the one mutable repo setting today.
         Public grants ANONYMOUS fetch only; push and the whole control plane stay
         org-authed. Returns the updated repo.
-      operationId: patch_v1_git_repos_name
+      operationId: patch_v1_git_repos_by_name
       parameters:
       - description: Name is the repo to update, from the :name path segment.
         example: widgets
@@ -64532,7 +64532,7 @@ paths:
         Returns one file's bytes at one revision. Text comes back verbatim,
         binary comes back base64, and a file past the 1 MiB view cap comes back marked
         truncated with NO content — the client is expected to clone instead.
-      operationId: get_v1_git_repos_name_blob
+      operationId: get_v1_git_repos_by_name_blob
       parameters:
       - description: Name is the repo to read, from the :name path segment.
         example: widgets
@@ -64579,7 +64579,7 @@ paths:
       description: |-
         Walks a ref's history newest first, or one path's history when a
         path is given. There is no cursor: the page is the newest `limit` commits.
-      operationId: get_v1_git_repos_name_commits
+      operationId: get_v1_git_repos_by_name_commits
       parameters:
       - description: Name is the repo to read, from the :name path segment.
         example: widgets
@@ -64648,7 +64648,7 @@ paths:
         being dropped. A caller building a desired set has to know the difference
         between "this file is empty" and "this file was not read" — silently omitting
         it is how a pruning reconcile deletes what the missing file declared.
-      operationId: get_v1_git_repos_name_files
+      operationId: get_v1_git_repos_by_name_files
       parameters:
       - description: Name is the repo to read, from the :name path segment.
         example: universe
@@ -64694,7 +64694,7 @@ paths:
         runs under one pack slot with the same memory bounds as a clone, so it can
         block behind heavy pack traffic rather than compete with it. Storage usage is
         re-measured afterwards, since a repack reclaims space.
-      operationId: post_v1_git_repos_name_gc
+      operationId: post_v1_git_repos_by_name_gc
       parameters:
       - description: |-
           Name is the repo's org-unique handle, from the :name path segment. A
@@ -64729,7 +64729,7 @@ paths:
         the source and a repeat call re-syncs it — the endpoint is idempotent by mirror
         semantics. Mirrored bytes are metered exactly like a push, and a push.landed
         event is emitted for the default branch so the code index picks the repo up.
-      operationId: post_v1_git_repos_name_mirror
+      operationId: post_v1_git_repos_by_name_mirror
       parameters:
       - description: |-
           Name is the local repo to mirror into, from the :name path segment. It is
@@ -64766,7 +64766,7 @@ paths:
       description: |-
         Returns a repo's outbound mirror targets — the downstream remotes
         the mirror reactor pushes to whenever a push lands here.
-      operationId: get_v1_git_repos_name_mirrors
+      operationId: get_v1_git_repos_by_name_mirrors
       parameters:
       - description: |-
           Name is the repo's org-unique handle, from the :name path segment. A
@@ -64805,7 +64805,7 @@ paths:
         at an internal service. Any embedded userinfo is stripped — credentials ride
         env-only at push time and never enter the stored URL. One mirror per host per
         repo; a second is a 409.
-      operationId: post_v1_git_repos_name_mirrors
+      operationId: post_v1_git_repos_by_name_mirrors
       parameters:
       - description: |-
           Name is the repo whose advanced refs are pushed downstream, from the :name
@@ -64843,7 +64843,7 @@ paths:
         Removes one outbound mirror target; later pushes stop being
         forwarded to it. Answers 204 with no body. Nothing is done to the downstream
         remote itself — only this repo's intent to push there is dropped.
-      operationId: delete_v1_git_repos_name_mirrors_id
+      operationId: delete_v1_git_repos_by_name_mirrors_by_id
       parameters:
       - description: Name is the repo, from the :name path segment.
         example: widgets
@@ -64875,7 +64875,7 @@ paths:
         merged onto the branch tip (unlisted files survive), and the same
         push-to-deploy hook a real receive-pack fires is fired, so downstream this is
         indistinguishable from a `git push`.
-      operationId: post_v1_git_repos_name_push
+      operationId: post_v1_git_repos_by_name_push
       parameters:
       - description: |-
           Name is the repo to push into, from the :name path segment. It is CREATED
@@ -64921,7 +64921,7 @@ paths:
       description: |-
         Returns the README at the tree root as plain text — unrendered, so
         the caller decides how to present it. A repo with no README is not found.
-      operationId: get_v1_git_repos_name_readme
+      operationId: get_v1_git_repos_by_name_readme
       parameters:
       - description: Name is the repo to read, from the :name path segment.
         example: widgets
@@ -64960,7 +64960,7 @@ paths:
         Lists a repo's branches, tags and default branch — what a branch
         picker needs in one call. Unlike the other read ops it tolerates a repo with no
         commits: the ref sets come back empty and the default branch is still named.
-      operationId: get_v1_git_repos_name_refs
+      operationId: get_v1_git_repos_by_name_refs
       parameters:
       - description: |-
           Name is the repo's org-unique handle, from the :name path segment. A
@@ -64994,7 +64994,7 @@ paths:
       description: |-
         Returns a repo's Slack subscriptions — which channels the
         lifecycle notifier posts this repo's push and deploy events to.
-      operationId: get_v1_git_repos_name_subscriptions
+      operationId: get_v1_git_repos_by_name_subscriptions
       parameters:
       - description: |-
           Name is the repo's org-unique handle, from the :name path segment. A
@@ -65031,7 +65031,7 @@ paths:
         that repo's push and deploy events there. Answers 201. The same channel twice
         on one repo is a 409; a repo outside the caller's scope is a 404, exactly as
         reading it is.
-      operationId: post_v1_git_repos_name_subscriptions
+      operationId: post_v1_git_repos_by_name_subscriptions
       parameters:
       - description: Name is the repo to subscribe, from the :name path segment.
         example: widgets
@@ -65069,7 +65069,7 @@ paths:
         Removes one Slack subscription from a repo; the notifier stops
         posting that repo's events to that channel. Answers 204 with no body. An id
         that is not this repo's subscription is not found.
-      operationId: delete_v1_git_repos_name_subscriptions_id
+      operationId: delete_v1_git_repos_by_name_subscriptions_by_id
       parameters:
       - description: Name is the repo, from the :name path segment.
         example: widgets
@@ -65098,7 +65098,7 @@ paths:
       description: |-
         Lists the immediate children of one directory at one revision,
         directories before files. It does not recurse — walk down a level at a time.
-      operationId: get_v1_git_repos_name_tree
+      operationId: get_v1_git_repos_by_name_tree
       parameters:
       - description: Name is the repo to read, from the :name path segment.
         example: widgets
@@ -65615,7 +65615,7 @@ paths:
         manual mark or a skip — and returns the refreshed journey. Reset is never
         dependency-gated. Auto-detect runs on the next read, so a step the org has in
         fact completed elsewhere goes straight back to done.
-      operationId: post_v1_guide_steps_id_reset
+      operationId: post_v1_guide_steps_by_id_reset
       parameters:
       - description: ID is the step's id, as it appears in the journey (e.g. "gsuite").
         in: path
@@ -65643,7 +65643,7 @@ paths:
         declaring the step does not apply to them — so a step whose dependencies are
         unfinished can still be skipped, and a skipped step counts as terminal for
         everything downstream of it.
-      operationId: post_v1_guide_steps_id_skip
+      operationId: post_v1_guide_steps_by_id_skip
       parameters:
       - description: ID is the step's id, as it appears in the journey (e.g. "gsuite").
         in: path
@@ -65808,7 +65808,7 @@ paths:
         Returns one public article by slug, with its body. A missing, Draft,
         or internal (non-public) article is 404 — fail-closed, so this route is no
         existence oracle for anything beyond "published and public".
-      operationId: get_v1_help_articles_slug
+      operationId: get_v1_help_articles_by_slug
       parameters:
       - description: |-
           Slug is the article's public identifier, from the path. It IS the document
@@ -70504,7 +70504,7 @@ paths:
         the change. Routes still naming it stop being served (they compile as skipped)
         until they name a transform that exists. Answers 204; an id this org does not
         hold is 404.
-      operationId: delete_v1_ingress_middlewares_id
+      operationId: delete_v1_ingress_middlewares_by_id
       parameters:
       - description: ID is the object to act on, from the path.
         example: strip-api
@@ -70523,7 +70523,7 @@ paths:
       x-app: ingress
     get:
       description: Returns one of the caller org's edge transforms by id.
-      operationId: get_v1_ingress_middlewares_id
+      operationId: get_v1_ingress_middlewares_by_id
       parameters:
       - description: ID is the object to act on, from the path.
         example: strip-api
@@ -70549,7 +70549,7 @@ paths:
         mints an id when the body omits one; PUT takes the id from the URL, which wins
         over any id in the body. type must be one of redirectScheme, stripPrefix,
         addPrefix or headers, and stripPrefix/addPrefix each require their config key.
-      operationId: put_v1_ingress_middlewares_id
+      operationId: put_v1_ingress_middlewares_by_id
       parameters:
       - description: |-
           ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128
@@ -70638,7 +70638,7 @@ paths:
         Removes one of the caller org's routing rules and hot-applies the
         shrunken table, freeing its host for another claim. Answers 204; an id this org
         does not hold is 404.
-      operationId: delete_v1_ingress_routes_id
+      operationId: delete_v1_ingress_routes_by_id
       parameters:
       - description: ID is the object to act on, from the path.
         example: web
@@ -70657,7 +70657,7 @@ paths:
       x-app: ingress
     get:
       description: Returns one of the caller org's routing rules by id.
-      operationId: get_v1_ingress_routes_id
+      operationId: get_v1_ingress_routes_by_id
       parameters:
       - description: ID is the object to act on, from the path.
         example: a1b2c3d4e5f60718
@@ -70684,7 +70684,7 @@ paths:
         one; PUT takes the id from the URL, which wins over any id in the body. A
         route's host is a GLOBALLY unique DNS claim: a host another org's route already
         holds is refused 409, so no tenant can hijack another's hostname.
-      operationId: put_v1_ingress_routes_id
+      operationId: put_v1_ingress_routes_by_id
       parameters:
       - description: |-
           ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.
@@ -70773,7 +70773,7 @@ paths:
         change. Routes still pointing at it stop being served (they compile as skipped)
         until they name a pool that exists. Answers 204; an id this org does not hold
         is 404.
-      operationId: delete_v1_ingress_services_id
+      operationId: delete_v1_ingress_services_by_id
       parameters:
       - description: ID is the object to act on, from the path.
         example: app-pool
@@ -70791,7 +70791,7 @@ paths:
       x-app: ingress
     get:
       description: Returns one of the caller org's backend pools by id.
-      operationId: get_v1_ingress_services_id
+      operationId: get_v1_ingress_services_by_id
       parameters:
       - description: ID is the object to act on, from the path.
         example: app-pool
@@ -70817,7 +70817,7 @@ paths:
         an id when the body omits one; PUT takes the id from the URL, which wins over
         any id in the body. A pool needs at least one backend and every backend URL
         must be http(s)://host[:port].
-      operationId: put_v1_ingress_services_id
+      operationId: put_v1_ingress_services_by_id
       parameters:
       - description: |-
           ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.
@@ -71030,7 +71030,7 @@ paths:
         Returns ONE provider with this org's connection status — the same view list
         carries, for a single id. An unknown id is 404, and so is a user-plane provider:
         the org surface never resolves one.
-      operationId: get_v1_integrations_provider
+      operationId: get_v1_integrations_by_provider
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
@@ -71095,7 +71095,7 @@ paths:
         AdminOnly connector without the caller's own-org admin bit → 403; not configured
         → 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now
         rather than dead-end at the callback).
-      operationId: post_v1_integrations_provider_connect
+      operationId: post_v1_integrations_by_provider_connect
       parameters:
       - description: Provider is the connector's registry id, from the :provider path
           segment.
@@ -71139,7 +71139,7 @@ paths:
         every custodied KMS secret and the connection row. Idempotent — disconnecting a
         provider that was never connected still returns {disconnected:true}. Symmetric
         with connect: an AdminOnly connector needs the caller's own-org admin bit.
-      operationId: post_v1_integrations_provider_disconnect
+      operationId: post_v1_integrations_by_provider_disconnect
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
@@ -71174,7 +71174,7 @@ paths:
         A verification failure is reported as {active:false}, not an error — the console/
         CLI renders it. Only apikey providers support verify (OAuth tokens are checked at
         use, not re-verified here).
-      operationId: post_v1_integrations_provider_verify
+      operationId: post_v1_integrations_by_provider_verify
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
@@ -71325,7 +71325,7 @@ paths:
       description: |-
         Deletes the repo's Pages site. 404 when there is none, so a
         caller can tell "turned it off" from "there was nothing on".
-      operationId: delete_v1_integrations_github_repos_repo_pages
+      operationId: delete_v1_integrations_github_repos_by_repo_pages
       parameters:
       - description: |-
           Repo is the repository's short name within the org's installation, with no
@@ -71357,7 +71357,7 @@ paths:
         source. The repo is resolved against the org installation's GRANTED set, so a
         caller can never address a repo the App was not granted; 404 when the repo has no
         Pages site.
-      operationId: get_v1_integrations_github_repos_repo_pages
+      operationId: get_v1_integrations_github_repos_by_repo_pages
       parameters:
       - description: |-
           Repo is the repository's short name within the org's installation, with no
@@ -71398,7 +71398,7 @@ paths:
         With buildType "workflow" the site builds via GitHub Actions; otherwise it builds
         from a branch source, defaulting to the repo's own default branch when none is
         given. Only "/" and "/docs" are legal source paths (GitHub's rule).
-      operationId: post_v1_integrations_github_repos_repo_pages
+      operationId: post_v1_integrations_github_repos_by_repo_pages
       parameters:
       - description: Repo is the repository, from the :repo path segment.
         example: widgets
@@ -71443,7 +71443,7 @@ paths:
         Sets or clears the custom domain (cname) and updates HTTPS
         enforcement, build type, or source. ONLY the provided fields are sent to GitHub,
         so an update never resets a setting the caller did not mention.
-      operationId: put_v1_integrations_github_repos_repo_pages
+      operationId: put_v1_integrations_github_repos_by_repo_pages
       parameters:
       - description: Repo is the repository, from the :repo path segment.
         example: widgets
@@ -71484,7 +71484,7 @@ paths:
         The build is queued AT GITHUB, not completed here, so the answer is 202 Accepted
         and its status is the one GitHub reported at queue time. 404 when the repository
         has no Pages site, or when the org's installation was not granted it.
-      operationId: post_v1_integrations_github_repos_repo_pages_builds
+      operationId: post_v1_integrations_github_repos_by_repo_pages_builds
       parameters:
       - description: |-
           Repo is the repository's short name within the org's installation, with no
@@ -71933,7 +71933,7 @@ paths:
         vector namespace, and marks the connector disconnected. The documents already
         ingested stay in the org's store — they are the org's own data — but stop being
         retrievable by search; a caller deletes them through the document surface.
-      operationId: delete_v1_kb_connectors_provider
+      operationId: delete_v1_kb_connectors_by_provider
       parameters:
       - description: 'Provider is the connector to act on: github, slack, google or
           notion.'
@@ -71965,7 +71965,7 @@ paths:
         org — a tampered, expired or foreign-provider state is refused outright. The
         token itself is never returned, never written into the document, and never
         logged; the document holds only its KMS path.
-      operationId: get_v1_kb_connectors_provider_callback
+      operationId: get_v1_kb_connectors_by_provider_callback
       parameters:
       - description: Provider is the connector completing its flow, from the path.
         in: path
@@ -72012,7 +72012,7 @@ paths:
         stays in control of the navigation. The URL carries a state this server SIGNED
         over the caller's validated org, so the connection the callback completes can
         only ever land in that org.
-      operationId: get_v1_kb_connectors_provider_connect
+      operationId: get_v1_kb_connectors_by_provider_connect
       parameters:
       - description: 'Provider is the connector to act on: github, slack, google or
           notion.'
@@ -72042,7 +72042,7 @@ paths:
         validated tenant and the credential is read from KMS, so an org can only ever
         sync its own connection. A provider failure is reported honestly (502) and
         recorded on the connector rather than silently swallowed.
-      operationId: post_v1_kb_connectors_provider_sync
+      operationId: post_v1_kb_connectors_by_provider_sync
       parameters:
       - description: 'Provider is the connector to act on: github, slack, google or
           notion.'
@@ -72191,7 +72191,7 @@ paths:
 
         For callers written against the older shape, the class is also accepted in a JSON
         request body, read only when `?type=` is absent.
-      operationId: v1.delete_keys
+      operationId: delete_v1_keys
       parameters:
       - description: |-
           Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
@@ -72246,7 +72246,7 @@ paths:
         Rotating is what creating means here: a user holds one key per type, so the
         endpoint is idempotent by (caller, type) and the superseded credential stops
         working. Two live secrets for one user would make "revoke my key" a lie.
-      operationId: v1.post_keys
+      operationId: post_v1_keys
       requestBody:
         content:
           application/json:
@@ -72417,7 +72417,7 @@ paths:
         it back to Base BEFORE tearing down the org's dedicated Valkey instance, then
         deletes the sealed credential and removes the metadata row. Answers 204 with
         no body; a second call is a 404.
-      operationId: delete_v1_kv_name
+      operationId: delete_v1_kv_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -72441,7 +72441,7 @@ paths:
         its instance address and the Valkey user it authenticates as ("default", the
         only user a requirepass instance has) — never the password. A still-booting
         instance reads "provisioning", reconciled from the operator's live view.
-      operationId: get_v1_kv_name
+      operationId: get_v1_kv_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -72539,7 +72539,7 @@ paths:
 
         The response is marked no-store: the body is contract text, sealed at rest and
         returned only to the owning org, and must not sit in a shared cache.
-      operationId: get_v1_legal_documents_id
+      operationId: get_v1_legal_documents_by_id
       parameters:
       - description: ID is the document's server-minted handle, "doc_"-prefixed.
         in: path
@@ -72567,7 +72567,7 @@ paths:
         The provider is whatever this deployment has wired. The honest default is
         "manual": the request is recorded and the org fulfils it out of band — nothing
         here fabricates a signature, and the stub never reports itself complete.
-      operationId: post_v1_legal_documents_id_sign
+      operationId: post_v1_legal_documents_by_id_sign
       parameters:
       - description: ID is the document to send for signature, from the path.
         example: doc_1f…
@@ -72728,7 +72728,7 @@ paths:
         Returns one template resolved for the caller's org — the org's
         own override if it has saved one, else the built-in — with its full text/template
         body and its declared merge fields. 404 when neither exists.
-      operationId: get_v1_legal_templates_id
+      operationId: get_v1_legal_templates_by_id
       parameters:
       - description: ID is the template's stable id, e.g. "nda" or "safe".
         in: path
@@ -72763,7 +72763,7 @@ paths:
         The body is validated on save, not at generation: a template that references an
         UNDECLARED merge field is refused with 400 rather than stored and rendered blank
         into a contract months later.
-      operationId: put_v1_legal_templates_id
+      operationId: put_v1_legal_templates_by_id
       parameters:
       - description: |-
           ID is the template to override, from the path. Overriding a built-in id
@@ -72997,7 +72997,7 @@ paths:
         that device, provider and account, and a stop that fails does not fail the
         revoke: the revoked row is the durable truth. An id that does not exist, or
         belongs to another user or org, is the same 404.
-      operationId: delete_v1_links_id
+      operationId: delete_v1_links_by_id
       parameters:
       - description: |-
           ID is the link to act on, from the path. It is scoped to the caller, so
@@ -73030,7 +73030,7 @@ paths:
         collection — route, usage, devices — register before this one and win
         first-match, so a link whose id collided with one of those words could not be
         addressed here.
-      operationId: get_v1_links_id
+      operationId: get_v1_links_by_id
       parameters:
       - description: |-
           ID is the link to act on, from the path. It is scoped to the caller, so
@@ -73064,7 +73064,7 @@ paths:
         which is also the answer when the machine belongs to someone else — the scope
         makes the two indistinguishable, deliberately. The session count reports 0
         where the agent plane is not mounted rather than failing the read.
-      operationId: get_v1_links_devices_machine
+      operationId: get_v1_links_devices_by_machine
       parameters:
       - description: |-
           Machine is the machine to act on, from the path. It is scoped to the
@@ -73099,7 +73099,7 @@ paths:
         co-tenant's work, and a stop that fails does not fail the revoke: the revoked
         row is the durable truth and the count then honestly reports fewer. A machine
         with nothing left to revoke is 404.
-      operationId: post_v1_links_devices_machine_revoke
+      operationId: post_v1_links_devices_by_machine_revoke
       parameters:
       - description: |-
           Machine is the machine to act on, from the path. It is scoped to the
@@ -73613,7 +73613,7 @@ paths:
       description: |-
         Removes one of the caller org's audiences and answers 204. It
         deletes the saved filter only — no customer, event or enrollment is touched.
-      operationId: delete_v1_marketing_audiences_id
+      operationId: delete_v1_marketing_audiences_by_id
       parameters:
       - description: ID is the audience id from the path, as returned by create.
         example: aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a
@@ -73633,7 +73633,7 @@ paths:
       description: |-
         Returns one of the caller org's saved audiences. An audience
         belonging to another org reads as not found.
-      operationId: get_v1_marketing_audiences_id
+      operationId: get_v1_marketing_audiences_by_id
       parameters:
       - description: ID is the audience id from the path, as returned by create.
         example: aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a
@@ -73660,7 +73660,7 @@ paths:
         would run — and reports how big it is and how many real mailboxes it reaches.
         It is the honest answer to "is this send worth making": a cohort of 500 that
         mails 3 says so, in deliverable and unmatched. Nothing is sent.
-      operationId: get_v1_marketing_audiences_id_preview
+      operationId: get_v1_marketing_audiences_by_id_preview
       parameters:
       - description: ID is the audience id from the path, as returned by create.
         example: aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a
@@ -73761,7 +73761,7 @@ paths:
         Removes one of the caller org's posts and answers 204. A
         post already published is deleted from the calendar only — nothing is
         retracted from the network it went out on.
-      operationId: delete_v1_marketing_calendar_id
+      operationId: delete_v1_marketing_calendar_by_id
       parameters:
       - description: ID is the post id from the path, as returned by create.
         example: cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468
@@ -73782,7 +73782,7 @@ paths:
         Returns one of the caller org's posts, including the exact
         error behind a failed publish. A post belonging to another org reads as not
         found.
-      operationId: get_v1_marketing_calendar_id
+      operationId: get_v1_marketing_calendar_by_id
       parameters:
       - description: ID is the post id from the path, as returned by create.
         example: cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468
@@ -73809,7 +73809,7 @@ paths:
         a patch, and it RESETS the lifecycle from the schedule: a scheduledAt makes
         the post "scheduled" again and none makes it a draft — so editing a failed
         post requeues it rather than leaving it stuck.
-      operationId: put_v1_marketing_calendar_id
+      operationId: put_v1_marketing_calendar_by_id
       parameters:
       - description: ID is the server-assigned post id ("cal_" + 128 random bits).
         in: path
@@ -73846,7 +73846,7 @@ paths:
         schedule. No social connector is wired today, so every channel answers an
         honest 501 naming the seam a real one would plug into, and the post is
         recorded failed with that exact reason — never a faked "published".
-      operationId: post_v1_marketing_calendar_id_publish
+      operationId: post_v1_marketing_calendar_by_id_publish
       parameters:
       - description: ID is the post id from the path, as returned by create.
         example: cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468
@@ -73938,7 +73938,7 @@ paths:
       description: |-
         Removes one of the caller org's campaigns and answers 204. A
         campaign belonging to another org reads as not found and is left untouched.
-      operationId: delete_v1_marketing_campaigns_id
+      operationId: delete_v1_marketing_campaigns_by_id
       parameters:
       - description: ID is the campaign id from the path, as returned by create.
         example: camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60
@@ -73958,7 +73958,7 @@ paths:
       description: |-
         Returns one of the caller org's campaigns. A campaign belonging to
         another org reads as not found.
-      operationId: get_v1_marketing_campaigns_id
+      operationId: get_v1_marketing_campaigns_by_id
       parameters:
       - description: ID is the campaign id from the path, as returned by create.
         example: camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60
@@ -73984,7 +73984,7 @@ paths:
         a patch: every field takes the value in the body, and an omitted one is
         cleared. The id comes from the path — the body cannot retarget another
         campaign — and createdAt is never rewritten.
-      operationId: put_v1_marketing_campaigns_id
+      operationId: put_v1_marketing_campaigns_by_id
       parameters:
       - description: ID is the server-assigned campaign id ("camp_" + 128 random bits).
         in: path
@@ -74021,7 +74021,7 @@ paths:
       description: |-
         Sets a campaign's send time and moves it to "scheduled". A
         scheduledAt of 0 clears the schedule and returns it to "draft".
-      operationId: post_v1_marketing_campaigns_id_schedule
+      operationId: post_v1_marketing_campaigns_by_id_schedule
       parameters:
       - description: ID is the campaign id from the path.
         example: camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60
@@ -74085,7 +74085,7 @@ paths:
         is redeemed, credited or counted, so it is safe to call from a pricing page on
         every keystroke. An inactive promo or an exhausted cap quotes ineligible with
         the reason rather than erroring.
-      operationId: get_v1_marketing_promos_code_eligibility
+      operationId: get_v1_marketing_promos_by_code_eligibility
       parameters:
       - description: Code is the promo code from the path.
         example: first1000
@@ -74151,7 +74151,7 @@ paths:
 
         It is IDEMPOTENT: an org that already redeemed gets its original redemption
         back with alreadyRedeemed true.
-      operationId: post_v1_marketing_promos_code_redeem
+      operationId: post_v1_marketing_promos_by_code_redeem
       parameters:
       - description: Code is the promo code from the path.
         example: first1000
@@ -74186,7 +74186,7 @@ paths:
         Returns the caller org's OWN redemption of a promo — an
         org-scoped read, so it can never surface another tenant's. Not found when this
         org has not redeemed it.
-      operationId: get_v1_marketing_promos_code_redemption
+      operationId: get_v1_marketing_promos_by_code_redemption
       parameters:
       - description: Code is the promo code from the path, e.g. "first1000".
         example: first1000
@@ -74263,7 +74263,7 @@ paths:
       description: |-
         Returns one of the caller org's sequences together with its steps
         in send order. A sequence belonging to another org reads as not found.
-      operationId: get_v1_marketing_sequences_id
+      operationId: get_v1_marketing_sequences_by_id
       parameters:
       - description: ID is the sequence id from the path, as returned by create.
         example: seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248
@@ -74297,7 +74297,7 @@ paths:
         already took is counted in alreadyEnrolled and never double-dripped — which is
         what makes retrying a partially-applied announcement a resume rather than a
         second send.
-      operationId: post_v1_marketing_sequences_id_enroll
+      operationId: post_v1_marketing_sequences_by_id_enroll
       parameters:
       - description: ID is the sequence id from the path.
         in: path
@@ -74335,7 +74335,7 @@ paths:
       description: |-
         Returns who is walking one sequence, most recently enrolled
         first, with each walk's current step and next due time.
-      operationId: get_v1_marketing_sequences_id_enrollments
+      operationId: get_v1_marketing_sequences_by_id_enrollments
       parameters:
       - description: ID is the sequence id from the path.
         example: seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248
@@ -74371,7 +74371,7 @@ paths:
         is sent, and steps already delivered are not recalled. Only an ACTIVE
         enrollment can be canceled — one already completed or canceled reads as not
         found.
-      operationId: post_v1_marketing_sequences_id_enrollments_eid_cancel
+      operationId: post_v1_marketing_sequences_by_id_enrollments_by_eid_cancel
       parameters:
       - description: ID is the sequence id from the path.
         example: seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248
@@ -74403,7 +74403,7 @@ paths:
         Flips draft/active/archived — the activation gate for
         sending, since only an active sequence accepts enrollments. It does not touch
         enrollments already walking: archiving stops new ones, not in-flight ones.
-      operationId: post_v1_marketing_sequences_id_status
+      operationId: post_v1_marketing_sequences_by_id_status
       parameters:
       - description: ID is the sequence id from the path.
         example: seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248
@@ -74436,7 +74436,7 @@ paths:
   /v1/marketing/sequences/{id}/steps:
     get:
       description: Returns one sequence's steps in send order.
-      operationId: get_v1_marketing_sequences_id_steps
+      operationId: get_v1_marketing_sequences_by_id_steps
       parameters:
       - description: ID is the sequence id from the path, as returned by create.
         example: seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248
@@ -74462,7 +74462,7 @@ paths:
         past the last, so steps arrive in the order they are added. Body is required
         and delaySeconds must be >= 0. Adding a step does not disturb enrollments
         already walking — one that has passed this index simply never sees it.
-      operationId: post_v1_marketing_sequences_id_steps
+      operationId: post_v1_marketing_sequences_by_id_steps
       parameters:
       - description: SequenceID is the sequence id from the path (the route's :id).
         in: path
@@ -74780,7 +74780,7 @@ paths:
         unknown, or belongs to another org, is the same 404, so a probe learns nothing
         about what exists. Removing a listing removes its price from per-call enforcement;
         it does not uninstall the tool for anyone who already installed it.
-      operationId: delete_v1_marketplace_listings_id
+      operationId: delete_v1_marketplace_listings_by_id
       parameters:
       - description: ID is the listing to unpublish, from the path.
         example: lst_1
@@ -74893,7 +74893,7 @@ paths:
         tools leave the registry. Scoped to the caller's org, so an id belonging to
         another tenant is a 404 and not a delete. Answers 204 with no body; a server
         this org does not have is 404.
-      operationId: delete_v1_mcp_servers_id
+      operationId: delete_v1_mcp_servers_by_id
       parameters:
       - description: ID is the server to deregister, from the path.
         in: path
@@ -75178,7 +75178,7 @@ paths:
         InferenceService goes away and the serving deployment behind it follows, so the
         model stops answering predict calls. Answers 204, or 404 for a name the
         caller's org does not own.
-      operationId: delete_v1_ml_models_name
+      operationId: delete_v1_ml_models_by_name
       parameters:
       - description: |-
           Name is the resource to act on, taken from the path. Lower-cased and
@@ -75202,7 +75202,7 @@ paths:
         kserve's live status, which is where readiness and the serving address appear.
         A name the caller's org does not own answers 404, exactly as an unknown name
         does, so a probe learns nothing about another tenant's models.
-      operationId: get_v1_ml_models_name
+      operationId: get_v1_ml_models_by_name
       parameters:
       - description: |-
           Name is the resource to act on, taken from the path. Lower-cased and
@@ -75423,7 +75423,7 @@ paths:
   /v1/mq/streams/{name}:
     delete:
       description: Removes a stream with all its messages and consumers. Irreversible.
-      operationId: delete_v1_mq_streams_name
+      operationId: delete_v1_mq_streams_by_name
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -75440,7 +75440,7 @@ paths:
       x-app: mq
     get:
       description: Returns one stream's configuration and live state.
-      operationId: get_v1_mq_streams_name
+      operationId: get_v1_mq_streams_by_name
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -75463,7 +75463,7 @@ paths:
       description: |-
         Reconfigures an existing stream; the path names the stream, and the
         immutable fields (storage, retention) must restate what they are.
-      operationId: put_v1_mq_streams_name
+      operationId: put_v1_mq_streams_by_name
       parameters:
       - description: Name is the stream name, unique within the org (alphanumeric,
           hyphens, underscores).
@@ -75495,7 +75495,7 @@ paths:
       description: |-
         Reads stored messages without a consumer: by sequence, by newest on a
         subject, or walking a subject forward from a sequence.
-      operationId: get_v1_mq_streams_name_messages
+      operationId: get_v1_mq_streams_by_name_messages
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -75544,7 +75544,7 @@ paths:
   /v1/mq/streams/{name}/messages/{seq}:
     delete:
       description: Erases one message by sequence; the sequence gap remains.
-      operationId: delete_v1_mq_streams_name_messages_seq
+      operationId: delete_v1_mq_streams_by_name_messages_by_seq
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -75568,7 +75568,7 @@ paths:
   /v1/mq/streams/{name}/purge:
     post:
       description: Removes messages from a stream, leaving its consumers in place.
-      operationId: post_v1_mq_streams_name_purge
+      operationId: post_v1_mq_streams_by_name_purge
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -75596,7 +75596,7 @@ paths:
   /v1/mq/streams/{stream}/consumers:
     get:
       description: Returns a stream's consumers, name-ordered, with delivery state.
-      operationId: get_v1_mq_streams_stream_consumers
+      operationId: get_v1_mq_streams_by_stream_consumers
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -75629,7 +75629,7 @@ paths:
       x-app: mq
     post:
       description: Creates a durable pull consumer on a stream and returns it.
-      operationId: post_v1_mq_streams_stream_consumers
+      operationId: post_v1_mq_streams_by_stream_consumers
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -75659,7 +75659,7 @@ paths:
       description: |-
         Removes a consumer and its delivery state; unacknowledged messages
         stay in the stream.
-      operationId: delete_v1_mq_streams_stream_consumers_name
+      operationId: delete_v1_mq_streams_by_stream_consumers_by_name
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -75683,7 +75683,7 @@ paths:
       x-app: mq
     get:
       description: Returns one consumer's configuration and delivery state.
-      operationId: get_v1_mq_streams_stream_consumers_name
+      operationId: get_v1_mq_streams_by_stream_consumers_by_name
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -75714,7 +75714,7 @@ paths:
         Pulls the consumer's next batch. Delivered messages are acknowledged on
         delivery — the broker will not redeliver what this call returns; an empty
         wait answers 408.
-      operationId: post_v1_mq_streams_stream_consumers_name_next
+      operationId: post_v1_mq_streams_by_stream_consumers_by_name_next
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -75780,7 +75780,7 @@ paths:
         a peek across the tenant boundary. An org whose network exists but has no
         edge-routers is 404 too, for the same reason the list is empty: there is no
         overlay until something is on it.
-      operationId: get_v1_networks_id
+      operationId: get_v1_networks_by_id
       parameters:
       - description: |-
           ID is the network id from the path. The URL is the addressing authority, so
@@ -77016,7 +77016,7 @@ paths:
         org.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: post_v1_o11y_countErrors
+      operationId: post_v1_o11y_counterrors
       requestBody:
         content:
           application/json:
@@ -78108,7 +78108,7 @@ paths:
         by its error id within a group at a timestamp.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_o11y_errorFromErrorID
+      operationId: get_v1_o11y_errorfromerrorid
       parameters:
       - description: |-
           Timestamp is the instance's time as a nanosecond epoch spelled as a
@@ -78151,7 +78151,7 @@ paths:
         timestamp, and the span it happened on.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_o11y_errorFromGroupID
+      operationId: get_v1_o11y_errorfromgroupid
       parameters:
       - description: |-
           Timestamp is the instance's time as a nanosecond epoch spelled as a
@@ -78263,7 +78263,7 @@ paths:
         Returns one grouped issue with its latest occurrence sample.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_o11y_errortracking_issues_id
+      operationId: get_v1_o11y_errortracking_issues_by_id
       parameters:
       - description: ID is the issue id.
         in: path
@@ -78288,7 +78288,7 @@ paths:
         assign — and returns the updated issue. Fields left unset are left unchanged.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: post_v1_o11y_errortracking_issues_id
+      operationId: post_v1_o11y_errortracking_issues_by_id
       parameters:
       - description: ID is the issue id.
         in: path
@@ -78410,7 +78410,7 @@ paths:
         Deletes one saved explorer view by id.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: delete_v1_o11y_explorer_views_viewId
+      operationId: delete_v1_o11y_explorer_views_by_viewid
       parameters:
       - description: ViewID is the view's id.
         in: path
@@ -78434,7 +78434,7 @@ paths:
         Returns one saved explorer view by id.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_o11y_explorer_views_viewId
+      operationId: get_v1_o11y_explorer_views_by_viewid
       parameters:
       - description: ViewID is the view's id.
         in: path
@@ -78459,7 +78459,7 @@ paths:
         echoes it back.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: put_v1_o11y_explorer_views_viewId
+      operationId: put_v1_o11y_explorer_views_by_viewid
       parameters:
       - description: ViewID is the id of the view to replace, taken from the URL.
         in: path
@@ -79981,7 +79981,7 @@ paths:
         caller's org.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: post_v1_o11y_listErrors
+      operationId: post_v1_o11y_listerrors
       requestBody:
         content:
           application/json:
@@ -80806,7 +80806,7 @@ paths:
         record and the recent version history.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_o11y_logs_pipelines_version
+      operationId: get_v1_o11y_logs_pipelines_by_version
       parameters:
       - description: Version is the config version to read — a positive number, or
           "latest".
@@ -81973,7 +81973,7 @@ paths:
         view walks.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_o11y_nextPrevErrorIDs
+      operationId: get_v1_o11y_nextpreverrorids
       parameters:
       - description: |-
           Timestamp is the instance's time as a nanosecond epoch spelled as a
@@ -83315,7 +83315,7 @@ paths:
         Removes one review queue and every item in it. A queue
         id belonging to another org answers the same 404 an unknown id does, so a
         probe learns nothing about what exists.
-      operationId: delete_v1_o11y_reviews_id
+      operationId: delete_v1_o11y_reviews_by_id
       parameters:
       - description: ID is the annotation queue to act on, from the path.
         example: annq_1
@@ -83340,7 +83340,7 @@ paths:
         Returns one review queue with its pending and completed
         counts and its first page of items. A queue id belonging to another org is a
         404, never a cross-tenant read.
-      operationId: get_v1_o11y_reviews_id
+      operationId: get_v1_o11y_reviews_by_id
       parameters:
       - description: ID is the annotation queue to act on, from the path.
         example: annq_1
@@ -83367,7 +83367,7 @@ paths:
         score-config set. A field the request omits is left alone. A name another
         queue in the same project already uses is a 409; a queue id belonging to
         another org is a 404.
-      operationId: patch_v1_o11y_reviews_id
+      operationId: patch_v1_o11y_reviews_by_id
       parameters:
       - description: ID is the annotation queue to update, from the path.
         example: annq_1
@@ -83402,7 +83402,7 @@ paths:
         Returns a page of one review queue's items, newest
         first, optionally filtered to PENDING or COMPLETED. A queue id belonging to
         another org is a 404, never a cross-tenant list.
-      operationId: get_v1_o11y_reviews_id_items
+      operationId: get_v1_o11y_reviews_by_id_items
       parameters:
       - description: ID is the annotation queue whose items to list, from the path.
         example: annq_1
@@ -83449,7 +83449,7 @@ paths:
         queue. Each item names exactly one object, either by traceId / observationId /
         sessionId or by objectType plus objectId; every item enters PENDING. A queue
         id belonging to another org is a 404.
-      operationId: post_v1_o11y_reviews_id_items
+      operationId: post_v1_o11y_reviews_by_id_items
       parameters:
       - description: ID is the annotation queue to add to, from the path.
         example: annq_1
@@ -83486,7 +83486,7 @@ paths:
         and sets its assignee. Completing an item stamps its completedAt. An item that
         exists under a different queue answers the same 404 an unknown item does, and
         so does a queue belonging to another org.
-      operationId: patch_v1_o11y_reviews_id_items_itemId
+      operationId: patch_v1_o11y_reviews_by_id_items_by_itemid
       parameters:
       - description: ID is the annotation queue the item belongs to, from the path.
         example: annq_1
@@ -87405,7 +87405,7 @@ paths:
             current org). They reach the new org via the OrgSwitcher, which re-scopes
             X-Org-Id without touching IAM membership. A personal-org request from someone
             who already has an org is meaningless → 409.
-      operationId: v1.post_orgs
+      operationId: post_v1_orgs
       requestBody:
         content:
           application/json:
@@ -87433,7 +87433,7 @@ paths:
         org's plan ENTITLES it to (that is GET /v1/entitlements, resolved from commerce).
 
         A caller may only read its OWN org's row; a platform super admin may read any.
-      operationId: get_v1_orgs_org_entitlements
+      operationId: get_v1_orgs_by_org_entitlements
       parameters:
       - in: path
         name: org
@@ -87462,7 +87462,7 @@ paths:
         super admin bypasses the plan check (operator comp/grant) and may target any org;
         everyone else may only change their own. Commerce unreachable is a 503, never an
         implicit yes.
-      operationId: post_v1_orgs_org_entitlements
+      operationId: post_v1_orgs_by_org_entitlements
       parameters:
       - in: path
         name: org
@@ -87680,7 +87680,7 @@ paths:
         derived from it. It is the entitlement half of ResolvePlan, over the same
         catalog and the same 404 for an id no catalog holds — the read a licensing or
         quota gate makes.
-      operationId: get_v1_plans_entitlements_id
+      operationId: get_v1_plans_entitlements_by_id
       parameters:
       - description: |-
           ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
@@ -87850,7 +87850,7 @@ paths:
         may be the plan's id or its slug, and it is resolved against the caller's
         catalog, so a reseller's override wins over the canonical record. An id no
         catalog holds answers 404.
-      operationId: get_v1_plans_resolve_id
+      operationId: get_v1_plans_resolve_by_id
       parameters:
       - description: |-
           ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
@@ -88065,7 +88065,7 @@ paths:
         first match wins, so a bare name resolves to PRODUCTION. The scan covers only the
         namespaces the caller is authorized for, so an org admin can never read a service
         outside their own org, and a name found in none of them is 404 rather than a leak.
-      operationId: get_v1_platform_fleet_app
+      operationId: get_v1_platform_fleet_by_app
       parameters:
       - description: App is the service's CR name, from the path. It must be a DNS-1123
           label.
@@ -88113,7 +88113,7 @@ paths:
         `?env=main|test|dev` is REQUIRED — a bare call does not default to production,
         which is what closes the fat-finger and confused-deputy hazard — and any other
         value is 400. A service with no Deployment to restart in that environment is 404.
-      operationId: post_v1_platform_fleet_app_deploy
+      operationId: post_v1_platform_fleet_by_app_deploy
       parameters:
       - description: App is the service's CR name, from the path. It must be a DNS-1123
           label.
@@ -88210,7 +88210,7 @@ paths:
         applications under it. A project this org does not have is 404, which is also
         what another tenant's project looks like from here. Requires a validated
         principal; 403 without one.
-      operationId: get_v1_platform_projects_project
+      operationId: get_v1_platform_projects_by_project
       parameters:
       - description: Project is the project's name, from the path.
         in: path
@@ -88244,7 +88244,7 @@ paths:
         The project must exist in IAM for this org, or the answer is 404; the `default`
         project is implicit and always accepted, because it is part of what an org IS.
         Requires a validated principal; 403 without one.
-      operationId: get_v1_platform_projects_project_apps
+      operationId: get_v1_platform_projects_by_project_apps
       parameters:
       - description: Project is the project's name, from the path.
         in: path
@@ -88296,7 +88296,7 @@ paths:
         go through add-domain and DNS verification first. Requires a validated
         principal; 403 without one, and every cluster object it will later create lands
         in that org's own `tenant-<org>` namespace.
-      operationId: post_v1_platform_projects_project_apps
+      operationId: post_v1_platform_projects_by_project_apps
       parameters:
       - description: Project is the project to create the application under, from
           the path.
@@ -88335,7 +88335,7 @@ paths:
         not block the delete, so the record cannot be left orphaned behind a broken
         cluster; the failure is logged for operators and the orphan reaper reconciles
         it. Requires a validated principal; 403 without one.
-      operationId: delete_v1_platform_projects_project_apps_app
+      operationId: delete_v1_platform_projects_by_project_apps_by_app
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88365,7 +88365,7 @@ paths:
         cluster currently reports for it: the operator Service CR's phase and health,
         and whether its sealed env has synced. An app this org and project do not have
         is 404. Requires a validated principal; 403 without one.
-      operationId: get_v1_platform_projects_project_apps_app
+      operationId: get_v1_platform_projects_by_project_apps_by_app
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88417,7 +88417,7 @@ paths:
         compute per tick for as long as it stays live. Requires a validated principal; 403
         without one, and everything is written into that org's own `tenant-<org>`
         namespace.
-      operationId: post_v1_platform_projects_project_apps_app_deploy
+      operationId: post_v1_platform_projects_by_project_apps_by_app_deploy
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88458,7 +88458,7 @@ paths:
         newest version first, each with its version, status, source, commit and image.
         Failed and superseded attempts are included — that is the point of a history.
         Requires a validated principal; 403 without one.
-      operationId: get_v1_platform_projects_project_apps_app_deployments
+      operationId: get_v1_platform_projects_by_project_apps_by_app_deployments
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88494,7 +88494,7 @@ paths:
         It returns a single deployment by id, scoped to the named application of the
         caller's org — so an id belonging to another app or another tenant is 404, not a
         read. Requires a validated principal; 403 without one.
-      operationId: get_v1_platform_projects_project_apps_app_deployments_id
+      operationId: get_v1_platform_projects_by_project_apps_by_app_deployments_by_id
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88541,7 +88541,7 @@ paths:
         unreachable, it degrades to the recorded timeline and says so. Every cluster read
         is confined to the caller org's own namespaces and time-boxed. Requires a
         validated principal; 403 without one.
-      operationId: get_v1_platform_projects_project_apps_app_deployments_id_logs
+      operationId: get_v1_platform_projects_by_project_apps_by_app_deployments_by_id_logs
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88583,7 +88583,7 @@ paths:
         verification state and, while pending, the DNS challenge records to publish. Live
         endpoint status for each host is observed from the cluster. Requires a validated
         principal; 403 without one.
-      operationId: get_v1_platform_projects_project_apps_app_domains
+      operationId: get_v1_platform_projects_by_project_apps_by_app_domains
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88631,7 +88631,7 @@ paths:
 
         `host` must be a valid DNS hostname; anything else is 400. Requires a validated
         principal; 403 without one.
-      operationId: post_v1_platform_projects_project_apps_app_domains
+      operationId: post_v1_platform_projects_by_project_apps_by_app_domains
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88681,7 +88681,7 @@ paths:
         The default host is permanent and cannot be removed: that is 400, not 404. A host
         that is neither attached nor claimed here is 404. Requires a validated principal;
         403 without one.
-      operationId: delete_v1_platform_projects_project_apps_app_domains_host
+      operationId: delete_v1_platform_projects_by_project_apps_by_app_domains_by_host
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88723,7 +88723,7 @@ paths:
         DNS is actually returning. An already-verified host answers as-is without
         re-checking. A host not claimed by this app is 404. Requires a validated
         principal; 403 without one.
-      operationId: post_v1_platform_projects_project_apps_app_domains_host_verify
+      operationId: post_v1_platform_projects_by_project_apps_by_app_domains_by_host_verify
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88775,7 +88775,7 @@ paths:
         re-materialises the Secret, but RUNNING pods keep the environment they started
         with until their next deploy or restart. Requires a validated principal; 403
         without one.
-      operationId: put_v1_platform_projects_project_apps_app_env
+      operationId: put_v1_platform_projects_by_project_apps_by_app_env
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88824,7 +88824,7 @@ paths:
         already exist, and `branch` defaults to the parent app's. A branch that does not
         resolve to a valid slug distinct from the parent's is 400. Requires a validated
         principal; 403 without one.
-      operationId: post_v1_platform_projects_project_apps_app_preview
+      operationId: post_v1_platform_projects_by_project_apps_by_app_preview
       parameters:
       - description: Project is the project the parent application lives under, from
           the path.
@@ -88870,7 +88870,7 @@ paths:
         the same deploy core as everything else, so it takes a NEW version number and is
         subject to the same per-org concurrency cap. Requires a validated principal; 403
         without one.
-      operationId: post_v1_platform_projects_project_apps_app_promote
+      operationId: post_v1_platform_projects_by_project_apps_by_app_promote
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88916,7 +88916,7 @@ paths:
         number and appends to the history rather than erasing what came after. Both
         lookups are scoped to this app and org, so another tenant's image can never be
         rolled in. Requires a validated principal; 403 without one.
-      operationId: post_v1_platform_projects_project_apps_app_rollback
+      operationId: post_v1_platform_projects_by_project_apps_by_app_rollback
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -88961,7 +88961,7 @@ paths:
         for THIS live span and never for the gap the app spent stopped. An app with no
         Service CR is 404, an unreachable cluster is 503, and a cluster that refuses the
         scale is 502. Requires a validated principal; 403 without one.
-      operationId: post_v1_platform_projects_project_apps_app_start
+      operationId: post_v1_platform_projects_by_project_apps_by_app_start
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -89001,7 +89001,7 @@ paths:
         unreachable cluster is 503 and a cluster that refuses the scale is 502. Because
         the pods stop, so does the compute metering. Requires a validated principal; 403
         without one.
-      operationId: post_v1_platform_projects_project_apps_app_stop
+      operationId: post_v1_platform_projects_by_project_apps_by_app_stop
       parameters:
       - description: Project is the project the application lives under, from the
           path.
@@ -89110,7 +89110,7 @@ paths:
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404 and
         nothing of theirs is touched.
-      operationId: delete_v1_platform_sites_slug
+      operationId: delete_v1_platform_sites_by_slug
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -89135,7 +89135,7 @@ paths:
         Scope: a validated principal is required (403 without one) and the lookup is
         keyed by (org, slug), so another tenant's slug is a 404 exactly like a
         nonexistent one.
-      operationId: get_v1_platform_sites_slug
+      operationId: get_v1_platform_sites_by_slug
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -89176,7 +89176,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: patch_v1_platform_sites_slug
+      operationId: patch_v1_platform_sites_by_slug
       parameters:
       - description: |-
           Slug is the project to update, from the path. The URL is the addressing
@@ -89235,7 +89235,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_v1_platform_sites_slug_deployments
+      operationId: get_v1_platform_sites_by_slug_deployments
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -89270,7 +89270,7 @@ paths:
         Scope: a validated principal is required (403 without one). Both the project
         and the deployment are resolved within that principal's org, so a deployment
         of another project — or of another tenant — is a 404.
-      operationId: get_v1_platform_sites_slug_deployments_id
+      operationId: get_v1_platform_sites_by_slug_deployments_by_id
       parameters:
       - description: Slug is the project the deployment belongs to, from the path.
         in: path
@@ -89309,7 +89309,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_v1_platform_sites_slug_domains
+      operationId: get_v1_platform_sites_by_slug_domains
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -89355,7 +89355,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_platform_sites_slug_domains
+      operationId: post_v1_platform_sites_by_slug_domains
       parameters:
       - description: Slug is the site the hosts attach to, from the path.
         in: path
@@ -89396,7 +89396,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: delete_v1_platform_sites_slug_domains_host
+      operationId: delete_v1_platform_sites_by_slug_domains_by_host
       parameters:
       - description: Slug is the project the host is attached to, from the path.
         in: path
@@ -89436,7 +89436,7 @@ paths:
         Scope: a validated principal is required (403 without one). Both the site and
         the claim are resolved within that principal's org, so a host claimed by
         another tenant is "not claimed by this site".
-      operationId: post_v1_platform_sites_slug_domains_host_verify
+      operationId: post_v1_platform_sites_by_slug_domains_by_host_verify
       parameters:
       - description: Slug is the project the host is attached to, from the path.
         in: path
@@ -89479,7 +89479,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_platform_sites_slug_publish
+      operationId: post_v1_platform_sites_by_slug_publish
       parameters:
       - description: Slug is the site to publish, from the path.
         in: path
@@ -89519,7 +89519,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_platform_sites_slug_purge
+      operationId: post_v1_platform_sites_by_slug_purge
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -89553,7 +89553,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_v1_platform_sites_slug_releases
+      operationId: get_v1_platform_sites_by_slug_releases
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -89601,7 +89601,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_platform_sites_slug_releases
+      operationId: post_v1_platform_sites_by_slug_releases
       parameters:
       - description: Slug is the site to publish, from the path.
         in: path
@@ -89647,7 +89647,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_platform_sites_slug_releases_release_activate
+      operationId: post_v1_platform_sites_by_slug_releases_by_release_activate
       parameters:
       - description: Slug is the site the release belongs to, from the path.
         in: path
@@ -89737,7 +89737,7 @@ paths:
         Removes one of the caller org's built plugins, so the
         runtime can no longer load it. Scoped to the caller's org, so an id belonging
         to another tenant answers 404 and is not deleted.
-      operationId: delete_v1_plugins_authored_id
+      operationId: delete_v1_plugins_authored_by_id
       parameters:
       - description: ID is the plugin to remove, from the path.
         in: path
@@ -90141,7 +90141,7 @@ paths:
         capabilities as the pricing source records them. A model hidden for the
         caller's org answers the same 404 an unknown name does, so a disabled model
         gets no existence oracle.
-      operationId: get_v1_pricing_model_name
+      operationId: get_v1_pricing_model_by_name
       parameters:
       - description: |-
           Name is the model's name or its slugged id ("zen4",
@@ -90450,7 +90450,7 @@ paths:
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404 and
         nothing of theirs is touched.
-      operationId: delete_v1_projects_slug
+      operationId: delete_v1_projects_by_slug
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -90475,7 +90475,7 @@ paths:
         Scope: a validated principal is required (403 without one) and the lookup is
         keyed by (org, slug), so another tenant's slug is a 404 exactly like a
         nonexistent one.
-      operationId: get_v1_projects_slug
+      operationId: get_v1_projects_by_slug
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -90516,7 +90516,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: patch_v1_projects_slug
+      operationId: patch_v1_projects_by_slug
       parameters:
       - description: |-
           Slug is the project to update, from the path. The URL is the addressing
@@ -90576,7 +90576,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_v1_projects_slug_deployments
+      operationId: get_v1_projects_by_slug_deployments
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -90611,7 +90611,7 @@ paths:
         Scope: a validated principal is required (403 without one). Both the project
         and the deployment are resolved within that principal's org, so a deployment
         of another project — or of another tenant — is a 404.
-      operationId: get_v1_projects_slug_deployments_id
+      operationId: get_v1_projects_by_slug_deployments_by_id
       parameters:
       - description: Slug is the project the deployment belongs to, from the path.
         in: path
@@ -90660,7 +90660,7 @@ paths:
         with an org-scoped token through the gateway, so the deployment is resolved
         within that principal's org and another tenant's slug or deployment id is a
         404.
-      operationId: post_v1_projects_slug_deployments_id_complete
+      operationId: post_v1_projects_by_slug_deployments_by_id_complete
       parameters:
       - description: Slug is the project the deployment belongs to, from the path.
         in: path
@@ -90704,7 +90704,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_v1_projects_slug_domains
+      operationId: get_v1_projects_by_slug_domains
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -90750,7 +90750,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_projects_slug_domains
+      operationId: post_v1_projects_by_slug_domains
       parameters:
       - description: Slug is the site the hosts attach to, from the path.
         in: path
@@ -90791,7 +90791,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: delete_v1_projects_slug_domains_host
+      operationId: delete_v1_projects_by_slug_domains_by_host
       parameters:
       - description: Slug is the project the host is attached to, from the path.
         in: path
@@ -90831,7 +90831,7 @@ paths:
         Scope: a validated principal is required (403 without one). Both the site and
         the claim are resolved within that principal's org, so a host claimed by
         another tenant is "not claimed by this site".
-      operationId: post_v1_projects_slug_domains_host_verify
+      operationId: post_v1_projects_by_slug_domains_by_host_verify
       parameters:
       - description: Slug is the project the host is attached to, from the path.
         in: path
@@ -90873,7 +90873,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_projects_slug_purge
+      operationId: post_v1_projects_by_slug_purge
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -91001,7 +91001,7 @@ paths:
         Delete removes one of the caller org's prompts and every version of it, answering
         204. It is scoped to the caller's org, so a name another tenant owns is the same
         404 an unknown name gives. There is no undo: the version history goes with it.
-      operationId: delete_v1_prompts_name
+      operationId: delete_v1_prompts_by_name
       parameters:
       - description: Name is the prompt to act on, from the path.
         example: greeting
@@ -91024,7 +91024,7 @@ paths:
         metadata of every version it has had. The history carries version numbers, types
         and timestamps only — not each version's body — so a long history cannot inflate
         this response. A name the caller's org does not own is 404, whoever owns it.
-      operationId: get_v1_prompts_name
+      operationId: get_v1_prompts_by_name
       parameters:
       - description: Name is the prompt to act on, from the path.
         example: greeting
@@ -91143,7 +91143,7 @@ paths:
         Removes one stream of the caller's org — its retained messages
         and its consumers with it — and answers 204 with no body. 404 when the org
         has no stream of that name.
-      operationId: delete_v1_pubsub_jetstream_streams_stream
+      operationId: delete_v1_pubsub_jetstream_streams_by_stream
       parameters:
       - description: Stream is the stream's name, from the path.
         in: path
@@ -91164,7 +91164,7 @@ paths:
         Returns one stream of the caller's org — its configuration and its
         live state (messages, bytes, sequence range, consumer count). 404 when the
         org has no stream of that name.
-      operationId: get_v1_pubsub_jetstream_streams_stream
+      operationId: get_v1_pubsub_jetstream_streams_by_stream
       parameters:
       - description: Stream is the stream's name, from the path.
         in: path
@@ -91192,7 +91192,7 @@ paths:
         retention or discard keeps the stream's current one, because JetStream holds
         storage and retention immutable and refuses a change with a 400 rather than
         this door pretending it took.
-      operationId: put_v1_pubsub_jetstream_streams_stream
+      operationId: put_v1_pubsub_jetstream_streams_by_stream
       parameters:
       - description: Stream is the stream to update, from the path.
         in: path
@@ -91228,7 +91228,7 @@ paths:
       description: |-
         Returns one stream's consumers, sorted by name. 404 when the
         org has no stream of that name.
-      operationId: get_v1_pubsub_jetstream_streams_stream_consumers
+      operationId: get_v1_pubsub_jetstream_streams_by_stream_consumers
       parameters:
       - description: Stream is the stream's name, from the path.
         in: path
@@ -91254,7 +91254,7 @@ paths:
         acknowledged, so many workers can share it and none sees a message twice
         outside redelivery. 409 when the stream already has a consumer of that name
         with a different configuration.
-      operationId: post_v1_pubsub_jetstream_streams_stream_consumers
+      operationId: post_v1_pubsub_jetstream_streams_by_stream_consumers
       parameters:
       - description: Stream is the stream to consume, from the path.
         in: path
@@ -91289,7 +91289,7 @@ paths:
         Removes one consumer — its cursor, not the stream's messages —
         and answers 204 with no body. 404 when the stream or the consumer does not
         exist.
-      operationId: delete_v1_pubsub_jetstream_streams_stream_consumers_name
+      operationId: delete_v1_pubsub_jetstream_streams_by_stream_consumers_by_name
       parameters:
       - description: Stream is the stream, from the path.
         in: path
@@ -91316,7 +91316,7 @@ paths:
         Returns one consumer of one org stream — its configuration and
         its cursor: delivered and acknowledged sequences, pending and redelivered
         counts. 404 when the stream or the consumer does not exist.
-      operationId: get_v1_pubsub_jetstream_streams_stream_consumers_name
+      operationId: get_v1_pubsub_jetstream_streams_by_stream_consumers_by_name
       parameters:
       - description: Stream is the stream, from the path.
         in: path
@@ -91351,7 +91351,7 @@ paths:
         not see it again. Workers needing at-least-once delivery consume the same
         consumer over the NATS port, where acks are theirs to send. An empty batch
         after the wait is an empty page, not an error.
-      operationId: post_v1_pubsub_jetstream_streams_stream_consumers_name_next
+      operationId: post_v1_pubsub_jetstream_streams_by_stream_consumers_by_name_next
       parameters:
       - description: Stream is the stream, from the path.
         in: path
@@ -91392,7 +91392,7 @@ paths:
         Removes one bucket of the caller's org — every key and every
         revision with it — and answers 204 with no body. 404 when the org has no
         bucket of that name.
-      operationId: delete_v1_pubsub_kv_bucket
+      operationId: delete_v1_pubsub_kv_by_bucket
       parameters:
       - description: Bucket is the bucket's name, from the path.
         in: path
@@ -91414,7 +91414,7 @@ paths:
         the same durable plane as the streams: each key holds up to History
         revisions, entries can expire by TTL, and watchers on the NATS port see every
         write. 409 when the org already has a bucket of that name.
-      operationId: post_v1_pubsub_kv_bucket
+      operationId: post_v1_pubsub_kv_by_bucket
       parameters:
       - description: |-
           Bucket is the bucket's name within the org, from the path: 1–64 of
@@ -91450,7 +91450,7 @@ paths:
         Delete removes one key — a delete marker in the key's history, so watchers
         see it and Get answers 404 — and answers 204 with no body. 404 when the
         bucket does not exist.
-      operationId: delete_v1_pubsub_kv_bucket_key
+      operationId: delete_v1_pubsub_kv_by_bucket_by_key
       parameters:
       - description: Bucket is the bucket, from the path.
         in: path
@@ -91476,7 +91476,7 @@ paths:
       description: |-
         Get returns one key's current value and revision. 404 when the bucket does
         not exist, the key was never written, or its latest revision is a delete.
-      operationId: get_v1_pubsub_kv_bucket_key
+      operationId: get_v1_pubsub_kv_by_bucket_by_key
       parameters:
       - description: Bucket is the bucket, from the path.
         in: path
@@ -91506,7 +91506,7 @@ paths:
         Put sets one key to one value and returns the revision the write created.
         Writes are versioned: each put is a new revision and the bucket retains up to
         its History of them per key.
-      operationId: put_v1_pubsub_kv_bucket_key
+      operationId: put_v1_pubsub_kv_by_bucket_by_key
       parameters:
       - description: Bucket is the bucket, from the path.
         in: path
@@ -91545,7 +91545,7 @@ paths:
         History returns one key's retained revisions, oldest first — every put and
         every delete marker up to the bucket's History depth. 404 when the bucket
         does not exist or the key was never written.
-      operationId: get_v1_pubsub_kv_bucket_key_history
+      operationId: get_v1_pubsub_kv_by_bucket_by_key_history
       parameters:
       - description: Bucket is the bucket, from the path.
         in: path
@@ -94687,7 +94687,7 @@ paths:
         A 404 means the id is unknown OR has aged out of this process's in-memory record.
         That is the honest answer either way: the process genuinely cannot tell the two
         apart.
-      operationId: get_v1_runner_releases_id
+      operationId: get_v1_runner_releases_by_id
       parameters:
       - description: ID is the build id the release trigger answered with, from the
           path.
@@ -94762,7 +94762,7 @@ paths:
       description: |-
         Deletes one bucket from the shared object store and removes its
         metadata row. Answers 204 with no body; a second call is a 404.
-      operationId: delete_v1_s3_name
+      operationId: delete_v1_s3_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -94787,7 +94787,7 @@ paths:
         gateway address it is reached at, and no username: the object store
         authenticates with a shared, out-of-band key rather than a per-bucket
         credential.
-      operationId: get_v1_s3_name
+      operationId: get_v1_s3_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -95090,7 +95090,7 @@ paths:
       description: |-
         Deletes one search index from the shared backend and removes its
         metadata row. Answers 204 with no body; a second call is a 404.
-      operationId: delete_v1_search_name
+      operationId: delete_v1_search_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -95115,7 +95115,7 @@ paths:
         and the gateway address it is reached at, and no username: the backend
         authenticates with a shared, out-of-band key rather than a per-index
         credential.
-      operationId: get_v1_search_name
+      operationId: get_v1_search_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -95486,7 +95486,7 @@ paths:
         Returns one captured error event of a project, by its id.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_sentry_events_id
+      operationId: get_v1_sentry_events_by_id
       parameters:
       - description: ID is the event id.
         in: path
@@ -95603,7 +95603,7 @@ paths:
         occurrence sample.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_sentry_issues_id
+      operationId: get_v1_sentry_issues_by_id
       parameters:
       - description: ID is the issue id.
         in: path
@@ -95629,7 +95629,7 @@ paths:
         assign — and returns the updated issue. Fields left unset are left unchanged.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: put_v1_sentry_issues_id
+      operationId: put_v1_sentry_issues_by_id
       parameters:
       - description: ID is the issue id.
         in: path
@@ -95663,7 +95663,7 @@ paths:
         occurrences to read.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_sentry_issues_id_events
+      operationId: get_v1_sentry_issues_by_id_events
       parameters:
       - description: ID is the issue id.
         in: path
@@ -95795,7 +95795,7 @@ paths:
         unknown project does; retained events are not touched. Answers 204.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: delete_v1_sentry_projects_id
+      operationId: delete_v1_sentry_projects_by_id
       parameters:
       - description: ID is the project id.
         in: path
@@ -95815,7 +95815,7 @@ paths:
         Returns one Sentry project of the caller's org, DSN included.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_v1_sentry_projects_id
+      operationId: get_v1_sentry_projects_by_id
       parameters:
       - description: ID is the project id.
         in: path
@@ -95842,7 +95842,7 @@ paths:
         new DSN.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: post_v1_sentry_projects_id_keys_rotate
+      operationId: post_v1_sentry_projects_by_id_keys_rotate
       parameters:
       - description: ID is the project id.
         in: path
@@ -95945,7 +95945,7 @@ paths:
       description: |-
         Returns one trace's captured errors for a project — every error event
         that carried the trace id, in the order the events plane holds them.
-      operationId: get_v1_sentry_traces_id
+      operationId: get_v1_sentry_traces_by_id
       parameters:
       - description: ID is the trace id.
         in: path
@@ -95979,7 +95979,7 @@ paths:
         values, which live in KMS. A product the org has never configured is not a 404:
         it answers 200 with an empty config object, so the console's Settings tab always
         renders and merges its own display defaults on top.
-      operationId: get_v1_settings_product
+      operationId: get_v1_settings_by_product
       parameters:
       - description: Product is the catalog slug, from the path. Must match ^[a-z0-9][a-z0-9._-]{0,62}$.
         in: path
@@ -96008,7 +96008,7 @@ paths:
         with no KMS configured a write that carries any secret is refused whole (503)
         rather than dropping it or persisting it in the clear. A secret the body omits
         keeps its stored value, so a partial write never silently clears one.
-      operationId: put_v1_settings_product
+      operationId: put_v1_settings_by_product
       parameters:
       - description: |-
           Product is the catalog slug, from the PATH. zip binds the path last, so the
@@ -96165,7 +96165,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_sites_slug_publish
+      operationId: post_v1_sites_by_slug_publish
       parameters:
       - description: Slug is the site to publish, from the path.
         in: path
@@ -96204,7 +96204,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_v1_sites_slug_releases
+      operationId: get_v1_sites_by_slug_releases
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -96252,7 +96252,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_sites_slug_releases
+      operationId: post_v1_sites_by_slug_releases
       parameters:
       - description: Slug is the site to publish, from the path.
         in: path
@@ -96298,7 +96298,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_v1_sites_slug_releases_release_activate
+      operationId: post_v1_sites_by_slug_releases_by_release_activate
       parameters:
       - description: Slug is the site the release belongs to, from the path.
         in: path
@@ -96438,7 +96438,7 @@ paths:
         Removes one of the caller org's authored skills. Scoped to the
         caller's org, so an id belonging to another tenant is never reached. Removing
         what is not there is not an error — the caller's intent is "gone", and it is.
-      operationId: delete_v1_skills_id
+      operationId: delete_v1_skills_by_id
       parameters:
       - description: ID is the skill to remove, from the path. It is the skill's name.
         in: path
@@ -96733,7 +96733,7 @@ paths:
         instance — never a live app pointed at a deleted backend — then deletes the
         sealed credential and removes the metadata row. Answers 204 with no body; a
         second call is a 404, not a second delete.
-      operationId: delete_v1_sql_name
+      operationId: delete_v1_sql_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -96758,7 +96758,7 @@ paths:
         the password, which is returned once at create and otherwise lives only in
         Hanzo KMS. A still-booting instance reads "provisioning", reconciled from the
         operator's live view rather than from the row.
-      operationId: get_v1_sql_name
+      operationId: get_v1_sql_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -97559,7 +97559,7 @@ paths:
         List returns every sync link the caller's org has, each with its two endpoints, its
         direction and trigger policy, and the time it last reconciled. Scoped to the
         caller's own org — another tenant's links are structurally unreachable.
-      operationId: v1.get_sync
+      operationId: get_v1_sync
       responses:
         "200":
           content:
@@ -97582,7 +97582,7 @@ paths:
         host with no embedded credentials; a target left empty is derived as a native
         repository named after the source. With run=true the first reconcile is queued in
         the background, so a large initial import never blocks this response.
-      operationId: v1.post_sync
+      operationId: post_v1_sync
       requestBody:
         content:
           application/json:
@@ -97612,7 +97612,7 @@ paths:
         204. The teardown is the point: without it an unsynced repository would keep
         force-pushing to the upstream it is no longer linked to. Org-scoped, so another
         tenant's id is the same 404 an unknown id gives.
-      operationId: v1.delete_sync_id
+      operationId: delete_v1_sync_by_id
       parameters:
       - description: ID is the sync to act on, from the path.
         example: sync_1
@@ -97633,7 +97633,7 @@ paths:
       description: |-
         Get returns one sync by id. It is org-scoped: an id belonging to another tenant is
         the same 404 an unknown id gives, so a probe learns nothing about what exists.
-      operationId: v1.get_sync_id
+      operationId: get_v1_sync_by_id
       parameters:
       - description: ID is the sync to act on, from the path.
         example: sync_1
@@ -97661,7 +97661,7 @@ paths:
         request omits is left as it was. Changing the direction immediately reconciles the
         derived outbound mirror, so turning push off stops the upstream being written to
         rather than merely recording the intent.
-      operationId: v1.patch_sync_id
+      operationId: patch_v1_sync_by_id
       parameters:
       - description: ID is the sync to update, from the path.
         example: sync_1
@@ -97698,7 +97698,7 @@ paths:
         created without run=true. The work is handed to a bounded background worker and the
         call answers 202 immediately, so a large mirror-in never holds the request open;
         queued=true means accepted, not finished.
-      operationId: v1.post_sync_id_run
+      operationId: post_v1_sync_by_id_run
       parameters:
       - description: ID is the sync to act on, from the path.
         example: sync_1
@@ -98182,7 +98182,7 @@ paths:
         the caller can never name into another tenant's box) is a harmless no-op. A
         storage backend that is unavailable fails closed with 502 rather than lying
         about success.
-      operationId: delete_v1_team_files_workspace_filename
+      operationId: delete_v1_team_files_by_workspace_by_filename
       parameters:
       - description: Workspace is the workspace uuid the blob belongs to, from the
           path.
@@ -98379,7 +98379,7 @@ paths:
       description: |-
         Deletes the caller org's OWN starter kit. A slug they do not own is a
         404, never a delete: the DELETE binds org.
-      operationId: delete_v1_templates_slug
+      operationId: delete_v1_templates_by_slug
       parameters:
       - description: Slug is the starter kit to act on, from the path.
         example: acme-portal
@@ -98399,7 +98399,7 @@ paths:
       description: |-
         Returns one starter kit: the caller org's own by that slug, else the public
         catalog's. A slug another org owns reads as not found.
-      operationId: get_v1_templates_slug
+      operationId: get_v1_templates_by_slug
       parameters:
       - description: Slug is the starter kit to act on, from the path.
         example: folio
@@ -98425,7 +98425,7 @@ paths:
         Overwrites the caller org's OWN starter kit at the path slug, answering
         the stored kit. A slug they do not own is 404, never a create: the UPDATE binds
         org, so a PUT can never reach another org's kit.
-      operationId: put_v1_templates_slug
+      operationId: put_v1_templates_by_slug
       parameters:
       - description: Slug is the kit to replace, from the path.
         example: acme-portal
@@ -98667,7 +98667,7 @@ paths:
         A HIDDEN listing is not served to an org — a shelf that renders what it does
         not list would be a way around the shelf — but is served to a SuperAdmin, who
         is the one deciding whether to put it back.
-      operationId: get_v1_tools_catalog_id
+      operationId: get_v1_tools_catalog_by_id
       parameters:
       - description: |-
           ID is the listing, from the path. It is the publisher's reverse-DNS name
@@ -98700,7 +98700,7 @@ paths:
         thing that writes it. The upstream half is never editable here: a description
         that disagreed with the publisher's would be a fork of their listing, and the
         next sync would silently undo it.
-      operationId: patch_v1_tools_catalog_id
+      operationId: patch_v1_tools_catalog_by_id
       parameters:
       - description: ID is the listing to curate, from the path.
         in: path
@@ -98849,7 +98849,7 @@ paths:
         The cascade is the point: an issue has no meaning without the board whose key
         names it, so deleting the board deletes them together rather than leaving
         orphans addressable by an identifier that no longer resolves.
-      operationId: delete_v1_tracker_projects_key
+      operationId: delete_v1_tracker_projects_by_key
       parameters:
       - description: |-
           Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting
@@ -98872,7 +98872,7 @@ paths:
         Returns one tracker project of the caller's org by its key —
         its name, description and timestamps. 404 when the org has no project
         under that key.
-      operationId: get_v1_tracker_projects_key
+      operationId: get_v1_tracker_projects_by_key
       parameters:
       - description: |-
           Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting
@@ -98903,7 +98903,7 @@ paths:
         The project KEY is never editable — it prefixes every issue identifier already
         filed under the board, so changing it would rewrite the human handle of every
         issue in it.
-      operationId: patch_v1_tracker_projects_key
+      operationId: patch_v1_tracker_projects_by_key
       parameters:
       - description: Key is the project to update, from the path.
         in: path
@@ -98942,7 +98942,7 @@ paths:
         repository's Issues tab passes kind=issue&repo=<r> and its Pull Requests tab
         kind=pr&repo=<r>. A filter value outside its closed set is refused with 400
         rather than silently returning an empty board.
-      operationId: get_v1_tracker_projects_key_issues
+      operationId: get_v1_tracker_projects_by_key_issues
       parameters:
       - description: Key is the project whose issues to list, from the path.
         example: ENG
@@ -99040,7 +99040,7 @@ paths:
         The issue's number is NOT reused: the next issue on the board takes the next
         number, so a deleted identifier stays retired rather than silently pointing at
         different work.
-      operationId: delete_v1_tracker_projects_key_issues_num
+      operationId: delete_v1_tracker_projects_by_key_issues_by_num
       parameters:
       - description: Key is the issue's project, from the path.
         in: path
@@ -99069,7 +99069,7 @@ paths:
         title, description, status, priority, assignee, labels, kind, source and its
         git bindings. 404 when the project or the issue does not exist in the caller's
         org.
-      operationId: get_v1_tracker_projects_key_issues_num
+      operationId: get_v1_tracker_projects_by_key_issues_by_num
       parameters:
       - description: Key is the issue's project, from the path.
         in: path
@@ -99113,7 +99113,7 @@ paths:
         The issue's kind, source and git bindings are not editable here: they record
         where the work item came FROM, which is a fact about its origin rather than
         its current state.
-      operationId: patch_v1_tracker_projects_key_issues_num
+      operationId: patch_v1_tracker_projects_by_key_issues_by_num
       parameters:
       - description: Key is the issue's project, from the path.
         example: ENG
@@ -100062,7 +100062,7 @@ paths:
 
         A slot another org holds, and a slot nobody holds, are both 404 — never a
         different status, so this route cannot be used to probe which slots are taken.
-      operationId: get_v1_validators_tokenId
+      operationId: get_v1_validators_by_tokenid
       parameters:
       - description: |-
           TokenID is the slot's GenesisNFT token id, from the path, as a decimal
@@ -100175,7 +100175,7 @@ paths:
       description: |-
         Deletes one vector collection from the shared backend and removes
         its metadata row. Answers 204 with no body; a second call is a 404.
-      operationId: delete_v1_vector_name
+      operationId: delete_v1_vector_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -100200,7 +100200,7 @@ paths:
         collection's status and the gateway address it is reached at, and no username:
         the backend authenticates with a shared, out-of-band key rather than a
         per-collection credential, so there is no per-resource user to report.
-      operationId: get_v1_vector_name
+      operationId: get_v1_vector_by_name
       parameters:
       - description: |-
           Name is the resource's org-unique slug, from the path. Lower-cased and
@@ -100413,7 +100413,7 @@ paths:
         confirmed by re-fetching the resource and checking its physical name carries
         the caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a
         404 rather than a delete of another org's VPC.
-      operationId: delete_v1_vpcs_id
+      operationId: delete_v1_vpcs_by_id
       parameters:
       - description: ID is the DigitalOcean resource id (a UUID), from the path.
         in: path
@@ -100433,7 +100433,7 @@ paths:
         Returns one of the caller org's VPCs by id. A VPC that exists but sits
         in another org's namespace is reported 404, never 403 — the answer must not
         tell one tenant that another tenant's resource exists.
-      operationId: get_v1_vpcs_id
+      operationId: get_v1_vpcs_by_id
       parameters:
       - description: ID is the DigitalOcean resource id (a UUID), from the path.
         in: path
@@ -100538,7 +100538,7 @@ paths:
         tier, chain and on-chain address. The custody handle to the signing material is
         never part of the answer. A wallet id another org owns reads as not found, so
         the response cannot confirm that it exists.
-      operationId: get_v1_wallets_id
+      operationId: get_v1_wallets_by_id
       parameters:
       - example: wal_4b1e77
         in: path
@@ -100568,7 +100568,7 @@ paths:
         counterfactual and the owner shares are ring-managed, so rotation is a no-op
         and the address is unchanged. A backend that is not configured fails closed
         with 503 rather than leaving the wallet half-rotated.
-      operationId: post_v1_wallets_id_keys
+      operationId: post_v1_wallets_by_id_keys
       parameters:
       - example: wal_4b1e77
         in: path
@@ -100598,7 +100598,7 @@ paths:
         its backend: KMS custody opens the sealed key in-process, MPC custody produces
         a threshold signature on the ring. The answer carries the digest that was
         signed alongside the signature, so a caller can verify what it got.
-      operationId: post_v1_wallets_id_sign
+      operationId: post_v1_wallets_by_id_sign
       parameters:
       - example: wal_4b1e77
         in: path
@@ -100637,7 +100637,7 @@ paths:
         than the kind being switched on. The ring computes the Safe-tx hash bound to
         the Safe contract and the chain id, so the hash a caller gets back is the one
         the Safe will verify. This PROPOSES: it does not execute the transaction.
-      operationId: post_v1_wallets_id_transactions
+      operationId: post_v1_wallets_by_id_transactions
       parameters:
       - example: wal_4b1e77
         in: path
@@ -100773,7 +100773,7 @@ paths:
         204 with no body. Delivery stops immediately and the endpoint's signing secret
         is gone with it; its recorded delivery history goes too. An id another org owns
         reads as not found.
-      operationId: delete_v1_webhooks_id
+      operationId: delete_v1_webhooks_by_id
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -100794,7 +100794,7 @@ paths:
         Returns one of the caller org's webhook endpoints with its 7-day
         delivery and failure counts, signing secret redacted. An id another org owns
         reads as not found, so the response cannot confirm that it exists.
-      operationId: get_v1_webhooks_id
+      operationId: get_v1_webhooks_by_id
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -100822,7 +100822,7 @@ paths:
         is written as its empty value, and an omitted or empty events list resubscribes
         the endpoint to EVERY event. The signing secret and the creation time are
         immutable here; rotate the secret with POST /v1/webhooks/{id}/secret.
-      operationId: put_v1_webhooks_id
+      operationId: put_v1_webhooks_by_id
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -100864,7 +100864,7 @@ paths:
         delivery id. It is org-scoped exactly like every other route here: the endpoint
         lookup only ever finds THIS org's endpoint, so another org's id is a 404 and
         never a window onto its logs.
-      operationId: get_v1_webhooks_id_deliveries
+      operationId: get_v1_webhooks_by_id_deliveries
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -100910,7 +100910,7 @@ paths:
         secret. The old secret stops working the instant this returns: every subsequent
         delivery signs with the new one, with no overlap window. Call it when the
         subscriber is ready to swap the value on its side, not before.
-      operationId: post_v1_webhooks_id_secret
+      operationId: post_v1_webhooks_by_id_secret
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -100939,7 +100939,7 @@ paths:
         dispatcher takes — one attempt, 10s timeout, no retry ladder — and records the
         result in the endpoint's delivery log. It works on a DISABLED endpoint too:
         validating one you have paused is the whole point.
-      operationId: post_v1_webhooks_id_test
+      operationId: post_v1_webhooks_by_id_test
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -101264,7 +101264,7 @@ paths:
         tenant can never read another's settlement, and an id that exists but belongs
         to somebody else is a 404 exactly like one that does not exist. A caller with
         no billable identity is refused outright.
-      operationId: get_v1_x402_settlements_id
+      operationId: get_v1_x402_settlements_by_id
       parameters:
       - description: |-
           ID is the settlement id from the URL — the deterministic keccak(from|nonce)
