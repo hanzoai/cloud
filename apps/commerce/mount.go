@@ -477,14 +477,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// The PORTAL payment-method pair — the address the BILLING app proxies to.
 	//
-	// billing owns the customer address /v1/billing/methods (manifest.Apps), so it
-	// cannot forward there: the forward is its own route and re-enters it (the
-	// depth-8 502 top-up hit). commerce publishes the portal family for exactly that
-	// — the service-token face of the same data — and cloud's billing app has been
-	// asking for /v1/billing/portal/methods all along while NOTHING in the fleet
-	// served it. The proxy forwarded a 404 verbatim and the saved-card list was empty
-	// no matter how many cards were vaulted; the DELETE had no owner at all and the
-	// live edge answered 405, so a customer could add a card and never remove one.
+	// It is the SERVICE-TOKEN face of the same rows the customer family above answers,
+	// and it is a separate address because it admits a separate principal — not because
+	// anything forwards to it. It was born when billing still held the customer address
+	// and could not forward there (the forward was its own route and re-entered it — the
+	// depth-8 502 top-up hit); billing asked for /v1/billing/portal/methods all along
+	// while NOTHING in the fleet served it, so the proxy forwarded a 404 verbatim, the
+	// saved-card list was empty no matter how many cards were vaulted, and the DELETE had
+	// no owner at all. Both families live here now (manifest.Apps gives commerce both
+	// prefixes) and neither hops; what remains is the gate, which differs, which is why
+	// they remain two addresses rather than one.
 	//
 	// THE GATE IS THE POINT, and it is not the console chain above. Both handlers key
 	// their finer scope on a value the CALLER supplies — PortalPaymentMethods filters
@@ -730,19 +732,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//                          body AND fail-closes an unvalidated caller. It is the auth gate
 	//                          on every one, and the IDOR control on the subject-scoped one.
 	//
-	// payment-methods is NOT one of them, and must not be added back. That address belongs
-	// to the BILLING app: manifest.Apps names "/v1/billing/methods" on the billing
-	// row and withholds it from this one, because billing serves the GET (a proxy to
-	// commerce's /v1/billing/portal/methods) — and the host claims a prefix for ONE
-	// app across every method, so the POST has to sit on the same router as the read or it
-	// misses on METHOD (apps/billing/billing.go says exactly that, and the console's
-	// save-card call is what died proving it). A registration here is unreachable in the
-	// fleet: the request reaches the billing process and never this one.
+	// payment-methods is not in THIS block, and the reason is the chain, not the owner:
+	// the three verbs are registered above on the pinned-subject chain their portal twins
+	// use. THIS APP OWNS THAT ADDRESS — manifest.Apps names "/v1/billing/methods" on the
+	// commerce row and withholds it from billing, and apps/billing/billing.go says so at
+	// the spot the proxy used to sit ("served CO-RESIDENT by the commerce app, not proxied
+	// from here"). It reads the other way round in the history because it WAS billing's
+	// until the HTTP hop was deleted: that proxy pointed at a service compiled into the
+	// same binary and was unconfigured here besides, so every saved-card call answered
+	// 401/501 to a signed-in customer.
 	//
-	// It was also a SECOND claim on one address, which openapi.Weave refuses rather than pick
-	// a winner between — the published operation is identical from either app (same id, same
-	// tag, no declared body), so nothing in the document changes by dropping it; what changes
-	// is that the document can be woven at all.
+	// One claim on one address is the whole requirement — openapi.Weave refuses a second
+	// one rather than pick a winner. Moving the verbs did not satisfy it on its own: the
+	// subset that PUBLISHES them was hand-edited to match, and copied the portal
+	// operationIds along with the prose, so two paths claimed one id and no document could
+	// be woven at all. A subset is generated (`make describe`) or it is wrong.
 	//
 	// subscriptions/:id/{cancel,reactivate} are org-NAMESPACE-scoped: commerce's handlers
 	// resolve the subscription by `:id` WITHIN the caller's org namespace (a foreign org's id
