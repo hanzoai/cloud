@@ -284,8 +284,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // and each op's path is the prefix composed with its leaf, the same composition
 // the router does and the identity every projection keys on (cmd/zipdoc resolves
 // it the same way as of zip v1.18.3). g.<Verb>(…) stays for the routes a typed op
-// cannot express: a raw pack stream, an HTML page, a webhook whose HMAC covers
-// the raw bytes, a ZAP envelope. The two are interleaved in the ORIGINAL order
+// cannot express: a raw pack stream, an HTML page, a tombstone with no In and no
+// Out, a ZAP envelope. The two are interleaved in the ORIGINAL order
 // because fiber resolves by registration order, and that order is load-bearing
 // here (see below).
 func routes(app cloud.Router, s *cloud.Service[state]) {
@@ -306,17 +306,16 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
 	zip.Post(g, "/repos/:name/push", o.pushFiles)
-	// Canonical-forge push ingest (webhook.go): git.hanzo.ai is a separate process,
-	// so its pushes reach the ONE push-to-deploy trigger through this door. A static
-	// segment that never shadows the :org/:repo smart-HTTP routes; PUBLIC at the JWT
-	// layer, HMAC-authed inside. cloud.Terminal writes the handler's bad-signature
-	// 401 / malformed-body 400 in-band so the commerce /v1 ErrorHandlerJSON
-	// (co-mounted ahead) cannot flatten it to 500 — the same reject-parity
-	// /v1/connector/github/webhook carries.
+	// The retired forge push door (webhook.go): a TOMBSTONE answering every
+	// delivery 410 and naming platform.hanzo.ai, kept because a 404 from this
+	// estate reads as "the API is switched off". A static segment that never
+	// shadows the :org/:repo smart-HTTP routes; cloud.Terminal writes the 410
+	// in-band so the commerce /v1 ErrorHandlerJSON (co-mounted ahead) cannot
+	// flatten it to 500.
 	//
-	// Untyped, deliberately: the body is a forge's own webhook envelope validated by
-	// HMAC over the RAW bytes, so a decode-then-revalidate typed op would have to
-	// reconstruct what it just parsed.
+	// Untyped, deliberately: this is the door a forge's own webhook protocol
+	// delivered to, and it now reads no request and returns no value — a typed
+	// op is built from an In or an Out, and a tombstone has neither.
 	g.Post("/webhook", cloud.Terminal(cloud.Handle(s, webhook)))
 	// SSH public-key registry (per-user keys for `git clone git@…`).
 	zip.Post(g, "/keys", o.registerKey, zip.WithStatus(http.StatusCreated))
@@ -354,7 +353,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/repos/:name/readme", o.browseReadme)
 
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
-	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
+	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively. They
+	// stay raw because they speak git's own pack protocol — pkt-line
+	// advertisements in, STREAMED packfiles out, JSON in neither direction.
 	g.Get("/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
 	g.Post("/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
 	g.Post("/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
