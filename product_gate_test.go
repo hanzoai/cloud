@@ -59,7 +59,7 @@ var unextracted = []string{
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
 	"controlplane", "crawl", "crm", "cron", "dataroom", "dataset",
 	"destinations", "do", "domain", "entitlements", "erp", "esign", "exec",
-	"experiments", "finance", "fleet", "flow", "goja", "graph", "guide",
+	"experiments", "explorer", "finance", "fleet", "flow", "goja", "guide",
 	"help", "index", "integrations", "k8s", "knowledge", "label",
 	"leaderboard", "legal", "link", "marketplace", "meet", "membership",
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
