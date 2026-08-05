@@ -33,7 +33,12 @@ type Deps struct {
 	Logger luxlog.Logger
 
 	// Brand is the white-label brand identifier for this deployment.
-	// Values: "hanzo", "lux", "zoo", "osage", "pars", or any customer brand.
+	// Values: exactly the ids in the brand registry (brand/brand.go) — "hanzo",
+	// "lux", "zoo", "pars", "bootnode". It is NOT open: brand.For folds an
+	// unregistered id to hanzo, silently, so an unlisted brand does not get its
+	// own issuer or domain — it gets Hanzo's. This said `"osage", ... or any
+	// customer brand`, which was wrong in both directions; brand.Registered is
+	// the fallible check for anything that must actually know.
 	Brand string
 
 	// Version is the API contract/build version emitted as the X-Api-Version

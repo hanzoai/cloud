@@ -232,7 +232,7 @@ type Server struct {
 // (ADDING to the baked-in defaults, never removing them), so createProject and
 // BindHost enforce the exact same set the serve gate does.
 func New(cfg Config, log luxlog.Logger) *Server {
-	apex := apexOf(cfg.Apex)
+	apex := siteZone(cfg.Apex)
 	// Publish the COMPLETE policy — the reserved labels AND the domains we run — so
 	// the claim gate refuses what the serve gate would refuse. selfOf folds the
 	// first-party apex in itself, so the published set does not depend on where in

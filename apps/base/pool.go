@@ -63,9 +63,12 @@ type appEntry struct {
 }
 
 func newPool(root string, deps cloud.Deps) *pool {
+	// cloud.JWKSURLFor, never the suffix concatenated here: this rebuilt the URL
+	// inline and so ignored CLOUD_JWKS_URL, leaving an operator-pinned JWKS in
+	// force at the edge and not in the per-app pool that verifies the same tokens.
 	jwks := ""
-	if iss := strings.TrimRight(deps.IAMIssuer, "/"); iss != "" {
-		jwks = iss + "/v1/iam/.well-known/jwks"
+	if strings.TrimSpace(deps.IAMIssuer) != "" {
+		jwks = cloud.JWKSURLFor(deps.IAMIssuer)
 	}
 	return &pool{
 		dir:     root,
