@@ -14,7 +14,7 @@ import (
 // github_sink.go implements cloud.IssueSink: it mirrors an external work item (today
 // a GitHub issue, via the App webhook + backfill in clients/integrations) into THIS
 // native tracker, idempotently by ExtRef. It is the tracker's side of the
-// tracker_seam inversion — integrations never imports tracker; it calls
+// tracker.go inversion — integrations never imports tracker; it calls
 // cloud.UpsertIssue, which lands here.
 //
 // One team, repo as the discriminator: every mirrored GitHub issue for an org files
@@ -26,7 +26,7 @@ import (
 
 // registerIssueSink wires the sink. Called from Mount once `mounted` is set, so the
 // sink never runs before its store cache exists.
-func registerIssueSink() { cloud.RegisterIssueSink(upsertIssueSeam) }
+func registerIssueSink() { cloud.RegisterIssueSink(upsertIssue) }
 
 // stateToStatus maps an upstream open/closed state to a tracker board column: open
 // work is actionable (todo), closed work is done. Anything else (defensive) → todo.
@@ -37,10 +37,10 @@ func stateToStatus(state string) string {
 	return "todo"
 }
 
-// upsertIssueSeam is the registered cloud.IssueSink: ensure the target team, find any
+// upsertIssue is the registered cloud.IssueSink: ensure the target team, find any
 // existing row for the ExtRef, and create or update it — the ONE mirror upsert,
 // shared by the webhook (one issue) and the backfill (many). Idempotent by ExtRef.
-func upsertIssueSeam(ctx context.Context, in cloud.IssueUpsert) (cloud.IssueUpsertResult, error) {
+func upsertIssue(ctx context.Context, in cloud.IssueUpsert) (cloud.IssueUpsertResult, error) {
 	s := mounted
 	if s == nil {
 		return cloud.IssueUpsertResult{}, cloud.ErrIssueSinkUnavailable

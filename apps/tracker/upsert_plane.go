@@ -11,7 +11,7 @@ import (
 // upsert_plane.go carries the external-issue mirror across a PROCESS boundary.
 //
 // The STORE is this app's. The FEEDER is integrations — it holds the GitHub App
-// and verifies the webhook — so cloud.RegisterIssueSink, an in-process seam, left
+// and verifies the webhook — so cloud.RegisterIssueSink, which only registers in-process, left
 // issueSink nil on exactly the path that has work to file. Every mirrored issue
 // and every backfill row was refused with "tracker issue sink not registered"
 // while this tracker was serving its own surface in the next process.
@@ -39,9 +39,9 @@ func exposeUpsert() {
 // into another tenant's tracker. Anonymous is refused rather than defaulted: an
 // item arriving with no principal must fail, not land on somebody's board.
 //
-// It calls upsertIssueSeam, never cloud.UpsertIssue. cloud.UpsertIssue now falls
+// It calls upsertIssue, never cloud.UpsertIssue. cloud.UpsertIssue now falls
 // through to THIS op when the local sink is nil, so a process serving it that went
-// back through the seam would dial its own socket and ask itself, forever.
+// back through it would dial its own socket and ask itself, forever.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeUpsert(ctx context.Context, in *plane.IssueIn) (*plane.IssueUpserted, error) {
@@ -52,7 +52,7 @@ func planeUpsert(ctx context.Context, in *plane.IssueIn) (*plane.IssueUpserted, 
 	if mounted == nil {
 		return nil, zip.Errorf(503, "tracker not mounted")
 	}
-	res, err := upsertIssueSeam(ctx, cloud.IssueUpsert{
+	res, err := upsertIssue(ctx, cloud.IssueUpsert{
 		Org: who.Org, Project: in.Project, ProjectKey: in.Key, ProjectName: in.TeamName,
 		Repo: in.Repo, ExtRef: in.ExtRef, Kind: in.Kind, Source: in.Source,
 		Title: in.Title, Description: in.Description, State: in.State,
