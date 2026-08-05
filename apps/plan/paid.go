@@ -1,110 +1,62 @@
 package plan
 
-// paid.go answers ONE catalog question the subscription paywall asks: "is this plan
-// tier a PAID Hanzo cloud subscription?" It reads the embedded @hanzo/plans catalog
-// (the single source of truth for what every tier costs) — it does NOT restate the
-// tier list in Go, so the answer auto-tracks the catalog and a future paid tier needs
-// no code change here. The plan→product entitlement vocabulary still lives only in the
-// goja bundle (plan.go); this is a price/category read, not a vocabulary reimpl.
+// paid.go answers ONE question the subscription paywall asks: "is the plan this org
+// actually bought a PAID Hanzo cloud account?" It is a PREDICATE over a plan's money
+// facts — category and price — and it reads no catalog.
+//
+// It used to take a tier id and look it up in the @hanzo/plans catalog. That was wrong,
+// and it cost money. The catalog lists what is ON SALE TODAY; a subscription records
+// what was bought, possibly years ago. Commerce keeps those two apart on purpose: when
+// a tier is retired its row is ARCHIVED, never deleted, so "invoices and renewals that
+// already reference it" still resolve — "retiring a tier stops new sales; it never
+// strands a subscriber" (commerce models/plan.Status). Classifying a subscriber against
+// the for-sale list strands exactly the subscribers commerce went out of its way to
+// protect: @hanzo/plans v1.4.10 retired plus/team-max/custom, so every org still paying
+// for one of them stopped counting as paid.
+//
+// So the caller passes the plan row the subscription itself froze at subscribe time,
+// and this decides. One authority — the record of what the customer bought — instead of
+// two that drift apart the moment the price list changes.
 
-import (
-	"fmt"
-	"strings"
-	"sync"
+import "strings"
 
-	hplans "github.com/hanzoai/plans"
-)
-
-// accountCategories are the @hanzo/plans catalog categories that ARE a Hanzo cloud
-// account tier — the subscription a customer buys to use the cloud product surface.
-// The catalog ALSO carries separate product lines ("world", "social", "dns") sold on
-// their own surfaces; a subscription to one of those is NOT a cloud account and must
-// never clear the cloud paywall. This mirrors the console's own ACCOUNT_CATEGORIES
-// (console src/lib/api/plans.ts) so "which categories are the cloud account tiers" has
-// ONE definition — read from the catalog, not restated as a slug list.
+// accountCategories are the catalog categories that ARE a Hanzo cloud account tier —
+// the subscription a customer buys to use the cloud product surface. The catalog also
+// carries separate product lines ("world", "social", "dns") sold on their own surfaces;
+// a subscription to one of those is NOT a cloud account and must never clear the cloud
+// paywall. This mirrors the console's own ACCOUNT_CATEGORIES (console
+// src/lib/api/plans.ts), so "which categories are cloud account tiers" has ONE
+// definition. Categories are a closed vocabulary and outlive the tiers that use them —
+// which is why classifying on the CATEGORY keeps working for a tier that is retired.
 var accountCategories = map[string]bool{
 	"personal":   true,
 	"team":       true,
 	"enterprise": true,
 }
 
-var (
-	paidOnce sync.Once
-	paidSet  map[string]bool
-	paidErr  error
-)
-
-// loadPaid builds the paid-cloud-tier set from the embedded @hanzo/plans
-// subscription.json ONCE. A tier is PAID when it is a cloud account category AND it
-// costs money: priceMonthly > 0, or a negotiated contactSales tier with no self-serve
-// price (Custom). This realizes the owner's "Pro ($20/mo) and above clears the paywall"
-// cut — {pro, plus, max, team, team-max, enterprise, custom} — WITHOUT hardcoding
-// slugs, since the catalog is the single source of truth for which tiers cost money.
-func loadPaid() {
-	data, err := hplans.Data()
-	if err != nil {
-		paidErr = fmt.Errorf("plan.Paid: load @hanzo/plans catalog: %w", err)
-		return
-	}
-	raw, ok := data["subscription.json"].([]any)
-	if !ok {
-		paidErr = fmt.Errorf("plan.Paid: @hanzo/plans subscription.json is not a plan array")
-		return
-	}
-	set := make(map[string]bool, len(raw))
-	for _, entry := range raw {
-		obj, ok := entry.(map[string]any)
-		if !ok {
-			continue
-		}
-		id, _ := obj["id"].(string)
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		category, _ := obj["category"].(string)
-		if !accountCategories[strings.TrimSpace(category)] {
-			continue // a non-account product line (world/social/dns) — never a cloud tier.
-		}
-		if isPaidTier(obj) {
-			set[id] = true
-		}
-	}
-	paidSet = set
+// Tier is the money facts of one plan: what product line it belongs to and whether it
+// costs anything. It is the subset of a commerce plan row this predicate needs, so
+// apps/plan states the paywall rule without importing the commerce models.
+type Tier struct {
+	// Category is the plan family — "personal"/"team"/"enterprise" are cloud account
+	// tiers; "world"/"social"/"dns" are their own products.
+	Category string
+	// Price is the recurring charge in cents. Zero is the free tier.
+	Price int64
+	// ContactSales marks a negotiated tier whose price is not published (Custom,
+	// Enterprise). It costs money; the amount just is not in the catalog.
+	ContactSales bool
 }
 
-// isPaidTier reports whether a catalog plan object costs money: a contactSales/quote
-// tier (negotiated, priceMonthly null) OR a positive monthly price. A zero/absent
-// priceMonthly with no contactSales flag is the free tier (Developer). JSON numbers
-// decode to float64, so priceMonthly is read as float64.
-func isPaidTier(obj map[string]any) bool {
-	if cs, _ := obj["contactSales"].(bool); cs {
-		return true
-	}
-	if p, ok := obj["priceMonthly"].(float64); ok {
-		return p > 0
-	}
-	return false
-}
-
-// Paid reports whether plan tier id is a PAID Hanzo cloud subscription tier — the
-// paywall's "this org holds a real plan" predicate. Pro/Plus/Max/Team/Team-Max/
-// Enterprise/Custom → (true, nil); the free Developer tier, a non-cloud product plan
-// (world-*/social-*), an empty or unknown id → (false, nil).
+// Paid reports whether t is a PAID Hanzo cloud account tier — the paywall's "this org
+// holds a real plan" predicate. It is true when the tier is a cloud account category AND
+// it costs money: a published price above zero, or a negotiated contact-sales contract.
 //
-// A non-nil error means the embedded catalog could not be read (a build/embed defect —
-// effectively impossible in a booted binary). It is returned rather than swallowed so
-// the caller can FAIL OPEN (admit the request) rather than mistake a catalog outage for
-// "no paid tier" and lock a subscriber out. This function NEVER fabricates a grant: it
-// returns true only for a tier the catalog says is a paid cloud account tier.
-func Paid(id string) (bool, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return false, nil // an empty tier is definitively not paid — no catalog read needed.
+// A free cloud tier (priced zero), any tier from another product line whatever it costs,
+// and a zero Tier are all false. It NEVER fabricates a grant.
+func Paid(t Tier) bool {
+	if !accountCategories[strings.TrimSpace(t.Category)] {
+		return false
 	}
-	paidOnce.Do(loadPaid)
-	if paidErr != nil {
-		return false, paidErr
-	}
-	return paidSet[id], nil
+	return t.ContactSales || t.Price > 0
 }
