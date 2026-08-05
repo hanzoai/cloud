@@ -29,6 +29,7 @@ func mountPrefs(t *testing.T) *zip.App {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, &service{store: store, log: luxlog.New("test")})
 	return app
 }
