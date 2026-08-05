@@ -98,7 +98,25 @@ func scoreOverPlane(ctx context.Context, lg log.Logger, org string, q cloud.Risk
 	// the request path for the next caller. A socket that IS there and does not
 	// answer stays an outage and still denies, which is the fact this gate exists
 	// to fail closed on.
-	if !scorerUp() {
+	//
+	// AND THE PROBE ITSELF CAN FAIL, which is a THIRD fact and not either of those
+	// two. [plane.Listening] reports ENOENT and ECONNREFUSED as "no listener" and
+	// returns every other dial error UNTOUCHED, precisely so that a socket which is
+	// present and unusable is never read as one that is absent. Under fd exhaustion
+	// (EMFILE), a mode that denies the dial (EACCES) or a run directory whose path
+	// has grown past the sun_path bound (ENAMETOOLONG), the probe fails in
+	// microseconds against a scorer that is perfectly healthy — so the budget below
+	// never catches it, and discarding the error here would answer ABSENT and wave
+	// the top-up through. That is the fail-open this gate exists to close, reachable
+	// by putting the commerce process under fd pressure.
+	up, err := scorerUp()
+	if err != nil {
+		// The judge's door is THERE and this process cannot use it. An outage, handed
+		// to the seam as one — [cloud.Decide] renders it RefusalError, and the fail
+		// policy denies it because the query is privileged.
+		return cloud.RiskVerdict{}, fmt.Errorf("risk: the scorer's socket is unusable: %w", err)
+	}
+	if !up {
 		wakeScorer(lg)
 		return cloud.RiskUnavailable(q, cloud.RefusalAbsent), nil
 	}
@@ -155,10 +173,17 @@ func signalsOf(facts map[string]string) []plane.Signal {
 // now. It connects, because the file does not answer the question: a socket left
 // by a dead pod outlives it, and for a lazily started app that difference is the
 // whole answer.
-func scorerUp() bool {
+//
+// IT RETURNS THE ERROR, and that is the whole of it. [plane.Listening] separates
+// three facts and this is a pass-through of that separation: no listener (false,
+// nil), a listener (true, nil), and a socket that is present and UNUSABLE (false,
+// err). Folding the third into the first — `return err == nil && up` — is the one
+// line that turns an outage into an absence, and absence is the exemption the fail
+// policy grants a privileged grant. This is the same contract [plane.Reach] keeps
+// for the router's own start door, for the same reason.
+func scorerUp() (bool, error) {
 	plane.Bind()
-	up, err := plane.Listening(zip.SocketPath(riskpeer.App))
-	return err == nil && up
+	return plane.Listening(zip.SocketPath(riskpeer.App))
 }
 
 // waking holds the ONE start request in flight. The host single-flights the start
@@ -203,10 +228,17 @@ func wakeScorer(lg log.Logger) {
 //	question went unanswered, and a privileged grant waits rather than proceeds.
 //	It is an operational fact, so saying it is honest and useful.
 //
-//	the model DECIDED against it — 403, and nothing more. A risk reason handed
+//	the SCREEN DECIDED against it — 403, and nothing more. A risk reason handed
 //	back to whoever triggered it is a feedback channel for tuning the next
 //	attempt. The reason is written to the log with the shape and policy version
 //	that produced it, which is where an operator reads it.
+//
+// WHICH OF THE TWO IT IS, IS READ OFF THE ACTION AND THE REFUSAL TOGETHER — never
+// off the refusal alone. A decision is the screen's whenever anything decided it,
+// and after the rule and the model were fused that includes a determination made
+// over stated facts while the model itself had no opinion to offer. Such a verdict
+// carries BOTH a decided action and the model's own refusal, and only the pair
+// tells it apart from the one the fail policy invented.
 //
 // It is never a 402. Out of funds is what a 402 means at this door and this is
 // not that — the whole point of the door is that the caller has no funds yet.
@@ -230,7 +262,21 @@ func riskGate(lg log.Logger) zip.Handler {
 		if v.Allowed() {
 			return c.Next()
 		}
-		if v.Refusal != "" {
+		// A NO-DECISION IS A BLOCK CARRYING A REFUSAL, and both halves are the test.
+		// [cloud.riskUnavailable] is the ONLY producer of that pair — it is what the
+		// fail policy returns for a privileged grant the scorer could not answer — and
+		// a scored verdict never carries a refusal at all. So this is the whole of "the
+		// judge is here and did not answer", and nothing else reaches it.
+		//
+		// THE REFUSAL ALONE IS NOT THE TEST, because Action and Refusal became
+		// INDEPENDENT the moment the rule and the model were fused: the severest of the
+		// two stands, and the model's own refusal is carried beside it. An armed
+		// organisation whose model is still warming, on a payment the rule froze,
+		// answers {restrict, "warming"} — a DETERMINATION, reached from stated facts,
+		// with the model merely having had no opinion to add. Read off the refusal that
+		// is a 503 "try again in a moment", which invites the retry that settles the
+		// payment the rule just froze, and reports a working control as an outage.
+		if v.Action == cloud.ActionBlock && v.Refusal != "" {
 			return zip.Errorf(http.StatusServiceUnavailable,
 				"the payment screen could not answer (%s) — try again in a moment", v.Refusal)
 		}

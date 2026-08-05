@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -132,6 +133,105 @@ func TestScoreOverPlane_AnUndeployedPeerIsAbsentRatherThanAnOutage(t *testing.T)
 	}
 }
 
+// unusableRuntimeDir points the fleet's socket scheme at a directory whose socket
+// paths cannot be DIALLED — the third fact [plane.Listening] separates, and the one
+// the converse controls below turn on.
+//
+// The path is longer than sun_path (108 bytes on Linux, 104 on Darwin), so the
+// address is refused while the sockaddr is built — before any syscall, in
+// microseconds, and against a scorer that may be perfectly healthy. That is the
+// shape of every real one: EMFILE once the process is out of descriptors, EACCES on
+// a run directory it may not open, ENAMETOOLONG on an over-long one. None of them
+// is ENOENT and none is ECONNREFUSED, so none of them is an ABSENCE — and none is
+// slow enough for the 150ms budget to catch.
+func unusableRuntimeDir(t *testing.T) {
+	t.Helper()
+	t.Setenv("ZIP_RUNTIME_DIR", filepath.Join(t.TempDir(), strings.Repeat("d", 200)))
+	plane.Unbind()
+	t.Cleanup(plane.Unbind)
+}
+
+// TestScoreOverPlane_AnUnusableSocketIsAnOutageRatherThanAnAbsence — THE MIRROR
+// IMAGE of [TestScoreOverPlane_AnUndeployedPeerIsAbsentRatherThanAnOutage], and
+// the control that side had no counterpart for.
+//
+// Absence and outage are the two facts the whole probe exists to tell apart, and
+// the probe reports THREE: no listener, a listener, and a socket that is present
+// and unusable. The third one is an outage. Folding it into the first — which is
+// what `err == nil && up` does — hands the fail policy the one refusal it EXEMPTS,
+// so a privileged grant at the credit door is waved through by a scorer nobody
+// could reach. Reachable without touching the risk app at all: exhaust this
+// process's descriptors and every probe answers "no scorer here".
+//
+// Mutation proof: restore `return err == nil && up` in scorerUp, or drop the error
+// branch in scoreOverPlane, and BOTH assertions below fail while
+// [TestScoreOverPlane_AnUndeployedPeerIsAbsentRatherThanAnOutage] still passes.
+func TestScoreOverPlane_AnUnusableSocketIsAnOutageRatherThanAnAbsence(t *testing.T) {
+	unusableRuntimeDir(t)
+	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
+
+	q := cloud.RiskQuery{
+		Stage:      cloud.StagePayment,
+		Subject:    cloud.RiskSubject{Kind: plane.KindAccount, ID: "acme/u_412"},
+		Privileged: true,
+	}
+
+	// THE PROBE ITSELF, first: a socket that cannot be dialled is not a socket with
+	// nobody behind it, and the difference is the error.
+	if up, err := scorerUp(); err == nil {
+		t.Fatalf("an undiallable socket probed clean (up=%v) — the fixture proves nothing", up)
+	}
+
+	// THE SHAPE. An outage is an ERROR out of this seam. Answering it as a verdict
+	// at all would be this client deciding the fail policy for itself, and the only
+	// verdict it is entitled to state is the ABSENT one.
+	v, err := scoreOverPlane(context.Background(), luxlog.New("gatetest"), gateOrg, q)
+	if err == nil {
+		t.Fatalf("an unusable socket answered %+v with no error — an unreachable-but-present "+
+			"scorer is an outage, and only a NOT-DEPLOYED one may read as an absence", v)
+	}
+	if v.Refusal == cloud.RefusalAbsent {
+		t.Errorf("refusal %q — an outage was laundered into the one refusal the fail policy exempts", v.Refusal)
+	}
+
+	// AND THE POLICY'S ANSWER TO IT, which is the fact that decides whether money
+	// moves: the query is privileged, so the seam BLOCKS rather than allows.
+	installRiskScorer(luxlog.New("gatetest"))
+	switch got := cloud.Decide(context.Background(), gateOrg, q); {
+	case got.Action == cloud.ActionAllow:
+		t.Errorf("a privileged grant was ALLOWED against an unreachable scorer (%+v) — "+
+			"this is the fail-open that mints spendable balance during a risk-plane outage", got)
+	case got.Action != cloud.ActionBlock:
+		t.Errorf("action %q, want %q", got.Action, cloud.ActionBlock)
+	case got.Refusal != cloud.RefusalError:
+		t.Errorf("refusal %q, want %q — the record must name the operational fact", got.Refusal, cloud.RefusalError)
+	}
+}
+
+// TestRiskGate_AnUnusableScorerSocketMakesTheGrantWait is that same property at
+// the WIRE, where the money is: the door answers 503 and the charge does not
+// settle.
+//
+// Mutation proof: restore `return err == nil && up` in scorerUp and this answers
+// 200 — the top-up settles, unscored, during a risk-plane failure.
+func TestRiskGate_AnUnusableScorerSocketMakesTheGrantWait(t *testing.T) {
+	app := gateApp(t)
+	unusableRuntimeDir(t)
+	installRiskScorer(luxlog.New("gatetest"))
+
+	code, body := topup(t, app)
+	if code == http.StatusOK {
+		t.Fatalf("the top-up SETTLED against an unreachable scorer: %d %s — a stolen card clears "+
+			"whenever this process runs out of descriptors", code, body)
+	}
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("%d %s, want 503 — the judge's door is there and unusable, so a privileged grant waits", code, body)
+	}
+	if !strings.Contains(body, cloud.RefusalError) {
+		t.Errorf("the refusal does not name the operational fact a customer can act on: %s", body)
+	}
+}
+
 // TestRiskGate_APresentScorerThatCannotAnswerMakesTheGrantWait is the other half
 // of the fail policy, and the reason Privileged is stated at this gate at all:
 // cloud.Privileged() does not match this route, so without the explicit bit a
@@ -180,6 +280,57 @@ func TestRiskGate_AVerdictDecidesTheOutcome(t *testing.T) {
 			})
 			if code, body := topup(t, app); code != tc.want {
 				t.Errorf("%s: %d %s, want %d", tc.action, code, body, tc.want)
+			}
+		})
+	}
+}
+
+// TestRiskGate_ADeterminationIsNotAnOutage — a DECIDED verdict that also carries a
+// refusal is the screen's answer, never the fail policy's.
+//
+// Action and Refusal became INDEPENDENT when the rule and the model were fused:
+// the severest of the two judgements stands, and the model's own refusal is
+// recorded beside it rather than replaced by it. So an armed organisation whose
+// model is still warming, on a payment a stated rule froze, answers
+// {restrict, "warming"} — a determination over stated facts, with the model merely
+// having had nothing to add.
+//
+// Read off the REFUSAL ALONE that is a 503 "try again in a moment": the door
+// invites the retry that settles the payment it just froze, and reports a control
+// working exactly as designed as an outage. The discriminator is the pair.
+//
+// Mutation proof: change the branch back to `if v.Refusal != ""` and the first two
+// cases answer 503; drop the `v.Refusal != ""` conjunct and the third answers 403,
+// which loses the one operational fact a customer can act on.
+func TestRiskGate_ADeterminationIsNotAnOutage(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		action  string
+		refusal string
+		want    int
+	}{
+		{"a rule froze it while the model was warming", cloud.ActionRestrict, "warming", http.StatusForbidden},
+		{"a rule froze it while the model was unusable", cloud.ActionRestrict, "unusable", http.StatusForbidden},
+		// The fuse keeps REVIEW proceeding whatever the model had to say, so a
+		// determination that only summons a person still serves the customer.
+		{"a rule examined it while the model was warming", cloud.ActionReview, "warming", http.StatusOK},
+		// The ONE shape the fail policy produces, and the only one that is a 503.
+		// BLOCK is what makes it identifiable: the scorer's own vocabulary tops out
+		// at restrict, held closed by
+		// [TestActions_TheScorerNeverBlocks] in apps/risk.
+		{"the judge is here and did not answer", cloud.ActionBlock, cloud.RefusalError, http.StatusServiceUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := gateApp(t)
+			cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
+				return cloud.RiskVerdict{Action: tc.action, Refusal: tc.refusal, Score: 0.9}, nil
+			})
+			code, body := topup(t, app)
+			if code != tc.want {
+				t.Fatalf("{%s, %q}: %d %s, want %d", tc.action, tc.refusal, code, body, tc.want)
+			}
+			if tc.want == http.StatusForbidden && strings.Contains(body, "try again") {
+				t.Errorf("a determination was answered as a retryable outage: %s", body)
 			}
 		})
 	}
