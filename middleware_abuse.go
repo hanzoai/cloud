@@ -51,6 +51,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -212,7 +213,7 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 
 	v := Decide(c.Context(), org, RiskQuery{
 		Stage:      StageUsage,
-		Subject:    RiskSubject{Kind: "session", ID: subject(sig)},
+		Subject:    RiskSubject{Kind: plane.KindSession, ID: subject(sig)},
 		Agency:     lane,
 		Privileged: privileged,
 		Signals: Facts(map[string]string{
