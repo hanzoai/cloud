@@ -323,12 +323,74 @@
     },
     "/v1/iam/admin/applications/upsert": {
       "post": {
-        "operationId": "post_v1_iam_admin_applications_upsert",
+        "operationId": "upsertApplication",
         "summary": "Creates an application or updates it in place, so a deployment can declare the applications it needs and run the same declaration on every environment and on every redeploy.",
         "description": "Creates an application or updates it in place, so a\ndeployment can declare the applications it needs and run the same declaration\non every environment and on every redeploy.\n\nIt says which of the two it did. Leave the client secret out and the existing\none is kept — so re-running your deployment does not rotate a credential your\nrunning services are holding.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.registration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "internal server error"
+          }
+        }
       }
     },
     "/v1/iam/admin/provision": {
@@ -343,12 +405,74 @@
     },
     "/v1/iam/admin/users/upsert": {
       "post": {
-        "operationId": "post_v1_iam_admin_users_upsert",
+        "operationId": "upsertUser",
         "summary": "Creates a person or updates them in place, so a deployment can declare the accounts it needs and re-run that declaration safely.",
         "description": "Creates a person or updates them in place, so a deployment can\ndeclare the accounts it needs and re-run that declaration safely.\n\nPasswords are hashed before they are stored. Leave the password out and their\ncurrent one is kept, so a redeploy never locks somebody out.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.person"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.reply"
+                }
+              }
+            },
+            "description": "internal server error"
+          }
+        }
       }
     },
     "/v1/iam/application": {
@@ -824,7 +948,49 @@
         "description": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "description": "ClientId is the application's OAuth client id — the one field that selects\nwhich login screen this is.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "responseType",
+            "in": "query",
+            "required": false,
+            "description": "ResponseType is the OAuth response type the screen will ask for. Only \"code\"\nis served; anything else is refused here rather than at the authorize leg,\nwhere the person has already typed a password.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       }
     },
     "/v1/iam/auth/methods": {
@@ -834,7 +1000,40 @@
         "description": "Returns the sign-in methods one application actually has switched\non, so a login screen can render the right buttons for it without you\nhard-coding a list that drifts the moment you add a provider.\n\nPublic by design: it is read before anyone has signed in, and it exposes only\nwhich methods exist, never their credentials.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "description": "ClientId is the application's OAuth client id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       }
     },
     "/v1/iam/certs": {
@@ -999,7 +1198,7 @@
       "get": {
         "operationId": "get_v1_iam_consent",
         "summary": "Returns the calling person's own privacy and communication choices.",
-        "description": "Returns the calling person's own privacy and communication\nchoices. Somebody who has never set them gets the defaults rather than\nnothing, so a consent screen always has something to show.",
+        "description": "Returns the calling person's own privacy and communication\nchoices. Somebody who has never set them gets the defaults rather than\nnothing, so a consent screen always has something to show — insights on, and\ntraining UNANSWERED, which is the state that means the screen still has to ask.",
         "tags": [
           "iam"
         ]
@@ -1007,7 +1206,7 @@
       "put": {
         "operationId": "put_v1_iam_consent",
         "summary": "Records the calling person's privacy and communication choices.",
-        "description": "Records the calling person's privacy and communication\nchoices. Only their own — there is no way to set consent for somebody else.\n\nIt merges rather than replaces, so saving a consent screen never discards a\npreference some other screen set at the same moment.",
+        "description": "Records the calling person's privacy and communication\nchoices. Only their own — there is no way to set consent for somebody else.\n\nSend only the answers you are changing. A question you leave out keeps the\nanswer it already had, so a screen that saves one switch never revokes the\nother, and two screens saving at once do not undo each other.\n\nAn answer this version does not recognize is refused here rather than stored,\nso nothing is ever persisted for a later reader to have to interpret.",
         "tags": [
           "iam"
         ]
@@ -1281,7 +1480,49 @@
         "description": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "description": "ClientId is the application's OAuth client id — the one field that selects\nwhich login screen this is.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "responseType",
+            "in": "query",
+            "required": false,
+            "description": "ResponseType is the OAuth response type the screen will ask for. Only \"code\"\nis served; anything else is refused here rather than at the authorize leg,\nwhere the person has already typed a password.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       }
     },
     "/v1/iam/get-application": {
@@ -1351,7 +1592,49 @@
         "description": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": false,
+            "description": "User is \"\u003chomeOrg\u003e/\u003cusername\u003e\" — which organizations that identity may act in.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org is an organization — who may act in it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       }
     },
     "/v1/iam/get-organization": {
@@ -1865,7 +2148,49 @@
         "description": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": false,
+            "description": "User is \"\u003chomeOrg\u003e/\u003cusername\u003e\" — which organizations that identity may act in.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org is an organization — who may act in it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_iam_memberships",
@@ -2952,17 +3277,29 @@
     },
     "/v1/iam/scim/v2/ResourceTypes": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_resourcetypes",
+        "operationId": "get_v1_iam_scim_v2_ResourceTypes",
         "summary": "Returns the kinds of record this directory provisions and the address of each, so your identity provider discovers them rather than having them configured by hand.",
         "description": "Returns the kinds of record this directory provisions and\nthe address of each, so your identity provider discovers them rather than\nhaving them configured by hand.",
         "tags": [
           "iam"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.listResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/iam/scim/v2/ResourceTypes/{name}": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_resourcetypes_by_name",
+        "operationId": "get_v1_iam_scim_v2_ResourceTypes_name",
         "summary": "Returns one provisionable record kind in full.",
         "description": "Returns one provisionable record kind in full.",
         "tags": [
@@ -2977,22 +3314,52 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "not found"
+          }
+        }
       }
     },
     "/v1/iam/scim/v2/Schemas": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_schemas",
+        "operationId": "get_v1_iam_scim_v2_Schemas",
         "summary": "Returns the attribute definitions this directory understands, so your identity provider knows which fields it may send and what they mean before it sends any.",
         "description": "Returns the attribute definitions this directory understands, so\nyour identity provider knows which fields it may send and what they mean\nbefore it sends any.",
         "tags": [
           "iam"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.listResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/iam/scim/v2/Schemas/{id}": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_schemas_by_id",
+        "operationId": "get_v1_iam_scim_v2_Schemas_id",
         "summary": "Returns one attribute definition in full.",
         "description": "Returns one attribute definition in full.",
         "tags": [
@@ -3007,17 +3374,47 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "not found"
+          }
+        }
       }
     },
     "/v1/iam/scim/v2/ServiceProviderConfig": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_serviceproviderconfig",
+        "operationId": "get_v1_iam_scim_v2_ServiceProviderConfig",
         "summary": "Tells your identity provider which parts of SCIM this directory supports, so it configures itself instead of you filling in a form.",
         "description": "Tells your identity provider which parts of SCIM this\ndirectory supports, so it configures itself instead of you filling in a form.\n\nFiltering and partial updates are supported. Bulk operations, sorting and\nentity tags are not — an IdP that reads this will not attempt them.",
         "tags": [
           "iam"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.config"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/iam/scim/v2/Users": {
@@ -3161,7 +3558,58 @@
         "description": "Returns your organization's service accounts — what each is called and\nwhen it was created. Never their secrets: a key's secret half exists in a\nresponse exactly once, when it is minted. Paginated in memory over the already org-scoped\nslice — the set per org is small, so a dedicated count query is overkill\n(v1 service_account.go:296-307).",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "query",
+            "required": false,
+            "description": "Organization is the organization whose service accounts to list. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "p",
+            "in": "query",
+            "required": false,
+            "description": "P is the 1-indexed page to return. Paging takes both p and pageSize —\nleave either out, or send something that is not a number, and the whole\nlist comes back.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "description": "Size is how many accounts a page holds.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_iam_service-accounts",
@@ -4348,6 +4796,35 @@
             "type": "string"
           },
           "zipCode": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.Answer": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "data2": {
+            "type": "object"
+          },
+          "data3": {
+            "type": "object"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "sub": {
             "type": "string"
           }
         },
@@ -7536,6 +8013,20 @@
         },
         "type": "object"
       },
+      "iam.bulk": {
+        "properties": {
+          "maxOperations": {
+            "type": "integer"
+          },
+          "maxPayloadSize": {
+            "type": "integer"
+          },
+          "supported": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "iam.certs.DeleteOutput": {
         "properties": {
           "deleted": {
@@ -7565,6 +8056,55 @@
           },
           "owner": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.config": {
+        "properties": {
+          "authenticationSchemes": {
+            "items": {
+              "$ref": "#/components/schemas/iam.scheme"
+            },
+            "type": "array"
+          },
+          "bulk": {
+            "$ref": "#/components/schemas/iam.bulk"
+          },
+          "changePassword": {
+            "$ref": "#/components/schemas/iam.toggle"
+          },
+          "documentationUri": {
+            "type": "string"
+          },
+          "etag": {
+            "$ref": "#/components/schemas/iam.toggle"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/iam.filter"
+          },
+          "patch": {
+            "$ref": "#/components/schemas/iam.toggle"
+          },
+          "schemas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/iam.toggle"
+          }
+        },
+        "type": "object"
+      },
+      "iam.filter": {
+        "properties": {
+          "maxResults": {
+            "type": "integer"
+          },
+          "supported": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -7677,6 +8217,32 @@
         },
         "type": "object"
       },
+      "iam.listResponse": {
+        "properties": {
+          "Resources": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "itemsPerPage": {
+            "type": "integer"
+          },
+          "schemas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "startIndex": {
+            "type": "integer"
+          },
+          "totalResults": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "iam.listTokensOut": {
         "properties": {
           "tokens": {
@@ -7740,6 +8306,35 @@
         },
         "type": "object"
       },
+      "iam.person": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "passwordType": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "iam.projects.DeleteOutput": {
         "properties": {
           "deleted": {
@@ -7792,6 +8387,73 @@
         "properties": {
           "provider": {
             "$ref": "#/components/schemas/iam.Provider"
+          }
+        },
+        "type": "object"
+      },
+      "iam.registration": {
+        "properties": {
+          "cert": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientSecret": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "expireInHours": {
+            "description": "ExpireInHours and RefreshExpireInHours are the application's token\nlifetimes. They are the ONLY declarative way to say that a refresh token\nmust OUTLIVE its access token: with neither stated, oidc.refreshTTL clamps\nthe refresh lifetime to the access lifetime, so the refresh_token grant the\nregistration advertises expires at the same instant as the token it was\nmeant to renew and can never be exercised. `hanzo-cli` sat in exactly that\nstate — a browser re-login every hour, and a live refresh returning 401.\n\nPOINTERS, for the same reason as IsShared: a plain float would read as 0 on\nevery reconcile that says nothing and reset a deliberate lifetime back to\nthe default. Nil means \"not stated, leave it\".",
+            "type": "number"
+          },
+          "grantTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "isShared": {
+            "description": "IsShared declares that this application serves EVERY organization, not only\nthe one named in Organization. It is the honest description of a brand app —\nhanzo-id, hanzo-chat, a brand console — whose customers each live in their own\ntenant: self-service onboarding moves a founder OUT of the brand org, so\n`user.Owner != app.Organization` is the steady state and the app really does\nserve every org. Application.ServesOrg reads it as one of the three ways to\nsay yes.\n\nA POINTER because omission must PRESERVE. This upsert is the operator's\nsteady-state reconcile and most callers say nothing about sharing; a plain\nbool would read as false on every one of them and silently un-share an app —\nthe same shape of accident that de-secreted apps through update-application.\nNil means \"not stated, leave it\"; only an explicit true or false moves it.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "public": {
+            "description": "Public declares a client that CANNOT hold a credential — a browser SPA,\na CLI, a desktop app. It proves itself with PKCE instead, and the token\nendpoint treats \"no stored secret\" as exactly that (token.go: a secret is\nverified only when one is stored). Without this flag every upsert minted\na secret, so a public client could never be registered at all and its\nbrowser code-\u003etoken exchange 401'd `invalid_client` forever.",
+            "type": "boolean"
+          },
+          "redirectUris": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "refreshExpireInHours": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "iam.reply": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -7872,6 +8534,31 @@
           },
           "owner": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.scheme": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "primary": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.toggle": {
+        "properties": {
+          "supported": {
+            "type": "boolean"
           }
         },
         "type": "object"

@@ -59,7 +59,6 @@ __pycache__/
 node_modules/
 **/node_modules/
 native/flags/target/
-tools
 
 # Build output at the repo root. `go build ./apps/gateway` and friends drop the
 # binary HERE by default, and five of them (gateway 53M, account 33M, authz 30M,
@@ -75,3 +74,8 @@ tools
 /authz
 /smoke
 /gen-app-cmds
+# /tools was written `tools`, unanchored. A pattern with no slash matches at ANY
+# depth, so it hid apps/tools (25 tracked files, the /v1/tools MCP catalogue) and
+# plugin/tools: `git add apps/tools/new.go` refused, and refusing to add is how
+# work disappears without a diff to notice. The leading slash is the whole fix.
+/tools
