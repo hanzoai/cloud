@@ -122,8 +122,10 @@ func TestPinBillingSubject_RefusesUnvalidated(t *testing.T) {
 	app := pinApp(t)
 	code, _ := callH(t, app, http.MethodGet, "/probe?userId=victim",
 		map[string]string{"X-Org-Id": "victim"}, "")
-	if code != http.StatusForbidden {
-		t.Fatalf("unvalidated caller: want 403, got %d", code)
+	// 401, not 403: no credential was presented at all, and a browser only
+	// re-authenticates on 401. A forged X-Org-Id is not a credential.
+	if code != http.StatusUnauthorized {
+		t.Fatalf("unvalidated caller: want 401, got %d", code)
 	}
 }
 
