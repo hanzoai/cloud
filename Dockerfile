@@ -56,11 +56,13 @@
 # about tags, not about tag SHAPE: a cut tag is never re-pointed. Cut the next
 # patch instead — that is cheap, and it keeps "which console is in v1.801.N"
 # answerable from git alone.
-# 8.5.48 IS sha-f8d8325 (both tags resolve to sha256:c16431e21c8e): the console
-# carrying reach-first Models, named by its release rather than by the commit that
-# happened to build it. Pinning the sha would have shipped the same bytes and left
-# 'which console is in this image' answerable only by cross-referencing a build.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.48
+# 8.5.50 is the release whose assistant actually sends its credential: the
+# streamed completion rides the client's one authorized door, preferences moved
+# to cloud's /v1/prefs, the 401 card stopped claiming an expired session, and
+# exactly one composer mounts per viewport. Cut as a release tag because a tag
+# build publishes its name verbatim — which console is in this image is
+# answerable from this line alone.
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.50
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
