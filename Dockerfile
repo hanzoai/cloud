@@ -44,7 +44,14 @@
 # BUMP: when a console/skills change must reach production, move its pin here in
 # the same commit that claims it. That is what makes a cloud release
 # reproducible and makes "what console is in v1.801.N" answerable from git.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-a0a4899-amd64
+#
+# This one is pinned by DIGEST rather than the usual sha-<sha7>-amd64 tag: the
+# build that produced it published to :latest, and :latest is exactly the moving
+# target the paragraph above is about. The digest is the same immutability that
+# tag shape was reaching for, stated directly — it names these bytes and no other.
+# Contents: hanzoai/console d761fbc, "an anonymous console visitor starts the IAM
+# hop, not a second landing".
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed@sha256:f21eeb6de2ba474864b8fc639dd8d69af0fcbe9dfc414556a47f199ebe71504c
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
