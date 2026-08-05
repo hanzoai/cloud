@@ -57,6 +57,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	meetui "github.com/hanzoai/cloud/apps/meet/ui"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/openapi"
@@ -86,6 +87,20 @@ const keyFile = "/etc/livekit-keys/keys.yaml"
 // declares more than one. Unset is correct and normal for a single-key file.
 const apiKeyEnv = "LIVEKIT_API_KEY"
 
+// wsEnv is where the browser opens its WebRTC signaling socket — the LiveKit
+// server this binary's tokens are honoured by (wss://live.hanzo.bot).
+//
+// It is served to the client rather than baked into the bundle because it is a
+// DEPLOYMENT fact and the bundle is a build artifact: a compiled-in address makes
+// a dev cluster's UI dial production's media plane, and makes the address
+// unchangeable without a rebuild.
+//
+// It is NOT part of ready(). A token is minted the same way whether or not this
+// binary knows the address — the published office client supplies its own — so an
+// unset value degrades the native UI and breaks nothing else. The native lobby is
+// told plainly (ws: "") and refuses to dial rather than guessing a host.
+const wsEnv = "LIVEKIT_WS"
+
 // state is meet's own data: the caller-verifying key, the answer-signing pair, and
 // the reason it is unusable when it is. reason is the ONE flag — a non-empty reason
 // IS "not configured", so there is no way for the two to disagree.
@@ -93,7 +108,55 @@ type state struct {
 	teamSecret string // SERVER_SECRET — verifies the caller's team session
 	apiKey     string // LiveKit api key    — the `iss` LiveKit matches on
 	apiSecret  string // LiveKit api secret — signs the minted token
+	ws         string // LIVEKIT_WS — where the browser dials; empty is legible, see wsEnv
 	reason     string // why this is unusable; empty means usable
+	authority  roster // who owns the membership rows; nil means the real peer, see rows
+}
+
+// roster is the workspace-membership authority — the process that OWNS the rows,
+// asked across a process boundary.
+//
+// It is an interface for ONE reason, and the reason is a bug it already hid. The
+// decisions above it are made HERE: whether a machine credential may take a seat,
+// whether a guest may, which workspaces to offer. But every one of them is reached
+// only AFTER the peer answers, and no test had a peer — so each IAM-lane test
+// stopped at an unanswerable ask and passed for the wrong reason. Mutation proved
+// it: deleting the machine-credential exclusion (p.Subject != "") changed nothing
+// the suite could see, because the machine got as far as the ask and was refused
+// by the missing peer rather than by the rule. A decision that only exists past a
+// boundary needs the boundary to be crossable in a test, or it is not tested.
+//
+// The org is NOT a parameter. It rides the context (cloud.As), exactly as it did
+// when these were bare cloud.Ask calls, so a caller cannot ask about another
+// tenant by naming one.
+type roster interface {
+	member(ctx context.Context, workspace, subject string) (*plane.Member, error)
+	workspaces(ctx context.Context, subject string) (*plane.Spaces, error)
+}
+
+// peer is the real authority: apps/team over the internal plane. Stateless, so
+// the zero value is the whole implementation.
+type peer struct{}
+
+func (peer) member(ctx context.Context, workspace, subject string) (*plane.Member, error) {
+	return cloud.Ask[plane.MemberIn, plane.Member](ctx, "team", plane.TeamMember,
+		&plane.MemberIn{Workspace: workspace, Subject: subject})
+}
+
+func (peer) workspaces(ctx context.Context, subject string) (*plane.Spaces, error) {
+	return cloud.Ask[plane.WorkspacesIn, plane.Spaces](ctx, "team", plane.TeamWorkspaces,
+		&plane.WorkspacesIn{Subject: subject})
+}
+
+// rows is the authority to ask. A state that names none asks the real peer — so
+// this is nil-safe by construction rather than by discipline, and every load()
+// failure path (which returns a state carrying only a reason) still answers a
+// lobby read the same way production does instead of panicking on it.
+func (s state) rows() roster {
+	if s.authority == nil {
+		return peer{}
+	}
+	return s.authority
 }
 
 // ready reports whether meet can mint. Fail-closed: an unconfigured deploy refuses
@@ -120,7 +183,7 @@ func load() state {
 	if err != nil {
 		return state{reason: err.Error()}
 	}
-	return state{teamSecret: secret, apiKey: key, apiSecret: apiSecret}
+	return state{teamSecret: secret, apiKey: key, apiSecret: apiSecret, ws: strings.TrimSpace(os.Getenv(wsEnv))}
 }
 
 // readKeys parses a LiveKit key file: a YAML map of apiKey -> apiSecret, which is the
@@ -193,11 +256,12 @@ func readKeys(path string) (string, string, error) {
 	return key, apiSecret, nil
 }
 
-// The mint route is UNTYPED BY DESIGN — it answers the raw token as text/plain,
-// and the comment at its registration says why zip cannot declare that. zipdoc
-// lifts prose from typed ops and there is none to lift from here, so its prose is
-// declared beside the route table instead and reaches the document, the generated
-// SDKs and the spec-derived CLI unchanged.
+// The mint and session routes are UNTYPED BY DESIGN — mint answers the raw token
+// as text/plain, session answers a shape assembled per caller, and the comment at
+// each registration says why zip cannot declare it. zipdoc lifts prose from typed
+// ops and there is none to lift from either, so their prose is declared beside the
+// route table instead and reaches the document, the generated SDKs and the
+// spec-derived CLI unchanged.
 func init() {
 	openapi.Describe("/v1/meet/getToken", http.MethodPost,
 		"Mint a join token for one video room",
@@ -217,6 +281,26 @@ func init() {
 			"An unconfigured deployment answers 503 under its own name rather than 404, and "+
 			"the refusal states only that the office is unconfigured — the reason names key "+
 			"material and stays in the boot log.")
+	openapi.Describe("/v1/meet/session", http.MethodGet,
+		"What this caller may open a room in",
+		"Answers the three facts the native lobby cannot know on its own: the identity a "+
+			"seat would be taken under, the LiveKit address the browser dials, and the "+
+			"workspaces this caller may open a room in.\n\n"+
+			"It is the SAME decision getToken makes, asked before the room exists rather "+
+			"than after it is named. A room is bound to its tenant by its name's leading "+
+			"workspace segment, and only a workspace this answer lists will be admitted — "+
+			"so the lobby offers exactly what the mint would grant, and a person is never "+
+			"shown a room they would then be refused. Workspaces the caller holds only a "+
+			"guest role in are omitted for that reason.\n\n"+
+			"An empty list is a real answer, not a fault: an IAM identity with no workspace "+
+			"has no room to open, and the lobby says so instead of failing.\n\n"+
+			"`ws` is empty when this deployment has not been told where its media plane is "+
+			"(LIVEKIT_WS). Token minting is unaffected — the published office client "+
+			"supplies its own address — so this is a degraded native UI, not a degraded "+
+			"service, and the lobby refuses to dial rather than guessing a host.")
+	// /v1/meet/health declares no prose here: it is a TYPED op now (see Mount), and
+	// zipdoc lifts its summary and description from the op itself. Describing it in
+	// both places is the drift this file already paid for once.
 }
 
 // Mount wires /v1/meet/* onto app. The route is registered even when unconfigured so
@@ -245,6 +329,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// declare a non-JSON response.
 	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
 
+	// The lobby's read. UNTYPED for a reason that is this app's alone: the gate is
+	// principal.Minted — the boundary's OWN attestation — and a typed op holds a
+	// context, not a request, so it cannot read one. The context-side facts a typed
+	// op CAN read (principal.OrgFrom / ValidatedFrom) are derived from headers that
+	// nothing strips in a hand-written plugin main, which is exactly the forgeable
+	// signal admits was fixed to stop selecting on. Typing this route would put the
+	// weaker fact back in front of the same rows.
+	app.Get("/v1/meet/session", cloud.Handle(s, session))
+
 	// /v1/meet/health makes "the office is unconfigured" a SIGNAL rather than a grep.
 	// A boot log line is invisible to a dashboard and rotates away; this is the same
 	// contract every other subsystem exposes, so the existing probe/alerting surface
@@ -260,6 +353,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	zip.Get(reg, "/v1/meet/health", ops{s}.health,
 		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+
+	// The native client, embedded in THIS binary and served from the SAME origin as
+	// the routes above. One origin is not a convenience here: the lobby's read is a
+	// credentialled same-origin GET, so there is no CORS grant to make, no second
+	// host to hold a session on, and no bundle carrying an API address it could be
+	// pointed away from. This is what replaces the office plugin in the published
+	// Team front — the media plane and the token were already ours; the client was
+	// the last piece that was not.
+	//
+	// Mounted OUTSIDE the ready() gate below, on purpose: an unconfigured deployment
+	// still serves the UI, which then renders the honest refusal from /v1/meet/session
+	// instead of a blank 404 that says nothing about what is wrong.
+	ui := zip.AdaptNetHTTP(http.StripPrefix("/meet", meetui.Handler()))
+	app.All("/meet", ui)
+	app.All("/meet/*", ui)
 
 	if !s.State.ready() {
 		// ERROR, not warn, and it names the file/Secret to fix. A subsystem that can
@@ -328,6 +436,111 @@ func (o ops) health(context.Context, *noIn) (*meetHealth, error) {
 		return &meetHealth{Ready: false, Service: "meet", Status: "degraded"}, nil
 	}
 	return &meetHealth{Ready: true, Service: "meet", Status: "ok"}, nil
+}
+
+// lobby is what the native client reads before it can name anything: who it would
+// be seated as, where the media plane is, and which workspaces it may open a room
+// in.
+//
+// The workspace list is the POINT of this route. A room is bound to its tenant by
+// the leading segment of its name (see workspace), so a client that does not know
+// its own workspace cannot compose a room name that any lane would admit — and it
+// has no way to learn one, because a uuid is not something a person types. The
+// alternative was for the client to guess and be refused, which is a lobby that
+// only works for someone who was sent a link.
+type lobby struct {
+	// Identity is the account a seat would be taken under — the SAME identity mint
+	// puts in the token's `sub`, and not something the caller may choose.
+	Identity string `json:"identity"`
+	// Name is the display label to prefill, empty when this deployment holds none.
+	Name string `json:"name"`
+	// WS is the LiveKit address the browser dials, empty when unconfigured (wsEnv).
+	WS string `json:"ws"`
+	// Workspaces is every workspace this caller may open a room in — already
+	// narrowed to the roles mint would admit, so the offer and the grant agree.
+	Workspaces []plane.Space `json:"workspaces"`
+}
+
+// session answers GET /v1/meet/session. It admits on the SAME two lanes as mint
+// and refuses on the same terms, so a caller that could not join anything is told
+// so at the door rather than after composing a room name.
+//
+// It answers OUTSIDE ready(), deliberately, and for the same reason the bundle is
+// served outside it: an unconfigured deployment should render a client that states
+// the problem, not a 404 and a blank page. So a deploy whose key file is bad —
+// which drops the whole state, teamSecret included — still answers a lobby read on
+// the IAM lane (that lane never needed teamSecret) while every mint is 503. That
+// pair is honest rather than contradictory: the workspaces someone belongs to do
+// not stop being true because this binary cannot sign, and the refusal they get on
+// joining names the real fault instead of hiding it behind an empty list.
+func session(s *cloud.Service[state], c *zip.Ctx) error {
+	sp, ok := s.State.spaces(c)
+	if !ok {
+		// Identical to mint's refusal in kind: the caller is not admitted, and the
+		// answer says nothing about which lane failed or what exists.
+		return zip.Errorf(http.StatusUnauthorized, "not signed in")
+	}
+	out := lobby{Identity: sp.Account, Name: sp.Name, WS: s.State.ws, Workspaces: make([]plane.Space, 0, len(sp.Items))}
+	for _, w := range sp.Items {
+		// The SAME predicate mint admits on. Offering a workspace this caller holds
+		// only a guest role in would put a room in front of them that getToken then
+		// refuses — the two answers have to come from one rule or they drift.
+		if privileged(w.Role) {
+			out.Workspaces = append(out.Workspaces, w)
+		}
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// spaces reports which workspaces the caller is in, on whichever lane it arrived —
+// the same lane selection, in the same order and on the same attestation, as
+// admits. It is deliberately a sibling of that function rather than a layer under
+// it: admits answers "may this caller into THAT room" and this answers "what could
+// this caller open", and folding them would make one of the two questions a
+// special case of the other for no gain.
+//
+// IAM LANE, selected on principal.Minted for the reason admits documents at
+// length: the org/user headers are the client's in a process where no boundary
+// ran, and here they would decide whose workspaces get listed.
+//
+// HS256 ARM answers from the token itself, because the token IS the answer: a
+// workspace session names exactly one workspace and carries the signed role in it.
+// The workspace's human name is not in the token and is not invented — an
+// unlabelled entry is honest, and this lane's caller (the published office client)
+// does not read this route at all.
+func (s state) spaces(c *zip.Ctx) (plane.Spaces, bool) {
+	if p, ok := principal.Minted(c); ok && p.Subject != "" && p.Org != "" {
+		out, err := s.rows().workspaces(cloud.As(c, p.Org), p.Subject)
+		if err != nil || out == nil {
+			// An unreachable authority is a refusal, never an assumption — the same
+			// posture admitsMember takes when team cannot answer.
+			return plane.Spaces{}, false
+		}
+		return *out, true
+	}
+	raw := bearer(c.Header("Authorization"))
+	if raw == "" {
+		return plane.Spaces{}, false
+	}
+	t, err := token.Decode(raw, s.teamSecret, true)
+	if err != nil || t.Workspace == "" {
+		return plane.Spaces{}, false
+	}
+	// An ACCOUNT is required here for the same reason mint requires one: it is
+	// the identity a seat is taken under, and mint refuses a token that carries
+	// none. Offering a workspace off a token the mint would then refuse is the
+	// one way these two answers could still disagree — a room shown, chosen, and
+	// declined. token.Generate cannot produce this (it validates the account as a
+	// uuid), so it is not an attacker's path; it is the invariant written down
+	// where the offer is made rather than assumed from where it is granted.
+	account := strings.TrimSpace(t.Account)
+	if account == "" {
+		return plane.Spaces{}, false
+	}
+	return plane.Spaces{
+		Account: account,
+		Items:   []plane.Space{{UUID: t.Workspace, Role: t.Role()}},
+	}, true
 }
 
 // request is the office client's wire. `_id` is the SPA's person ref — accepted because
@@ -490,8 +703,7 @@ func (s state) admitsMember(c *zip.Ctx, room string, p principal.Principal) (joi
 	if ws == "" {
 		return joiner{}, false
 	}
-	m, err := cloud.Ask[plane.MemberIn, plane.Member](cloud.As(c, p.Org), "team", plane.TeamMember,
-		&plane.MemberIn{Workspace: ws, Subject: p.Subject})
+	m, err := s.rows().member(cloud.As(c, p.Org), ws, p.Subject)
 	if err != nil || m == nil || !m.Member {
 		return joiner{}, false
 	}

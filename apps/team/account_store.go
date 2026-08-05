@@ -349,6 +349,22 @@ func (s *accountStore) Membership(ctx context.Context, workspaceID, account stri
 	return role, true
 }
 
+// MemberName returns the display name on a member row, empty when the row has
+// none or does not exist. It is deliberately NOT folded into Membership: a role
+// is what a member may DO and is read by every gate, while a display name is
+// decoration read by the few surfaces that render a person. Empty is a real
+// answer — EnsureMemberName only fills a name that a login supplied.
+func (s *accountStore) MemberName(ctx context.Context, workspaceID, account string) string {
+	var name string
+	err := s.db.Select("display_name").From("members").
+		Where(query.HashExp{"workspace_id": workspaceID, "user_id": account}).
+		WithContext(ctx).Row(&name)
+	if err != nil {
+		return ""
+	}
+	return name
+}
+
 // AccountForSubject is the ONE answer to "which team account is this IAM
 // identity?", and the store is deliberately the one that gives it.
 //
