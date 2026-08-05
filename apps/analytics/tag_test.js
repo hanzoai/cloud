@@ -12,10 +12,13 @@ const source = fs.readFileSync(process.argv[2], 'utf8')
 
 // run loads the tag into a fresh sandbox and returns what it sent.
 // attrs are the data-* attributes on the <script> element.
+// opts.storage seeds localStorage, opts.jar seeds the cookies — the two places a
+// browser may already be carrying an anonymous id when this tag arrives.
 function run(attrs, opts = {}) {
   const sent = { fetch: [], beacon: [] }
   const listeners = {}
-  const storage = new Map()
+  const storage = new Map(Object.entries(opts.storage || {}))
+  const jar = new Map(Object.entries(opts.jar || {}))
 
   const script = {
     src: opts.src || 'https://api.hanzo.ai/v1/event.js',
@@ -38,9 +41,21 @@ function run(attrs, opts = {}) {
     document: {
       currentScript: script,
       referrer: '',
-      visibilityState: 'visible'
+      visibilityState: 'visible',
+      // A real jar. The anonymous id lives in a cookie so it can outlive an
+      // ORIGIN; a stub without one would leave the whole chain unexercised.
+      get cookie() {
+        return [...jar].map(([k, v]) => `${k}=${v}`).join('; ')
+      },
+      set cookie(raw) {
+        const first = raw.split(';')[0]
+        const eq = first.indexOf('=')
+        if (eq > 0) jar.set(first.slice(0, eq).trim(), first.slice(eq + 1).trim())
+      }
     },
-    location: { href: 'https://hanzo.team/', pathname: '/' },
+    // hanzo.team is not hanzo.ai, so the chain writes a host-only cookie here —
+    // the Domain= attribute would be rejected and the cookie dropped outright.
+    location: { href: 'https://hanzo.team/', pathname: '/', hostname: 'hanzo.team', protocol: 'https:' },
     history: { pushState() {}, replaceState() {} },
     navigator: {
       sendBeacon: opts.noBeacon
@@ -56,7 +71,13 @@ function run(attrs, opts = {}) {
   }
   sandbox.window = sandbox
   vm.runInNewContext(source, sandbox)
-  return { sent, sandbox, storage, fire: (n, e) => (listeners[n] || []).forEach((f) => f(e)) }
+  return { sent, sandbox, storage, jar, fire: (n, e) => (listeners[n] || []).forEach((f) => f(e)) }
+}
+
+/** The anonymous id on the first event of the first transmission. */
+function anonOf(r) {
+  const body = r.sent.beacon.length ? r.sent.beacon[0].body : r.sent.fetch[0].init.body
+  return JSON.parse(body).batch[0].anonymousId
 }
 
 // 1. NO KEY ⇒ INERT. The whole reason the tag exists: a keyless beacon is
@@ -115,15 +136,44 @@ function run(attrs, opts = {}) {
   assert.strictEqual(r.sent.beacon.length, 1, 'src ?key= is honored')
 }
 
-// 6. Identity uses @hanzo/event's storage keys, so a page carrying both clients
-//    is one person and not two.
+// 6. THE COOKIE WINS. Identity is hzAnonId — the one chain, vendored from
+//    @hanzo/event and served ahead of this file — so a browser that already
+//    carries an id arrives as the person it already is. This tag used to read
+//    localStorage alone, which is ORIGIN-scoped: it could not see the shared
+//    cookie, so an origin carrying only this tag was its own population.
 {
-  const r = run({ 'data-key': 'pk-live-abc' })
-  assert.ok(r.storage.has('hz_anon_id'), 'hz_anon_id')
-  assert.ok(r.storage.has('hz_session'), 'hz_session')
+  const id = '01920000-0000-7000-8000-0000000000ee'
+  const r = run({ 'data-key': 'pk-live-abc' }, { jar: { hz_anon_id: id } })
+  r.fire('pagehide')
+  assert.strictEqual(anonOf(r), id, 'the cookie is the identity')
 }
 
-// 7. SPA navigation is a pageview: pushState fires no event, so history is
+// 7. AN EXISTING hz_id IS ADOPTED, NOT ORPHANED. hz.js minted into a key of its
+//    own, so browsers in the wild carry one. Minting over it would detach a
+//    returning visitor from their own history.
+{
+  const legacy = '01920000-0000-7000-8000-0000000000ff'
+  const r = run({ 'data-key': 'pk-live-abc' }, { storage: { hz_id: legacy } })
+  r.fire('pagehide')
+  assert.strictEqual(anonOf(r), legacy, 'hz.js legacy id adopted')
+  assert.strictEqual(r.jar.get('hz_anon_id'), legacy, 'carried onto the shared key')
+  assert.strictEqual(r.storage.get('hz_anon_id'), legacy)
+}
+
+// 8. A browser carrying nothing is given ONE id, in the durable place. The
+//    session stays origin-local and in localStorage — deliberately unchanged.
+{
+  const r = run({ 'data-key': 'pk-live-abc' })
+  r.fire('pagehide')
+  const id = anonOf(r)
+  assert.ok(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab]/.test(id), 'v7 anon id: ' + id)
+  assert.strictEqual(r.jar.get('hz_anon_id'), id, 'the cookie outlives the origin')
+  assert.strictEqual(r.storage.get('hz_anon_id'), id)
+  assert.ok(r.storage.has('hz_session'), 'hz_session')
+  assert.ok(!r.jar.has('hz_session'), 'a session is not shared across surfaces')
+}
+
+// 9. SPA navigation is a pageview: pushState fires no event, so history is
 //    patched. A repeat of the same href is not a second pageview.
 {
   const r = run({ 'data-key': 'pk-live-abc' })
@@ -137,7 +187,7 @@ function run(attrs, opts = {}) {
   assert.strictEqual(batch[1].path, '/inbox')
 }
 
-// 8. An uncaught error is captured as a typed error event.
+// 10. An uncaught error is captured as a typed error event.
 {
   const r = run({ 'data-key': 'pk-live-abc' })
   r.fire('error', { error: new Error('boom') })
@@ -149,4 +199,4 @@ function run(attrs, opts = {}) {
   assert.strictEqual(err.error.handled, false)
 }
 
-console.log('tag.js: 8/8 behavioral checks passed')
+console.log('tag.js: 10/10 behavioral checks passed')

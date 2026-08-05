@@ -36,9 +36,11 @@
 package analytics
 
 import (
+	"bytes"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 
 	"github.com/hanzoai/cloud/openapi"
@@ -47,10 +49,54 @@ import (
 //go:embed tag.js
 var tagJS []byte
 
-// tagETag is the tag's content hash, computed once. A tag is fetched on every
+// anonJS is the anonymous-identity chain, VENDORED BYTE-FOR-BYTE from
+// @hanzo/event (github.com/hanzoai/ui, pkgs/event/src/anon.js). It is the one
+// implementation of who a browser is, and the npm client and hz.js run the same
+// text: a page carrying any two Hanzo clients has to resolve to ONE person, and
+// it did not — this tag read localStorage alone under a key hz.js never wrote.
+//
+// Vendored rather than restated because a fourth restatement is how the split
+// happened in the first place. To resync:
+//
+//	curl -fsSL https://unpkg.com/@hanzo/event/src/anon.js -o apps/analytics/anon.js
+//
+// and TestTagServesOneIdentityChain holds the seam: this file must carry the
+// marked region, and tag.js must not name an identity key of its own.
+//
+//go:embed anon.js
+var anonJS []byte
+
+// tagAsset is what /v1/event.js actually serves: the shared chain, then the tag,
+// inside ONE wrapper so neither half leaves a name on the page it is pasted into
+// (the chain is written to be spliced into other people's scopes, and hz.js
+// splices it into its own). tag.js is itself an IIFE, so it simply nests, and
+// document.currentScript still resolves — the script is executing.
+var tagAsset = func() []byte {
+	const begin, end = "/* ── BEGIN hz anon chain", "/* ── END hz anon chain"
+	b := bytes.Index(anonJS, []byte(begin))
+	e := bytes.Index(anonJS, []byte(end))
+	if b < 0 || e < b {
+		// Unreachable with an intact embed, and a silent miss would ship a tag
+		// whose every event carries an undefined identity.
+		panic(fmt.Sprintf("analytics: anon.js carries no shared chain (begin=%d end=%d)", b, e))
+	}
+	nl := bytes.IndexByte(anonJS[e:], '\n')
+	if nl < 0 {
+		panic("analytics: anon.js END marker is not a whole line")
+	}
+	var out bytes.Buffer
+	out.WriteString(";(function () {\n")
+	out.Write(anonJS[b : e+nl+1])
+	out.WriteByte('\n')
+	out.Write(tagJS)
+	out.WriteString("\n})()\n")
+	return out.Bytes()
+}()
+
+// tagETag is the asset's content hash, computed once. A tag is fetched on every
 // cold page load in the fleet, so the 304 is the common answer, not the rare one.
 var tagETag = func() string {
-	sum := sha256.Sum256(tagJS)
+	sum := sha256.Sum256(tagAsset)
 	return `"` + hex.EncodeToString(sum[:16]) + `"`
 }()
 
@@ -98,5 +144,5 @@ func serveTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(tagJS)
+	_, _ = w.Write(tagAsset)
 }
