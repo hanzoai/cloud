@@ -62,10 +62,25 @@ func PinBillingSubject() zip.Handler {
 			// Not a validated customer — admit ONLY a trusted in-proc S2S caller that
 			// names its own org (same admission billingData makes), leaving its query
 			// untouched. Everything else is refused before the read runs.
-			if s2sBillingCall(c) && c.Org() != "" {
-				return c.Next()
+			//
+			// The two refusals are DIFFERENT answers and must not share a status. A
+			// service token is a credential: presenting one and omitting X-Org-Id is
+			// an authenticated request that names no scope, which is 403. Presenting
+			// nothing is not signed in, which is 401 — and the difference is load
+			// bearing on the customer path, because a browser re-authenticates on 401
+			// and merely reports 403. These routes moved here from cloud's billing
+			// app, which answered 401 deliberately ("a customer's own billing action,
+			// so no identity is 401 sign in, never the wildcard's admin 403"); serving
+			// them in-process silently made every one of them 403, so an expired
+			// session on the saved-cards screen showed a permission error instead of
+			// sending the customer to sign in.
+			if s2sBillingCall(c) {
+				if c.Org() != "" {
+					return c.Next()
+				}
+				return zip.ErrForbidden("X-Org-Id is required to scope a service-token billing read")
 			}
-			return zip.ErrForbidden("sign in to view billing")
+			return zip.ErrUnauthorized("sign in to view billing")
 		}
 
 		subject := account.Payer(account.Credential{
