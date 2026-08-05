@@ -71,8 +71,17 @@ openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equ
 # command told to repair a red gate could not run at all. Each exemption is
 # defined once and read everywhere it applies; a repair path that skipped fewer
 # apps than the gate would be the same bug again.
+# EVERY app is attempted, and the failures are NAMED. Under `set -e` this loop
+# stopped at the first app that failed, and the apps after it never ran — which
+# reports nothing at all, and nothing is indistinguishable from passing. On
+# 2026-08-05 an unbalanced brace in apps/commerce/describe.go stopped the loop
+# there; ~45 apps behind it silently never regenerated, and because `meet` was
+# where the run appeared to end, three separate people diagnosed a defect in
+# `meet`. Two real defects were braided by one truncation. A gate that hides
+# what it did not check is worse than one that checks nothing, because it is
+# believed.
 describe-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slow by construction).
-	@set -e; for d in $(APPDIRS); do \
+	@failed=""; for d in $(APPDIRS); do \
 	  a=$$(basename $$d); \
 	  case " $(OPENAPI_NEEDS_BROKER) " in \
 	    *" $$a "*) echo ">> skip $$a — needs a live broker to mount (OPENAPI_NEEDS_BROKER)"; continue;; \
@@ -80,9 +89,16 @@ describe-apps: ## Regenerate EVERY app's own spec subset (one binary per app; sl
 	  case " $(CORESIDENT) " in \
 	    *" $$a "*) echo ">> skip $$a — coresident: middleware on a sibling's router, no standalone mount to project"; continue;; \
 	  esac; \
-	  $(MAKE) --no-print-directory -C $$d describe; \
-	done
-	@for a in $(EXTERNAL); do $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe || exit 1; done
+	  $(MAKE) --no-print-directory -C $$d describe || failed="$$failed $$a"; \
+	done; \
+	for a in $(EXTERNAL); do \
+	  $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe || failed="$$failed $$a"; \
+	done; \
+	if [ -n "$$failed" ]; then \
+	  echo; echo ">> describe FAILED for:$$failed"; \
+	  echo ">> every other app was still attempted; the subsets above are current."; \
+	  exit 1; \
+	fi
 	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app subsets"
 
 # The drift gate. It REGENERATES FROM SOURCE and fails on any diff, which is the
