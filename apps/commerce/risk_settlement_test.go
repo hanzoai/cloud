@@ -88,7 +88,11 @@ func doorApp(t *testing.T, status int, body string) *zip.App {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 	})
 	app := zip.New(zip.Config{Logger: luxlog.New("doortest"), DisableStartupMessage: true})
-	app.Post("/v1/billing/topup/token", riskGate(luxlog.New("doortest")).route(settledBody(status, body)))
+	// settling supplies the ledger and the receipt read the settlement credit needs
+	// (settle_test.go). What a door TEACHES is this file's subject and what it CREDITS
+	// is not, but the two run at the same point and the credit runs first, so a door
+	// with no ledger behind it never reaches the teaching at all.
+	app.Post("/v1/billing/topup/token", settling(t).route(settledBody(status, body)))
 	return app
 }
 

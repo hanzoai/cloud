@@ -454,9 +454,13 @@ func settledPayment(ref func() string) func(context.Context, *PaymentIn) (*Payme
 // payApp is a test app wired the way the binary is: the app-wide Bridge FIRST, because
 // it is what parks the request a typed op reads its payer off ([cloud.Request]), and it
 // must precede every route it serves — fiber runs middleware in registration order.
+// It also publishes the ONE spendable ledger, because a settled payment now deposits
+// into it before anything else happens (settle.go): a door fixture with no ledger
+// behind it is a door that answers 500 to every charge that clears.
 func payApp(t *testing.T) *zip.App {
 	t.Helper()
 	isolate(t)
+	funded(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("paytest"), DisableStartupMessage: true})
 	app.Use(zip.H(cloud.Bridge()))
 	return app
@@ -467,8 +471,13 @@ func payApp(t *testing.T) *zip.App {
 // op is the screened one and every projection of it runs the screen. It stands in for
 // the money core and for nothing else — the registration form, the response type and
 // the status are the shipped ones.
+//
+// The screen is handed the settlement its fake core stands for, because the door
+// finishes a cleared charge by depositing what SETTLED (settle.go) and the amount of
+// that is a fact about a commerce row this fixture does not write.
 func typedDoor(t *testing.T, app *zip.App, s screen, ref func() string) {
 	t.Helper()
+	s = stating(s, settlement{cents: gateCents, currency: "usd"})
 	zip.Post(app, paymentsDoor, s.op(settledPayment(ref)),
 		zip.WithOperationID("takePaymentProbe"),
 		zip.WithStatus(http.StatusCreated))
@@ -476,7 +485,10 @@ func typedDoor(t *testing.T, app *zip.App, s screen, ref func() string) {
 
 // browserDoor is the RAW credit door, composed the way mount.go composes it: the screen
 // wrapping the handler that answers like commerce's top-up.
+// It states the settlement for [typedDoor]'s reason: the deposit is sized by what
+// cleared, not by what the body asked for.
 func browserDoor(app *zip.App, s screen, ref func() string) {
+	s = stating(s, settlement{cents: gateCents, currency: "usd"})
 	app.Post("/v1/billing/topup/token", s.route(func(c *zip.Ctx) error {
 		c.Fiber().Response().Header.Set("Content-Type", "application/json")
 		return c.Bytes(http.StatusOK,
