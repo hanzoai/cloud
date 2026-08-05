@@ -46,7 +46,7 @@ func mountAgenticStack(t *testing.T, ai cloud.AIClient) *zip.App {
 		t.Fatalf("automations.Mount: %v", err)
 	}
 	// guide with the REAL invoke seam (automations.InvokeTool) — no fake tool plane.
-	if err := Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir(), AI: ai, AIDefaultModel: "zen"}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("guide.Mount: %v", err)
 	}
 	// company: the incorporation state machine on its own per-org store, manual KYC
