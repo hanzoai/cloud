@@ -44,6 +44,7 @@ package risk
 import (
 	"container/list"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -542,4 +543,219 @@ func (p *plane) rebuild(t tenant) (*rings, time.Time, int, error) {
 	}
 	vel.reconcile()
 	return vel, edge, len(held), nil
+}
+
+// ── what the aggregates already hold ─────────────────────────────────────────
+//
+// Everything above this line is how the aggregates are FILLED. This is how they
+// are READ by a rule rather than by a model, and the two readers want different
+// things: the model wants nine coordinates measured against this organisation's
+// own baselines, and a rule wants two plain counts it can compare against a
+// stated bound. Reading the model's features to recover a count would be reading
+// a ratio to recover its numerator.
+//
+// IT IS THE SUBJECT'S HISTORY AND NOT THIS EVENT. [plane.score] does not record,
+// so the event being judged is not in these numbers — which is the correct
+// reading and worth saying out loud: the bounds below are what an identifier had
+// ALREADY done when it arrived.
+
+// The identifiers a determination can name, in the vocabulary an operator reads
+// rather than the aggregation-axis names the engine keys on. Both are closed
+// sets, so this is a translation and never an open string.
+const (
+	// axisSubject is the payer's own account, namespaced by its kind.
+	axisSubject = "subject"
+	// axisPair is the payer and one counterparty together.
+	axisPair = "counterparty pair"
+	// axisDevice is the device fingerprint.
+	axisDevice = "device"
+	// axisPeer is the counterparty alone. It is NOT an aggregation axis — velocity
+	// keys a counterparty only in the pair — so it appears on the fan-out reading
+	// and nowhere else.
+	axisPeer = "counterparty"
+)
+
+// axisOf translates one aggregation axis into the word a determination says. An
+// axis this app does not know is carried through as itself: a new upstream axis
+// must read oddly in a cause, never silently as one of these.
+func axisOf(kind string) string {
+	switch kind {
+	case anomaly.AxisAccount:
+		return axisSubject
+	case anomaly.AxisPair:
+		return axisPair
+	case anomaly.AxisDevice:
+		return axisDevice
+	}
+	return kind
+}
+
+// paced is what the aggregates hold for ONE of an event's axes over their
+// narrowest window: how many events, and how much they moved.
+type paced struct {
+	// Axis is which identifier this counts, from the closed set above.
+	Axis string
+	// Events and Nano are the window's plain count and its accrued value, the
+	// latter in the unit the stated bounds are written in.
+	Events int
+	Nano   int64
+	// Span is the window they were read over, carried so a test can hold the rule
+	// to the window it claims rather than to whichever one it happened to get.
+	Span time.Duration
+}
+
+// shared is how many DISTINCT subjects one of an event's LINK identifiers is
+// already tied to.
+type shared struct {
+	// Axis is which identifier is shared, from the closed set above.
+	Axis string
+	// Subjects is how many distinct subjects the tenant's own record ties to it,
+	// counted no further than the stated bound: the rule asks whether the bound is
+	// reached and a larger number would answer a question nobody asked at a cost
+	// nobody bounded.
+	Subjects int
+}
+
+// reading is what ONE tenant's own aggregates already hold about the identifiers
+// on ONE event, taken at the moment that event is judged.
+//
+// The ZERO VALUE is "the aggregates said nothing", which is the honest reading
+// for an event whose identifiers this organisation has never seen — and it makes
+// every rule over it silent rather than firing on a fresh subject.
+type reading struct {
+	// Pace is one entry per aggregation axis the event names ([anomaly.Keys]).
+	Pace []paced
+	// Shared is one entry per LINK identifier the event carries — its device and
+	// its counterparty. An identifier the event does not carry is absent rather
+	// than counted as the empty string, for the same reason [anomaly.Keys] omits
+	// it: every anonymous event in the tenant would otherwise pool into one.
+	Shared []shared
+}
+
+// pace reads what one key's aggregates hold over the NARROWEST window they keep,
+// and reports whether they keep one at all.
+//
+// THE WINDOW IS TAKEN AND NEVER NAMED. velocity's own documentation says why a
+// name is the wrong handle — "a caller that reads observations by name can check
+// at construction that the names it needs exist rather than silently reading zero
+// for a window nobody configured" — and a control that reads zero because a name
+// was misspelled is a control that is off with nothing to see. So the window is
+// selected by being the shortest one the store actually keeps: there is no name
+// to get wrong, and a store keeping no windows at all is REFUSED here rather than
+// answered with a zero that reads exactly like a quiet subject.
+//
+// The narrowest window is also the right one on its own terms. It is the burst
+// window — the finest resolution the aggregates offer — and a burst is what these
+// bounds are about; the wider windows answer "how much does this subject usually
+// do", which is the model's question and not this one's.
+//
+// It does not take the ring set's own lock: [velocity.Store] is documented safe
+// for concurrent use and shards its own locking, and the census that r.mu guards
+// is not read here.
+func (r *rings) pace(k velocity.Key) (velocity.Observation, bool) {
+	var out velocity.Observation
+	for _, o := range r.vel.Observe(k) {
+		if out.Span == 0 || o.Span < out.Span {
+			out = o
+		}
+	}
+	return out, out.Span > 0
+}
+
+// sharedByDevice and sharedByPeer count how many DISTINCT subjects one
+// identifier is already tied to across the tenant's own retained record.
+//
+// TWO STATEMENTS AND NOT ONE PARAMETERISED BY A COLUMN NAME. The column is the
+// only difference and it is the one thing that must never come from a value, so
+// it is spelled in the statement rather than substituted into it; every term that
+// IS caller data is bound.
+//
+// The `at` predicate is the record's own retention ([ringWindow]) and it is what
+// makes the read a bounded range scan of the tenant's own covering index
+// (observation(tenant, at, id)) rather than a scan of the file. The LIMIT is
+// [fanSubjects]: the rule asks whether the bound is REACHED, so counting past it
+// is work with no reader, and DISTINCT under a LIMIT stops as soon as it is.
+const sharedByDevice = `SELECT COUNT(*) FROM (
+	SELECT DISTINCT kind, subject FROM observation
+	 WHERE tenant = ? AND at >= ? AND device = ? LIMIT ?)`
+
+const sharedByPeer = `SELECT COUNT(*) FROM (
+	SELECT DISTINCT kind, subject FROM observation
+	 WHERE tenant = ? AND at >= ? AND peer = ? LIMIT ?)`
+
+// sharing counts the distinct subjects one identifier is tied to, no further than
+// the stated bound.
+func (p *plane) sharing(t tenant, statement, value string) (int, error) {
+	sh, err := p.for_(t)
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	if err := sh.db.QueryRow(statement, string(t),
+		p.now().UTC().Add(-ringWindow).Unix(), value, fanSubjects).Scan(&n); err != nil {
+		return 0, fmt.Errorf("risk: count the subjects sharing an identifier: %w", err)
+	}
+	return n, nil
+}
+
+// prior reads what this tenant's own aggregates already hold about one event's
+// identifiers, and it is the ONE door to that reading: the axes come from
+// [anomaly.Keys], which is the same definition the ingest path records to and the
+// model reads, so a rule can never be evaluated on a key the aggregates were
+// never filled on.
+//
+// IT REFUSES RATHER THAN READING ZERO. Every failure here — an unreadable shelf,
+// a ring set keeping no window — is a state in which the aggregate rules cannot
+// decide, and an empty reading would make them SILENTLY allow. So it is an error,
+// answered by the same fail policy as any other failure of this op, which is the
+// caller's to apply. It is also a state the resident's own construction makes
+// unreachable: [newRings] always keeps velocity's standard windows and the shelf
+// is already open by the time a residency exists.
+func (p *plane) prior(t tenant, o observation) (reading, error) {
+	r, err := p.resident(t)
+	if err != nil {
+		return reading{}, err
+	}
+	var out reading
+	for _, k := range anomaly.Keys(o.tx(t)) {
+		w, kept := r.vel.pace(k)
+		if !kept {
+			return reading{}, fmt.Errorf("risk: this organisation's aggregates keep no window, so no bound over them can be read")
+		}
+		out.Pace = append(out.Pace, paced{
+			Axis: axisOf(k.Kind), Events: w.Count, Nano: nanoOfUSD(w.Sum), Span: w.Span,
+		})
+	}
+	for _, link := range []struct{ axis, statement, value string }{
+		{axisDevice, sharedByDevice, o.device},
+		{axisPeer, sharedByPeer, o.peer},
+	} {
+		if link.value == "" {
+			continue
+		}
+		n, err := p.sharing(t, link.statement, link.value)
+		if err != nil {
+			return reading{}, err
+		}
+		out.Shared = append(out.Shared, shared{Axis: link.axis, Subjects: n})
+	}
+	return out, nil
+}
+
+// nanoOfUSD converts a value the aggregates carry in USD into the unit the stated
+// bounds are written in.
+//
+// It SATURATES rather than wrapping. A sum past the int64 nano ceiling is about
+// nine billion dollars, which no real accrual reaches — but a conversion that
+// wrapped would turn the largest accrual there is into a small or negative one,
+// and the rule would read the worst event it will ever see as unremarkable.
+// Saturating is the direction that can only make a bound fire, never disable it.
+func nanoOfUSD(usd float64) int64 {
+	switch {
+	case !(usd > 0): // also catches NaN, which is neither > nor <= 0
+		return 0
+	case usd >= float64(math.MaxInt64)/nanoPerUSD:
+		return math.MaxInt64
+	}
+	return int64(usd * nanoPerUSD)
 }
