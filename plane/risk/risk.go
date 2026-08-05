@@ -31,6 +31,7 @@ const App = "risk"
 // plane_registry_test.go.
 var Ops = []string{
 	plane.RiskDecide,
+	plane.RiskObserve,
 }
 
 // RiskDecide judge one subject against the calling organisation's own model.
@@ -38,4 +39,11 @@ var Ops = []string{
 // Calls plane.RiskDecide on risk over the peer plane.
 func RiskDecide(ctx context.Context, in *plane.RiskDecideIn) (*plane.RiskDecided, error) {
 	return plane.Ask[plane.RiskDecideIn, plane.RiskDecided](ctx, App, plane.RiskDecide, in)
+}
+
+// RiskObserve teach the calling organisation's own model from something that settled.
+//
+// Calls plane.RiskObserve on risk over the peer plane.
+func RiskObserve(ctx context.Context, in *plane.RiskObserveIn) (*plane.RiskObserved, error) {
+	return plane.Ask[plane.RiskObserveIn, plane.RiskObserved](ctx, App, plane.RiskObserve, in)
 }

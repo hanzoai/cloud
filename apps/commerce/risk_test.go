@@ -357,9 +357,17 @@ func TestRiskGate_JudgesThePayerThatWillBeCredited(t *testing.T) {
 	if asked.Stage != cloud.StagePayment {
 		t.Errorf("stage %q, want %q", asked.Stage, cloud.StagePayment)
 	}
-	if asked.Subject.Kind != plane.KindAccount {
-		t.Errorf("kind %q, want %q — a top-up moves an ACCOUNT's spend, and the kind namespaces the subject",
-			asked.Subject.Kind, plane.KindAccount)
+	// THE PAYER, AND NOT THE ACCOUNT, and the kind is what makes that structural.
+	// The kind namespaces the subject, so it selects which POPULATION's aggregates
+	// answer — and an account's are its metered inference spend. Judged as an
+	// account, a top-up is scored against a distribution of money spent OUT, and the
+	// windowed value bounds the aggregate rule reads (a PAYMENTS appetite) accrue on
+	// that same key: a customer with a large inference bill is examined for it, and
+	// no restatement of the number can fix a population.
+	if asked.Subject.Kind != plane.KindPayer {
+		t.Errorf("kind %q, want %q — a top-up is the PAYER moving money in, and an account's "+
+			"aggregates are its inference spend; one key for both is one appetite over two populations",
+			asked.Subject.Kind, plane.KindPayer)
 	}
 	// The ONE subject rule, stated here independently of the gate: the wallet key
 	// the balance read, the spend gate and the credit all address.
