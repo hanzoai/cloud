@@ -195,7 +195,7 @@
     },
     "/v1/tracker/projects/{key}": {
       "delete": {
-        "operationId": "delete_v1_tracker_projects_key",
+        "operationId": "delete_v1_tracker_projects_by_key",
         "summary": "Removes one tracker project of the caller's org AND every issue filed under it, and answers 204 with no body.",
         "description": "Removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
         "tags": [
@@ -219,7 +219,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_tracker_projects_key",
+        "operationId": "get_v1_tracker_projects_by_key",
         "summary": "Returns one tracker project of the caller's org by its key — its name, description and timestamps.",
         "description": "Returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
         "tags": [
@@ -250,7 +250,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_tracker_projects_key",
+        "operationId": "patch_v1_tracker_projects_by_key",
         "summary": "Renames a tracker project or rewrites its description, and returns the updated project.",
         "description": "Renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
         "tags": [
@@ -296,7 +296,7 @@
     },
     "/v1/tracker/projects/{key}/issues": {
       "get": {
-        "operationId": "get_v1_tracker_projects_key_issues",
+        "operationId": "get_v1_tracker_projects_by_key_issues",
         "summary": "Returns the issues of one tracker project, optionally filtered by status, kind, repo, source and whether they are scheduled.",
         "description": "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo, source and whether they are scheduled.\n\nThis is the ONE place a surface takes its slice of the shared issue table: the\nboard passes no filter or a status, the timeline passes scheduled=true, a git\nrepository's Issues tab passes kind=issue\u0026repo=\u003cr\u003e and its Pull Requests tab\nkind=pr\u0026repo=\u003cr\u003e. A filter value outside its closed set is refused with 400\nrather than silently returning an empty board.",
         "tags": [
@@ -398,7 +398,7 @@
     },
     "/v1/tracker/projects/{key}/issues/{num}": {
       "delete": {
-        "operationId": "delete_v1_tracker_projects_key_issues_num",
+        "operationId": "delete_v1_tracker_projects_by_key_issues_by_num",
         "summary": "Removes one issue from a tracker project and answers 204 with no body.",
         "description": "Removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
         "tags": [
@@ -431,7 +431,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_tracker_projects_key_issues_num",
+        "operationId": "get_v1_tracker_projects_by_key_issues_by_num",
         "summary": "Returns one issue of one tracker project by its per-project number — title, description, status, priority, assignee, labels, kind, source and its git bindings.",
         "description": "Returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
         "tags": [
@@ -471,7 +471,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_tracker_projects_key_issues_num",
+        "operationId": "patch_v1_tracker_projects_by_key_issues_by_num",
         "summary": "Edits one issue in place and returns it — retitle it, rewrite its body, move it between board columns, reprioritize, reassign, reschedule, or replace its labels.",
         "description": "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, reschedule, or\nreplace its labels. Every field is optional: one the caller omits keeps its\nstored value, and `labels` REPLACES the set rather than adding to it.\n\n`startAt` and `dueAt` are the issue's place on the timeline, in unix seconds;\n0 clears one. They are validated as the interval they RESULT in, so moving\nonly the due date is still checked against the stored start — a due date\nbefore its start is 400, never a bar drawn backwards.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
         "tags": [

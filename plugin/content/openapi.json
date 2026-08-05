@@ -170,7 +170,7 @@
     },
     "/v1/content/{doctype}/{name}/transition": {
       "post": {
-        "operationId": "post_v1_content_doctype_name_transition",
+        "operationId": "post_v1_content_by_doctype_by_name_transition",
         "summary": "Moves one content item to a new lifecycle state and, on the move to published, fans it out to the item's channels.",
         "description": "Moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
         "tags": [

@@ -119,7 +119,7 @@
     },
     "/v1/validators/{tokenId}": {
       "get": {
-        "operationId": "get_v1_validators_tokenId",
+        "operationId": "get_v1_validators_by_tokenid",
         "summary": "Returns one claimed validator slot, scoped to the caller's org.",
         "description": "Returns one claimed validator slot, scoped to the caller's org.\n\nA slot another org holds, and a slot nobody holds, are both 404 — never a\ndifferent status, so this route cannot be used to probe which slots are taken.",
         "tags": [
