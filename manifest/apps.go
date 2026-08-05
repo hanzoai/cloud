@@ -113,7 +113,20 @@ var Apps = []App{
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
 	{Name: "functions", Prefixes: []string{"/v1/functions"}},
-	{Name: "tracker", Prefixes: []string{"/v1/tracker"}},
+	// /tracker is the BOARD ITSELF — the SPA embedded in this app's binary
+	// (apps/tracker/ui), which is the whole point of tracker.hanzo.ai. It must be
+	// claimed here or the fleet routes the host's page to whoever owns "/" (the
+	// console), and the visitor gets the console's HTML shell where the board
+	// should be: a 200 that is not the product. An app-level static prefix beside
+	// the API it reads, exactly as git claims /explore and team claims
+	// /collaborator.
+	//
+	// It could NOT be caught by the published-path oracle: a static bundle is
+	// served by an untyped All() route, so it appears in no openapi.json and
+	// router_test's gate had nothing to compare. The gate that does catch it is
+	// internal/manifesttest, which reads the app's LIVE router declaration
+	// (untyped routes included) rather than its published document.
+	{Name: "tracker", Prefixes: []string{"/tracker", "/v1/tracker"}},
 	{Name: "templates", Prefixes: []string{"/v1/templates"}},
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
 	{Name: "framework", Prefixes: []string{"/v1/framework"}},
