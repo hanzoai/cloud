@@ -217,6 +217,49 @@ const freezeNano = 10_000 * nanoPerUSD
 // anything is wrong: it is a reason to look, which is exactly what review means.
 const reviewNano = 50_000 * nanoPerUSD
 
+// burstEvents is how many events on ONE of an event's identifiers — its subject,
+// its counterparty pair or its device — inside the aggregates' narrowest window
+// make a BURST ([onPace]).
+//
+// Sixty, which is one a minute for an hour on ONE identifier. Two bounds meet at
+// that figure and both are held by
+// [TestDetermine_TheAggregateBoundsCannotDisableTheRules]:
+//
+//	IT MUST BE ABOVE WHAT A FOLD ALONE PRODUCES. A tenant's own feature surface
+//	folds into the aggregates one observation per (subject, [featureBucket]),
+//	which is twelve an hour for a continuously active subject. A bound at or
+//	under that is not a burst detector — it is a detector of having been active
+//	all hour, firing on this organisation's most ordinary customers, and it
+//	would fire on its OWN history the moment a residency rebuilt.
+//
+//	IT MUST BE ABOVE ZERO. A count bound at zero is not a permissive setting; it
+//	is the rule firing on every event there is, which is the same control being
+//	useless in the other direction.
+//
+// There is no matching bound for the VALUE a burst accrues, and deliberately not:
+// [reviewNano] and [freezeNano] are that bound already, read over a window instead
+// of over one event. What one payment may not move, an hour of payments may not
+// move either — one statement of appetite, two readings.
+const burstEvents = 60
+
+// fanSubjects is how many DISTINCT subjects sharing ONE device or ONE
+// counterparty make a network of nominally unrelated persons rather than a
+// household, an office or a popular merchant ([onFan]).
+//
+// Twenty. It is deliberately generous, because the finding it supports is a
+// REVIEW and never a freeze: twenty accounts on one device fingerprint is well
+// past a family and well past a shared laptop, and the response to it is a person
+// looking rather than a payment stopping. A tighter bound would summon that person
+// for every office.
+//
+// IT MUST BE ABOVE ONE, and this is the direction that would fail silently in the
+// other sense: one distinct subject is EVERY device, so a bound of one — or of
+// zero, which the count is also the query's LIMIT for — turns "shared" into
+// "exists" and the rule into noise. It must also stay under [recordRows], or it
+// names a number the tenant's own retained record can never reach and the rule is
+// switched off with nothing to see.
+const fanSubjects = 20
+
 // listedAsOf dates [defaultJurisdictions]. A listing with no date cannot have its
 // currency assessed, and [reference.Jurisdictions] refuses one that has none —
 // correctly, because "not listed" from an undated listing is not a fact.
