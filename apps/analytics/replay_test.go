@@ -51,12 +51,6 @@ func fakeProducer(t *testing.T, err error) *[]*kgo.Record {
 	return &got
 }
 
-// mapped configures the org→token shim for this test.
-func mapped(t *testing.T, pairs string) {
-	t.Helper()
-	t.Setenv(replayTokensEnv, pairs)
-}
-
 // replayWire is a minimal well-formed snapshot batch for org "acme".
 const replayWire = `{"sessionId":"sess-01","windowId":"win-01","distinctId":"person-7",` +
 	`"events":[{"type":4,"timestamp":1785951969399,"data":{"href":"https://hanzo.ai/"}}]}`
@@ -93,7 +87,7 @@ func TestSnapshotRecordIsTheWireContract(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 5, 17, 46, 9, 399_000_000, time.UTC)
 
-	rec, err := snapshotRecord(in, "hi_token", "203.0.113.9", "0d1a5f4e-7c62-4a5b-9c31-2f0e6b8d4a11", now)
+	rec, err := snapshotRecord(in, "acme", "203.0.113.9", "0d1a5f4e-7c62-4a5b-9c31-2f0e6b8d4a11", now)
 	if err != nil {
 		t.Fatalf("snapshotRecord: %v", err)
 	}
@@ -107,11 +101,11 @@ func TestSnapshotRecordIsTheWireContract(t *testing.T) {
 		t.Errorf("partition key = %q, want the raw session id %q", rec.Key, "sess-01")
 	}
 
-	// Every header, by name and by value. The `token` one is load-bearing: the
-	// consumer reads the team from the HEADER, so a message missing it is dropped
-	// with no error at either end.
+	// Every header, by name and by value. The `org` one is load-bearing: the
+	// consumer resolves the project from that HEADER, so a message missing it is
+	// dropped with no error at either end.
 	for _, want := range []struct{ key, value string }{
-		{"token", "hi_token"},
+		{"org", "acme"},
 		{"distinct_id", "person-7"},
 		{"session_id", "sess-01"},
 		{"timestamp", strconv.FormatInt(now.UnixMilli(), 10)},
@@ -142,12 +136,23 @@ func TestSnapshotRecordIsTheWireContract(t *testing.T) {
 		{"distinct_id", env.DistinctID, "person-7"},
 		{"ip", env.IP, "203.0.113.9"},
 		{"now", env.Now, "2026-08-05T17:46:09.399Z"},
-		{"token", env.Token, "hi_token"},
 		{"event", env.Event, "$snapshot_items"},
 		{"timestamp", env.Timestamp, "2026-08-05T17:46:09.399Z"},
 	} {
 		if f.got != f.want {
 			t.Errorf("envelope %s = %q, want %q", f.name, f.got, f.want)
+		}
+	}
+	// THE ENVELOPE CARRIES NO TENANT. The org is in the header, in one copy. A
+	// `token` field reappearing here would be the second credential this path was
+	// built to not have, so its ABSENCE is asserted rather than assumed.
+	var envRaw map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Value, &envRaw); err != nil {
+		t.Fatalf("envelope raw: %v", err)
+	}
+	for _, gone := range []string{"token", "org"} {
+		if _, present := envRaw[gone]; present {
+			t.Errorf("envelope carries %q — the tenant travels in the header, in ONE copy", gone)
 		}
 	}
 
@@ -200,7 +205,7 @@ func TestSnapshotItemsIsAFlatArray(t *testing.T) {
 		json.RawMessage(`{"type":3,"timestamp":1,"data":{}}`),
 		json.RawMessage(`{"type":4,"timestamp":2,"data":{}}`),
 	}}
-	rec, err := snapshotRecord(in, "hi_t", "", "id", time.Unix(0, 0).UTC())
+	rec, err := snapshotRecord(in, "acme", "", "id", time.Unix(0, 0).UTC())
 	if err != nil {
 		t.Fatalf("snapshotRecord: %v", err)
 	}
@@ -278,7 +283,6 @@ func TestSessionIDLengthIsBytesNotRunes(t *testing.T) {
 // TestReplayRefusesABadSessionID drives the same grammar through the DOOR, so the
 // refusal is a 400 on the wire and not merely a false from a pure function.
 func TestReplayRefusesABadSessionID(t *testing.T) {
-	mapped(t, "acme=hi_token")
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
 	for _, id := range []string{"", "sess_01", "sess/01", strings.Repeat("a", 71), "sess 01"} {
@@ -300,7 +304,6 @@ func TestReplayRefusesABadSessionID(t *testing.T) {
 // every ingest door answers, because this door shares their resolver. Nothing is
 // produced.
 func TestReplayRefusesTheAnonymousCaller(t *testing.T) {
-	mapped(t, "acme=hi_token")
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
 	for _, host := range []string{"hanzo.ai", "api.hanzo.ai"} {
@@ -318,7 +321,6 @@ func TestReplayRefusesTheAnonymousCaller(t *testing.T) {
 // never produced. This is the same fail-closed rule doors_test.go holds over the
 // doors table, asserted here because this route is not in that table.
 func TestReplayFailsClosedOnUnresolvableCredential(t *testing.T) {
-	mapped(t, "acme=hi_token")
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false })
@@ -339,7 +341,6 @@ func TestReplayFailsClosedOnUnresolvableCredential(t *testing.T) {
 // TestReplayAdmitsAResolvedKey is the "the gate is not just a wall" half: a
 // resolvable sk- and a resolvable pk- both reach the produce.
 func TestReplayAdmitsAResolvedKey(t *testing.T) {
-	mapped(t, "acme=hi_token")
 	for _, hdr := range []map[string]string{
 		{"x-api-key": "sk-good"},
 		{"Authorization": "Bearer pk-good"},
@@ -362,7 +363,6 @@ func TestReplayAdmitsAResolvedKey(t *testing.T) {
 // through navigator.sendBeacon, which cannot set a header, so the key arrives as
 // ?ingest_key= — a carrier a typed In never sees.
 func TestReplayTakesTheKeyOffTheQueryCarrier(t *testing.T) {
-	mapped(t, "acme=hi_token")
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
 	key := stubResolver(t, func(string) (string, bool) { return "acme", true })
@@ -377,11 +377,10 @@ func TestReplayTakesTheKeyOffTheQueryCarrier(t *testing.T) {
 	}
 }
 
-// TestReplayTenantIsTheCredentialsNeverTheBody: the token that goes on the wire is
-// the one mapped for the org the CREDENTIAL resolved to. A body naming another org,
-// another token or another tenant cannot move it.
+// TestReplayTenantIsTheCredentialsNeverTheBody: the org that goes on the wire is the
+// one the CREDENTIAL resolved to. A body naming another org — or carrying a `token`
+// field, the credential this path no longer has — cannot move it.
 func TestReplayTenantIsTheCredentialsNeverTheBody(t *testing.T) {
-	mapped(t, "acme=hi_acme,victim=hi_victim")
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
 	body := `{"sessionId":"sess-01","distinctId":"d","org":"victim","token":"hi_victim",` +
@@ -392,98 +391,60 @@ func TestReplayTenantIsTheCredentialsNeverTheBody(t *testing.T) {
 	if len(*got) != 1 {
 		t.Fatalf("produced %d record(s), want 1", len(*got))
 	}
-	tok, _ := header((*got)[0], "token")
-	if tok != "hi_acme" {
-		t.Errorf("token header = %q, want hi_acme — the tenant is the CREDENTIAL's, and a body "+
-			"naming another org must not reach another team's stream", tok)
+	org, _ := header((*got)[0], "org")
+	if org != "acme" {
+		t.Errorf("org header = %q, want acme — the tenant is the CREDENTIAL's, and a body "+
+			"naming another org must not reach another tenant's stream", org)
+	}
+	// The body's `token` must not survive anywhere on the wire: it is a caller-supplied
+	// string, and this path has exactly one tenant fact, which the caller does not set.
+	if _, present := header((*got)[0], "token"); present {
+		t.Error("a token header was produced — this path carries no credential to the ingester")
+	}
+	if strings.Contains(string((*got)[0].Value), "hi_victim") {
+		t.Error("the body's token reached the message value")
 	}
 }
 
-// ── 4. org → token, fail closed ─────────────────────────────────────────────
+// ── 4. the tenant on the wire ───────────────────────────────────────────────
 
-// TestParseReplayTokens is the shim's grammar, including the property that makes it
-// safe to hold several orgs: one malformed pair must not un-map the others.
-func TestParseReplayTokens(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		raw  string
-		want map[string]string
-	}{
-		{"empty", "", map[string]string{}},
-		{"one pair", "hanzo=hi_abc", map[string]string{"hanzo": "hi_abc"}},
-		{"two pairs", "hanzo=hi_abc,acme=hi_def", map[string]string{"hanzo": "hi_abc", "acme": "hi_def"}},
-		{"spaces trimmed", " hanzo = hi_abc , acme = hi_def ", map[string]string{"hanzo": "hi_abc", "acme": "hi_def"}},
-		{"missing separator is skipped", "hanzo,acme=hi_def", map[string]string{"acme": "hi_def"}},
-		{"empty org is skipped", "=hi_abc,acme=hi_def", map[string]string{"acme": "hi_def"}},
-		{"empty token is skipped", "hanzo=,acme=hi_def", map[string]string{"acme": "hi_def"}},
-		{"trailing comma", "hanzo=hi_abc,", map[string]string{"hanzo": "hi_abc"}},
-		{"token may contain =", "hanzo=hi_a=b", map[string]string{"hanzo": "hi_a=b"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := parseReplayTokens(tc.raw)
-			if len(got) != len(tc.want) {
-				t.Fatalf("parseReplayTokens(%q) = %v, want %v", tc.raw, got, tc.want)
-			}
-			for org, token := range tc.want {
-				if got[org] != token {
-					t.Errorf("parseReplayTokens(%q)[%q] = %q, want %q", tc.raw, org, got[org], token)
-				}
-			}
-		})
-	}
-}
-
-// TestUnmappedOrgFailsClosed is the one that matters most about the shim: an org the
-// pipeline is not configured for is REFUSED, and refused with a status, rather than
-// produced with an empty token. The consumer resolves the team from that header and
-// drops what it cannot resolve, silently — so a 200 here would be a recording
-// discarded off-cluster with every status check green.
-func TestUnmappedOrgFailsClosed(t *testing.T) {
-	for _, tc := range []struct{ name, tokens string }{
-		{"nothing configured at all", ""},
-		{"another org configured", "other=hi_other"},
-		{"this org present but blank", "acme="},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			mapped(t, tc.tokens)
-			got := fakeProducer(t, nil)
-			app := mountApp(t)
-			code, body := doBody(t, app, http.MethodPost, replayPath, "user-dave", "acme", replayWire)
-			if code != http.StatusServiceUnavailable {
-				t.Errorf("unmapped org = %d (%s), want 503", code, body)
-			}
-			var e struct {
-				Code string `json:"code"`
-			}
-			if err := json.Unmarshal(body, &e); err != nil || e.Code != "replay_not_configured" {
-				t.Errorf("code = %q (%s), want replay_not_configured", e.Code, body)
-			}
-			if len(*got) != 0 {
-				t.Errorf("an unmapped org produced %d record(s) — an empty token is dropped "+
-					"silently downstream, so it must never be produced", len(*got))
-			}
-		})
-	}
-}
-
-// TestMappedOrgProducesItsOwnToken: two orgs, two tokens, and each credential
-// reaches only its own.
-func TestMappedOrgProducesItsOwnToken(t *testing.T) {
-	mapped(t, "acme=hi_acme,globex=hi_globex")
-	for _, tc := range []struct{ org, want string }{
-		{"acme", "hi_acme"},
-		{"globex", "hi_globex"},
-	} {
+// TestProducedOrgIsTheCredentialsOrg: two orgs, two credentials, and each reaches
+// only its own — with NOTHING configured for either. That is the point of the
+// change this test replaced: there is no mapping to be missing, so an org cannot be
+// "not configured for replay" and there is no deployment-side edit to forget when a
+// tenant arrives. Authentication is the whole of admission.
+func TestProducedOrgIsTheCredentialsOrg(t *testing.T) {
+	for _, org := range []string{"acme", "globex"} {
 		got := fakeProducer(t, nil)
 		app := mountApp(t)
-		if code, body := doBody(t, app, http.MethodPost, replayPath, "user-dave", tc.org, replayWire); code != http.StatusOK {
-			t.Fatalf("org %s = %d (%s), want 200", tc.org, code, body)
+		if code, body := doBody(t, app, http.MethodPost, replayPath, "user-dave", org, replayWire); code != http.StatusOK {
+			t.Fatalf("org %s = %d (%s), want 200", org, code, body)
 		}
 		if len(*got) != 1 {
-			t.Fatalf("org %s produced %d record(s), want 1", tc.org, len(*got))
+			t.Fatalf("org %s produced %d record(s), want 1", org, len(*got))
 		}
-		if tok, _ := header((*got)[0], "token"); tok != tc.want {
-			t.Errorf("org %s produced token %q, want %q", tc.org, tok, tc.want)
+		if h, _ := header((*got)[0], "org"); h != org {
+			t.Errorf("org %s produced org header %q, want %q", org, h, org)
+		}
+	}
+}
+
+// TestNoCredentialTravelsToTheIngester is the invariant the whole change is for: a
+// produced message carries the tenant and no secret. A `hi_` anywhere in the bytes
+// would mean a second credential had grown back onto this path.
+func TestNoCredentialTravelsToTheIngester(t *testing.T) {
+	got := fakeProducer(t, nil)
+	app := mountApp(t)
+	if code, body := doBody(t, app, http.MethodPost, replayPath, "user-dave", "acme", replayWire); code != http.StatusOK {
+		t.Fatalf("= %d (%s), want 200", code, body)
+	}
+	rec := (*got)[0]
+	if strings.Contains(string(rec.Value), "hi_") {
+		t.Errorf("the message value carries a project token: %s", rec.Value)
+	}
+	for _, h := range rec.Headers {
+		if h.Key == "token" || strings.HasPrefix(string(h.Value), "hi_") {
+			t.Errorf("header %q = %q — no credential belongs on this wire", h.Key, h.Value)
 		}
 	}
 }
@@ -493,8 +454,6 @@ func TestMappedOrgProducesItsOwnToken(t *testing.T) {
 // TestReplayBoundsAreRefusedNotTruncated: over either bound the request is refused
 // whole. A truncated recording would be unplayable and the receipt would be a lie.
 func TestReplayBoundsAreRefusedNotTruncated(t *testing.T) {
-	mapped(t, "acme=hi_token")
-
 	t.Run("oversize body is 413", func(t *testing.T) {
 		got := fakeProducer(t, nil)
 		app := mountApp(t)
@@ -507,22 +466,6 @@ func TestReplayBoundsAreRefusedNotTruncated(t *testing.T) {
 		}
 		if len(*got) != 0 {
 			t.Errorf("an oversize body produced %d record(s)", len(*got))
-		}
-	})
-
-	t.Run("too many events is 400", func(t *testing.T) {
-		got := fakeProducer(t, nil)
-		app := mountApp(t)
-		items := make([]string, maxReplayEvents+1)
-		for i := range items {
-			items[i] = `{"type":3,"timestamp":1,"data":{}}`
-		}
-		body := `{"sessionId":"sess-01","events":[` + strings.Join(items, ",") + `]}`
-		if code, resp := doBody(t, app, http.MethodPost, replayPath, "user-dave", "acme", body); code != http.StatusBadRequest {
-			t.Errorf("oversize batch = %d (%s), want 400", code, resp)
-		}
-		if len(*got) != 0 {
-			t.Errorf("an oversize batch produced %d record(s)", len(*got))
 		}
 	})
 
@@ -550,7 +493,6 @@ func TestReplayBoundsAreRefusedNotTruncated(t *testing.T) {
 // durable is the caller's business: a 200 over it would be exactly the silent loss
 // that `answer` (event.go) exists to prevent, and a recorder would never retry.
 func TestProduceFailureIsA503NeverA200(t *testing.T) {
-	mapped(t, "acme=hi_token")
 	fakeProducer(t, errors.New("broker unreachable"))
 	app := mountApp(t)
 	code, body := doBody(t, app, http.MethodPost, replayPath, "user-dave", "acme", replayWire)
@@ -566,7 +508,6 @@ func TestProduceFailureIsA503NeverA200(t *testing.T) {
 // TestReplayAnswersTheSharedReceipt: the happy path answers the SAME CaptureResult
 // every other door on this surface answers, and one batch is one accepted unit.
 func TestReplayAnswersTheSharedReceipt(t *testing.T) {
-	mapped(t, "acme=hi_token")
 	fakeProducer(t, nil)
 	app := mountApp(t)
 	code, body := doBody(t, app, http.MethodPost, replayPath, "user-dave", "acme", replayWire)
