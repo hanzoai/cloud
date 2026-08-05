@@ -117,20 +117,23 @@ func Complete(doc *Document, owner Owner) error {
 	}
 	var orphan []string
 	for _, key := range describedRoutes() {
-		// The host's door belongs to NO APP, and owner cannot say so.
+		// The host's doors belong to NO APP, and owner cannot say so.
 		//
 		// cmd/cloud registers GET /v1/openapi.json as a static route that outranks
 		// ai's "/v1" remainder; manifest/openapi_test.go records the manifest's own
 		// answer ("ai") as exactly the misroute the host's claim exists to correct.
-		// The declaration is made in THIS package — see the init beside [Path] —
-		// because, in its words, it is "the one operation with no owning subsystem".
+		// The declaration is made in THIS package — see the inits beside [Path] and
+		// [CommandPath] — because, in their words, they are the operations with no
+		// owning subsystem.
 		//
 		// So every app whose paths fall to that remainder would be charged with a
-		// door no app mounts. It is not going unjudged: it renders in the fleet
-		// document the host serves, which is where the operation actually is.
-		// [Product] hid this by accident, returning "" for any segment holding a
-		// dot; owner has to decline it on purpose.
-		if key.path == Path {
+		// door no app mounts. It is not going unjudged: they render in the fleet
+		// document the host serves, which is where the operations actually are.
+		// [Product] hid this by accident for the document, returning "" for any
+		// segment holding a dot; /v1/commands has no dot to hide behind, so it
+		// arrived as an orphan charged to ai the moment it was declared. owner has
+		// to decline both on purpose, and [Door] is where serve says which.
+		if Door(key.path) {
 			continue
 		}
 		// The declaration is keyed by the ROUTER's pattern (/v1/kms/secrets/+) and
