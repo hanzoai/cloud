@@ -985,12 +985,17 @@ type PushIn struct {
 	CloneURL string `json:"cloneUrl,omitempty"`
 }
 
-// Built acknowledges that the builder ACCEPTED the push and says whether it
-// matched an application. Matched=false is a real answer — most pushes track no
-// app — and is what lets a caller tell "nothing to build" from "nobody asked".
-// Those two were the same nil error before this op existed.
+// Built acknowledges that the builder ACCEPTED the push. A failure is an error,
+// never this shape — the same contract as Imported and Mirrored.
+//
+// It deliberately does NOT report how many applications the push matched. Most
+// pushes track no app, so that count would be interesting, but nothing consumes
+// it today and the builder does not return it; adding the field would mean
+// widening buildFromPush's signature to produce a value no caller reads. Fields
+// append at the END of a ZAP type, so the day something needs the count it can
+// be added without disturbing any peer.
 type Built struct {
-	Matched bool `json:"matched"`
+	Repo string `json:"repo"`
 }
 
 // ReleaseIn is a proven, clean-semver image ready to roll onto its Service CR.
