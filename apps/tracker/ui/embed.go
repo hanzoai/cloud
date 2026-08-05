@@ -33,7 +33,16 @@ import (
 	"strings"
 )
 
-//go:embed all:dist
+// dist WITHOUT `all:` — the prefix that would also embed dot-files.
+//
+// dist/.sync-stamp is provenance for whoever regenerates this bundle: it names
+// the source repository, branch and commit. That is a fact for the repo, not a
+// file to publish, and `all:dist` published it — the SPA handler serves anything
+// it can stat, so the build's private origin was readable by anyone who guessed
+// the path. Plain `dist` omits every `.`-prefixed entry, so the stamp stays in
+// git, stays truthful, and is not in the binary at all.
+//
+//go:embed dist
 var distFS embed.FS
 
 // FS returns the embedded built-UI filesystem rooted at dist/.
@@ -52,9 +61,17 @@ func FS() fs.FS {
 //
 //   - Content-addressed assets under assets/ ship immutable cache hints (Vite
 //     hashes filenames).
-//   - Any path that is not a real file rewrites to index.html so the client-side
+//   - A path that is not a real file rewrites to index.html so the client-side
 //     router handles the route — the standard SPA fallback that lets a deep-link
-//     reload survive.
+//     reload survive. EXCEPT under assets/, where a miss is a 404: that subtree
+//     holds only content-addressed build output, so a request for a name that is
+//     not there is a stale index pointing at a purged chunk. Answering the HTML
+//     shell there hands a <script> tag a document — "Unexpected token '<'",
+//     which reads as a corrupt bundle rather than the cache-miss it is.
+//   - A DIRECTORY is not a page. http.FileServer lists one, so serving whatever
+//     stat succeeds on published the whole asset manifest at /tracker/assets/;
+//     a directory now falls through to the SPA (or 404s under assets/) and the
+//     bundle's contents stay something you have to already know the name of.
 //   - If the build is absent (index.html missing) every request returns 503, so
 //     a missing bundle is loud in staging, never a blank page in production.
 func Handler() http.Handler {
@@ -71,20 +88,32 @@ func Handler() http.Handler {
 		if reqPath == "" {
 			reqPath = "index.html"
 		}
+		asset := strings.HasPrefix(reqPath, assetDir+"/") || reqPath == assetDir
 
-		if _, err := fs.Stat(root, reqPath); err != nil {
+		info, err := fs.Stat(root, reqPath)
+		switch {
+		case err != nil || info.IsDir():
+			// Not a file we serve. Under assets/ that is a miss and says so;
+			// anywhere else it is a client-side route.
+			if asset {
+				http.NotFound(w, r)
+				return
+			}
 			serveIndex(w, r, root)
 			return
-		}
-
-		if strings.HasPrefix(reqPath, "assets/") {
+		case asset:
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else {
+		default:
 			w.Header().Set("Cache-Control", "no-cache")
 		}
 		fileServer.ServeHTTP(w, r)
 	})
 }
+
+// assetDir is the one content-addressed subtree: Vite hashes every filename
+// under it, which is what makes both the immutable cache hint and the 404-on-miss
+// correct there and nowhere else.
+const assetDir = "assets"
 
 // serveIndex writes index.html with no-cache so a freshly-deployed build
 // replaces the stale shell on the next request.
