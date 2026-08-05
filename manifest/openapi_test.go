@@ -14,7 +14,7 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// TestNoAppClaimsTheSpecDoor: no manifest row may claim the exact spec path.
+// TestNoAppClaimsAHostDoor: no manifest row may claim a host door exactly.
 //
 // Specificity is what makes the host's static route win over ai's "/v1" — a
 // static path beats the wildcard containing it whatever order they register in.
@@ -22,15 +22,15 @@ import (
 // a Load registers All(prefix), fiber merges byte-identical patterns into one
 // route with both handlers chained, and the host's GET would sit BEHIND the
 // proxy handler and never run. Same trap, same shape, as the MCP door.
-func TestNoAppClaimsTheSpecDoor(t *testing.T) {
+func TestNoAppClaimsAHostDoor(t *testing.T) {
 	for _, a := range Apps {
 		for _, p := range a.Prefixes {
-			if p == openapi.Path {
-				t.Fatalf("app %q claims %q, the host's own spec door. A Load there registers "+
-					"All(%q), which fiber merges with the host's GET into one route — the door "+
-					"would sit behind the proxy handler and never run, and the fleet would "+
-					"publish %s's single-app document as the whole API. Claim a DEEPER prefix "+
-					"or none.", a.Name, p, p, a.Name)
+			if openapi.Door(p) {
+				t.Fatalf("app %q claims %q, one of the host's own doors (openapi.Door). A Load "+
+					"there registers All(%q), which fiber merges with the host's GET into one "+
+					"route — the door would sit behind the proxy handler and never run, and the "+
+					"fleet would answer for the whole API with %s's single-app view of it. Claim "+
+					"a DEEPER prefix or none.", a.Name, p, p, a.Name)
 			}
 		}
 	}
