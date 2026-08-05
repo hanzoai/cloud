@@ -43,18 +43,18 @@ import (
 // marketing type; the rest is generation context. It is the wire body of
 // POST /v1/content/generate and the input of the content_generate automation action.
 type GenerateInput struct {
-	DocType  string `json:"doctype"`                // Campaign | SocialPost | Asset
-	Title    string `json:"title,omitempty"`        // optional explicit title
-	Brief    string `json:"brief,omitempty"`        // the brief/goal driving copy generation
-	Product  string `json:"product,omitempty"`      // commerce product handle (copy context)
-	Design   string `json:"design,omitempty"`       // studio design slug (asset source)
-	Channels string `json:"channels,omitempty"`     // target channels (SocialPost)
-	Project  string `json:"project,omitempty"`      // brand/site sub-scope (billing + tenancy axis)
-	Voice    string `json:"voice,omitempty"`        // brand-voice guidance for the copy director
-	Tone     string `json:"tone,omitempty"`         // tone override for a single draft
-	Kind     string `json:"kind,omitempty"`         // asset kind: ecom|product|lifestyle|hover|hero
-	Source   string `json:"source_media,omitempty"` // asset source image (design CAD/photo)
-	Model    string `json:"model,omitempty"`        // optional zen model override (copy)
+	DocType  string `json:"doctype" url:"-"`                // Campaign | SocialPost | Asset
+	Title    string `json:"title,omitempty" url:"-"`        // optional explicit title
+	Brief    string `json:"brief,omitempty" url:"-"`        // the brief/goal driving copy generation
+	Product  string `json:"product,omitempty" url:"-"`      // commerce product handle (copy context)
+	Design   string `json:"design,omitempty" url:"-"`       // studio design slug (asset source)
+	Channels string `json:"channels,omitempty" url:"-"`     // target channels (SocialPost)
+	Project  string `json:"project,omitempty" url:"-"`      // brand/site sub-scope (billing + tenancy axis)
+	Voice    string `json:"voice,omitempty" url:"-"`        // brand-voice guidance for the copy director
+	Tone     string `json:"tone,omitempty" url:"-"`         // tone override for a single draft
+	Kind     string `json:"kind,omitempty" url:"-"`         // asset kind: ecom|product|lifestyle|hover|hero
+	Source   string `json:"source_media,omitempty" url:"-"` // asset source image (design CAD/photo)
+	Model    string `json:"model,omitempty" url:"-"`        // optional zen model override (copy)
 }
 
 // GenerateResult is the created draft's identity.
