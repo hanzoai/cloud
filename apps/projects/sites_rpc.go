@@ -38,6 +38,39 @@ func exposeSites() {
 	zip.Post[plane.SiteIn, plane.Site](cloud.Plane(), "/sites/resolve-org", planeResolveSiteOrg,
 		zip.WithOperationID(plane.SitesResolveOrg),
 		zip.WithSummary("Resolve a published site pinned to one org"))
+
+	zip.Post[plane.LiveSitesIn, plane.LiveSitesOut](cloud.Plane(), "/sites/live", planeLiveSites,
+		zip.WithOperationID(plane.SitesLive),
+		zip.WithSummary("Every serving site, across orgs"))
+}
+
+// planeLiveSites answers the cross-org directory read for the process that
+// assembles the catalog, which is never this one.
+//
+// LiveSites returns nil when this package is unmounted, on the reasoning that a
+// deployment which hosts nothing is not a fault. That reads correctly here — the
+// process that owns the store is the one answering — and read WRONG in the
+// catalog process, where nil meant "ask somewhere else" and was silently
+// published as "nothing is live". Every demo URL, the whole `site` kind, and the
+// template lane's deployed starters left the corpus without an error anywhere.
+//
+// No org, on purpose, exactly like the resolve above. This is the one cross-org
+// read in the package and the visibility rule that makes it safe lives in its
+// query, not in its caller.
+func planeLiveSites(ctx context.Context, _ *plane.LiveSitesIn) (*plane.LiveSitesOut, error) {
+	live, err := LiveSites(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &plane.LiveSitesOut{Sites: make([]plane.LiveSite, 0, len(live))}
+	for _, s := range live {
+		out.Sites = append(out.Sites, plane.LiveSite{
+			Org: s.Org, Slug: s.Slug, Name: s.Name, URL: s.URL,
+			Repo: s.Repo, ForkedFrom: s.ForkedFrom, UpdatedAt: s.UpdatedAt,
+			Upstream: s.Upstream, License: s.License,
+		})
+	}
+	return out, nil
 }
 
 // planeResolveSite answers the multi-tenant product URL (<slug>.hanzo.app) and

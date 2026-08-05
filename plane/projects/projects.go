@@ -31,6 +31,7 @@ const App = "projects"
 // plane_registry_test.go.
 var Ops = []string{
 	plane.ProjectsResolveKey,
+	plane.SitesLive,
 	plane.SitesResolve,
 	plane.SitesResolveOrg,
 }
@@ -40,6 +41,13 @@ var Ops = []string{
 // Calls plane.ProjectsResolveKey on projects over the peer plane.
 func ProjectsResolveKey(ctx context.Context, in *plane.KeyIn) (*plane.Attribution, error) {
 	return plane.Ask[plane.KeyIn, plane.Attribution](ctx, App, plane.ProjectsResolveKey, in)
+}
+
+// SitesLive every serving site, across orgs.
+//
+// Calls plane.SitesLive on projects over the peer plane.
+func SitesLive(ctx context.Context, in *plane.LiveSitesIn) (*plane.LiveSitesOut, error) {
+	return plane.Ask[plane.LiveSitesIn, plane.LiveSitesOut](ctx, App, plane.SitesLive, in)
 }
 
 // SitesResolve resolve a published site by host label.

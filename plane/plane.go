@@ -154,6 +154,23 @@ const (
 	// collision, not the fix.
 	IndexReconcile = "index_reconcile"
 
+	// The cross-org live-site read, across the process boundary — the catalog's
+	// OTHER source, broken by the same split and even more quietly.
+	//
+	// projects.LiveSites answers nil when the package is not mounted, on the
+	// reasoning that "a deployment that does not host sites is not an error". That
+	// is true of a DEPLOYMENT and false of a PROCESS: in the catalog process it is
+	// not that nothing is serving, it is that the wrong half of the fleet was
+	// asked. So the corpus lost every live site — the demo URLs, the `site` kind,
+	// and the template lane's own deployed starters — and reported no error at all,
+	// because nil and empty are the same answer here.
+	//
+	// It takes no org, exactly like sites_resolve above and for a reason of the
+	// same shape: this is THE cross-org read, and the rule that makes it safe is
+	// applied in the query by the app that owns the store — public visibility,
+	// live status, not hidden. There is no tenant here for a caller to widen into.
+	SitesLive = "sites_live"
+
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
 	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
@@ -1018,4 +1035,40 @@ type Site struct {
 	Prefix               string `json:"prefix"`
 	Status               string `json:"status"`
 	CrossOriginIsolation bool   `json:"crossOriginIsolation"`
+}
+
+// LiveSitesIn asks for every site this deployment is serving. It carries no
+// fields, and that is the contract rather than an omission: this is THE
+// cross-org read, so there is no tenant to name, and the rule that makes it safe
+// — public, live, not hidden — is applied in the query by the app that owns the
+// store. A field here could only ever be a way to ask for something narrower
+// than what is already public, or wider than what is.
+type LiveSitesIn struct{}
+
+// LiveSitesOut is every serving site, newest first.
+type LiveSitesOut struct {
+	Sites []LiveSite `json:"sites,omitempty"`
+}
+
+// LiveSite is one deployed site in the terms a directory needs: where it is,
+// what it was built from, and whose work it credits.
+//
+// Repo and ForkedFrom are the trace back OUT of a demo — a live URL nobody can
+// get from to the source is a screenshot, not a starting point. Upstream and
+// License are carried exactly as stored and never inferred: a guessed credit is
+// worse than no credit, and a directory that guesses authorship in its own
+// favour is not making an error, it is making a claim.
+//
+// There is no authorship field. Who published a site is Org — the account that
+// paid for it, which the tenancy boundary enforces and no request can forge.
+type LiveSite struct {
+	Org        string `json:"org"`
+	Slug       string `json:"slug"`
+	Name       string `json:"name,omitempty"`
+	URL        string `json:"url,omitempty"`
+	Repo       string `json:"repo,omitempty"`
+	ForkedFrom string `json:"forkedFrom,omitempty"`
+	UpdatedAt  int64  `json:"updatedAt,omitempty"`
+	Upstream   string `json:"upstream,omitempty"`
+	License    string `json:"license,omitempty"`
 }
