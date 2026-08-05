@@ -275,16 +275,21 @@ type issueQuery struct {
 	// Source keeps only issues opened from that surface: team, git, crm,
 	// helpdesk, cms or agent. An unknown value is refused with 400.
 	Source string `json:"source"`
+	// Scheduled keeps only issues that carry a date — a start, a due date or
+	// both. This is the timeline's slice of the board: pass scheduled=true to
+	// get exactly the rows a gantt has somewhere to draw, instead of fetching
+	// every issue and discarding the undated ones client-side.
+	Scheduled bool `json:"scheduled"`
 }
 
 // ListIssues returns the issues of one tracker project, optionally filtered by
-// status, kind, repo and source.
+// status, kind, repo, source and whether they are scheduled.
 //
-// This is the ONE place a surface takes its slice of the shared issue table:
-// hanzo.team passes no filter or a status, a git repository's Issues tab passes
-// kind=issue&repo=<r> and its Pull Requests tab kind=pr&repo=<r>. A filter value
-// outside its closed set is refused with 400 rather than silently returning an
-// empty board.
+// This is the ONE place a surface takes its slice of the shared issue table: the
+// board passes no filter or a status, the timeline passes scheduled=true, a git
+// repository's Issues tab passes kind=issue&repo=<r> and its Pull Requests tab
+// kind=pr&repo=<r>. A filter value outside its closed set is refused with 400
+// rather than silently returning an empty board.
 //
 // Example: {"key": "ENG", "kind": "pr", "repo": "hanzoai/cloud"}
 func (o ops) listIssues(ctx context.Context, in *issueQuery) (*issueList, error) {
@@ -331,7 +336,7 @@ func issueQueryFilter(in *issueQuery) (IssueFilter, error) {
 	if len(repo) > maxField {
 		return IssueFilter{}, zip.ErrBadRequest("repo filter too long")
 	}
-	return IssueFilter{Status: status, Kind: kind, Repo: repo, Source: source}, nil
+	return IssueFilter{Status: status, Kind: kind, Repo: repo, Source: source, Scheduled: in.Scheduled}, nil
 }
 
 // issueRef addresses ONE issue: the project key and the issue's per-project
@@ -393,12 +398,24 @@ type issuePatch struct {
 	// most 48 characters and may not contain a comma (the storage separator);
 	// empty entries are dropped.
 	Labels *[]string `json:"labels"`
+	// StartAt is when the work starts, in unix seconds — the left edge of its
+	// bar on the timeline. 0 clears it.
+	StartAt *int64 `json:"startAt"`
+	// DueAt is when the work is due, in unix seconds — the right edge of its
+	// bar, or the milestone marker when there is no start. 0 clears it. It may
+	// not fall before startAt.
+	DueAt *int64 `json:"dueAt"`
 }
 
 // UpdateIssue edits one issue in place and returns it — retitle it, rewrite its
-// body, move it between board columns, reprioritize, reassign, or replace its
-// labels. Every field is optional: one the caller omits keeps its stored value,
-// and `labels` REPLACES the set rather than adding to it.
+// body, move it between board columns, reprioritize, reassign, reschedule, or
+// replace its labels. Every field is optional: one the caller omits keeps its
+// stored value, and `labels` REPLACES the set rather than adding to it.
+//
+// `startAt` and `dueAt` are the issue's place on the timeline, in unix seconds;
+// 0 clears one. They are validated as the interval they RESULT in, so moving
+// only the due date is still checked against the stored start — a due date
+// before its start is 400, never a bar drawn backwards.
 //
 // The issue's kind, source and git bindings are not editable here: they record
 // where the work item came FROM, which is a fact about its origin rather than
@@ -468,6 +485,19 @@ func (o ops) updateIssue(ctx context.Context, in *issuePatch) (*issueView, error
 			return nil, err
 		}
 		i.Labels = lb
+	}
+	if in.StartAt != nil {
+		i.StartAt = *in.StartAt
+	}
+	if in.DueAt != nil {
+		i.DueAt = *in.DueAt
+	}
+	// Validate the RESULTING interval, not the patch: a caller who moves only the
+	// due date is still moving it relative to the start already stored, so a
+	// patch-only check would let a request that never mentions startAt land an
+	// issue whose bar ends before it begins.
+	if err := checkSchedule(i.StartAt, i.DueAt); err != nil {
+		return nil, err
 	}
 	i.UpdatedAt = time.Now().Unix()
 	if err := store.UpdateIssue(ctx, i); err != nil {
