@@ -22,11 +22,24 @@ type mode struct {
 	plan       bool
 	maxQueries int
 	maxSources int
-	readTop    int // pages actually FETCHED (read stage); 0 ⇒ snippets only
-	newsBias   bool
-	system     string
-	feeCents   int64
-	models     []string
+	readTop    int // pages actually FETCHED in the opening round; 0 ⇒ snippets only
+	// rounds is the survey's round budget. 0 is a SINGLE gathering pass — the fast
+	// modes' behaviour, unchanged — and >0 iterates: search → read → decide → repeat.
+	// hostCap is how many pages one host may contribute to the ranked set: 1 for a
+	// six-source answer (breadth is the whole value), 3 for research (three pages
+	// from an authoritative domain is the point, not a duplicate).
+	rounds  int
+	hostCap int
+	// deadline and tokenCeiling are the wall clock and the token spend one request
+	// of this mode may not cross. Per-mode because a research pass legitimately
+	// costs more than a search, and one global constant had to be sized for the
+	// cheaper of the two.
+	deadline     time.Duration
+	tokenCeiling int
+	newsBias     bool
+	system       string
+	feeCents     int64
+	models       []string
 }
 
 // modes is the registry. search/news are fast single-pass and read NOTHING (the
@@ -40,15 +53,19 @@ type mode struct {
 // backs research and zen5 backs search, so either mode still answers if its primary
 // is down; the cloud-wide default is appended as a final backstop in synthModels.
 var modes = map[string]mode{
-	"search": {name: "search", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
-	"news":   {name: "news", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, newsBias: true, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
+	"search": {name: "search", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, rounds: 0, hostCap: 1, deadline: 90 * time.Second, tokenCeiling: 120_000, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
+	"news":   {name: "news", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, rounds: 0, hostCap: 1, deadline: 90 * time.Second, tokenCeiling: 120_000, newsBias: true, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
 	// ONE research mode, at what used to be "deep". research and deep were never
 	// two behaviours: same system prompt, same models, same plan gate — only the
 	// dials differed (4/12/4 vs 6/16/6). Two names for one thing made the product
 	// look like it had a choice to offer and made the real cost of that choice
 	// invisible behind an adjective. Research now always does the deeper pass, and
 	// carries the price that pass actually costs.
-	"research": {name: "research", plan: true, maxQueries: 6, maxSources: 16, readTop: 6, system: researchSystem, feeCents: 10, models: []string{"zen5", "zen5-flash"}},
+	//
+	// rounds:6 is what makes research ITERATE — the single capability the fast
+	// modes do not have. It gathers wider (32 sources, 3 per host), reads across
+	// rounds rather than once, and is priced at what that actually costs (25¢).
+	"research": {name: "research", plan: true, maxQueries: 6, maxSources: 32, readTop: 6, rounds: 6, hostCap: 3, deadline: 300 * time.Second, tokenCeiling: 400_000, system: researchSystem, feeCents: 25, models: []string{"zen5", "zen5-flash"}},
 }
 
 // IsMode reports whether a request mode selects the answer engine. An empty or
@@ -91,9 +108,11 @@ const (
 		"If the sources conflict or are insufficient, say so plainly and answer from general knowledge while noting the uncertainty. Never fabricate facts or URLs."
 
 	researchSystem = "You are Hanzo Deep Research. Synthesize a thorough, well-organized report answering the question from the numbered web sources. " +
-		"Use clear section headings, compare sources, and surface the strongest evidence. " +
-		"Cite inline as Markdown links [title](url) after each supported claim. " +
-		"Do NOT add a trailing References section or bare URLs. Note gaps or disagreements between sources. Never fabricate facts or URLs."
+		"Write a structured report with section headings, compare sources, and surface the strongest evidence. " +
+		"Cite at least three distinct sources per section. " +
+		"Place each [title](url) immediately after the claim it supports; never a bare URL, never a period after a link, " +
+		"never a trailing References or Sources section and no footnote markers. " +
+		"Note gaps or disagreements between sources. Never fabricate facts or URLs."
 )
 
 // feeCents resolves the per-answer price in cents for a mode, most specific
