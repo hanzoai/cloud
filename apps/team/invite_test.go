@@ -89,6 +89,7 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	}
 	g := &api{
 		accounts: store,
+		ident:    testIdent(store),
 		cfg:      config{serverSecret: testSecret, iamEndpoint: iamSrv.URL, iamClientID: "hanzo-team", iamClientSecret: "team-secret", provider: "openid"},
 		log:      luxlog.New("test"),
 		commerce: commerce,
@@ -149,6 +150,7 @@ func TestSendInviteGuestInfraErrorAdmits(t *testing.T) {
 	commerce := &fakeCommerce{err: fmt.Errorf("commerce not co-resident")}
 	g := &api{
 		accounts: store,
+		ident:    testIdent(store),
 		cfg:      config{serverSecret: testSecret, iamEndpoint: iamSrv.URL, iamClientID: "hanzo-team", iamClientSecret: "team-secret", provider: "openid"},
 		log:      luxlog.New("test"),
 		commerce: commerce,

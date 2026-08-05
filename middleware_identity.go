@@ -434,7 +434,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 			// (principal.Mint). The headers above are the contract everything
 			// DOWNSTREAM reads; this is the fact a middleware reads when it cannot
 			// prove it is downstream — see principal.Mint.
-			principal.Mint(c, principal.Principal{Org: effOrg, User: claims.userID()})
+			principal.Mint(c, principal.Principal{Org: effOrg, User: claims.userID(), Subject: strings.TrimSpace(claims.Subject)})
 			return c.Continue()
 		}
 
