@@ -46,6 +46,16 @@ var untypedByDesign = map[string]string{
 	"POST /v1/event/{project}/store": "the Sentry error wire on the one event door: the body is a " +
 		"raw Sentry envelope stream and the credential is a DSN key the o11y consumer verifies itself " +
 		"(cloud.ObsErrorIngest) — no principal, no struct In, nothing for a typed op to say.",
+
+	"POST /v1/replay": "the session-replay snapshot door has a declarable BODY — unlike every other " +
+		"entry here — and is still not typable, because ADMISSION is what keeps it out. " +
+		admissionReason + " That is not academic on this door: it takes a publishable pk- on " +
+		"?ingest_key= (a recorder drains its buffer through navigator.sendBeacon on unload, which " +
+		"cannot set headers), and a typed op never sees the query string the credential arrived on. " +
+		"Its 413 has the same ORDER problem as the anonymous lane's: the RAW body length is refused " +
+		"before any decode, and zip's op.invoke decodes first, so a typed op would answer 400 to an " +
+		"oversized recording that is answered 413 today — and 413 is the one status that tells a " +
+		"recorder to chunk.",
 }
 
 const (
@@ -187,6 +197,10 @@ var proseless = map[string]bool{
 	"CaptureResult": true,
 	// The PostHog wire — now served on /v1/event, sniffed by decodeEvent.
 	"insightsBody": true, "insightsEvent": true,
+	// The session-replay snapshot wire (replay.go). Its fields carry doc comments in
+	// Go like every other type here; it reaches the document through the same
+	// reflection-based Register seam, which cannot see them.
+	"replayBody": true,
 }
 
 // TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
