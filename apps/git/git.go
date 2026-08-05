@@ -58,6 +58,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/brand"
 	"github.com/zap-proto/zip"
 )
 
@@ -158,8 +159,8 @@ func rfc3339(unix int64) string {
 // only place the scope can travel.
 func cloneURL(s *cloud.Service[state], org, project, name string) string {
 	host := s.Domain
-	if host == "" {
-		host = "api.hanzo.ai"
+	if host == "" { // only a hand-built Deps; Config.Validate requires a domain
+		host = brand.APIHost(brand.Default)
 	}
 	if project == "" {
 		return fmt.Sprintf("https://%s/v1/git/%s/%s.git", host, org, name)
