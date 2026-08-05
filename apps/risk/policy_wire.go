@@ -58,6 +58,11 @@ type riskAppetiteIn struct {
 	// Live turns the model out of shadow. It defaults to FALSE on every call, so
 	// going live is always an explicit act and never a side effect of changing a
 	// number.
+	//
+	// Setting it requires an ADMIN of this organisation. Arming decides whether the
+	// model may change an outcome at all — a payment frozen, a grant refused — for
+	// every customer this organisation has, which is a governance act rather than a
+	// tuning one. Stating the appetite and the sample needs no admin.
 	Live bool `json:"live"`
 }
 
@@ -158,6 +163,12 @@ func (o ops) policy(ctx context.Context, _ *riskPolicyIn) (*riskPolicyOut, error
 // cannot be written down is refused rather than answered from state the next
 // rollout would silently undo.
 //
+// ARMING IS AN ADMIN ACT AND TUNING IS NOT. Setting `live` requires an admin of
+// this organisation; stating the appetite and the sample is self-service for any
+// member. Taking the model live decides whether it may change an OUTCOME at all —
+// a payment frozen, a grant refused — for every customer this organisation has,
+// and that is a decision an organisation takes rather than one of its members.
+//
 // A RESTATEMENT OF THE REGIME IN FORCE MINTS NOTHING and answers the version
 // already in force. Compare the version you receive with the version you had:
 // unchanged means the numbers were the same, which is why there is no flag for it.
@@ -182,6 +193,14 @@ func (o ops) appetite(ctx context.Context, in *riskAppetiteIn) (*riskPolicyOut, 
 		return nil, err
 	}
 	defer leave()
+	// AFTER the principal is resolved, and before anything is written. Authority is
+	// a question about the CALLER, so it cannot be asked until there is one; and
+	// asking it before the regime's own bounds means an unauthorised caller learns
+	// nothing about which appetites this op accepts. Same ordering [ops.adopt] makes,
+	// for the same two reasons.
+	if err := admitArming(ctx, in.Live); err != nil {
+		return nil, err
+	}
 	ver, err := p.appetite(t, in.Review, in.Sample, in.Live, caller(ctx))
 	if err != nil {
 		return nil, wrap(err)
