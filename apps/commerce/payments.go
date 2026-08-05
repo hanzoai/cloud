@@ -158,21 +158,20 @@ type paymentOps struct{}
 // customer their own receipt — to protect a mint that is not there. A gate belongs on
 // the act it can prevent.
 //
-// WHICH SUBJECT THE MONEY LANDS ON is the org's POOL — the org slug, which is
-// commerce's own orgBillingKey — and it is recorded HERE, off the published handler
-// prose, because it is a fact about our wiring rather than about the wire.
+// WHICH SUBJECT THE MONEY LANDS ON is the PAYER's wallet — [principal.Subject] over the
+// payer's org, which is the address principal.WalletOf hands the spend gate — and it is
+// recorded HERE, off the published handler prose, because it is a fact about our wiring
+// rather than about the wire.
 //
-// It is not always the account the payer rule names. For every org whose credential
+// The subject handed to commerce's core below is the org's POOL (org.Name, commerce's
+// own orgBillingKey), and it still is: that names the row in commerce's OWN transaction
+// store, which nothing in this binary spends from. For every org whose credential
 // resolves to its pool the two are the same string; for the two populations where
 // account.Payer resolves a PERSON — a member of the shared signup org, or a credential
-// carrying a signed `person:` billing_account claim — the browser's top-up credits that
-// person's wallet while this door credits the pool. The screen judges the PAYER either
-// way, which is the right risk subject (a payment appetite belongs to whoever is
-// paying) and is what makes the two doors accrue on one key. But for that population
-// the money and the model then name two different wallets, and the wallet the AI spend
-// gate reads is the one this door did NOT credit. Making them agree means routing this
-// credit through the same payer rule [principal.Subject] — a change to where money
-// lands, which belongs in its own review and not inside a screen.
+// carrying a signed `person:` billing_account claim — they are not, and the wallet the
+// AI spend gate reads is the person's. That is why the SPENDABLE credit is posted by
+// the settlement, through the same payer rule the screen judges by (settle.go): one
+// payment, one payer, one wallet, whichever door took it.
 func exposePayments(app *zip.App, s screen) {
 	o := paymentOps{}
 	// BOTH OPS ARE DECLARED ON THE APP WITH THEIR WHOLE PATH, and the screen is in the
