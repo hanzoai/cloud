@@ -36,15 +36,10 @@ func init() {
 
 // ---- /_/commerce — the operator surface the ingress withholds publicly ----
 
+// The health probe is deliberately absent here: it is a typed op (mount.go),
+// so its prose is the doc comment zipdoc lifts, and a Describe beside it would
+// be a second prose source for one route.
 func describeAdmin() {
-	openapi.Describe("/_/commerce/healthz", http.MethodGet,
-		"Liveness for the commerce subsystem",
-		"Answers ok whenever the commerce subsystem is mounted. It is registered BEFORE the "+
-			"module embed boots, so it keeps answering even when the embed failed and every "+
-			"business route is serving a fail-closed 503 — which is the point: it reports that the "+
-			"process is reachable, never that the money plane is healthy. Unauthenticated, and "+
-			"under /_ so the ingress does not expose it publicly.")
-
 	openapi.Describe("/_/commerce/providers", http.MethodGet,
 		"List the payment providers configured for your own tenant",
 		"Returns the caller's own tenant row projected to a public view with the KMS paths "+
@@ -522,6 +517,11 @@ func describePublic() {
 			"default-namespace read shared by every tenant rather than per-org data, and it is "+
 			"public and cacheable.")
 
+	// The deposit-proxy trio and the webhook relay are deliberately absent
+	// here: the module removed those routes — deposits are commerce's own rails
+	// now (topup/token, wire, crypto) and the real webhook receiver is POST
+	// /v1/billing/webhooks/:provider — and prose for a route that does not
+	// exist never renders, so keeping it would only preserve a dead claim.
 	openapi.Describe("/v1/commerce/tenant", http.MethodGet,
 		"The public tenant configuration a checkout page boots from",
 		"Answers the branding, identity issuer and client id, identity-verification config, "+
