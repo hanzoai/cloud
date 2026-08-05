@@ -95,7 +95,12 @@ func tenantStore(ctx context.Context, st *state) (*Store, string, error) {
 // path would have refused.
 func mountedStore(org string) (*Store, string, error) {
 	if mounted == nil {
-		return nil, "", fmt.Errorf("agents: not mounted")
+		// ErrNoPeer, not a bare string: "this process does not own the session
+		// store" is a routable fact — a caller can take the plane leg — and every
+		// other absence on this estate is spelled the same way. A caller that
+		// cannot tell absence from failure is how StopSessions came to report a
+		// revoke that stopped nothing as a success.
+		return nil, "", fmt.Errorf("%w: agents (this process does not own the session store)", cloud.ErrNoPeer)
 	}
 	org = strings.TrimSpace(org)
 	if org == "" || len(org) > principal.MaxOrgLen {
