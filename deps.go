@@ -80,6 +80,9 @@ type Deps struct {
 	// Each is an interface with both in-process and ZAP-RPC implementations.
 	IAM      IAMClient
 	KMS      KMSClient
+	// K8s is the cluster control plane, absent by default. paas and validators
+	// are the only consumers; both fail closed with the reason from Ready().
+	K8s      K8sClient
 	Base     BaseClient
 	Commerce CommerceClient
 	// AI runs CHAT COMPLETIONS (a WRITE endpoint): agents, guide, crm, content,
@@ -137,6 +140,7 @@ type VFSClient = types.VFSClient
 type MQClient = types.MQClient
 type PaymentsClient = types.PaymentsClient
 type VaultClient = types.VaultClient
+type K8sClient = types.K8sClient
 
 // --- placeholder types (replaced by ZAP-generated types per subsystem) ---
 //

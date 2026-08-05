@@ -24,19 +24,14 @@ package validators
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/types"
 )
 
 // reservedNamespaces are the live luxd namespaces a validator node CR may NEVER
@@ -59,18 +54,24 @@ var reservedNameRE = regexp.MustCompile(`^luxd(-.*)?$`)
 // name is always a valid k8s object name (and can never contain a '/').
 var slugRE = regexp.MustCompile(`[^a-z0-9-]`)
 
-// luxNetworkGVR is the operator LuxNetwork kind under the DEDICATED group. NOT
-// lux.network (legacy operator → live luxd) and NOT lux.cloud (shim). The
-// operator's LuxNetwork reconciler, wired opt-in + namespace-scoped, watches
-// exactly this group in exactly the dedicated namespace.
-func luxNetworkGVR(group string) schema.GroupVersionResource {
-	return schema.GroupVersionResource{Group: group, Version: "v1", Resource: "luxnetworks"}
-}
+// The operator LuxNetwork kind lives under the DEDICATED group — carried
+// separately because it is env-driven (crConfig.Group). NOT lux.network (legacy
+// operator → live luxd) and NOT lux.cloud (shim). The operator's LuxNetwork
+// reconciler, wired opt-in + namespace-scoped, watches exactly this group in
+// exactly the dedicated namespace.
+const (
+	luxNetworkVersion  = "v1"
+	luxNetworkResource = "luxnetworks"
+)
 
-// kmsSecretsGVR is the kms-operator KMSSecret CR — the bridge from cloud's KMS
-// scope to the namespaced Secret mounted at /staking-keys. Same kind
-// clients/platform declares for app secrets, so there is ONE KMS→Secret path.
-var kmsSecretsGVR = schema.GroupVersionResource{Group: "secrets.lux.network", Version: "v1alpha1", Resource: "kmssecrets"}
+// The kms-operator KMSSecret CR — the bridge from cloud's KMS scope to the
+// namespaced Secret mounted at /staking-keys. Same kind clients/platform
+// declares for app secrets, so there is ONE KMS→Secret path.
+const (
+	kmsSecretsGroup    = "secrets.lux.network"
+	kmsSecretsVersion  = "v1alpha1"
+	kmsSecretsResource = "kmssecrets"
+)
 
 // provisionRequest is the node-materialization input, all server-derived from a
 // VALIDATED claim (org from JWT, tokenID/nodeID from the proven entitlement).
@@ -103,40 +104,34 @@ type crConfig struct {
 	StorageGi int    // PVC size (default 200)
 }
 
-// k8sProvisioner writes CRs via the dynamic client. nil dyn ⇒ no cluster
-// resolved; every write fails closed with initErr (surfaced honestly).
+// k8sProvisioner writes CRs through the cluster seam (cloud.K8sClient). It
+// builds no client of its own: cloud.BuildK8sClient resolves one at boot and
+// hands it over on deps, and the OSS default is unavailable-but-honest rather
+// than absent. No cluster resolved ⇒ every write fails closed with the reason
+// Ready reports (surfaced honestly).
 type k8sProvisioner struct {
-	dyn     dynamic.Interface
-	initErr string
-	cfg     crConfig
+	k8s cloud.K8sClient
+	cfg crConfig
 }
 
-// newK8sProvisioner builds the dynamic client from the in-cluster service
-// account, falling back to KUBECONFIG for local/dev — identical to
-// clients/platform.newK8sClient.
-func newK8sProvisioner(cfg crConfig) *k8sProvisioner {
-	p := &k8sProvisioner{cfg: cfg}
-	restCfg, err := rest.InClusterConfig()
-	if err != nil {
-		cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{})
-		restCfg, err = cc.ClientConfig()
-		if err != nil {
-			p.initErr = fmt.Sprintf("no in-cluster config and no kubeconfig: %v", err)
-			return p
-		}
+// unavailable is "" when a cluster is resolved, else WHY — the reason Provision
+// fails closed with. A nil client means the seam was never wired, which is the
+// same answer with a different cause.
+func (p *k8sProvisioner) unavailable() string {
+	if p == nil || p.k8s == nil {
+		return "kubernetes client not configured"
 	}
-	restCfg.UserAgent = "hanzo-cloud-validators"
-	dyn, err := dynamic.NewForConfig(restCfg)
-	if err != nil {
-		p.initErr = fmt.Sprintf("dynamic client: %v", err)
-		return p
+	ok, reason := p.k8s.Ready()
+	if ok {
+		return ""
 	}
-	p.dyn = dyn
-	return p
+	if reason == "" {
+		return "kubernetes client not configured"
+	}
+	return reason
 }
 
-func (p *k8sProvisioner) Available() bool { return p != nil && p.dyn != nil }
+func (p *k8sProvisioner) Available() bool { return p.unavailable() == "" }
 
 // crName is the deterministic node name: val-<orgSlug>-<tokenId>. The org is
 // folded to a DNS label; the tokenId disambiguates. Never `luxd*`.
@@ -174,11 +169,7 @@ func (p *k8sProvisioner) guard(org string, tokenID uint64) (name, ns string, err
 // new node, both owner-guarded. Idempotent: re-provisioning the same slot
 // create-or-updates the same named objects.
 func (p *k8sProvisioner) Provision(ctx context.Context, req provisionRequest) (string, string, error) {
-	if !p.Available() {
-		reason := "kubernetes client not configured"
-		if p.initErr != "" {
-			reason = p.initErr
-		}
+	if reason := p.unavailable(); reason != "" {
 		return "", "", fmt.Errorf("%s", reason)
 	}
 	name, ns, err := p.guard(req.Org, req.TokenID)
@@ -212,8 +203,8 @@ func (p *k8sProvisioner) applyKMSSecret(ctx context.Context, ns string, req prov
 	for i, k := range stakingArtifacts {
 		keys[i] = k
 	}
-	desired := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "secrets.lux.network/v1alpha1",
+	desired := map[string]any{
+		"apiVersion": kmsSecretsGroup + "/" + kmsSecretsVersion,
 		"kind":       "KMSSecret",
 		"metadata": map[string]any{
 			"name":      secretName,
@@ -244,8 +235,8 @@ func (p *k8sProvisioner) applyKMSSecret(ctx context.Context, ns string, req prov
 				"creationPolicy":  "Owner",
 			},
 		},
-	}}
-	return p.applyUnstructured(ctx, kmsSecretsGVR, ns, secretName, desired)
+	}
+	return p.applyObject(ctx, kmsSecretsGroup, kmsSecretsVersion, kmsSecretsResource, ns, secretName, desired)
 }
 
 // applyLuxNetwork create-or-updates the single-replica LuxNetwork CR. The spec's
@@ -253,8 +244,8 @@ func (p *k8sProvisioner) applyKMSSecret(ctx context.Context, ns string, req prov
 // read-only at /staking-keys by the operator's LuxNetwork reconciler).
 func (p *k8sProvisioner) applyLuxNetwork(ctx context.Context, ns, name, secretName string, req provisionRequest) error {
 	one := int64(1)
-	desired := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": p.cfg.Group + "/v1",
+	desired := map[string]any{
+		"apiVersion": p.cfg.Group + "/" + luxNetworkVersion,
 		"kind":       "LuxNetwork",
 		"metadata": map[string]any{
 			"name":      name,
@@ -296,17 +287,17 @@ func (p *k8sProvisioner) applyLuxNetwork(ctx context.Context, ns, name, secretNa
 				},
 			},
 		},
-	}}
-	return p.applyUnstructured(ctx, luxNetworkGVR(p.cfg.Group), ns, name, desired)
+	}
+	return p.applyObject(ctx, p.cfg.Group, luxNetworkVersion, luxNetworkResource, ns, name, desired)
 }
 
-// applyUnstructured is create-if-absent, else merge-patch spec+labels. Idempotent
+// applyObject is create-if-absent, else merge-patch spec+labels. Idempotent
 // and byte-stable for a stable input. Scoped to the dedicated namespace only.
-func (p *k8sProvisioner) applyUnstructured(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, desired *unstructured.Unstructured) error {
-	_, err := p.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, cErr := p.dyn.Resource(gvr).Namespace(ns).Create(ctx, desired, metav1.CreateOptions{})
-		if apierrors.IsAlreadyExists(cErr) {
+func (p *k8sProvisioner) applyObject(ctx context.Context, group, version, resource, ns, name string, desired map[string]any) error {
+	_, err := p.k8s.Get(ctx, group, version, resource, ns, name)
+	if errors.Is(err, types.ErrK8sNotFound) {
+		cErr := p.k8s.Create(ctx, group, version, resource, ns, desired)
+		if errors.Is(cErr, types.ErrK8sAlreadyExists) {
 			return nil
 		}
 		return cErr
@@ -315,11 +306,10 @@ func (p *k8sProvisioner) applyUnstructured(ctx context.Context, gvr schema.Group
 		return err
 	}
 	patch, _ := json.Marshal(map[string]any{
-		"metadata": map[string]any{"labels": desired.Object["metadata"].(map[string]any)["labels"]},
-		"spec":     desired.Object["spec"],
+		"metadata": map[string]any{"labels": desired["metadata"].(map[string]any)["labels"]},
+		"spec":     desired["spec"],
 	})
-	_, err = p.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
-	return err
+	return p.k8s.MergePatch(ctx, group, version, resource, ns, name, patch)
 }
 
 func (p *k8sProvisioner) labels(org string, tokenID uint64) map[string]any {

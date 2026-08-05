@@ -314,3 +314,55 @@ type PaymentsClient interface {
 type VaultClient interface {
 	Charge(ctx context.Context, req *VaultChargeRequest) (*VaultChargeResponse, error)
 }
+
+// ── Kubernetes seam ──────────────────────────────────────────────────────────
+//
+// K8sClient is the OSS seam for the cluster control plane, and it exists so this
+// binary links no Kubernetes client at all. Two subsystems talk to a cluster —
+// paas (reconciles App CRs) and validators (writes node CRs) — and both used to
+// import k8s.io/client-go directly. That made "runs anywhere, no Kubernetes" a
+// claim about configuration rather than a property of the build: the dependency
+// was linked whether or not a cluster existed.
+//
+// It follows the same inversion as every other product plane here (IAMClient,
+// CommerceClient, DurableEngine): the interface lives in the core, the private
+// build registers a dynamic-client implementation, and the OSS default is
+// unavailable-but-honest rather than absent.
+//
+// SHAPES. Objects cross as decoded-JSON maps — exactly what
+// unstructured.Unstructured wraps, so neither side marshals. A GroupVersionResource
+// crosses as three strings. The only patch shape either caller uses is an RFC-7386
+// JSON merge patch, so it is named rather than parameterised.
+//
+// NUMBERS. A map destined for the cluster must use int64 for integers, not int:
+// the dynamic client deep-copies through a JSON-shaped conversion that panics on
+// plain int. Callers keep their int64(...) casts; an implementation may normalise.
+type K8sClient interface {
+	// Get returns one object. Missing objects yield ErrK8sNotFound.
+	Get(ctx context.Context, group, version, resource, namespace, name string) (map[string]any, error)
+	// List returns the objects in a namespace. limit <= 0 means unlimited. A
+	// missing CRD or namespace yields ErrK8sNotFound — callers rely on being able
+	// to tell "no cluster state yet" from "the request failed".
+	List(ctx context.Context, group, version, resource, namespace string, limit int64) ([]map[string]any, error)
+	// Create creates one object. A losing race yields ErrK8sAlreadyExists, which
+	// callers treat as success.
+	Create(ctx context.Context, group, version, resource, namespace string, obj map[string]any) error
+	// MergePatch applies an RFC-7386 JSON merge patch.
+	MergePatch(ctx context.Context, group, version, resource, namespace, name string, patch []byte) error
+	// Ready reports cluster reachability and, when false, WHY. The reason is
+	// surfaced verbatim to operators (the paas health route reports it), so
+	// "unavailable" is never silent — the whole point of failing closed here is
+	// that somebody can find out what is missing.
+	Ready() (ok bool, reason string)
+}
+
+// The cluster-error sentinels. They stand in for apierrors.IsNotFound and
+// friends so no caller needs the k8s error package. An implementation MUST wrap
+// the underlying error (%w) rather than replacing it: callers print the original
+// text into health payloads and 502 bodies, and losing it would turn a precise
+// RBAC message into a shrug.
+var (
+	ErrK8sNotFound      = errors.New("k8s: resource not found")
+	ErrK8sAlreadyExists = errors.New("k8s: resource already exists")
+	ErrK8sForbidden     = errors.New("k8s: forbidden (RBAC)")
+)

@@ -94,6 +94,12 @@ func BuildDeps(cfg *Config) Deps {
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
+	// The cluster control plane (paas, validators). Not a pick(): there is no ZAP
+	// hop to a Kubernetes API server — either an implementation is registered into
+	// the k8s.go seam (the private build) or there is none, and BuildK8sClient
+	// returns the unavailable default. Never nil, so a consumer holds a client that
+	// answers with the reason rather than a nil to check at every call site.
+	deps.K8s = BuildK8sClient(cfg)
 	deps.Durable = buildDurability(cfg, logger)
 
 	// Payments and Vault never co-resident. Disabled stub when no
