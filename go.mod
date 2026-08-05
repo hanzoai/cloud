@@ -29,7 +29,7 @@ require (
 	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.5.0
+	github.com/hanzoai/sqlite v0.5.1
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/luxfi/log v1.6.0
