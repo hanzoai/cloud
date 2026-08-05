@@ -23,6 +23,7 @@ func mountConsole(t *testing.T) (*cloud.Service[state], *zip.App) {
 	t.Cleanup(func() { _ = store.Close() })
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, k8s: fakeK8s(), sitesHost: "hanzo.app"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	return s, app
 }
@@ -90,7 +91,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 		t.Fatalf("environments want 200, got %d (%s)", code, body)
 	}
 	var envs struct {
-		Environments []environmentView `json:"environments"`
+		Environments []environmentRow `json:"environments"`
 	}
 	if err := json.Unmarshal(body, &envs); err != nil {
 		t.Fatalf("environments decode: %v (%s)", err, body)
@@ -98,7 +99,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 	if len(envs.Environments) != 2 {
 		t.Fatalf("want 2 environments, got %d: %s", len(envs.Environments), body)
 	}
-	byEnv := map[string]environmentView{}
+	byEnv := map[string]environmentRow{}
 	for _, e := range envs.Environments {
 		byEnv[e.ID] = e
 	}
@@ -119,13 +120,13 @@ func TestConsoleAggregatesShape(t *testing.T) {
 		t.Fatalf("pipelines want 200, got %d (%s)", code, body)
 	}
 	var pipes struct {
-		Pipelines []pipelineView `json:"pipelines"`
+		Pipelines []pipelineRow `json:"pipelines"`
 	}
 	_ = json.Unmarshal(body, &pipes)
 	if len(pipes.Pipelines) != 2 {
 		t.Fatalf("want 2 pipelines, got %d: %s", len(pipes.Pipelines), body)
 	}
-	pByID := map[string]pipelineView{}
+	pByID := map[string]pipelineRow{}
 	for _, p := range pipes.Pipelines {
 		pByID[p.ID] = p
 	}
@@ -144,7 +145,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 		t.Fatalf("builds want 200, got %d (%s)", code, body)
 	}
 	var builds struct {
-		Builds []buildView `json:"builds"`
+		Builds []buildRow `json:"builds"`
 	}
 	_ = json.Unmarshal(body, &builds)
 	if len(builds.Builds) != 1 {
@@ -161,7 +162,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 		t.Fatalf("releases want 200, got %d (%s)", code, body)
 	}
 	var rels struct {
-		Releases []releaseView `json:"releases"`
+		Releases []releaseRow `json:"releases"`
 	}
 	_ = json.Unmarshal(body, &rels)
 	if len(rels.Releases) != 1 {

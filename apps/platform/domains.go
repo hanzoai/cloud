@@ -80,15 +80,44 @@ func underSitesApex(s *cloud.Service[state], host string) bool {
 //	pending_deploy host is attached but the app has no Service CR yet (deploy it)
 //	pending        custom claim awaiting DNS verification (Records show the proof)
 type domainView struct {
-	Host      string        `json:"host"`
-	Kind      string        `json:"kind"`   // default | subtree | custom
-	Status    string        `json:"status"` // live | provisioning | pending_deploy | pending
-	URL       string        `json:"url"`
-	Verified  bool          `json:"verified"`
-	Primary   bool          `json:"primary,omitempty"`
-	Records   []fqdn.Record `json:"records,omitempty"`
-	Detail    string        `json:"detail,omitempty"`
-	CreatedAt int64         `json:"createdAt,omitempty"`
+	// Host is the hostname itself.
+	Host string `json:"host"`
+	// Kind is `default`, `subtree` or `custom` — how the org came to own it.
+	Kind string `json:"kind"`
+	// Status is `live`, `provisioning`, `pending_deploy` or `pending`, derived
+	// from the operator CR and never fabricated.
+	Status string `json:"status"`
+	// URL is the host as an HTTPS address.
+	URL string `json:"url"`
+	// Verified is whether ownership is settled — always true for a host the org
+	// structurally owns.
+	Verified bool `json:"verified"`
+	// Primary marks the app's permanent default host.
+	Primary bool `json:"primary,omitempty"`
+	// Records are the DNS records to publish while a custom claim is pending.
+	Records []fqdn.Record `json:"records,omitempty"`
+	// Detail says why a claim is still pending, in the resolver's own words.
+	Detail string `json:"detail,omitempty"`
+	// CreatedAt is the unix second the custom claim was made.
+	CreatedAt int64 `json:"createdAt,omitempty"`
+	// created is whether THIS answer created the claim, and it is server-side
+	// only: it never reaches the wire (no json tag), it exists solely so
+	// StatusCode can tell a fresh 201 from an idempotent 200. Carrying it as a
+	// field rather than a status written from inside the handler is what keeps the
+	// code a declared part of the contract every projection can read.
+	created bool
+}
+
+// StatusCode is the code an attach answers with: 201 for a claim this call
+// created, 200 for one that already existed. Declared on the op with
+// zip.WithStatus(200, 201), so the document publishes both. Every other route
+// serving a domainView declares no status and answers the default 200, which is
+// what they have always answered.
+func (v *domainView) StatusCode() int {
+	if v.created {
+		return http.StatusCreated
+	}
+	return http.StatusOK
 }
 
 // customDomainView renders a custom domain row. A verified row's status is the
@@ -139,35 +168,44 @@ func hostInEndpoints(host string, endpoints []string) bool {
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
-// listDomains returns the app's domains: the default host, any org-subtree hosts,
-// and every BYO custom claim (pending with its challenge records, or verified with
-// live status). One merged, honest view.
-func listDomains(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	endpoints, phase := s.State.k8s.observeDomains(c.Context(), org, a.Slug)
-	def := defaultHost(s, org, a.Slug)
-	customs, err := s.State.store.ListDomainsByApp(c.Context(), org, a.ID)
+// domainList is one app's hosts as a list answers them — a bare JSON array, named
+// so the document can describe it.
+type domainList []domainView
+
+// listDomains returns every hostname this app answers on.
+//
+// It lists the app's hosts: the permanent default host it was born with, any
+// org-subtree hosts attached to it, and every custom host claimed for it with its
+// verification state and, while pending, the DNS challenge records to publish. Live
+// endpoint status for each host is observed from the cluster. Requires a validated
+// principal; 403 without one.
+func (o ops) listDomains(ctx context.Context, in *appRef) (*domainList, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list domains: %v", err)
+		return nil, err
+	}
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
+	}
+	endpoints, phase := s.State.k8s.observeDomains(ctx, org, a.Slug)
+	def := defaultHost(s, org, a.Slug)
+	customs, err := s.State.store.ListDomainsByApp(ctx, org, a.ID)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list domains: %v", err)
 	}
 	customSet := make(map[string]bool, len(customs))
 	for _, d := range customs {
 		customSet[d.Host] = true
 	}
 
-	out := []domainView{{
+	out := domainList{{
 		Host: def, Kind: "default", Primary: true, Verified: true,
 		URL: "https://" + def, Status: activeHostStatus(def, endpoints, phase),
 	}}
 	// org-subtree active hosts (custom hosts are rendered from their rows instead).
-	for _, h := range domainList(a.DomainsJSON) {
+	for _, h := range activeHosts(a.DomainsJSON) {
 		if h == def || customSet[h] {
 			continue
 		}
@@ -179,173 +217,210 @@ func listDomains(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, d := range customs {
 		out = append(out, customDomainView(s, d, def, endpoints, phase))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
+// addDomainReq is the host to attach. Host carries `url:"-"` because the URL
+// addresses the app and the hostname has always ridden in the body.
 type addDomainReq struct {
-	Host string `json:"host"`
+	// Project is the project the application lives under, from the path.
+	Project string `json:"project"`
+	// App is the application's slug, from the path.
+	App string `json:"app"`
+	// Host is the hostname to attach. Required, and must be a valid DNS hostname.
+	Host string `json:"host" url:"-"`
 }
 
-// addDomain attaches a host to an app. An org-subtree host is active immediately;
-// a BYO custom host is claimed as PENDING and returns the DNS challenge records to
-// publish (it is not rendered into the ingress until verified).
-func addDomain(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// addDomain attaches a hostname — instantly if you already own it, otherwise with a
+// DNS challenge.
+//
+// It attaches `host` to the app, and which of two things happens depends on who
+// owns the name. A host inside the caller org's own subtree is structurally owned,
+// so it goes ACTIVE immediately and answers 201. A bring-your-own host is claimed
+// as PENDING and answers the DNS challenge records to publish; it is NOT rendered
+// into the app's ingress until /verify passes.
+//
+// Claims are globally unique. A host already claimed by another organization is
+// 409, and so is one claimed by a different app in your own; re-adding this app's
+// OWN claim is idempotent and answers its current state at 200. The default host is
+// always attached and re-adding it is 409. A host under the platform's shared apex
+// that is not the caller's own subtree is 403 — it belongs to whoever owns that
+// subtree and can never be grabbed through the custom path.
+//
+// `host` must be a valid DNS hostname; anything else is 400. Requires a validated
+// principal; 403 without one.
+func (o ops) addDomain(ctx context.Context, body *addDomainReq) (*domainView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	proj, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	var body addDomainReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	proj, a, err := loadApp(s, ctx, org, body.Project, body.App)
+	if err != nil {
+		return nil, err
 	}
 	host := fqdn.Clean(body.Host)
 	if host == "" {
-		return zip.ErrBadRequest("host is required")
+		return nil, zip.ErrBadRequest("host is required")
 	}
 	if !fqdn.Valid(host) {
-		return zip.ErrBadRequest("host must be a valid DNS hostname (e.g. app.yourco.com)")
+		return nil, zip.ErrBadRequest("host must be a valid DNS hostname (e.g. app.yourco.com)")
 	}
 	def := defaultHost(s, org, a.Slug)
 	if host == def {
-		return zip.ErrConflict("the default domain is always attached and cannot be re-added")
+		return nil, zip.ErrConflict("the default domain is always attached and cannot be re-added")
 	}
 	now := time.Now().Unix()
 
 	// Org-subtree host → active immediately (structurally owned, no proof needed).
 	if isOrgSubtreeHost(s, org, host) {
-		hosts := addHost(domainList(a.DomainsJSON), host)
-		if err := persistHostsAndIngress(s, c.Context(), &a, hosts, now); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "attach domain: %v", err)
+		hosts := addHost(activeHosts(a.DomainsJSON), host)
+		if err := persistHostsAndIngress(s, ctx, &a, hosts, now); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "attach domain: %v", err)
 		}
-		endpoints, phase := s.State.k8s.observeDomains(c.Context(), org, a.Slug)
-		return c.JSON(http.StatusCreated, domainView{
+		endpoints, phase := s.State.k8s.observeDomains(ctx, org, a.Slug)
+		return &domainView{
 			Host: host, Kind: "subtree", Verified: true, URL: "https://" + host,
-			Status: activeHostStatus(host, endpoints, phase),
-		})
+			Status: activeHostStatus(host, endpoints, phase), created: true,
+		}, nil
 	}
 
 	// A host under the platform apex that is NOT the caller's own subtree belongs to
 	// its owning org (or Hanzo) — never BYO-claimable (RED: no cross-tenant grab of
 	// another org's *.hanzo.app host via the custom path).
 	if underSitesApex(s, host) {
-		return zip.ErrForbidden("hosts under " + s.State.sitesHost + " cannot be claimed as a custom domain")
+		return nil, zip.ErrForbidden("hosts under " + s.State.sitesHost + " cannot be claimed as a custom domain")
 	}
 
 	// BYO custom host → global-uniqueness check, then a pending claim + challenge.
-	existing, found, err := s.State.store.LookupDomain(c.Context(), host)
+	existing, found, err := s.State.store.LookupDomain(ctx, host)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "domain lookup: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "domain lookup: %v", err)
 	}
 	if found {
 		if existing.Org != org {
-			return zip.ErrConflict("domain is already claimed by another organization")
+			return nil, zip.ErrConflict("domain is already claimed by another organization")
 		}
 		if existing.AppID != a.ID {
-			return zip.ErrConflict("domain is already claimed by another application in your organization")
+			return nil, zip.ErrConflict("domain is already claimed by another application in your organization")
 		}
 		// Idempotent: this app re-adds its own claim → return the current state.
-		endpoints, phase := s.State.k8s.observeDomains(c.Context(), org, a.Slug)
-		return c.JSON(http.StatusOK, customDomainView(s, existing, def, endpoints, phase))
+		endpoints, phase := s.State.k8s.observeDomains(ctx, org, a.Slug)
+		v := customDomainView(s, existing, def, endpoints, phase)
+		return &v, nil
 	}
 	token, err := fqdn.Token()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	d := Domain{Host: host, Org: org, ProjectID: proj, AppID: a.ID, AppSlug: a.Slug, Status: "pending", Token: token, CreatedAt: now}
-	if err := s.State.store.CreateDomain(c.Context(), d); err != nil {
+	if err := s.State.store.CreateDomain(ctx, d); err != nil {
 		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("domain is already claimed") // lost a create race
+			return nil, zip.ErrConflict("domain is already claimed") // lost a create race
 		}
-		return zip.Errorf(http.StatusInternalServerError, "claim domain: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "claim domain: %v", err)
 	}
-	return c.JSON(http.StatusCreated, customDomainView(s, d, def, nil, ""))
+	v := customDomainView(s, d, def, nil, "")
+	v.created = true
+	return &v, nil
 }
 
-// verifyDomain resolves the DNS challenge for a pending custom domain. On success
-// it marks the claim verified, renders the host into the app ingress, and patches
-// the operator CR (which then issues the ACME cert). On not-yet it returns the
-// honest still-pending view (not an error) so the customer can retry after DNS
-// propagates.
-func verifyDomain(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// verifyDomain checks a custom domain's DNS and turns it on if it passes.
+//
+// It runs the DNS challenge check for a pending custom host and, when it passes,
+// marks the host verified and renders it into the app's ingress so it starts
+// serving.
+//
+// A check that RAN and did not pass is not an error: it answers 200 with the host
+// still pending and the reason in `detail`, so a console can show the operator what
+// DNS is actually returning. An already-verified host answers as-is without
+// re-checking. A host not claimed by this app is 404. Requires a validated
+// principal; 403 without one.
+func (o ops) verifyDomain(ctx context.Context, in *domainRef) (*domainView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
 	}
-	host := fqdn.Clean(c.Param("host"))
-	d, err := s.State.store.GetDomain(c.Context(), org, a.ID, host)
+	host := fqdn.Clean(in.Host)
+	d, err := s.State.store.GetDomain(ctx, org, a.ID, host)
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("domain not found")
+		return nil, zip.ErrNotFound("domain not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get domain: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get domain: %v", err)
 	}
 	def := defaultHost(s, org, a.Slug)
 
 	if d.Status == "verified" {
-		endpoints, phase := s.State.k8s.observeDomains(c.Context(), org, a.Slug)
-		return c.JSON(http.StatusOK, customDomainView(s, d, def, endpoints, phase))
+		endpoints, phase := s.State.k8s.observeDomains(ctx, org, a.Slug)
+		v := customDomainView(s, d, def, endpoints, phase)
+		return &v, nil
 	}
 
-	if err := fqdn.Verify(c.Context(), dns(s), host, d.Token); err != nil {
+	if err := fqdn.Verify(ctx, dns(s), host, d.Token); err != nil {
 		v := customDomainView(s, d, def, nil, "")
 		v.Detail = err.Error()
-		return c.JSON(http.StatusOK, v) // honest "still pending" — the check ran
+		return &v, nil // honest "still pending" — the check ran
 	}
 
 	now := time.Now().Unix()
-	if _, err := s.State.store.MarkDomainVerified(c.Context(), org, a.ID, host, now); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "mark verified: %v", err)
+	if _, err := s.State.store.MarkDomainVerified(ctx, org, a.ID, host, now); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "mark verified: %v", err)
 	}
 	d.Status, d.VerifiedAt = "verified", now
-	hosts := addHost(domainList(a.DomainsJSON), host)
-	if err := persistHostsAndIngress(s, c.Context(), &a, hosts, now); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "attach verified domain: %v", err)
+	hosts := addHost(activeHosts(a.DomainsJSON), host)
+	if err := persistHostsAndIngress(s, ctx, &a, hosts, now); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "attach verified domain: %v", err)
 	}
 	s.Log.Info("custom domain verified", "org", org, "app", a.Slug, "host", host)
-	endpoints, phase := s.State.k8s.observeDomains(c.Context(), org, a.Slug)
-	return c.JSON(http.StatusOK, customDomainView(s, d, def, endpoints, phase))
+	endpoints, phase := s.State.k8s.observeDomains(ctx, org, a.Slug)
+	v := customDomainView(s, d, def, endpoints, phase)
+	return &v, nil
 }
 
-// removeDomain detaches a host: it drops it from the ingress host set (re-applying
-// the CR) and releases any custom claim (freeing the host for re-claim, anywhere).
-// The default host is permanent and cannot be removed.
-func removeDomain(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// removeDomain detaches a hostname and releases the claim.
+//
+// It drops the host from the app's ingress and releases any custom claim on it, so
+// the name becomes claimable again — by this org or any other. Answers 204.
+//
+// The default host is permanent and cannot be removed: that is 400, not 404. A host
+// that is neither attached nor claimed here is 404. Requires a validated principal;
+// 403 without one.
+func (o ops) removeDomain(ctx context.Context, in *domainRef) (*noContent, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
 	}
-	host := fqdn.Clean(c.Param("host"))
+	host := fqdn.Clean(in.Host)
 	if host == defaultHost(s, org, a.Slug) {
-		return zip.ErrBadRequest("the default domain cannot be removed")
+		return nil, zip.ErrBadRequest("the default domain cannot be removed")
 	}
 	now := time.Now().Unix()
 
-	newHosts, removed := removeHost(domainList(a.DomainsJSON), host)
+	newHosts, removed := removeHost(activeHosts(a.DomainsJSON), host)
 	if removed {
-		if err := persistHostsAndIngress(s, c.Context(), &a, newHosts, now); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "detach domain: %v", err)
+		if err := persistHostsAndIngress(s, ctx, &a, newHosts, now); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "detach domain: %v", err)
 		}
 	}
-	deleted, err := s.State.store.DeleteDomain(c.Context(), org, a.ID, host)
+	deleted, err := s.State.store.DeleteDomain(ctx, org, a.ID, host)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "release domain: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "release domain: %v", err)
 	}
 	if !removed && !deleted {
-		return zip.ErrNotFound("domain not attached to this application")
+		return nil, zip.ErrNotFound("domain not attached to this application")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // persistHostsAndIngress writes the app's new active host set and re-applies the
