@@ -15,6 +15,9 @@
       "name": "billing"
     },
     {
+      "name": "cart"
+    },
+    {
       "name": "catalog"
     },
     {
@@ -623,6 +626,147 @@
         "tags": [
           "billing"
         ]
+      }
+    },
+    "/v1/cart": {
+      "post": {
+        "operationId": "openCart",
+        "summary": "Open a cart for a shopper to fill",
+        "description": "Opens an empty cart for a shopper to fill, and answers it with its new id.\n\nThis is the first step of a sale: hold the id, add items to it with\nsetCartItem, then hand it to checkout. Every field of the request is optional —\nan empty body opens a perfectly good anonymous cart — and the fields exist only\nto pre-fill what is already known about the shopper.\n\nThe STORE defaults to the org's own default storefront, so a merchant selling\nthrough one storefront never has to name it. The CURRENCY defaults to usd; note\nthat checkout overrides it with the store's own currency when the sale is\nauthorized, so a currency set here is a hint rather than a commitment.\n\nThe cart is created in the CALLER'S OWN org namespace, taken from the validated\nprincipal and never from the body, so a cart can never be opened on another\ntenant's books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartOpen"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/cart/{id}": {
+      "get": {
+        "operationId": "getCart",
+        "summary": "Read one cart with its lines and totals",
+        "description": "Reads one cart: its lines, its status and what it comes to.\n\nThis is what a storefront calls to render the basket, and what a support agent\ncalls to see what a shopper is looking at. The totals are the cart's STORED\ntally — shipping and tax stay zero until checkout resolves a shipping option\nand a tax region, so a cart total before checkout is the merchandise total and\nis meant to be.\n\nThe org scopes the read by construction: the store is namespaced to it, so a\ncart id belonging to another tenant is simply not found rather than found and\nthen filtered, and answers 404 rather than 403 so the id space cannot be probed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cart's id, as the open call answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/cart/{id}/discard": {
+      "post": {
+        "operationId": "discardCart",
+        "summary": "Discard a cart the shopper abandoned",
+        "description": "Discards a cart the shopper abandoned, and answers it in its final state.\n\nA discarded cart is CLOSED, not deleted: the row stays, so abandoned-basket\nreporting and any follow-up that keys on it still have something to read. It\nstops being a cart anything will check out, which is the point — it is how a\nstorefront says \"this basket is over\" without destroying the evidence that it\nexisted.\n\nDiscarding is idempotent: a cart already discarded answers its stored state\nrather than failing, so a retry is safe.\n\nThe cart is resolved inside the caller's own org namespace, so another tenant's\nid answers 404.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cart's id, as the open call answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/cart/{id}/item": {
+      "post": {
+        "operationId": "setCartItem",
+        "summary": "Set one item's quantity in a cart; zero removes it",
+        "description": "Sets how many of one item a cart holds, and answers the whole updated cart.\n\nThis is the ONE way a cart's contents change. The quantity is the RESULT, not a\ndelta: sending 3 leaves 3 however many were there before, so a retry is safe and\na double-submit cannot double an order. ZERO REMOVES the line — there is\ndeliberately no separate delete, because removal is the same act at the boundary\nvalue and a second spelling would be a second set of edge cases.\n\nName the item with EITHER product OR variant, never both. Prefer variant for\nanything sold in sizes, colours or tiers: the price and the stock belong to the\nvariant, so a product-level line on a varianted product prices the wrong thing.\nEither may be given as an id or as the human key — a product's URL slug, a\nvariant's SKU — which is what lets a storefront add to cart straight from a\nproduct page URL without a lookup first.\n\nThe item's price and name are CACHED onto the line as it is added, so the cart\nkeeps the price the shopper was shown even if the catalog moves underneath it.\n\nAn item that resolves to nothing in the catalog is refused 400 and the cart is\nleft exactly as it was; nothing is partially applied.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cart to amend, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartItemSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/catalog/entries": {
@@ -1625,6 +1769,153 @@
   },
   "components": {
     "schemas": {
+      "Cart": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the cart was opened, RFC3339.",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency is the ISO 4217 code every amount below is denominated in.",
+            "type": "string"
+          },
+          "discountCents": {
+            "description": "DiscountCents is what coupons and promotions took off, in whole cents.",
+            "type": "integer"
+          },
+          "email": {
+            "description": "Email is the shopper's address, when the cart carries one.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the cart's id — what every other cart op addresses it by, and what a\nstorefront persists against the browser session.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items are the cart's lines, in the order they were added.",
+            "items": {
+              "$ref": "#/components/schemas/CartItem"
+            },
+            "type": "array"
+          },
+          "lineTotalCents": {
+            "description": "LineTotalCents is the sum of the lines before any discount, in whole cents.",
+            "type": "integer"
+          },
+          "order": {
+            "description": "Order is the order this cart became, once checkout completed it. Empty\nuntil then, and its presence is what makes a cart final.",
+            "type": "string"
+          },
+          "shippingCents": {
+            "description": "ShippingCents is the shipping charge, in whole cents. It stays zero until a\nshipping option is priced at checkout.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"active\" for a cart still being filled, \"ordered\" once checkout\nturned it into an order, and \"discarded\" when the shopper abandoned it.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Store is the storefront the cart is being filled on.",
+            "type": "string"
+          },
+          "subtotalCents": {
+            "description": "SubtotalCents is LineTotalCents less DiscountCents, in whole cents.",
+            "type": "integer"
+          },
+          "taxCents": {
+            "description": "TaxCents is the sales tax, in whole cents. It stays zero until checkout\nresolves the shopper's tax region.",
+            "type": "integer"
+          },
+          "totalCents": {
+            "description": "TotalCents is what the shopper pays: subtotal plus shipping plus tax, in\nwhole cents.",
+            "type": "integer"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the cart was last amended, RFC3339.",
+            "type": "string"
+          },
+          "user": {
+            "description": "User is the signed-in shopper this cart belongs to, empty for a guest cart.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartItem": {
+        "properties": {
+          "free": {
+            "description": "Free reports a line that costs nothing because a coupon or a promotion made\nit so, rather than because its price is zero.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the line's identity — the variant id when the line is a variant,\notherwise the product id. It is what a subsequent set call addresses.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is \"variant\" when this line is a specific sellable variant and\n\"product\" when it is the product itself.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the item's display name, cached onto the line when it was added so\na cart renders without a second read.",
+            "type": "string"
+          },
+          "priceCents": {
+            "description": "PriceCents is the unit price in whole cents, cached at the moment the line\nwas added. The line's contribution to the cart is this times Quantity.",
+            "type": "integer"
+          },
+          "quantity": {
+            "description": "Quantity is how many units of this item the cart holds.",
+            "type": "integer"
+          },
+          "sku": {
+            "description": "SKU is the line's stock-keeping unit — the variant's when it has one,\notherwise the product's. Empty when neither carries one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartItemSet": {
+        "properties": {
+          "id": {
+            "description": "ID is the cart to amend, from the path.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product names the catalog product to set, by its id or its URL slug. Give\nthis or Variant, never both; a request naming neither is refused.",
+            "type": "string"
+          },
+          "quantity": {
+            "description": "Quantity is how many of that item the cart should hold AFTER this call — it\nis the resulting count, not a delta, so sending 3 twice leaves 3 and not 6.\nZERO REMOVES the line, which is the only way to take an item out.",
+            "type": "integer"
+          },
+          "variant": {
+            "description": "Variant names the specific sellable variant to set, by its id or its SKU.\nPrefer it over Product for anything sold in sizes, colours or tiers — the\nprice and the stock are the variant's, not the product's.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartOpen": {
+        "properties": {
+          "currency": {
+            "description": "Currency is the ISO 4217 code the cart is priced in, lower-cased. Empty\nmeans usd.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email is the shopper's address, for a cart that belongs to someone who has\nnot signed in. It is what a guest checkout and an abandoned-cart follow-up\nkey on. Empty is fine.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Store is the storefront this cart is being filled on. Empty uses the org's\ndefault store, which is what a single-storefront merchant always wants.",
+            "type": "string"
+          },
+          "user": {
+            "description": "User is the id of the signed-in shopper this cart belongs to, when there is\none. Empty means a guest cart identified only by its own id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CollectOut": {
         "properties": {
           "balanceUsedCents": {
