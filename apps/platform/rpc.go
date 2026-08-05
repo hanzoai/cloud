@@ -83,8 +83,8 @@ func exposeFleet(s *cloud.Service[fleetState]) {
 // exposePush publishes the git-push-to-deploy trigger, bound to the service that
 // owns the application store.
 //
-// It is the plane half of build.go's RegisterPushBuilder, and the reason it has
-// to exist is the sharpest case in this whole seam family. The push lands on
+// It is the plane half of build.go's RegisterPushBuilder, and the sharpest case
+// of the whole class. The push lands on
 // GIT's embedded server; the builder is PLATFORM's. Those are two apps and
 // therefore two processes, so the in-process registration was nil in the only
 // process that ever fires it — and OnGitPush's contract was to return nil when
@@ -124,7 +124,7 @@ func exposePush() {
 // exposeRelease publishes the first-party CR rollout, bound to the fleet service
 // that owns the k8s client.
 //
-// Plane half of RegisterServiceReleaser, and the same story as exposePush: the
+// Plane half of RegisterServiceReleaser, same story as exposePush: the
 // build that PROVES an image and the control plane that PATCHES the CR are
 // different apps, so OnServiceRelease's nil-when-unregistered meant every release
 // reported a rollout that never touched a CR.

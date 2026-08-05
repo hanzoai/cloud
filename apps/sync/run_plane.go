@@ -12,7 +12,7 @@ import (
 //
 // The ENGINE is this app. The TRIGGERS are not: a GitHub push webhook lands on
 // integrations, a native push lands on git, and neither of them is where the
-// engine runs. cloud.RegisterSync is an in-process seam, so syncFn was nil on
+// engine runs. cloud.RegisterSync only registers in-process, so syncFn was nil on
 // every path that actually fires — cloud.Sync answered ErrSyncUnavailable while
 // this engine was up next door, and every mirror and every chained propagation
 // silently stopped happening, reported as a missing registration rather than as
@@ -41,8 +41,8 @@ func exposeRun() {
 // repos.
 //
 // It calls reconcileEvent, never cloud.Sync. cloud.Sync now falls through to THIS
-// op when the local seam is nil, so a process serving it that dispatched through
-// the seam would dial its own socket and answer itself, forever.
+// op when the local one is nil, so a process serving it that dispatched through
+// it would dial its own socket and answer itself, forever.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeRun(ctx context.Context, in *plane.SyncIn) (*plane.SyncRan, error) {
