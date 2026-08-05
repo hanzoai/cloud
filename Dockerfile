@@ -44,7 +44,19 @@
 # BUMP: when a console/skills change must reach production, move its pin here in
 # the same commit that claims it. That is what makes a cloud release
 # reproducible and makes "what console is in v1.801.N" answerable from git.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-a0a4899-amd64
+#
+# CONSOLE IS PINNED BY SEMVER, not by sha. `sha-<sha7>-amd64` is what the builder
+# publishes on every main push; `v<X.Y.Z>` is what it publishes on a cut v* tag,
+# and that is the one to name here — the pin then says which RELEASE of the
+# console a cloud image carries, which a sha cannot.
+#
+# The tradeoff is real and the discipline changes to match: a sha tag cannot be
+# re-pushed to different bytes, whereas a semver tag CAN be moved (`:v8.4.118`
+# was, in this fleet). So the rule that keeps this reproducible is now a rule
+# about tags, not about tag SHAPE: a cut tag is never re-pointed. Cut the next
+# patch instead — that is cheap, and it keeps "which console is in v1.801.N"
+# answerable from git alone.
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:v8.5.37
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
