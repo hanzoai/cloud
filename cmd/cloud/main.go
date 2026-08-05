@@ -33,6 +33,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -460,33 +461,58 @@ var draining atomic.Bool
 // A non-vital absence stays READY and is still reported. Taking a pod out of
 // rotation because one minor subsystem died would turn a partial failure into a
 // total one, which is the same mistake as aborting, just later.
+//
+// Both probes are TYPED ops. They read plain JSON out and nothing else — no
+// stream, no bytes, no redirect, no foreign signature — so they carry their
+// shape in the registry like any other op, and the same answer is reachable
+// over native ZAP typed Call on :9653 as over the kubelet's GET.
 func health(app *zip.App, absent map[string]string) {
-	app.Get("/healthz", func(c *zip.Ctx) error {
-		out := map[string]any{"status": "ok"}
-		if a := stillAbsent(app, absent); len(a) > 0 {
-			out["absent"] = a
-		}
-		return c.JSON(200, out)
-	})
+	zip.Get(app, "/healthz", func(context.Context, *probeIn) (*probeOut, error) {
+		return &probeOut{Status: "ok", Absent: stillAbsent(app, absent)}, nil
+	}, zip.WithStatus(200),
+		zip.WithSummary("Report whether this host process is alive"))
 
-	app.Get("/readyz", func(c *zip.Ctx) error {
+	zip.Get(app, "/readyz", func(context.Context, *probeIn) (*probeOut, error) {
 		// Draining first: a pod on its way out is not ready regardless of what
 		// it is still able to serve. drain.go describes this contract for the
 		// root package's ops listener; the HOST is a different process with its
 		// own lifecycle, and it is the one K8s signals and probes.
 		if draining.Load() {
-			return c.JSON(503, map[string]any{"status": "draining"})
+			return &probeOut{Status: "draining"}, nil
 		}
 		a := stillAbsent(app, absent)
 		if u := unfit(a); len(u) > 0 {
-			return c.JSON(503, map[string]any{"status": "unfit", "absent": u})
+			return &probeOut{Status: "unfit", Absent: u}, nil
 		}
-		out := map[string]any{"status": "ok"}
-		if len(a) > 0 {
-			out["absent"] = a
-		}
-		return c.JSON(200, out)
-	})
+		return &probeOut{Status: "ok", Absent: a}, nil
+	}, zip.WithStatus(200, 503),
+		zip.WithSummary("Report whether this host should be sent requests"))
+}
+
+// probeIn is empty on purpose: both probes read nothing from the caller.
+type probeIn struct{}
+
+// probeOut is the one answer both probes give. Absent is declared ahead of
+// Status because the raw handlers marshalled a map and encoding/json writes map
+// keys sorted, so this order keeps the exact bytes every probe script already
+// parses.
+type probeOut struct {
+	// Absent names each subsystem that failed to start, with its reason.
+	// Empty on a healthy host, and omitted then.
+	Absent map[string]string `json:"absent,omitempty"`
+	// Status is "ok", "draining" (this pod is shutting down) or "unfit" (a
+	// vital subsystem is absent).
+	Status string `json:"status"`
+}
+
+// StatusCode makes the answer carry its own status: draining and unfit are
+// 503, everything else 200. The liveness op declares 200 alone, so a healthz
+// answer can never smuggle a 503 and flap the kubelet into a restart loop.
+func (p *probeOut) StatusCode() int {
+	if p.Status == "draining" || p.Status == "unfit" {
+		return 503
+	}
+	return 200
 }
 
 // unfit narrows the absence set to the subsystems this deployment has declared
