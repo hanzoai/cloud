@@ -19,8 +19,10 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/risk"
+	analyticspeer "github.com/hanzoai/cloud/plane/analytics"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
 	"github.com/zap-proto/zip"
@@ -104,6 +106,39 @@ func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
 	for i := range live {
 		if generated[i] != live[i] {
 			t.Fatalf("op %d: generated %q, risk serves %q\n  fix: go run ./plane/gen",
+				i, generated[i], live[i])
+		}
+	}
+}
+
+// TestGeneratedAnalyticsSurfaceIsTheLiveSurface holds the EVENT DOOR to the same
+// gate, and it earns its keep the way the scorer's does.
+//
+// It is reached by peers in other binaries and by nothing else: no HTTP route
+// stands behind it, and the callers that would notice it missing are the ones
+// whose whole contract is that a failed emit changes nothing. An op that stopped
+// being registered — a build that no longer calls exposeCapture, a rename on one
+// side — would leave every peer's facts unwritten, silently, while every door
+// they describe kept answering exactly as before. So the registration itself is
+// asserted, from the running registry.
+func TestGeneratedAnalyticsSurfaceIsTheLiveSurface(t *testing.T) {
+	live := liveOps(t, analyticspeer.App, analytics.Mount, false)
+	t.Cleanup(func() { _ = analytics.Shutdown(t.Context()) })
+
+	generated := append([]string(nil), analyticspeer.Ops...)
+	sort.Strings(generated)
+
+	if len(live) == 0 {
+		t.Fatal("analytics registered no plane ops at all — every peer that states a fact about " +
+			"its own work writes nothing, and nothing says so. build must call exposeCapture.")
+	}
+	if len(generated) != len(live) {
+		t.Fatalf("generated %d ops, analytics serves %d\n  generated: %v\n  live:      %v\n"+
+			"  fix: go run ./plane/gen", len(generated), len(live), generated, live)
+	}
+	for i := range live {
+		if generated[i] != live[i] {
+			t.Fatalf("op %d: generated %q, analytics serves %q\n  fix: go run ./plane/gen",
 				i, generated[i], live[i])
 		}
 	}

@@ -195,6 +195,24 @@ const (
 	// LLM-obs sink first; it retired with that sink.
 	ObsErrorPost = "obs_error_post" // the Sentry envelope/store wire
 
+	// EventCapture states ONE occurrence onto the shared event plane, for an app
+	// running in another binary.
+	//
+	// It is the WRITE side of the door ObsErrorPost claims a slice of, and it is
+	// here for the same reason: analytics owns POST /v1/event, event.fact and the
+	// /v1/insights reads over them, and the pod forks one process per app — so a
+	// peer that wanted its own facts queryable beside the product's had no way to
+	// state one. In-process there is a write core (ingestEvents) and it is
+	// unreachable from another pid; over HTTP there is the public edge, which is a
+	// second gate, a second credential and a hop through the fleet's own front
+	// door to reach a table one socket away.
+	//
+	// So a peer ASKS the app that owns the plane, exactly as a debit asks commerce
+	// and a decision asks risk. The tenant is the CALLER's, minted from the plane
+	// principal, so a peer can only ever write into its own organisation's
+	// partition — the same rule the HTTP door holds, at the other door.
+	EventCapture = "event_capture"
+
 	// RiskDecide judges one subject at one lifecycle moment against that
 	// organisation's OWN model, for a gate running in another binary.
 	//
@@ -941,6 +959,62 @@ type RiskDecided struct {
 	// reached under. Zero means no regime was ever stated and the default posture —
 	// shadow — was in force.
 	Policy int `json:"policy"`
+}
+
+// ---- event.capture — one occurrence, onto the shared event plane ------------
+
+// EventIn is ONE occurrence a peer states onto the shared event plane — the same
+// plane POST /v1/event fills, /v1/insights reads and every product lens groups
+// over. It is what makes a peer's own facts answerable in the SAME query as the
+// product's, rather than in a private table beside it.
+//
+// THERE IS NO ORG HERE AND THERE CANNOT BE, for the reason RiskDecideIn states:
+// the organisation this lands under is the CALLER's, stamped server-side from the
+// plane principal. A field naming one would be a caller writing into another
+// tenant's partition, which is the one thing the event plane's tenancy stamp
+// exists to prevent.
+//
+// It is deliberately the SMALL shape and not the ingest wire's whole vocabulary.
+// The HTTP wire carries a browser's world — referrers, campaign parameters,
+// replay clips, exception frames — because a browser is what fills it. A peer
+// states a fact about its own work, so what it needs is a name, a surface, whom
+// it concerned and what it says; anything richer belongs on the wire the richer
+// caller already has.
+type EventIn struct {
+	// Name is what happened, in the emitter's own verb-object vocabulary
+	// (risk_decided, secret_rotated). It is the column every lens groups by, so it
+	// must come from a CLOSED set the emitter owns — never from a string a caller
+	// of the emitter chose, which is unbounded cardinality in the one column the
+	// plane indexes.
+	Name string `json:"name" validate:"required"`
+	// Product is the emitting SURFACE — the app's own name. Empty attributes the
+	// row to no surface, which is honest and unhelpful.
+	Product string `json:"product,omitempty"`
+	// Subject is whom the occurrence concerned, as the value the emitter is
+	// willing to have stored: the row's distinct id. An identifying value belongs
+	// here only in an opaque form — the plane is a SHARED store read by every lens
+	// the organisation has, not the emitter's private record.
+	Subject string `json:"subject,omitempty"`
+	// At is when it happened, RFC 3339. Empty means now, decided by the app that
+	// owns the plane (which is also the one that clamps a stated time).
+	At string `json:"at,omitempty"`
+	// Attributes are the occurrence's own facts, as [Signal] — the plane's ONE
+	// name/value pair — because a map cannot cross this plane at all (see
+	// [Header], which learned it the expensive way). They land in the row's
+	// attributes map, so a new fact is a new value and never a schema change.
+	Attributes []Signal `json:"attributes,omitempty"`
+}
+
+// EventCaptured is the honest receipt: what landed and what did not. A peer that
+// states an occurrence the plane cannot route is TOLD so, rather than being given
+// a 200 for a row that was never written — the exact silence that let an 88% loss
+// run unnoticed on the HTTP door.
+type EventCaptured struct {
+	// Accepted is how many occurrences were admitted and published.
+	Accepted int `json:"accepted"`
+	// Dropped is how many were not, because nothing about them named a landable
+	// row.
+	Dropped int `json:"dropped"`
 }
 
 // ---- host.start — waking a lazy app ----------------------------------------
