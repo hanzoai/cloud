@@ -66,7 +66,12 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 		}
 		rows := make([]finance.UsageRow, 0, len(reply.Rows))
 		for _, r := range reply.Rows {
-			cents, cerr := r.Amount.Minor()
+			// A usage row is a FIGURE SOMEONE READS: per-token debits are
+			// routinely finer than a cent (0.00589 USD is a real row), and
+			// Minor()'s exactness guard turned every such ledger into a 502 on
+			// the usage page. RoundMinor is the explicit display rounding that
+			// guard tells us to make.
+			cents, cerr := r.Amount.RoundMinor()
 			if cerr != nil {
 				return nil, false, cerr
 			}
