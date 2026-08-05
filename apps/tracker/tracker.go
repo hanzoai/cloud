@@ -27,6 +27,10 @@
 //	PATCH  /v1/tracker/projects/:key/issues/:num         update an issue         -> Issue
 //	DELETE /v1/tracker/projects/:key/issues/:num         delete an issue
 //
+// And the UI the surface exists for, embedded in this binary (ui/):
+//
+//	GET    /tracker, /tracker/*                          the board + timeline SPA
+//
 // Order 129: binds /v1/tracker/* before the AI subsystem's /v1/* catch-all
 // (150). serve.go auto-registers GET /v1/tracker/health.
 package tracker
@@ -45,6 +49,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	trackerui "github.com/hanzoai/cloud/apps/tracker/ui"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -251,6 +256,22 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/projects/:key/issues/:num", o.getIssue)
 	zip.Patch(g, "/projects/:key/issues/:num", o.updateIssue)
 	zip.Delete(g, "/projects/:key/issues/:num", o.deleteIssue)
+
+	// The UI is a static asset bundle embedded in THIS binary (ui/) — the board
+	// and timeline over the surface above. Serving it here is what lets cloud
+	// front tracker.hanzo.ai and retire the Huly tracker that answered that host.
+	//
+	// NOT a typed op and never will be: these routes answer HTML and hashed
+	// assets under their own content types and cache hints, plus index.html for
+	// every path the client router owns. A typed op publishes JSON. ui/
+	// embed_test.go pins the bytes.
+	//
+	// Same origin as /v1/tracker above, which is the point rather than a
+	// convenience: the SPA sends no tenancy of its own because the composer's
+	// identity check has already minted the validated org for both halves.
+	ui := zip.AdaptNetHTTP(http.StripPrefix("/tracker", trackerui.Handler()))
+	app.All("/tracker", ui)
+	app.All("/tracker/*", ui)
 }
 
 // ---- HTTP response shapes (the published contract) ----
