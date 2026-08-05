@@ -44,6 +44,19 @@ func seedProject(t *testing.T, app *zip.App, org, name string) {
 	}
 }
 
+// compose does for a hermetic test app what cloud.Serve does for the binary:
+// install the identity bridge that carries the validated org, and the request
+// itself, across the typed-op boundary. Every route on this surface is a typed op,
+// and a typed handler receives a context and its decoded In — so without this the
+// org never arrives and every op fails closed at 403, which is the correct
+// behaviour and a useless test.
+//
+// It belongs to the COMPOSER and never to the subsystem: only a composer knows the
+// identity boundary has already run and that no route is registered ahead of it.
+// The tests here are the composer of their own app, so they install it, exactly
+// once, at the root — the same place and the same order app.go uses.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
 func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
 	store, err := openStore(t.TempDir())
@@ -54,6 +67,7 @@ func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *cloud.Service[state]) {
 	fp := newFakeProjects()
 	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: fp, k8s: k, sitesHost: "hanzo.app"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	testProjects.Store(app, fp)
 	return app, s

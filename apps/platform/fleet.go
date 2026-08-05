@@ -26,7 +26,8 @@
 // name, which is exactly the duplicate definition the one-way rule forbids.
 //
 // SECURITY — every route is authorized off ONE IAM identity through the
-// platform's one gate (cloud.Guard, gate.go): the read routes take cloud.Admin,
+// platform's one gate (cloud.Scope.Admits, gate.go), applied at the top of each
+// typed op by board.admit: the read routes take cloud.Admin,
 // which admits a validated principal who is a SuperAdmin OR an OrgAdmin, the
 // deploy takes cloud.Super, and each handler then
 // CONFINES a non-super caller to its own org's platform namespaces
@@ -58,7 +59,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -243,14 +243,21 @@ func buildFleet(b cloud.Base) fleetState {
 // platform runs on), `projects/:project/apps` is a CUSTOMER's apps. Two different
 // collections need two different names — calling both "apps" under one prefix would
 // be the duplicate definition this fold exists to remove.
-func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
+func fleetRoutes(app *zip.App, s *cloud.Service[fleetState]) {
+	b := board{s: s}
 	// FLAT paths, not a Group: `Group("/v1/platform/fleet").Get("")` composes to the
 	// literal "/v1/platform/fleet/", and that trailing slash is what the OpenAPI
 	// emitter publishes — so every generated SDK would call a path the manifest
 	// prefix does not name. Fiber happens to match both forms, which is exactly why
 	// this hides: the router forgives it and the CONTRACT does not.
-	app.Get("/v1/platform/fleet", cloud.Guard(cloud.Admin, cloud.Handle(s, listFleet)))
-	app.Get("/v1/platform/fleet/:app", cloud.Guard(cloud.Admin, cloud.Handle(s, getFleetApp)))
+	//
+	// The gate is no longer cloud.Guard around the handler, because a typed op has
+	// no zip.Handler to wrap; it is board.admit as the first line inside each op,
+	// applying the SAME cloud.Scope.Admits and answering the SAME cloud.Scope.Refusal.
+	// The scope each route needs is stated in its own doc comment, which is where a
+	// caller reads it.
+	zip.Get(app, "/v1/platform/fleet", b.listFleet)
+	zip.Get(app, "/v1/platform/fleet/:app", b.getFleetApp)
 	// MUTATION is superadmin-only (cloud.Super), NOT the broader read gate: the
 	// only namespaces this board scans are the platform's OWN tier (hanzo{,-testnet,
 	// -devnet}), so a rolling restart here recreates a SHARED platform service
@@ -258,7 +265,7 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 	// admin is a CUSTOMER-org admin, not a platform operator — restarting prod iam is
 	// a platform-operator action. Gating the read board (below) any wider is bounded
 	// (observe, audit-logged); gating a restart wider is a live DoS lever (RED H1).
-	app.Post("/v1/platform/fleet/:app/deploy", cloud.Guard(cloud.Super, cloud.Handle(s, deployFleet)))
+	zip.Post(app, "/v1/platform/fleet/:app/deploy", b.deployFleet, zip.WithStatus(http.StatusAccepted))
 
 	// Native release seam: install the first-party CR-rollout hook (build.go's
 	// RegisterServiceReleaser inversion) so a proven, clean-semver image rolls onto
@@ -275,63 +282,9 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 	exposeFleet(s)
 }
 
-// The fleet board's prose, beside the route table so the path, its guard and what
-// it means are read together. None of the three is a typed op, so there is no doc
-// comment for zipdoc to lift and each would otherwise publish an operationId and
-// NOTHING else — an SDK method that cannot explain itself and a CLI command with
-// no help text. Stating the GUARD here matters more than anywhere else on this
-// surface: two of these read the platform's own tier and the third restarts a
-// shared platform service. Declared through the same registry Register uses, so a
-// description renders only while the router actually serves the route.
-func init() {
-	openapi.Describe("/v1/platform/fleet", "GET",
-		"The platform's own service tier, and where it has drifted",
-		"Returns the board for the services the PLATFORM itself runs — iam, kms, gateway and the "+
-			"rest — as `{apps, summary}`: per service its environment, health, phase, the image tag "+
-			"its CR DECLARES, the tag actually running, and the drift between them, plus a summary "+
-			"counting the board green, yellow and red.\n\n"+
-			"This is not a customer surface. `/v1/platform/projects/:project/apps` is a tenant's "+
-			"apps; this is the tier those tenants run ON, which is why the two are named "+
-			"differently rather than sharing a prefix.\n\n"+
-			"Admission is scoped at the SCAN, before any CR is read: a platform SuperAdmin observes "+
-			"the whole fleet, an org admin observes only their own org's namespaces, and an org "+
-			"that owns none gets an empty board — a non-super caller never even lists another org's "+
-			"services. Narrow further with `env`, `health`, `org`, or `drift=1` for only what has "+
-			"drifted.\n\n"+
-			"It degrades honestly rather than failing whole: a namespace that does not exist is "+
-			"skipped, and a running-state read the caller cannot make leaves the running tag empty "+
-			"— an unknown, never a guess — while the declared, health and phase columns still "+
-			"render.")
-
-	openapi.Describe("/v1/platform/fleet/:app", "GET",
-		"One platform service, resolved to production by default",
-		"Returns a single platform service by its CR name, with the same declared-versus-running "+
-			"and drift facts the board carries. The name must be a DNS-1123 label; anything else "+
-			"is 400.\n\n"+
-			"Namespaces are scanned in lifecycle order — main, then test, then dev — and the first "+
-			"match wins, so a bare name resolves to PRODUCTION. The scan covers only the namespaces "+
-			"the caller is authorized for, so an org admin can never read a service outside their "+
-			"own org, and a name found in none of them is 404 rather than a leak.")
-
-	openapi.Describe("/v1/platform/fleet/:app/deploy", "POST",
-		"Roll a platform service's pods, in a named environment",
-		"Triggers a rolling restart of one platform service's Deployment by stamping a fresh "+
-			"restart annotation, and answers 202 with the app, the namespace, the environment and "+
-			"the timestamp. It restarts pods; it does NOT change the image — a version change is "+
-			"the release path, not this.\n\n"+
-			"SuperAdmin ONLY, and deliberately narrower than the read gate beside it. The only "+
-			"namespaces this board touches are the platform's own tier, so a restart here recycles "+
-			"a SHARED service every tenant depends on. A brand-org admin is a customer-org admin, "+
-			"not a platform operator: observing the board is bounded and audited, and restarting "+
-			"production identity is not.\n\n"+
-			"`?env=main|test|dev` is REQUIRED — a bare call does not default to production, which "+
-			"is what closes the fat-finger and confused-deputy hazard — and any other value is 400. "+
-			"A service with no Deployment to restart in that environment is 404.")
-}
-
-// THE ROLE GATE is cloud.Guard(cloud.Admin) on the read routes and
-// cloud.Guard(cloud.Super) on the mutation, registered above — the platform's one
-// authorization rule (gate.go, HIP-0519), parameterised by how much authority
+// THE ROLE GATE is board.admit(cloud.Admin) on the read routes and
+// board.admit(cloud.Super) on the mutation, at the top of each op — the platform's
+// one authorization rule (gate.go, HIP-0519), parameterised by how much authority
 // each route needs. The read board admits a SuperAdmin OR an admin of its own
 // org, which lets the platform operator drive it off a plain `hanzo login` with
 // no shared token; the deploy/restart admits platform sudo only, because it
@@ -426,9 +379,9 @@ func scopedNamespaces(s *cloud.Service[fleetState], ctx context.Context, c *zip.
 // in prod-first scan order. It composes the AUTH confinement (scopedNamespaces) with
 // the optional env SELECTION — orthogonal: env can only narrow WITHIN the caller's
 // own authorized set, never reach outside it.
-func targetNamespaces(s *cloud.Service[fleetState], ctx context.Context, c *zip.Ctx) []string {
+func targetNamespaces(s *cloud.Service[fleetState], ctx context.Context, c *zip.Ctx, env string) []string {
 	nss := scopedNamespaces(s, ctx, c)
-	env := strings.TrimSpace(c.Query("env"))
+	env = strings.TrimSpace(env)
 	if env == "" {
 		return nss
 	}
@@ -480,29 +433,94 @@ type AppView struct {
 	Cluster     string   `json:"cluster"`
 	Namespace   string   `json:"namespace"`
 	Endpoints   []string `json:"endpoints"`
-	Drift       Drift    `json:"drift"`
+	Drift       Verdict  `json:"drift"`
 }
 
-// listApps returns the whole fleet's drift board, ordered deterministically
-// (org, app, env). Optional narrowing filters mirror the platform board:
-// ?env=, ?health=, ?drift=1 (only rows that are actually drifting), ?org=.
-func listFleet(s *cloud.Service[fleetState], c *zip.Ctx) error {
+// fleetQuery narrows the drift board. Every field rides the query string, which is
+// what a board's filters have always been.
+type fleetQuery struct {
+	// Env narrows to one lifecycle env: main, test or dev.
+	Env string `json:"env"`
+	// Health narrows to one health colour: green, yellow or red.
+	Health string `json:"health"`
+	// Org narrows to one image namespace.
+	Org string `json:"org"`
+	// Drift is `1` or `true` to show only rows that have actually drifted. It is
+	// a STRING and not a bool because those two spellings are exactly what the
+	// board has always accepted, and a bool would silently widen that to `?drift`
+	// alone and to `TRUE` — a behaviour change wearing a type change's clothes.
+	Drift string `json:"drift"`
+}
+
+// driftTally counts a board by drift severity.
+type driftTally struct {
+	// OK is how many rows run what they declare.
+	OK int `json:"ok"`
+	// Yellow is how many have drifted within tolerance.
+	Yellow int `json:"yellow"`
+	// Red is how many have drifted badly.
+	Red int `json:"red"`
+}
+
+// fleetSummary is the board's roll-up.
+type fleetSummary struct {
+	// Total is how many rows the board returned, after filtering.
+	Total int `json:"total"`
+	// ByDrift counts those rows green, yellow and red.
+	ByDrift driftTally `json:"byDrift"`
+}
+
+// driftBoard is the platform's own service tier and where it has drifted.
+type driftBoard struct {
+	// Apps are the service rows, ordered by org, then app, then env.
+	Apps []AppView `json:"apps"`
+	// Summary counts the board by drift severity.
+	Summary fleetSummary `json:"summary"`
+}
+
+// listFleet returns the platform's own service tier, and where it has drifted.
+//
+// It returns the board for the services the PLATFORM itself runs — iam, kms,
+// gateway and the rest — as `{apps, summary}`: per service its environment, health,
+// phase, the image tag its CR DECLARES, the tag actually running, and the drift
+// between them, plus a summary counting the board green, yellow and red.
+//
+// This is not a customer surface. `/v1/platform/projects/:project/apps` is a
+// tenant's apps; this is the tier those tenants run ON, which is why the two are
+// named differently rather than sharing a prefix.
+//
+// Admission is scoped at the SCAN, before any CR is read: a platform SuperAdmin
+// observes the whole fleet, an org admin observes only their own org's namespaces,
+// and an org that owns none gets an empty board — a non-super caller never even
+// lists another org's services. Narrow further with `env`, `health`, `org`, or
+// `drift=1` for only what has drifted.
+//
+// It degrades honestly rather than failing whole: a namespace that does not exist
+// is skipped, and a running-state read the caller cannot make leaves the running
+// tag empty — an unknown, never a guess — while the declared, health and phase
+// columns still render.
+func (b board) listFleet(ctx context.Context, in *fleetQuery) (*driftBoard, error) {
+	s := b.s
+	c, err := b.admit(ctx, cloud.Admin)
+	if err != nil {
+		return nil, err
+	}
 	if err := fleetReady(s); err != nil {
-		return err
+		return nil, err
 	}
 	// Observe only the namespaces this caller is authorized for: the whole fleet for
 	// a SuperAdmin, the caller's own org namespaces for an OrgAdmin (empty board for
 	// an org that owns none). The tenant boundary is applied at the scan, before any
 	// CR is read, so a non-super caller never even lists another org's apps.
-	views, err := observeFleet(s, c.Context(), scopedNamespaces(s, c.Context(), c))
+	views, err := observeFleet(s, ctx, scopedNamespaces(s, ctx, c))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	env := strings.TrimSpace(c.Query("env"))
-	fleetHealth := strings.TrimSpace(c.Query("health"))
-	org := strings.TrimSpace(c.Query("org"))
-	driftOnly := c.Query("drift") == "1" || c.Query("drift") == "true"
+	env := strings.TrimSpace(in.Env)
+	fleetHealth := strings.TrimSpace(in.Health)
+	org := strings.TrimSpace(in.Org)
+	driftOnly := in.Drift == "1" || in.Drift == "true"
 
 	out := make([]AppView, 0, len(views))
 	byDrift := map[DriftSeverity]int{SeverityOK: 0, SeverityYellow: 0, SeverityRed: 0}
@@ -523,42 +541,66 @@ func listFleet(s *cloud.Service[fleetState], c *zip.Ctx) error {
 		byDrift[v.Drift.Severity]++
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
-		"apps": out,
-		"summary": map[string]any{
-			"total": len(out),
-			"byDrift": map[string]int{
-				"ok":     byDrift[SeverityOK],
-				"yellow": byDrift[SeverityYellow],
-				"red":    byDrift[SeverityRed],
+	return &driftBoard{
+		Apps: out,
+		Summary: fleetSummary{
+			Total: len(out),
+			ByDrift: driftTally{
+				OK:     byDrift[SeverityOK],
+				Yellow: byDrift[SeverityYellow],
+				Red:    byDrift[SeverityRed],
 			},
 		},
-	})
+	}, nil
 }
 
-// getApp returns one service row by CR name. Scans the platform namespaces in
-// env order (main→test→dev) and returns the first match, so the bare app name
-// resolves to production by default.
-func getFleetApp(s *cloud.Service[fleetState], c *zip.Ctx) error {
+// fleetRef addresses one platform service on the board, optionally within one
+// lifecycle env.
+type fleetRef struct {
+	// App is the service's CR name, from the path. It must be a DNS-1123 label.
+	App string `json:"app"`
+	// Env narrows the scan to one lifecycle env: main, test or dev. Omitted, the
+	// namespaces are scanned in lifecycle order and the first match wins, so a
+	// bare name resolves to PRODUCTION.
+	Env string `json:"env"`
+}
+
+// getFleetApp returns one platform service, resolved to production by default.
+//
+// It returns a single platform service by its CR name, with the same
+// declared-versus-running and drift facts the board carries. The name must be a
+// DNS-1123 label; anything else is 400.
+//
+// Namespaces are scanned in lifecycle order — main, then test, then dev — and the
+// first match wins, so a bare name resolves to PRODUCTION. The scan covers only the
+// namespaces the caller is authorized for, so an org admin can never read a service
+// outside their own org, and a name found in none of them is 404 rather than a leak.
+func (b board) getFleetApp(ctx context.Context, in *fleetRef) (*AppView, error) {
+	s := b.s
+	c, err := b.admit(ctx, cloud.Admin)
+	if err != nil {
+		return nil, err
+	}
 	if err := fleetReady(s); err != nil {
-		return err
+		return nil, err
 	}
-	name := fleetReqApp(c)
+	name := slugOf(in.App)
 	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("app must be a DNS-1123 label")
+		return nil, zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-	for _, ns := range targetNamespaces(s, c.Context(), c) {
-		obj, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+	for _, ns := range targetNamespaces(s, ctx, c, in.Env) {
+		obj, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return fleetK8sErr(s, "get", err)
+			return nil, fleetK8sErr(s, "get", err)
 		}
 		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
-		return c.JSON(http.StatusOK, observeCR(obj, ns, envOf(ns), runningTagOf(s, c.Context(), ns, name, repository)))
+		v := observeCR(obj, ns, envOf(ns), runningTagOf(s, ctx, ns, name, repository))
+		return &v, nil
 	}
-	return zip.ErrNotFound("app not found in the platform namespaces")
+	return nil, zip.ErrNotFound("app not found in the platform namespaces")
 }
 
 // observeFleet lists every App CR across the given namespaces (the caller's
@@ -621,41 +663,89 @@ const restartedAtAnnotation = "hanzo.ai/restartedAt"
 // Hanzo CD's selfHeal reconciles from universe git, so a tag change is still a git
 // commit (the one way to change WHAT runs). A restart re-runs WHAT IS DECLARED with
 // no drift for CD to revert — the honest, GitOps-compatible "redeploy this app".
-func deployFleet(s *cloud.Service[fleetState], c *zip.Ctx) error {
-	if err := fleetReady(s); err != nil {
-		return err
+// restartRef addresses the platform service to restart, in a named env.
+type restartRef struct {
+	// App is the service's CR name, from the path. It must be a DNS-1123 label.
+	App string `json:"app"`
+	// Env is REQUIRED and must be main, test or dev. A bare call does not default
+	// to production, which is what closes the fat-finger and confused-deputy
+	// hazard.
+	//
+	// It carries no `validate:"required"`: the handler already refuses an empty env
+	// with the sentence that names the three values, and a validator tag would
+	// replace that sentence with a generic one. The requirement is stated here and
+	// enforced there, once.
+	Env string `json:"env"`
+}
+
+// restarted is what a rolling restart answers: which service was rolled, where.
+type restarted struct {
+	// OK is always true — a failure is an error, not a false here.
+	OK bool `json:"ok"`
+	// App is the service that was restarted.
+	App string `json:"app"`
+	// Namespace is the namespace its Deployment was patched in.
+	Namespace string `json:"namespace"`
+	// Env is that namespace's lifecycle env.
+	Env string `json:"env"`
+	// RestartedAt is the timestamp stamped onto the pod template, RFC3339 UTC.
+	RestartedAt string `json:"restartedAt"`
+}
+
+// deployFleet rolls a platform service's pods, in a named environment.
+//
+// It triggers a rolling restart of one platform service's Deployment by stamping a
+// fresh restart annotation, and answers 202 with the app, the namespace, the
+// environment and the timestamp. It restarts pods; it does NOT change the image — a
+// version change is the release path, not this.
+//
+// SuperAdmin ONLY, and deliberately narrower than the read gate beside it. The only
+// namespaces this board touches are the platform's own tier, so a restart here
+// recycles a SHARED service every tenant depends on. A brand-org admin is a
+// customer-org admin, not a platform operator: observing the board is bounded and
+// audited, and restarting production identity is not.
+//
+// `?env=main|test|dev` is REQUIRED — a bare call does not default to production,
+// which is what closes the fat-finger and confused-deputy hazard — and any other
+// value is 400. A service with no Deployment to restart in that environment is 404.
+func (b board) deployFleet(ctx context.Context, in *restartRef) (*restarted, error) {
+	s := b.s
+	c, err := b.admit(ctx, cloud.Super)
+	if err != nil {
+		return nil, err
 	}
-	name := fleetReqApp(c)
+	if err := fleetReady(s); err != nil {
+		return nil, err
+	}
+	name := slugOf(in.App)
 	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("app must be a DNS-1123 label")
+		return nil, zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
 	// L1: never SILENTLY target production. A restart must name its lifecycle env
 	// explicitly (?env=main|test|dev) — a bare deploy no longer defaults to the
 	// prod (main) namespace, closing the fat-finger / confused-deputy prod hazard.
-	env := strings.TrimSpace(c.Query("env"))
+	env := strings.TrimSpace(in.Env)
 	if env == "" {
-		return zip.ErrBadRequest("specify ?env=main|test|dev — deploy does not default to production")
+		return nil, zip.ErrBadRequest("specify ?env=main|test|dev — deploy does not default to production")
 	}
 	if nsForEnv(env) == "" {
-		return zip.ErrBadRequest("env must be one of main|test|dev")
+		return nil, zip.ErrBadRequest("env must be one of main|test|dev")
 	}
-	ns, err := resolveTargetIn(s, c.Context(), name, targetNamespaces(s, c.Context(), c))
+	ns, err := resolveTargetIn(s, ctx, name, targetNamespaces(s, ctx, c, env))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	restartedAt := time.Now().UTC().Format(time.RFC3339)
 	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{%q:%q}}}}}`, restartedAtAnnotation, restartedAt)
 	if _, err := s.State.dyn.Resource(k8s.Deployments).Namespace(ns).Patch(
-		c.Context(), name, k8stypes.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
+		ctx, name, k8stypes.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
-			return zip.ErrNotFound("app " + name + " has no Deployment to restart in " + ns)
+			return nil, zip.ErrNotFound("app " + name + " has no Deployment to restart in " + ns)
 		}
-		return fleetK8sErr(s, "restart", err)
+		return nil, fleetK8sErr(s, "restart", err)
 	}
 	s.Log.Info("fleet rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
-	return c.JSON(http.StatusAccepted, map[string]any{
-		"ok": true, "app": name, "namespace": ns, "env": envOf(ns), "restartedAt": restartedAt,
-	})
+	return &restarted{OK: true, App: name, Namespace: ns, Env: envOf(ns), RestartedAt: restartedAt}, nil
 }
 
 // resolveTarget finds the namespace an App CR lives in, scanning ALL platform
@@ -722,8 +812,6 @@ func newFleetDynamic() (dynamic.Interface, error) {
 }
 
 // ── pure mapping helpers (unit-tested without a cluster) ─────────────────────
-
-func fleetReqApp(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("app"))) }
 
 // scanOrder returns the platform namespaces in a stable env order (main first),
 // so a bare app-name read/deploy resolves to production before test/dev.

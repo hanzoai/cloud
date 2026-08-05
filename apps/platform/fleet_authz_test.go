@@ -55,6 +55,7 @@ func paasApp(t *testing.T, objs ...runtime.Object) (*zip.App, *cloud.Service[fle
 	s := fakeService(objs...)
 	s.Base.Log = luxlog.New("test")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	fleetRoutes(app, s)
 	return app, s
 }
@@ -322,6 +323,7 @@ func TestFleetListWithoutK8sIs503Not500(t *testing.T) {
 	s.State.initErr = "no kubeconfig"
 	s.Base.Log = luxlog.New("test")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	fleetRoutes(app, s)
 
 	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/platform/fleet", "acme-admin", "acme", true, false)

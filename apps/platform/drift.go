@@ -83,9 +83,17 @@ type DriftFlag struct {
 	Message  string        `json:"message"`
 }
 
-// Drift is the drift verdict for one observed service row: the ordered flags plus
-// the rolled-up severity (apps-drift.ts `Drift`).
-type Drift struct {
+// Verdict is the drift verdict for one observed service row: the ordered flags
+// plus the rolled-up severity (apps-drift.ts `Drift`).
+//
+// It is not called Drift. The fleet's schema namespace is FLAT and single-valued —
+// one name, one shape, wherever two apps meet — and apps/plugins already publishes
+// a `Drift` that means the fleet-wide summary of one plugin's versions. Two shapes
+// under one name would have every generated SDK bind whichever it read last, so the
+// name that was not yet published is the one that yields, to the word this type's
+// own doc comment already used for it. The JSON field is still `drift`: the wire is
+// untouched.
+type Verdict struct {
 	Severity DriftSeverity `json:"severity"`
 	Flags    []DriftFlag   `json:"flags"`
 }
@@ -193,10 +201,10 @@ func DriftSeverityOf(flags []DriftFlag) DriftSeverity {
 // ComputeDrift is the full drift verdict (flags + rolled-up severity) for one
 // observed service row (apps-drift.ts `computeDrift`). Flags is always non-nil so
 // the JSON encodes `[]`, never `null`.
-func ComputeDrift(o Observed) Drift {
+func ComputeDrift(o Observed) Verdict {
 	flags := ComputeDriftFlags(o)
 	if flags == nil {
 		flags = []DriftFlag{}
 	}
-	return Drift{Severity: DriftSeverityOf(flags), Flags: flags}
+	return Verdict{Severity: DriftSeverityOf(flags), Flags: flags}
 }
