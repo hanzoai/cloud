@@ -51,7 +51,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	hcloud "github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -60,7 +60,7 @@ import (
 // ops binds the service to the typed dataroom ops. A TypedHandler takes no
 // service parameter, so the service arrives as a RECEIVER and every op is a
 // method value — also the only bound form cmd/zipdoc can lift prose from.
-type ops struct{ s *hcloud.Service[state] }
+type ops struct{ s *cloud.Service[state] }
 
 // noInput is the In of an op addressed entirely by the caller's principal: it
 // takes nothing off the wire. The dataroom collection reads are org-scoped, so
