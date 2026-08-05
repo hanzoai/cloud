@@ -7,19 +7,18 @@ package team
 //
 //   - the GATEWAY principal (X-User-Id / X-Org-Id, validated by the identity
 //     boundary), which cloud.Bridge parks on the context — the bots surface;
-//   - team's OWN HS256 session token (Authorization: Bearer, else the HttpOnly
-//     account-token cookie), minted by this service's OAuth callback and signed
-//     with SERVER_SECRET — the billing and files surfaces.
+//   - a TEAM CALLER (identity.who, account.go): an IAM access token, else team's
+//     own HS256 session token, riding a header or a cookie — the billing, files
+//     and collaborator surfaces.
 //
-// The second one is why cloud.Request is here: a team session token rides in a
-// header or a cookie, and principal.OrgFrom cannot carry either. Resolving it is
-// an identity gate, exactly the class the pin admits — and keeping it in THIS
-// file is why the pin has one team entry instead of one per plane. The cookie
-// WRITER is here for the same reason and no other: the account-token cookie is
-// the other end of that same identity, set on the response.
+// The second one is why cloud.Request is here: both of those credentials ride in
+// a header or a cookie, and principal.OrgFrom cannot carry either. Resolving it is
+// an identity gate, exactly the class the pin admits. The cookie WRITER is here
+// for the same reason and no other: the account-token cookie is the other end of
+// that same identity, set on the response.
 //
 // EVERY resolver below fails closed off the HTTP path: the CLI projection's
-// LocalInvoke runs an op with no request at all, so `tokenOf`, `sessionOf`,
+// LocalInvoke runs an op with no request at all, so `callerOf`, `sessionOf`,
 // `admin` and `cookie` find nothing and the op refuses rather than inventing an
 // identity or claiming to have signed out a browser that was never there.
 
@@ -31,7 +30,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/team/token"
 )
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -73,35 +71,34 @@ func admin(ctx context.Context) bool {
 	return ok && c.IsAdmin()
 }
 
-// tokenOf resolves the request's VERIFIED team session or workspace token — the
-// SAME sessionToken decode the untyped handlers do, reached from a typed op. Off
-// the HTTP path there is no request and therefore no token, which fails closed
-// with the same error an absent one gives.
+// callerOf resolves the request's VERIFIED caller — the SAME identity.who the
+// untyped handlers resolve, reached from a typed op. Off the HTTP path there is no
+// request and therefore no credential, which fails closed with the same error an
+// absent one gives.
 //
-// It is the token, not the (account, org) pair, because the collaborator plane
-// gates on the WORKSPACE claim too: a workspace token names its workspace, and a
+// It is the caller, not the (account, org) pair, because the collaborator plane
+// gates on the WORKSPACE too: an HS256 workspace token names its workspace, and a
 // documentId for a different one is refused.
-func tokenOf(ctx context.Context, secret string) (*token.Token, error) {
+func callerOf(ctx context.Context, id *identity) (caller, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return nil, errNoOrg
+		return caller{}, errNoOrg
 	}
-	t, _, err := sessionToken(c, secret)
-	return t, err
+	return id.who(c)
 }
 
-// sessionOf resolves (account, org) from that same verified token, refusing one
-// that carries no tenant claim — the orgPrincipal rule the untyped billing and
-// files handlers apply, stated once here for the typed ops.
-func sessionOf(ctx context.Context, secret string) (account, org string, err error) {
-	t, err := tokenOf(ctx, secret)
+// sessionOf resolves (account, org) from that same verified caller, refusing one
+// that carries no tenant — the orgPrincipal rule the untyped billing and files
+// handlers apply, stated once here for the typed ops.
+func sessionOf(ctx context.Context, id *identity) (account, org string, err error) {
+	cl, err := callerOf(ctx, id)
 	if err != nil {
 		return "", "", err
 	}
-	if org = t.Org(); org == "" {
+	if cl.org == "" {
 		return "", "", errNoOrg
 	}
-	return t.Account, org, nil
+	return cl.account, cl.org, nil
 }
 
 // cookie writes one of team's own browser cookies from a TYPED op, and reports

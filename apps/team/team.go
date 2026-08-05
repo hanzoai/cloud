@@ -89,11 +89,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 	}
 
+	// The identity seam: ONE answer to "who is calling, and what may they touch",
+	// shared by every team surface. The IAM validator is the SAME RS256/JWKS trust
+	// anchor the identity boundary and the OAuth callback use; the HS256 secret is
+	// the fallback arm; the account store is the membership authority the IAM lane
+	// authorizes a named workspace against.
+	ident := &identity{
+		verify:   cloud.NewTokenValidator(cfg.iamEndpoint).Validate,
+		secret:   cfg.serverSecret,
+		accounts: accounts,
+		audience: sessionAudience(cfg),
+	}
+
 	trans := &transServer{
 		store:     newStore(filepath.Join(root, "workspaces")),
 		hier:      buildHierarchy(modelJSON),
 		hub:       newHub(),
-		secret:    cfg.serverSecret,
+		ident:     ident,
 		accounts:  accounts,
 		bots:      agentsBotLister, // the ONE in-process seam to the agents registry
 		log:       log,
@@ -121,7 +133,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		accounts: accounts, trans: trans, cfg: cfg, log: log,
 		// The IAM boundary: the SAME RS256/JWKS validator the identity middleware
 		// uses, so the OAuth callback's `owner` claim is VERIFIED, never trusted raw.
-		verify: cloud.NewTokenValidator(cfg.iamEndpoint).Validate,
+		ident: ident,
 		// The entitlement seams: commerce answers "does the org's plan license
 		// 'team'"; plan answers the plan's entitlement block (team.guests cap).
 		commerce: deps.Commerce,
@@ -174,21 +186,26 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Files plane: the workspace blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS seam (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
-	files := &filesService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, degraded: degraded}
+	files := &filesService{vfs: deps.VFS, ident: ident, degraded: degraded}
 	files.register(app, guard)
 
 	// Billing plane: the go:embed'd usage/wallet page (/billing/ui/*) + the
 	// plan/seats read (/billing/plan) — session-gated, org-scoped through the
 	// SAME commerce/plan seams the login gate (entitle.go) uses.
-	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, secret: cfg.serverSecret, degraded: degraded}
+	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, ident: ident, degraded: degraded}
 	billing.register(app, guard)
 
 	// Collaborator planes, both app-level under /collaborator: the markup
 	// snapshot RPC (collab.go, POST /collaborator/rpc/:documentId) and the live
 	// hocuspocus Y.js WebSocket (collabws.go, GET /collaborator) — one service,
 	// one tenancy gate, one VFS seam.
-	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, hub: newCollabHub(deps.VFS), degraded: degraded}
+	collab := &collabService{vfs: deps.VFS, accounts: accounts, ident: ident, hub: newCollabHub(deps.VFS), degraded: degraded}
 	collab.register(app, guard)
+
+	// The membership read a PEER process needs: meet decides a room join and does
+	// not own these rows, so the answer travels rather than being read off a signed
+	// claim (member_rpc.go).
+	exposeMember(accounts)
 
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
 	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)

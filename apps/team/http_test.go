@@ -534,7 +534,7 @@ func TestCallbackVerifiesOwner(t *testing.T) {
 			accounts: store,
 			cfg:      config{serverSecret: testSecret, iamEndpoint: iam.URL, iamClientID: "hanzo-team", provider: "openid"},
 			log:      luxlog.New("test"),
-			verify:   verify,
+			ident:    &identity{verify: verify, secret: testSecret, accounts: store},
 		}
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
 		g.register(app, func(h zip.Handler) zip.Handler { return h })

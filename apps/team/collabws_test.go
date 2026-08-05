@@ -74,7 +74,7 @@ func collabHarness(t *testing.T) (svc *collabService, docName, memberTok string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc = &collabService{vfs: vfs, accounts: mounted.State.accounts, secret: testSecret, hub: newCollabHub(vfs)}
+	svc = &collabService{vfs: vfs, accounts: mounted.State.accounts, ident: testIdent(mounted.State.accounts), hub: newCollabHub(vfs)}
 	docName = ws.UUID + "|document:class:Document|doc-1|content"
 	return svc, docName, tok
 }
