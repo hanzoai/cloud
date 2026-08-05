@@ -201,6 +201,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("commerce: nil deps.Logger")
 	}
 	lg := deps.Logger.New("subsystem", "commerce")
+	// The other direction of the same idea as the ops above: those publish what
+	// this process OWNS, and this reaches for the one thing it does not. The credit
+	// door below screens against a model that can only live in one binary, so the
+	// scorer is installed as a plane client — cloud.SetRiskScorer's first producer
+	// (risk.go).
+	installRiskScorer(lg)
 	if deps.Payments == nil {
 		lg.Warn("commerce: deps.Payments is nil — payment intent paths will fail; tenant config + admin still served")
 	}
@@ -665,11 +671,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//                        boundary stays exactly where the bridge put it.
 	// The card PAN never touches this binary: TopupWithToken charges the Square nonce only,
 	// and the settled charge itself is the mint authority (mintauth.WithAuthorized).
+	//   riskGate            — that mint authority is exactly why this route is screened.
+	//                         A settled charge on a stolen card IS spendable balance, so
+	//                         HANZO RISK judges the payer at the last moment before the
+	//                         charge, as a PRIVILEGED grant: a scorer that is present and
+	//                         cannot answer refuses rather than proceeds. It sits after
+	//                         PinBillingSubject so the subject it judges is the subject the
+	//                         charge credits, and before the handler so a refusal costs no
+	//                         card authorization. See risk.go.
 	app.Post("/v1/billing/topup/token",
 		accountclient.RequireCSRF(),
 		commercemid.RequestContext(),
 		iammiddleware.IAMTokenRequired(),
 		accountclient.PinBillingSubject(),
+		riskGate(lg),
 		commercebilling.TopupWithToken,
 	)
 
