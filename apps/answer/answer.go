@@ -21,13 +21,26 @@
 //	synthesize → synthesize()  → string               (streamed through the Sink)
 //
 // BOUNDED. The fast modes make ≤3 LLM calls (1 plan + 1 synthesis + 1 follow-up)
-// over one gathering pass. A survey adds ONE decision call per extra round, itself
-// bounded by mode.rounds (hard-capped at maxRounds), mode.deadline, mode.tokenCeiling,
-// and saturation. It is never an open agent loop.
+// over one gathering pass. A survey adds ONE decision call per extra round (two on
+// a round the model answers unreadably), itself bounded by mode.rounds (hard-capped
+// at maxRounds), mode.deadline, mode.tokenCeiling, saturation, and the client still
+// being connected. It is never an open agent loop.
 //
-// METERED ONCE. Every answer debits the resolved payer through the per-org
-// ResourceMeter (Base.Bill) — the ONE revenue debit, since the in-process AI path
-// runs on the binary's balance-exempt M2M identity.
+// GROUNDED, AND ONLY GROUNDED. Two properties hold against pages we did not
+// author: the synthesis prompt fences every source with a per-request nonce, so a
+// crawled page cannot print itself a source number the report then cites; and every
+// markdown link in the answer is checked against the gathered set before it reaches
+// the client, so a citation always points at a page THIS request fetched. Neither
+// is a prompt instruction — a prompt is advice to a model, these are properties of
+// the text that leaves the process. See ground.go.
+//
+// ONE REVENUE DEBIT, NOT ONE DEBIT. Every answer debits the resolved payer once
+// through the per-org ResourceMeter (Base.Bill): the mode's flat fee, which is the
+// product price. That is the only REVENUE charge — but not the only charge. The AI
+// plane this engine is handed is itself metered (build.go wraps it in
+// meteredAIClient), so each internal completion also debits the payer per token
+// against the same balance. Which layer should price /v1/ask is an open decision,
+// recorded here rather than claimed away.
 package answer
 
 import (
@@ -207,14 +220,33 @@ func (e Engine) Run(ctx context.Context, p Params, out Sink) {
 		tok.add(u)
 		if len(got) > 0 {
 			plan = got
+			// The plan is what makes a three-minute wait legible. "Origins ·
+			// Design rationale · Reception" tells the reader what the engine is
+			// working on; a bare `planning` frame tells them only that it is busy.
+			out.status("planning", titles(plan))
 		}
 	}
 
 	// 2) SURVEY — search and read applied to the plan and iterated under the mode's
 	// bounds. rounds==0 is the single pass the fast modes always did; rounds>0 is
 	// deep research. ONE code path, parameterized — never a second engine.
-	srcs, stok := e.survey(ctx, p, plan, out)
+	//
+	// The gather gets a FRACTION of the request's clock, not all of it. Synthesis
+	// runs on this same ctx and is the part the user actually receives: a survey
+	// allowed to spend the last millisecond would hand a full corpus to a
+	// completion that cannot start, and the answer would be "the model is
+	// unavailable" — the exact outcome the deadline exists to prevent.
+	gctx, stopGather := gather(ctx)
+	srcs, stok := e.survey(gctx, p, plan, tok.total, out)
+	stopGather()
 	tok.merge(stok)
+
+	// A client that hung up during the gather gets no further work: the calls that
+	// remain would produce an answer nobody receives, and billing for an answer
+	// nobody received is billing for nothing.
+	if !out.alive() {
+		return
+	}
 
 	// 3) SYNTHESIZE — one grounded completion over the numbered sources, with
 	// inline markdown citations, streamed to the client as it is produced.
@@ -258,6 +290,51 @@ func (e Engine) meter(p Params, tok tokens) {
 		RequestID:        p.requestID,
 		ClientIP:         p.clientIP,
 	})
+}
+
+// gatherShare is the fraction (in tenths) of the request's remaining wall clock
+// the survey may spend. The rest is synthesis' — it is the only stage whose output
+// the caller actually reads, and it cannot borrow time the gather already spent.
+const gatherShare = 7
+
+// gather derives the survey's context from the request's: the same cancellation,
+// a shorter deadline. A parent with no deadline (a test, a non-timed caller)
+// yields a plain cancellable child — there is no clock to divide.
+func gather(ctx context.Context) (context.Context, context.CancelFunc) {
+	d, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	left := time.Until(d)
+	if left <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, left*gatherShare/10)
+}
+
+// titles renders the plan's topic headings as one status detail — what the engine
+// is about to research, in the reader's words rather than the loop's.
+func titles(plan []topic) string {
+	out := make([]string, 0, len(plan))
+	for _, t := range plan {
+		if s := strings.TrimSpace(oneLine(t.Title)); s != "" {
+			out = append(out, s)
+		}
+	}
+	return clip(strings.Join(out, " · "), maxPlanDetail)
+}
+
+// maxPlanDetail bounds the plan headline on the wire: a legible line, not the
+// whole plan re-serialized into a status frame.
+const maxPlanDetail = 200
+
+// warn logs a degradation. Log is nil on some construction paths (and in every
+// test), and a nil deref inside an error path would turn a contained failure into
+// a process kill at the worst possible moment.
+func (e Engine) warn(msg string, kv ...any) {
+	if e.Log != nil {
+		e.Log.Warn(msg, kv...)
+	}
 }
 
 // tokens accumulates LLM token usage across the loop's calls.
@@ -357,18 +434,25 @@ func parsePlan(content string) []topic {
 // note (never a fabricated answer) and NIL usage, so Run bills no charge for a
 // non-answer — and that note is emitted too, so a streaming client still sees it.
 func (e Engine) synthesize(ctx context.Context, p Params, srcs []Source, emit func(string)) (string, *cloud.ChatResponse) {
+	// The fence and the allow-set are the two halves of grounding (ground.go): what
+	// counts as a source, and what counts as a citation. Both are derived once, per
+	// request, and both are enforced on the text rather than asked of the model.
+	fence := nonce()
+	allow := cited(srcs)
 	prompt := p.system +
 		"\nToday is " + time.Now().UTC().Format("2006-01-02") + "." +
+		"\n\n" + fenceRule(fence) +
 		"\n\nQuestion: " + p.q +
-		"\n\nWeb sources:\n" + sourcesBlock(srcs)
+		"\n\nWeb sources:\n" + sourcesBlock(srcs, fence)
 	// The joiner holds a markdown link back until its closing paren arrives, so a
-	// citation never renders as raw `[title](htt` mid-stream. It wraps emit HERE and
-	// nowhere else: it is a delivery property of the answer text, not of the loop.
-	j := &joiner{emit: emit}
+	// citation never renders as raw `[title](htt` mid-stream — and, holding it
+	// whole, can apply the same citation check the finished answer gets. It wraps
+	// emit HERE and nowhere else: it is a delivery property of the answer text.
+	j := &joiner{emit: emit, allow: allow}
 	for _, model := range append([]string{p.model}, p.fallbacks...) {
 		if resp := e.chat(ctx, p, model, prompt, j.write); resp != nil && strings.TrimSpace(resp.Content) != "" {
 			j.flush()
-			return resp.Content, resp
+			return cite(resp.Content, allow), resp
 		}
 		// A model that failed mid-link must not leak its half-frame into the next
 		// model's stream; its Content was discarded, so its buffer is too.
@@ -436,6 +520,7 @@ func (e Engine) chat(ctx context.Context, p Params, model, prompt string, emit f
 	}
 	resp, err := e.AI.ChatCompletion(ctx, req)
 	if err != nil {
+		e.warn("answer: completion failed (falling through)", "model", model, "err", err)
 		return nil
 	}
 	if emit != nil && resp != nil {
