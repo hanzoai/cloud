@@ -74,7 +74,8 @@ func TestPolicy_AWriteAnswersThePolicyAndNotTheModel(t *testing.T) {
 	probe.reset(true)
 	app := mountBilled(t, &ledger{available: 1_000_000})
 
-	code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
+	// An ARMING write, so the caller is an admin of its own org ([admitArming]).
+	code, body := reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
 		`{"review":0.02,"sample":0.10,"live":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("PUT /v1/risk/policy = %d %s", code, body)
@@ -172,10 +173,82 @@ func TestPolicy_ARestatementNeedsNoFlag(t *testing.T) {
 	}
 }
 
+// TestPolicy_ArmingIsAnAdminActAndTuningIsNot — the authority boundary inside one
+// write.
+//
+// Arming and tuning arrive at the SAME address in the same body, and only one of
+// them is self-service. Before this, neither was gated by anything but billing
+// ([ops.gate]) and the tenant guard ([ops.admit]) — neither of which asks about
+// authority — so any member of an organisation could PUT {"live":true} and take
+// its model out of shadow: a decision that lets the model freeze that
+// organisation's customers' payments, taken by whoever happened to hold a token.
+//
+// ORG-ADMIN AND NOT SUPERADMIN is the whole shape of it. The organisation is
+// arming ITSELF, so requiring platform sudo would make every customer's governance
+// decision Hanzo's to take. [cloud.Admin] is that scope, and SuperAdmin is its
+// stated superset rather than the requirement.
+//
+// Mutation proof: delete the [admitArming] call in [ops.appetite] and the first
+// case answers 200; make it require [cloud.Super] and the second fails; make it
+// gate on anything but `live` and the third fails.
+func TestPolicy_ArmingIsAnAdminActAndTuningIsNot(t *testing.T) {
+	probe.reset(true)
+	app := mountBilled(t, &ledger{available: 1_000_000})
+
+	// A MEMBER MAY NOT ARM.
+	code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
+		`{"review":0.02,"sample":0.10,"live":true}`)
+	if code != http.StatusForbidden {
+		t.Fatalf("a plain member armed the org: %d %s, want 403 — taking a model live decides "+
+			"whether it may freeze this organisation's customers' payments", code, body)
+	}
+
+	// AND NOTHING MOVED. A refusal that still recorded the regime would be the
+	// arming arrived at through the door that refused it.
+	if held := readPolicy(t, app, orgA); held.Version != 0 || len(held.History) != 0 {
+		t.Fatalf("the refused arming still minted version %d over %d versions",
+			held.Version, len(held.History))
+	}
+
+	// TUNING IS SELF-SERVICE. The appetite and the sample are the organisation's own
+	// operating point and any member may state them; gating them would make a
+	// governance rule out of a number.
+	code, body = req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
+		`{"review":0.02,"sample":0.10}`)
+	if code != http.StatusOK {
+		t.Fatalf("a member could not state the appetite: %d %s, want 200 — only ARMING is an "+
+			"admin act", code, body)
+	}
+	tuned := readPolicy(t, app, orgA)
+	if tuned.Version != 1 {
+		t.Fatalf("the member's tuning landed as version %d, want 1", tuned.Version)
+	}
+	if tuned.History[0].Live {
+		t.Error("a tuning write took the model LIVE — `live` defaults false on every call, so " +
+			"arming is never a side effect of changing a number")
+	}
+
+	// AN ADMIN OF THAT ORG MAY ARM.
+	code, body = reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
+		`{"review":0.02,"sample":0.10,"live":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("an admin of this org could not arm it: %d %s — the organisation arming ITSELF "+
+			"is org-scoped and self-service, never platform sudo", code, body)
+	}
+	armed := readPolicy(t, app, orgA)
+	if !armed.History[0].Live {
+		t.Fatalf("the admin's arming did not take: %+v", armed.History[0])
+	}
+}
+
 // putRegime states a regime and decodes the policy value it answers.
+//
+// It calls as an org ADMIN because the regimes stated through it arm the model, and
+// arming is an admin act ([admitArming]). Tuning alone needs no admin, and
+// [TestPolicy_TuningTheAppetiteIsSelfService] is what holds that half open.
 func putRegime(t *testing.T, app *zip.App, body string) riskPolicyOut {
 	t.Helper()
-	code, raw := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, body)
+	code, raw := reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, body)
 	if code != http.StatusOK {
 		t.Fatalf("PUT /v1/risk/policy = %d %s", code, raw)
 	}
