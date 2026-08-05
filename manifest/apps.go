@@ -85,7 +85,15 @@ var Apps = []App{
 	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
 	// app states its fail-closed set once (apps/commerce/mount.go); this row states
 	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/recharge", "/v1/billing/invoices", "/v1/billing/settings", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/mode", "/v1/billing/methods", "/v1/billing/portal/methods", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/payments", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/tenant", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
+	// /v1/cart is the first step of a sale, and the fleet published the last three
+	// without it: /v1/store/:storeid/{authorize,capture,charge} have always been
+	// served here, while the cart they operate on had no address at all. The
+	// capability was never missing — hanzoai/commerce implements the whole noun —
+	// only the route was, so this row is what makes the documented flow completable
+	// rather than a new product. Named here or it falls to ai's bare "/v1"
+	// remainder, whose prepaid balance gate would make filling a basket require the
+	// balance the basket exists to create.
+	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/recharge", "/v1/billing/invoices", "/v1/billing/settings", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/mode", "/v1/billing/methods", "/v1/billing/portal/methods", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/cart", "/v1/payments", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/tenant", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
