@@ -40,9 +40,16 @@
 // works here, and a key that is refused there is refused here, forever, by
 // construction rather than by two functions being kept in agreement.
 //
-// THE TENANT IS NEVER READ FROM THE BODY. The org comes from the credential, and the
-// team token the message carries is looked up FROM that server-resolved org — so a
-// caller cannot write a recording into another tenant's replay stream by naming one.
+// THE TENANT IS NEVER READ FROM THE BODY, and it is the ONLY thing this door tells the
+// ingester about who is writing. The org is whatever eventTenant resolved from the
+// credential; it rides the message as a ROUTING fact, and the ingester files the
+// recording under the project that org owns. It is not a credential and it does not
+// authenticate anything — the authentication already happened here, once, against the
+// IAM-issued pk-, and a message on this topic is only ever produced by this door.
+//
+// So there is no second token anywhere on this path. An org's recordings cannot be
+// steered into another tenant's stream by naming one, because the caller never names
+// it: the value on the wire is the server-resolved org and nothing a caller can set.
 //
 // A PRODUCE FAILURE IS A 503, NEVER A 200. The produce is the commit point, exactly
 // as the fact publish is on the event plane (bus.go): the door answers "accepted"
@@ -104,7 +111,11 @@ const (
 // partitioned and then dropped at the far end, which the caller would see as a 200.
 const maxSessionID = 70
 
-// maxReplayBytes / maxReplayEvents bound ONE snapshot request.
+// maxReplayBytes bounds ONE snapshot request, and it is the ONLY bound on one, because
+// there is only one thing to bound: how much a single message can carry. A second cap
+// on the event COUNT would be a second answer to that question, arbitrary where this
+// one is derived, and a recorder that hit it would be told 400 about a batch whose
+// only problem was its size.
 //
 // THE BYTE CAP IS NOT ARBITRARY AND IT IS NOT THE GLOBAL ONE. One batch becomes ONE
 // Kafka message, and the transport under the embedded broker is the platform bus,
@@ -116,10 +127,7 @@ const maxSessionID = 70
 // produced, refused by the bus, and answered 503 for a reason the caller cannot act
 // on. Bounding at the door turns that into an honest 413 the recorder can chunk
 // against.
-const (
-	maxReplayBytes  = 512 << 10
-	maxReplayEvents = 2000
-)
+const maxReplayBytes = 512 << 10
 
 // replayProduceTimeout bounds ONE produce so a wedged broker cannot hold an ingest
 // request open; the caller gets an honest 503 instead. Same budget, same reason, as
@@ -169,87 +177,21 @@ func validSessionID(id string) bool {
 	return true
 }
 
-// ── org → the ingest team token ─────────────────────────────────────────────
-
-// replayTokensEnv maps each org to the replay team token its recordings are
-// ingested under.
-//
-// THIS IS A DELIBERATE ONE-ORG SHIM, and it is named as one so it is not mistaken
-// for the design. The ingester is TEAM-scoped and cloud is ORG-scoped, and today
-// there is exactly one org and one team, so a single env var is the whole of the
-// mapping and anything more would be architecture for a tenant that does not exist.
-// It does not survive the second tenant: every org's token sits in one variable, so
-// rotating one restarts the pod for all of them, and a secret in an env var is not
-// where this platform keeps secrets.
-//
-// THE WAY IT GROWS IS ALREADY IN THE TREE. apps/destinations resolves exactly this
-// shape of credential — a per-org third-party project token, `hi_…`, for this same
-// Insights pipeline — from its KMS-sealed connection secrets, per org, fail-closed
-// (see its Spec's `Secrets: []string{"api_key"}`). When the second org arrives, the
-// token moves there and this variable and its parser are deleted; the rest of this
-// file does not change, because everything below reads the token through
-// replayToken and nothing else.
-//
-// Grammar: comma-separated org=token pairs, e.g. "hanzo=hi_abc,acme=hi_def".
-const replayTokensEnv = "CLOUD_REPLAY_TOKENS"
-
-// parseReplayTokens reads the org→token map. Pure over the raw variable so the
-// grammar is driven directly by tests, and TOTAL: a malformed pair is skipped rather
-// than failing the parse, because one bad entry must not silently un-map every OTHER
-// org — that would turn a typo into a fleet-wide outage instead of one org's honest
-// refusal.
-func parseReplayTokens(raw string) map[string]string {
-	out := map[string]string{}
-	for _, pair := range strings.Split(raw, ",") {
-		org, token, ok := strings.Cut(pair, "=")
-		org, token = strings.TrimSpace(org), strings.TrimSpace(token)
-		if !ok || org == "" || token == "" {
-			continue
-		}
-		out[org] = token
-	}
-	return out
-}
-
-// replayToken resolves the ingest token for a SERVER-RESOLVED org. The org is the
-// one eventTenant produced from the credential — never a body field — so this cannot
-// be steered into another tenant's stream by a caller.
-//
-// FAIL-CLOSED: an org with no configured token resolves to nothing, and the door
-// refuses. It must never produce with an empty token: the consumer reads the token
-// from the message HEADER and drops a message whose token it cannot resolve, with no
-// error anywhere — so admitting an unmapped org would answer 200 for a recording
-// that is discarded off-cluster, the silent-loss failure this whole surface is
-// built against.
-func replayToken(org string) (string, bool) {
-	token, ok := parseReplayTokens(os.Getenv(replayTokensEnv))[org]
-	return token, ok
-}
-
-// cannotIngestReplay is the refusal for an org the replay pipeline is not
-// configured for. 503, not 4xx, and the distinction is the caller's next move: the
-// request is well-formed and the credential is good, so there is nothing to fix in
-// either — what is missing is a deployment-side mapping, which only an operator can
-// add. A 4xx would send a recorder off to change a body that was already correct.
-func cannotIngestReplay(org string) *zip.HTTPError {
-	return &zip.HTTPError{
-		Status: http.StatusServiceUnavailable, Code: "replay_not_configured",
-		Msg: "session replay is not configured for org " + org + ": no ingest token is mapped for it",
-	}
-}
-
 // ── the message ─────────────────────────────────────────────────────────────
 
 // snapshotEnvelope is the OUTER message value. `Data` is the inner document as a
 // JSON STRING — the encoding is DOUBLE on purpose, because that is what the consumer
 // parses; it reads Data as text and unmarshals it a second time.
+//
+// It carries no tenant field. The org travels in the message HEADER, in ONE copy,
+// because the header is where the ingester reads it — a second copy in the envelope
+// would be a value that can only ever agree with itself, or disagree.
 type snapshotEnvelope struct {
 	UUID       string `json:"uuid"`
 	DistinctID string `json:"distinct_id"`
 	IP         string `json:"ip"`
 	Data       string `json:"data"`
 	Now        string `json:"now"`
-	Token      string `json:"token"`
 	Event      string `json:"event"`
 	Timestamp  string `json:"timestamp"`
 }
@@ -283,11 +225,12 @@ type snapshotProperties struct {
 // double encoding cannot be caught by anything in the build. The test IS the
 // contract.
 //
-// THE TOKEN TRAVELS IN A HEADER, and the consumer reads it from there rather than
-// from the envelope. It is in the envelope too because the envelope's own schema
-// carries it, but the header is the load-bearing copy: a message produced without it
-// is dropped silently, so both are written from ONE argument and cannot disagree.
-func snapshotRecord(in replayBody, token, ip, id string, now time.Time) (*kgo.Record, error) {
+// THE ORG TRAVELS IN A HEADER, in one copy, and it is the whole of what this message
+// says about tenancy. The ingester resolves it to the project the org owns and files
+// the recording there; a message whose org resolves to no project is dropped at the
+// far end rather than filed anywhere, which is the same fail-closed shape this door
+// answers with.
+func snapshotRecord(in replayBody, org, ip, id string, now time.Time) (*kgo.Record, error) {
 	stamp := now.UTC().Format(snapshotTime)
 	data, err := json.Marshal(snapshotData{
 		Event: snapshotEvent,
@@ -312,7 +255,6 @@ func snapshotRecord(in replayBody, token, ip, id string, now time.Time) (*kgo.Re
 		IP:         ip,
 		Data:       string(data),
 		Now:        stamp,
-		Token:      token,
 		Event:      snapshotEvent,
 		Timestamp:  stamp,
 	})
@@ -326,7 +268,10 @@ func snapshotRecord(in replayBody, token, ip, id string, now time.Time) (*kgo.Re
 		Key:   []byte(in.SessionID),
 		Value: value,
 		Headers: []kgo.RecordHeader{
-			{Key: "token", Value: []byte(token)},
+			// The tenant, as the ingester's routing key. It is the SERVER-RESOLVED
+			// org — the same value every other write on this surface is attributed
+			// to — and it replaces the project token this message used to carry.
+			{Key: "org", Value: []byte(org)},
 			{Key: "distinct_id", Value: []byte(in.DistinctID)},
 			{Key: "session_id", Value: []byte(in.SessionID)},
 			// Unix MILLIS as a decimal string — the one header that is not the same
@@ -475,17 +420,12 @@ func replayIngest(_ *cloud.Service[state], c *zip.Ctx) error {
 	if len(in.Events) == 0 {
 		return zip.ErrBadRequest("no rrweb events in this batch")
 	}
-	if len(in.Events) > maxReplayEvents {
-		return zip.ErrBadRequest("batch too large: " + strconv.Itoa(len(in.Events)) +
-			" events, limit " + strconv.Itoa(maxReplayEvents))
-	}
 
-	// The token is looked up from the SERVER-RESOLVED org, never from the body.
-	token, ok := replayToken(a.org)
-	if !ok {
-		return cannotIngestReplay(a.org)
-	}
-	rec, err := snapshotRecord(in, token, cloud.ClientIP(c), uuid.NewString(), time.Now())
+	// The org is the one eventTenant resolved from the credential, and it goes on the
+	// wire as-is. There is nothing to look up and nothing that can be unconfigured:
+	// the only way to reach this line is to have authenticated, and the tenant a
+	// credential resolves to is exactly the tenant its recordings are filed under.
+	rec, err := snapshotRecord(in, a.org, cloud.ClientIP(c), uuid.NewString(), time.Now())
 	if err != nil {
 		return zip.ErrBadRequest("snapshot payload cannot be encoded")
 	}
