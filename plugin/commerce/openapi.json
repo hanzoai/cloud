@@ -45,6 +45,23 @@
         "description": "Returns the caller's own tenant row projected to a public view with the KMS paths stripped, so a provider's name and enabled flag are visible and its credential location never is. The tenant is derived from the IAM owner claim and from nothing else — there is no tenant parameter to supply, so a cross-tenant read is not expressible. A tenant admin or a platform admin may call it; a plain authenticated user is refused 403 and an anonymous one 401. A caller whose owner claim has no tenant row gets a 404 byte-identical to the one a cross-tenant probe would get."
       }
     },
+    "/_/commerce/providers/{name}": {
+      "put": {
+        "operationId": "put___commerce_providers_by_name",
+        "summary": "Turn one payment rail on or off for your own tenant",
+        "description": "Flips the enabled flag on the named provider in the caller's own tenant row, so a rail can be taken out of service — or put back — without touching its credentials. The KMS paths are never read, written or echoed here; this verb owns exactly one bit.\n\nDisabling is what a checkout page sees immediately: only ENABLED providers are listed by the public tenant read, so a rail turned off here stops being offered rather than failing at authorization time. Re-enabling restores the same stored credential, which is why this is a switch and not a delete.\n\nThe tenant is derived from the IAM owner claim and from nothing else — there is no tenant parameter to supply, so a cross-tenant write is not expressible. A tenant admin or a platform admin may call it; a plain authenticated user is refused 403 and an anonymous one 401. A provider name with no row on that tenant is 404, the same answer a cross-tenant probe gets.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/_/commerce/tenants": {
       "post": {
         "operationId": "post___commerce_tenants",
