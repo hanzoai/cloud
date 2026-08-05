@@ -248,6 +248,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		// its own datastore (standalone), but in this unified binary finance is
 		// co-resident, so we inject the finance-backed ledger adapter.
 		Ledger: ledger{},
+		// THE HOST'S SECRET PLANE, in-process. deps.KMS is the embedded KMS this
+		// binary already runs (the logs say so at boot: "deps.KMS -> the kms app
+		// over the internal plane"), so commerce reads a deployment secret by
+		// asking its host rather than through an env fan-out — KMS to a k8s
+		// Secret to a pod variable, three places to go stale and a restart to
+		// pick up a rotation. nil when this build has no KMS, which commerce
+		// treats as "fall back", never as an error.
+		Secrets: deps.KMS,
 	})
 	if err != nil {
 		lg.Error("commerce embed failed — serving fail-closed 503 (cloud stays up)", "err", err)
