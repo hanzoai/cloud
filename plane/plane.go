@@ -500,8 +500,18 @@ type Space struct {
 }
 
 // Spaces is what the rows say about one person: the account they resolved to and
-// the workspaces they are in. Account is empty exactly when there are no
-// workspaces, so a caller cannot mistake "no rows" for an identity.
+// the workspaces they are in.
+//
+// The invariant is ONE-WAY: a non-empty Items implies a non-empty Account, so
+// every workspace offered has an identity to seat the person under. The converse
+// does NOT hold and must not be assumed — a subject that resolves to an account
+// while holding no current membership row answers with the account and an empty
+// list, which is the honest "we know who you are, and you are in nothing".
+//
+// (This doc used to claim the biconditional — "Account is empty exactly when
+// there are no workspaces" — which the implementation never satisfied, because it
+// resolves the account BEFORE walking the rows. A doc that overstates an
+// invariant is worse than none: it is the one a caller writes an `if` against.)
 type Spaces struct {
 	// Account is the team AccountUuid the subject resolved to — the same identity
 	// Member.Account carries, from the same derivation.
