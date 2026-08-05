@@ -1003,10 +1003,8 @@ github.com/hanzoai/cd/gitops-engine v0.7.3 h1:NmPf8v3Ti8ejSI8M96wFmzOchQ2fgxZHhV
 github.com/hanzoai/cd/gitops-engine v0.7.3/go.mod h1:Jyc94hEnwpmaS4kBFmC4fP3t+VvZ8DZgxPtV4FdmL7M=
 github.com/hanzoai/cek v0.2.3 h1:wOVav3abWAWiIyqTr9pKK/b4PjUCT1j3mdU5LzKpxSQ=
 github.com/hanzoai/cek v0.2.3/go.mod h1:T9c9qr9x+0kHsk0J57KElY7l2jgWF08onbxZ3ck5nxM=
-github.com/hanzoai/commerce v1.49.66 h1:DDMH+6jyYk1mUUSJ5nIbddwgmDSGhCSyfDb/21X+jv8=
-github.com/hanzoai/commerce v1.49.66/go.mod h1:TtxF3nlzmKav9XCVcNF2h03jFPukzTLemTuG9my38jY=
-github.com/hanzoai/commerce v1.49.67 h1:WXKPmcDCgdaY+k01oa/j3Z/2hNnOBHS2aKE23uC8h58=
-github.com/hanzoai/commerce v1.49.67/go.mod h1:TtxF3nlzmKav9XCVcNF2h03jFPukzTLemTuG9my38jY=
+github.com/hanzoai/commerce v1.49.68 h1:pYwJGJUrLCtjTK4kUVIK87yqTJwGG8sg1vgkEXicxTM=
+github.com/hanzoai/commerce v1.49.68/go.mod h1:TtxF3nlzmKav9XCVcNF2h03jFPukzTLemTuG9my38jY=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
