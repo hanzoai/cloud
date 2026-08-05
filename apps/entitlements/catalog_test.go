@@ -22,6 +22,18 @@ package entitlements
 // consistent the whole time and wrong only about each other. So it re-derives BOTH
 // sides on every run — appProducts from this package, the grants from the embedded
 // catalog the binary actually links — and asserts they describe the same vocabulary.
+//
+// A THIRD list exists and this gate cannot reach it, so it is recorded here instead:
+// @hanzogui/shell's APP_ENTITLEMENTS (hanzo-registry.ts) maps studio/bot/world/platform
+// to a minimum tier of "pro" and gates on it CLIENT-SIDE, against a different endpoint
+// (GET /v1/billing/subscriptions). That map is the only place the product intent — these
+// apps are paid, Pro and above — is actually written down, and being client-side it is
+// advice rather than enforcement. Its `world: 'pro'` even names the mechanism the catalog
+// really used: "bundled via world-pro on pro/plus/max, world-team on team", i.e. the
+// tier-level `bundles` field, which @hanzo/plans carried at v1.4.4 and DELETED at v1.4.11
+// with nothing put in its place. So the honest count is three vocabularies, not two, and
+// the server has never held the one that decides. Whoever resolves the failures below
+// should collapse all three, not just the two this file can see.
 
 import (
 	"sort"
@@ -141,7 +153,9 @@ func TestEveryProductCloudAsksAboutCanBeGranted(t *testing.T) {
 		"projection consults no kill switch.\n\n"+
 		"Resolve it on ONE side, never by widening this gate: either the catalog grants these\n"+
 		"products to the tiers that sell them, or cloud stops asking the licence authority\n"+
-		"about products it does not license.",
+		"about products it does not license. Before choosing, read @hanzogui/shell's\n"+
+		"APP_ENTITLEMENTS — it already answers this question (studio/bot/world/platform = pro)\n"+
+		"client-side, and the server has never agreed with it.",
 		len(dead), strings.Join(dead, ", "), appProducts, catalog(g))
 }
 
