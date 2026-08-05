@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/o11y/pkg/prober"
+	"github.com/luxfi/metric"
 
 	"github.com/hanzoai/cloud"
 )
@@ -181,6 +182,14 @@ type journal interface {
 // mattered.
 type reporter struct {
 	next http.RoundTripper
+	// up is hanzo_service_up in the program's own registry — the same series,
+	// name and label the meter pipeline has always written, produced here a
+	// second time so the framework's export carries it natively. Two producers,
+	// one truth: both record the same probe's verdict, so the series is
+	// uninterrupted whichever pipeline a reader drinks from, and the old one can
+	// be retired without a gap once every reader is confirmed on this road.
+	// Nil when no registry was offered; recording is then skipped, never faked.
+	up metric.GaugeVec
 	// name maps a target's exact address to its name. A redirect lands on a
 	// different address, is absent from this map, and passes through unreported:
 	// only a probe's own first request is a verdict.
@@ -199,13 +208,18 @@ func (r *reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	if !watched {
 		return resp, err
 	}
+	verdict := 0.0
 	switch {
 	case err != nil:
 		r.note(name, req.URL.String(), err.Error())
 	case answered(resp.StatusCode):
+		verdict = 1.0
 		r.note(name, req.URL.String(), "")
 	default:
 		r.note(name, req.URL.String(), "HTTP "+strconv.Itoa(resp.StatusCode))
+	}
+	if r.up != nil {
+		r.up.WithLabelValues(name).Set(verdict)
 	}
 	return resp, err
 }
@@ -238,7 +252,7 @@ func (r *reporter) note(name, url, reason string) {
 // probeClient is the client the prober uses, carrying the reporter. It sets no
 // Timeout of its own: the prober bounds every probe with a context deadline, and
 // a second bound would be a second number to keep in step with the first.
-func probeClient(log journal) *http.Client {
+func probeClient(log journal, up metric.GaugeVec) *http.Client {
 	name := make(map[string]string, len(fleetTargets))
 	for _, t := range fleetTargets {
 		name[t.URL] = t.Name
@@ -247,8 +261,22 @@ func probeClient(log journal) *http.Client {
 		next: http.DefaultTransport,
 		name: name,
 		log:  log,
+		up:   up,
 		last: make(map[string]string, len(fleetTargets)),
 	}}
+}
+
+// upgauge mints hanzo_service_up in the program's registry — the exact
+// series name and label the meter pipeline has always published, so every rule
+// and reader sees one uninterrupted series whichever producer wrote the sample.
+// A nil registry yields a nil gauge and recording is skipped: a test that
+// mounts probes without a registry measures the probing, not the export.
+func upgauge(r metric.Registerer) metric.GaugeVec {
+	if r == nil {
+		return nil
+	}
+	return r.NewGaugeVec("hanzo_service_up",
+		"1 when the service answered its probe, 0 when it did not", []string{"service"})
 }
 
 // fleetProber is pinned for the process life so Shutdown can stop it.
@@ -260,7 +288,7 @@ var fleetProber *prober.Prober
 // on, and a signal that defaults to off is one that is off in the deployment
 // that needed it. O11Y_PROBES=false disables it; O11Y_PROBE_INTERVAL tunes the
 // period.
-func mountProbes(deps cloud.Deps) error {
+func mountProbes(deps cloud.Deps, instruments metric.Registerer) error {
 	log := deps.Logger.New("subsystem", "o11y-probes")
 
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("O11Y_PROBES")), "false") {
@@ -280,7 +308,7 @@ func mountProbes(deps cloud.Deps) error {
 	p, err := prober.New(prober.Config{
 		Targets:  fleetTargets,
 		Interval: interval,
-		Client:   probeClient(log),
+		Client:   probeClient(log, upgauge(instruments)),
 	})
 	if err != nil {
 		// Non-fatal: losing probes should not take the API plane down with them.

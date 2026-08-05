@@ -1,7 +1,10 @@
 package o11y
 
 import (
+	"errors"
+
 	"context"
+	"github.com/luxfi/metric"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -413,7 +416,7 @@ func TestReporterIgnoresAddressesItDoesNotWatch(t *testing.T) {
 // so a failure of any watched service is attributable without a second table.
 func TestProbeClientWatchesEveryTarget(t *testing.T) {
 	rec := &recorder{}
-	c := probeClient(rec)
+	c := probeClient(rec, nil)
 	rt, ok := c.Transport.(*reporter)
 	if !ok {
 		t.Fatalf("probe client transport is %T, want the reporter", c.Transport)
@@ -431,4 +434,65 @@ func TestProbeClientWatchesEveryTarget(t *testing.T) {
 	if c.Timeout != 0 {
 		t.Errorf("probe client timeout = %v, want the prober's context deadline to be the one bound", c.Timeout)
 	}
+}
+
+// The verdict the reporter logs is also the verdict it records: hanzo_service_up
+// reads 1 for an answered probe and 0 for a refusal, under the exact series
+// name and label the meter pipeline has always published — one uninterrupted
+// series, whichever producer wrote the sample.
+func TestReporterRecordsTheVerdictItReports(t *testing.T) {
+	reg := metric.NewRegistry()
+	up := upgauge(reg)
+	r := &reporter{
+		next: verdictTransport{},
+		name: map[string]string{
+			"http://up.hanzo.svc:80/healthz":   "up",
+			"http://down.hanzo.svc:80/healthz": "down",
+		},
+		log:  &recorder{},
+		up:   up,
+		last: map[string]string{},
+	}
+	for _, u := range []string{"http://up.hanzo.svc:80/healthz", "http://down.hanzo.svc:80/healthz"} {
+		req := httptest.NewRequest(http.MethodGet, u, nil)
+		req.RequestURI = ""
+		resp, _ := r.RoundTrip(req)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+	}
+	fams, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	got := map[string]float64{}
+	for _, f := range fams {
+		if f.Name != "hanzo_service_up" {
+			continue
+		}
+		for _, m := range f.Metrics {
+			for _, l := range m.Labels {
+				if l.Name == "service" {
+					got[l.Value] = m.Value.Value
+				}
+			}
+		}
+	}
+	if got["up"] != 1 {
+		t.Errorf("up = %v, want 1 — an answered probe must record 1", got["up"])
+	}
+	if v, ok := got["down"]; !ok || v != 0 {
+		t.Errorf("down = %v (present=%v), want 0 — a refused dial must record 0, not be absent", v, ok)
+	}
+}
+
+// verdictTransport answers 200 for the up host and refuses the down host, so a
+// test drives both verdicts without a network.
+type verdictTransport struct{}
+
+func (verdictTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Hostname() == "down.hanzo.svc" {
+		return nil, errors.New("connect: connection refused")
+	}
+	return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 }
