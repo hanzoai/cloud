@@ -288,5 +288,15 @@ func DefaultPrice(c *zip.Ctx) int64 {
 		return 0
 	}
 
+	// A read spends nothing, so a read costs nothing — the SAME rule the standing
+	// gate applies (Consumes, price.go). Without it a declared surface price bills
+	// its own listings and its own error pages, which is why every surface in the
+	// fleet was Free: the declaration had no way to say "charge the work, not the
+	// index". Checked before the price so an unpriced read costs nothing either way
+	// and the two paths cannot diverge.
+	if !Consumes(c.Method()) {
+		return 0
+	}
+
 	return PriceOf(path).Cents()
 }
