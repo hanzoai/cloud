@@ -2,6 +2,7 @@ package finance
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud/money"
@@ -97,6 +98,94 @@ func TestDepositRefIdempotent(t *testing.T) {
 		t.Fatalf("deposit additive #2: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 2000) // 1000 + 500 + 500.
+}
+
+// TestDepositAlreadyCreditedIsNotAFailure — a deposit that cannot RUN, on money that is
+// already in the books, answers with the money and not with an error.
+//
+// The in-transaction dedup only covers a replay whose transaction reaches its own read.
+// A transaction that never gets that far — the one that lost the write to a concurrent
+// poster of the same settlement, or whose request context died between the card clearing
+// and the post — leaves the caller an error over a ref that IS credited. At a credit door
+// that is a 500 on a settled charge (apps/commerce settle.go), and the customer's own
+// retry is what has to recover it.
+//
+// The context here is CANCELLED, which is that state reproducibly rather than by racing:
+// the transaction cannot begin at all, and the entry is nonetheless posted.
+//
+// Mutation proof: make [creditedUnder] answer ("", false) — or give its read the
+// caller's own dying context instead of a detached one — and this fails with
+// "begin tx: context canceled" on a wallet holding the money.
+func TestDepositAlreadyCreditedIsNotAFailure(t *testing.T) {
+	f := New(t.TempDir())
+	defer func() { _ = f.Close() }()
+	in := types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(4200), Ref: "sq_pay_9Xk2"}
+
+	posted, err := f.Deposit(context.Background(), in)
+	if err != nil {
+		t.Fatalf("the first deposit: %v", err)
+	}
+
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	got, err := f.Deposit(dead, in)
+	if err != nil {
+		t.Fatalf("a deposit of an ALREADY CREDITED ref failed with %v — the caller is told the money "+
+			"did not land while the ledger holds it, which at a credit door is a 500 on a settled card", err)
+	}
+	if got != posted {
+		t.Errorf("it answered entry %q, want the entry the money is actually under, %q", got, posted)
+	}
+	mustBalance(t, f, "acme", "acme", 4200) // still ONE credit.
+
+	// AND IT DOES NOT INVENT ONE. A ref that was never posted has no credit to report, so
+	// the failure is still a failure — otherwise the guard would answer success for money
+	// that never moved, which is the defect it exists to prevent, inverted.
+	fresh := in
+	fresh.Ref = "sq_pay_never_posted"
+	if _, err := f.Deposit(dead, fresh); err == nil {
+		t.Fatal("a deposit that never ran, on a ref nothing credited, answered SUCCESS — a caller " +
+			"would be told a balance exists that does not")
+	}
+	mustBalance(t, f, "acme", "acme", 4200)
+}
+
+// TestDepositConcurrentSettlementsOfOneRef — many posters, one settlement, one credit.
+//
+// Settlement is at-least-once and about to have a second writer (the processor webhook
+// replaying a charge the door already posted). Every one of them names the same Ref, so
+// every one of them must be told the money is there and the wallet must hold it once.
+func TestDepositConcurrentSettlementsOfOneRef(t *testing.T) {
+	f := New(t.TempDir())
+	defer func() { _ = f.Close() }()
+	in := types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(4200), Ref: "sq_pay_9Xk2"}
+
+	const posters = 16
+	ids := make([]string, posters)
+	errs := make([]error, posters)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range posters {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			ids[i], errs[i] = f.Deposit(context.Background(), in)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("poster %d was refused (%v) over a settlement the ledger credited", i, err)
+		}
+		if ids[i] != ids[0] {
+			t.Errorf("poster %d answered entry %q, poster 0 answered %q — one settlement, two entries",
+				i, ids[i], ids[0])
+		}
+	}
+	mustBalance(t, f, "acme", "acme", 4200)
 }
 
 // TestMigrateOrgIdempotent proves the commerce→finance backfill is exactly-once: running
