@@ -98,14 +98,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("validators.Mount: unknown VALIDATORS_NETWORK %q", network)
 	}
 
-	prov := newK8sProvisioner(crConfig{
+	// The cluster comes from deps (cloud.BuildK8sClient resolved it at boot); this
+	// subsystem never builds one. Unresolved is not fatal — Available() reports it
+	// and the node degrades to an honest "pending".
+	prov := &k8sProvisioner{k8s: deps.K8s, cfg: crConfig{
 		Group:     envOr("VALIDATORS_CR_GROUP", "node.lux.cloud"),
 		Namespace: envOr("VALIDATORS_NAMESPACE", "lux-validators"),
 		NodeImage: envOr("VALIDATORS_NODE_IMAGE", "ghcr.io/luxfi/node:v1.36.15"),
 		KMSHost:   envOr("VALIDATORS_KMS_HOST", "http://cloud."+deps.Brand+".svc.cluster.local:8000"),
 		KMSCreds:  envOr("VALIDATORS_KMS_CREDS", "platform-kms-auth"),
 		StorageGi: envInt("VALIDATORS_STORAGE_GI", 200),
-	})
+	}}
 
 	b := cloud.NewBase(deps, "validators")
 	s := &cloud.Service[state]{Base: b, State: state{

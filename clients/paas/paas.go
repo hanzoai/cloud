@@ -30,15 +30,21 @@
 // user-facing per-app PaaS view still lives in console; this is the CLI/operator
 // surface.
 //
-// k8s client: built in-process from the in-cluster service account
-// (rest.InClusterConfig) with a KUBECONFIG fallback for local/dev — the identical
-// construction clients/ml uses. When no kubeconfig is resolvable the subsystem
-// mounts anyway and every endpoint fails closed (503 + the real init error; the
-// health route reports "degraded"), never status-theater.
+// k8s client: NONE of its own. The subsystem reaches the cluster ONLY through the
+// cloud.K8sClient seam it is handed at Mount (deps.K8s) — objects cross as
+// decoded-JSON maps, a GroupVersionResource crosses as three strings, and the
+// cluster-error sentinels (types.ErrK8sNotFound and friends) stand in for
+// apierrors.IsNotFound, so this package links no Kubernetes client at all. The
+// private build registers a dynamic-client implementation; the OSS core gets the
+// unavailable default, which answers every call with the reason it is unavailable.
+// Either way the subsystem MOUNTS: when the client is not ready every endpoint
+// fails closed (503 + the reason Ready() reports; the health route says
+// "degraded"), never status-theater.
 package paas
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -48,28 +54,29 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
-// appsGVR is the operator App CR — the one workload kind the fleet runs on. The
-// drift board reads it across the platform namespaces. Asserted in the tests; a
-// typo here silently breaks the whole board.
-var appsGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
+// The operator App CR — the one workload kind the fleet runs on. The drift board
+// reads it across the platform namespaces. Asserted in the tests; a typo here
+// silently breaks the whole board. Group/version/resource are three plain strings
+// because that is how a GroupVersionResource crosses the cloud.K8sClient seam.
+const (
+	appsGroup    = "hanzo.ai"
+	appsVersion  = "v1"
+	appsResource = "apps"
+)
 
-// deploymentsGVR is the live Deployment behind each Service — the source of the
-// RUNNING tag (the operator Service CR status does not surface the running image,
-// so the running tag is observed from the Deployment's container, exactly as the
-// platform inventory reads it in inventory.ts). Read-only for this subsystem.
-var deploymentsGVR = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+// The live Deployment behind each Service — the source of the RUNNING tag (the
+// operator Service CR status does not surface the running image, so the running
+// tag is observed from the Deployment's container, exactly as the platform
+// inventory reads it in inventory.ts). Read-only for this subsystem.
+const (
+	deploymentsGroup    = "apps"
+	deploymentsVersion  = "v1"
+	deploymentsResource = "deployments"
+)
 
 // nsEnv maps each scanned namespace to the lifecycle env it represents, mirroring
 // the platform inventory's DEFAULT_TARGETS (inventory.ts): the `hanzo` namespace
@@ -94,33 +101,35 @@ var appNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // to a floating tag is possible, but the drift board then flags it loudly).
 var imageRepoRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*[a-z0-9]$`)
 
-const userAgent = "hanzo-cloud-paas"
-
-// state is paas's own data; shared deps live in the embedded cloud.Base.
+// state is paas's own data; shared deps live in the embedded cloud.Base. The
+// cluster seam is the ONE thing this subsystem holds: never nil (deps hands over
+// the unavailable default when no cluster implementation is linked), so no call
+// site nil-checks it — an unusable client answers with the reason instead.
 type state struct {
-	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
-	initErr string            // why dyn is nil, surfaced by health + ready()
+	k8s cloud.K8sClient
 }
 
 // Mount wires the /v1/paas/* surface onto app. Every handler is behind the IAM
 // guard (SuperAdmin or OrgAdmin, org-confined), then reads/patches the operator
-// App CRs + their Deployments.
+// App CRs + their Deployments. The cluster client comes from deps — this package
+// never constructs one, which is what keeps client-go out of the build.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "paas", build, routes)
+	return cloud.Mount(app, deps, "paas", func(b cloud.Base) (state, error) {
+		return build(b, deps.K8s)
+	}, routes)
 }
 
-// build resolves the in-process k8s dynamic client (fail-closed: when no kubeconfig
-// resolves the subsystem still mounts and every endpoint 503s honestly).
-func build(b cloud.Base) (state, error) {
-	var st state
-	if dyn, err := newDynamic(); err != nil {
-		st.initErr = err.Error()
-		b.Log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", err)
-	} else {
-		st.dyn = dyn
+// build binds the subsystem to the cluster seam (fail-closed: an unavailable
+// client still mounts and every endpoint 503s honestly, with the reason Ready
+// reports — no cluster support linked, no kubeconfig, whatever it actually is).
+func build(b cloud.Base, k8s cloud.K8sClient) (state, error) {
+	st := state{k8s: k8s}
+	ok, reason := k8s.Ready()
+	if !ok {
+		b.Log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", reason)
 	}
 	b.Log.Info("paas control plane mounted",
-		"prefix", "/v1/paas", "k8s", st.dyn != nil, "brand", b.Brand, "env", b.Env)
+		"prefix", "/v1/paas", "k8s", ok, "brand", b.Brand, "env", b.Env)
 	return st, nil
 }
 
@@ -354,14 +363,14 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
 	for _, ns := range targetNamespaces(c) {
-		obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+		obj, err := s.State.k8s.Get(c.Context(), appsGroup, appsVersion, appsResource, ns, name)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
+			if errors.Is(err, types.ErrK8sNotFound) {
 				continue
 			}
 			return k8sErr(s, "get", err)
 		}
-		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
+		repository := nestedString(obj, "spec", "image", "repository")
 		return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
 	}
 	return zip.ErrNotFound("app not found in the platform namespaces")
@@ -380,16 +389,15 @@ func observeFleet(s *cloud.Service[state], ctx context.Context, namespaces []str
 		// whole board, so the declared/health/phase columns still render.
 		running := runningTagsIn(s, ctx, ns)
 		env := nsEnv[ns]
-		list, err := s.State.dyn.Resource(appsGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+		list, err := s.State.k8s.List(ctx, appsGroup, appsVersion, appsResource, ns, 0)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
+			if errors.Is(err, types.ErrK8sNotFound) {
 				continue
 			}
 			return nil, k8sErr(s, "list", err)
 		}
-		for i := range list.Items {
-			cr := &list.Items[i]
-			views = append(views, observeCR(cr, ns, env, running[cr.GetName()]))
+		for _, cr := range list {
+			views = append(views, observeCR(cr, ns, env, running[objName(cr)]))
 		}
 	}
 	sort.Slice(views, func(i, j int) bool {
@@ -451,9 +459,9 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	restartedAt := time.Now().UTC().Format(time.RFC3339)
 	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{%q:%q}}}}}`, restartedAtAnnotation, restartedAt)
-	if _, err := s.State.dyn.Resource(deploymentsGVR).Namespace(ns).Patch(
-		c.Context(), name, k8stypes.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
-		if apierrors.IsNotFound(err) {
+	if err := s.State.k8s.MergePatch(
+		c.Context(), deploymentsGroup, deploymentsVersion, deploymentsResource, ns, name, []byte(patch)); err != nil {
+		if errors.Is(err, types.ErrK8sNotFound) {
 			return zip.ErrNotFound("app " + name + " has no Deployment to restart in " + ns)
 		}
 		return k8sErr(s, "restart", err)
@@ -479,9 +487,9 @@ func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (s
 // (an OrgAdmin owning no scanned namespace) resolves to a clean 404, never a leak.
 func resolveTargetIn(s *cloud.Service[state], ctx context.Context, name string, namespaces []string) (string, error) {
 	for _, ns := range namespaces {
-		if _, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if _, err := s.State.k8s.Get(ctx, appsGroup, appsVersion, appsResource, ns, name); err == nil {
 			return ns, nil
-		} else if !apierrors.IsNotFound(err) {
+		} else if !errors.Is(err, types.ErrK8sNotFound) {
 			return "", k8sErr(s, "get", err)
 		}
 	}
@@ -497,11 +505,11 @@ func resolveTargetIn(s *cloud.Service[state], ctx context.Context, name string, 
 // must be probe-able by the platform/operator without a JWT.
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	res := map[string]any{"service": "paas", "status": "ok"}
-	if s.State.dyn == nil {
-		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
+	if ok, reason := s.State.k8s.Ready(); !ok {
+		res["status"], res["k8s"], res["error"] = "degraded", false, reason
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
-	if _, err := s.State.dyn.Resource(appsGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := s.State.k8s.List(c.Context(), appsGroup, appsVersion, appsResource, "hanzo", 1); err != nil {
 		res["status"], res["k8s"], res["crd"], res["error"] = "degraded", true, false, err.Error()
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
@@ -511,9 +519,13 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 
 // ── k8s plumbing ────────────────────────────────────────────────────────────
 
+// ready is the fail-closed gate every cluster-touching handler opens with. The
+// reason comes from the client itself (Ready), so the 503 body names what is
+// actually missing — no cluster support linked into this build, no kubeconfig,
+// an unreachable API server — rather than a generic "not configured".
 func ready(s *cloud.Service[state]) error {
-	if s.State.dyn == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "paas: kubernetes client not configured: %s", s.State.initErr)
+	if ok, reason := s.State.k8s.Ready(); !ok {
+		return zip.Errorf(http.StatusServiceUnavailable, "paas: kubernetes client not configured: %s", reason)
 	}
 	return nil
 }
@@ -522,30 +534,13 @@ func ready(s *cloud.Service[state]) error {
 // the missing access so the operator knows exactly what to grant the cloud service
 // account (get/list on apps.hanzo.ai). Mirrors ml.k8sErr.
 func k8sErr(s *cloud.Service[state], op string, err error) error {
-	s.Log.Error("k8s op failed", "op", op, "resource", appsGVR.Resource, "err", err)
-	if apierrors.IsForbidden(err) {
+	s.Log.Error("k8s op failed", "op", op, "resource", appsResource, "err", err)
+	if errors.Is(err, types.ErrK8sForbidden) {
 		return zip.Errorf(http.StatusBadGateway,
 			"%s apps: kubernetes RBAC denied (cloud service account needs %s on apps.hanzo.ai): %v",
 			op, op, err)
 	}
 	return zip.Errorf(http.StatusBadGateway, "%s apps failed: %v", op, err)
-}
-
-// newDynamic builds the dynamic client from the in-cluster service account,
-// falling back to KUBECONFIG / ~/.kube/config for local/dev — identical to
-// clients/ml.newDynamic.
-func newDynamic() (dynamic.Interface, error) {
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{})
-		cfg, err = cc.ClientConfig()
-		if err != nil {
-			return nil, fmt.Errorf("no in-cluster config and no kubeconfig: %w", err)
-		}
-	}
-	cfg.UserAgent = userAgent
-	return dynamic.NewForConfig(cfg)
 }
 
 // ── pure mapping helpers (unit-tested without a cluster) ─────────────────────
@@ -629,14 +624,14 @@ func healthFromStatus(status map[string]any) string {
 // This is inventory.ts observeService fused with apps-api.ts toAppView:
 // declared tag from the CR spec, running tag from the Deployment (passed in),
 // health + phase + endpoints from the operator-reconciled CR status.
-func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string) AppView {
-	name := obj.GetName()
-	repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
-	declaredTag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag")
-	role, _, _ := unstructured.NestedString(obj.Object, "spec", "role")
+func observeCR(obj map[string]any, namespace, env, runningTag string) AppView {
+	name := objName(obj)
+	repository := nestedString(obj, "spec", "image", "repository")
+	declaredTag := nestedString(obj, "spec", "image", "tag")
+	role := nestedString(obj, "spec", "role")
 
-	status, _, _ := unstructured.NestedMap(obj.Object, "status")
-	phase, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
+	status := nestedMap(obj, "status")
+	phase := nestedString(obj, "status", "phase")
 	endpoints := nestedStringSlice(status, "endpoints")
 
 	obs := Observed{DeclaredTag: declaredTag, RunningTag: runningTag}
@@ -667,15 +662,14 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 // error yields an empty map so the board still renders declared/health/phase.
 func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace string) map[string]string {
 	out := map[string]string{}
-	list, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	list, err := s.State.k8s.List(ctx, deploymentsGroup, deploymentsVersion, deploymentsResource, namespace, 0)
 	if err != nil {
 		s.Log.Warn("list deployments for running tag failed; running tag will be empty",
 			"namespace", namespace, "err", err)
 		return out
 	}
-	for i := range list.Items {
-		d := &list.Items[i]
-		out[d.GetName()] = firstContainerTag(d)
+	for _, d := range list {
+		out[objName(d)] = firstContainerTag(d)
 	}
 	return out
 }
@@ -685,12 +679,57 @@ func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace strin
 // is never mistaken for the app), falling back to the first container. Mirrors
 // inventory.ts runningTagFromDeployment. Best-effort: any error → "".
 func runningTagOf(s *cloud.Service[state], ctx context.Context, namespace, name, declaredRepository string) string {
-	d, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	d, err := s.State.k8s.Get(ctx, deploymentsGroup, deploymentsVersion, deploymentsResource, namespace, name)
 	if err != nil {
 		return ""
 	}
 	return runningTagFromDeployment(d, declaredRepository)
 }
+
+// nested walks a path of keys through an object's nested maps and returns the
+// value there, or nil when any segment is missing or is not a map. It is the ONE
+// traversal the typed readers below share — apimachinery's `unstructured.Nested*`
+// family, minus the deep copies (nothing here mutates what it reads) and minus the
+// dependency, since an object off the cloud.K8sClient seam is already a
+// decoded-JSON map.
+func nested(obj map[string]any, path ...string) any {
+	var cur any = obj
+	for _, key := range path {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = m[key]
+	}
+	return cur
+}
+
+// nestedString reads a string at a path, "" when absent or another type. Every
+// field the drift board reads off a CR is optional in practice (a CR mid-
+// reconcile, a kind that never sets it), so an absent value is an empty column,
+// never an error.
+func nestedString(obj map[string]any, path ...string) string {
+	s, _ := nested(obj, path...).(string)
+	return s
+}
+
+// nestedMap reads a sub-object at a path, nil when absent. A nil map reads as
+// empty everywhere below, so callers never guard it.
+func nestedMap(obj map[string]any, path ...string) map[string]any {
+	m, _ := nested(obj, path...).(map[string]any)
+	return m
+}
+
+// nestedSlice reads a list at a path, nil when absent. Elements stay `any`
+// because a decoded-JSON list is heterogeneous by type; the caller asserts.
+func nestedSlice(obj map[string]any, path ...string) []any {
+	s, _ := nested(obj, path...).([]any)
+	return s
+}
+
+// objName is an object's metadata.name — the CR / Deployment name the board keys
+// every row on.
+func objName(obj map[string]any) string { return nestedString(obj, "metadata", "name") }
 
 // nestedInt reads an integer-valued key from an unstructured map, tolerating the
 // int64/float64 the k8s decoder may produce.
@@ -731,12 +770,9 @@ func nestedStringSlice(m map[string]any, key string) []string {
 
 // deploymentContainers extracts the pod-template container images from an
 // unstructured Deployment (spec.template.spec.containers[].image).
-func deploymentContainers(dep *unstructured.Unstructured) []string {
-	if dep == nil {
-		return nil
-	}
-	raw, ok, _ := unstructured.NestedSlice(dep.Object, "spec", "template", "spec", "containers")
-	if !ok {
+func deploymentContainers(dep map[string]any) []string {
+	raw := nestedSlice(dep, "spec", "template", "spec", "containers")
+	if len(raw) == 0 {
 		return nil
 	}
 	imgs := make([]string, 0, len(raw))
@@ -756,7 +792,7 @@ func deploymentContainers(dep *unstructured.Unstructured) []string {
 // container whose image repository equals the CR's declared repository (so a
 // sidecar can never be mistaken for the app), falling back to the first container.
 // Mirrors inventory.ts runningTagFromDeployment.
-func runningTagFromDeployment(dep *unstructured.Unstructured, declaredRepository string) string {
+func runningTagFromDeployment(dep map[string]any, declaredRepository string) string {
 	imgs := deploymentContainers(dep)
 	if len(imgs) == 0 {
 		return ""
@@ -773,7 +809,7 @@ func runningTagFromDeployment(dep *unstructured.Unstructured, declaredRepository
 // first container's tag. The per-service exact match (runningTagFromDeployment)
 // is used when the declared repo is known; this keeps the list pass O(deployments)
 // without a Get per service.
-func firstContainerTag(dep *unstructured.Unstructured) string {
+func firstContainerTag(dep map[string]any) string {
 	imgs := deploymentContainers(dep)
 	if len(imgs) == 0 {
 		return ""
