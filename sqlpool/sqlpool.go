@@ -11,7 +11,13 @@
 // is the pool cap, so that is what remains here.
 package sqlpool
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/namespace"
+)
 
 // Single caps db at one connection.
 //
@@ -30,3 +36,35 @@ import "database/sql"
 // image builds. Until that asymmetry is fixed upstream the cap has to be stated
 // by the caller, and this is where cloud states it.
 func Single(db *sql.DB) { db.SetMaxOpenConns(1) }
+
+// Open opens the named SYSTEM-namespace database under dir, with the cap already
+// applied. It is the one call an app makes to get its store's handle.
+//
+// It exists because the two lines it replaces were a PAIR that nothing paired.
+// Thirty-three stores opened themselves with byte-identical code —
+//
+//	db, err := cek.Open(namespace.System(), "<app>", dir)
+//	if err != nil { return nil, fmt.Errorf("open <app> store: %w", err) }
+//	sqlpool.Single(db)
+//
+// — and the correctness argument above (a two-statement read-modify-write is
+// atomic ONLY because no second connection can interleave) rests entirely on the
+// third line, which is a separate call the caller has to remember. Thirty-three
+// remembered. apps/framework did not: it opens a cek database through an engine
+// callback and never capped it, so its DocType store ran uncapped in production.
+//
+// A rule that lives in thirty-three copies of a prologue holds until someone
+// writes a thirty-fourth store; a rule INSIDE the opener is a property of every
+// handle that exists. Same argument as cloud.App being the only way to get an app.
+//
+// The name is the FILE key in the system namespace — the app's own name — never a
+// path: these are the deployment's databases, not a tenant's. A per-org store
+// comes through OrgDB, which names its owner.
+func Open(name, dir string) (*sql.DB, error) {
+	db, err := cek.Open(namespace.System(), name, dir)
+	if err != nil {
+		return nil, fmt.Errorf("open %s store: %w", name, err)
+	}
+	Single(db)
+	return db, nil
+}
