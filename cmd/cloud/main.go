@@ -352,7 +352,7 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	if a.Required {
 		return fmt.Errorf("%s is required here and would not start: %w", a.Name, err)
 	}
-	// A remote mount (CLOUD_<NAME>_ADDR) starts no process — zip.Mount only builds
+	// A remote mount (CLOUD_<NAME>_ADDR) starts no process — zip.Proxy only builds
 	// a client — so its only failures are an unusable address and a route conflict.
 	// Both are configuration this deployment got wrong, there is no process to
 	// degrade, and a second Load would re-register the same prefixes.
