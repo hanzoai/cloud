@@ -493,8 +493,7 @@ func RegisterServiceReleaser(f func(ctx context.Context, ev ServiceReleaseEvent)
 
 // OnServiceRelease rolls a proven image live by patching the matching hanzo.ai/v1
 // Service CR's spec.image (the operator then reconciles the Deployment). The
-// releaser enforces the clean-semver gate and CR-name resolution; this is only
-// the dispatch seam.
+// releaser enforces the clean-semver gate and CR-name resolution; this is only the dispatch.
 //
 // Like OnGitPush it used to return nil when unregistered, with the same result:
 // a release that patched no CR, reported as a successful rollout. The proving

@@ -7,19 +7,19 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// sync_seam.go is the inversion layer between the universal sync ENGINE
+// sync.go is the inversion layer between the universal sync ENGINE
 // (clients/sync) and the two planes that trigger or execute it — the webhook
 // triggers (clients/integrations GitHub App, clients/git Hanzo Git ingest) and the git
-// object plane (clients/git). It is the SAME idiom as git_import.go's GitImporter:
+// object plane (clients/git). It is the same idiom as git_import.go's GitImporter:
 // the engine registers itself here at Mount; triggers call the package funcs below
 // with NO import of the engine package, so nothing imports the sync package except apps
-// (which mounts it). One seam, one direction, no cycles.
+// (which mounts it). One direction, no cycles.
 
 // SyncEvent is a provider-agnostic sync trigger. A webhook (GitHub push, Hanzo Git
 // push) or a manual run builds one and hands it to the registered engine via Sync;
 // the engine resolves the Syncs whose SOURCE matches (Provider, Locator/Repo)
 // for the org and applies each. Flat + string-typed so it crosses the trigger→
-// engine seam without importing the engine.
+// engine without importing the engine.
 type SyncEvent struct {
 	Kind     string // sync kind, e.g. "git"
 	Provider string // endpoint the event came from: "github" | "gitlab" | "hanzo-git"
@@ -64,7 +64,7 @@ var ErrSyncUnavailable = errors.New("cloud: sync engine not registered")
 // Co-resident, it is a Go call. Otherwise it asks the sync app over the plane —
 // because the TRIGGERS and the ENGINE are different apps and therefore different
 // processes. A webhook lands on integrations, a push lands on git, and neither
-// of them is where the engine runs, so the in-process seam is nil on every path
+// of them is where the engine runs, so the in-process call is nil on every path
 // that actually fires. It answered ErrSyncUnavailable for all of them while the
 // engine was up next door: every mirror and every chained propagation silently
 // stopped happening, reported as "not registered" rather than as the reachable
@@ -87,7 +87,7 @@ func Sync(ctx context.Context, ev SyncEvent) (SyncResult, error) {
 	return SyncResult{Ran: out.Ran, Skipped: out.Skipped}, nil
 }
 
-// ── git object-plane control seam (outbound mirror ensure/remove) ─────────────
+// ── git object-plane control (outbound mirror ensure/remove) ────────────────
 
 // GitMirrorController lets the sync engine's git provider ENSURE or REMOVE a
 // native repo's outbound mirror target without importing clients/git (which owns

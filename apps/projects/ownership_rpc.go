@@ -11,8 +11,8 @@ import (
 
 // The identity trust boundary asks projects who owns a claimed project.
 //
-// Same seam and same reason as key_rpc.go and sites_rpc.go, and of the three this
-// is the one that was load-bearing for SECURITY. cloud.SanitizeIdentity refuses an
+// Same reason as key_rpc.go and sites_rpc.go, and of the three this one was
+// load-bearing for SECURITY. cloud.SanitizeIdentity refuses an
 // X-Project-Id registered to a DIFFERENT org than the caller's validated org, and
 // it answered that question from a package-level registry this app fills at Mount.
 // The boundary is edge middleware in EVERY process; this store is in exactly one.
