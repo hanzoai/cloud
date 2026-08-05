@@ -154,6 +154,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// cache is live — the GitHub App webhook + backfill (clients/integrations) reach
 	// the tracker through it without importing this package (tracker_seam inversion).
 	registerIssueSink()
+	// The same upsert, offered to the process the feeder actually runs in —
+	// integrations holds the GitHub App, and it is not this one (upsert_plane.go).
+	exposeUpsert()
 	s.Log.Info("tracker mounted", "brand", s.Brand)
 	return nil
 }
