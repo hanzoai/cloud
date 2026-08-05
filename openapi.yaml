@@ -4733,6 +4733,8 @@ components:
           type: string
         id:
           type: string
+        network:
+          type: string
         nonce:
           type: string
         payee:
@@ -30625,6 +30627,44 @@ components:
         up:
           type: boolean
       type: object
+    o11y.traceRow:
+      properties:
+        durationMs:
+          description: |-
+            DurationMs is End minus Start in milliseconds: the trace's wall clock,
+            not the sum of its spans, which double-counts everything concurrent.
+          type: number
+        end:
+          description: End is the latest span end, RFC3339 with nanoseconds, in UTC.
+          type: string
+        numSpans:
+          description: NumSpans is how many spans the trace carries.
+          type: integer
+        start:
+          description: Start is the earliest span start, RFC3339 with nanoseconds,
+            in UTC.
+          type: string
+        traceId:
+          description: TraceID is the trace's id — the {traceId} of the detail read.
+          type: string
+      type: object
+    o11y.tracesOut:
+      properties:
+        count:
+          description: Count is how many traces this page carries.
+          type: integer
+        limit:
+          description: Limit is the page cap actually applied, after clamping.
+          type: integer
+        sinceSec:
+          description: SinceSec is the window actually read, in seconds, after clamping.
+          type: integer
+        traces:
+          description: Traces are the caller org's traces, most recently active first.
+          items:
+            $ref: '#/components/schemas/o11y.traceRow'
+          type: array
+      type: object
     o11y.updateItemIn:
       properties:
         assignee:
@@ -30847,6 +30887,18 @@ components:
       type: object
     onboardResp:
       properties:
+        accessKey:
+          description: |-
+            AccessKey is the identifier of the org-scoped credential provisioning minted
+            with the organization. Present on a first run that actually minted one.
+          type: string
+        accessSecret:
+          description: |-
+            AccessSecret is that credential's confidential half, returned ONCE — on the
+            response that mints it and never again. IAM keeps only its argon2id digest
+            and blanks the plaintext, so this is the single moment it exists in a form
+            its owner can read; a replay of the same provision re-reveals nothing.
+          type: string
         additional:
           description: |-
             Additional is true when the caller already had an organization and this one
@@ -32273,6 +32325,17 @@ components:
         hiddenReason:
           type: string
         id:
+          type: string
+        key:
+          description: |-
+            Key is the project's publishable ingest key, minted at create. It is the
+            value the injected beacon carries and the ONE thing that attributes this
+            site's events; the static-builder reads it beside analytics.
+
+            Publishable means it belongs in a page's source: it names a write scope and
+            mints no principal, so it is returned in full rather than masked. Masking it
+            would only mean every caller needed a second endpoint to get the thing the
+            page already ships.
           type: string
         lastPurgeAt:
           type: integer
@@ -48150,6 +48213,47 @@ paths:
       tags:
       - billing
       x-app: commerce
+  /v1/billing/crypto/deposit:
+    post:
+      description: |-
+        Mints a deposit address held by the MPC signer fleet — no single party holds the key — on the chain and token you name, and returns it with the intent that tracks it.
+
+        The account credited is the PINNED caller's, never a value in the body, so a deposit cannot be aimed at someone else's balance. A caller who already has an open intent gets that same address back rather than a new one, so reloading the page cannot spray keygens across the signer fleet.
+
+        NO BALANCE MOVES HERE. This hands out an address; the chain watcher credits the account when a real transfer confirms, which is also why an address handed out and never funded costs nothing and expires nothing.
+      operationId: post_v1_billing_crypto_deposit
+      summary: Get a deposit address for a crypto top-up
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/crypto/deposit/{id}:
+    get:
+      description: |-
+        Answers the addressed deposit intent's current state — pending until a transfer is seen, confirming while the chain buries it, succeeded once it is credited — so a payment page can poll one deposit rather than the whole balance.
+
+        Scoped to the caller: an intent belonging to another payer is not found and answers 404, never another account's state. The credit itself is the chain watcher's to make; this read reports it and never performs it.
+      operationId: get_v1_billing_crypto_deposit_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Follow one crypto deposit to settlement
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/crypto/options:
+    get:
+      description: |-
+        Answers the custody processor's LIVE capability list — the chains and the tokens on each that this deployment can actually take a deposit on. A payment page renders its asset picker straight from it rather than from a list of its own, so a chain the processor stops supporting disappears from the picker instead of minting an address nothing watches.
+
+        It is a capability read, not an account read: it says what may be paid with, never anything about this caller's balance or deposits.
+      operationId: get_v1_billing_crypto_options
+      summary: Which chains and tokens a crypto top-up can use
+      tags:
+      - billing
+      x-app: commerce
   /v1/billing/gpu/charge:
     post:
       description: |-
@@ -48370,42 +48474,36 @@ paths:
   /v1/billing/methods:
     get:
       description: |-
-        Answers the org's saved payment methods as the portal holds them — brand, last four, expiry, default flag. This is what the GPU launch gate's card-on-file check reads.
+        Answers the cards saved against your own account as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system. It is what a checkout prefills its payment step from.
 
-        NO CARD DATA IS HELD HERE. What the fleet stores is the masked descriptor plus the PROCESSOR's reusable card reference; the number and the CVV live at the processor and never enter this system, so there is nothing here to un-mask.
+        The customer face of the list a service token reads at /v1/billing/portal/methods — same rows, different principal, no hop between them.
 
-        The customer filter is pinned server-side to the caller's own ORG slug — the upstream 400s without one, and this always supplies it — so a caller sees only its own org's methods. A card is SAVED under that same org key, so this list is the one that always matches what was saved; the /v1/finance/payment-methods sibling keys the same store on the resolved WALLET instead, which differs wherever the payer is a person rather than the org pool.
-
-        401 without a validated principal. The upstream status forwards verbatim and an unreachable upstream is 502 — never an empty list, because no cards and could not ask must not look alike.
+        The subject filter is pinned to the VALIDATED caller before the handler runs, so the answer is your own account's cards whatever customerId the request carries, and another org's rows are outside the namespace entirely. A caller who is not signed in is refused before the read.
       operationId: get_v1_billing_methods
-      summary: Cards saved against the caller's org, masked
+      summary: Your saved cards, masked — the customer read
       tags:
       - billing
-      x-app: billing
+      x-app: commerce
     post:
       description: |-
-        Vaults the single-use card token the browser produced with the payment processor and attaches the REUSABLE reference it returns to the caller's org, so a later charge — a top-up, auto-recharge, a GPU launch — has something to bill.
+        Vaults the card the processor already holds — you send its one-time reference, never a card number — as a reusable card on file, and stores the billing address with it. That vaulted card is what a subscription renewal or an auto-recharge charges later, which is why saving one is the step that makes a monthly plan billable at all.
 
-        WHAT IS STORED IS NOT A CARD. The processor exchanges the one-time token for a card-on-file id; this system keeps that id, the masked brand/last4/expiry the browser sent, and a billing address if one was supplied. No PAN and no CVV, ever.
+        It charges nothing. Saving a card moves no money; the first charge is whatever arrangement you then attach it to.
 
-        The owning customer is pinned server-side to the caller's own org on every billing subject key, so a forged body can never attach a card to another tenant. Vaulting VALIDATES the card with the processor, so a card the bank refuses comes back 402 carrying the processor's own reason — forwarded verbatim, because insufficient funds and a wrong security code are different remedies for the customer.
-
-        401 without a validated principal.
+        The subject is pinned from the validated caller and OVERWRITES the customerId in the body while leaving the card fields untouched, so a card can only ever be attached to the caller's OWN account whatever the body claims. That pin is the whole control on this write, not decoration: this is the one handler in the family that reads its subject from the body.
       operationId: post_v1_billing_methods
-      summary: Save a card on file for the caller's org
+      summary: Save a card for later charges
       tags:
       - billing
-      x-app: billing
+      x-app: commerce
   /v1/billing/methods/{id}:
     delete:
       description: |-
-        Detaches a card on file: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.
+        Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.
 
-        The id is resolved INSIDE the caller's own org, so it can only ever name a card this org can list. Another tenant's id does not resolve and answers 404 — not 403, because a status that separates 'not yours' from 'not there' turns an id into something worth guessing.
+        The customer twin of DELETE /v1/billing/portal/methods/{id}. The id is resolved INSIDE your own org namespace, so a card that is not yours is simply not found there and answers 404 — never 403, which would confirm the id exists.
 
-        Removing the card an auto-recharge or a running GPU lease bills leaves that arrangement with nothing to charge; it is the customer's call to make, and this makes it rather than refusing on their behalf.
-
-        401 without a validated principal — the org is the validated owner claim, never a client-supplied field, so this cannot be pointed at another tenant.
+        Removing the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is yours to decide.
       operationId: delete_v1_billing_methods_by_id
       parameters:
       - in: path
@@ -48413,10 +48511,10 @@ paths:
         required: true
         schema:
           type: string
-      summary: Remove a saved card from the caller's org
+      summary: Remove one of your saved cards
       tags:
       - billing
-      x-app: billing
+      x-app: commerce
   /v1/billing/mode:
     post:
       description: 'Flips the org''s live flag, which is the single authority for
@@ -48464,11 +48562,21 @@ paths:
       description: |-
         Answers the org's saved payment methods as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system.
 
-        This is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods, and it exists as its own address because the host that publishes that one cannot forward to it — the forward would re-enter its own handler. Both answer the same rows.
+        This is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods. Both are served here, in this process, and answer the same rows; they are two addresses because they admit two different principals, not because either forwards to the other.
 
         The customer filter is pinned to the VALIDATED caller before the handler runs, so a browser sees only its own subject's cards whatever customerId it sends; only a caller holding the internal service token may name the subject, and the org it may name it within is fixed by the gateway. Cross-tenant is closed by the org namespace for both, so an id or a subject from another org resolves to nothing. A caller who is neither is refused before the read.
       operationId: get_v1_billing_portal_methods
       summary: Cards saved against the caller's org, masked — the portal read
+      tags:
+      - billing
+      x-app: commerce
+    post:
+      description: |-
+        The service-token twin of POST /v1/billing/methods: it vaults the processor's one-time reference as a reusable card on file for the named subject, with its billing address, and moves no money doing it.
+
+        It exists so an internal caller can complete the family it can already read and detach. The subject it may name is pinned to the org the gateway fixed, so the service token acts WITHIN one tenant and never across tenants; a caller holding no service token is refused before the write.
+      operationId: post_v1_billing_portal_methods
+      summary: Save a card on a subject's behalf — the portal attach
       tags:
       - billing
       x-app: commerce
@@ -48477,7 +48585,7 @@ paths:
       description: |-
         Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.
 
-        The service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is — the host that publishes the customer address proxies here rather than into itself.
+        The service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is — a different principal, on the same rows, in this same process.
 
         The id is resolved INSIDE the caller's org namespace, so another tenant's card is not found there and answers 404 — never 403, which would confirm the id exists. That bound holds for the service token too: it may act for any subject within the org the gateway pinned, and for no subject outside it.
 
@@ -48692,6 +48800,19 @@ paths:
           type: string
       summary: Payment-provider webhook intake for settlement and subscription lifecycle
         events
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/wire:
+    get:
+      description: |-
+        Answers the receiving bank details for the brand this deployment serves — the account the funds actually land in, hydrated per brand rather than hard-coded — together with the payment reference to put on the transfer.
+
+        THE REFERENCE IS THE POINT. It carries your own billing key, and it is how an arriving wire is attributed to your account; a transfer sent without it arrives as an unidentified receipt. That is why this read is gated at all: an unpinned caller would be handed an unattributable reference.
+
+        Reading it credits nothing and reserves nothing. A wire is settled by an operator when the bank shows the funds, so the balance moves on receipt, not on this call.
+      operationId: get_v1_billing_wire
+      summary: Where to wire funds, and the reference that credits them to you
       tags:
       - billing
       x-app: commerce
@@ -50250,7 +50371,7 @@ paths:
         Returns the caller org's share classes, in creation order. A
         share class is what a certificate is issued in, and every class the company
         has authorized appears. The response is a bare JSON array, not an envelope.
-      operationId: v1.captable.get_classes
+      operationId: get_v1_captable_classes
       responses:
         "200":
           content:
@@ -50301,7 +50422,7 @@ paths:
         Returns the caller org's cap-table company record. The row is
         seeded when the tenant's store first opens, so it always exists; its name and
         incorporation details are set with PUT /v1/captable/company.
-      operationId: v1.captable.get_company
+      operationId: get_v1_captable_company
       responses:
         "200":
           content:
@@ -50320,7 +50441,7 @@ paths:
         stored as empty when omitted, so a call that sends only a name CLEARS them.
         The company row itself is seeded when the tenant's store first opens, so this
         never creates one.
-      operationId: v1.captable.put_company
+      operationId: put_v1_captable_company
       requestBody:
         content:
           application/json:
@@ -50344,7 +50465,7 @@ paths:
         Returns the caller org's convertible notes, newest first. A
         note's principal sits OUTSIDE issued equity until it converts, so it is not
         part of the share counts.
-      operationId: v1.captable.get_convertibles
+      operationId: get_v1_captable_convertibles
       responses:
         "200":
           content:
@@ -50374,7 +50495,7 @@ paths:
         Removes one of the caller org's convertible notes, taking its
         principal out of the cap table's unconverted-instrument totals. An id this org
         does not hold is not found.
-      operationId: v1.captable.delete_convertibles_id
+      operationId: delete_v1_captable_convertibles_id
       parameters:
       - description: ID is the convertible note to delete.
         in: path
@@ -50400,7 +50521,7 @@ paths:
         Returns the caller org's investments, newest first. It spans
         every round, so it is the flat ledger of cheques written into the company,
         each naming its investor and the round it went into.
-      operationId: v1.captable.get_investments
+      operationId: get_v1_captable_investments
       responses:
         "200":
           content:
@@ -50418,7 +50539,7 @@ paths:
         Returns the caller org's option grants, newest first. Each row is
         joined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED
         or CANCELLED are listed here but do not dilute the cap table.
-      operationId: v1.captable.get_options
+      operationId: get_v1_captable_options
       responses:
         "200":
           content:
@@ -50448,7 +50569,7 @@ paths:
         Removes one of the caller org's option grants, taking its shares
         out of the cap table's granted-options and fully-diluted counts. An id this org
         does not hold is not found.
-      operationId: v1.captable.delete_options_id
+      operationId: delete_v1_captable_options_id
       parameters:
       - description: ID is the option grant to delete.
         in: path
@@ -50474,7 +50595,7 @@ paths:
         Returns the caller org's equity plans, newest first. An equity
         plan is an option pool: a reserve of shares, drawn from one share class, that
         option grants are written against.
-      operationId: v1.captable.get_plans
+      operationId: get_v1_captable_plans
       responses:
         "200":
           content:
@@ -50504,7 +50625,7 @@ paths:
         Returns the caller org's fundraising rounds, newest first. A round
         groups a fundraising event; a PRICED round also carries the share class and
         price per share it issues at.
-      operationId: v1.captable.get_rounds
+      operationId: get_v1_captable_rounds
       responses:
         "200":
           content:
@@ -50535,7 +50656,7 @@ paths:
         investment written into it, oldest first. A round id that does not exist in the
         caller's org is not found — including one that exists in another tenant, since
         the org comes from the caller's principal and is part of the lookup.
-      operationId: v1.captable.get_rounds_id
+      operationId: get_v1_captable_rounds_id
       parameters:
       - description: |-
           ID is the round to read. It is the path segment: the URL is the addressing
@@ -50565,7 +50686,7 @@ paths:
         close date and moving its status to CLOSED. Only an OPEN round can be closed:
         a round that is already closed — like an id this org does not hold — is not
         found. Closing a round does not change what was invested in it.
-      operationId: v1.captable.post_rounds_id_close
+      operationId: post_v1_captable_rounds_id_close
       parameters:
       - description: |-
           ID is the round to close. It is the path segment: the URL is the
@@ -50621,7 +50742,7 @@ paths:
         Returns the caller org's SAFEs, newest first. A SAFE is a simple
         agreement for future equity: its capital sits OUTSIDE issued equity until it
         converts, so it is not part of the share counts.
-      operationId: v1.captable.get_safes
+      operationId: get_v1_captable_safes
       responses:
         "200":
           content:
@@ -50651,7 +50772,7 @@ paths:
         Removes one of the caller org's SAFEs, taking its capital out of the
         cap table's unconverted-instrument totals. An id this org does not hold is not
         found.
-      operationId: v1.captable.delete_safes_id
+      operationId: delete_v1_captable_safes_id
       parameters:
       - description: ID is the SAFE to delete.
         in: path
@@ -50677,7 +50798,7 @@ paths:
         Returns the caller org's share certificates, newest first. Each row
         is joined to its holder and its share class, so a certificate names who holds
         it and what class it is in without a second call.
-      operationId: v1.captable.get_shares
+      operationId: get_v1_captable_shares
       responses:
         "200":
           content:
@@ -50707,7 +50828,7 @@ paths:
         Removes one of the caller org's share certificates, taking its
         shares out of the cap table's outstanding and fully-diluted counts. An id this
         org does not hold is not found.
-      operationId: v1.captable.delete_shares_id
+      operationId: delete_v1_captable_shares_id
       parameters:
       - description: ID is the share certificate to delete.
         in: path
@@ -50746,7 +50867,7 @@ paths:
         Returns the caller org's stakeholders, newest first. The
         response is a bare JSON array, not an envelope. Each row carries the holder's
         contact and address fields alongside the company's name.
-      operationId: v1.captable.get_stakeholders
+      operationId: get_v1_captable_stakeholders
       responses:
         "200":
           content:
@@ -50779,7 +50900,7 @@ paths:
         orphan issued equity: a holder that still holds share certificates or option
         grants cannot be deleted, and answers 400 saying so — release or transfer the
         holdings first. An id this org does not hold is not found.
-      operationId: v1.captable.delete_stakeholders_id
+      operationId: delete_v1_captable_stakeholders_id
       parameters:
       - description: ID is the stakeholder to delete.
         in: path
@@ -50808,7 +50929,7 @@ paths:
         The values are stored as sent. Unlike adding a stakeholder, this route does
         not check the email's shape or the type and relationship vocabularies, so it
         can record a value that adding one would have rejected.
-      operationId: v1.captable.patch_stakeholders_id
+      operationId: patch_v1_captable_stakeholders_id
       parameters:
       - description: |-
           ID is the stakeholder to update. It is the path segment: the URL is the
@@ -50846,7 +50967,7 @@ paths:
         converted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and
         CANCELLED grants are excluded, so equity issued through an exercised option is
         never counted twice.
-      operationId: v1.captable.get_summary
+      operationId: get_v1_captable_summary
       responses:
         "200":
           content:
@@ -51075,7 +51196,7 @@ paths:
         order is fixed, so a console can render the same rows every time. A policy that
         cannot be read leaves that channel's policy fields empty rather than failing
         the whole listing.
-      operationId: get_v1_channels
+      operationId: v1.get_channels
       responses:
         "200":
           content:
@@ -51119,7 +51240,7 @@ paths:
         allowlisted or disabled, the config-managed DM and group allow entries, the
         senders approved through PAIRING (read-only here), and the org's named access
         groups. An unknown channel is a 404.
-      operationId: get_v1_channels_allowlist
+      operationId: v1.channels.get_allowlist
       parameters:
       - description: |-
           Channel is the transport to read: discord, slack, teams or telegram.
@@ -51153,7 +51274,7 @@ paths:
         alone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries
         — senders approved through pairing belong to the approval flow, so a policy
         edit can never revoke one. An unknown channel is a 404.
-      operationId: put_v1_channels_allowlist
+      operationId: v1.channels.put_allowlist
       requestBody:
         content:
           application/json:
@@ -51185,7 +51306,7 @@ paths:
         into. It is a CURSOR feed, not a search: pass the returned cursor back as
         `since` to get only what has arrived since. Only this org's messages are
         stored under this org, so the feed can never carry another tenant's chat.
-      operationId: get_v1_channels_inbox
+      operationId: v1.channels.get_inbox
       parameters:
       - description: |-
           Since is the exclusive cursor: only messages with a higher row id come
@@ -51226,7 +51347,7 @@ paths:
         "pairing" and who is not allowed yet. Each row carries the CODE an org admin
         passes to POST /v1/channels/pairing/approve. Expired requests are not
         returned. Codes are capability strings: they are shown here, and never logged.
-      operationId: get_v1_channels_pairing
+      operationId: v1.channels.get_pairing
       responses:
         "200":
           content:
@@ -51249,7 +51370,7 @@ paths:
         bootstraps that sender as the channel's owner, which the answer reports. An
         unknown or expired code is a 404, and a code always belongs to exactly one
         org, so it can never approve someone into another tenant.
-      operationId: post_v1_channels_pairing_approve
+      operationId: v1.channels.post_pairing_approve
       requestBody:
         content:
           application/json:
@@ -53196,6 +53317,21 @@ paths:
       tags:
       - collections
       x-app: base
+  /v1/commands:
+    get:
+      description: |-
+        The command projection of the OpenAPI document at /v1/openapi.json — each operation reduced to what running it by name needs: its service and command token, its method and path, the prose lifted from the handler, its path parameters as positional arguments and its remaining inputs as typed flags.
+
+        It is a separate address for one measured reason: the fleet document is megabytes and a command palette cannot load it, while this projection of the same operations is several times smaller because it carries no schemas, responses or components.
+
+        Unauthenticated by design, exactly as the document it derives from: a client has to be able to read the contract before it holds a credential, and a list of operation names grants nothing. The list is TOTAL and is never filtered by caller — what you may run is decided per request by the authorizer, on the decoded input, so a filtered list would be a second claim about permission that is free to be wrong.
+
+        Rendered once and served as bytes thereafter, under a strong ETag.
+      operationId: get_v1_commands
+      summary: Every operation this API answers, as a command
+      tags:
+      - commands
+      x-app: openapi
   /v1/commerce/admin/catalog:
     get:
       description: 'Returns the brand-scoped catalog carrying the administrative economics
@@ -53232,61 +53368,6 @@ paths:
       tags:
       - commerce
       x-app: commerce
-  /v1/commerce/deposits:
-    post:
-      description: Forwards the deposit request to the backend belonging to the tenant
-        the request HOST resolves to, and answers that backend's status and body verbatim.
-        The upstream is always taken from the resolved tenant's configured backend
-        and never from the Host header itself, so a spoofed host cannot redirect the
-        forward; only the Authorization and Content-Type headers are carried forward,
-        so cookies and custom headers never leak to the backend. An unknown host is
-        404 with no echo of the host, a caller with no Authorization is 401, a tenant
-        with no backend configured is 503, and an unreachable backend is 502.
-      operationId: post_v1_commerce_deposits
-      summary: Open a deposit against the tenant's own backend
-      tags:
-      - commerce
-      x-app: commerce
-  /v1/commerce/deposits/{id}/confirm:
-    post:
-      description: Forwards the confirmation for the addressed deposit to the resolved
-        tenant's own backend and answers that backend's reply verbatim. The tenant
-        comes from the request host, the upstream from that tenant's configured backend,
-        and an Authorization header is required — the confirmation is the caller's,
-        and this service only relays it. An unknown host is 404, a missing deposit
-        id 400, a tenant with no backend configured 503 and an unreachable backend
-        502.
-      operationId: post_v1_commerce_deposits_by_id_confirm
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Confirm a deposit that needed a second step
-      tags:
-      - commerce
-      x-app: commerce
-  /v1/commerce/deposits/{id}/status:
-    get:
-      description: Returns the deposit's state as the tenant's own backend reports
-        it — pending, processing, settled or failed — which is what the checkout page
-        polls until a terminal state or timeout. The tenant is resolved from the request
-        host and the read is forwarded to that tenant's configured backend with the
-        caller's Authorization carried through; without that header the answer is
-        401. An unknown host is 404, a tenant with no backend 503 and an unreachable
-        backend 502.
-      operationId: get_v1_commerce_deposits_by_id_status
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Poll a deposit's state until it settles
-      tags:
-      - commerce
-      x-app: commerce
   /v1/commerce/tenant:
     get:
       description: Answers the branding, identity issuer and client id, identity-verification
@@ -53301,26 +53382,6 @@ paths:
         tenants; a successful answer is cacheable for a minute.
       operationId: get_v1_commerce_tenant
       summary: The public tenant configuration a checkout page boots from
-      tags:
-      - commerce
-      x-app: commerce
-  /v1/commerce/webhooks/{provider}:
-    post:
-      description: 'Forwards the provider''s event — body and original signature headers
-        intact — to the backend of the tenant the request host resolves to, so that
-        backend can verify it with its own tenant-scoped signing key. Commerce deliberately
-        does NOT verify the signature here: the keys live with the tenant backend,
-        and holding a second copy would be a second place to rotate and a stale cache
-        that rejects live webhooks. A provider outside the known set is 404, as is
-        an unresolvable host; a tenant with no backend configured is 503.'
-      operationId: post_v1_commerce_webhooks_by_provider
-      parameters:
-      - in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      summary: Relay a payment provider's webhook to the tenant's own backend
       tags:
       - commerce
       x-app: commerce
@@ -55659,7 +55720,7 @@ paths:
         A room id outside the caller's own tenant store is not found. Only links that
         NAME the room are counted — a link created over a single document contributes
         nothing here, even when that document also sits in the room.
-      operationId: v1.dataroom.get_analytics_dataroom_dataroomId
+      operationId: get_v1_dataroom_analytics_dataroom_dataroomId
       parameters:
       - description: |-
           DataroomID is the room to report on. It is the path segment, resolved in
@@ -55691,7 +55752,7 @@ paths:
         The link is resolved in the caller's OWN tenant store, so another org's link id
         is not found — knowing a link id is enough to OPEN the room it shares, and
         never enough to read who has been reading it.
-      operationId: v1.dataroom.get_analytics_link_linkId
+      operationId: get_v1_dataroom_analytics_link_linkId
       parameters:
       - description: |-
           LinkID is the link to report on. It is the path segment, resolved in the
@@ -55722,7 +55783,7 @@ paths:
 
         Documents are not included — a room's contents come from reading the single
         room.
-      operationId: v1.dataroom.get_datarooms
+      operationId: get_v1_dataroom_datarooms
       responses:
         "200":
           content:
@@ -55745,7 +55806,7 @@ paths:
         room holds no documents and is reachable by NOBODY until a share link is
         created over it — opening a room and granting access are two separate acts, so
         a room cannot leak by existing.
-      operationId: v1.dataroom.post_datarooms
+      operationId: post_v1_dataroom_datarooms
       requestBody:
         content:
           application/json:
@@ -55774,7 +55835,7 @@ paths:
         time breaking ties — the SAME order a link's visitor sees, so this is what the
         room looks like from the outside. A room id outside the caller's own tenant
         store is not found.
-      operationId: v1.dataroom.get_datarooms_id
+      operationId: get_v1_dataroom_datarooms_id
       parameters:
       - description: |-
           ID is the room to read. It is the path segment: the URL is the addressing
@@ -55808,7 +55869,7 @@ paths:
         document must exist in the caller's own store — either missing is not found —
         and a document already in the room is refused as a conflict rather than
         duplicated.
-      operationId: v1.dataroom.post_datarooms_id_documents
+      operationId: post_v1_dataroom_datarooms_id_documents
       parameters:
       - description: |-
           ID is the room to add to. It is the path segment: the URL is the addressing
@@ -55847,7 +55908,7 @@ paths:
         Tenant isolation is the per-org store itself: there is one SQLite file per org
         and the org is never a parameter, so no input the caller controls can address
         another tenant's documents. Metadata only — the bytes come from the file route.
-      operationId: v1.dataroom.get_documents
+      operationId: get_v1_dataroom_documents
       responses:
         "200":
           content:
@@ -55881,7 +55942,7 @@ paths:
         The lookup runs in the caller's own tenant store, so an id belonging to another
         org is not found exactly like one that never existed. Metadata only: the bytes
         are a separate read.
-      operationId: v1.dataroom.get_documents_id
+      operationId: get_v1_dataroom_documents_id
       parameters:
       - description: |-
           ID is the document to read. It is the path segment: the URL is the
@@ -55943,7 +56004,7 @@ paths:
 
         Archived links are omitted entirely. A link reports only THAT a password is
         set — the stored form is a bcrypt hash and no route returns it.
-      operationId: v1.dataroom.get_links
+      operationId: get_v1_dataroom_links
       responses:
         "200":
           content:
@@ -55980,7 +56041,7 @@ paths:
         The address a visitor later states is recorded UNVERIFIED, so a link gated only
         by email is openable by anyone the link reaches. Use a password for a link that
         must not travel.
-      operationId: v1.dataroom.post_links
+      operationId: post_v1_dataroom_links
       requestBody:
         content:
           application/json:
@@ -58163,9 +58224,11 @@ paths:
 
         WHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for navigator.sendBeacon, which cannot set headers) does the same, and is the credential a browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this org's errors, not a lens, not any other route on this API — so a leaked one lets a stranger write into your stream, and never lets one read out of it. Reading these rows back always takes a real bearer. A Hanzo Team workspace token resolves its org at REDUCED capability: the signed account names the person, so a `distinctId` in the body cannot pin events on a colleague.
 
-        NO CREDENTIAL IS ALSO ADMITTED, and that is the point — a logged-out visitor has none. Such a write is PROJECTED: filed under the reserved `$public` tenant, narrowed to what the SERVER can name — pageviews and errors, plus the closed autocapture vocabulary ($click, $input, $change, $submit, $view) — where EVERY one of those names is resolved through a server-owned table and stored as that table's value, so the name on the wire is never the name in the row. Stripped, too, to the fields the projection names, so revenue, personId, groupId and every property but the element annotation cannot reach a row — and an exception is carried only on an error, never on an interaction, so a click cannot ship a stack trace into a row's attributes. ITS IDENTITY IS NAMESPACED for the same reason the name is: nobody signed for it, so a `distinctId` off the wire is stored under a reserved `$anon:` prefix that no identified subject carries — an anonymous visitor still counts as one visitor, and still cannot be joined to a person the org knows. Everything refused is counted in `dropped`. On a published-site host the same projection applies with that site's org as the tenant. But a credential that IS presented and does NOT resolve is 403, never quietly downgraded: filing a misconfigured key's events under $public would hide them in a partition their owner cannot read.
+        NO CREDENTIAL IS REFUSED: a write the server cannot attribute to a project is 401 `ingest_key_required`, and a credential that IS presented but resolves to no project is 403 `ingest_key_unknown`. Nothing is filed under a shared tenant — events nobody can read are worse than events nobody sent, because the caller is told it succeeded. A browser bundle therefore always ships a pk-, which is what /v1/event.js takes.
 
-        The anonymous lane alone is bounded: 413 over 64 KiB, 400 over 50 events, 429 on the per-client-IP and per-peer caps, and a DNT:1 or Sec-GPC:1 request stores nothing and says so in the receipt. Two stored values carry their own bounds on top, because a request cap does not bound one value: an element annotation over 2 KiB (or a trail over 32 steps) and an exception class over 256 bytes are dropped from the row, which still lands. Where a deployment switches anonymous capture off, a credential-less write is 403 instead. Authenticated bodies are offered to the observability plane first, which claims LLM-observability ingestion batches and declines everything else.
+        A REDUCED principal — a Hanzo Team workspace token — writes through the PROJECTION into its own org: narrowed to what the SERVER can name (pageviews and errors, plus the closed autocapture vocabulary $click, $input, $change, $submit, $view), where every one of those names is resolved through a server-owned table and stored as that table's value, so the name on the wire is never the name in the row. Stripped, too, to the fields the projection names, so revenue, personId, groupId and every property but the element annotation cannot reach a row — and an exception is carried only on an error, never on an interaction, so a click cannot ship a stack trace into a row's attributes. It does NOT name the person: the signed account is the identity, so a `distinctId` in the body cannot pin events on a colleague. Everything refused is counted in `dropped`.
+
+        The projected lane alone is bounded: 413 over 64 KiB, 400 over 50 events, 429 on the per-client-IP and per-peer caps, and a DNT:1 or Sec-GPC:1 request stores nothing and says so in the receipt. Two stored values carry their own bounds on top, because a request cap does not bound one value: an element annotation over 2 KiB (or a trail over 32 steps) and an exception class over 256 bytes are dropped from the row, which still lands. Authenticated bodies are offered to the observability plane first, which claims LLM-observability ingestion batches and declines everything else.
       operationId: post_v1_event
       requestBody:
         content:
@@ -58188,6 +58251,29 @@ paths:
       summary: Capture product events into your org's warehouse
       tags:
       - event
+      x-app: analytics
+  /v1/event.js:
+    get:
+      description: |-
+        Serves the browser tag that autocaptures pageviews (initial and SPA) and uncaught errors onto the canonical wire at POST /v1/event.
+
+        Install is one line, and it is the same line for a Hanzo property and for a customer's own page:
+
+            <script defer src="https://api.hanzo.ai/v1/event.js" data-key="pk-…"></script>
+
+        `data-key` is the publishable key the project mints; `data-product` optionally names the emitting surface. The key may also ride the src as `?key=` for a host that strips data attributes.
+
+        WITHOUT A KEY THE TAG SENDS NOTHING. A keyless beacon is accepted 200 into $public, a reserved tenant the owning org cannot read — so silence is the honest failure, and the tag picks it rather than reporting success into a tenant nobody reads.
+      operationId: get_v1_event.js
+      responses:
+        2XX:
+          content:
+            application/javascript:
+              schema:
+                format: binary
+                type: string
+          description: Success
+      summary: The Hanzo event tag — the one-line install for a surface with no bundler
       x-app: analytics
   /v1/event/{project}/envelope:
     post:
@@ -68682,7 +68768,7 @@ paths:
 
         For callers written against the older shape, the class is also accepted in a JSON
         request body, read only when `?type=` is absent.
-      operationId: delete_v1_keys
+      operationId: v1.delete_keys
       parameters:
       - description: |-
           Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
@@ -68737,7 +68823,7 @@ paths:
         Rotating is what creating means here: a user holds one key per type, so the
         endpoint is idempotent by (caller, type) and the superseded credential stops
         working. Two live secrets for one user would make "revoke my key" a lie.
-      operationId: post_v1_keys
+      operationId: v1.post_keys
       requestBody:
         content:
           application/json:
@@ -69958,7 +70044,7 @@ paths:
                 sample:
                 - u_1
                 - u_2
-                source: event.event
+                source: event.fact
                 unmatched: 497
               schema:
                 $ref: '#/components/schemas/AudiencePreview'
@@ -82186,6 +82272,56 @@ paths:
       tags:
       - o11y
       x-app: o11y
+  /v1/o11y/traces:
+    get:
+      description: |-
+        Lists the caller org's recent traces — one row per trace with
+        its span count and wall-clock duration, most recently active first. This is
+        the trace SEARCH: it is where a trace id comes from, and the spans behind any
+        row are then read from GET /v1/o11y/traces/{traceId}. Every row belongs to the
+        caller's own org — the tenant is the validated principal, never an input, and
+        there is no administrator widening, because a trace list is a tenant's records
+        rather than a rollup over them. An unreachable telemetry store answers 503
+        rather than an empty page, because "no traces" and "cannot see the traces" are
+        different facts and only one of them is about the caller's system.
+      operationId: get_v1_o11y_traces
+      parameters:
+      - description: |-
+          Range is the window in seconds, counted back from now over each trace's
+          last activity. Default 3600, capped at 604800 (7d).
+        example: 3600
+        in: query
+        name: range
+        required: false
+        schema:
+          type: integer
+      - description: Limit is how many traces to return. Default 50, capped at 500.
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          MinDurationMs keeps only traces that lasted at least this many
+          milliseconds. Zero or absent keeps every trace in the window.
+        in: query
+        name: minDurationMs
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.tracesOut'
+          description: ok
+      summary: Lists the caller org's recent traces — one row per trace with its span
+        count and wall-clock duration, most recently active first.
+      tags:
+      - o11y
+      x-app: o11y
   /v1/o11y/traces/{traceId}:
     get:
       description: |-
@@ -83557,14 +83693,15 @@ paths:
         Onboard creates the caller's organization. Two flows, keyed on whether the caller
         already has a home org (mirrors app/onboard/route.ts):
 
-          - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT
-            carries the new owner and the cloud scopes everything to it.
+          - FIRST-RUN (no home org): create + MOVE the user in as admin, so their next
+            JWT carries the new owner and the cloud scopes everything to it. This is the
+            path a fresh OAuth sign-up takes, from the sign-up application's org.
           - ADDITIONAL (owner set): create the org but do NOT move the user — a move
             changes their IAM owner (stripping a SuperAdmin's status + orphaning their
             current org). They reach the new org via the OrgSwitcher, which re-scopes
             X-Org-Id without touching IAM membership. A personal-org request from someone
             who already has an org is meaningless → 409.
-      operationId: post_v1_orgs
+      operationId: v1.post_orgs
       requestBody:
         content:
           application/json:
@@ -85000,13 +85137,13 @@ paths:
         Attaches one or more CUSTOM public hostnames to this org's site.
 
         Binding a host you do not own would let you shadow it at the edge, so which
-        outcome you get depends on whether ownership is already established: a caller
-        vouches (a SuperAdmin, or an ADMIN of a platform-operator org — which manages
-        customer DNS, so its admin's bind IS the vouch) and binds VERIFIED immediately;
-        every other caller, INCLUDING a plain member of an operator org, has the host
-        CLAIMED as pending and gets the DNS challenge back in `bound[].records`. A
-        pending claim HOLDS the name so nobody else can take it, but it does not route
-        until POST .../domains/{host}/verify proves control.
+        outcome you get depends on whether ownership is already established: a SuperAdmin
+        vouches (the operator manages the customer's DNS, so its bind IS the proof) and
+        binds VERIFIED immediately; every other caller, INCLUDING an admin of the
+        deployment's own brand org, has the host CLAIMED as pending and gets the DNS
+        challenge back in `bound[].records`. A pending claim HOLDS the name so nobody
+        else can take it, but it does not route until POST .../domains/{host}/verify
+        proves control.
 
         A hostname we operate is refused to a non-vouched caller (those are assigned
         by the platform, never claimed), a host another site already holds is a 409,
@@ -86395,13 +86532,13 @@ paths:
         Attaches one or more CUSTOM public hostnames to this org's site.
 
         Binding a host you do not own would let you shadow it at the edge, so which
-        outcome you get depends on whether ownership is already established: a caller
-        vouches (a SuperAdmin, or an ADMIN of a platform-operator org — which manages
-        customer DNS, so its admin's bind IS the vouch) and binds VERIFIED immediately;
-        every other caller, INCLUDING a plain member of an operator org, has the host
-        CLAIMED as pending and gets the DNS challenge back in `bound[].records`. A
-        pending claim HOLDS the name so nobody else can take it, but it does not route
-        until POST .../domains/{host}/verify proves control.
+        outcome you get depends on whether ownership is already established: a SuperAdmin
+        vouches (the operator manages the customer's DNS, so its bind IS the proof) and
+        binds VERIFIED immediately; every other caller, INCLUDING an admin of the
+        deployment's own brand org, has the host CLAIMED as pending and gets the DNS
+        challenge back in `bound[].records`. A pending claim HOLDS the name so nobody
+        else can take it, but it does not route until POST .../domains/{host}/verify
+        proves control.
 
         A hostname we operate is refused to a non-vouched caller (those are assigned
         by the platform, never claimed), a host another site already holds is a 409,
@@ -93123,7 +93260,7 @@ paths:
         List returns every sync link the caller's org has, each with its two endpoints, its
         direction and trigger policy, and the time it last reconciled. Scoped to the
         caller's own org — another tenant's links are structurally unreachable.
-      operationId: get_v1_sync
+      operationId: v1.get_sync
       responses:
         "200":
           content:
@@ -93146,7 +93283,7 @@ paths:
         host with no embedded credentials; a target left empty is derived as a native
         repository named after the source. With run=true the first reconcile is queued in
         the background, so a large initial import never blocks this response.
-      operationId: post_v1_sync
+      operationId: v1.post_sync
       requestBody:
         content:
           application/json:
@@ -93176,7 +93313,7 @@ paths:
         204. The teardown is the point: without it an unsynced repository would keep
         force-pushing to the upstream it is no longer linked to. Org-scoped, so another
         tenant's id is the same 404 an unknown id gives.
-      operationId: delete_v1_sync_id
+      operationId: v1.delete_sync_id
       parameters:
       - description: ID is the sync to act on, from the path.
         example: sync_1
@@ -93197,7 +93334,7 @@ paths:
       description: |-
         Get returns one sync by id. It is org-scoped: an id belonging to another tenant is
         the same 404 an unknown id gives, so a probe learns nothing about what exists.
-      operationId: get_v1_sync_id
+      operationId: v1.get_sync_id
       parameters:
       - description: ID is the sync to act on, from the path.
         example: sync_1
@@ -93225,7 +93362,7 @@ paths:
         request omits is left as it was. Changing the direction immediately reconciles the
         derived outbound mirror, so turning push off stops the upstream being written to
         rather than merely recording the intent.
-      operationId: patch_v1_sync_id
+      operationId: v1.patch_sync_id
       parameters:
       - description: ID is the sync to update, from the path.
         example: sync_1
@@ -93262,7 +93399,7 @@ paths:
         created without run=true. The work is handed to a bounded background worker and the
         call answers 202 immediately, so a large mirror-in never holds the request open;
         queued=true means accepted, not finished.
-      operationId: post_v1_sync_id_run
+      operationId: v1.post_sync_id_run
       parameters:
       - description: ID is the sync to act on, from the path.
         example: sync_1
@@ -93809,7 +93946,7 @@ paths:
       description: |-
         Upgrades to the WebSocket the Team client runs an entire workspace over: every frame is a ZAP envelope wrapping one JSON-RPC message — findAll/findOne reads against the workspace's documents, tx writes that broadcast to the other live sessions, hello negotiating JSON rather than msgpack. The response is a protocol upgrade, so there is no body to read.
 
-        THE PATH SEGMENT IS THE CREDENTIAL. It is the workspace token selectWorkspace minted — bearer-equivalent, and sitting in a URL that proxies and access logs record, which is exactly why it expires in twelve hours and is re-minted on demand rather than being long-lived like the session token. It is decoded and verified (signature and expiry) BEFORE the upgrade, so a bad one is a 401 and never a socket that is accepted and then dropped, and it must carry both an account and a workspace claim.
+        THE PATH SEGMENT IS THE CREDENTIAL. It is the workspace token selectWorkspace minted — bearer-equivalent, and sitting in a URL that proxies and access logs record, which is exactly why it expires in twelve hours and is re-minted on demand rather than being long-lived like the session token. It is decoded and verified (signature and expiry) BEFORE the upgrade, so a bad one is a 401 and never a socket that is accepted and then dropped, and it must carry both an account and a workspace claim. Nothing ambient authorizes this socket: a WebSocket is exempt from CORS, so a cookie-borne credential would make the Origin check the only access control on the whole data plane.
 
         The tenant is the token's SIGNED org claim and it keys every store path, so no header can name another workspace's data. The upgrade ALSO refuses a browser Origin outside the team surfaces with 403 — otherwise any page could open an authenticated socket with a token it lured out of a logged-in browser — while a request with no Origin at all is admitted, because that is what a non-browser client sends.
 
@@ -93828,12 +93965,13 @@ paths:
   /v1/team/transactor/api/v1/statistics:
     get:
       description: |-
-        Statistics returns the transactor's live sessions for the workspace the
-        caller's token names — the endpoint the front's workspace switcher and server
-        panel poll on the transactor base. The token is verified exactly like the
-        WebSocket upgrade is, and activeSessions carries ONLY that token's own
-        workspace, never another tenant's sessions. An invalid or expired token is
-        401.
+        Statistics returns the transactor's live sessions for the workspace the caller's
+        credential names — the endpoint the front's workspace switcher and server panel
+        poll on the transactor base. `token` carries the same two lanes the socket's path
+        segment does: a workspace UUID names the workspace and is authorized against the
+        membership rows, an HS256 workspace token names it in its signed claims.
+        activeSessions carries ONLY that one workspace, never another tenant's sessions.
+        An unverifiable credential, or one the caller is no member under, is 401.
       operationId: get_v1_team_transactor_api_v1_statistics
       parameters:
       - description: Token is the workspace token minted by selectWorkspace.
@@ -93851,20 +93989,21 @@ paths:
                 $ref: '#/components/schemas/statsOut'
           description: ok
       summary: Statistics returns the transactor's live sessions for the workspace
-        the caller's token names — the endpoint the front's workspace switcher and
-        server panel poll on the transactor base.
+        the caller's credential names — the endpoint the front's workspace switcher
+        and server panel poll on the transactor base.
       tags:
       - team
       x-app: team
   /v1/team/transactor/statistics:
     get:
       description: |-
-        Statistics returns the transactor's live sessions for the workspace the
-        caller's token names — the endpoint the front's workspace switcher and server
-        panel poll on the transactor base. The token is verified exactly like the
-        WebSocket upgrade is, and activeSessions carries ONLY that token's own
-        workspace, never another tenant's sessions. An invalid or expired token is
-        401.
+        Statistics returns the transactor's live sessions for the workspace the caller's
+        credential names — the endpoint the front's workspace switcher and server panel
+        poll on the transactor base. `token` carries the same two lanes the socket's path
+        segment does: a workspace UUID names the workspace and is authorized against the
+        membership rows, an HS256 workspace token names it in its signed claims.
+        activeSessions carries ONLY that one workspace, never another tenant's sessions.
+        An unverifiable credential, or one the caller is no member under, is 401.
       operationId: get_v1_team_transactor_statistics
       parameters:
       - description: Token is the workspace token minted by selectWorkspace.
@@ -93882,8 +94021,8 @@ paths:
                 $ref: '#/components/schemas/statsOut'
           description: ok
       summary: Statistics returns the transactor's live sessions for the workspace
-        the caller's token names — the endpoint the front's workspace switcher and
-        server panel poll on the transactor base.
+        the caller's credential names — the endpoint the front's workspace switcher
+        and server panel poll on the transactor base.
       tags:
       - team
       x-app: team
@@ -96813,7 +96952,8 @@ paths:
       - description: |-
           ID is the settlement id from the URL — the deterministic keccak(from|nonce)
           key an x402 receipt is issued under (the `id` field of a Receipt, and the
-          value of the X-Payment-Response header a paid request answers with).
+          `transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid
+          request answers with).
         in: path
         name: id
         required: true
@@ -96949,6 +97089,7 @@ tags:
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
     — collections, records, access rules and sign-in.'
   name: collections
+- name: commands
 - description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
     alerts, payment webhooks and the storefront catalog.'
   name: commerce

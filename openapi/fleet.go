@@ -93,6 +93,23 @@ func FleetSpec(app *zip.App) (*Document, error) {
 // A missing subset is refused rather than skipped. Skipping it would publish a
 // fleet document with one app's whole surface quietly absent, which is precisely
 // the failure mode plugin/ingress cost eight paths to.
+//
+// AND EACH SUBSET IS CHECKED FOR THE INVARIANT ITS GENERATOR ALREADY OWES, at the
+// one place the app's NAME is still in hand. [From] refuses to emit a document
+// whose operationIds collide, so a generated subset cannot arrive broken — but
+// "generated" was an assumption about a committed file, and a file can be edited.
+// One was: /v1/billing/methods was hand-written into commerce's subset by copying
+// the /v1/billing/portal/methods block, operationId and prose together, so two
+// paths claimed get_v1_billing_portal_methods and the fleet could not be woven at
+// all. [Weave] did catch it — but a collision INSIDE one part reaches Weave as a
+// collision between two paths with no app attached, so the report named the two
+// addresses and left which of 123 subsets to a search. Here the answer is the
+// loop variable.
+//
+// It is the same check, not a second one: uniqueOperationIDs is the single
+// statement of the rule, asked once per part here and once over the whole
+// composition there, because a part being injective and the weave being injective
+// are different facts and neither implies the other.
 func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
 	out := make([]Part, 0, len(apps))
 	for _, name := range apps {
@@ -103,6 +120,10 @@ func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
 		var doc Document
 		if err := json.Unmarshal(raw, &doc); err != nil {
 			return nil, fmt.Errorf("%s subset: %w", name, err)
+		}
+		if err := uniqueOperationIDs(&doc); err != nil {
+			return nil, fmt.Errorf("%s subset: %w — its own generator refuses this, so the file was "+
+				"not generated; run `make -C apps/%s describe` rather than editing it", name, err, name)
 		}
 		out = append(out, Part{App: name, Doc: &doc})
 	}
