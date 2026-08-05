@@ -213,6 +213,21 @@ const (
 	// live status, not hidden. There is no tenant here for a caller to widen into.
 	SitesLive = "sites_live"
 
+	// The login-manager teardown, across the process boundary. A credential
+	// revoke lives in link and the sessions that ran under it live in agents,
+	// and the two ship as separate binaries — so the in-process call link made
+	// found an unmounted package every time and answered (0, nil). The revoke
+	// returned 200 {"sessionsStopped":0} while the sessions kept running under
+	// the revoked account, and nothing anywhere said otherwise.
+	//
+	// The org is the CALLER's plane identity and never an argument, for the
+	// sharpest version of the usual reason: this op tears sessions down, so a
+	// caller able to name the org could tear down a co-tenant's. The actor is
+	// derived from the caller's org and the revoking subject on the ANSWERING
+	// side, which is what keeps a revoke bounded to its own user's sessions.
+	AgentsSessionsStop  = "agents_sessions_stop"
+	AgentsSessionsCount = "agents_sessions_count"
+
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
 	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
@@ -1287,6 +1302,38 @@ type LiveSite struct {
 	UpdatedAt  int64  `json:"updatedAt,omitempty"`
 	Upstream   string `json:"upstream,omitempty"`
 	License    string `json:"license,omitempty"`
+}
+
+// ---- agents: the login-manager session teardown -----------------------------
+
+// SessionMatchIn selects the live sessions a credential revoke tears down.
+//
+// It carries NO org: the tenant is the caller's plane identity, resolved on the
+// answering side. Subject travels instead of a fully-formed actor because the
+// actor is org-qualified (org/user) and the org is exactly what the caller may
+// not state — so the one place that can build the actor is the one place that
+// knows the org is real.
+//
+// An empty Subject yields an empty actor, which the agents guard reads as "stop
+// nothing". That is fail-closed by construction: a match that lost its caller
+// identity sweeps nothing rather than sweeping the org.
+type SessionMatchIn struct {
+	// Subject is the revoking user, unqualified. The answering side qualifies it.
+	Subject string `json:"subject"`
+	// Host/Provider/Account narrow WITHIN the actor's own sessions; empty is any.
+	Host     string `json:"host,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Account  string `json:"account,omitempty"`
+}
+
+// SessionCount is how many sessions the op stopped, or found live.
+//
+// A count is the whole answer here, and the reason it can be is that failure is
+// an error: "0" now means zero sessions matched and never "the store could not
+// be reached", which is the distinction whose absence let a revoke report
+// success having revoked nothing.
+type SessionCount struct {
+	Count int `json:"count"`
 }
 
 // ---- git: status + mirror --------------------------------------------------

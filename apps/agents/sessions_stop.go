@@ -94,12 +94,22 @@ func (s *Store) countActiveMatch(ctx context.Context, org string, m SessionMatch
 // scope it: the caller passes their own actor (org/user), so a revoke can only ever
 // stop the caller's OWN sessions — never a co-tenant's, never an org's every session
 // — even though m's Host/Provider/Account come from an attacker-controllable link
-// row. A match with no actor stops nothing (fail-closed). Not-mounted → (0, nil), so
-// a revoke tolerates a deployment with no session plane.
+// row. A match with no actor stops nothing (fail-closed).
+//
+// Absence is an ERROR (ErrNoPeer), never (0, nil). It was the latter, and agents
+// ships as its own binary — so in the fleet the link process that calls this has
+// never had the session store in it, and every credential revoke answered 200
+// with {"sessionsStopped":0} having torn down nothing, while the sessions kept
+// running under the revoked account. A zero that means "I could not ask" is
+// indistinguishable from "there were none", and this is the seam where that
+// distinction is the security property. Callers take the plane leg (apps/link).
 func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) {
+	if m.empty() {
+		return 0, nil // fail-closed: a match with no actor stops nothing, and that is an answer
+	}
 	sto, org, serr := mountedStore(org)
-	if serr != nil || m.empty() {
-		return 0, nil
+	if serr != nil {
+		return 0, serr
 	}
 	live, err := sto.listActiveMatch(ctx, org, m)
 	if err != nil {
@@ -152,9 +162,12 @@ func stopOne(ctx context.Context, sto *Store, x Session) error {
 // (running|paused) — the device view's "active sessions". Org-scoped; 0 when not
 // mounted or the match is empty.
 func CountActiveSessions(ctx context.Context, org string, m SessionMatch) (int, error) {
+	if m.empty() {
+		return 0, nil // the same fail-closed answer as StopSessions
+	}
 	sto, org, serr := mountedStore(org)
-	if serr != nil || m.empty() {
-		return 0, nil
+	if serr != nil {
+		return 0, serr
 	}
 	return sto.countActiveMatch(ctx, org, m)
 }

@@ -973,7 +973,7 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	period := periodKey(time.Now())
 	now := time.Now().Unix()
-	swept, accrued, royalties := 0, 0, 0
+	swept, accrued, royalties, royaltyErrs := 0, 0, 0, 0
 	for _, src := range sources {
 		swept++
 		// Read the source org's metered spend ONCE, then fan out to BOTH the affiliate
@@ -991,9 +991,23 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 			s.Log.Warn("affiliates: upline accrual failed", "source", src, "err", aerr)
 		}
 		accrued += n
-		royalties += authors.AccrueForOrg(ctx, src, spend, period, now)
+		// The royalty leg reports its own failure now. It used to return a bare
+		// int, so an unmounted authors — which is every deployment, authors being
+		// its own binary — was indistinguishable from "no author was owed
+		// anything", and the sweep reported a completed accrual of zero.
+		r, rerr := authors.AccrueForOrg(ctx, src, spend, period, now)
+		if rerr != nil {
+			royaltyErrs++
+			s.Log.Warn("affiliates: author royalty accrual failed", "source", src, "err", rerr)
+		}
+		royalties += r
 	}
-	return adminOK(c, map[string]any{"swept": swept, "accrued": accrued, "royaltiesAccrued": royalties})
+	return adminOK(c, map[string]any{
+		"swept": swept, "accrued": accrued, "royaltiesAccrued": royalties,
+		// Reported, not swallowed: a sweep that could not reach the royalty store
+		// must not read as one that found nothing owed.
+		"royaltyFailures": royaltyErrs,
+	})
 }
 
 // ── accrual core (the ONE multi-level walk, shared by sweep + lazy read) ───────
