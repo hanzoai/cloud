@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both cgo and pure-Go build tags). Blank
@@ -67,11 +65,10 @@ type PipelineStore struct {
 }
 
 func openPipelineStore(dir string) (*PipelineStore, error) {
-	db, err := cek.Open(namespace.System(), "world", dir)
+	db, err := sqlpool.Open("world", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open world store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &PipelineStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

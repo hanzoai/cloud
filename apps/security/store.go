@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
@@ -64,11 +62,10 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "security", dir)
+	db, err := sqlpool.Open("security", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open security store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

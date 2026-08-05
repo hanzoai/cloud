@@ -14,9 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// The ONE Hanzo SQLite driver (registers "sqlite" under both build tags),
 	// identical to every other clients/* store.
@@ -29,11 +27,10 @@ type store struct {
 
 // openStore opens (creating + migrating) the wallets store under dir.
 func openStore(dir string) (*store, error) {
-	db, err := cek.Open(namespace.System(), "wallets", dir)
+	db, err := sqlpool.Open("wallets", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open wallets store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

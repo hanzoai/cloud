@@ -6,11 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	// cek is the ONE opener: the database is born encrypted under the key cek
-	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
+	// sqlpool.Open is the ONE opener: the database is born encrypted under the
+	// key cek derives from the process master and the system namespace, and comes
+	// back with the single-connection cap already applied.
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both cgo and pure-Go build tags). Blank
@@ -46,11 +45,10 @@ type Prefs struct {
 var errNotFound = errors.New("prefs: not found")
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "prefs", dir)
+	db, err := sqlpool.Open("prefs", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open prefs store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

@@ -13,11 +13,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	// cek is the ONE opener: the database is born encrypted under the key cek
-	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
+	// sqlpool.Open is the ONE opener: the database is born encrypted under the
+	// key cek derives from the process master and the system namespace, and comes
+	// back with the single-connection cap already applied.
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// The ONE "sqlite" driver.
 	_ "github.com/hanzoai/sqlite"
@@ -65,11 +64,10 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "index", dir)
+	db, err := sqlpool.Open("index", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open index store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

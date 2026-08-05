@@ -20,9 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -55,11 +53,10 @@ type Settlement struct {
 type store struct{ db *sql.DB }
 
 func openStore(dir string) (*store, error) {
-	db, err := cek.Open(namespace.System(), "x402", dir)
+	db, err := sqlpool.Open("x402", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open x402 store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

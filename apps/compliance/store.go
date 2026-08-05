@@ -6,10 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/idv"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -27,11 +25,10 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "compliance", dir)
+	db, err := sqlpool.Open("compliance", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open compliance store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

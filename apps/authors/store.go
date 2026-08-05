@@ -10,11 +10,11 @@ import (
 	"net/url"
 	"strings"
 
-	// cek is the ONE opener; the ONE Hanzo SQLite driver registers "sqlite".
+	// sqlpool.Open is the ONE opener (cek + the single-connection cap); the ONE
+	// Hanzo SQLite driver registers "sqlite".
 	// Mirrors clients/affiliates / clients/referrals — one storage pattern.
-	"github.com/hanzoai/cek"
+
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -176,11 +176,10 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "authors", dir)
+	db, err := sqlpool.Open("authors", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open authors store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
