@@ -448,8 +448,19 @@ func (s state) spaces(c *zip.Ctx) (plane.Spaces, bool) {
 	if err != nil || t.Workspace == "" {
 		return plane.Spaces{}, false
 	}
+	// An ACCOUNT is required here for the same reason mint requires one: it is
+	// the identity a seat is taken under, and mint refuses a token that carries
+	// none. Offering a workspace off a token the mint would then refuse is the
+	// one way these two answers could still disagree — a room shown, chosen, and
+	// declined. token.Generate cannot produce this (it validates the account as a
+	// uuid), so it is not an attacker's path; it is the invariant written down
+	// where the offer is made rather than assumed from where it is granted.
+	account := strings.TrimSpace(t.Account)
+	if account == "" {
+		return plane.Spaces{}, false
+	}
 	return plane.Spaces{
-		Account: strings.TrimSpace(t.Account),
+		Account: account,
 		Items:   []plane.Space{{UUID: t.Workspace, Role: t.Role()}},
 	}, true
 }
