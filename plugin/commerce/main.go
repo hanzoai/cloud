@@ -19,7 +19,10 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "commerce",
 		Price: cloud.Free,
-		App:   commerce.Mount,
+		Mount: commerce.Mount,
+		// commerce wraps ALL of /v1 (mount.go: app.Group("/v1").Use(...)), so the
+		// grant is real and stated, not inherited from a signature.
+		Global: true,
 	}}, []string{"commerce"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

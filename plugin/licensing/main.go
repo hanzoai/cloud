@@ -19,7 +19,11 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "licensing",
 		Price: cloud.Free,
-		App:   licensing.Mount,
+		// licensing is an external leaf whose Mount takes the concrete *zip.App.
+		// The adapter lives HERE, on cloud's side, for the reason authz's does: the
+		// plugin contract bends to the leaf, never the fleet's one signature.
+		Mount:  func(app cloud.Router, deps cloud.Deps) error { return licensing.Mount(cloud.ZipApp(app), deps) },
+		Global: true,
 	}}, []string{"licensing"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

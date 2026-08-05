@@ -33,11 +33,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Router is the surface a subsystem mounts on: zip's routing methods, plus two
-// named, read-only holes onto the host — the *fiber.App the in-process
+// Router is the surface a subsystem mounts on: zip's routing surface EMBEDDED,
+// plus two named, read-only holes onto the host — the *fiber.App the in-process
 // dispatchers need (fiber.Test, GetRoutes, adaptor.FiberApp) and Plugins(), what
 // this process is actually running. *zip.App satisfies it as-is, so Serve can
-// hand the bare app to a subsystem that supplies App, and tests can pass a raw app.
+// hand the bare app to a Global subsystem, and tests can pass a raw app.
+//
+// TWO METHODS ARE DECLARED HERE, AND THAT IS THE WHOLE OF WHAT CLOUD ADDS. The
+// end state worth reaching is fewer: `type Router = zip.Router` with Fiber and
+// Plugins as package FUNCTIONS taking a Router — the shape ZipApp below already
+// has, and the shape zip itself chose when it dropped Fiber() from its own Router
+// (a decorator wraps something and has no *fiber.App of its own to return, so
+// requiring one makes decoration impossible). That is what commerce's mintRouter
+// runs into. It is not done here only because the two holes have 131 call sites
+// in apps/, which is a mechanical sweep and a different commit.
 //
 // Fiber() is a deliberate, named hole: it is the concrete engine, and middleware
 // installed through it is app-wide. It is promoted onto the scoped Router rather
@@ -52,23 +61,24 @@ import (
 // fleet board (/v1/admin/plugins) is the reader; making it Global to ask a
 // read-only question would have granted app-wide middleware to buy a status field.
 type Router interface {
-	// Use is zip's ONE composition verb, so it takes a [zip.Component] —
-	// middleware, or another *zip.App included by reference. It is the only
-	// signature that widened in zip v1.23; every route method below still takes
-	// ...Handler. Mirroring zip.Router exactly is what lets a *zip.App satisfy
-	// this interface, which ZipApp's type switch depends on.
-	Use(cs ...zip.Component) zip.Router
-
-	Get(path string, handlers ...zip.Handler) zip.Router
-	Post(path string, handlers ...zip.Handler) zip.Router
-	Put(path string, handlers ...zip.Handler) zip.Router
-	Patch(path string, handlers ...zip.Handler) zip.Router
-	Delete(path string, handlers ...zip.Handler) zip.Router
-	Head(path string, handlers ...zip.Handler) zip.Router
-	Options(path string, handlers ...zip.Handler) zip.Router
-	All(path string, handlers ...zip.Handler) zip.Router
-
-	Group(prefix string, handlers ...zip.Handler) zip.Router
+	// The routing surface is zip.Router — BY REFERENCE, not restated. Ten method
+	// lines used to be copied here, and copying an interface makes cloud a second
+	// place zip's routing surface is defined: the two agree only for as long as
+	// someone keeps them agreeing, and when they disagreed the cost was not a
+	// compile error here but a fleet stall. zip v1.23 widened ONE signature (Use
+	// took Component instead of Handler) and every implementor that had spelled
+	// the methods out — this interface, and the decorators downstream of it — had
+	// to be edited in lockstep before v1.19+ could be adopted anywhere.
+	//
+	// Embedded, a zip routing change costs this file ZERO edits, and the two
+	// things below are visibly what cloud ADDS rather than being buried among ten
+	// lines cloud merely echoes.
+	//
+	// It carries zip.OpTarget with it, which is a gain and not a widening: every
+	// implementor already had OpScope (scope below, *zip.App, and commerce's
+	// mintRouter), and a Router that IS an OpTarget is one a typed registrar —
+	// zip.Get[In, Out] — accepts directly.
+	zip.Router
 
 	Fiber() *fiber.App
 
