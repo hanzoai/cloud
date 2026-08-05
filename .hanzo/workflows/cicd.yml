@@ -306,6 +306,47 @@ jobs:
           username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: The commit must exist on github before a tag can name it
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          SHA: ${{ github.sha }}
+        # The claim below reserves a version by creating refs/tags/v<N> AT THIS
+        # COMMIT on github.com. A ref can only point at an object that is there,
+        # so the claim answers 404 — "Object does not exist" — for a commit github
+        # has never seen, and refuses to build.
+        #
+        # It routinely has not seen it. CI runs on git.hanzo.ai, which is canonical
+        # and where the push lands; github is fed by a PUSH MIRROR on an 8-HOUR
+        # interval, and the claim runs seconds later. So the object the tag must
+        # name is normally hours away, and every release in that window fails on a
+        # 404 that reads like a permissions problem and is really a race. It cost
+        # the fleet four days of releases stacked behind one.
+        #
+        # Publishing the commit here closes the race at its cause: after this step
+        # github HAS the object, whatever the mirror's schedule. It goes to a ref
+        # of its own rather than to main, because main is the mirror's to move and
+        # the two lineages do diverge — this step's job is to make the object
+        # exist, not to decide what main is.
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/hanzoai/cloud"
+          if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" "${api}/commits/${SHA}" 2>/dev/null; then
+            echo "commit ${SHA} is already on github — nothing to publish"
+            exit 0
+          fi
+          echo "commit ${SHA} is not on github yet (push mirror runs every 8h); publishing it now"
+          git push --force "https://x-access-token:${GH_PAT}@github.com/hanzoai/cloud" \
+            "${SHA}:refs/heads/forge-head"
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" "${api}/commits/${SHA}" 2>/dev/null; then
+              echo "github now resolves ${SHA}"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::pushed ${SHA} to github but it still does not resolve — the claim below would 404 on an object that is not there"
+          exit 1
+
       - name: Claim a version — atomically, before anything is built
         id: ver
         env:
