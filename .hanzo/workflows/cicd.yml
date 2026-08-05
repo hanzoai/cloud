@@ -687,7 +687,6 @@ jobs:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
           KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
-          KMS_ORG: ${{ vars.KMS_ORG || 'hanzo' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
           # pin.sh probes the registry before it moves anything; these let it read
           # a private manifest instead of falling back to anonymous.
@@ -698,16 +697,21 @@ jobs:
           VERSION="${{ needs.image.outputs.version }}"
 
           # Secrets come from KMS, never from a file or a repo variable.
-          KMS_TOKEN=$(curl -fsS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
             -H 'Content-Type: application/json' \
             -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty')
+            | jq -r '.accessToken // empty' || true)
           [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
 
-          PIN_TOKEN=$(curl -fsS \
-            "${KMS_ENDPOINT}/v1/kms/orgs/${KMS_ORG}/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty')
-          [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at ${KMS_ORG}/deploy (env ${KMS_SECRET_ENV})"; exit 1; }
+          # THERE IS NO ORG IN A KMS PATH. The store root comes from the validated
+          # claim, so the org is the credential's, not the URL's — that is what
+          # makes another tenant's secret unnameable rather than merely refused.
+          # This asked for /v1/kms/orgs/<org>/secrets/... which is not a route the
+          # broker has, so it 404'd on every release since the car was written.
+          PIN_TOKEN=$(curl -sS \
+            "${KMS_ENDPOINT}/v1/kms/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty' || true)
+          [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
           echo "::add-mask::${PIN_TOKEN}"
 
           git clone --quiet --depth 1 \
@@ -847,7 +851,6 @@ jobs:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
           KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
-          KMS_ORG: ${{ vars.KMS_ORG || 'hanzo' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
         run: |
           set -euo pipefail
@@ -870,17 +873,18 @@ jobs:
           # naming the exact KMS path to create, instead of quietly shipping a
           # cloud nobody's client knows about. That silent version is what the
           # fleet has been living in.
-          KMS_TOKEN=$(curl -fsS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
             -H 'Content-Type: application/json' \
             -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty')
+            | jq -r '.accessToken // empty' || true)
           [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
 
-          TOKEN=$(curl -fsS \
-            "${KMS_ENDPOINT}/v1/kms/orgs/${KMS_ORG}/secrets/deploy/FLEET_DISPATCH_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty')
+          # Same route correction as the pin above: no org in a KMS path.
+          TOKEN=$(curl -sS \
+            "${KMS_ENDPOINT}/v1/kms/secrets/deploy/FLEET_DISPATCH_TOKEN?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty' || true)
           if [ -z "$TOKEN" ]; then
-            echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at ${KMS_ORG}/deploy (env ${KMS_SECRET_ENV}). Create it with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,java-sdk,cli} hanzo-go/sdk hanzo-rs/sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzo-docs/docs — six owners, so a fine-grained PAT cannot carry it; use a classic PAT with repo scope or a GitHub App installed on all six. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
+            echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential). Create it with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,java-sdk,cli} hanzo-go/sdk hanzo-rs/sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzo-docs/docs — six owners, so a fine-grained PAT cannot carry it; use a classic PAT with repo scope or a GitHub App installed on all six. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
             exit 1
           fi
           echo "::add-mask::${TOKEN}"
