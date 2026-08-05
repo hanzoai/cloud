@@ -32,7 +32,7 @@ import (
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 	zipmw "github.com/zap-proto/zip/middleware"
 )
@@ -221,7 +221,7 @@ func (rl *scopeRateLimiter) rulesFor(org string) []metering.ScopeRule {
 	ctx, cancel := context.WithTimeout(For(context.Background(), org), scopeRulesTimeout)
 	defer cancel()
 	var rules []metering.ScopeRule
-	if out, err := Ask[struct{}, plane.ScopeRules](ctx, peerCommerce, plane.FinanceScopeRules, &struct{}{}); err == nil && out != nil {
+	if out, err := commerce.FinanceScopeRules(ctx); err == nil && out != nil {
 		rules = make([]metering.ScopeRule, 0, len(out.Rules))
 		for _, r := range out.Rules {
 			rules = append(rules, metering.ScopeRule{Project: r.Project, Service: r.Service, RateLimitRpm: r.RateLimitRpm})
