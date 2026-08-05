@@ -85,9 +85,9 @@ func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	if err := visor.Mount(app, deps); err != nil { // Wire order: visor first — the shadowing mount
 		t.Fatalf("visor.Mount: %v", err)
 	}
-	if err := mountRelay(app, deps); err != nil {
-		t.Fatalf("mountRelay: %v", err)
-	}
+	// Mount owns the relay (bots.go mounts it second, so the native control
+	// plane cannot be shadowed) — the harness mounting it AGAIN declared
+	// ALL /v1/bot/* twice, which zip's build refuses outright since v1.26.0.
 	if err := Mount(app, deps); err != nil { // …bots last, as in Wire
 		t.Fatalf("bots.Mount: %v", err)
 	}
@@ -106,6 +106,13 @@ func collisions(app *zip.App) []string {
 	var out []string
 	seen := map[string]int{}
 	for _, r := range app.Fiber().GetRoutes() {
+		if r.Path == "/" {
+			// Middleware territory: every app.Use (the composer's bridge,
+			// telemetry) rides fiber's "/" route as a handler CHAIN, by
+			// design. The guard's subject is declared routes, and every one
+			// this fleet declares lives under /v1.
+			continue
+		}
 		key := r.Method + " " + r.Path
 		if n := len(r.Handlers); n > 1 {
 			out = append(out, fmt.Sprintf("%s — %d handlers chained on one route", key, n))
@@ -118,21 +125,27 @@ func collisions(app *zip.App) []string {
 	return out
 }
 
-// The guard itself must be shown to FIRE on the bug, or it is decoration. This
-// reproduces the original collision — two subsystems, one pattern — and asserts
-// collisions() sees it, through the SAME function the real check below uses.
+// The defense must be shown to FIRE on the bug, or it is decoration. The
+// defense MOVED: zip itself now refuses a duplicate declaration at build time
+// (since v1.26.0), panicking with BOTH callsites named — strictly stronger
+// than this package's after-the-fact scan, which the router's silent merge
+// forced on it. The test keeps proving the collision cannot ship; what changed
+// is whose refusal stops it. collisions() stays for the second line
+// (TestSubsystemsDoNotRegisterDuplicateRoutes) over the composed fleet.
 func TestDuplicateRouteGuardDetectsACollision(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("two GET /v1/bots registrations built without refusal — the duplicate guard is gone from both zip and this package")
+		}
+		if !strings.Contains(fmt.Sprint(r), "GET /v1/bots") {
+			t.Fatalf("the refusal named the wrong route: %v", r)
+		}
+	}()
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	app.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, map[string]any{"bots": []string{"machine"}}) })
 	app.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, map[string]any{"bots": []string{"run"}}) })
-
-	got := collisions(app)
-	if len(got) == 0 {
-		t.Fatal("the guard cannot see the very collision it guards: two GET /v1/bots handlers are registered and collisions() reported none")
-	}
-	if !strings.Contains(got[0], "GET /v1/bots") {
-		t.Fatalf("guard named the wrong route: %v", got)
-	}
+	_ = collisions(app) // zip refuses during the build walk above or here; either way the defer sees it
 }
 
 // No two subsystems may claim the same method+path. The router does not panic on
