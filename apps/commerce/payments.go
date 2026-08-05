@@ -143,6 +143,15 @@ type paymentOps struct{}
 // as an argument is also what keeps this file from importing the risk seam to fetch a
 // gate it does not own.
 //
+// AND IT IS COMPOSED ONTO THE HANDLER, which is the only place it reaches the whole
+// op. zip records a typed op ONCE and projects it four ways — this REST route, the
+// `takePayment` MCP tool, the by-name call plane and the CLI — and all four dispatch
+// to the op's HANDLER. Middleware composed at registration (zip.With) wraps the fiber
+// handler REST is served through and nothing else, so the screen guarded the URL while
+// the tool an agent already holds ran the money core unscreened. `o.take(screen)`
+// BUILDS the screened handler, so the screen is inside the one thing every projection
+// invokes.
+//
 // IT IS ON THE WRITE AND NOT ON THE READ. `take` moves money; `get` reads a receipt
 // out of the caller's own ledger namespace and mints nothing, so screening it would
 // spend a scorer round trip — and, when a scorer is present and mute, REFUSE a
@@ -164,30 +173,26 @@ type paymentOps struct{}
 // gate reads is the one this door did NOT credit. Making them agree means routing this
 // credit through the same payer rule [principal.Subject] — a change to where money
 // lands, which belongs in its own review and not inside a screen.
-func exposePayments(app *zip.App, screen zip.Middleware) {
+func exposePayments(app *zip.App, s screen) {
 	o := paymentOps{}
-	// THE SCREEN RIDES A GROUP, and the group exists for zipdoc rather than for
-	// routing. Composing it inline — zip.Post(app.With(screen), "/v1/payments", …) —
-	// registers and gates correctly, and then zipdoc REFUSES the op: it resolves a
-	// router's prefix from an *zip.App or from an assigned `g := <router>.Group("…")`
-	// and can read neither out of a With, so rather than file the prose under a guessed
-	// path it errors. That is the right refusal — a doc comment filed under the wrong
-	// path is silently dropped from the document AND from the MCP tool, which for the
-	// one tool that takes money is the tool becoming uncallable.
+	// BOTH OPS ARE DECLARED ON THE APP WITH THEIR WHOLE PATH, and the screen is in the
+	// write's HANDLER rather than on a router the write is declared through.
 	//
-	// So the gated router is spelled the way zipdoc reads: a `/v1` group holding the
-	// screen, with `/payments` as the leaf. Same absolute path, same single screen, and
-	// the prose still reaches the registry.
+	// The `/v1` group this used to open existed only to give the screen somewhere to
+	// ride that zipdoc could still read a prefix out of: zipdoc resolves a router's
+	// prefix from an *zip.App or from an assigned `g := <router>.Group("…")` and can
+	// read neither out of a With, so an inline `zip.Post(app.With(screen), …)` made it
+	// refuse the op — and prose filed under a guessed path is silently dropped from the
+	// document AND from the MCP tool, which for the one tool that takes money is the
+	// tool becoming uncallable. With the screen off the router there is no router to
+	// spell, so the group is gone and both ops read the same way.
 	//
-	// IT IS THIS GROUP'S OWN NODE AND NOTHING ELSE'S. A group is a NODE, not a path
-	// filter, so this middleware runs only for routes registered THROUGH `mint` — the
-	// one op below — and not for the rest of /v1, which is registered on the app's own
-	// node. (The same distinction cost nine plugins their boot once; see cloud's
-	// scope.Use.) The leaf cannot be "" on a group at the door itself: joining
-	// "/v1/payments" with "" yields "/v1/payments/", a different route from the one an
-	// agent calls.
-	mint := app.With(screen).Group("/v1")
-	zip.Post(mint, "/payments", o.take,
+	// The prose still reaches the registry because `o.take` is now the BUILDER of the
+	// handler rather than the handler: zipdoc reads a `zip.Post(app, p, build(dep))`
+	// registration by taking the doc comment off `build`, which is where the operation
+	// is described and where "a payment is RISK-SCREENED before the card is charged"
+	// has always been written.
+	zip.Post(app, "/v1/payments", o.take(s),
 		zip.WithOperationID("takePayment"),
 		zip.WithSummary("Take a card payment and credit the org's balance"),
 		zip.WithTags("payments"),
@@ -222,8 +227,20 @@ func exposePayments(app *zip.App, screen zip.Middleware) {
 // carries the processor's own reference (`processorRef`) so the charge can be
 // reconciled against the processor rather than taken on trust.
 //
-// A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (paymentOps) take(ctx context.Context, in *PaymentIn) (*PaymentOut, error) {
+// A named builder, not a closure, so zipdoc can lift this prose into the registry.
+//
+// It BUILDS the handler rather than being it, because the screen has to sit inside
+// the value every projection of this op dispatches to — see exposePayments. `charge`
+// is the money move, `take` is the screened door onto it, and the only registrable
+// one is the second.
+func (o paymentOps) take(s screen) zip.TypedHandler[PaymentIn, PaymentOut] {
+	return s.op(o.charge)
+}
+
+// charge is the money move `take` screens: commerce's ONE card core, projected onto
+// this op's types. It is deliberately registered nowhere — the registered handler is
+// the screened one — so no address in this binary reaches it directly.
+func (paymentOps) charge(ctx context.Context, in *PaymentIn) (*PaymentOut, error) {
 	org, err := payingOrg(ctx, "take payment")
 	if err != nil {
 		return nil, err
