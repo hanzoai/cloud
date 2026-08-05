@@ -397,6 +397,24 @@ var allowedRequestUses = map[string]string{
 		"attributable. ONE function, asked from the one tenantOf every op goes through, which resolves " +
 		"the TENANT with principal.OrgFrom and never through the request. Fails closed off the HTTP " +
 		"path: no request, no attested asserter, no write.",
+	"apps/billing/typed.go": "payer / caller — the billing package's ONE resolver of the request for " +
+		"its typed ops. The TENANT is resolved with principal.OrgFrom, never through the request; the " +
+		"request is needed for the PAYER — the wallet subject principal.Subject resolves from the minted " +
+		"X-User-Name and the signed billing_account claim, headers the org does not carry, and the SAME " +
+		"resolution the spend gate and the debit use, so a finance view can never read a different wallet " +
+		"than the one charged. caller additionally reads the validated user id (X-User-Id) for the " +
+		"per-account routed-usage breakdown, which is scoped to the PERSON. Cache-Control rides the " +
+		"DECLARED contract instead (zip.WithResponseHeader + each Out's ResponseHeaders), so no-store " +
+		"needs no request at all. Both fail closed off the HTTP path: no request, no payer.",
+	"apps/affiliates/typed.go": "sudo / actor / requireBody — the affiliate program's ONE resolver of the request. " +
+		"Every /v1/admin route gates on platform sudo (X-User-IsAdmin), which principal.OrgFrom does not " +
+		"carry; an application and the user-level referral mirror are ATTRIBUTED to the validated user id " +
+		"(X-User-Id) — an attribution, never an authority; and requireBody replays the c.Bind refusal the " +
+		"raw write handlers answered on a bodyless request, because zip's typed decode is tolerant and " +
+		"without it a bodyless apply would enroll, a bodyless handle post would opt the caller out, and a " +
+		"bodyless rate post would set a rate of zero. The TENANT is resolved with principal.OrgFrom " +
+		"(tenant, in this same file), never through the request. All fail closed off the HTTP path: no " +
+		"request, no attested admin, no actor, and nothing to require a body of.",
 	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
 		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +
