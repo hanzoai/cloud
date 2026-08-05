@@ -105,14 +105,46 @@ const (
 		"Lead with the answer; be concise, factual, and well structured (short paragraphs, bullets where they help). " +
 		"Cite inline as Markdown links [source title](url) immediately after the claim each source supports, and cite generously. " +
 		"Do NOT add a References or Sources section, footnote markers, or bare URLs — citations are inline links only. " +
-		"If the sources conflict or are insufficient, say so plainly and answer from general knowledge while noting the uncertainty. Never fabricate facts or URLs."
+		"If the sources conflict or are insufficient, say so plainly and answer from general knowledge while noting the uncertainty. Never fabricate facts or URLs." +
+		widgetRule
+
+	// widgetRule teaches the model the ONE structured-result format the answer
+	// surfaces render. It is shared by every mode so the shapes cannot drift apart
+	// between search and research.
+	//
+	// A widget is an ENHANCEMENT, and the instruction says so explicitly: the
+	// client validates every block and DROPS anything malformed — a ragged table,
+	// an unknown kind, a field of the wrong type — keeping the prose. So an answer
+	// whose prose depends on a widget to make sense would read as a hole whenever
+	// validation refused one. The prose must stand alone; the widget makes it
+	// faster to read.
+	//
+	// The model supplies DATA, never markup: the renderer holds the shapes and
+	// escapes every field. That is deliberate — this model reads the open web, so
+	// any page it fetches is a potential injection source, and markup it authored
+	// would be a path into the extension's origin.
+	widgetRule = "\n\nWhen the question's SHAPE calls for one — a comparison, a procedure, " +
+		"key figures, a chronology, a single entity, or a term to define — ALSO emit exactly one " +
+		"structured result block, fenced as ```hanzo-widget containing only JSON. Use at most two " +
+		"per answer, and only when the shape genuinely fits; most answers need none. " +
+		"The prose must stand on its own without the block. Emit DATA only, never HTML. " +
+		"The kinds and their exact fields are:\n" +
+		`{"kind":"comparison","title":"...","columns":["","A","B"],"rows":[["Row label","A value","B value"]]}` + "\n" +
+		`{"kind":"steps","title":"...","steps":["first","second"]}` + "\n" +
+		`{"kind":"stats","title":"...","stats":[{"label":"...","value":"..."}]}` + "\n" +
+		`{"kind":"timeline","title":"...","events":[{"when":"2019","what":"..."}]}` + "\n" +
+		`{"kind":"entity","title":"...","subtitle":"...","facts":[{"label":"...","value":"..."}]}` + "\n" +
+		`{"kind":"definition","term":"...","meaning":"...","example":"..."}` + "\n" +
+		"Every value must be a plain string. In a comparison, every row must have exactly as many " +
+		"cells as there are columns, and the first column is the row label."
 
 	researchSystem = "You are Hanzo Deep Research. Synthesize a thorough, well-organized report answering the question from the numbered web sources. " +
 		"Write a structured report with section headings, compare sources, and surface the strongest evidence. " +
 		"Cite at least three distinct sources per section. " +
 		"Place each [title](url) immediately after the claim it supports; never a bare URL, never a period after a link, " +
 		"never a trailing References or Sources section and no footnote markers. " +
-		"Note gaps or disagreements between sources. Never fabricate facts or URLs."
+		"Note gaps or disagreements between sources. Never fabricate facts or URLs." +
+		widgetRule
 )
 
 // feeCents resolves the per-answer price in cents for a mode, most specific
