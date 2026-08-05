@@ -613,6 +613,12 @@ func projectKey(c *zip.Ctx) string {
 const (
 	sourceEvent   = "event"   // canonical POST /v1/event (canonical wire)
 	sourcePostHog = "posthog" // POST /v1/insights/e (PostHog wire)
+	// sourcePlane is the INTERNAL plane door (event_rpc.go): an occurrence stated
+	// by a peer app over the socket rather than by a client over HTTP. It is a
+	// wire like the others and it is tagged like the others, so "which rows did
+	// the fleet write about itself" is a filter on $source and never a second
+	// table.
+	sourcePlane = "plane"
 )
 
 // withSource returns a copy of p carrying $source=source (the ingest adapter), so
