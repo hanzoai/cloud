@@ -113,6 +113,12 @@ var Prefixes = []string{
 	// refuses on a prepaid BALANCE, which would make "take a payment" require the
 	// balance the payment exists to create.
 	paymentsPrefix,
+	// The typed cart ops (cart.go) — the first step of a sale, which this binary
+	// served the LAST three steps of and not the first. Own the prefix for the same
+	// reason payments owns its own: unclaimed, /v1/cart falls to the bare /v1
+	// remainder, whose prepaid balance gate would make filling a basket require the
+	// balance the basket exists to create.
+	cartPrefix,
 }
 
 // commerceMasterKey answers ONE question — can this build actually use the key we
@@ -267,6 +273,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// screen on the WRITE only; the receipt read mints nothing.
 	exposePayments(zapp, screen)
 	exposeInvoices(zapp)
+	// The typed cart surface (cart.go). It reads and writes the embedded module's
+	// own cart store, so unlike the payment ops it is only useful when the embed
+	// below succeeds — and it is registered HERE anyway, ahead of it, so a cart
+	// call against a failed embed answers the 503 payingOrg raises ("commerce is
+	// not co-resident in this process") instead of the bare 404 an unregistered
+	// route gives. A missing basket and a missing feature are different answers.
+	exposeCart(zapp)
 
 	// The liveness probe, registered FIRST so it answers even when the embed
 	// fails below. Typed, so the probe is a published op like every other.
