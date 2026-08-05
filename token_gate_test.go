@@ -33,11 +33,23 @@ var allowedTokenPrimitives = map[string]string{
 		"cutover deletes this package (the session lane reads the hanzo_iam_token the browser already " +
 		"holds, the workspace grant moves behind the authority). Do not add readers — the entries below " +
 		"are the complete set and it only shrinks.",
-	"apps/team/account.go":     "reader of the condemned team token — dies with the cutover.",
-	"apps/team/collabws.go":    "reader of the condemned team token — dies with the cutover.",
-	"apps/team/transactor.go":  "reader of the condemned team token — dies with the cutover.",
-	"apps/team/typed.go":       "reader of the condemned team token — dies with the cutover.",
-	"apps/analytics/team.go":   "reader of the condemned team token — dies with the cutover.",
+	"apps/team/account.go": "the ONE reader inside apps/team, and the whole of the dual read: identity.who " +
+		"resolves an IAM access token first and falls back to this package's decode, so every other team " +
+		"surface resolves a caller and touches no algorithm. The fallback arm — and this import with it — is " +
+		"deleted when login mints IAM-only and front/love/analytics-collector verify IAM. Four readers " +
+		"(collabws, transactor, typed, and the files plane's helpers) left the set when the seam landed.\n\n" +
+		"IT GATES AUDIENCE, and the divergence is deliberate. THIS file's verification is the boundary's " +
+		"(cloud.NewTokenValidator), which does not gate `aud` — correctly, for an API door: a signature from " +
+		"a trusted issuer already proves IAM minted the token for one of its own apps, and the app-registry " +
+		"mirror that once checked which was deleted for drifting. A SESSION door is a different question. " +
+		"This lane turns a bearer into a signed-in person, and a token the user obtained for another app is " +
+		"not consent to that, so team narrows to a NAMED audience set at the resource server rather than at " +
+		"the door (identity.forThisDeployment; shape pinned by TestSessionAudienceIsNamedNotPatterned, " +
+		"behaviour by TestIAMLaneRefusesAForeignAudience). A second session-issuing surface owes the same " +
+		"gate — verification says IAM minted it, never that it was minted for you.",
+	"apps/analytics/team.go": "reader of the condemned team token — the ingest trust order already resolves " +
+		"a validated IAM bearer ahead of it (eventTenant step 1), so this arm dies with the cutover and " +
+		"needs no IAM lane of its own.",
 	"apps/meet/meet.go": "two halves: mints the LiveKit room-join token — the media server's own wire " +
 		"contract, an HS256 JWT under the LiveKit key the server itself validates, granting no Hanzo " +
 		"surface — and reads the condemned team token, which dies with the cutover.",

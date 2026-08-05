@@ -47,7 +47,6 @@ import (
 	"github.com/zap-proto/zip/wsx"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 )
@@ -563,8 +562,11 @@ func (cc *collabConn) frame(ctx context.Context, data []byte) {
 	}
 }
 
-// auth verifies the in-band token exactly like the RPC lane (same token, same
-// workspace pin, same membership gate) and on success joins the room.
+// auth verifies the in-band credential exactly like the RPC lane (same seam, same
+// workspace pin, same membership gate) and on success joins the room. The frame
+// carries the credential itself, so it resolves through identity.verified rather
+// than off the request's carriers — an IAM access token or team's HS256 token, the
+// same two lanes in the same order.
 func (cc *collabConn) auth(ctx context.Context, docName string, r *lreader) {
 	if _, ok := cc.sessions[docName]; ok {
 		return // duplicate Auth for a live session — idempotent
@@ -583,12 +585,12 @@ func (cc *collabConn) auth(ctx context.Context, docName string, r *lreader) {
 		deny("malformed auth")
 		return
 	}
-	t, err := token.Decode(raw, cc.svc.secret, true)
-	if err != nil || t.Account == "" {
+	cl, err := cc.svc.ident.verified(ctx, raw)
+	if err != nil {
 		deny("invalid session token")
 		return
 	}
-	org := t.Org()
+	org := cl.org
 	if org == "" {
 		deny("invalid session token")
 		return
@@ -598,7 +600,7 @@ func (cc *collabConn) auth(ctx context.Context, docName string, r *lreader) {
 		deny("malformed documentId")
 		return
 	}
-	if t.Workspace != "" && t.Workspace != doc.workspace {
+	if cl.workspace != "" && cl.workspace != doc.workspace {
 		deny("document not found")
 		return
 	}
@@ -606,12 +608,7 @@ func (cc *collabConn) auth(ctx context.Context, docName string, r *lreader) {
 		deny("collaborator unavailable")
 		return
 	}
-	w, err := cc.svc.accounts.WorkspaceByUUID(ctx, org, doc.workspace)
-	if err != nil {
-		deny("document not found")
-		return
-	}
-	if _, ok := cc.svc.accounts.Membership(ctx, w.ID, t.Account); !ok {
+	if _, err := cc.svc.ident.admit(ctx, cl, doc.workspace); err != nil {
 		deny("document not found")
 		return
 	}

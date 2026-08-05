@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -88,10 +89,12 @@ type api struct {
 	trans    *transServer
 	cfg      config
 	log      luxlog.Logger
-	// verify is cloud's RS256/JWKS IAM token validator (cloud.NewTokenValidator —
-	// the SAME trust anchor as the identity boundary). The OAuth callback derives
-	// the tenant from ITS verdict, never from unverified claims.
-	verify func(string) (cloud.VerifiedIdentity, error)
+	// ident is the identity seam every team surface resolves its caller through:
+	// cloud's RS256/JWKS IAM validator (the SAME trust anchor as the identity
+	// boundary), the HS256 secret, and the membership rows. The OAuth callback
+	// derives its tenant from that validator's verdict, never from unverified
+	// claims — one validator, not a second copy beside the seam holding it.
+	ident *identity
 	// commerce answers CheckEntitlement(org, "team") at workspace select — nil
 	// (not co-resident) is an infra absence and never blocks login.
 	commerce types.CommerceClient
@@ -494,7 +497,7 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 	}
 	// AccountUuid = the IAM sub (derived to a stable UUID when the sub is not one).
 	account = accountID(sub)
-	id, err := g.verify(access)
+	id, err := g.ident.verify(access)
 	if err != nil {
 		return "", "", "org_failed", err
 	}
@@ -564,17 +567,30 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 // map so token.Generate's JSON marshal is stable and the decode side
 // (orgsFromExtra) reads it back with no SDK dependency in the token layer.
 func orgsClaim(orgs []model.OrgRef, home string) []map[string]any {
-	out := make([]map[string]any, 0, len(orgs)+1)
+	refs := homeOrgs(orgs, home)
+	out := make([]map[string]any, 0, len(refs))
+	for _, o := range refs {
+		out = append(out, map[string]any{"org": o.Org, "role": o.Role})
+	}
+	return out
+}
+
+// homeOrgs is that rule itself: the verified membership set, deduped, with the home
+// tenant guaranteed present. It is shared by the login mint above and by the IAM
+// lane's caller (identity.iam), so a person enumerates the SAME orgs whichever
+// credential they arrive with.
+func homeOrgs(orgs []model.OrgRef, home string) []model.OrgRef {
+	out := make([]model.OrgRef, 0, len(orgs)+1)
 	seen := map[string]bool{}
 	for _, o := range orgs {
 		if o.Org == "" || seen[o.Org] {
 			continue
 		}
 		seen[o.Org] = true
-		out = append(out, map[string]any{"org": o.Org, "role": o.Role})
+		out = append(out, o)
 	}
 	if home != "" && !seen[home] {
-		out = append(out, map[string]any{"org": home, "role": "admin"})
+		out = append(out, model.OrgRef{Org: home, Role: "admin"})
 	}
 	return out
 }
@@ -640,7 +656,13 @@ func (g *api) setCookie(c *zip.Ctx) error {
 	// cookie. Storing an unverified, caller-supplied value is a login-CSRF /
 	// session-fixation vector — an attacker could pin a cookie the victim's browser
 	// then presents as authenticated. Only a token THIS service signed is accepted.
-	if _, err := token.Decode(body.Token, g.cfg.serverSecret, true); err != nil {
+	//
+	// The HS256 arm ONLY, deliberately: this writes account-token, and the IAM
+	// cookie beside it is minted by the OAuth callback out of a code exchange the
+	// browser itself started. Accepting a caller-supplied IAM token here would add a
+	// second, caller-driven writer for that cookie — a session-fixation surface the
+	// callback does not have.
+	if _, err := g.ident.hs256(body.Token); err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
 	g.setSessionCookie(c, authCookie, body.Token, int(sessionTokenTTL.Seconds()))
@@ -864,25 +886,25 @@ func (g *api) resolveWorkspace(ctx context.Context, orgs []model.OrgRef, account
 	}
 }
 
-// getWorkspaceInfo returns info for THE workspace the caller is scoped to — the
-// one selectWorkspace already minted into the session token's `workspace` claim,
-// resolved owner_org-scoped by (org, uuid). It NEVER falls back to the caller's
-// first workspace: a token with no workspace claim (an account/login token that
-// has not selected a workspace yet) is a clean WorkspaceNotFound, so the client is
-// forced through the explicit selectWorkspace step rather than being silently
-// handed an arbitrary one.
+// getWorkspaceInfo returns info for THE workspace the caller's CREDENTIAL is
+// scoped to — the one selectWorkspace already minted into the workspace token's
+// `workspace` claim, resolved owner_org-scoped by (org, uuid). It NEVER falls back
+// to the caller's first workspace: a credential that pins no workspace (an
+// account/login token that has not selected one, and every IAM caller, which pins
+// nothing by construction) is a clean WorkspaceNotFound, so the client is forced
+// through the explicit selectWorkspace step rather than being silently handed an
+// arbitrary one.
 func (g *api) getWorkspaceInfo(c *zip.Ctx) error {
-	t, _, err := sessionToken(c, g.cfg.serverSecret)
+	cl, err := g.ident.who(c)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
 	}
-	if t.Workspace == "" {
+	if cl.workspace == "" {
 		return g.fail(c, statusWorkspaceNotFound(""))
 	}
-	org := t.Org()
-	ws, err := g.accounts.WorkspaceByUUID(c.Context(), org, t.Workspace)
+	ws, err := g.accounts.WorkspaceByUUID(c.Context(), cl.org, cl.workspace)
 	if err != nil {
-		return g.fail(c, statusWorkspaceNotFound(t.Workspace))
+		return g.fail(c, statusWorkspaceNotFound(cl.workspace))
 	}
 	return g.ok(c, toWorkspaceInfo(ws))
 }
@@ -908,58 +930,380 @@ func (g *api) getSocialIds(c *zip.Ctx) error {
 	}})
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── the identity seam ─────────────────────────────────────────────────────────
 
-// sessionToken decodes AND verifies (signature + expiry) the request's HS256
-// bearer/cookie token — the one this service minted. bearer takes precedence over
-// the cookie. It is the ONE place a team session token is turned into a principal,
-// shared by the account RPC and the files plane.
-//
-// The SPA sends OUR HS256 token, not an IAM RS256 JWT: an IAM bearer would simply
-// fail the HMAC check (ErrSignature) and be rejected here, so there is no separate
-// algorithm routing to maintain (why token.Alg was removed). token.Decode with
-// verify=true also enforces `exp`/`nbf`, so a captured expired token is refused.
-func sessionToken(c *zip.Ctx, secret string) (*token.Token, string, error) {
-	raw := bearer(c)
-	if raw == "" {
-		raw = c.Fiber().Req().Cookies(authCookie)
-	}
-	if raw == "" {
-		return nil, "", fmt.Errorf("no token")
-	}
-	t, err := token.Decode(raw, secret, true)
-	if err != nil {
-		return nil, "", err
-	}
-	if t.Account == "" {
-		return nil, "", fmt.Errorf("token has no account")
-	}
-	return t, raw, nil
+// identity is what every team surface turns a credential into a caller with, and
+// the ONE place a credential's algorithm is routed on. It composes three answers
+// and braids none of them: VERIFICATION (an IAM access token against the IAM JWKS,
+// or the HS256 signature), ACCOUNT RESOLUTION (accountID over the IAM subject —
+// the join establishSession stores the account's rows under), and WORKSPACE
+// AUTHORIZATION (the membership rows, admit).
+type identity struct {
+	// verify is cloud's RS256/JWKS IAM validator (cloud.NewTokenValidator) — the
+	// SAME trust anchor as the identity boundary and as the OAuth callback's tenant
+	// derivation, so a token any one of them accepts is a token all three accept.
+	verify func(string) (cloud.VerifiedIdentity, error)
+	// secret is SERVER_SECRET, the key of the HS256 arm.
+	secret string
+	// accounts is the membership authority. On the IAM lane nothing about a
+	// workspace is signed, so these rows ARE the authorization.
+	accounts *accountStore
+	// audience is the set of IAM apps whose access tokens this deployment accepts
+	// as a TEAM SESSION. See identity.iam for why team gates on it when the
+	// identity boundary deliberately does not.
+	audience map[string]bool
 }
 
-// account resolves (AccountUuid, org, token) from the request's verified session
-// token. The org is the token's SIGNED extra.org claim — the tenant key for every
-// account-store query — never a client header.
+// caller is who a team surface is talking to. It is the WHOLE answer: no surface
+// reads a claim off a credential for itself, so no surface can disagree with this
+// one about who is calling.
+type caller struct {
+	// account is the team AccountUuid.
+	account string
+	// org is the IAM tenant every account-store query is scoped to.
+	org string
+	// orgs is the home-safe membership set the cross-org surfaces enumerate.
+	orgs []model.OrgRef
+	// user is the IAM `<owner>/<name>` id, the key IAM's get-user takes for a
+	// mid-session membership refresh. Empty when the credential names no username.
+	user string
+	// workspace is the workspace the CREDENTIAL pinned itself to. Empty on the IAM
+	// lane, which pins nothing: what an IAM caller may touch is decided per request
+	// by admit against the rows, never by a claim the caller carries.
+	workspace string
+	// raw is the HS256 credential exactly as presented, and it is EMPTY ON THE IAM
+	// LANE — deliberately, structurally, and not as a rule each caller remembers.
+	//
+	// The account RPC echoes this back to the SPA as its session token, and the SPA
+	// is page JS. An IAM access token is an estate-wide RS256 bearer that reaches
+	// the gateway, KMS and every other service; the login flow puts it in an
+	// HttpOnly cookie precisely so script can never read it. Echoing it here would
+	// hand it straight back to the script the cookie flag exists to keep it from —
+	// one unauthenticated-looking RPC, and the caller's whole platform credential is
+	// in a variable. So the IAM lane carries no credential OUT of this file at all,
+	// and a future echo site cannot reintroduce the leak by forgetting.
+	raw string
+	// iam reports which lane resolved this caller. It exists so a surface can grant
+	// on rows instead of on a signed workspace claim, not so it can re-derive trust.
+	iam bool
+}
+
+// who resolves the caller of a team surface, on either of two lanes.
+//
+// THE IAM LANE is an IAM access token — Authorization: Bearer, else the
+// hanzo_iam_token cookie the login flow already set — verified against the IAM
+// JWKS, narrowed to this deployment's own audience, and resolved to a team account
+// through the store by its SUBJECT (identity.iam).
+//
+// THE HS256 ARM is the token this service minted, semantics unchanged: bearer
+// first and the account-token cookie after, signature and exp/nbf enforced. It is
+// deleted when login mints IAM-only and front/love/analytics-collector verify IAM.
+//
+// ONE SURFACE IS NOT DUAL-READ YET, and it blocks that deletion: getWorkspaceInfo
+// answers for the workspace the CREDENTIAL pins, and the IAM lane pins none by
+// construction — only selectWorkspace's HS256 mint does. So the workspace a client
+// is "in" still has to travel as a claim. Deleting the arm means the front NAMING
+// the workspace on that call (as it already does for selectWorkspace) and this
+// authorizing it through admit, the same way the transactor and files planes
+// already do. That is a client change, which is why it is a later phase and not
+// this one.
+//
+// THE ORDER IS WHAT MAKES THIS PHASE INERT, and it is the existing credential
+// first on BOTH carriers:
+//
+//   - Authorization is answered by the bearer alone. A signed-in browser carries an
+//     IAM cookie beside its HS256 bearer, so consulting the cookie for a request
+//     that already presented a bearer would move every current client onto the new
+//     lane at once.
+//   - with no bearer, account-token is read BEFORE hanzo_iam_token, and an
+//     account-token that is PRESENT answers alone — a stale one is refused rather
+//     than falling through. The two cookies coexist for the whole overlap and are
+//     not interchangeable: the HS256 one can PIN A WORKSPACE and the IAM one
+//     cannot, so preferring the IAM cookie silently widened the collaborator planes
+//     from "the workspace this token names" to "any workspace you are a member of",
+//     and made getWorkspaceInfo answer WorkspaceNotFound where the pin used to
+//     answer. Falling through on expiry would be the same widening on a timer: a
+//     session that used to end in a 401 would quietly continue with a different
+//     reach.
+//
+// So the rule is one sentence for every carrier: THE FIRST CREDENTIAL THE REQUEST
+// PRESENTS, IN CARRIER ORDER, IS THE ONE THAT ANSWERS. The IAM cookie is reached by
+// a browser holding nothing else, which is exactly the post-cutover client and
+// nobody today — which is what makes this phase inert. Within a carrier IAM wins: a
+// header that verifies as IAM is never re-read as HS256.
+func (id *identity) who(c *zip.Ctx) (caller, error) {
+	if id == nil {
+		return caller{}, fmt.Errorf("no identity seam")
+	}
+	ctx := c.Context()
+	if raw := bearer(c); raw != "" {
+		return id.verified(ctx, raw)
+	}
+	if raw := c.Fiber().Req().Cookies(authCookie); raw != "" {
+		return id.hs256(raw)
+	}
+	return id.iam(ctx, c.Fiber().Req().Cookies(iamTokenCookie))
+}
+
+// verified is who() over ONE presented credential rather than over a request's
+// carriers — the same two lanes in the same order, for the surfaces that carry the
+// credential in a body or a path segment instead of a header. The HS256 error is
+// the one reported: both arms fail closed, so the caller learns why the credential
+// it actually holds was refused rather than why the other lane did not claim it.
+func (id *identity) verified(ctx context.Context, raw string) (caller, error) {
+	if cl, err := id.iam(ctx, raw); err == nil {
+		return cl, nil
+	}
+	return id.hs256(raw)
+}
+
+// iam turns a VERIFIED IAM ACCESS token into a caller. Fails closed on every
+// path: no validator, no store to resolve against, an unverifiable token, one that
+// is not an access token, one whose owner claim is empty (there is no tenant to
+// scope to), and one whose SUBJECT names no account in that tenant.
+//
+// THE SUBJECT, NEVER THE CANONICAL USER ID. VerifiedIdentity.User falls back sub →
+// preferred_username → name, so a token carrying no sub presents its USERNAME
+// there — and accountID returns a UUID-shaped input verbatim, so a username set to
+// a colleague's account uuid resolved to the colleague, and admit() then granted
+// every workspace the two share. Subject-only closes it; the account itself comes
+// from the store (AccountForSubject), which confirms the row a login created
+// rather than asserting an id no row has to match.
+//
+// TYPE, NOT JUST SIGNATURE. IAM's signer emits the same claim set into the access
+// token and the id_token but for aud/tokenType/nonce (middleware_identity.go), so
+// a valid signature from a trusted issuer does not say WHICH of them arrived — and
+// the id_token is the one handed to a browser SPA to read. A session credential
+// must be the access token, so the type is checked here.
+//
+// AUDIENCE IS CHECKED HERE, and it is checked here BECAUSE the identity boundary
+// deliberately does not. That posture was decided for the boundary, whose job is
+// "did IAM mint this for one of its own apps" — for an API call, aud only names
+// which app, and cloud kept no mirror of IAM's registry because the mirror drifted
+// and silently 401'd every new first-party app. A SESSION is a different question.
+// This lane turns a bearer into a signed-in person on hanzo.team, and a token the
+// user obtained for a DIFFERENT app — chat, the console, any OIDC client they ever
+// clicked through — is not consent to that. Without the gate, one app's token is
+// every app's session, which is the confused-deputy shape the estate closes
+// elsewhere by narrowing at the resource server rather than at the door.
+//
+// The set is this deployment's OWN client id and nothing else by default, so it
+// cannot drift into a registry mirror: it is one value team already has to know to
+// run its OAuth flow, and the browser's hanzo_iam_token is the token that flow
+// exchanged, so it carries exactly this audience. Additional first-party SPAs are
+// named explicitly by an operator (TEAM_IAM_AUDIENCES) rather than admitted by a
+// pattern — an audience allowlist that grows by rule is the mirror again.
+//
+// TENANT IS THE HOME ORG, NEVER `owner`. v.Owner carries the APPLICATION's org, so
+// it is chosen by whichever app the caller authenticated through; a token with
+// owner="lux" and a membership set naming hanzo would otherwise scope every team
+// store query to "lux". The boundary refuses to derive a tenant from that claim
+// (idClaims.homeOrg) and so does this. An empty home is a refusal, which also
+// excludes every MACHINE credential — a client_credentials app or an API key is a
+// member of nothing, and a team session is a person's.
+func (id *identity) iam(ctx context.Context, raw string) (caller, error) {
+	if id == nil || id.verify == nil {
+		return caller{}, fmt.Errorf("no iam validator")
+	}
+	if id.accounts == nil {
+		return caller{}, fmt.Errorf("no account store to resolve a subject against")
+	}
+	if raw == "" {
+		return caller{}, fmt.Errorf("no token")
+	}
+	v, err := id.verify(raw)
+	if err != nil {
+		return caller{}, err
+	}
+	if !isAccessToken(v.TokenType) {
+		return caller{}, fmt.Errorf("not an access token: tokenType %q", v.TokenType)
+	}
+	if !id.forThisDeployment(v.Audience) {
+		return caller{}, fmt.Errorf("token audience %v is not a team session audience", v.Audience)
+	}
+	org := v.Home()
+	if org == "" {
+		return caller{}, fmt.Errorf("verified token names no home org")
+	}
+	if v.Subject == "" {
+		return caller{}, fmt.Errorf("verified token carries no subject")
+	}
+	account, ok := id.accounts.AccountForSubject(ctx, org, v.Subject)
+	if !ok {
+		return caller{}, fmt.Errorf("verified subject holds no account in %q", org)
+	}
+	user := ""
+	if v.Username != "" {
+		user = org + "/" + v.Username
+	}
+	// NO raw: an IAM credential never leaves this function. See caller.raw.
+	return caller{
+		account: account,
+		org:     org,
+		orgs:    homeOrgs(v.Orgs, org),
+		user:    user,
+		iam:     true,
+	}, nil
+}
+
+// forThisDeployment reports whether a token was minted for an app whose session
+// this deployment is. Empty audience is REFUSED: a session credential that names
+// no app is one nobody consented to hand here.
+//
+// THE INCOMING CLAIM IS MATCHED EXACTLY — no trim, no fold, no normalisation.
+// Normalising it here would make the comparison non-injective: "hanzo-team " and
+// "hanzo-team" are DISTINCT IAM applications (IAM refuses only an exact name
+// collision, so the padded one is registrable), and trimming collapses them onto
+// one key, handing every session of the real app to whoever registered the
+// lookalike. This is the rule OrgHasUnsafeRune states for orgs — an injective
+// boundary must never fold two distinct identifiers into one — applied to the
+// identifier this door happens to compare.
+//
+// Whitespace is dealt with once, on the way IN, where the set is BUILT
+// (sessionAudience): an operator's config entry is theirs to tidy, a signed claim
+// is not ours to rewrite.
+func (id *identity) forThisDeployment(aud []string) bool {
+	for _, a := range aud {
+		if id.audience[a] {
+			return true
+		}
+	}
+	return false
+}
+
+// sessionAudience is the set of IAM apps whose access tokens this deployment
+// accepts as a team session: its OWN client id, plus any explicitly named by the
+// operator in TEAM_IAM_AUDIENCES (comma-separated).
+//
+// The default is one value — the client id team already needs to run its OAuth
+// flow, and therefore the audience of the very token that flow puts in the
+// browser's cookie. Extra entries are NAMED, never matched by a pattern: an
+// audience set that grows by rule is the IAM app-registry mirror the estate
+// deleted, arriving one wildcard at a time.
+//
+// Trimming happens HERE and only here — an operator's config entry is theirs to
+// tidy, while the signed claim this set is compared against is matched exactly
+// (see identity.forThisDeployment for why folding it is a hole).
+//
+// Phase-2 precondition: if the hanzo-team IAM app is IsShared, seed
+// clientID+"-org-"+<org> here — a shared app's access tokens carry the per-org
+// audience form.
+func sessionAudience(cfg config) map[string]bool {
+	out := map[string]bool{}
+	if id := strings.TrimSpace(cfg.iamClientID); id != "" {
+		out[id] = true
+	}
+	for _, a := range strings.Split(os.Getenv("TEAM_IAM_AUDIENCES"), ",") {
+		if a = strings.TrimSpace(a); a != "" {
+			out[a] = true
+		}
+	}
+	return out
+}
+
+// isAccessToken reports whether IAM's `tokenType` names the token a bearer session
+// may be built on.
+//
+// The comparison is case-insensitive and treats an ABSENT type as an access token,
+// which is the one permissive branch here and is deliberate: IAM has minted tokens
+// without the claim, and refusing those would sign every one of those users out at
+// deploy rather than at expiry. It is safe in the direction that matters — the
+// id_token this exists to exclude is exactly the one that DOES carry a type, so an
+// omitted claim is never an id_token being waved through. It stops being reached as
+// tokens roll over, rather than needing a flag day.
+func isAccessToken(t string) bool {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "", "access-token", "access_token", "bearer":
+		return true
+	default:
+		return false
+	}
+}
+
+// hs256 decodes AND verifies (signature + expiry) the HS256 session or workspace
+// token this service minted. The tenant, the membership set and the workspace all
+// come from its SIGNED claims.
+func (id *identity) hs256(raw string) (caller, error) {
+	if id == nil {
+		return caller{}, fmt.Errorf("no identity seam")
+	}
+	if raw == "" {
+		return caller{}, fmt.Errorf("no token")
+	}
+	t, err := token.Decode(raw, id.secret, true)
+	if err != nil {
+		return caller{}, err
+	}
+	if t.Account == "" {
+		return caller{}, fmt.Errorf("token has no account")
+	}
+	user, _ := t.Extra["user"].(string)
+	return caller{
+		account:   t.Account,
+		org:       t.Org(),
+		orgs:      orgsFromExtra(t.Extra),
+		user:      user,
+		workspace: t.Workspace,
+		raw:       raw,
+	}, nil
+}
+
+// admit authorizes cl for the workspace the REQUEST named and returns its row.
+// Membership IS the authorization — the server reads the rows, the caller signs
+// nothing — which is why it is the one gate both lanes pass through wherever a
+// workspace is named. Every failure answers the same errNoWorkspace, so an unknown
+// workspace, another tenant's, and one the caller is not in are indistinguishable.
+func (id *identity) admit(ctx context.Context, cl caller, wsUUID string) (workspace, error) {
+	if id == nil || id.accounts == nil {
+		return workspace{}, errNoWorkspace
+	}
+	// A caller with no tenant, or none with an account, names nothing to be a member
+	// of — and an empty org is a value the owner_org scoping would happily match a
+	// row against. Refused here, once, so every surface inherits the same floor.
+	if cl.org == "" || cl.account == "" {
+		return workspace{}, errNoWorkspace
+	}
+	w, err := id.accounts.WorkspaceByUUID(ctx, cl.org, strings.TrimSpace(wsUUID))
+	if err != nil {
+		return workspace{}, errNoWorkspace
+	}
+	if _, ok := id.accounts.Membership(ctx, w.ID, cl.account); !ok {
+		return workspace{}, errNoWorkspace
+	}
+	return w, nil
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+// account resolves (AccountUuid, org, token) from the request's verified caller.
+// The org is the IAM tenant — the HOME org of a verified access token, or the HS256
+// token's SIGNED extra.org claim — and is the key for every account-store query,
+// never a client header.
+//
+// The token is EMPTY for an IAM caller, and that is the answer rather than a gap:
+// it is echoed to the SPA as its session token, and an IAM caller's credential is
+// an estate-wide bearer held in an HttpOnly cookie that script must never see (see
+// caller.raw). Such a caller already holds the credential it authenticated with, so
+// there is nothing it needs handed back.
 func (g *api) account(c *zip.Ctx) (account, org, tok string, err error) {
-	t, raw, err := sessionToken(c, g.cfg.serverSecret)
+	cl, err := g.ident.who(c)
 	if err != nil {
 		return "", "", "", err
 	}
-	org = t.Org()
-	return t.Account, org, raw, nil
+	return cl.account, cl.org, cl.raw, nil
 }
 
 // accountOrgs resolves (AccountUuid, membership set, token) from the verified
-// session token. The set is the SIGNED extra.orgs claim (home + every team org),
-// read back home-safe by orgsFromExtra — the tenant SET the cross-org surfaces
+// caller. The set is home-safe — the verified `orgs` claim on the IAM lane, the
+// SIGNED extra.orgs on the HS256 one — and is the tenant SET the cross-org surfaces
 // (getUserWorkspaces union, selectWorkspace resolution) enumerate. Never a client
 // header. Empty account fails closed, exactly like account().
 func (g *api) accountOrgs(c *zip.Ctx) (account string, orgs []model.OrgRef, tok string, err error) {
-	t, raw, err := sessionToken(c, g.cfg.serverSecret)
+	cl, err := g.ident.who(c)
 	if err != nil {
 		return "", nil, "", err
 	}
-	return t.Account, orgsFromExtra(t.Extra), raw, nil
+	return cl.account, cl.orgs, cl.raw, nil
 }
 
 // callbackOrigin is the ORIGIN the OAuth redirect_uri is built from — the SAME
