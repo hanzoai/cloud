@@ -127,7 +127,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := validatorOps{s: s}
-	zapp := cloud.ZipApp(app)
 
 	g := app.Group("/v1/validators")
 	// The composer owns cloud.Bridge: the fused host installs it once at its root
@@ -136,12 +135,28 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// where it has always been — see its own comment.
 	g.Use(requireOrgOnWrite())
 
-	// The collection root (/v1/validators) stays FLAT, declared on the App with
-	// its WHOLE path: joining "/v1/validators" with "" yields "/v1/validators/"
-	// (trailing slash), which the portal's bare /v1/validators calls would miss.
-	// Same gotcha the clients/wallets, guide, link, … subsystems document.
-	zip.Get(zapp, "/v1/validators", o.list)
-	zip.Post(zapp, "/v1/validators", o.provision)
+	// The collection root (/v1/validators) stays FLAT: joining "/v1/validators"
+	// with "" yields "/v1/validators/" (trailing slash), which the portal's bare
+	// /v1/validators calls would miss. Same gotcha the clients/wallets, guide,
+	// link, … subsystems document.
+	//
+	// The gate rides the ROUTER rather than a prefix. zip middleware is scoped to
+	// the group INSTANCE it was installed on (and that group's children) and is
+	// never matched by prefix across the App, so declared straight on the App the
+	// root sat outside g entirely: requireOrgOnWrite did not run for it, and an
+	// anonymous POST fell through to zip's decode — answering 400 on a malformed
+	// body where this surface has always answered 403.
+	//
+	// With() wraps the leaf it registers and installs nothing at "/v1", which is
+	// what keeps this legal: a Use there would gate every other subsystem's /v1
+	// routes, and cloud's ownership gate (scope.err) refuses a subsystem that
+	// installs middleware outside the prefixes it owns. .Group("/v1") is then only
+	// an address — it joins to exactly "/v1/validators", and it is a prefix
+	// cmd/zipdoc can read, so both ops keep their prose. Same shape apps/sync uses.
+	// Pinned by TestIdentityRefusalStillPrecedesTheBody.
+	gated := cloud.ZipApp(app).With(gateWrite).Group("/v1")
+	zip.Get(gated, "/validators", o.list)
+	zip.Post(gated, "/validators", o.provision)
 
 	zip.Get(g, "/challenge", o.challenge)
 	zip.Get(g, "/:tokenId", o.get)
@@ -165,6 +180,23 @@ func requireOrgOnWrite() zip.Handler {
 			return zip.ErrForbidden("validated identity required")
 		}
 		return c.Continue()
+	}
+}
+
+// gateWrite is the SAME refusal as a leaf-wrapping zip.Middleware, for the two
+// collection-root ops that hang off a router rather than a prefixed group (see
+// routes). A signature adapter, not a second rule: a group's Use takes a handler
+// that calls c.Continue(), With() takes func(Handler) Handler, and both ask
+// principal.Org the one question above.
+func gateWrite(next zip.Handler) zip.Handler {
+	return func(c *zip.Ctx) error {
+		if c.Method() != http.MethodPost {
+			return next(c)
+		}
+		if _, ok := principal.Org(c); !ok {
+			return zip.ErrForbidden("validated identity required")
+		}
+		return next(c)
 	}
 }
 
