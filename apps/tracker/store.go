@@ -53,6 +53,15 @@ type Project struct {
 //
 // They are identity, set once at Create and immutable thereafter (Update touches
 // only the mutable board state), so a row never migrates between surfaces.
+//
+// StartAt/DueAt are the row's SCHEDULE — the interval a timeline draws it on, in
+// unix seconds, 0 meaning unset. They are mutable board state like Status: work
+// gets rescheduled. There is no milestone table, because a milestone is not a
+// second kind of thing: it is this row with a DueAt and no StartAt — an interval
+// of zero length, a point in time. A dated epic is a phase (its children are
+// already reachable by ExtRef); a dated issue is a bar. So the timeline is a
+// FILTER + a projection over the one table, exactly like the board, and neither
+// view can drift from the other's data.
 type Issue struct {
 	ID          string
 	ProjectID   string
@@ -68,6 +77,8 @@ type Issue struct {
 	Priority    string
 	Assignee    string
 	Labels      string
+	StartAt     int64 // unix seconds the work starts; 0 = unset
+	DueAt       int64 // unix seconds the work is due; 0 = unset
 	CreatedAt   int64
 	UpdatedAt   int64
 }
@@ -129,6 +140,8 @@ CREATE TABLE IF NOT EXISTS issues (
   priority     TEXT NOT NULL DEFAULT 'none',
   assignee     TEXT NOT NULL DEFAULT '',
   labels       TEXT NOT NULL DEFAULT '',
+  start_at     INTEGER NOT NULL DEFAULT 0,
+  due_at       INTEGER NOT NULL DEFAULT 0,
   created_at   INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL
 );
@@ -147,6 +160,11 @@ CREATE INDEX IF NOT EXISTS ix_issues_org_project_status ON issues(org, project_i
 		`ALTER TABLE issues ADD COLUMN source  TEXT NOT NULL DEFAULT 'team'`,
 		`ALTER TABLE issues ADD COLUMN repo    TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE issues ADD COLUMN ext_ref TEXT NOT NULL DEFAULT ''`,
+		// The schedule pair, forward-added the same way: an existing row reads as
+		// unscheduled (0/0) and renders on the board exactly as before, so the
+		// timeline is additive to a live tracker rather than a rewrite of it.
+		`ALTER TABLE issues ADD COLUMN start_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE issues ADD COLUMN due_at   INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("migrate add column: %w", err)
@@ -164,6 +182,11 @@ CREATE INDEX IF NOT EXISTS ix_issues_org_kind ON issues(org, kind);
 -- existing row for an anchor by (org, project, ext_ref) so a webhook redelivery or
 -- a backfill re-run updates in place instead of duplicating.
 CREATE INDEX IF NOT EXISTS ix_issues_extref ON issues(org, project_id, ext_ref);
+-- Timeline read: the gantt asks one board for the rows that carry a schedule, so
+-- the due date is indexed within the tenant the same way status is. An unscheduled
+-- board costs the index nothing (every row shares the 0 key) and a scheduled one
+-- reads its window without touching the rows that have no dates.
+CREATE INDEX IF NOT EXISTS ix_issues_org_project_due ON issues(org, project_id, due_at);
 `
 	if _, err := s.db.Exec(spineIdx); err != nil {
 		return fmt.Errorf("migrate spine index: %w", err)
@@ -275,13 +298,13 @@ func (s *Store) DeleteProject(ctx context.Context, org, key string) (bool, error
 	return true, nil
 }
 
-const issueCols = `id,project_id,org,number,kind,source,repo,ext_ref,title,description,status,priority,assignee,labels,created_at,updated_at`
+const issueCols = `id,project_id,org,number,kind,source,repo,ext_ref,title,description,status,priority,assignee,labels,start_at,due_at,created_at,updated_at`
 
 func scanIssue(sc interface{ Scan(...any) error }) (Issue, error) {
 	var i Issue
 	err := sc.Scan(&i.ID, &i.ProjectID, &i.Org, &i.Number, &i.Kind, &i.Source, &i.Repo,
 		&i.ExtRef, &i.Title, &i.Description, &i.Status, &i.Priority, &i.Assignee,
-		&i.Labels, &i.CreatedAt, &i.UpdatedAt)
+		&i.Labels, &i.StartAt, &i.DueAt, &i.CreatedAt, &i.UpdatedAt)
 	return i, err
 }
 
@@ -309,10 +332,10 @@ func (s *Store) CreateIssue(ctx context.Context, i Issue) (Issue, error) {
 		i.Source = "team"
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO issues (`+issueCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO issues (`+issueCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		i.ID, i.ProjectID, i.Org, i.Number, i.Kind, i.Source, i.Repo, i.ExtRef,
 		i.Title, i.Description, i.Status, i.Priority, i.Assignee, i.Labels,
-		i.CreatedAt, i.UpdatedAt); err != nil {
+		i.StartAt, i.DueAt, i.CreatedAt, i.UpdatedAt); err != nil {
 		return Issue{}, fmt.Errorf("insert issue: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -360,15 +383,20 @@ func (s *Store) GetIssueByExtRef(ctx context.Context, org, projectID, extRef str
 	return i, nil
 }
 
-// IssueFilter narrows ListIssues. All fields optional (empty = no constraint).
-// This is the ONE knob every work-item surface turns: hanzo.team passes {Status},
-// a git repo's Issues tab passes {Repo, Kind:"issue"}, its PRs tab {Repo,
-// Kind:"pr"}, an agent's queue {Source:"agent"}.
+// IssueFilter narrows ListIssues. All fields optional (zero = no constraint).
+// This is the ONE knob every work-item surface turns: hanzo.team's board passes
+// {Status}, its timeline passes {Scheduled}, a git repo's Issues tab passes
+// {Repo, Kind:"issue"}, its PRs tab {Repo, Kind:"pr"}, an agent's queue
+// {Source:"agent"}.
 type IssueFilter struct {
 	Status string
 	Kind   string
 	Repo   string
 	Source string
+	// Scheduled keeps only rows that carry a schedule (a start, a due date, or
+	// both) — the timeline's slice. It is the one filter that is a predicate
+	// rather than an equality, because "has a date" is what a gantt selects on.
+	Scheduled bool
 }
 
 // ListIssues returns issues for a project narrowed by IssueFilter. Ordered by
@@ -387,6 +415,9 @@ func (s *Store) ListIssues(ctx context.Context, org, projectID string, f IssueFi
 	add("kind", f.Kind)
 	add("repo", f.Repo)
 	add("source", f.Source)
+	if f.Scheduled {
+		q += ` AND (start_at>0 OR due_at>0)`
+	}
 	q += ` ORDER BY status ASC, number ASC`
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -408,9 +439,10 @@ func (s *Store) ListIssues(ctx context.Context, org, projectID string, f IssueFi
 // number). id+project_id+org+number+created_at are immutable.
 func (s *Store) UpdateIssue(ctx context.Context, i Issue) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE issues SET title=?,description=?,status=?,priority=?,assignee=?,labels=?,updated_at=?
+		`UPDATE issues SET title=?,description=?,status=?,priority=?,assignee=?,labels=?,start_at=?,due_at=?,updated_at=?
 		 WHERE org=? AND project_id=? AND number=?`,
-		i.Title, i.Description, i.Status, i.Priority, i.Assignee, i.Labels, i.UpdatedAt,
+		i.Title, i.Description, i.Status, i.Priority, i.Assignee, i.Labels,
+		i.StartAt, i.DueAt, i.UpdatedAt,
 		i.Org, i.ProjectID, i.Number)
 	if err != nil {
 		return fmt.Errorf("update issue: %w", err)
