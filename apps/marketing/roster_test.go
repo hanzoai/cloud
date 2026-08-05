@@ -41,6 +41,7 @@ func mountRoutes(t *testing.T) (*zip.App, *cloud.Service[state]) {
 		State: state{store: testStore(t)},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
+	compose(app)
 	routes(app, cloud.ZipApp(app), s)
 	return app, s
 }
