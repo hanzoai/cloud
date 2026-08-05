@@ -1388,7 +1388,7 @@
     },
     "/v1/o11y/countErrors": {
       "post": {
-        "operationId": "post_v1_o11y_countErrors",
+        "operationId": "post_v1_o11y_counterrors",
         "summary": "Counts the grouped exceptions in the query window for the caller's org.",
         "description": "Counts the grouped exceptions in the query window for the caller's\norg.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -2764,7 +2764,7 @@
     },
     "/v1/o11y/errorFromErrorID": {
       "get": {
-        "operationId": "get_v1_o11y_errorFromErrorID",
+        "operationId": "get_v1_o11y_errorfromerrorid",
         "summary": "Returns one exception instance and the span it happened on, by its error id within a group at a timestamp.",
         "description": "Returns one exception instance and the span it happened on,\nby its error id within a group at a timestamp.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -2815,7 +2815,7 @@
     },
     "/v1/o11y/errorFromGroupID": {
       "get": {
-        "operationId": "get_v1_o11y_errorFromGroupID",
+        "operationId": "get_v1_o11y_errorfromgroupid",
         "summary": "Returns the representative exception instance of a group at a timestamp, and the span it happened on.",
         "description": "Returns the representative exception instance of a group at a\ntimestamp, and the span it happened on.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -2962,7 +2962,7 @@
     },
     "/v1/o11y/errortracking/issues/{id}": {
       "get": {
-        "operationId": "get_v1_o11y_errortracking_issues_id",
+        "operationId": "get_v1_o11y_errortracking_issues_by_id",
         "summary": "Returns one grouped issue with its latest occurrence sample.",
         "description": "Returns one grouped issue with its latest occurrence sample.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -2993,7 +2993,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_o11y_errortracking_issues_id",
+        "operationId": "post_v1_o11y_errortracking_issues_by_id",
         "summary": "Changes an issue's lifecycle — resolve, ignore, reopen or assign — and returns the updated issue.",
         "description": "Changes an issue's lifecycle — resolve, ignore, reopen or\nassign — and returns the updated issue. Fields left unset are left unchanged.\n\nCallers need the editor role; the runtime's own gate enforces it.",
         "tags": [
@@ -3149,7 +3149,7 @@
     },
     "/v1/o11y/explorer/views/{viewId}": {
       "delete": {
-        "operationId": "delete_v1_o11y_explorer_views_viewId",
+        "operationId": "delete_v1_o11y_explorer_views_by_viewid",
         "summary": "Deletes one saved explorer view by id.",
         "description": "Deletes one saved explorer view by id.\n\nCallers need the editor role; the runtime's own gate enforces it.",
         "tags": [
@@ -3180,7 +3180,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_o11y_explorer_views_viewId",
+        "operationId": "get_v1_o11y_explorer_views_by_viewid",
         "summary": "Returns one saved explorer view by id.",
         "description": "Returns one saved explorer view by id.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -3211,7 +3211,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_o11y_explorer_views_viewId",
+        "operationId": "put_v1_o11y_explorer_views_by_viewid",
         "summary": "Replaces one saved explorer view by id with the given view and echoes it back.",
         "description": "Replaces one saved explorer view by id with the given view and\nechoes it back.\n\nCallers need the editor role; the runtime's own gate enforces it.",
         "tags": [
@@ -5069,7 +5069,7 @@
     },
     "/v1/o11y/listErrors": {
       "post": {
-        "operationId": "post_v1_o11y_listErrors",
+        "operationId": "post_v1_o11y_listerrors",
         "summary": "Lists the grouped exceptions in the query window — each an exception type with its message, count, service and first/last-seen — for the caller's org.",
         "description": "Lists the grouped exceptions in the query window — each an\nexception type with its message, count, service and first/last-seen — for the\ncaller's org.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -6133,7 +6133,7 @@
     },
     "/v1/o11y/logs/pipelines/{version}": {
       "get": {
-        "operationId": "get_v1_o11y_logs_pipelines_version",
+        "operationId": "get_v1_o11y_logs_pipelines_by_version",
         "summary": "Returns the caller's org's log parsing pipelines at one config version — \"latest\" for the newest — along with that version's deployment record and the recent version history.",
         "description": "Returns the caller's org's log parsing pipelines at one config\nversion — \"latest\" for the newest — along with that version's deployment\nrecord and the recent version history.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -7599,7 +7599,7 @@
     },
     "/v1/o11y/nextPrevErrorIDs": {
       "get": {
-        "operationId": "get_v1_o11y_nextPrevErrorIDs",
+        "operationId": "get_v1_o11y_nextpreverrorids",
         "summary": "Returns the ids of the exception instances immediately after and before a given one within its group — the paging cursor the error detail view walks.",
         "description": "Returns the ids of the exception instances immediately after\nand before a given one within its group — the paging cursor the error detail\nview walks.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -9275,7 +9275,7 @@
     },
     "/v1/o11y/reviews/{id}": {
       "delete": {
-        "operationId": "delete_v1_o11y_reviews_id",
+        "operationId": "delete_v1_o11y_reviews_by_id",
         "summary": "Removes one review queue and every item in it.",
         "description": "Removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists.",
         "tags": [
@@ -9307,7 +9307,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_o11y_reviews_id",
+        "operationId": "get_v1_o11y_reviews_by_id",
         "summary": "Returns one review queue with its pending and completed counts and its first page of items.",
         "description": "Returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
         "tags": [
@@ -9339,7 +9339,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_o11y_reviews_id",
+        "operationId": "patch_v1_o11y_reviews_by_id",
         "summary": "Changes a review queue's name, description or score-config set.",
         "description": "Changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
         "tags": [
@@ -9387,7 +9387,7 @@
     },
     "/v1/o11y/reviews/{id}/items": {
       "get": {
-        "operationId": "get_v1_o11y_reviews_id_items",
+        "operationId": "get_v1_o11y_reviews_by_id_items",
         "summary": "Returns a page of one review queue's items, newest first, optionally filtered to PENDING or COMPLETED.",
         "description": "Returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
         "tags": [
@@ -9447,7 +9447,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_o11y_reviews_id_items",
+        "operationId": "post_v1_o11y_reviews_by_id_items",
         "summary": "Enqueues traces, observations or sessions on a review queue.",
         "description": "Enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
         "tags": [
@@ -9499,7 +9499,7 @@
     },
     "/v1/o11y/reviews/{id}/items/{itemId}": {
       "patch": {
-        "operationId": "patch_v1_o11y_reviews_id_items_itemId",
+        "operationId": "patch_v1_o11y_reviews_by_id_items_by_itemid",
         "summary": "Moves one queue item between PENDING and COMPLETED and sets its assignee.",
         "description": "Moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
         "tags": [
@@ -14051,7 +14051,7 @@
     },
     "/v1/sentry/events/{id}": {
       "get": {
-        "operationId": "get_v1_sentry_events_id",
+        "operationId": "get_v1_sentry_events_by_id",
         "summary": "Returns one captured error event of a project, by its id.",
         "description": "Returns one captured error event of a project, by its id.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -14207,7 +14207,7 @@
     },
     "/v1/sentry/issues/{id}": {
       "get": {
-        "operationId": "get_v1_sentry_issues_id",
+        "operationId": "get_v1_sentry_issues_by_id",
         "summary": "Returns one grouped issue of the caller's org with its latest occurrence sample.",
         "description": "Returns one grouped issue of the caller's org with its latest\noccurrence sample.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -14238,7 +14238,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_sentry_issues_id",
+        "operationId": "put_v1_sentry_issues_by_id",
         "summary": "Changes an issue's lifecycle — resolve, ignore, reopen or assign — and returns the updated issue.",
         "description": "Changes an issue's lifecycle — resolve, ignore, reopen or\nassign — and returns the updated issue. Fields left unset are left unchanged.\n\nCallers need the editor role; the runtime's own gate enforces it.",
         "tags": [
@@ -14281,7 +14281,7 @@
     },
     "/v1/sentry/issues/{id}/events": {
       "get": {
-        "operationId": "get_v1_sentry_issues_id_events",
+        "operationId": "get_v1_sentry_issues_by_id_events",
         "summary": "Lists one issue's captured occurrences, scoped to a project — a project is an isolation unit, so the caller declares which project's occurrences to read.",
         "description": "Lists one issue's captured occurrences, scoped to a project\n— a project is an isolation unit, so the caller declares which project's\noccurrences to read.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -14444,7 +14444,7 @@
     },
     "/v1/sentry/projects/{id}": {
       "delete": {
-        "operationId": "delete_v1_sentry_projects_id",
+        "operationId": "delete_v1_sentry_projects_by_id",
         "summary": "Deletes one Sentry project of the caller's org.",
         "description": "Deletes one Sentry project of the caller's org. Its DSN\nstops resolving immediately, so ingest for that id fails closed exactly as an\nunknown project does; retained events are not touched. Answers 204.\n\nCallers need the editor role; the runtime's own gate enforces it.",
         "tags": [
@@ -14468,7 +14468,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_sentry_projects_id",
+        "operationId": "get_v1_sentry_projects_by_id",
         "summary": "Returns one Sentry project of the caller's org, DSN included.",
         "description": "Returns one Sentry project of the caller's org, DSN included.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
         "tags": [
@@ -14501,7 +14501,7 @@
     },
     "/v1/sentry/projects/{id}/keys/rotate": {
       "post": {
-        "operationId": "post_v1_sentry_projects_id_keys_rotate",
+        "operationId": "post_v1_sentry_projects_by_id_keys_rotate",
         "summary": "Rotates a project's DSN key — bumping its rotation watermark so keys below it stop verifying — and returns the project with its new DSN.",
         "description": "Rotates a project's DSN key — bumping its rotation\nwatermark so keys below it stop verifying — and returns the project with its\nnew DSN.\n\nCallers need the editor role; the runtime's own gate enforces it.",
         "tags": [
@@ -14636,7 +14636,7 @@
     },
     "/v1/sentry/traces/{id}": {
       "get": {
-        "operationId": "get_v1_sentry_traces_id",
+        "operationId": "get_v1_sentry_traces_by_id",
         "summary": "Returns one trace's captured errors for a project — every error event that carried the trace id, in the order the events plane holds them.",
         "description": "Returns one trace's captured errors for a project — every error event\nthat carried the trace id, in the order the events plane holds them.",
         "tags": [
