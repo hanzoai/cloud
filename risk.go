@@ -170,6 +170,18 @@ type RiskVerdict struct {
 	Cause string `json:"cause,omitempty"`
 	// Refusal names why this is not a scored answer, and is empty when it is one.
 	Refusal string `json:"refusal,omitempty"`
+	// Shape is the model SPACE the verdict was reached in, as `<family>:<digest>`.
+	// It is what pins an adverse decision to a model — a score is only meaningful
+	// against the space that produced it, and "the model that was running" is not
+	// an answer to which model decided this. Empty on an unscored answer, which has
+	// no space behind it.
+	Shape string `json:"shape,omitempty"`
+	// Policy is the version of the organisation's decision regime this verdict was
+	// reached under. The threshold is derived from the appetite that version
+	// states, so it is the record that makes the decision reconstructible after the
+	// appetite is restated. Zero means no regime was ever stated and the default
+	// posture — shadow — was in force.
+	Policy int `json:"policy,omitempty"`
 }
 
 // Scored reports whether a verdict came from the scorer rather than the fail
@@ -396,6 +408,22 @@ func riskUnavailable(q RiskQuery, why string) RiskVerdict {
 	}
 	return RiskVerdict{Action: ActionAllow, Agency: q.Agency, Refusal: why}
 }
+
+// RiskUnavailable is that same policy, for a scorer that has to state one fact
+// [Decide] cannot observe from here.
+//
+// A scorer reached over the plane learns something the seam does not: whether the
+// app it asks is PART OF THIS DEPLOYMENT. Over a socket, "not deployed" arrives as
+// a failed call like any other — and read as an error it would take the
+// fail-CLOSED branch, so a fleet that simply does not run the risk app would
+// refuse every privileged grant in it. That is the outage the absent exemption
+// exists to prevent, and only the caller of the plane can tell it apart from a
+// peer that is here and silent.
+//
+// So the scorer states the refusal and this applies the ONE policy to it, rather
+// than a second copy of the rule appearing at the one seam that needs it most.
+// Every other refusal stays [Decide]'s to determine.
+func RiskUnavailable(q RiskQuery, why string) RiskVerdict { return riskUnavailable(q, why) }
 
 // answering reports whether a refusal came from a scorer that is present and
 // returning — the fact that separates "the judge is out today" from "the judge

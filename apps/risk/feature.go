@@ -57,6 +57,7 @@ import (
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
+	contract "github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -189,16 +190,23 @@ func tenantOf(ctx context.Context, brandID string) (tenant, error) {
 // Subject kinds. A feature is meaningless without saying WHOSE, and each kind
 // below is a column the event surface actually carries — not a category invented
 // here and then read as empty.
+//
+// The VALUES come from the call contract (package plane) because a kind crosses
+// the process boundary: a gate in another binary states one on every decision it
+// asks for. Two spellings of "account" would not read as a disagreement, they
+// would namespace one subject into two — so there is one spelling, in the package
+// both halves import, and the prose that says what each one MEANS stays here with
+// the surface that computes it.
 const (
 	// kindPerson is the identified end user across the product surface:
 	// person_id, else distinct_id, else anonymous_id.
-	kindPerson = "person"
+	kindPerson = contract.KindPerson
 	// kindSession is one session of that surface.
-	kindSession = "session"
+	kindSession = contract.KindSession
 	// kindAccount is the org's own user in the metered plane
 	// (hanzo.cloud_usage.user_id) — the subject whose spend velocity is what
 	// pay-as-you-go abuse moves.
-	kindAccount = "account"
+	kindAccount = contract.KindAccount
 )
 
 // kinds is the closed set, in one place, so a rollup cannot write a kind a read
