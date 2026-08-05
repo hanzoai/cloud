@@ -161,14 +161,17 @@ func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 	}
 }
 
-// TestAppIsTheOnlyAppWideDoor pins the asymmetry that makes the whole thing
-// work: with App the subsystem receives the bare *zip.App and its Use means what
-// it has always meant. That is the capability, and it is spelled out in Wire().
-func TestAppIsTheOnlyAppWideDoor(t *testing.T) {
+// TestGlobalIsTheOnlyAppWideDoor pins the asymmetry that makes the whole thing
+// work: with Global the subsystem's Router IS the bare app, so its Use means what
+// it has always meant. That is the capability, and it is spelled out at the
+// composition root — as a BOOL, beside Price and Prefixes, where a grant belongs.
+// It used to be a second Mount field with a second signature, which is how three
+// subsystems acquired the capability by naming a concrete parameter type.
+func TestGlobalIsTheOnlyAppWideDoor(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "edge", App: func(a *zip.App, _ cloud.Deps) error {
-			a.Use(zip.H(deny))
+		{Name: "edge", Global: true, Mount: func(r cloud.Router, _ cloud.Deps) error {
+			r.Use(zip.H(deny))
 			return nil
 		}},
 		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
@@ -180,7 +183,7 @@ func TestAppIsTheOnlyAppWideDoor(t *testing.T) {
 		t.Fatalf("MountAll: %v", err)
 	}
 	if got := get(t, app, "/v1/neighbour/ping"); got != http.StatusUnauthorized {
-		t.Errorf("neighbour = %d, want 401 — App middleware must still reach every route", got)
+		t.Errorf("neighbour = %d, want 401 — Global middleware must still reach every route", got)
 	}
 }
 
