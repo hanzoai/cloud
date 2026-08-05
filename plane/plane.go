@@ -102,6 +102,22 @@ const (
 	// had nowhere else to come from.
 	TeamMember = "team_member"
 
+	// TeamWorkspaces answers "which workspaces is this person in?" — the same
+	// rows TeamMember reads, asked without already knowing the answer.
+	//
+	// A caller that must DECIDE a join asks TeamMember, because it already holds
+	// the workspace the room named. A caller that must OFFER a join has nothing
+	// to name yet: the meet lobby has to show a person the workspaces they can
+	// open a room in, and a room is bound to its tenant by its name's leading
+	// workspace segment, so without this the native client could only ask the
+	// user to type a uuid it has no way to know.
+	//
+	// It is a person's OWN memberships and never a workspace's roster: the
+	// subject is the caller's, the org rides the call, and the answer is the
+	// list of rows that person holds. Nothing here tells one member about
+	// another.
+	TeamWorkspaces = "team_workspaces"
+
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
 	GitInbound = "git_inbound"
@@ -502,6 +518,57 @@ type Member struct {
 	// Account is the team AccountUuid the subject resolved to — the identity the
 	// asking process attributes the person by, so it never derives one itself.
 	Account string `json:"account"`
+}
+
+// WorkspacesIn names the person a workspace list is about. The ORG is absent for
+// the same reason it is absent from MemberIn: it is the tenancy key of every
+// workspace row, so a caller able to pass it could enumerate another tenant's.
+type WorkspacesIn struct {
+	// Subject is the IAM subject, NOT a team account id — team owns the join from
+	// one to the other, exactly as in MemberIn.
+	Subject string `json:"subject"`
+}
+
+// Space is one workspace a person holds a member row in.
+//
+// The ROLE is on it because the asking process decides with it: meet admits a
+// privileged member and refuses a guest, and it applies that rule to the list it
+// offers as well as to the join it grants, so a person is never shown a room
+// they would then be refused.
+type Space struct {
+	// UUID is the workspace's stable id — and, in meet, the leading segment of
+	// every room name bound to it.
+	UUID string `json:"uuid"`
+	// Name is the human label for a picker.
+	Name string `json:"name"`
+	// Role is the role on the caller's member row (owner | admin | member | guest).
+	Role string `json:"role"`
+}
+
+// Spaces is what the rows say about one person: the account they resolved to and
+// the workspaces they are in.
+//
+// The invariant is ONE-WAY: a non-empty Items implies a non-empty Account, so
+// every workspace offered has an identity to seat the person under. The converse
+// does NOT hold and must not be assumed — a subject that resolves to an account
+// while holding no current membership row answers with the account and an empty
+// list, which is the honest "we know who you are, and you are in nothing".
+//
+// (This doc used to claim the biconditional — "Account is empty exactly when
+// there are no workspaces" — which the implementation never satisfied, because it
+// resolves the account BEFORE walking the rows. A doc that overstates an
+// invariant is worse than none: it is the one a caller writes an `if` against.)
+type Spaces struct {
+	// Account is the team AccountUuid the subject resolved to — the same identity
+	// Member.Account carries, from the same derivation.
+	Account string `json:"account"`
+	// Name is the display name on the caller's member rows, empty when they have
+	// not set one. A DISPLAY name only: meet passes it as the LiveKit participant
+	// label, which is decoration, never identity.
+	Name string `json:"name"`
+	// Items is every workspace the person is in, newest membership first. Empty is
+	// a real answer, not an error.
+	Items []Space `json:"items"`
 }
 
 // ---- git -------------------------------------------------------------------
