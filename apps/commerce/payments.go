@@ -128,14 +128,66 @@ type paymentOps struct{}
 
 // exposePayments publishes the payment surface. Mount calls it.
 //
-// Both ops are registered on the APP with their whole path rather than on a
-// group with an empty leaf: joining a "/v1/payments" group with "" yields
-// "/v1/payments/", a different route from the one an agent will call. The
-// app-wide cloud.Bridge (serve.go) is what parks the validated org these ops
-// read, so they need no group middleware to have an identity.
-func exposePayments(app *zip.App) {
+// Neither op is registered on a group at its own address with an empty leaf: joining
+// a "/v1/payments" group with "" yields "/v1/payments/", a different route from the
+// one an agent will call. The read is therefore declared on the APP with its whole
+// path, and the write on a "/v1" group carrying the screen (below) — same two
+// addresses either way. The app-wide cloud.Bridge (serve.go) is what parks the
+// validated org these ops read, so neither needs group middleware to have an identity.
+//
+// THE SCREEN IS A PARAMETER, and it is the one thing about this surface that could
+// not be decided here. `take` runs the same credit-minting core as the browser's card
+// top-up, so it is a CREDIT DOOR and has to be screened by the same risk gate that
+// door is — but which gate that is belongs to the composition root, beside the other
+// registration, where both are visible as one decision (mount.go, risk.go). Taking it
+// as an argument is also what keeps this file from importing the risk seam to fetch a
+// gate it does not own.
+//
+// IT IS ON THE WRITE AND NOT ON THE READ. `take` moves money; `get` reads a receipt
+// out of the caller's own ledger namespace and mints nothing, so screening it would
+// spend a scorer round trip — and, when a scorer is present and mute, REFUSE a
+// customer their own receipt — to protect a mint that is not there. A gate belongs on
+// the act it can prevent.
+//
+// WHICH SUBJECT THE MONEY LANDS ON is the org's POOL — the org slug, which is
+// commerce's own orgBillingKey — and it is recorded HERE, off the published handler
+// prose, because it is a fact about our wiring rather than about the wire.
+//
+// It is not always the account the payer rule names. For every org whose credential
+// resolves to its pool the two are the same string; for the two populations where
+// account.Payer resolves a PERSON — a member of the shared signup org, or a credential
+// carrying a signed `person:` billing_account claim — the browser's top-up credits that
+// person's wallet while this door credits the pool. The screen judges the PAYER either
+// way, which is the right risk subject (a payment appetite belongs to whoever is
+// paying) and is what makes the two doors accrue on one key. But for that population
+// the money and the model then name two different wallets, and the wallet the AI spend
+// gate reads is the one this door did NOT credit. Making them agree means routing this
+// credit through the same payer rule [principal.Subject] — a change to where money
+// lands, which belongs in its own review and not inside a screen.
+func exposePayments(app *zip.App, screen zip.Middleware) {
 	o := paymentOps{}
-	zip.Post(app, "/v1/payments", o.take,
+	// THE SCREEN RIDES A GROUP, and the group exists for zipdoc rather than for
+	// routing. Composing it inline — zip.Post(app.With(screen), "/v1/payments", …) —
+	// registers and gates correctly, and then zipdoc REFUSES the op: it resolves a
+	// router's prefix from an *zip.App or from an assigned `g := <router>.Group("…")`
+	// and can read neither out of a With, so rather than file the prose under a guessed
+	// path it errors. That is the right refusal — a doc comment filed under the wrong
+	// path is silently dropped from the document AND from the MCP tool, which for the
+	// one tool that takes money is the tool becoming uncallable.
+	//
+	// So the gated router is spelled the way zipdoc reads: a `/v1` group holding the
+	// screen, with `/payments` as the leaf. Same absolute path, same single screen, and
+	// the prose still reaches the registry.
+	//
+	// IT IS THIS GROUP'S OWN NODE AND NOTHING ELSE'S. A group is a NODE, not a path
+	// filter, so this middleware runs only for routes registered THROUGH `mint` — the
+	// one op below — and not for the rest of /v1, which is registered on the app's own
+	// node. (The same distinction cost nine plugins their boot once; see cloud's
+	// scope.Use.) The leaf cannot be "" on a group at the door itself: joining
+	// "/v1/payments" with "" yields "/v1/payments/", a different route from the one an
+	// agent calls.
+	mint := app.With(screen).Group("/v1")
+	zip.Post(mint, "/payments", o.take,
 		zip.WithOperationID("takePayment"),
 		zip.WithSummary("Take a card payment and credit the org's balance"),
 		zip.WithTags("payments"),
@@ -157,6 +209,11 @@ func exposePayments(app *zip.App) {
 //
 // The ORG is the caller's, taken from the validated principal and never from the
 // input, so a payment can only ever credit the account of whoever made the call.
+//
+// A payment is RISK-SCREENED before the card is charged, so this can be refused
+// without any money moving: 403 means the screen did not authorise it, and 503 means
+// the screen could not reach a decision — that one is worth retrying, and no charge
+// was attempted either way.
 //
 // Send an idempotencyKey. An agent retries by construction, and the key is what
 // turns a retry into a replay of the first receipt instead of a second charge.

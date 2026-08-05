@@ -27,7 +27,10 @@ import (
 func toolsFor(t *testing.T) map[string]map[string]any {
 	t.Helper()
 	app := zip.New(zip.Config{})
-	exposePayments(app)
+	// The screen is the identity middleware here: this reads the REGISTRY projection,
+	// and a gate composed around a handler changes nothing a tool description can see.
+	// What holds the real screen to the real op is TestPayments_TheTypedDoorIsScreened.
+	exposePayments(app, func(next zip.Handler) zip.Handler { return next })
 	exposeInvoices(app)
 	out := map[string]map[string]any{}
 	for _, tool := range app.MCPTools() {

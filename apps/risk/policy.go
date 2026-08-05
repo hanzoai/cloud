@@ -253,7 +253,7 @@ const reviewNano = 50_000 * nanoPerUSD
 // never arrives; the browser does not run the payment SDK's buyer-verification step, so
 // there is no verification token either; and no header carries one. The DEVICE half of
 // the fan-out is therefore UNARMED at the credit door, deliberately, and it is declared
-// at boot (apps/commerce's [topupAxes]) rather than left to read as a rule that found
+// at boot (apps/commerce's [paymentAxes]) rather than left to read as a rule that found
 // nothing.
 //
 // What is emphatically NOT done is inventing one. A user-agent string, or a digest of

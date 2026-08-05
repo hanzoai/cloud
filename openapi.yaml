@@ -86916,6 +86916,11 @@ paths:
         The ORG is the caller's, taken from the validated principal and never from the
         input, so a payment can only ever credit the account of whoever made the call.
 
+        A payment is RISK-SCREENED before the card is charged, so this can be refused
+        without any money moving: 403 means the screen did not authorise it, and 503 means
+        the screen could not reach a decision — that one is worth retrying, and no charge
+        was attempted either way.
+
         Send an idempotencyKey. An agent retries by construction, and the key is what
         turns a retry into a replay of the first receipt instead of a second charge.
 
