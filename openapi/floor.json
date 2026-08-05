@@ -1,6 +1,6 @@
 {
-  "paths": 1709,
-  "operations": 2387,
+  "paths": 1710,
+  "operations": 2388,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -141,6 +141,7 @@
     "referrals": 2,
     "registry": 6,
     "releases": 1,
+    "replay": 1,
     "rerank": 1,
     "research": 8,
     "responses": 1,
