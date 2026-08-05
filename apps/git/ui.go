@@ -133,6 +133,10 @@ func access(path string) string {
 // so a bare /:org/:repo can never shadow it there. They register AFTER the root
 // smart-HTTP routes (git.go), whose paths carry a distinct /info/refs |
 // /git-*-pack tail, so a 2-segment UI route and a clone route never collide.
+//
+// Every route here stays raw because it serves a server-rendered HTML page to
+// a browser, not JSON; the JSON twin of each page is a typed op under
+// /v1/git/repos/:name (git.go).
 func uiRoutes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/git", cloud.Handle(s, uiHome))
 	app.Get("/git/explore", cloud.Handle(s, uiExplore))
