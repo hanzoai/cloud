@@ -25,8 +25,11 @@
 // A customer's private project is a row in their own org's `catalog` index. It
 // cannot appear in another tenant's results because the query that would return
 // it is never run for them. Nothing PUBLISHES over HTTP either: the published
-// corpus is reconciled in-process from sources that are public by construction
-// (sync.go), so no credential exists that could promote a tenant row into it.
+// corpus is reconciled from sources that are public by construction (sync.go),
+// so no credential exists that could promote a tenant row into it. The swap
+// itself is a call on the internal plane — a socket the edge router does not
+// carry, reachable only from inside this deployment — so "no write route" stays
+// literally true of every surface a caller can reach.
 //
 // Surface:
 //
@@ -61,6 +64,11 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/projects"
 	"github.com/hanzoai/cloud/plane"
+	// The GENERATED client for the index peer — the one typed way to call it, with
+	// the app name, the op and the In/Out pair already fixed to each other. Aliased
+	// because the app package this file also imports is the SAME word: one is the
+	// index in this process, the other is how to reach it in another.
+	indexpeer "github.com/hanzoai/cloud/plane/index"
 	"github.com/zap-proto/zip"
 )
 
@@ -345,9 +353,7 @@ func lexical(ctx context.Context, org, q string) ([]json.RawMessage, error) {
 	if c, ok := cloud.Request(ctx); ok {
 		call = cloud.As(c, org)
 	}
-	out, err := cloud.Ask[plane.IndexQueryIn, plane.IndexQueryOut](
-		call, "index", plane.IndexQuery,
-		&plane.IndexQueryIn{UID: uid, Q: q, Limit: scan})
+	out, err := indexpeer.IndexQuery(call, &plane.IndexQueryIn{UID: uid, Q: q, Limit: scan})
 	if err != nil {
 		return nil, err
 	}
@@ -355,6 +361,59 @@ func lexical(ctx context.Context, org, q string) ([]json.RawMessage, error) {
 		return nil, nil
 	}
 	return out.Rows, nil
+}
+
+// write hands the assembled corpus to the index, wherever the index happens to
+// be. It is the exact mirror of lexical, and it was missing for the exact reason
+// lexical needed writing: Reconcile serves out of the index's own process-level
+// global, so in THIS process it has always answered "index: not mounted".
+//
+// That is why the catalog was empty. Not a wiped store, not an expired GitHub
+// token, not a sync that never ran — the sync ran every hour, read both sources
+// correctly, assembled the whole corpus, and then had nowhere to put it. When
+// catalog and index became two plugin rows the READ was given a plane op and the
+// write was deliberately left in-process ("one writer, in the process that owns
+// the file"), which is the right property and the wrong conclusion: the writer is
+// still one and still the index's, whether the corpus reaches it through a
+// function call or a socket.
+//
+// Fixing the read alone turned a 503 into {"data":[],"total":0} — it began
+// succeeding against a store nothing had ever written to. A page of nothing is a
+// worse bug than an error, because it looks like an answer.
+//
+// IN-PROCESS FIRST, then the plane, both legs real, for the same reason lexical
+// takes them in that order: a fused binary that mounted both apps has the index
+// right here, and the deployed fleet does not.
+func write(ctx context.Context, org string, docs []json.RawMessage) (int, int, error) {
+	if index.Ready() {
+		rows := make([]map[string]any, 0, len(docs))
+		for _, raw := range docs {
+			var d map[string]any
+			if err := json.Unmarshal(raw, &d); err != nil {
+				continue
+			}
+			rows = append(rows, d)
+		}
+		return index.Reconcile(ctx, org, uid, pk, rows)
+	}
+	// WHICH TENANT THE CORPUS IS WRITTEN AS, and why For() is right here where
+	// lexical needs As().
+	//
+	// lexical runs inside a request, and zip's forwardIdentity says an inbound
+	// request always wins over a stated caller — so it has an identity to displace.
+	// This runs in the sync goroutine off a background context: there is no request
+	// to lose to, and the tenant is simply stated. That is the form plane's own
+	// contract names for a background job, and the published corpus is written as
+	// PublicOrg by exactly this call.
+	out, err := indexpeer.IndexReconcile(cloud.For(ctx, org),
+		&plane.IndexReconcileIn{UID: uid, PrimaryKey: pk, Docs: docs})
+	if err != nil {
+		return 0, 0, err
+	}
+	if out == nil {
+		return 0, 0, nil
+	}
+	return out.Kept, out.Removed, nil
 }
 
 // filter applies the exact-match browse axes. An absent param is not a filter.
@@ -457,18 +516,19 @@ func intQuery(raw string, def int) int {
 // is testable without a live GitHub and the site source without a store.
 var (
 	reconcile = func(ctx context.Context, org string, rows []Entry) (int, int, error) {
-		docs := make([]map[string]any, 0, len(rows))
+		docs := make([]json.RawMessage, 0, len(rows))
 		for _, e := range rows {
 			if e.ID == "" || e.Org == "" {
 				continue // an unkeyed row is one the next swap could never prune
 			}
 			e.Scope = "" // provenance is stamped on READ; storing it would freeze it
-			var doc map[string]any
-			raw, _ := json.Marshal(e)
-			_ = json.Unmarshal(raw, &doc)
-			docs = append(docs, doc)
+			raw, err := json.Marshal(e)
+			if err != nil {
+				continue
+			}
+			docs = append(docs, raw)
 		}
-		return index.Reconcile(ctx, org, uid, pk, docs)
+		return write(ctx, org, docs)
 	}
 	// The corpus's two sources, one seam each: what we BUILT and what is LIVE.
 	fromOrgs  = orgRepos
