@@ -9,6 +9,10 @@ package risk
 // allows, and shadow still changes nothing at all.
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 	"strings"
 	"testing"
 
@@ -320,6 +324,108 @@ func TestDetermine_OverTheWireInShadowIsUnchanged(t *testing.T) {
 	if !strings.Contains(out.Cause, "in shadow") {
 		t.Errorf("cause %q does not report the finding it would have acted on", out.Cause)
 	}
+}
+
+// TestActions_TheScorerNeverBlocks — this app's whole vocabulary tops out at
+// RESTRICT, and that is load-bearing OUTSIDE this app.
+//
+// Two rules meet here and both already say it in prose. [answer]: "an alert is a
+// review, never a block — a statistical judgement may reach here and no further on
+// its own". [onGeography]: "restrict and not block — block is reserved for a
+// finding that this party may not transact at all", which is the AML plane's to
+// make about a person and not this one's about a country and a number.
+//
+// WHAT DEPENDS ON IT. The credit door tells a DETERMINATION apart from a
+// no-decision by the pair (action == block AND a refusal), because
+// [cloud.riskUnavailable] is then the only thing that can have produced it. Emit
+// block from here — with a warming model's refusal still riding along, which the
+// fuse deliberately preserves — and that gate reads a working freeze as a scorer
+// outage and answers 503 "try again in a moment": an invitation to retry the
+// payment it just froze.
+//
+// It is STRUCTURAL rather than a sample of decisions, because the claim is "no
+// path", and no finite set of scored events can establish that. Comments are
+// invisible to it — the prose above names block freely; only a resolved reference
+// counts.
+func TestActions_TheScorerNeverBlocks(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		t.Fatalf("parse the package: %v", err)
+	}
+	var found int
+	for _, pkg := range pkgs {
+		for name, file := range pkg.Files {
+			ast.Inspect(file, func(n ast.Node) bool {
+				sel, ok := n.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				id, ok := sel.X.(*ast.Ident)
+				if !ok || id.Name != "cloud" {
+					return true
+				}
+				switch sel.Sel.Name {
+				case "ActionBlock", "ActionChallenge":
+					found++
+					t.Errorf("%s:%d names cloud.%s — this app's vocabulary is allow, review and "+
+						"restrict, and the credit door reads a block CARRYING a refusal as the fail "+
+						"policy's no-decision rather than as a determination",
+						name, fset.Position(sel.Pos()).Line, sel.Sel.Name)
+				}
+				return true
+			})
+		}
+	}
+	// The scan must actually be looking at this package: a filter that matched no
+	// file would pass the assertion above vacuously.
+	if len(pkgs) == 0 {
+		t.Fatal("the scan parsed no package at all — the assertion above proves nothing")
+	}
+	for _, pkg := range pkgs {
+		if len(pkg.Files) < 2 {
+			t.Fatalf("the scan parsed %d file(s) of package %s — the assertion above proves nothing",
+				len(pkg.Files), pkg.Name)
+		}
+	}
+	// And it must be able to SEE the vocabulary it is looking for, or a renamed
+	// import would silently disarm it.
+	if _, err := os.Stat("determine.go"); err != nil {
+		t.Fatalf("determine.go: %v", err)
+	}
+	if !usesCloudAction(t, fset, pkgs) {
+		t.Error("no file resolves any cloud.Action* at all — the scan cannot see the vocabulary " +
+			"it is policing, so its silence means nothing")
+	}
+	_ = found
+}
+
+// usesCloudAction reports whether the package names ANY cloud.Action* constant, so
+// the scan above is known to be able to see one.
+func usesCloudAction(t *testing.T, fset *token.FileSet, pkgs map[string]*ast.Package) bool {
+	t.Helper()
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Files {
+			var seen bool
+			ast.Inspect(file, func(n ast.Node) bool {
+				sel, ok := n.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == "cloud" &&
+					strings.HasPrefix(sel.Sel.Name, "Action") {
+					seen = true
+				}
+				return true
+			})
+			if seen {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestSeverity_OrdersTheVocabularyMostPermissiveFirst. The fusion is only correct
