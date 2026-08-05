@@ -89,44 +89,43 @@ func TestPlans_ResolveProducesLicenseFeatures(t *testing.T) {
 	}
 }
 
-// TestEntitlements_WorldTiers exercises the exported Entitlements seam against the
-// REAL embedded @hanzo/plans module, proving the bumped catalog serves the World
-// tiers with the new world.model_api gate through the Go/goja path (not just node).
-func TestEntitlements_WorldTiers(t *testing.T) {
+// TestEntitlements_RetiredTierIsAnError pins what happens to a plan id the catalog
+// no longer sells, because the answer decides whether a retired tier fails safe.
+//
+// It used to assert the World tiers — world-free/pro/team/enterprise — resolve through
+// the Go/goja path. @hanzo/plans carried them at v1.4.4 alongside a tier-level `bundles`
+// field that granted them, and DELETED both at v1.4.11 with nothing in their place.
+// World is not a separately billable product: its limits resolve to the free floor
+// (apps/world/entitlement.go), which is the whole answer rather than a degraded one.
+//
+// What is worth keeping from that test is the seam it exercised, so this asserts both
+// halves: a live tier still resolves entitlements through goja, and a retired id
+// ERRORS rather than answering an empty map. The distinction matters — an empty map
+// reads as "this tier grants nothing", which is a confident wrong answer that would
+// silently strip a paying subscriber of everything they bought.
+func TestEntitlements_RetiredTierIsAnError(t *testing.T) {
 	prev := host
 	host = newHost(t)
 	defer func() { host.Close(); host = prev }()
 
 	ctx := context.Background()
 
-	// world-pro: model API granted.
-	pro, err := Entitlements(ctx, "world-pro")
+	// A tier the catalog still sells resolves, and carries something.
+	live, err := Entitlements(ctx, "enterprise")
 	if err != nil {
-		t.Fatalf("Entitlements(world-pro): %v", err)
+		t.Fatalf("Entitlements(enterprise): %v", err)
 	}
-	if pro["world.model_api"] != true {
-		t.Fatalf("world-pro world.model_api = %v, want true", pro["world.model_api"])
+	if len(live) == 0 {
+		t.Fatal("Entitlements(enterprise) returned an empty map — the goja path resolved nothing")
 	}
 
-	// world-free: model API denied (key absent -> fail closed).
-	free, err := Entitlements(ctx, "world-free")
-	if err != nil {
-		t.Fatalf("Entitlements(world-free): %v", err)
-	}
-	if _, present := free["world.model_api"]; present {
-		t.Fatalf("world-free must not carry world.model_api, got %v", free["world.model_api"])
-	}
-
-	// world-enterprise: new contact tier, unlimited API rate.
-	ent, err := Entitlements(ctx, "world-enterprise")
-	if err != nil {
-		t.Fatalf("Entitlements(world-enterprise): %v", err)
-	}
-	if ent["world.api_rate_limit"] != float64(-1) {
-		t.Fatalf("world-enterprise world.api_rate_limit = %v, want -1", ent["world.api_rate_limit"])
-	}
-	if ent["world.model_api"] != true {
-		t.Fatalf("world-enterprise world.model_api = %v, want true", ent["world.model_api"])
+	// A retired tier is refused, not answered emptily.
+	for _, retired := range []string{"world-pro", "world-free", "world-enterprise"} {
+		got, err := Entitlements(ctx, retired)
+		if err == nil {
+			t.Fatalf("Entitlements(%s) = %v with no error — a retired tier must not "+
+				"answer as though it grants nothing", retired, got)
+		}
 	}
 }
 
