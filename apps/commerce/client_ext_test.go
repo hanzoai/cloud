@@ -12,8 +12,10 @@ import (
 	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/plan"
 	commercemod "github.com/hanzoai/commerce"
+	commercebilling "github.com/hanzoai/commerce/api/billing"
 	"github.com/hanzoai/commerce/billing/grant"
 	"github.com/hanzoai/commerce/datastore"
+	commerceplan "github.com/hanzoai/commerce/models/plan"
 	commerceorg "github.com/hanzoai/commerce/pkg/org"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -41,6 +43,13 @@ type fakeCatalog struct{}
 func (fakeCatalog) Lookup(slug string) *grant.CatalogPlan {
 	if slug == "max" {
 		return &grant.CatalogPlan{Slug: "max", Name: "Max", Description: "Max tier", PriceCents: 20000, Currency: "usd"}
+	}
+	// "plus" is a RETIRED tier: @hanzo/plans stopped publishing it at 1.4.5. It is
+	// here because a subscription on it was opened while it WAS on sale, and that
+	// subscriber is still being charged — which is exactly the case the entitlement
+	// resolver must keep answering.
+	if slug == "plus" {
+		return &grant.CatalogPlan{Slug: "plus", Name: "Plus", Description: "Retired tier", PriceCents: 10000, Currency: "usd"}
 	}
 	return nil
 }
@@ -135,6 +144,55 @@ func TestInProcessClient(t *testing.T) {
 		}
 		if !hasFeature(ent.Features, "inference") {
 			t.Errorf("Features %v missing engine_feature 'inference'", ent.Features)
+		}
+	})
+
+	// A subscriber on a RETIRED tier must still resolve the products that tier
+	// licensed. The catalog cannot answer — it lists what is on sale today, and this
+	// tier is not — so the answer has to come from the tier's own authority row,
+	// which commerce keeps resolvable after retirement and now backfills the
+	// licensing block onto. Without that the org is refused a product it pays for.
+	t.Run("retired_tier_still_licenses_its_products", func(t *testing.T) {
+		const org = "plusco"
+
+		// Production state: the row was archived back when a plan carried no
+		// licensing block at all, so it has none.
+		adb := commerceplan.AuthorityDB(ctx)
+		row := commerceplan.New(adb)
+		row.Slug, row.Category, row.Price = "plus", "personal", 10000
+		row.Status, row.Managed = commerceplan.StatusArchived, true
+		if err := row.Create(); err != nil {
+			t.Fatalf("create archived plus row: %v", err)
+		}
+
+		seedActiveGrant(t, ctx, org, "plus")
+
+		// Before the boot seed backfills it, the row cannot say what it licensed —
+		// which is precisely the live defect.
+		if ent, err := client.CheckEntitlement(ctx, org, "team"); err != nil {
+			t.Fatalf("CheckEntitlement: %v", err)
+		} else if ent.Active {
+			t.Fatalf("un-backfilled archived row must not grant; got %+v", ent)
+		}
+
+		// The boot seed reconciles the catalog and backfills what retired tiers
+		// licensed when they were last on sale.
+		if _, _, err := commercebilling.SeedPlans(ctx); err != nil {
+			t.Fatalf("SeedPlans: %v", err)
+		}
+
+		ent, err := client.CheckEntitlement(ctx, org, "team")
+		if err != nil {
+			t.Fatalf("CheckEntitlement: %v", err)
+		}
+		if !ent.Active {
+			t.Fatalf("a subscriber on the retired %q tier must still hold its team licence; got %+v", "plus", ent)
+		}
+		if ent.Plan != "plus" {
+			t.Errorf("Plan = %q, want plus", ent.Plan)
+		}
+		if !hasFeature(ent.Features, "licensing.product:team") {
+			t.Errorf("Features %v missing licensing.product:team", ent.Features)
 		}
 	})
 
