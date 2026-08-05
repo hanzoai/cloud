@@ -16,14 +16,24 @@ import (
 
 // Source is one web source backing an answer — the @hanzo/ai SearchSource shape,
 // field for field. It is the ONE source value in this package: search produces
-// it, read() enriches only its Snippet (never its identity), synthesis grounds on
-// it, and the wire emits it verbatim in the `sources` and `done` frames.
+// it, read() fills its Text, synthesis grounds on it, and the wire emits it
+// verbatim in the `sources` and `done` frames.
+//
+// SNIPPET IS WHAT THE CLIENT SHOWS; TEXT IS WHAT THE MODEL READS. Snippet is
+// always the search engine's ~600-rune summary. Text is the fetched page —
+// thousands of runes of markup we did not author, per source, re-ranked every
+// round — and `json:"-"` is what keeps it off the wire: a rendered snippet is
+// somebody else's text either way, but a bounded amount of it, and a survey that
+// shipped its whole corpus in every snapshot would send a megabyte of duplicate
+// SSE per answer. read() may touch no other field: the `sources` frame the client
+// already rendered has to stay valid.
 type Source struct {
 	URL     string `json:"url"`
 	Title   string `json:"title"`
 	Snippet string `json:"snippet"`
 	Engine  string `json:"engine,omitempty"`
 	Favicon string `json:"favicon"`
+	Text    string `json:"-"`
 }
 
 // rank dedupes results (one per URL, at most hostCap per host, preserving
