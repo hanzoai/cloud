@@ -117,19 +117,33 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 	if err != nil {
 		return nil, wrap(err)
 	}
+	// WHAT THE ORGANISATION'S OWN AGGREGATES ALREADY HELD about this event's
+	// identifiers, read HERE and not inside the rule, because the rule is pure over
+	// stated facts and this is the one place a tenant is known. It is read AFTER the
+	// score and before the fusion, so both judges describe the same event; the score
+	// records nothing, so the reading is what those identifiers had already done
+	// when this one arrived.
+	//
+	// A reading that cannot be taken is an ERROR and never an empty one: empty is
+	// "this subject has done nothing", which is the answer that would silently allow.
+	seen, err := p.prior(t, obs)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	// THE MODEL IS ONE OF TWO JUDGES. [determine] reads the stated facts the model
-	// does not model — the jurisdiction the payer acted from, and the value moving
-	// — and [fuse] takes the severer of the two verdicts. It runs on EVERY answer,
-	// including the refusals: the whole reason a rule sits here is that a fresh
-	// account's model is warming, and warming is exactly when a first large payment
-	// from a listed jurisdiction arrives.
+	// does not model — the jurisdiction the payer acted from, the value moving, and
+	// the pace and fan-out of the identifiers carrying it — and [fuse] takes the
+	// severer of the two verdicts. It runs on EVERY answer, including the refusals:
+	// the whole reason a rule sits here is that a fresh account's model is warming,
+	// and warming is exactly when a first large payment from a listed jurisdiction
+	// arrives — or when the twentieth account on one device does.
 	//
 	// The value is [riskEvent.Nano] — the same number the model read, so the two
 	// judges cannot disagree about the amount. The posture is the ASSESSMENT's own
 	// ([anomaly.Assessment.Shadow], set on every path the engine returns by), not a
 	// fresh read of the regime: it is the posture this verdict was actually reached
 	// under, which is the same reason [decided] carries its policy version.
-	return fuse(answer(d), determine(signal(in.Signals, contract.SignalCountry), ev.Nano), d.A.Shadow), nil
+	return fuse(answer(d), determine(signal(in.Signals, contract.SignalCountry), ev.Nano, seen), d.A.Shadow), nil
 }
 
 // planeTenant mints the tenant a PLANE call acts for: the org the CALLER stated,
