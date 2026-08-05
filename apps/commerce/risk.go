@@ -318,14 +318,21 @@ type payment struct {
 // A value that both registrations WRAP THEIR HANDLER WITH is the one composition
 // point every projection has to run through.
 //
-// It holds only the logger because the decision holds no state: the model is the risk
-// app's, the fail policy is [cloud.Decide]'s, and what a door observed is a [payment].
-type screen struct{ lg log.Logger }
+// It holds the logger and one read, because the decision holds no state: the model is
+// the risk app's, the fail policy is [cloud.Decide]'s, and what a door observed is a
+// [payment]. The read is [receiptOf] — what a payment that cleared actually was — and
+// it is a field for the reason [teach] is a variable: a door test can state a
+// settlement without standing up a commerce datastore to hold one. It is set once, by
+// [riskGate], and production never varies it.
+type screen struct {
+	lg      log.Logger
+	receipt func(ctx context.Context, org, id string) (settlement, error)
+}
 
 // riskGate resolves the screen. It is called ONCE, at the composition root, and the
 // value is handed to each registration — a screen fetched independently at each door
 // is a screen that can be fetched at one of them, which is the state this closed.
-func riskGate(lg log.Logger) screen { return screen{lg: lg} }
+func riskGate(lg log.Logger) screen { return screen{lg: lg, receipt: receiptOf} }
 
 // route composes the screen onto a RAW route's handler.
 //
@@ -372,7 +379,16 @@ func (s screen) route(next zip.Handler) zip.Handler {
 		if res.StatusCode() < 200 || res.StatusCode() > 299 {
 			return nil
 		}
-		ref, _ := settlementOf(res.Body())
+		ref, receipt := settlementOf(res.Body())
+		// THE MONEY BEFORE THE RECORD, and unlike the record it can refuse the door:
+		// commerce's card core credits its own transaction store, which nothing in this
+		// binary spends from, so this is where the settlement reaches the ledger every
+		// gate actually reads (settle.go). A 200 written by the handler is overwritten by
+		// the error, because answering success to a customer whose money went nowhere is
+		// the defect, not the report of it.
+		if err := s.settle(c.Context(), p, ref, receipt); err != nil {
+			return err
+		}
 		s.learn(p, ref)
 		return nil
 	}
@@ -428,6 +444,13 @@ func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandle
 		// answer's own fields are the settlement fact the raw door has to read its
 		// response bytes for.
 		ref, _ := firstRef(out.ProcessorRef, out.ID)
+		// The same two halves in the same order as the raw door: the ledger the gate
+		// reads, then the model. A credit that cannot be posted refuses the op and the
+		// receipt is withheld, so an agent is never told a balance exists that does not
+		// (settle.go).
+		if err := s.settle(ctx, p, ref, out.ID); err != nil {
+			return nil, err
+		}
 		s.learn(p, ref)
 		return out, nil
 	}
@@ -735,8 +758,8 @@ func firstRef(ids ...string) (string, bool) {
 	return "", false
 }
 
-// settlementOf reads the settlement's own identifier out of a RAW door's answer, which
-// is the only place a door states one as bytes: the typed op returns a PaymentOut and
+// settlementOf reads the settlement's own identifiers out of a RAW door's answer, which
+// is the only place a door states them as bytes: the typed op returns a PaymentOut and
 // its fields are read directly ([screen.op]).
 //
 // The two names are one door's two facts, not two doors' spellings: commerce's core
@@ -744,15 +767,22 @@ func firstRef(ids ...string) (string, bool) {
 // is the gateway's reference and `transactionId` the ledger receipt. [firstRef] is the
 // precedence between them, and it is the same precedence the typed door applies to the
 // same two values under its own field names.
-func settlementOf(body []byte) (string, bool) {
+//
+// It answers BOTH, because the two are used for different things and only one of them
+// can stand in for the other. ref is the idempotency key — one payment, one identity,
+// whichever door or webhook credits it. receipt is the ROW, and it is what
+// [screen.settle] reads the settled amount, currency and books back off: the key is
+// enough to dedup a deposit and never enough to size one.
+func settlementOf(body []byte) (ref, receipt string) {
 	var out struct {
 		ProcessorRef  string `json:"processorRef"`
 		TransactionID string `json:"transactionId"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
-		return "", false
+		return "", ""
 	}
-	return firstRef(out.ProcessorRef, out.TransactionID)
+	ref, _ = firstRef(out.ProcessorRef, out.TransactionID)
+	return ref, out.TransactionID
 }
 
 // payerOrg is the org whose ledger this payment will credit, and therefore the

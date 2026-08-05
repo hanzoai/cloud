@@ -40,8 +40,18 @@ const (
 )
 
 // charged is the handler the gate stands in front of. Reaching it IS the allow.
+//
+// It answers a SETTLED RECEIPT — commerce's own TakePaymentOut field names — because
+// reaching the handler is no longer the end of the door: an allow that clears a charge
+// then credits the spendable ledger off exactly this answer (settle.go), so a fixture
+// that answered anything else would be testing a door that refuses.
 func charged(c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]string{"status": "charged"})
+	return c.JSON(http.StatusOK, map[string]any{
+		"transactionId": settledReceipt,
+		"balanceCents":  gateCents,
+		"status":        "ok",
+		"processorRef":  settledRef,
+	})
 }
 
 // gateApp is the credit door reduced to the two middlewares that decide the
@@ -57,7 +67,10 @@ func gateApp(t *testing.T) *zip.App {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
 	// The screen WRAPPING THE HANDLER, exactly as mount.go registers the browser door.
-	app.Post("/v1/billing/topup/token", riskGate(luxlog.New("gatetest")).route(charged))
+	// settling supplies the ledger a settled top-up now deposits into and the receipt
+	// its amount is read off (settle_test.go) — the money half is not this file's
+	// subject, but a door that cannot finish a settlement cannot answer 200 either.
+	app.Post("/v1/billing/topup/token", settling(t).route(charged))
 	return app
 }
 
