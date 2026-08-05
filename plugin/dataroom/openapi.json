@@ -18,7 +18,7 @@
   "paths": {
     "/v1/dataroom/analytics/dataroom/{dataroomId}": {
       "get": {
-        "operationId": "v1.dataroom.get_analytics_dataroom_dataroomId",
+        "operationId": "get_v1_dataroom_analytics_dataroom_dataroomId",
         "summary": "Rolls up every share link pointing at one data room: session and page-view totals for the room, plus the per-page breakdown for each link beneath it.",
         "description": "Rolls up every share link pointing at one data room:\nsession and page-view totals for the room, plus the per-page breakdown for each\nlink beneath it.\n\nA room id outside the caller's own tenant store is not found. Only links that\nNAME the room are counted — a link created over a single document contributes\nnothing here, even when that document also sits in the room.",
         "tags": [
@@ -51,7 +51,7 @@
     },
     "/v1/dataroom/analytics/link/{linkId}": {
       "get": {
-        "operationId": "v1.dataroom.get_analytics_link_linkId",
+        "operationId": "get_v1_dataroom_analytics_link_linkId",
         "summary": "Reports how one share link was actually read: total viewing sessions, total page views, and per page the view count, the summed dwell measure and its average.",
         "description": "Reports how one share link was actually read: total viewing\nsessions, total page views, and per page the view count, the summed dwell\nmeasure and its average.\n\nThe link is resolved in the caller's OWN tenant store, so another org's link id\nis not found — knowing a link id is enough to OPEN the room it shares, and\nnever enough to read who has been reading it.",
         "tags": [
@@ -84,7 +84,7 @@
     },
     "/v1/dataroom/datarooms": {
       "get": {
-        "operationId": "v1.dataroom.get_datarooms",
+        "operationId": "get_v1_dataroom_datarooms",
         "summary": "Returns every data room in the caller org's own store, newest first, with its short public id, name, description and timestamps.",
         "description": "Returns every data room in the caller org's own store, newest\nfirst, with its short public id, name, description and timestamps.\n\nDocuments are not included — a room's contents come from reading the single\nroom.",
         "tags": [
@@ -104,7 +104,7 @@
         }
       },
       "post": {
-        "operationId": "v1.dataroom.post_datarooms",
+        "operationId": "post_v1_dataroom_datarooms",
         "summary": "Opens a new data room for the caller org and answers with it, including the short public id it is addressed by.",
         "description": "Opens a new data room for the caller org and answers with it,\nincluding the short public id it is addressed by.\n\n`name` is required; without it the call is refused and the tenant store is\nuntouched, because a dispatch answering 4xx rolls its transaction back. A new\nroom holds no documents and is reachable by NOBODY until a share link is\ncreated over it — opening a room and granting access are two separate acts, so\na room cannot leak by existing.",
         "tags": [
@@ -136,7 +136,7 @@
     },
     "/v1/dataroom/datarooms/{id}": {
       "get": {
-        "operationId": "v1.dataroom.get_datarooms_id",
+        "operationId": "get_v1_dataroom_datarooms_id",
         "summary": "Reads one of the caller org's data rooms together with every document in it, each carrying its membership id and order index.",
         "description": "Reads one of the caller org's data rooms together with every\ndocument in it, each carrying its membership id and order index.\n\nThe documents are sorted by that index with unordered ones last and creation\ntime breaking ties — the SAME order a link's visitor sees, so this is what the\nroom looks like from the outside. A room id outside the caller's own tenant\nstore is not found.",
         "tags": [
@@ -169,7 +169,7 @@
     },
     "/v1/dataroom/datarooms/{id}/documents": {
       "post": {
-        "operationId": "v1.dataroom.post_datarooms_id_documents",
+        "operationId": "post_v1_dataroom_datarooms_id_documents",
         "summary": "Puts an already-uploaded document into one of the caller org's data rooms and answers with the new membership id.",
         "description": "Puts an already-uploaded document into one of the caller\norg's data rooms and answers with the new membership id.\n\nIt ATTACHES, it never uploads: the bytes must already be stored, so the usual\norder is upload the document, then add it to the room. Both the room and the\ndocument must exist in the caller's own store — either missing is not found —\nand a document already in the room is refused as a conflict rather than\nduplicated.",
         "tags": [
@@ -212,7 +212,7 @@
     },
     "/v1/dataroom/documents": {
       "get": {
-        "operationId": "v1.dataroom.get_documents",
+        "operationId": "get_v1_dataroom_documents",
         "summary": "Returns every document in the caller org's own store, newest first — name, opaque storage key, content type, page count, size and timestamps.",
         "description": "Returns every document in the caller org's own store, newest\nfirst — name, opaque storage key, content type, page count, size and\ntimestamps.\n\nTenant isolation is the per-org store itself: there is one SQLite file per org\nand the org is never a parameter, so no input the caller controls can address\nanother tenant's documents. Metadata only — the bytes come from the file route.",
         "tags": [
@@ -242,7 +242,7 @@
     },
     "/v1/dataroom/documents/{id}": {
       "get": {
-        "operationId": "v1.dataroom.get_documents_id",
+        "operationId": "get_v1_dataroom_documents_id",
         "summary": "Reads one of the caller org's documents — its name, opaque storage key, content type, page count, size and timestamps.",
         "description": "Reads one of the caller org's documents — its name, opaque storage\nkey, content type, page count, size and timestamps.\n\nThe lookup runs in the caller's own tenant store, so an id belonging to another\norg is not found exactly like one that never existed. Metadata only: the bytes\nare a separate read.",
         "tags": [
@@ -305,7 +305,7 @@
     },
     "/v1/dataroom/links": {
       "get": {
-        "operationId": "v1.dataroom.get_links",
+        "operationId": "get_v1_dataroom_links",
         "summary": "Returns every live share link in the caller org's own store, newest first, with the controls a visitor will meet: whether an address is required, whether a password is set, the allow and deny lists, whether download is permitted, and when the link expires.",
         "description": "Returns every live share link in the caller org's own store,\nnewest first, with the controls a visitor will meet: whether an address is\nrequired, whether a password is set, the allow and deny lists, whether download\nis permitted, and when the link expires.\n\nArchived links are omitted entirely. A link reports only THAT a password is\nset — the stored form is a bcrypt hash and no route returns it.",
         "tags": [
@@ -325,7 +325,7 @@
         }
       },
       "post": {
-        "operationId": "v1.dataroom.post_links",
+        "operationId": "post_v1_dataroom_links",
         "summary": "Grants access: it mints a public share link over one data room (`dataroomId`) or one document (`documentId`) — one of the two is required — and answers with the link, whose `id` is the token a visitor opens it with.",
         "description": "Grants access: it mints a public share link over one data\nroom (`dataroomId`) or one document (`documentId`) — one of the two is\nrequired — and answers with the link, whose `id` is the token a visitor opens\nit with.\n\nThis is how a party is let in. The controls are declared HERE and enforced on\nthe viewer surface: `password` is hashed with bcrypt before storage and is\nnever readable back, `emailProtected` (on by default) makes a visitor state an\naddress, `allowList`/`denyList` narrow which addresses pass, `allowDownload`\n(off by default) governs downloads, and `expiresAt` closes the link. The target\nroom or document must exist in the caller's own store or it is not found.\n\nCreating a link also writes dataroom's ONE cross-tenant row: the link id to\nowning org mapping an anonymous visitor is routed through. That write is part\nof the operation — if it fails the call is 500 — so a link that no visitor\ncould open is never handed back as usable.\n\nThe address a visitor later states is recorded UNVERIFIED, so a link gated only\nby email is openable by anyone the link reaches. Use a password for a link that\nmust not travel.",
         "tags": [
