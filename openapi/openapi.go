@@ -437,7 +437,7 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 	for _, r := range rs {
 		path, params := translate(r.Path)
 
-		op := &Operation{OperationID: operationID(r.Method, path)}
+		op := &Operation{OperationID: zip.ID(r.Method, path)}
 		if p := Product(r.Path); p != "" {
 			op.Tags = []string{p}
 			products[p] = true
@@ -696,56 +696,6 @@ func translate(pattern string) (string, []string) {
 		}
 	}
 	return strings.Join(segs, "/"), params
-}
-
-// operationID derives a stable id from method+path.
-//
-// '_' is the SEPARATOR (it encodes '/'), so any character that also folded to
-// '_' would collide with a path boundary. That was not hypothetical: the router
-// once served both GET /v1/pricing-policy and GET /v1/pricing/policy, and an
-// earlier "everything non-alphanumeric → _" rule collapsed them onto one id.
-// (The first of those was a pure alias of the second and has since been deleted,
-// but the encoding still has to survive the next such pair — and hyphenated
-// addresses we do not own, like /v1/git/…/git-upload-pack and
-// /v1/index/…/documents/delete-batch, are permanent.) '-' and '.' are legal in
-// an operationId and are therefore preserved rather than folded, which keeps any
-// such pair distinct (get_v1_pricing-policy vs get_v1_pricing_policy).
-//
-// Params contribute "by_<name>" so /v1/a/{b} and /v1/a/b do not collapse either.
-// This is derivation, not proof: a literal '_' in a segment can still alias a
-// '/' (/v1/a/b_c vs /v1/a/b/c). From VERIFIES uniqueness over the whole document
-// and fails loudly rather than emit a duplicate — the guard, not the encoding,
-// is what makes the ids trustworthy.
-func operationID(method, path string) string {
-	var b strings.Builder
-	b.WriteString(strings.ToLower(method))
-	for _, s := range strings.Split(path, "/") {
-		if s == "" {
-			continue
-		}
-		b.WriteByte('_')
-		if strings.HasPrefix(s, "{") {
-			b.WriteString("by_")
-			s = strings.TrimSuffix(strings.TrimPrefix(s, "{"), "}")
-		}
-		b.WriteString(sanitize(s))
-	}
-	return b.String()
-}
-
-// sanitize reduces a path segment to [a-z0-9.-], the characters that are legal
-// in an operationId and cannot be confused with the '_' path separator.
-func sanitize(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '.':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
 }
 
 // Mount serves the document at Path off app's OWN live router — the app it is
