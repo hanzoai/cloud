@@ -850,11 +850,10 @@ const (
 )
 
 // The signal names the scorer READS. Every other name a gate observes still
-// travels and is still reported with the decision; these four are the ones that
-// name a coordinate of the model's own event, so they are spelled in the package
-// both halves import rather than agreed by convention — a gate and a scorer that
-// spell "nano" differently do not fail, they quietly score every payment as
-// moving no money.
+// travels and is still reported with the decision; these are the ones the scorer
+// acts on, so they are spelled in the package both halves import rather than
+// agreed by convention — a gate and a scorer that spell "nano" differently do not
+// fail, they quietly score every payment as moving no money.
 const (
 	// SignalNano is the value moved, in nano-USD. Absent means the event moves no
 	// money and the value features read BLIND, which is a different fact from zero.
@@ -866,6 +865,16 @@ const (
 	SignalDevice = "device"
 	// SignalAt is when it happened, RFC 3339. Absent means now.
 	SignalAt = "at"
+	// SignalCountry is the jurisdiction the payer acted from, ISO 3166-1 alpha-2.
+	//
+	// It is the one name here that is NOT a coordinate of the model's own event.
+	// The model learns one organisation's own behaviour and a country is not a
+	// dimension of that; this is read by the DETERMINISTIC rule beside the model,
+	// which judges stated facts rather than learned mass. It is spelled here for
+	// the same reason as the rest — one spelling, both halves — and a gate that
+	// cannot state it omits it, which is a different fact from stating that the
+	// payer is somewhere unremarkable.
+	SignalCountry = "country"
 )
 
 // RiskDecideIn is one question for the scorer: what is being judged, at which
