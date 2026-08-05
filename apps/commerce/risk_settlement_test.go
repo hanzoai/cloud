@@ -88,7 +88,7 @@ func doorApp(t *testing.T, status int, body string) *zip.App {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 	})
 	app := zip.New(zip.Config{Logger: luxlog.New("doortest"), DisableStartupMessage: true})
-	app.Post("/v1/billing/topup/token", screenChain(riskGate(luxlog.New("doortest"))), settledBody(status, body))
+	app.Post("/v1/billing/topup/token", riskGate(luxlog.New("doortest")).route(settledBody(status, body)))
 	return app
 }
 
