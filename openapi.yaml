@@ -83673,7 +83673,12 @@ paths:
         carries the processor's own reference (`processorRef`) so the charge can be
         reconciled against the processor rather than taken on trust.
 
-        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+        A named builder, not a closure, so zipdoc can lift this prose into the registry.
+
+        It BUILDS the handler rather than being it, because the screen has to sit inside
+        the value every projection of this op dispatches to — see exposePayments. `charge`
+        is the money move, `take` is the screened door onto it, and the only registrable
+        one is the second.
       operationId: takePayment
       requestBody:
         content:
