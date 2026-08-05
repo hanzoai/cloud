@@ -231,12 +231,16 @@ func TestBrowseIsOneKeyedList(t *testing.T) {
 // TestTheBridgeIsInstalledAheadOfTheLeaves is the structural claim every tenancy
 // test here rests on. A typed op reads its tenant off the CONTEXT, which only
 // cloud.Bridge parks there — and fiber runs middleware in registration order, so
-// one installed after its leaves never runs and every org-scoped op 403s. This
-// mounts the REAL Mount on a bare app (no app-wide bridge, exactly as this
-// package's tests have always mounted it) and proves a validated caller is served
-// while an anonymous one is refused.
+// one installed after its leaves never runs and every org-scoped op 403s.
+//
+// The COMPOSER owns that install, not this subsystem: cloud.App puts it at the
+// root of every program before any route, and Mount registers only leaves. So
+// the order is written out here in the two lines it actually takes — enrichment
+// at the root, then the REAL Mount — and the claim is proved end to end: a
+// validated caller is served, an anonymous one is refused.
 func TestTheBridgeIsInstalledAheadOfTheLeaves(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
