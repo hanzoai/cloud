@@ -1,32 +1,52 @@
 // Package bots is a bot doing your work on a real desktop, live, while you watch.
 //
-// It is the CONTROL PLANE for a bot run: a task the bot runtime executes on a
-// surface — a desktop or terminal sandbox it drives — with a LIVE session (the
-// URL the hanzo.app /vnc panel embeds to watch/attach).
+// It is the whole cloud side of the headless bot: the CONTROL PLANE for a bot run
+// — a task executed on a surface (a desktop or terminal sandbox the bot drives)
+// with a LIVE session, the URL the hanzo.app /vnc panel embeds to watch or attach
+// — TOGETHER WITH the door to the service that executes it, @hanzo/bot.
 //
-// A bot run is ONE value with ONE home. It is not the bot MACHINE that hosts a
-// runtime (visor's /v1/compute/bots — a machine you rent), and it is not the
-// runtime service itself (apps/runtime — the transport to the executor).
+// One product, not two. The control plane and the transport to the executor were
+// separate apps once (apps/runtime), which made a LANGUAGE boundary look like a
+// product boundary: the surface is Go, the executor is TS, and nothing else
+// distinguished them. They answer for the same thing and now live in one place.
 //
-// CLOUD OWNS POLICY, THE RUNTIME OWNS THE RUN. The sandbox lives in the runtime,
-// keyed in the runtime's own store under the tenant that started it; that store is
-// the only thing that knows whether a run is alive. So this package keeps no
-// second copy of it. It owns what a control plane owns — who you are, which org
-// you are, and whether you may — and then asks the runtime, which IS the registry.
-// Copying that state into cloud would create a second id space agreeing with
-// nothing: listing runs that do not exist and stopping runs never started.
+// CLOUD OWNS POLICY, THE EXECUTOR OWNS THE RUN. The sandbox lives in @hanzo/bot,
+// keyed in its own store under the tenant that started it; that store is the only
+// thing that knows whether a run is alive. So this package keeps no second copy of
+// it. It owns what a control plane owns — who you are, which org you are, and
+// whether you may — and then asks the executor, which IS the registry. Copying
+// that state into cloud would create a second id space agreeing with nothing:
+// listing runs that do not exist and stopping runs never started.
+//
+// A bot run is ONE value with ONE home. It is not the bot MACHINE that hosts an
+// executor (visor's /v1/compute/bots — a machine you rent).
 //
 // Isolation: the org is the gateway-minted X-Org-Id (HIP-0026) resolved via
-// principal.Org, NEVER a request field, and it is what cloud sends the runtime,
+// principal.Org, NEVER a request field, and it is what cloud sends the executor,
 // which keys every run under tenants/{org}/. A caller cannot name another tenant's
 // org, so it cannot read or stop another tenant's runs; a foreign run id resolves
 // under the CALLER's org, where it does not exist, and answers 404.
 //
-// Surface (org-scoped; the console BotsApi and the CLI `hanzo bot run` call it):
+// Two faces, and the split between them is what a tenant can ACT on:
 //
-//	POST /v1/bots/run           -> 501: no runtime launch operation exists yet
-//	GET  /v1/bots               -> {bots:[{runId,task,surface,status,sessionUrl,startedAt}]}
-//	POST /v1/bots/:runId/stop   -> {runId, status}
+//   - NATIVE + TYPED, the run control plane (org-scoped; the console BotsApi and
+//     the CLI `hanzo bot run` call it):
+//
+//     POST /v1/bots/run           -> 501: no executor launch operation exists yet
+//     GET  /v1/bots               -> {bots:[{runId,task,surface,status,sessionUrl,startedAt}]}
+//     POST /v1/bots/:runId/stop   -> {runId, status}
+//
+//   - RELAYED, the executor's own operational paths at /v1/bot/* (relay.go). A
+//     liveness probe is not a tenant-scoped resource, so it stays a relay rather
+//     than being reimplemented in Go.
+//
+// The transport itself (transport.go) knows how to MOVE BYTES and nothing about
+// what they mean: a caller states WHAT it wants done (a Call) and gets back a
+// domain-shaped outcome — never an *http.Response, a status code, or a framing
+// detail. Today those bytes move over HTTP; per HIP-0106/HIP-0120 they should move
+// over ZAP, and that swap is meant to be a change to transport.go plus each
+// caller's one stub, not a rewrite. apps/coding dispatches its coding tasks to the
+// same executor and uses the same Call.
 package bots
 
 import (
@@ -40,7 +60,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/runtime"
+
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -56,7 +76,7 @@ const (
 	// gatewayURLEnv configures the browser-facing bot VNC gateway base — the public
 	// origin the TS bot service serves /vnc?nodeId=<id> from, which the hanzo.app
 	// /vnc panel embeds. It is DISTINCT from the runtime's in-cluster address
-	// (clients/runtime's BOT_GATEWAY_URL, a pod-internal DNS name a browser cannot
+	// (transport.go's BOT_GATEWAY_URL, a pod-internal DNS name a browser cannot
 	// reach): a session URL must be publicly embeddable, so it carries its own knob.
 	gatewayURLEnv     = "CLOUD_BOT_GATEWAY_URL"
 	defaultGatewayURL = "https://bot.hanzo.ai"
@@ -163,6 +183,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		State: state{gateway: gatewayBase(), runtime: wire{}},
 	}
 	routes(app, s)
+	// The executor's ops face, on the same product: /v1/bot/* relayed verbatim.
+	// It mounts SECOND because the native control plane above is what a tenant
+	// acts on, and a relay must never be able to shadow it.
+	if err := mountRelay(app, deps); err != nil {
+		return err
+	}
 	s.Log.Info("bots surface mounted", "gateway", s.State.gateway, "brand", deps.Brand)
 	return nil
 }
@@ -317,9 +343,9 @@ func (o ops) stop(ctx context.Context, in *stopBotIn) (*BotStopped, error) {
 	case err == nil:
 		o.s.Log.Info("bot stopped", "org", org, "run", runID)
 		return &BotStopped{RunID: runID, Status: statusStopped}, nil
-	case errors.Is(err, runtime.ErrNotFound):
+	case errors.Is(err, ErrNotFound):
 		return nil, zip.ErrNotFound("no such bot for this org")
-	case errors.Is(err, runtime.ErrNotServed):
+	case errors.Is(err, ErrNotServed):
 		return nil, zip.Errorf(http.StatusBadGateway,
 			"bots: the runtime does not serve stop, so this run's state is unknown — it was NOT stopped")
 	default:
