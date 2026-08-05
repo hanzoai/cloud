@@ -96,6 +96,35 @@ const (
 	ActionBlock = "block"
 )
 
+// Severity ranks the vocabulary above, and it exists so that TWO judgements about
+// one event compose into one answer: the severest of them stands.
+//
+// It is here rather than at the one gate that fuses today because the ordering IS
+// a property of the vocabulary — the constants are declared "most permissive
+// first" and this makes that sentence executable, in the same file, so the prose
+// and the code cannot drift into two orderings.
+//
+// AN UNRECOGNISED ACTION RANKS BELOW ALLOW. It is not a milder verdict; it is a
+// string this vocabulary does not contain, and letting one place anywhere in the
+// order would let a typo win a fusion and become the outcome. Ranking it lowest
+// means the judgement that IS recognised decides, and the fail policy — which is
+// [Decide]'s, not this function's — is what answers for the unrecognised one.
+func Severity(action string) int {
+	switch action {
+	case ActionAllow:
+		return 0
+	case ActionReview:
+		return 1
+	case ActionChallenge:
+		return 2
+	case ActionRestrict:
+		return 3
+	case ActionBlock:
+		return 4
+	}
+	return -1
+}
+
 // The reasons an answer is not a scored one. A caller that logs, audits or
 // reports an outcome reports this beside it, so "allowed" and "allowed because
 // nobody was listening" are never the same row.
