@@ -298,7 +298,7 @@ var allowedRequestUses = map[string]string{
 		"beside admin-ness. TWO functions in ONE file, delegating to the same resolveScope every raw handler " +
 		"beside them uses; both fail closed off the HTTP path, where there is no attested caller and therefore " +
 		"no scope.",
-	"apps/graph/graph.go": "forwarded — the chain-data reads PROXY to the deployment's indexer and " +
+	"apps/explorer/explorer.go": "forwarded — the chain-data reads PROXY to the deployment's indexer and " +
 		"graph, and where no service token is configured they pass the CALLER's own Authorization " +
 		"through (client.go's authorize). That credential is the caller's, not an addressing value, so " +
 		"it must not become an In field a caller could also put in a body — and principal.OrgFrom " +

@@ -1,5 +1,5 @@
 // client.go is the ONE HTTP path from this subsystem to the Lux chain-data plane.
-// Every handler in graph.go routes through this client, so the wire contract (base
+// Every handler in explorer.go routes through this client, so the wire contract (base
 // URLs, read-only auth, JSON/GraphQL decoding, error mapping) lives once here and can
 // never drift between hand-rolled fetches.
 //
@@ -21,7 +21,7 @@
 // non-2xx HTTP status → that status, and a GraphQL {errors} envelope → 502 with the
 // upstream message. It never masks an upstream failure as success or fabricates data.
 
-package graph
+package explorer
 
 import (
 	"bytes"
@@ -119,23 +119,23 @@ func (cl *client) latestBlock(ctx context.Context, auth string) (map[string]any,
 func (cl *client) getJSON(ctx context.Context, auth, url string) (map[string]any, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "graph: build request: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "explorer: build request: %v", err)
 	}
 	req.Header.Set("Accept", "application/json")
 	authorize(req, auth)
 
 	resp, err := cl.cc.Do(req)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "graph: indexer unreachable: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "explorer: indexer unreachable: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, zip.Errorf(resp.StatusCode, "graph: indexer %d: %s", resp.StatusCode, snippet(raw))
+		return nil, zip.Errorf(resp.StatusCode, "explorer: indexer %d: %s", resp.StatusCode, snippet(raw))
 	}
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "graph: decode indexer response: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "explorer: decode indexer response: %v", err)
 	}
 	return out, nil
 }
@@ -151,7 +151,7 @@ func (cl *client) priceFeeds(ctx context.Context, auth string) ([]map[string]any
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cl.graph+graphQLPath, bytes.NewReader(body))
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "graph: build query: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "explorer: build query: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -159,12 +159,12 @@ func (cl *client) priceFeeds(ctx context.Context, auth string) ([]map[string]any
 
 	resp, err := cl.cc.Do(req)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "graph: graph unreachable: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "explorer: graph unreachable: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, zip.Errorf(resp.StatusCode, "graph: graph %d: %s", resp.StatusCode, snippet(raw))
+		return nil, zip.Errorf(resp.StatusCode, "explorer: graph %d: %s", resp.StatusCode, snippet(raw))
 	}
 
 	var out struct {
@@ -176,10 +176,10 @@ func (cl *client) priceFeeds(ctx context.Context, auth string) ([]map[string]any
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "graph: decode graphql response: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "explorer: decode graphql response: %v", err)
 	}
 	if len(out.Errors) > 0 {
-		return nil, zip.Errorf(http.StatusBadGateway, "graph: %s", firstNonEmpty(out.Errors[0].Message, "graphql error"))
+		return nil, zip.Errorf(http.StatusBadGateway, "explorer: %s", firstNonEmpty(out.Errors[0].Message, "graphql error"))
 	}
 	return out.Data.PriceFeeds, nil
 }
