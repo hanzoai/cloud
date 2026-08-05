@@ -148,6 +148,13 @@ func OrgOf(user, org string) (string, bool) {
 type Principal struct {
 	Org  string
 	User string
+	// Subject is the token's `sub` VERBATIM. User is the canonical id and falls
+	// back to preferred_username when a token carries no sub, which makes it an
+	// attribution key rather than an identity key: two subjects can present the
+	// same User. A consumer that RESOLVES A RECORD from the caller — an account
+	// row, a membership — keys on this and refuses it empty, so it can never be
+	// handed one identity's token and address another's row.
+	Subject string
 }
 
 // mintedSlot names the request-local slot the boundary parks its attestation in.
@@ -169,7 +176,7 @@ type mintedSlot struct{}
 // must not depend on its position asks THIS instead — a fact only the boundary
 // can state, absent when the boundary did not run, which fails closed to
 // anonymous rather than open to forged.
-// Both fields are CLONED. A value read off a request is a zero-copy view into
+// EVERY field is CLONED. A value read off a request is a zero-copy view into
 // the reused fasthttp buffer, and this one is retained past the read — it becomes
 // a map key in the edge sensor and a column in a meter — so an un-owned copy
 // would mutate into unrelated bytes on the next request through that worker.
@@ -177,8 +184,9 @@ type mintedSlot struct{}
 // clones for exactly this reason.)
 func Mint(c *zip.Ctx, p Principal) {
 	c.Fiber().Locals(mintedSlot{}, Principal{
-		Org:  strings.Clone(p.Org),
-		User: strings.Clone(p.User),
+		Org:     strings.Clone(p.Org),
+		User:    strings.Clone(p.User),
+		Subject: strings.Clone(p.Subject),
 	})
 }
 

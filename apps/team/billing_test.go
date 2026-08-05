@@ -33,7 +33,7 @@ func billingApp(t *testing.T, commerce types.CommerceClient, planEnt func(contex
 		t.Fatalf("openAccountStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	b := &billingService{accounts: store, commerce: commerce, planEnt: planEnt, secret: testSecret}
+	b := &billingService{accounts: store, commerce: commerce, planEnt: planEnt, ident: testIdent(store)}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	// The SAME bridge the composer installs at its root. The plan read is a typed
 	// op, and a typed op receives only a context — the request its session token
