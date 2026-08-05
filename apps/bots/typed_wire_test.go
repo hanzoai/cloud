@@ -138,8 +138,11 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			len(typed), len(untypedByDesign), got, want)
 	}
 	// The MEASURED partition, so the prose cannot drift from the binary.
-	if len(served) != 3 || len(typed) != 2 {
-		t.Errorf("served = %d (want 3), typed = %d (want 2)", len(served), len(typed))
+	// 10 since zip v1.26.0: the document now carries every method of the
+	// relay's one All() registration — the eight ledger entries above plus
+	// the two typed ops. Before, the wildcard collapsed and served read 3.
+	if len(served) != 10 || len(typed) != 2 {
+		t.Errorf("served = %d (want 10), typed = %d (want 2)", len(served), len(typed))
 	}
 }
 

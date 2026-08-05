@@ -327,6 +327,11 @@ func TestRoutesLiveUnderV1Bot(t *testing.T) {
 		if !strings.HasPrefix(r.Path, "/v1/bot") {
 			continue
 		}
+		if r.Method == "HEAD" {
+			// fiber derives a HEAD for every GET; the allowlist pins what is
+			// DECLARED, and a derived HEAD declares nothing.
+			continue
+		}
 		key := r.Method + " " + r.Path
 		if _, ok := want[key]; !ok {
 			t.Fatalf("unexpected route %s", key)
