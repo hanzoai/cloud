@@ -662,7 +662,7 @@ func TestDetermine_TheAggregateBoundsCannotDisableTheRules(t *testing.T) {
 	// folds in one observation per (subject, featureBucket); at or under that
 	// figure the rule fires on every continuously active customer, and on this
 	// organisation's own history the moment a residency rebuilds.
-	perWindow := int(burstWindow() / featureBucket)
+	perWindow := int(burstWindow / featureBucket)
 	switch {
 	case burstEvents <= 0:
 		t.Error("the burst bound is not positive, so every event is a burst and the rule reviews " +
@@ -670,7 +670,7 @@ func TestDetermine_TheAggregateBoundsCannotDisableTheRules(t *testing.T) {
 	case burstEvents <= perWindow:
 		t.Errorf("the burst bound (%d) is at or under what a FOLD alone puts in the burst window "+
 			"(%d = %s / %s), so this organisation's own history trips it",
-			burstEvents, perWindow, burstWindow(), featureBucket)
+			burstEvents, perWindow, burstWindow, featureBucket)
 	case burstEvents >= recordRows:
 		t.Errorf("the burst bound (%d) is past what the tenant's retained record can hold (%d), "+
 			"so no traffic can ever reach it and the rule is off with nothing to see",
@@ -689,18 +689,22 @@ func TestDetermine_TheAggregateBoundsCannotDisableTheRules(t *testing.T) {
 	}
 	// And the aggregates must actually KEEP the window the count is read over, or
 	// every reading is a zero that looks exactly like a quiet subject.
-	if _, kept := newRings().pace(velocity.Key{OrgID: "o", Kind: anomaly.AxisAccount, Value: "s"}); !kept {
+	//
+	// THE PUBLISHED WINDOW IS HELD AGAINST THE MEASURED ONE. [burstWindow] is what
+	// [placeable] refuses an observation against and what the pace bounds claim to be
+	// read over; the ring set is what actually answers a pace read. Derived from two
+	// places they would agree until one moved, and the failure would be silent in the
+	// worst direction: a placement bound wider than the window the rules read admits
+	// exactly the backdated events that then count as now.
+	w, kept := newRings().pace(velocity.Key{OrgID: "o", Kind: anomaly.AxisAccount, Value: "s"})
+	if !kept {
 		t.Fatal("the aggregates keep no window, so the burst bound is read over nothing")
 	}
-}
-
-// burstWindow is the window [onPace]'s count bound is actually read over: the
-// narrowest one a fresh ring set keeps. It is MEASURED from the rings rather than
-// restated, because the whole point of taking the window instead of naming it is
-// that no second statement of it can drift.
-func burstWindow() time.Duration {
-	w, _ := newRings().pace(velocity.Key{OrgID: "o", Kind: anomaly.AxisAccount, Value: "s"})
-	return w.Span
+	if w.Span != burstWindow {
+		t.Errorf("the rules read a %s window but placement is bounded at %s — an observation "+
+			"outside the read window may enter the rings and be folded to the leading edge, "+
+			"which counts history as now", w.Span, burstWindow)
+	}
 }
 
 // TestPace_OverTheWire is the velocity deliverable through the op a gate actually
