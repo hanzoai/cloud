@@ -1,6 +1,6 @@
 {
-  "paths": 1700,
-  "operations": 2354,
+  "paths": 1704,
+  "operations": 2358,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -28,6 +28,7 @@
     "builds": 1,
     "campaign": 11,
     "captable": 31,
+    "cart": 4,
     "catalog": 8,
     "channels": 7,
     "chat": 2,
