@@ -162,6 +162,75 @@ func chunkText(s string, size int) []string {
 
 func isSpace(r rune) bool { return r == ' ' || r == '\n' || r == '\t' || r == '\r' }
 
+// joinWindow caps how long a joiner will hold text waiting for a link to close.
+// A model that emits a lone `[` and then prose must not stall the stream, so the
+// buffer is released unconditionally at this many runes.
+const joinWindow = 512
+
+// joiner keeps a markdown link whole across streamed deltas. A citation arrives
+// as `[Rich`, ` Hickey](https://`, `clojure.org)` — rendered as they land, the
+// reader watches raw brackets and a half URL appear and then rewrite themselves.
+// From the first `[` the text is held until the closing `)` (or joinWindow) and
+// released in one piece.
+//
+// It is a DELIVERY property only: every consumer accumulates answer+delta, so the
+// finished text is identical either way. It wraps the synthesis emit and nothing
+// else — status, sources and follow-ups are not prose and must never be held.
+type joiner struct {
+	buf  strings.Builder
+	emit func(string)
+}
+
+func (j *joiner) write(delta string) {
+	j.buf.WriteString(delta)
+	for {
+		s := j.buf.String()
+		if s == "" {
+			j.buf.Reset()
+			return
+		}
+		i := strings.IndexByte(s, '[')
+		switch {
+		case i < 0: // nothing open — everything is safe to release
+			j.release(s, "")
+			return
+		case i > 0: // release what precedes the link, keep the link open
+			j.release(s[:i], s[i:])
+		default: // the buffer starts at '['
+			k := strings.IndexByte(s, ')')
+			if k < 0 {
+				if len([]rune(s)) >= joinWindow {
+					j.release(s, "")
+				}
+				return
+			}
+			j.release(s[:k+1], s[k+1:])
+		}
+	}
+}
+
+// release emits out and leaves keep buffered.
+func (j *joiner) release(out, keep string) {
+	j.buf.Reset()
+	j.buf.WriteString(keep)
+	if out != "" {
+		j.emit(out)
+	}
+}
+
+// flush releases whatever is still held — the answer ended mid-link, or ended
+// inside a bracket that was never a link at all.
+func (j *joiner) flush() {
+	if s := j.buf.String(); s != "" {
+		j.buf.Reset()
+		j.emit(s)
+	}
+}
+
+// reset drops the buffer without emitting: the completion it belonged to was
+// discarded, so its half-frame must not leak into the next model's stream.
+func (j *joiner) reset() { j.buf.Reset() }
+
 // sourcesBlock renders the numbered grounding context the model synthesizes over.
 func sourcesBlock(src []Source) string {
 	if len(src) == 0 {

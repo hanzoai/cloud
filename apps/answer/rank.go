@@ -7,6 +7,7 @@ package answer
 
 import (
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -25,13 +26,22 @@ type Source struct {
 	Favicon string `json:"favicon"`
 }
 
-// rank dedupes results (one per URL and one per host, preserving discovery order
-// on ties) and orders them by relevance to the query, then caps at limit.
-// Relevance = query-term overlap weighted toward the title plus a whole-phrase
-// bonus, so a page that actually mentions the subject outranks a broad match.
-func rank(query string, results []websearch.Result, limit int) []Source {
+// rank dedupes results (one per URL, at most hostCap per host, preserving
+// discovery order on ties) and orders them by relevance to the query, then caps
+// at limit. Relevance = query-term overlap weighted toward the title plus a
+// whole-phrase bonus, so a page that actually mentions the subject outranks a
+// broad match.
+//
+// hostCap is a mode value, not a constant: one page per host is right for a
+// six-source answer, where breadth IS the value, and wrong for research, where
+// three pages from an authoritative domain are the point. hostCap<=1 reproduces
+// the one-per-host set exactly.
+func rank(query string, results []websearch.Result, limit, hostCap int) []Source {
 	terms := queryTerms(query)
 	phrase := strings.ToLower(strings.TrimSpace(query))
+	if hostCap < 1 {
+		hostCap = 1
+	}
 
 	type scored struct {
 		src   Source
@@ -39,7 +49,7 @@ func rank(query string, results []websearch.Result, limit int) []Source {
 		idx   int
 	}
 	seenURL := make(map[string]bool)
-	seenHost := make(map[string]bool)
+	hostCount := make(map[string]int)
 	list := make([]scored, 0, len(results))
 
 	for i, r := range results {
@@ -47,15 +57,15 @@ func rank(query string, results []websearch.Result, limit int) []Source {
 			continue
 		}
 		host := hostOf(r.URL)
-		if host == "" || seenHost[host] {
+		if host == "" || hostCount[host] >= hostCap {
 			continue
 		}
 		seenURL[r.URL] = true
-		seenHost[host] = true
+		hostCount[host]++
 		list = append(list, scored{
 			src: Source{
 				URL:     r.URL,
-				Title:   orHost(r.Title, host),
+				Title:   orHost(cleanTitle(r.Title), host),
 				Snippet: clip(r.Content, maxSnippet),
 				Engine:  r.Engine,
 				Favicon: favicon(host),
@@ -153,6 +163,25 @@ func favicon(host string) string {
 		return ""
 	}
 	return "https://www.google.com/s2/favicons?domain=" + host + "&sz=64"
+}
+
+// titleNoise matches the bracketed and parenthesised furniture search engines
+// staple onto a title — "[PDF]", "(Official Site)", "[2024 Update]". It is
+// citation noise: the link text should read as the document's name.
+var titleNoise = regexp.MustCompile(`\[[^\]]*\]|\([^)]*\)`)
+
+// cleanTitle strips that noise and collapses the whitespace it leaves behind.
+//
+// A title that is ENTIRELY bracketed is kept as-is: stripping it would leave the
+// empty string and the source would be cited by its bare hostname instead of its
+// name. Losing the title of every wholly-parenthesised page is a worse outcome
+// than keeping its parentheses.
+func cleanTitle(s string) string {
+	stripped := strings.Join(strings.Fields(titleNoise.ReplaceAllString(s, " ")), " ")
+	if stripped == "" {
+		return s
+	}
+	return stripped
 }
 
 func orHost(title, host string) string {
