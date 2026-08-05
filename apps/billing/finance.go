@@ -116,7 +116,10 @@ type credits []financeCredit
 
 func (credits) ResponseHeaders() map[string]string { return noStore() }
 
-type usagePoint struct {
+// sample is one bucket of the usage series. The name is fleet-unique on
+// purpose: the weave refuses one schema name with two shapes, and admin
+// already publishes a differently-shaped usagePoint.
+type sample struct {
 	Date  string `json:"date"`
 	Cents int64  `json:"cents"`
 }
@@ -130,12 +133,12 @@ type usageLine struct {
 
 // financeUsageView is the GET /v1/finance/usage?range= response.
 type financeUsageView struct {
-	TotalCents int64        `json:"totalCents"`
-	Currency   string       `json:"currency"`
-	Start      string       `json:"start,omitempty"`
-	End        string       `json:"end,omitempty"`
-	Series     []usagePoint `json:"series"`
-	Lines      []usageLine  `json:"lines"`
+	TotalCents int64       `json:"totalCents"`
+	Currency   string      `json:"currency"`
+	Start      string      `json:"start,omitempty"`
+	End        string      `json:"end,omitempty"`
+	Series     []sample    `json:"series"`
+	Lines      []usageLine `json:"lines"`
 }
 
 func (financeUsageView) ResponseHeaders() map[string]string { return noStore() }
@@ -473,9 +476,9 @@ func (o ops) financeUsage(ctx context.Context, in *window) (*financeUsageView, e
 		lineUnits[label]++
 	}
 
-	series := make([]usagePoint, 0, len(buckets))
+	series := make([]sample, 0, len(buckets))
 	for b, cents := range buckets {
-		series = append(series, usagePoint{Date: b.Format(time.RFC3339), Cents: cents})
+		series = append(series, sample{Date: b.Format(time.RFC3339), Cents: cents})
 	}
 	sort.Slice(series, func(i, j int) bool { return series[i].Date < series[j].Date })
 

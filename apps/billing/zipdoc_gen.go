@@ -12,7 +12,21 @@ func init() {
 	zip.Describe("GET /v1/billing/usage/accounts", zip.Doc{
 		Description: "Answers per-account totals for the linked provider accounts the\ngateway ROUTED this caller's traffic through — requests, prompt and completion\ntokens, recorded cost — plus their honest sum.\n\nThis is the one read in the billing namespace scoped to the PERSON, not the\norg. Rows are keyed on (validated org, validated user), so a caller sees the\naccounts THEY linked and never a colleague's, even inside one org — everything\nelse under /v1/billing is org-wide. Neither key is ever read from the request\nbody or the query.\n\nIt is a ROUTING counter, not the money ledger. `costCents` is 0 for an account\nbilled by its own subscription, where the plan pays the provider directly, so\nthese totals do not reconcile against what the org was charged.\n/v1/billing/usage is the charged ledger.\n\n401 without a validated principal. Where the linked-account plane is not\nresident the answer is an honest 501 — never an empty breakdown, which would\nread as no usage.",
 		Fields: map[string]string{
-			"RoutedUsage.billing": "BillingMode(Kind): plan | commerce",
+			"AccountsTotal.accounts":         "Accounts is how many linked accounts the total folds.",
+			"AccountsTotal.completionTokens": "CompletionTokens is the total completion-token count.",
+			"AccountsTotal.costCents":        "CostCents is the total cost in cents.",
+			"AccountsTotal.promptTokens":     "PromptTokens is the total prompt-token count.",
+			"AccountsTotal.requests":         "Requests is the total request count the gateway routed.",
+			"AccountsTotal.totalTokens":      "TotalTokens is the total token count.",
+			"RoutedUsage.account":            "Account is the provider-side account identifier.",
+			"RoutedUsage.billing":            "Billing is how the routed inference bills: plan or commerce.",
+			"RoutedUsage.completionTokens":   "CompletionTokens is the routed completion-token count.",
+			"RoutedUsage.costCents":          "CostCents is the routed cost in cents.",
+			"RoutedUsage.kind":               "Kind is how the account authenticates: subscription or apikey.",
+			"RoutedUsage.promptTokens":       "PromptTokens is the routed prompt-token count.",
+			"RoutedUsage.provider":           "Provider is the AI provider the row's account belongs to.",
+			"RoutedUsage.requests":           "Requests is how many requests the gateway routed through this account.",
+			"RoutedUsage.totalTokens":        "TotalTokens is the routed total token count.",
 		},
 	})
 	zip.Describe("GET /v1/finance/balance", zip.Doc{
