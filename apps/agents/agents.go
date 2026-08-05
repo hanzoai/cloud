@@ -143,6 +143,13 @@ type state struct {
 
 var mounted *cloud.Service[state]
 
+// Ready reports whether the session store is in THIS process, so a caller can
+// tell "no sessions" from "ask the process that owns them" before it reads a
+// count as a fact. It is the same question apps/projects.Ready answers for the
+// site catalog, and it exists here for the same reason: agents ships as its own
+// binary, so the honest answer for an in-process caller is usually "no".
+func Ready() bool { return mounted != nil }
+
 // ---- HTTP response shapes (the published contract) ----
 
 type agentView struct {
@@ -321,6 +328,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("agents.Mount: %w", err)
 	}
 	mounted = s
+	// The login-manager teardown, for the link process that has no session store
+	// in it — two doors onto the ONE StopSessions (sessions_rpc.go).
+	exposeSessions()
 
 	o := agentOps{s: s}
 	// Bridge FIRST, and at the door this SUBSYSTEM is, not on one node inside it: a
