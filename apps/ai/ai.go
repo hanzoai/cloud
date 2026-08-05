@@ -194,16 +194,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			// can only ever refuse slightly early, which is the safe direction for a
 			// fail-closed gate. Nothing is billed from this number; it decides
 			// admission only.
-			a, err := bal.Amount.Parse()
+			cents, err := bal.Amount.FloorMinor()
 			if err != nil {
 				return 0, fmt.Errorf("plane balance read: %w", err)
 			}
-			minor := a.Minor() // big.Int of cents, truncated toward zero by Rescale
-			if !minor.IsInt64() {
-				return 0, fmt.Errorf("plane balance read: %s %s exceeds int64 cents",
-					bal.Amount.Decimal, bal.Amount.Currency)
-			}
-			return minor.Int64(), nil
+			return cents, nil
 		})
 	}
 	// The DEBIT crosses the same way, for the same reason — and it must key on the SAME

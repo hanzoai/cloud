@@ -20,25 +20,26 @@ import (
 // DOWN, never up: rounding up would admit a request the balance cannot cover, and the
 // debit that follows is exact — so the difference lands as a negative balance nobody
 // authorized. Rounding down can only refuse slightly early.
-func TestBalanceIsRoundedDownExplicitly(t *testing.T) {
+//
+// This used to be asserted by GREPPING ai.go for `a.Minor()` and a comment claiming it
+// "truncates toward zero". It does not — money.Amount.Minor() is Rescale, which rounds
+// HALF-AWAY-FROM-ZERO — so the test passed while the property it named was false, and
+// 4.995 was admitted against a 5.00 charge. A test that reads the source can only
+// confirm the code still says what it said; it cannot notice that the sentence is
+// wrong. The arithmetic is asserted where the rounding now lives, plane/money_test.go.
+// What is left here is the one thing only this package can say: that THIS gate still
+// asks for the floored figure, and has not drifted back to the helper that refuses.
+func TestBalanceGateDoesNotCallRefusingMinor(t *testing.T) {
 	src, err := os.ReadFile("ai.go")
 	if err != nil {
 		t.Fatalf("read ai.go: %v", err)
 	}
 	body := string(src)
 
-	// It must not call the refusing helper and hope.
 	if strings.Contains(body, "bal.Amount.Minor()") {
 		t.Error("Money.Minor() refuses sub-cent amounts — the gate must round explicitly")
 	}
-	// It must parse and take minor units itself, which truncates toward zero.
-	for _, want := range []string{"bal.Amount.Parse()", "a.Minor()", "minor.IsInt64()"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("missing %q — the rounding choice must be visible at the call site", want)
-		}
-	}
-	// And it must not silently widen: an out-of-range balance is an error, not a clamp.
-	if !strings.Contains(body, "exceeds int64 cents") {
-		t.Error("an amount too large for int64 must error, never wrap into a wrong balance")
+	if !strings.Contains(body, "bal.Amount.FloorMinor()") {
+		t.Error("the balance gate must floor: rounding up admits spend the balance cannot cover")
 	}
 }
