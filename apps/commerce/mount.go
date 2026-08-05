@@ -203,10 +203,25 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	lg := deps.Logger.New("subsystem", "commerce")
 	// The other direction of the same idea as the ops above: those publish what
 	// this process OWNS, and this reaches for the one thing it does not. The credit
-	// door below screens against a model that can only live in one binary, so the
+	// doors below screen against a model that can only live in one binary, so the
 	// scorer is installed as a plane client — cloud.SetRiskScorer's first producer
 	// (risk.go).
 	installRiskScorer(lg)
+	// THE CREDIT SCREEN, resolved ONCE and composed onto every door that mints.
+	//
+	// There are two, and they are registered a hundred lines apart: the browser's
+	// POST /v1/billing/topup/token below, and the agent's typed POST /v1/payments in
+	// exposePayments. Both end in commerce's ONE card money move (billing.TakePayment),
+	// so both mint spendable balance from a settled charge — which is why the screen is
+	// named here, at the composition root, and handed to each registration rather than
+	// being reached for at either. A gate fetched independently at each door is a gate
+	// that can be fetched at one of them, and that is exactly the state this closed:
+	// the screen guarded the browser and the typed op ran the same core unscreened, so
+	// the whole control had a second entrance with an MCP tool pointed at it.
+	//
+	// It is one VALUE, not one call per door, so there is no arrangement of these two
+	// registrations in which they hold different screens.
+	screen := riskGate(lg)
 	if deps.Payments == nil {
 		lg.Warn("commerce: deps.Payments is nil — payment intent paths will fail; tenant config + admin still served")
 	}
@@ -220,7 +235,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// what decides whether an agent can take a payment. They share commerce's ONE
 	// charge core with the browser's card top-up (payments.go), so registering
 	// them here adds a door, never a second money path.
-	exposePayments(zapp)
+	//
+	// AND A DOOR ONTO THE MINT IS SCREENED, which is why the screen is passed in. The
+	// shared core is the whole argument: POST /v1/payments reaches the same authorized
+	// deposit the top-up does, so leaving it unscreened left the risk gate below with an
+	// unguarded twin — and the twin is the one published as an MCP tool. exposePayments
+	// puts the screen on the WRITE only; the receipt read mints nothing.
+	exposePayments(zapp, screen)
 	exposeInvoices(zapp)
 
 	// Native zip health endpoint — registered FIRST so probes answer even when
@@ -671,20 +692,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//                        boundary stays exactly where the bridge put it.
 	// The card PAN never touches this binary: TopupWithToken charges the Square nonce only,
 	// and the settled charge itself is the mint authority (mintauth.WithAuthorized).
-	//   riskGate            — that mint authority is exactly why this route is screened.
-	//                         A settled charge on a stolen card IS spendable balance, so
-	//                         HANZO RISK judges the payer at the last moment before the
-	//                         charge, as a PRIVILEGED grant: a scorer that is present and
-	//                         cannot answer refuses rather than proceeds. It sits after
-	//                         PinBillingSubject so the subject it judges is the subject the
-	//                         charge credits, and before the handler so a refusal costs no
-	//                         card authorization. See risk.go.
+	//   screen             — that mint authority is exactly why this route is screened.
+	//                        A settled charge on a stolen card IS spendable balance, so
+	//                        HANZO RISK judges the payer at the last moment before the
+	//                        charge, as a PRIVILEGED grant: a scorer that is present and
+	//                        cannot answer refuses rather than proceeds. It sits after
+	//                        PinBillingSubject so the subject it judges is the subject the
+	//                        charge credits, and before the handler so a refusal costs no
+	//                        card authorization. See risk.go.
+	// It is not typed yet — module work, per the module-handler note; the typed
+	// door onto this same charge core is POST /v1/payments (payments.go), and it holds
+	// the SAME `screen` value — that is what makes the control one control.
+	//
+	// THE CHAIN IS BYTE-FOR-BYTE WHAT IT WAS, screen included and in the same place: the
+	// screen is the ONE value resolved above, handed the chain as its `next`
+	// (screenChain, risk.go). A raw route takes a handler list and a typed op takes none,
+	// so the two doors are WIRED two ways while being SCREENED by one thing — which is
+	// the property that matters, and the one the structural test asserts.
 	app.Post("/v1/billing/topup/token",
 		accountclient.RequireCSRF(),
 		commercemid.RequestContext(),
 		iammiddleware.IAMTokenRequired(),
 		accountclient.PinBillingSubject(),
-		riskGate(lg),
+		screenChain(screen),
 		commercebilling.TopupWithToken,
 	)
 

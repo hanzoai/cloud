@@ -15,24 +15,35 @@ package commerce
 //	therefore read a nil scorer and allowed, unscored. This installs one that
 //	reaches the risk child over its socket.
 //
-//	the GATE — the one place that asks. POST /v1/billing/topup/token is the
-//	self-serve CREDIT DOOR: a settled card charge is its mint authority, so a
-//	stolen card that clears is money in an account, and the account is what buys
-//	inference. It is the sharpest lifecycle moment this binary owns.
+//	the GATE — the one place that asks. A settled card charge is its own mint
+//	authority, so a stolen card that clears is money in an account, and the account
+//	is what buys inference. It is the sharpest lifecycle moment this binary owns.
+//
+// THERE ARE TWO DOORS ONTO THAT MINT AND THE GATE HOLDS BOTH. commerce has exactly
+// ONE card money move (billing.TakePayment) and this binary opens two addresses onto
+// it — the browser's POST /v1/billing/topup/token and the agent's typed
+// POST /v1/payments (payments.go), which the module note there calls "the same core
+// the console's card top-up runs". A screen on one of them is not a control: it is a
+// control standing beside an unscreened entrance to the same ledger write, and the
+// unscreened one is the one an agent already holds an MCP tool for. So the gate is a
+// zip.Middleware and mount.go composes it onto BOTH registrations; ONE decision, ONE
+// payer rule, ONE settlement key, two addresses.
 //
 // THE GATE IS PRIVILEGED AND SAYS SO IN SO MANY WORDS. cloud.Privileged() reads a
-// list of grant PATHS and this route is on none of them, so the default would be
-// the fail-OPEN branch — a scorer outage would wave every top-up through, on the
-// one route where waving one through mints spendable balance. The bit is set here
+// list of grant PATHS and neither route is on it, so the default would be
+// the fail-OPEN branch — a scorer outage would wave every payment through, on the
+// only two routes where waving one through mints spendable balance. The bit is set here
 // rather than added to that list because the list describes IAM and KMS surfaces
 // and this is neither; the gate that knows what it is guarding states it.
 //
 // IT SHIPS IN SHADOW, and that is a property of the MODEL rather than of this
 // code. A model nobody has reviewed is in shadow (apps/risk policy), shadow forces
 // its alert false however high the score, and this gate turns a non-alert into an
-// allow. So today every legitimate top-up proceeds and every decision is on the
-// record with what the model WOULD have said. What still refuses is a scorer that
-// is HERE and cannot answer — the fail-closed branch this bit exists to select.
+// allow. So today every legitimate payment proceeds at either door and every decision
+// is on the record with what the model WOULD have said. What still refuses is a scorer
+// that is HERE and cannot answer — the fail-closed branch this bit exists to select.
+// Widening the gate to the second door widens the RECORD, not the enforcement: no
+// organisation is armed by this, and the default regime is untouched.
 
 import (
 	"context"
@@ -74,39 +85,46 @@ func installRiskScorer(lg log.Logger) {
 	// the seam is published, so it is on the record before any payment needs it —
 	// which is the same reason apps/risk announces a jurisdiction listing it cannot
 	// use at mount rather than on the first decision that wanted one.
-	lg.Info("credit door risk axes", "armed", topupAxes, "unarmed", topupUnarmed,
-		"why", "no device fingerprint reaches this binary from a card top-up")
+	lg.Info("credit door risk axes", "armed", paymentAxes, "unarmed", paymentUnarmed,
+		"doors", []string{"/v1/billing/topup/token", paymentsPrefix},
+		"why", "no device fingerprint reaches this binary from a card payment")
 }
 
-// topupAxes is exactly what the credit door STATES, and [topupUnarmed] exactly what
+// paymentAxes is exactly what a credit door STATES, and [paymentUnarmed] exactly what
 // it does not. They are stated rather than left to be inferred from
-// [topupSignals] because the difference decides which halves of the risk rule can
-// fire at this door, and a half that cannot fire must never be mistaken for a half
-// that found nothing. A test holds [topupSignals] to these two lists, so the
-// declaration cannot drift from the door.
-var topupAxes = []string{plane.SignalNano, plane.SignalCountry, plane.SignalPeer}
+// [paymentSignals] because the difference decides which halves of the risk rule can
+// fire at these doors, and a half that cannot fire must never be mistaken for a half
+// that found nothing. A test holds [paymentSignals] to these two lists, so the
+// declaration cannot drift from the doors.
+//
+// ONE LIST FOR BOTH DOORS, because both send the same body: the browser's top-up and
+// the agent's typed payment each carry a card token, an amount and a currency under
+// the SAME field names, so [paymentSignals] reads either one and the axes it can
+// state do not depend on which address was called.
+var paymentAxes = []string{plane.SignalNano, plane.SignalCountry, plane.SignalPeer}
 
-// topupUnarmed is the DEVICE axis, and the reason is a fact about the payment path
+// paymentUnarmed is the DEVICE axis, and the reason is a fact about the payment path
 // rather than a decision of this file's.
 //
-// No device fingerprint reaches this binary from a top-up. The request body is a card
-// token, an amount and a currency; the card is tokenised in the browser and its
-// number never arrives here; the browser does not run the payment SDK's
+// No device fingerprint reaches this binary from a card payment at either door. The
+// request body is a card token, an amount and a currency; the card is tokenised in the
+// browser and its number never arrives here; the browser does not run the payment SDK's
 // buyer-verification step, so there is no verification token either; and no header
-// carries a device id. There is nothing to state.
+// carries a device id. An agent calling the typed door has less still. There is nothing
+// to state.
 //
 // AND NOTHING IS INVENTED IN ITS PLACE. A user-agent string — or a digest of the
 // request's headers — is shared by millions of unrelated people, so stated as a
 // device it would put ordinary customers past the fan-out bound and summon a person
 // for every payment: the same control useless in the louder direction, and wearing
 // the name of a fingerprint while holding nothing of the kind. The axis stays unarmed
-// and says so. When a real fingerprint is collected, [topupSignals] states it in one
+// and says so. When a real fingerprint is collected, [paymentSignals] states it in one
 // line and this list loses an entry.
 //
 // The device half of the fan-out is not dead everywhere: POST /v1/risk/learn takes a
 // device from a caller that has one, so the rule is exercised where a real value
 // exists.
-var topupUnarmed = []string{plane.SignalDevice}
+var paymentUnarmed = []string{plane.SignalDevice}
 
 // scoreOverPlane asks the risk child, and translates the two vocabularies.
 //
@@ -253,12 +271,34 @@ func wakeScorer(lg log.Logger) {
 // riskGate screens one credit-door request and refuses what the scorer will not
 // have.
 //
-// WHERE IT SITS IS PART OF WHAT IT IS. It runs AFTER PinBillingSubject, which is
-// what makes the subject it judges the subject the charge will credit: that
-// middleware refuses every caller that is neither a validated customer nor the
-// trusted service token, and pins the credited subject to the caller's own. A
-// screen placed before it would judge a subject a later middleware could still
-// change, which is a control on a value rather than on an act.
+// IT GUARDS EVERY DOOR ONTO THE MINT, and there are two. commerce holds ONE card
+// money move (commerce billing.TakePayment) and this binary opens two addresses
+// onto it: the browser's POST /v1/billing/topup/token and the agent's typed
+// POST /v1/payments (payments.go). Both end in the same authorized deposit, so a
+// screen on one of them is not a control — it is a control with a second door
+// beside it, and the second door is the one an agent already holds a tool for.
+// One gate, both doors, stated at the composition root (mount.go) where each
+// address is registered.
+//
+// IT IS A MIDDLEWARE AND NOT A HANDLER, and that is what lets it reach the second
+// door at all. A typed op is registered as a CONTRACT rather than as a chain
+// (zip.Post takes the handler, not a handler list), so there is no c.Next() for a
+// screen to sit in front of — zip composes middleware around a typed op at
+// registration (zip.With). Holding its own `next` is therefore the ONE form that
+// gates both an untyped chain and a typed op; the alternative was a second
+// spelling of this decision for the typed door, which is two screens to drift.
+//
+// WHERE IT SITS IS PART OF WHAT IT IS. On the browser door it runs AFTER
+// PinBillingSubject, which is what makes the subject it judges the subject the
+// charge will credit: that middleware refuses every caller that is neither a
+// validated customer nor the trusted service token, and pins the credited subject
+// to the caller's own. A screen placed before it would judge a subject a later
+// middleware could still change, which is a control on a value rather than on an
+// act. The typed door pins nothing — it reads the validated tenant off the context
+// and names no subject a caller could send — so there is nothing there to run
+// after; what both doors share is [payerOrg] and [principal.Subject], the ONE
+// payer rule, which is why an accrual reached through either of them lands on one
+// key. See [teachSettlement].
 //
 // It refuses in TWO different sentences because they are two different facts, and
 // a customer can act on only one of them:
@@ -281,70 +321,93 @@ func wakeScorer(lg log.Logger) {
 //
 // It is never a 402. Out of funds is what a 402 means at this door and this is
 // not that — the whole point of the door is that the caller has no funds yet.
-func riskGate(lg log.Logger) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org := payerOrg(c)
-		// THE SUBJECT IS RESOLVED ONCE and used by both halves of this middleware — the
-		// screen below and the record after it. A screen that judged one subject while
-		// the record taught another would be two subjects, and the velocity of the one
-		// being judged would be empty forever however many payments settled.
-		subject := principal.Subject(c, org)
-		facts := topupSignals(c)
-		v := cloud.Decide(c.Context(), org, cloud.RiskQuery{
-			Stage: cloud.StagePayment,
-			// THE PAYER, not the account. They are different populations and this door
-			// judges the first: an account's learned history is its metered inference
-			// spend, so screening a payment as an account compares money moving IN
-			// against a distribution of money spent OUT — and the windowed value bounds
-			// the aggregate rule reads are a PAYMENTS appetite accruing on the very same
-			// key. A customer with a large inference bill was examined for it. See
-			// [plane.KindPayer].
-			Subject: cloud.RiskSubject{Kind: plane.KindPayer, ID: subject},
-			// STATED, never derived. cloud.Privileged() does not match this route
-			// and the default is fail-open, so an unset bit here is a scorer outage
-			// minting balance.
-			Privileged: true,
-			Signals:    cloud.Facts(facts),
-		})
-		// EVERY decision is recorded, including the allows — an unscored allow and a
-		// clean one are different rows, and the refusal is what tells them apart.
-		lg.Info("credit door screened",
-			"org", org, "action", v.Action, "scored", v.Scored(), "refusal", v.Refusal,
-			"cause", v.Cause, "score", v.Score, "shape", v.Shape, "policy", v.Policy)
-		if v.Allowed() {
-			if err := c.Next(); err != nil {
-				return err
+func riskGate(lg log.Logger) zip.Middleware {
+	return func(next zip.Handler) zip.Handler {
+		return func(c *zip.Ctx) error {
+			org := payerOrg(c)
+			// THE SUBJECT IS RESOLVED ONCE and used by both halves of this middleware — the
+			// screen below and the record after it. A screen that judged one subject while
+			// the record taught another would be two subjects, and the velocity of the one
+			// being judged would be empty forever however many payments settled.
+			subject := principal.Subject(c, org)
+			facts := paymentSignals(c)
+			v := cloud.Decide(c.Context(), org, cloud.RiskQuery{
+				Stage: cloud.StagePayment,
+				// THE PAYER, not the account. They are different populations and this door
+				// judges the first: an account's learned history is its metered inference
+				// spend, so screening a payment as an account compares money moving IN
+				// against a distribution of money spent OUT — and the windowed value bounds
+				// the aggregate rule reads are a PAYMENTS appetite accruing on the very same
+				// key. A customer with a large inference bill was examined for it. See
+				// [plane.KindPayer].
+				Subject: cloud.RiskSubject{Kind: plane.KindPayer, ID: subject},
+				// STATED, never derived. cloud.Privileged() does not match either of the
+				// two routes this gate holds and the default is fail-open, so an unset bit
+				// here is a scorer outage minting balance.
+				Privileged: true,
+				Signals:    cloud.Facts(facts),
+			})
+			// EVERY decision is recorded, including the allows — an unscored allow and a
+			// clean one are different rows, and the refusal is what tells them apart. The
+			// PATH is on the row because one gate now answers for two addresses, and a
+			// record that does not say which door a decision was reached at cannot be read
+			// back against the traffic that produced it.
+			lg.Info("credit door screened",
+				"door", c.Path(),
+				"org", org, "action", v.Action, "scored", v.Scored(), "refusal", v.Refusal,
+				"cause", v.Cause, "score", v.Score, "shape", v.Shape, "policy", v.Policy)
+			if v.Allowed() {
+				if err := next(c); err != nil {
+					return err
+				}
+				// AND WHAT ACTUALLY HAPPENED GOES BACK TO THE MODEL. The screen above reads
+				// history; this is the only thing in the fleet that WRITES any. It runs after
+				// the handler because a settlement is a fact about the past, and only the
+				// handler's own answer says whether there was one.
+				teachSettlement(c, lg, org, subject, facts)
+				return nil
 			}
-			// AND WHAT ACTUALLY HAPPENED GOES BACK TO THE MODEL. The screen above reads
-			// history; this is the only thing in the fleet that WRITES any. It runs after
-			// the handler because a settlement is a fact about the past, and only the
-			// handler's own answer says whether there was one.
-			teachSettlement(c, lg, org, subject, facts)
-			return nil
+			// A NO-DECISION IS A BLOCK CARRYING A REFUSAL, and both halves are the test.
+			// [cloud.riskUnavailable] is the ONLY producer of that pair — it is what the
+			// fail policy returns for a privileged grant the scorer could not answer — and
+			// a scored verdict never carries a refusal at all. So this is the whole of "the
+			// judge is here and did not answer", and nothing else reaches it.
+			//
+			// THE REFUSAL ALONE IS NOT THE TEST, because Action and Refusal became
+			// INDEPENDENT the moment the rule and the model were fused: the severest of the
+			// two stands, and the model's own refusal is carried beside it. An armed
+			// organisation whose model is still warming, on a payment the rule froze,
+			// answers {restrict, "warming"} — a DETERMINATION, reached from stated facts,
+			// with the model merely having had no opinion to add. Read off the refusal that
+			// is a 503 "try again in a moment", which invites the retry that settles the
+			// payment the rule just froze, and reports a working control as an outage.
+			if v.Action == cloud.ActionBlock && v.Refusal != "" {
+				return zip.Errorf(http.StatusServiceUnavailable,
+					"the payment screen could not answer (%s) — try again in a moment", v.Refusal)
+			}
+			// Block, challenge and restrict all land here. Neither door has a way to
+			// present a challenge and neither has a reduced ceiling to fall back to, so
+			// anything short of "proceed" is a refusal — never a quiet proceed.
+			return zip.ErrForbidden("this payment was not authorised")
 		}
-		// A NO-DECISION IS A BLOCK CARRYING A REFUSAL, and both halves are the test.
-		// [cloud.riskUnavailable] is the ONLY producer of that pair — it is what the
-		// fail policy returns for a privileged grant the scorer could not answer — and
-		// a scored verdict never carries a refusal at all. So this is the whole of "the
-		// judge is here and did not answer", and nothing else reaches it.
-		//
-		// THE REFUSAL ALONE IS NOT THE TEST, because Action and Refusal became
-		// INDEPENDENT the moment the rule and the model were fused: the severest of the
-		// two stands, and the model's own refusal is carried beside it. An armed
-		// organisation whose model is still warming, on a payment the rule froze,
-		// answers {restrict, "warming"} — a DETERMINATION, reached from stated facts,
-		// with the model merely having had no opinion to add. Read off the refusal that
-		// is a 503 "try again in a moment", which invites the retry that settles the
-		// payment the rule just froze, and reports a working control as an outage.
-		if v.Action == cloud.ActionBlock && v.Refusal != "" {
-			return zip.Errorf(http.StatusServiceUnavailable,
-				"the payment screen could not answer (%s) — try again in a moment", v.Refusal)
-		}
-		// Block, challenge and restrict all land here. This door has no way to
-		// present a challenge and no reduced ceiling to fall back to, so anything
-		// short of "proceed" is a refusal — never a quiet proceed.
-		return zip.ErrForbidden("this top-up was not authorised")
 	}
+}
+
+// screenChain is the screen in a CHAIN position, and it exists because the two doors
+// are registered two different ways — not because they are screened two different ways.
+//
+// A raw route takes a handler LIST and each handler continues with c.Next(); a typed op
+// takes no list at all and is composed at registration (zip.With). [riskGate] holds its
+// own `next` so it can serve the second form, and this hands it the first form's `next`,
+// which is the chain. One line, one decision, no second screen.
+//
+// The raw route also has to stay registered on cloud's own Router rather than on a
+// With-decorated one, and that is a zipdoc constraint rather than a routing one:
+// registering a raw money route through a resolvable wrapper makes zipdoc lift the FIRST
+// HANDLER's doc comment as the route's description, so the top-up's published prose
+// became RequireCSRF's. A gate must not be able to rewrite the document.
+func screenChain(screen zip.Middleware) zip.Handler {
+	return screen(func(c *zip.Ctx) error { return c.Next() })
 }
 
 // ── what settled ─────────────────────────────────────────────────────────────
@@ -373,7 +436,8 @@ var teach = riskpeer.RiskObserve
 // needs room to come up (plane.Ask reaches the peer and single-flights the start).
 const teachBudget = 5 * time.Second
 
-// teachSettlement tells the risk plane that a top-up SETTLED.
+// teachSettlement tells the risk plane that a card payment SETTLED, at whichever of
+// the two doors took it.
 //
 // # This is the only thing that teaches the credit door's rule anything
 //
@@ -408,7 +472,7 @@ const teachBudget = 5 * time.Second
 //	observation is inert. The id lands in the risk plane's reserved namespace, which
 //	the public learn door refuses outright.
 //
-// # Idempotent, on the settlement's own identifier
+// # Idempotent, on the settlement's own identifier — ACROSS BOTH DOORS
 //
 // Settlement is at-least-once: the door retries, a webhook replays, an event is
 // redelivered. The key is therefore the PROCESSOR's reference for the charge — the
@@ -416,6 +480,15 @@ const teachBudget = 5 * time.Second
 // path that can credit one payment — falling back to the ledger receipt only where
 // the processor stated none. Velocity that double-counted a retry would freeze a
 // customer for paying once.
+//
+// THAT IS ALSO WHAT MAKES THE TWO DOORS ONE ACCRUAL. Both doors return the SAME core's
+// answer, so a payment taken at either one carries the same gateway payment id and
+// keys the same observation: a burst split across the two accumulates on one subject
+// instead of hiding half of itself behind the address that was not screened, and one
+// payment sent to both doors converges rather than counting twice. The receipt
+// fallback converges too — it is the ledger transaction id, which each door merely
+// names differently on the wire ([settlementOf] reads both spellings) — so neither the
+// primary key nor the fallback can disagree about what "the same payment" is.
 //
 // # It can never fail the payment
 //
@@ -428,10 +501,16 @@ func teachSettlement(c *zip.Ctx, lg log.Logger, org, subject string, facts map[s
 	if org == "" || subject == "" {
 		return
 	}
-	// THE HANDLER'S OWN ANSWER IS THE SETTLEMENT FACT. A non-2xx is a top-up that did
+	// THE HANDLER'S OWN ANSWER IS THE SETTLEMENT FACT. A non-2xx is a payment that did
 	// not credit — declined, refused, or broken — and teaching from one would tell the
 	// model money moved when none did, which is a velocity bound a caller fills by
 	// sending payments that fail.
+	//
+	// THE WHOLE 2xx BAND, not one code, and that is what carries it onto the second
+	// door: the browser's top-up answers 200 and the typed payment op DECLARES 201
+	// (zip.WithStatus, payments.go), so a screen that recognised only 200 would allow
+	// the agent's payment, watch it settle, and teach nothing — the accrual silently
+	// blind on exactly the door an agent holds a tool for.
 	res := c.Fiber().Response()
 	if res.StatusCode() < 200 || res.StatusCode() > 299 {
 		return
@@ -441,16 +520,16 @@ func teachSettlement(c *zip.Ctx, lg log.Logger, org, subject string, facts map[s
 		// The door answered success and named nothing this process can key on. Say so
 		// rather than minting a key: an observation under an invented id counts the same
 		// money again on the next retry, which is worse than the one it did not record.
-		lg.Warn("a settled top-up could not be taught to the risk model: the answer named no settlement",
-			"org", org)
+		lg.Warn("a settled payment could not be taught to the risk model: the answer named no settlement",
+			"door", c.Path(), "org", org)
 		return
 	}
 	nano := facts[plane.SignalNano]
 	if nano == "" {
-		// No amount this door could state in USD ([topupSignals]). The event still
+		// No amount this door could state in USD ([paymentSignals]). The event still
 		// happened, so it is still taught — the value features read blind, which is a
 		// different and honest fact from a payment of nothing.
-		lg.Debug("teaching a settled top-up with no stated value", "org", org)
+		lg.Debug("teaching a settled payment with no stated value", "door", c.Path(), "org", org)
 	}
 	in := &plane.RiskObserveIn{
 		Stage:      cloud.StagePayment,
@@ -515,42 +594,51 @@ func teachSettlement(c *zip.Ctx, lg log.Logger, org, subject string, facts map[s
 // settlementOf reads the settlement's own identifier out of the door's answer.
 //
 // THE PROCESSOR'S REFERENCE FIRST, because it is the one identifier that is the same
-// across every path that can credit ONE payment — the synchronous door and a replayed
-// webhook both carry the gateway's payment id, while each writes its own ledger row
-// with its own receipt. Keyed on the reference, two paths crediting one payment teach
-// ONE observation; keyed on the receipt they would teach two, and the velocity bound
-// would count money that arrived once as having arrived twice.
+// across every path that can credit ONE payment — the two synchronous doors and a
+// replayed webhook all carry the gateway's payment id, while each writes its own ledger
+// row with its own receipt. Keyed on the reference, several paths crediting one payment
+// teach ONE observation; keyed on the receipt they would teach one each, and the
+// velocity bound would count money that arrived once as having arrived twice.
 //
 // The ledger receipt is the fallback and not the default: a processor that states no
 // reference still settled, and refusing to teach it would leave a real payment out of
 // the accrual. Both are minted by us or by the gateway and neither is a field the
 // paying customer can set.
 //
-// ok=false means the answer named neither, which is a door this process cannot key an
-// idempotent record on — reported by the caller rather than papered over with a
+// THE RECEIPT HAS TWO SPELLINGS AND THIS READS BOTH, because the two doors publish one
+// value under two names: commerce's core returns TakePaymentOut.TransactionID, the
+// browser door forwards that struct verbatim as `transactionId`, and the typed op
+// renames it to `id` on its own PaymentOut (payments.go) — the ledger transaction id
+// either way, which is why reading both is one identifier and not two. Reading only
+// `transactionId` would leave the typed door with no key on any settlement whose
+// processor stated no reference, and a settlement with no key is a payment that teaches
+// nothing; the two cannot collide, because neither answer carries the other's field.
+//
+// ok=false means the answer named none of them, which is a door this process cannot key
+// an idempotent record on — reported by the caller rather than papered over with a
 // generated id.
 func settlementOf(body []byte) (string, bool) {
 	var out struct {
 		ProcessorRef  string `json:"processorRef"`
 		TransactionID string `json:"transactionId"`
+		ID            string `json:"id"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		return "", false
 	}
-	if ref := strings.TrimSpace(out.ProcessorRef); ref != "" {
-		return ref, true
-	}
-	if id := strings.TrimSpace(out.TransactionID); id != "" {
-		return id, true
+	for _, id := range []string{out.ProcessorRef, out.TransactionID, out.ID} {
+		if id = strings.TrimSpace(id); id != "" {
+			return id, true
+		}
 	}
 	return "", false
 }
 
-// payerOrg is the org whose ledger this top-up will credit, and therefore the
+// payerOrg is the org whose ledger this payment will credit, and therefore the
 // organisation whose model judges it.
 //
-// The two lanes are exactly the two PinBillingSubject admits, and no others reach
-// this gate:
+// The two lanes are exactly the two PinBillingSubject admits on the browser door, and
+// no others reach this gate:
 //
 //	a validated customer — principal.Ledger, the SELECTED org that pays. It is
 //	the same key the balance read and the spend gate use.
@@ -558,8 +646,14 @@ func settlementOf(body []byte) (string, bool) {
 //	org. It carries no validated user, so there is no ledger to resolve and the
 //	org it named is the one being credited.
 //
+// The typed door admits the first lane only — it has no service-token branch, and its
+// handler resolves the same validated tenant off the context (payments.go payingOrg) —
+// so ONE resolver answers for both addresses. That is the point: an accrual is only a
+// bound if both doors key it the same way, and a second resolver written for the second
+// door would be two payers wearing one name.
+//
 // Anything else resolves to "" and the scorer refuses to mint a tenant for it, so
-// a request that reaches the credit door naming no organisation is denied by the
+// a request that reaches a credit door naming no organisation is denied by the
 // privileged branch rather than screened against nobody.
 func payerOrg(c *zip.Ctx) string {
 	if org := principal.Ledger(c); org != "" {
@@ -571,7 +665,14 @@ func payerOrg(c *zip.Ctx) string {
 	return ""
 }
 
-// topupSignals is what this gate SAW, in the scorer's own vocabulary.
+// paymentSignals is what this gate SAW, in the scorer's own vocabulary.
+//
+// ONE READER FOR BOTH DOORS, and it is the wire that makes that honest rather than
+// convenient: commerce's top-up body and the typed op's PaymentIn declare the amount and
+// the currency under the SAME field names (`amountCents`, `currency`), because both are
+// projections of one core that takes one set of values. So the facts a screen can state
+// do not depend on which address was called, and there is no second signal rule to drift
+// out of step with the first.
 //
 // The amount is the fact that matters at a credit door — value velocity is the
 // axis a stolen card moves — and it is the one signal the model reads as a
@@ -579,7 +680,7 @@ func payerOrg(c *zip.Ctx) string {
 //
 // THE COUNTRY IS THE ADDRESS'S, NOT THE PAYER'S, and that is a limitation this
 // door cannot fix from here. The jurisdiction worth judging is the account's
-// billing or KYC one, and no part of it reaches this process: the top-up body is
+// billing or KYC one, and no part of it reaches this process: the payment body is
 // a Square nonce, an amount and a currency; the card is tokenised in the browser
 // and its PAN never touches this binary, so there is no billing address to read;
 // the validated principal carries an org, a user, a name and an email and no
@@ -597,7 +698,7 @@ func payerOrg(c *zip.Ctx) string {
 // THE PEER IS THE ADDRESS, AND THAT IS WHAT ARMS THE FAN-OUT. Two of the rule's
 // four halves read aggregation AXES rather than one event's numbers, and an axis a
 // gate never states does not exist: with only ip, currency, country and nano stated,
-// the counterparty and device axes were empty on every top-up, so [risk.onFan] — the
+// the counterparty and device axes were empty on every payment, so [risk.onFan] — the
 // half that exists to see one actor behind twenty nominally unrelated accounts —
 // could not fire at this door for any input at all, and [risk.onPace] read one axis
 // where it reads three. Account farming is unremarkable from every account taken by
@@ -612,12 +713,12 @@ func payerOrg(c *zip.Ctx) string {
 // which costs the attacker something) and cannot be forged into somebody else's
 // finding.
 //
-// WHAT IT IS NOT is a fabricated device. See [topupAxes].
-// It SUPPLIES THE ARGUMENTS, and [topupFacts] is the rule — the same split
-// [cloud.ClientIP] makes over [cloud.clientAddr], for the same reason. What this
+// WHAT IT IS NOT is a fabricated device. See [paymentAxes].
+// It SUPPLIES THE ARGUMENTS, and [paymentFacts] is the rule — the same split
+// [cloud.ClientIP] makes over [cloud.clientAddr], for the same reason. What a
 // door states decides which halves of the risk rule can fire at it, and that is a
 // property worth testing without a socket, a proxy set or a request.
-func topupSignals(c *zip.Ctx) map[string]string {
+func paymentSignals(c *zip.Ctx) map[string]string {
 	var body struct {
 		AmountCents int64  `json:"amountCents"`
 		Currency    string `json:"currency"`
@@ -626,13 +727,13 @@ func topupSignals(c *zip.Ctx) map[string]string {
 	// handler behind it validates its own wire and answers 400 in its own words.
 	// Here it simply means the amount was not observed.
 	_ = json.Unmarshal(c.Body(), &body)
-	return topupFacts(cloud.ClientIP(c), cloud.ClientCountry(c), body.AmountCents, body.Currency)
+	return paymentFacts(cloud.ClientIP(c), cloud.ClientCountry(c), body.AmountCents, body.Currency)
 }
 
-// topupFacts IS the rule, as a pure function of the four facts the door observed:
+// paymentFacts IS the rule, as a pure function of the four facts the door observed:
 // the address our own edge resolved, the jurisdiction it resolved from it, and the
 // amount and currency the request asked to move.
-func topupFacts(address, country string, amountCents int64, currency string) map[string]string {
+func paymentFacts(address, country string, amountCents int64, currency string) map[string]string {
 	signals := map[string]string{
 		"ip":       address,
 		"currency": strings.ToLower(strings.TrimSpace(currency)),
