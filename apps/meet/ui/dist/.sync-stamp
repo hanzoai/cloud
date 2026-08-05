@@ -1,0 +1,6 @@
+# Provenance of this embedded Meet SPA build. See ../README.md to regenerate.
+app=@hanzo/meet (admin-meet)
+base=/meet/
+api_prefix=/v1/meet
+source=hanzoai/admin:apps/admin-meet@f5b2670f6a580b1cc994969c9aea848aaac3235c (blue/meet-ui)
+built=tsc --noEmit && vite build

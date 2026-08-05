@@ -30,7 +30,7 @@ func TestGetTokenAnswersARawTokenAsText(t *testing.T) {
 	body, _ := json.Marshal(request{RoomName: roomIn(workspaceA), ParticipantName: "Ada"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/meet/getToken", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+session(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix()))
+	req.Header.Set("Authorization", "Bearer "+workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix()))
 
 	resp, err := app.Test(req)
 	if err != nil {
