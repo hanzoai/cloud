@@ -1,4 +1,4 @@
-// Package graph is chain data: your block indexers and how far each has caught
+// Package explorer is chain data: your block indexers and how far each has caught
 // up, plus the on-chain price feeds.
 //
 // It serves them at /v1/indexers and /v1/oracles — read from the Lux chain-data
@@ -39,7 +39,7 @@
 // list (200) — the same graceful fold as visor/clusters, NOT a 502 that surfaces as a
 // console error for every org without an indexer/graph deployed. A reachable-but-empty
 // upstream likewise returns an empty list — it NEVER fabricates an indexer or oracle row.
-package graph
+package explorer
 
 import (
 	"context"
@@ -49,7 +49,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// state is graph's own data: the chain-data upstream client. The shared deps live
+// state is explorer's own data: the chain-data upstream client. The shared deps live
 // in the embedded cloud.Base — brand (s.Brand) is the chain family surfaced and env
 // (s.Env) is the network tier reported as an indexer's `network`.
 type state struct {
@@ -58,14 +58,14 @@ type state struct {
 
 // Mount wires the chain-data surface onto app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "graph", build, routes)
+	return cloud.Mount(app, deps, "explorer", build, routes)
 }
 
 // build dials the chain-data upstreams (INDEXER_URL / GRAPH_URL from env) and
 // records the informative mount line.
 func build(b cloud.Base) (state, error) {
 	st := state{cl: newClient()}
-	b.Log.Info("graph chain-data surface mounted",
+	b.Log.Info("explorer chain-data surface mounted",
 		"indexer", st.cl.indexer, "graph", st.cl.graph, "brand", b.Brand, "env", b.Env)
 	return st, nil
 }
@@ -85,18 +85,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// before any subsystem registers a route — an order only the composer can
 	// hold.
 
-	// TYPED ops. graph owns two top-level nouns rather than one prefix, so each is
+	// TYPED ops. explorer owns two top-level nouns rather than one prefix, so each is
 	// declared at its whole path on the app's registry — the identity every
 	// projection (document, MCP tool, CLI command, SDK method) keys on.
-	o := graphOps{s: s}
+	o := ops{s: s}
 	zapp := cloud.ZipApp(app)
 	zip.Get(zapp, "/v1/indexers", o.listIndexers)
 	zip.Get(zapp, "/v1/oracles", o.listOracles)
 }
 
-// graphOps is the receiver the chain-data ops hang off. A method value is the only
+// ops is the receiver the chain-data ops hang off. A method value is the only
 // bound form cmd/zipdoc can lift prose from, so ops are methods and not closures.
-type graphOps struct{ s *cloud.Service[state] }
+type ops struct{ s *cloud.Service[state] }
 
 // noInput is the input of an op the URL fully addresses.
 type noInput struct{}
@@ -141,7 +141,7 @@ type indexersOut struct {
 // reaches the indexer; when the indexer is entirely unreachable the answer degrades
 // to an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer
 // REST, so `lag` is honestly omitted rather than fabricated.
-func (o graphOps) listIndexers(ctx context.Context, _ *noInput) (*indexersOut, error) {
+func (o ops) listIndexers(ctx context.Context, _ *noInput) (*indexersOut, error) {
 	if err := gate(ctx); err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ type oraclesOut struct {
 // PriceFeed registry. A reachable graph with no feeds answers an honest empty list;
 // an unreachable or erroring graph likewise degrades to an empty list at 200 rather
 // than a 502, so the console never error-toasts. No feed is ever fabricated.
-func (o graphOps) listOracles(ctx context.Context, _ *noInput) (*oraclesOut, error) {
+func (o ops) listOracles(ctx context.Context, _ *noInput) (*oraclesOut, error) {
 	if err := gate(ctx); err != nil {
 		return nil, err
 	}
