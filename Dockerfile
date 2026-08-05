@@ -62,7 +62,7 @@
 # exactly one composer mounts per viewport. Cut as a release tag because a tag
 # build publishes its name verbatim — which console is in this image is
 # answerable from this line alone.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.50
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.53
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
