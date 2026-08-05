@@ -1,12 +1,10 @@
 package meet
 
-// Both of meet's routes are UNTYPED BY DESIGN, and this file MEASURES the reasons
-// rather than asserting them. The reasons are recorded at each registration in
-// Mount; what follows is the same two facts, driven through the real router, so
-// that:
-//
-//   - typing either route without first closing the zip gap goes RED here, and
-//   - when zip CAN express them, this is the exact ledger a conversion must keep.
+// meet's mint route is UNTYPED BY DESIGN and its health route is a typed op that
+// declares both of its statuses. This file MEASURES both answers rather than
+// asserting them: the mint refusal is recorded at its registration in Mount and
+// re-proved here, and the health test is the conversion's parity ledger — the
+// exact pair of answers the typed op must keep.
 //
 // A stale refusal is worse than none: nobody re-checks a route whose reason is
 // only prose.
@@ -53,12 +51,12 @@ func TestGetTokenAnswersARawTokenAsText(t *testing.T) {
 	}
 }
 
-// TestHealthCarriesABodyAtBOTHStatuses is refusal #2. This route answers 200 with a
-// body when meet can mint and 503 WITH THE SAME BODY when it cannot, and ready is
-// the whole dashboard fact in both. zip's WithStatus takes ONE unconditional 2xx;
-// the only way a typed op sends 503 is by returning an error, which renders as zip's
-// flat {status,code,error} — so ready:false would vanish from the degraded answer,
-// which is the one a probe actually reads. That is the multi-status gap (#78).
+// TestHealthCarriesABodyAtBOTHStatuses is the health conversion's parity proof.
+// The route answers 200 with a body when meet can mint and 503 WITH THE SAME BODY
+// when it cannot, and ready is the whole dashboard fact in both. That pair once
+// kept it raw; the typed op now declares WithStatus(200, 503) and the report's own
+// StatusCode picks between them, so the degraded answer keeps its body — and this
+// test is what goes red if a change ever drops it back to an error envelope.
 func TestHealthCarriesABodyAtBOTHStatuses(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

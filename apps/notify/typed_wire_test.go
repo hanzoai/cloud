@@ -4,32 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
-
-// untypedByDesign is the CLOSED list of notify operations that are NOT typed ops,
-// each with the wire fact that keeps it out. A typed op is a route PLUS a registry
-// entry — the one value the OpenAPI operation, the MCP tool, the CLI command and
-// the SDK method all come from — so an operation missing from that registry is
-// invisible to all four. These three are missing on purpose. Addresses are written
-// the way the DOCUMENT writes them, which is the identity every projection keys on.
-var untypedByDesign = map[string]string{
-	"POST /v1/notify/send": "ONE address, TWO 200 shapes: a send to a SINGLE recipient returns the bare " +
-		"SendResponse, a send to several returns the {items:[SendResponse]} envelope (notify.go handleSend). " +
-		"An op declares exactly one Out.",
-	"POST /v1/notify/send/sms":   "same handler, same two 200 shapes as POST /v1/notify/send.",
-	"POST /v1/notify/send/email": "same handler, same two 200 shapes as POST /v1/notify/send.",
-}
 
 func wireApp(t *testing.T) *zip.App {
 	t.Helper()
@@ -73,9 +63,11 @@ func notifyOps(t *testing.T) (served map[string]bool, typed map[string]string, s
 	return served, typed, reg.Schemas
 }
 
-// TestEveryRouteIsTypedOrNamed fails when a notify operation is neither a typed op
-// nor one of the three named above.
-func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+// TestEveryRouteIsTyped fails when a notify operation carries no typed registry
+// entry. The whole surface is typed — the send routes were the last holdouts, and
+// typing them is what lets a sibling process (IAM's OTP sender) reach them as a
+// typed zip.Call instead of hand-rolling HTTP against an undeclared shape.
+func TestEveryRouteIsTyped(t *testing.T) {
 	served, typed, _ := notifyOps(t)
 
 	var untyped []string
@@ -83,22 +75,13 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		if _, ok := typed[key]; ok {
 			continue
 		}
-		if _, named := untypedByDesign[key]; named {
-			continue
-		}
 		untyped = append(untyped, key)
 	}
 	if len(untyped) > 0 {
 		sort.Strings(untyped)
-		t.Errorf("operation(s) with no registry entry and no reason: %s\n"+
+		t.Errorf("operation(s) with no registry entry: %s\n"+
 			"A route that is not a typed op has no schema, no prose, no MCP tool, no CLI command and no SDK "+
-			"method. Convert it (zip.Get/Post/... on the group), or add it to untypedByDesign with the reason "+
-			"typing it would move the wire.", strings.Join(untyped, ", "))
-	}
-	for key := range untypedByDesign {
-		if !served[key] {
-			t.Errorf("untypedByDesign names %q, which notify no longer serves", key)
-		}
+			"method. Convert it (zip.Get/Post/... on the group).", strings.Join(untyped, ", "))
 	}
 }
 
@@ -148,57 +131,201 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 }
 
-// TestSendAnswersTwoShapes is the MEASUREMENT behind the refusal above, not an
-// assertion about it. One recipient returns a bare SendResponse object; two return
-// the {items:[…]} envelope. A typed op declares one Out, so as long as this test
-// passes the three send routes cannot be typed without moving the wire — and the
-// day zip can declare a polymorphic response, this test is the conversion's spec.
-func TestSendAnswersTwoShapes(t *testing.T) {
-	// Replace the delivery seam so nothing touches a real provider.
-	s := &service{log: luxlog.New("test")}
-	s.send = func(ctx context.Context, org, channel, provider string, to []string, subject, body string) (string, error) {
+// sendApp is the send-route harness: the same routes() the binary serves, behind
+// the cloud.Bridge the composer installs in production (a subsystem never
+// installs its own), with the delivery function replaced so nothing touches a
+// real provider.
+func sendApp(t *testing.T, send func(ctx context.Context, org, channel, provider string, to []string, subject, body string) (string, error)) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Use(cloud.Bridge())
+	routes(app, &service{log: luxlog.New("test"), send: send})
+	return app
+}
+
+// post drives one send. user simulates the SanitizeIdentity-minted X-User-Id
+// (present ONLY for a validated bearer); org simulates the minted X-Org-Id.
+func post(t *testing.T, app *zip.App, path, org, user string, body map[string]any) (int, []byte) {
+	t.Helper()
+	b, _ := json.Marshal(body)
+	rq := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(b))
+	rq.Header.Set("Content-Type", "application/json")
+	if org != "" {
+		rq.Header.Set("X-Org-Id", org)
+	}
+	if user != "" {
+		rq.Header.Set("X-User-Id", user)
+	}
+	resp, err := app.Test(rq)
+	if err != nil {
+		t.Fatalf("send %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, raw
+}
+
+// TestSendKeepsBothShapes is the conversion's parity proof: the typed op answers
+// the exact bytes the raw handler always did. One recipient returns the bare
+// {message_id,status} outcome; two return the {items:[…]} envelope. This is the
+// pair the two-shape refusal said no typed op could carry — notifyDelivery's
+// MarshalJSON carries it, so the routes are typed AND the bytes are unchanged.
+func TestSendKeepsBothShapes(t *testing.T) {
+	app := sendApp(t, func(context.Context, string, string, string, []string, string, string) (string, error) {
 		return "fake", nil
-	}
-	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
-	g := app2.Group("/v1/notify")
-	g.Post("/send", s.handleSend(""))
+	})
 
-	post := func(to []string) []byte {
-		b, _ := json.Marshal(map[string]any{"to": to, "channel": "sms", "body": "hi"})
-		rq := httptest.NewRequest(http.MethodPost, "/v1/notify/send?sync=true", bytes.NewReader(b))
-		rq.Header.Set("Content-Type", "application/json")
-		rq.Header.Set("X-Org-Id", "acme")
-		rq.Header.Set("X-User-Id", "u_acme")
-		resp, err := app2.Test(rq)
-		if err != nil {
-			t.Fatalf("send: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(resp.Body)
-			t.Fatalf("send %v: %d (%s)", to, resp.StatusCode, raw)
-		}
-		raw, _ := io.ReadAll(resp.Body)
-		return raw
+	code, raw := post(t, app, "/v1/notify/send?sync=true", "acme", "u_acme",
+		map[string]any{"to": []string{"+15550001"}, "channel": "sms", "body": "hi"})
+	if code != http.StatusOK {
+		t.Fatalf("one recipient: %d (%s)", code, raw)
 	}
-
 	var one map[string]any
-	if err := json.Unmarshal(post([]string{"+15550001"}), &one); err != nil {
+	if err := json.Unmarshal(raw, &one); err != nil {
 		t.Fatalf("one-recipient decode: %v", err)
 	}
 	if _, hasItems := one["items"]; hasItems {
-		t.Fatal("one recipient returned the items envelope — the two-shape refusal is stale, re-check it")
+		t.Fatal("one recipient returned the items envelope — the bare-outcome fold is broken")
 	}
-	if one["status"] != "sent" {
-		t.Fatalf("one recipient body = %v, want a bare SendResponse", one)
+	if one["status"] != "sent" || one["message_id"] == "" {
+		t.Fatalf("one recipient body = %v, want a bare {message_id,status} outcome", one)
 	}
 
+	code, raw = post(t, app, "/v1/notify/send?sync=true", "acme", "u_acme",
+		map[string]any{"to": []string{"+15550001", "+15550002"}, "channel": "sms", "body": "hi"})
+	if code != http.StatusOK {
+		t.Fatalf("two recipients: %d (%s)", code, raw)
+	}
 	var many map[string]any
-	if err := json.Unmarshal(post([]string{"+15550001", "+15550002"}), &many); err != nil {
+	if err := json.Unmarshal(raw, &many); err != nil {
 		t.Fatalf("two-recipient decode: %v", err)
 	}
 	items, ok := many["items"].([]any)
 	if !ok || len(items) != 2 {
-		t.Fatalf("two recipients body = %v, want {items:[…2]} — the two-shape refusal is stale", many)
+		t.Fatalf("two recipients body = %v, want {items:[…2]}", many)
+	}
+}
+
+// TestSendRefusalsKeepTheirStatuses pins every refusal the raw handler answered,
+// status for status, on the typed route.
+func TestSendRefusalsKeepTheirStatuses(t *testing.T) {
+	app := sendApp(t, func(context.Context, string, string, string, []string, string, string) (string, error) {
+		return "fake", nil
+	})
+	for _, tc := range []struct {
+		name, path, org, user string
+		body                  map[string]any
+		want                  int
+	}{
+		{"no principal", "/v1/notify/send?sync=true", "acme", "", map[string]any{"to": []string{"x"}, "channel": "sms", "body": "hi"}, http.StatusUnauthorized},
+		{"no org", "/v1/notify/send?sync=true", "", "u_acme", map[string]any{"to": []string{"x"}, "channel": "sms", "body": "hi"}, http.StatusUnauthorized},
+		{"no recipients", "/v1/notify/send?sync=true", "acme", "u_acme", map[string]any{"channel": "sms", "body": "hi"}, http.StatusBadRequest},
+		{"no channel", "/v1/notify/send?sync=true", "acme", "u_acme", map[string]any{"to": []string{"x"}, "body": "hi"}, http.StatusBadRequest},
+		{"no body or template", "/v1/notify/send?sync=true", "acme", "u_acme", map[string]any{"to": []string{"x"}, "channel": "sms"}, http.StatusBadRequest},
+		{"async refused", "/v1/notify/send", "acme", "u_acme", map[string]any{"to": []string{"x"}, "channel": "sms", "body": "hi"}, http.StatusServiceUnavailable},
+	} {
+		if code, raw := post(t, app, tc.path, tc.org, tc.user, tc.body); code != tc.want {
+			t.Errorf("%s: %d (%s), want %d", tc.name, code, raw, tc.want)
+		}
+	}
+}
+
+// TestChannelPinnedRoutesOverrideTheBody proves /send/sms and /send/email fix the
+// channel whatever the body names — the contract the per-channel routes exist for.
+func TestChannelPinnedRoutesOverrideTheBody(t *testing.T) {
+	for path, want := range map[string]string{
+		"/v1/notify/send/sms?sync=true":   "sms",
+		"/v1/notify/send/email?sync=true": "email",
+	} {
+		var got string
+		app := sendApp(t, func(_ context.Context, _, channel, _ string, _ []string, _, _ string) (string, error) {
+			got = channel
+			return "fake", nil
+		})
+		body := map[string]any{"to": []string{"x"}, "channel": "voice", "body": "hi"}
+		if want == "sms" {
+			body["channel"] = "email"
+		} else {
+			body["channel"] = "sms"
+		}
+		if code, raw := post(t, app, path, "acme", "u_acme", body); code != http.StatusOK {
+			t.Fatalf("%s: %d (%s)", path, code, raw)
+		}
+		if got != want {
+			t.Errorf("%s delivered on channel %q, want %q", path, got, want)
+		}
+	}
+}
+
+// TestTerminalFailureIsA200WithStatusFailed pins the notifyd contract IAM
+// decodes: a provider failure is a 200 whose status is failed with the reason in
+// error, never a transport error.
+func TestTerminalFailureIsA200WithStatusFailed(t *testing.T) {
+	app := sendApp(t, func(context.Context, string, string, string, []string, string, string) (string, error) {
+		return "twilio", errors.New("number unreachable")
+	})
+	code, raw := post(t, app, "/v1/notify/send?sync=true", "acme", "u_acme",
+		map[string]any{"to": []string{"+15550001"}, "channel": "sms", "body": "hi"})
+	if code != http.StatusOK {
+		t.Fatalf("terminal failure: %d (%s), want 200", code, raw)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got["status"] != "failed" || got["error"] != "number unreachable" {
+		t.Fatalf("terminal failure body = %v, want status failed with the provider's reason", got)
+	}
+}
+
+// TestSendIsCallableByName is the projection this conversion exists for: IAM's
+// OTP sender reaches these ops as a typed call BY NAME over the socket plane.
+// The call encoding computes the input's whole layout before reading a byte of
+// payload, so a map field anywhere on the input failed every such call — this
+// drives the real socket with template_vars populated to prove the raw-object
+// field crosses, and the answer is the one declared shape (no JSON fold on
+// this plane).
+func TestSendIsCallableByName(t *testing.T) {
+	// A unix socket address is capped near a hundred bytes and t.TempDir embeds
+	// the test name, so an anonymous short-named dir keeps the address legal.
+	sockDir, err := os.MkdirTemp("", "zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(sockDir) })
+	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
+
+	app := sendApp(t, func(context.Context, string, string, string, []string, string, string) (string, error) {
+		return "fake", nil
+	})
+	go func() { _ = app.Listen(zip.SocketPath("notify")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for i := 0; ; i++ {
+		if c, derr := net.Dial("unix", zip.SocketPath("notify")); derr == nil {
+			_ = c.Close()
+			break
+		}
+		if i == 200 {
+			t.Fatal("notify socket never began listening")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	conn, err := zip.Dial(zip.SocketPath("notify"))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	// A background caller states who it acts for; the callee's identity chain
+	// parks it exactly as it parks a gateway assertion.
+	ctx := zip.WithCaller(context.Background(), zip.Caller{Org: "acme", User: "u_acme"})
+	out, err := zip.Call[notifySend, notifyDelivery](ctx, conn, "v1.notify.post_send", &notifySend{
+		To: []string{"+15550001"}, Channel: "sms", Body: "hi",
+		TemplateVars: json.RawMessage(`{"code":"123456"}`), Sync: "true",
+	})
+	if err != nil {
+		t.Fatalf("call by name: %v", err)
+	}
+	if len(out.Items) != 1 || out.Items[0].Status != "sent" {
+		t.Fatalf("delivery = %+v, want one sent outcome", out)
 	}
 }

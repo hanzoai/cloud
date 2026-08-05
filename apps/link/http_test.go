@@ -22,6 +22,10 @@ const testTimeout = 60 * time.Second
 func mountLink(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// cloud.Bridge parks the validated request on the context a typed op
+	// receives; it is the composer's install — once at the root of every program
+	// — so this package does not install its own and a test app owes it.
+	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -241,6 +245,9 @@ func TestHTTPInputValidation(t *testing.T) {
 func TestRevokeStopsSessions(t *testing.T) {
 	dir := t.TempDir()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// The composer's install, owed by any test app that mounts typed subsystems
+	// (see mountLink); without it every typed op here answers 403.
+	app.Use(cloud.Bridge())
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}
 	if err := agents.Mount(app, deps); err != nil {
 		t.Fatalf("agents.Mount: %v", err)
@@ -332,6 +339,9 @@ func TestRevokeStopsSessions(t *testing.T) {
 func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
 	dir := t.TempDir()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// The composer's install, owed by any test app that mounts typed subsystems
+	// (see mountLink); without it every typed op here answers 403.
+	app.Use(cloud.Bridge())
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}
 	if err := agents.Mount(app, deps); err != nil {
 		t.Fatalf("agents.Mount: %v", err)
