@@ -21,10 +21,12 @@ import (
 	"fmt"
 
 	aimod "github.com/hanzoai/ai"
+	webtools "github.com/hanzoai/ai/agent/builtin_tool/web"
 	aictl "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	airouters "github.com/hanzoai/ai/routers"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
@@ -118,6 +120,37 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if cloud.TracerProviderInstalled() {
 		aiobject.AdoptHostTracerProvider()
 	}
+	// THE WEB, FOR EVERY RESPONSES-API AGENT.
+	//
+	// ai's builtin registry declares web_search / fetch_url / deep_research but holds
+	// no backend for the two this host serves — agent/builtin_tool/web must stay a
+	// leaf package (object imports agent, agent imports the registry), and websearch
+	// lives here in any case. This is where that seam is closed, beside the balance
+	// and tier readers, for the same reason they are here: this package links both
+	// sides and the host does not.
+	//
+	// In-process, never over api.hanzo.ai. The edge validates a CUSTOMER credential
+	// and answers 401 to a service; routing our own calls back through it is what
+	// once fail-closed every completion at 503 on a healthy pod.
+	//
+	// deep_research is deliberately NOT installed yet: apps/answer builds its Params
+	// from unexported fields and exposes no constructor, so wiring it means giving
+	// that package an entry point rather than reaching into it from here. Until then
+	// the tool reports that it is unavailable in this deployment — which is the
+	// honest answer, and specifically not an empty result, because an agent told "no
+	// results" concludes the web holds nothing and answers from memory.
+	webtools.SetSearch(func(ctx context.Context, query string, limit int) ([]webtools.SearchResult, error) {
+		hits := websearch.Search(ctx, query, "")
+		if limit > 0 && len(hits) > limit {
+			hits = hits[:limit]
+		}
+		out := make([]webtools.SearchResult, 0, len(hits))
+		for _, h := range hits {
+			out = append(out, webtools.SearchResult{Title: h.Title, URL: h.URL, Snippet: h.Content})
+		}
+		return out, nil
+	})
+
 	// THE PREPAID GATE'S COMPLETION CEILING, PER MODEL, FROM THE CATALOG.
 	//
 	// cloud's meter must bound a completion BEFORE it runs, and that bound is a
