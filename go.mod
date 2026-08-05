@@ -692,7 +692,7 @@ require (
 	github.com/hanzoai/o11y v1.5.58
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
-	github.com/hanzoai/zen v1.4.9
+	github.com/hanzoai/zen v1.4.10
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
