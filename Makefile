@@ -1,6 +1,11 @@
 # hanzoai/cloud — developer ergonomics for the unified Hanzo Cloud binary (HIP-0106).
 # Targets are intentionally minimal; deploy artifacts (compose, helm) live in deploy/ and helm/.
 
+# Bare `make` shows help. Stated explicitly because make otherwise takes the FIRST
+# target it parses, and `include mk/fleet.mk` below inserts three targets ahead of
+# help — so without this line, typing `make` would silently run the openapi weave.
+.DEFAULT_GOAL := help
+
 GO              ?= go
 
 # cloud is a STANDALONE Go module — a self-contained deploy unit (its own go.mod,
@@ -79,6 +84,13 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # The binary each app builds to. Named targets (not a loop) so make can schedule
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
+
+# ONE DOOR. mk/fleet.mk defines openapi-weave, describe-apps and surface-check, and
+# without this include they were reachable only as `make -f mk/fleet.mk <target>` —
+# a path nobody would guess and nothing in `make help` mentioned. Its own header
+# always said it was meant to be included here; it just never was, so the drift
+# gate (surface-check) sat behind a door with no handle.
+include mk/fleet.mk
 
 .PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 

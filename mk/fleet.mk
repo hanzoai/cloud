@@ -5,7 +5,12 @@
 # recipe here delegates to mk/plugin.mk, so "how an app is built" stays in
 # exactly one file no matter how many apps a command touches.
 
-ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST)))..)
+# lastword, not firstword: firstword is whichever makefile make STARTED with, so
+# running `make -f mk/fleet.mk` resolved the root correctly while `include
+# mk/fleet.mk` from the root Makefile resolved to the repo's PARENT and broke the
+# go.mk include below. lastword is this file in both cases, which is what makes the
+# header's "included at the root it changes nothing" actually true.
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 include $(ROOT)/mk/go.mk
 
 # The apps, read from the Makefiles themselves. Those sit alongside each app's
