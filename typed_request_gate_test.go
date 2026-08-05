@@ -415,6 +415,12 @@ var allowedRequestUses = map[string]string{
 		"bodyless rate post would set a rate of zero. The TENANT is resolved with principal.OrgFrom " +
 		"(tenant, in this same file), never through the request. All fail closed off the HTTP path: no " +
 		"request, no attested admin, no actor, and nothing to require a body of.",
+	"apps/link/http.go": "scope — the linked-account surface is scoped to (org, SUBJECT): every op keys " +
+		"the caller's own provider accounts and usage on the validated user id (c.User()) as well as the " +
+		"tenant, and principal.OrgFrom carries only the tenant. ONE function, which every op in the " +
+		"package asks — the SAME caller() boundary the raw handlers keyed — so both planes share one " +
+		"gate. Off the HTTP path there is no attested caller, so it refuses with exactly the 403 an " +
+		"anonymous REST call gets: fail closed, one gate, not two.",
 	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
 		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +

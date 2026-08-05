@@ -43,6 +43,7 @@
 package meet
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -192,11 +193,11 @@ func readKeys(path string) (string, string, error) {
 	return key, apiSecret, nil
 }
 
-// Both routes here are UNTYPED BY DESIGN — one answers text/plain, the other
-// answers the same body under two statuses, and each comment below says why zip
-// cannot declare that. zipdoc lifts prose from typed ops and there are none to
-// lift from, so the prose is declared beside the route table instead and reaches
-// the document, the generated SDKs and the spec-derived CLI unchanged.
+// The mint route is UNTYPED BY DESIGN — it answers the raw token as text/plain,
+// and the comment at its registration says why zip cannot declare that. zipdoc
+// lifts prose from typed ops and there is none to lift from here, so its prose is
+// declared beside the route table instead and reaches the document, the generated
+// SDKs and the spec-derived CLI unchanged.
 func init() {
 	openapi.Describe("/v1/meet/getToken", http.MethodPost,
 		"Mint a join token for one video room",
@@ -216,16 +217,6 @@ func init() {
 			"An unconfigured deployment answers 503 under its own name rather than 404, and "+
 			"the refusal states only that the office is unconfigured — the reason names key "+
 			"material and stays in the boot log.")
-	openapi.Describe("/v1/meet/health", http.MethodGet,
-		"Whether the office can mint join tokens",
-		"Reports whether this deployment holds the LiveKit key pair it needs. `ready:true` "+
-			"with 200 when tokens can be minted; the SAME body with `ready:false`, "+
-			"`status:\"degraded\"` and 503 when they cannot, so a probe and a dashboard "+
-			"both read the degraded state instead of someone grepping a boot log.\n\n"+
-			"It takes no credential and is reachable on every public host, so it withholds "+
-			"both the reason and the signing key's name on purpose: `ready` is the whole "+
-			"dashboard fact, and the reason — which names the key file and the Secret — is "+
-			"written to the boot log where an operator already is.")
 }
 
 // Mount wires /v1/meet/* onto app. The route is registered even when unconfigured so
@@ -259,21 +250,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// contract every other subsystem exposes, so the existing probe/alerting surface
 	// picks it up with no new machinery.
 	//
-	// It carries ready:false and NOT the reason. This route takes no credential and is
-	// reachable on five public hosts, so it is not an operator surface — a health path
-	// under /v1/* is only as private as the edge in front of it, and this edge makes it
-	// public. ready:false is the whole dashboard fact; the reason, which names the key
-	// file and the Secret, stays in the boot log where the operator already is. Same
-	// posture as the getToken 503 (see health, below) — one file, one answer.
-	//
-	// UNTYPED BY DESIGN — this route answers 200 with a body when meet can mint and
-	// 503 WITH THE SAME BODY when it cannot, and that pair is exactly what zip cannot
-	// declare. WithStatus takes ONE unconditional 2xx; the only way a typed op sends
-	// 503 is by returning an error, and an error is rendered as zip's flat
-	// {status,code,error} — so ready:false, the whole dashboard fact, would vanish
-	// from the degraded answer. This is the multi-status gap (#78); the route
-	// converts when that lands.
-	app.Get("/v1/meet/health", cloud.Handle(s, health))
+	// A TYPED op, declaring BOTH statuses it answers with: the report's own
+	// StatusCode picks 200 or 503, so the degraded answer keeps carrying the same
+	// body the healthy one does — the pair that once kept this route raw, before
+	// zip could declare a non-2xx with a typed body.
+	reg := cloud.ZipApp(app)
+	if reg == nil {
+		return fmt.Errorf("meet.Mount: router carries no typed-op registry")
+	}
+	zip.Get(reg, "/v1/meet/health", ops{s}.health,
+		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
 	if !s.State.ready() {
 		// ERROR, not warn, and it names the file/Secret to fix. A subsystem that can
@@ -291,24 +277,57 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// health reports whether meet can mint, and when it cannot, why. 503 + ready:false so
-// the degraded state is legible to a probe and to a dashboard, not just to whoever
-// greps the boot log.
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	res := map[string]any{"service": "meet", "status": "ok"}
-	if !s.State.ready() {
-		// ready:false IS the dashboard fact, and it is all a probe needs. The REASON —
-		// which names the key-file path and the Secret — stays in the boot log, because
-		// this endpoint takes no credential and is reachable on five public hosts. The
-		// api key is withheld for the same reason; it is not secret, but an unauthed
-		// caller has no business enumerating which key pair this binary signs with.
-		// (Leaking it here while deliberately keeping it out of the getToken 503 would
-		// have been two postures in one file.)
-		res["status"], res["ready"] = "degraded", false
-		return c.JSON(http.StatusServiceUnavailable, res)
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// ops binds the mounted Service so a typed op can be a method value — the only
+// bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query. GET carries no request body, so this publishes nothing.
+type noIn struct{}
+
+// meetHealth is the probe's answer, the SAME shape at 200 and at 503 — ready is
+// the whole dashboard fact, and the field order is the byte order the map it replaced
+// marshaled (keys sorted).
+type meetHealth struct {
+	// Ready reports whether this deployment can mint join tokens. False is the 503.
+	Ready bool `json:"ready"`
+	// Service names the subsystem answering — always "meet".
+	Service string `json:"service"`
+	// Status is "ok" when tokens can be minted and "degraded" when they cannot.
+	Status string `json:"status"`
+}
+
+// StatusCode is how the answer states which of the op's two declared statuses it
+// carries: ready picks 200, degraded picks 503.
+func (h *meetHealth) StatusCode() int {
+	if h.Ready {
+		return http.StatusOK
 	}
-	res["ready"] = true
-	return c.JSON(http.StatusOK, res)
+	return http.StatusServiceUnavailable
+}
+
+// Health reports whether the office can mint join tokens.
+//
+// It reports whether this deployment holds the LiveKit key pair it needs:
+// ready:true with 200 when tokens can be minted, the SAME body with ready:false,
+// status "degraded" and 503 when they cannot — so a probe and a dashboard both
+// read the degraded state instead of someone grepping a boot log.
+//
+// It takes no credential and is reachable on every public host, so it withholds
+// both the reason and the signing key's name on purpose: ready is the whole
+// dashboard fact, and the reason — which names the key file and the Secret — is
+// written to the boot log where an operator already is.
+func (o ops) health(context.Context, *noIn) (*meetHealth, error) {
+	if !o.s.State.ready() {
+		return &meetHealth{Ready: false, Service: "meet", Status: "degraded"}, nil
+	}
+	return &meetHealth{Ready: true, Service: "meet", Status: "ok"}, nil
 }
 
 // request is the office client's wire. `_id` is the SPA's person ref — accepted because
