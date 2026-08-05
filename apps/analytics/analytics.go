@@ -130,6 +130,9 @@ func build(b cloud.Base) (state, error) {
 	// currentKeyResolver prefers it.
 	SetFallbackKeyResolver(planeKeys{})
 	startSink(b.Log)
+	// The event door for a peer in another process, published beside the HTTP
+	// doors and reaching the same write core — see event_rpc.go.
+	exposeCapture()
 	return state{}, nil
 }
 
