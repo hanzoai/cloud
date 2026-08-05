@@ -285,10 +285,24 @@ func TestSSEFrameOrderingInvariant(t *testing.T) {
 // arriving as separate model deltas is delivered as one frame, so a reader never
 // watches `[Rich Hickey](htt` appear and rewrite itself.
 func TestSSEMarkdownLinkNeverSplits(t *testing.T) {
-	noNetworkSearch(t)
+	// A REAL source, so the citation check keeps the link and the joiner is what
+	// this test measures. (TestCiteKeepsGroundedLinksAndFlattensTheRest owns the
+	// other case: a link to a page this request never fetched.)
+	searchStub(t, map[string][]string{"who created clojure and why": {"https://clojure.org/about"}})
 	fakeCrawl(t, nil)
 	e := newEngine(&streamAI{loopAI: loopAI{answer: "Made by [Rich Hickey](https://clojure.org/about) in 2007."}})
 	evs, wire := frames(t, e, baseParams(modes["search"]))
+
+	var whole string
+	for _, ev := range evs {
+		if ev["type"] == "text" {
+			d, _ := ev["delta"].(string)
+			whole += d
+		}
+	}
+	if whole != "Made by [Rich Hickey](https://clojure.org/about) in 2007." {
+		t.Fatalf("a grounded citation must survive the stream intact, got %q\n%s", whole, wire)
+	}
 
 	for i, ev := range evs {
 		if ev["type"] != "text" {

@@ -31,12 +31,18 @@ const maxAnswerChunk = 200
 // honest answer + a done frame (and is not billed), a down crawl degrades to
 // snippets — so the client ALWAYS gets a terminal frame. The union's `error`
 // variant is the CLIENT's (a transport failure it observes), never the server's.
+// alive reports whether the client is still receiving. It is the loop's only
+// window onto the socket: one research answer costs five minutes, three dozen page
+// fetches and up to eight completions, and without this a browser tab closed a
+// second in buys all of it. A sink with no socket (the JSON reply, a test) is
+// always alive.
 type Sink interface {
 	status(stage, detail string)
 	sources(s []Source)
 	text(delta string)
 	followUps(qs []string)
 	done(answer string, s []Source)
+	alive() bool
 }
 
 // ── SSE sink ─────────────────────────────────────────────────────────────────
@@ -44,7 +50,13 @@ type Sink interface {
 // sseSink writes each event as an SSE frame (`data: <json>\n\n`) and flushes, so
 // the browser/SDK renders sources, progress, and the answer as they arrive. The
 // JSON self-describes via `type`, so a data-only SSE reader needs no `event:` line.
-type sseSink struct{ w *bufio.Writer }
+type sseSink struct {
+	w *bufio.Writer
+	// gone latches on the first failed write: the reader hung up, and every frame
+	// after it is work done for nobody. A stream cannot un-disconnect, so once set
+	// it stays set.
+	gone bool
+}
 
 func (s *sseSink) frame(v any) {
 	b, err := json.Marshal(v)
@@ -52,10 +64,15 @@ func (s *sseSink) frame(v any) {
 		return
 	}
 	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", b); err != nil {
+		s.gone = true
 		return
 	}
-	_ = s.w.Flush()
+	if err := s.w.Flush(); err != nil {
+		s.gone = true
+	}
 }
+
+func (s *sseSink) alive() bool { return !s.gone }
 
 func (s *sseSink) status(stage, detail string) {
 	e := map[string]any{"type": "status", "stage": stage}
@@ -94,6 +111,7 @@ func (b *bufferSink) status(string, string) {}
 func (b *bufferSink) sources(s []Source)    { b.srcs = s }
 func (b *bufferSink) text(string)           {}
 func (b *bufferSink) followUps(qs []string) { b.follow = qs }
+func (b *bufferSink) alive() bool           { return true }
 func (b *bufferSink) done(answer string, s []Source) {
 	b.answer = answer
 	if s != nil {
@@ -173,12 +191,18 @@ const joinWindow = 512
 // From the first `[` the text is held until the closing `)` (or joinWindow) and
 // released in one piece.
 //
+// Holding a link whole is also what lets the stream apply the SAME citation check
+// the finished answer gets (cite): a link split across two frames could not be
+// checked at all, and the streamed text would keep a citation the `done` frame
+// drops. allow is the gathered source set; a nil allow flattens every link.
+//
 // It is a DELIVERY property only: every consumer accumulates answer+delta, so the
 // finished text is identical either way. It wraps the synthesis emit and nothing
 // else — status, sources and follow-ups are not prose and must never be held.
 type joiner struct {
-	buf  strings.Builder
-	emit func(string)
+	buf   strings.Builder
+	emit  func(string)
+	allow map[string]bool
 }
 
 func (j *joiner) write(delta string) {
@@ -197,51 +221,71 @@ func (j *joiner) write(delta string) {
 		case i > 0: // release what precedes the link, keep the link open
 			j.release(s[:i], s[i:])
 		default: // the buffer starts at '['
-			k := strings.IndexByte(s, ')')
+			k := linkEnd(s)
 			if k < 0 {
 				if len([]rune(s)) >= joinWindow {
 					j.release(s, "")
 				}
 				return
 			}
-			j.release(s[:k+1], s[k+1:])
+			j.release(s[:k], s[k:])
 		}
 	}
 }
 
-// release emits out and leaves keep buffered.
+// linkEnd returns the index just past the markdown link at s[0]=='[', or -1 while
+// the link is still arriving.
+//
+// Parentheses inside the target are BALANCED: `[Clojure](…/Clojure_(programming_
+// language))` is one link, and stopping at the first `)` would split the very
+// citations a research answer leans on hardest. A `[` that turns out not to open a
+// link is released as soon as that is known, so ordinary prose is never held.
+func linkEnd(s string) int {
+	close := strings.IndexByte(s, ']')
+	if close < 0 {
+		return -1 // still inside the link text
+	}
+	if close+1 >= len(s) {
+		return -1 // cannot yet tell whether a target follows
+	}
+	if s[close+1] != '(' {
+		return close + 1 // `[not a link]` — release it
+	}
+	depth := 0
+	for i := close + 1; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth--; depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return -1
+}
+
+// release emits out — with its citations checked — and leaves keep buffered.
 func (j *joiner) release(out, keep string) {
 	j.buf.Reset()
 	j.buf.WriteString(keep)
-	if out != "" {
+	if out = cite(out, j.allow); out != "" {
 		j.emit(out)
 	}
 }
 
 // flush releases whatever is still held — the answer ended mid-link, or ended
-// inside a bracket that was never a link at all.
+// inside a bracket that was never a link at all. It goes out through release, so
+// the last frame is checked exactly like every frame before it.
 func (j *joiner) flush() {
 	if s := j.buf.String(); s != "" {
-		j.buf.Reset()
-		j.emit(s)
+		j.release(s, "")
 	}
 }
 
 // reset drops the buffer without emitting: the completion it belonged to was
 // discarded, so its half-frame must not leak into the next model's stream.
 func (j *joiner) reset() { j.buf.Reset() }
-
-// sourcesBlock renders the numbered grounding context the model synthesizes over.
-func sourcesBlock(src []Source) string {
-	if len(src) == 0 {
-		return "(no web sources were found — answer from general knowledge and say so)"
-	}
-	var b strings.Builder
-	for i, s := range src {
-		fmt.Fprintf(&b, "[%d] %s\n%s\n%s\n\n", i+1, s.Title, s.URL, s.Snippet)
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
 
 func nonNilSrc(s []Source) []Source {
 	if s == nil {
