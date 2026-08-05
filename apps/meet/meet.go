@@ -301,6 +301,11 @@ func init() {
 	// /v1/meet/health declares no prose here: it is a TYPED op now (see Mount), and
 	// zipdoc lifts its summary and description from the op itself. Describing it in
 	// both places is the drift this file already paid for once.
+
+	// The call client's two addresses. Bound with All(), so they publish every
+	// method the generator knows and none of them can lift prose from a handler —
+	// a static bundle has no typed op. The ONE helper every embedded SPA uses.
+	openapi.DescribeSPA("/meet", "call client")
 }
 
 // Mount wires /v1/meet/* onto app. The route is registered even when unconfigured so
