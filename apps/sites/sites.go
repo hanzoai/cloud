@@ -611,16 +611,30 @@ func (s *Server) streamSite(c *zip.Ctx, cli *s3.Client, site Site) error {
 // candidates returns the ordered object keys to try for a cleaned request path.
 // resolveKey never yields a trailing slash (path.Clean strips it), so a directory
 // request and an extension-less path are the same case: try the exact key, then
-// its index.html child.
-//   - ""            → index.html                    (site root)
-//   - "assets/a.js" → assets/a.js                    (a file with an extension)
-//   - "docs"        → docs, then docs/index.html     (file, else directory index)
+// the two ways a static export can spell that page.
+//   - ""            → index.html                                 (site root)
+//   - "assets/a.js" → assets/a.js                                 (a file with an extension)
+//   - "docs"        → docs, docs.html, then docs/index.html
+//
+// `rel + ".html"` is the one that makes Next.js hostable here. `output: export`
+// without `trailingSlash` writes a route as the FLAT file `docs.html`, not as
+// `docs/index.html` — so before this, a Next export served its homepage and 404'd
+// every other route. Measured on the hanzo.ai export (759 pages): `/` and
+// `/pricing.html` were 200 while `/pricing`, `/zen` and `/zen/models` were all
+// 404, which is the shape of a site that looks deployed and is unusable.
+//
+// Both spellings are tried because both are legitimate: `trailingSlash: true`,
+// Hugo, Jekyll and Vite's MPA output emit the directory-index form, and Next's
+// default emits the flat form. Fixing this by setting `trailingSlash` in every
+// repo would push a server limitation onto each site and change every canonical
+// URL to do it; one extra candidate here costs a single HEAD miss on the paths
+// that use the other convention.
 func (s *Server) candidates(rel string) []string {
 	switch {
 	case rel == "":
 		return []string{"index.html"}
 	case path.Ext(rel) == "":
-		return []string{rel, rel + "/index.html"}
+		return []string{rel, rel + ".html", rel + "/index.html"}
 	default:
 		return []string{rel}
 	}
