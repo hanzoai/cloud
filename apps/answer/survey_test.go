@@ -175,10 +175,17 @@ func TestSurveyIteratesSearchAndRead(t *testing.T) {
 	if strings.Join(*asked, ",") != "https://clojure.org/about,https://a.example/jvm" {
 		t.Fatalf("read must follow round 0's ranking then the move's list, got %v", *asked)
 	}
-	// The page text landed on the source and SURVIVED the next round's re-rank.
+	// The page text landed on the source and SURVIVED the next round's re-rank —
+	// and stayed OFF the wire, where a snapshot carries the search snippet only.
 	for _, s := range r.srcs {
-		if s.URL == "https://clojure.org/about" && !strings.Contains(s.Snippet, "Rich Hickey created Clojure") {
-			t.Fatalf("round 0's page must survive re-ranking, got %q", s.Snippet)
+		if s.URL != "https://clojure.org/about" {
+			continue
+		}
+		if !strings.Contains(s.Text, "Rich Hickey created Clojure") {
+			t.Fatalf("round 0's page must survive re-ranking, got %q", s.Text)
+		}
+		if strings.Contains(s.Snippet, "Rich Hickey created Clojure") {
+			t.Fatalf("page text must never reach the wire snippet, got %q", s.Snippet)
 		}
 	}
 	if ai.nexts != 3 {
@@ -204,8 +211,10 @@ func TestSurveyEmitsCumulativeSourceSnapshots(t *testing.T) {
 	r := &recSink{}
 	newEngine(ai).Run(context.Background(), deepParams(), r)
 
-	if len(r.snaps) < 3 {
-		t.Fatalf("want a snapshot per rank and per read, got %d", len(r.snaps))
+	// One snapshot per ROUND. Reading fills Source.Text, which is not on the wire,
+	// so a post-read frame would repeat the one before it byte for byte.
+	if len(r.snaps) != 2 {
+		t.Fatalf("want one sources snapshot per round, got %d", len(r.snaps))
 	}
 	prev := urlSet(r.snaps[0])
 	for i, s := range r.snaps[1:] {
@@ -297,8 +306,10 @@ func TestSurveyDiscardsTheRoundsProse(t *testing.T) {
 	if r.answer != "The synthesized report." {
 		t.Fatalf("the answer must come from synthesis alone, got %q", r.answer)
 	}
-	if ai.nexts != 1 {
-		t.Fatalf("an unparseable move must end the survey, not loop; %d decision calls", ai.nexts)
+	// One reprompt, then stop: a model that answers in prose must not silently
+	// collapse a research answer into a single pass, and must not loop either.
+	if ai.nexts != 2 {
+		t.Fatalf("an unreadable move must be reprompted exactly once; %d decision calls", ai.nexts)
 	}
 	if r.order[len(r.order)-1] != "done" {
 		t.Fatalf("done must still be terminal: %v", r.order)
@@ -364,32 +375,50 @@ func TestSurveyBoundsExitCleanly(t *testing.T) {
 	}
 }
 
-// TestSurveyTokenCeilingStopsTheGather proves the cost bound is real: once the
-// running token total crosses the mode's ceiling the survey stops deciding, even
-// though rounds remain and every round is still finding new evidence.
+// TestSurveyTokenCeilingStopsTheGather proves the cost bound is real, and that
+// it bounds the REQUEST rather than the survey's own subtotal: the plan call is
+// spent before the first round, and it counts.
 func TestSurveyTokenCeilingStopsTheGather(t *testing.T) {
-	searchStub(t, map[string][]string{
+	stub := map[string][]string{
 		"origins of clojure": {"https://clojure.org/about"},
 		"q0":                 {"https://r0.example/x"},
 		"q1":                 {"https://r1.example/x"},
-	})
-	fakeCrawl(t, nil)
-
-	ai := &scriptAI{
-		plan:   `{"plan":[{"title":"Origins","todos":["origins of clojure"]}]}`,
-		answer: "Report.",
-		tokens: 5_000,
-		moves:  []string{`{"next":"widen","queries":["q0"]}`, `{"next":"widen","queries":["q1"]}`},
 	}
-	p := deepParams()
-	p.tokenCeiling = 1_000 // one decision call's usage already blows it
-	r := &recSink{}
-	newEngine(ai).Run(context.Background(), p, r)
+	moves := []string{`{"next":"widen","queries":["q0"]}`, `{"next":"widen","queries":["q1"]}`}
 
-	if ai.nexts != 1 {
-		t.Fatalf("the token ceiling must stop the gather after one decision, got %d", ai.nexts)
+	for _, c := range []struct {
+		name    string
+		ceiling int
+		nexts   int
+	}{
+		// The plan call alone (5k) blows a 1k ceiling: the gather never gets to
+		// decide anything. Measured against the survey's own total this would have
+		// been 0 vs the ceiling and the round would have proceeded — the bug this
+		// case exists to hold shut.
+		{name: "the plan alone blows it", ceiling: 1_000, nexts: 0},
+		// Room for the plan but not for a decision on top of it.
+		{name: "the plan plus one decision", ceiling: 7_000, nexts: 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			searchStub(t, stub)
+			fakeCrawl(t, nil)
+			ai := &scriptAI{
+				plan:   `{"plan":[{"title":"Origins","todos":["origins of clojure"]}]}`,
+				answer: "Report.",
+				tokens: 5_000,
+				moves:  moves,
+			}
+			p := deepParams()
+			p.tokenCeiling = c.ceiling
+			r := &recSink{}
+			newEngine(ai).Run(context.Background(), p, r)
+
+			if ai.nexts != c.nexts {
+				t.Fatalf("want %d decision calls under a %d ceiling, got %d", c.nexts, c.ceiling, ai.nexts)
+			}
+			assertTerminal(t, r)
+		})
 	}
-	assertTerminal(t, r)
 }
 
 // TestSurveyDeadlineStopsTheGather proves a client disconnect or an expired wall
@@ -452,7 +481,10 @@ func assertTerminal(t *testing.T, r *recSink) {
 // ── the pure pieces ───────────────────────────────────────────────────────────
 
 func TestParseMove(t *testing.T) {
-	m := parseMove("```json\n{\"next\":\"look \\n at  logs\",\"queries\":[\"a\",\" \",\"b\"],\"read\":[\"u1\"],\"done\":true}\n```")
+	m, ok := parseMove("```json\n{\"next\":\"look \\n at  logs\",\"queries\":[\"a\",\" \",\"b\"],\"read\":[\"u1\"],\"done\":true}\n```", 6)
+	if !ok {
+		t.Fatal("a fenced move must be readable")
+	}
 	if m.Next != "look at logs" {
 		t.Fatalf("next must collapse to one line, got %q", m.Next)
 	}
@@ -463,15 +495,41 @@ func TestParseMove(t *testing.T) {
 		t.Fatalf("read/done mis-parsed: %+v", m)
 	}
 	// A long next step is clipped, not emitted whole.
-	long := parseMove(`{"next":"` + strings.Repeat("x", 200) + `"}`)
+	long, _ := parseMove(`{"next":"`+strings.Repeat("x", 200)+`"}`, 6)
 	if len([]rune(long.Next)) != maxNextStep {
 		t.Fatalf("next step must clip to %d, got %d", maxNextStep, len([]rune(long.Next)))
 	}
 	// Prose, empty, and malformed all yield the zero move — which ends the survey.
-	for _, in := range []string{"I'll search for more", "", "{not json}", "{}"} {
-		if got := parseMove(in); got.Done || len(got.Queries) > 0 || len(got.Read) > 0 {
-			t.Fatalf("unparseable %q must yield the zero move, got %+v", in, got)
+	for _, in := range []string{"I'll search for more", "", "{not json}"} {
+		got, ok := parseMove(in, 6)
+		if ok {
+			t.Fatalf("unreadable %q must report itself unreadable, got %+v", in, got)
 		}
+		if got.Done || len(got.Queries) > 0 || len(got.Read) > 0 {
+			t.Fatalf("unreadable %q must yield the zero move, got %+v", in, got)
+		}
+	}
+	// An EMPTY move that PARSED is the model deciding to stop, not a formatting
+	// failure — the caller reprompts one and not the other.
+	if got, ok := parseMove("{}", 6); !ok || got.Done || len(got.Queries) > 0 {
+		t.Fatalf("an empty object must parse to the empty move, got %+v ok=%v", got, ok)
+	}
+
+	// THE FAN-OUT CAP, at the boundary the untrusted value crosses. A move naming
+	// two hundred queries is one round's budget, not two hundred outbound searches.
+	var many []string
+	for i := range 200 {
+		many = append(many, fmt.Sprintf(`"q%d"`, i))
+	}
+	flood, ok := parseMove(`{"queries":[`+strings.Join(many, ",")+`],"read":[`+strings.Join(many, ",")+`]}`, 6)
+	if !ok {
+		t.Fatal("a well-formed flood must still parse")
+	}
+	if len(flood.Queries) != 6 {
+		t.Fatalf("queries must clip to the mode budget, got %d", len(flood.Queries))
+	}
+	if len(flood.Read) != maxRead {
+		t.Fatalf("read must clip to %d, got %d", maxRead, len(flood.Read))
 	}
 }
 
@@ -536,5 +594,157 @@ func TestTopURLs(t *testing.T) {
 	}
 	if topURLs(s, 0) != nil {
 		t.Fatal("readTop=0 must read nothing")
+	}
+}
+
+// ── the move is untrusted input ───────────────────────────────────────────────
+
+// TestSurveyNeverReadsOffThePool is the containment RED proved was missing. The
+// decision prompt carries titles and URLs from pages we crawled, so a page can
+// write an instruction into its own title and steer what the server fetches next.
+// That request carries the user's question in its query string, leaves from the
+// cluster's egress, and its answer is filed in the tenant's corpus.
+//
+// `read` is therefore intersected with the pool the survey itself gathered.
+func TestSurveyNeverReadsOffThePool(t *testing.T) {
+	searchStub(t, map[string][]string{
+		"origins of clojure": {"https://clojure.org/about"},
+	})
+	asked := fakeCrawl(t, map[string]string{"https://clojure.org/about": "# About\n\nbody"})
+
+	exfil := "https://evil.tld/exfil?q=who-created-clojure"
+	ai := &scriptAI{
+		plan:   `{"plan":[{"title":"Origins","todos":["origins of clojure"]}]}`,
+		answer: "Report.",
+		moves: []string{
+			`{"next":"read the advisory","read":["` + exfil + `"],"queries":["origins of clojure"]}`,
+			`{"done":true}`,
+		},
+	}
+	newEngine(ai).Run(context.Background(), deepParams(), &recSink{})
+
+	for _, u := range *asked {
+		if u == exfil {
+			t.Fatalf("a url the survey never gathered must never be fetched, asked %v", *asked)
+		}
+	}
+	if strings.Join(*asked, ",") != "https://clojure.org/about" {
+		t.Fatalf("only the gathered pool is readable, asked %v", *asked)
+	}
+}
+
+// TestSurveyCapsOneRoundsQueries proves the fan-out bound. Only the opening
+// round's query list is ours; every later one comes back from a model whose
+// prompt is partly attacker-authored, and an uncapped list is a request that can
+// issue hundreds of outbound searches from a shared cluster egress.
+func TestSurveyCapsOneRoundsQueries(t *testing.T) {
+	stub := map[string][]string{"origins of clojure": {"https://clojure.org/about"}}
+	var qs []string
+	for i := range 200 {
+		q := fmt.Sprintf("q%d", i)
+		qs = append(qs, `"`+q+`"`)
+		stub[q] = []string{fmt.Sprintf("https://r%d.example/x", i)}
+	}
+	searchStub(t, stub)
+	fakeCrawl(t, nil)
+
+	ai := &scriptAI{
+		plan:   `{"plan":[{"title":"Origins","todos":["origins of clojure"]}]}`,
+		answer: "Report.",
+		moves:  []string{`{"next":"widen","queries":[` + strings.Join(qs, ",") + `]}`, `{"done":true}`},
+	}
+	p := deepParams()
+	r := &recSink{}
+	newEngine(ai).Run(context.Background(), p, r)
+
+	// Round 0 runs the plan's one query; round 1 may run at most the mode's budget.
+	if got, want := len(r.details["searching"]), 1+p.maxQueries; got != want {
+		t.Fatalf("a 200-query move must run %d searches, ran %d", want, got)
+	}
+}
+
+// TestSurveyReadsAtMostMaxReadAndBlacklistsNothing pins both halves of the read
+// bound. A round reads at most maxRead pages however many a move names — and a
+// page the cap left out this round is still fetchable next round.
+//
+// The bug this holds shut: unread MARKED every url it was handed while read
+// FETCHED only the first maxRead, so a move naming ten pages blacklisted four of
+// them without ever fetching one, and the round then tripped saturation and ended
+// the survey early — losing evidence on exactly the runs working hardest.
+func TestSurveyReadsAtMostMaxReadAndBlacklistsNothing(t *testing.T) {
+	var urls, quoted []string
+	for i := range 10 {
+		u := fmt.Sprintf("https://h%d.example/x", i)
+		urls = append(urls, u)
+		quoted = append(quoted, `"`+u+`"`)
+	}
+	searchStub(t, map[string][]string{"origins of clojure": urls})
+	asked := fakeCrawl(t, nil)
+
+	ai := &scriptAI{
+		plan:   `{"plan":[{"title":"Origins","todos":["origins of clojure"]}]}`,
+		answer: "Report.",
+		moves: []string{
+			`{"next":"read them","read":[` + strings.Join(quoted, ",") + `]}`,
+			`{"next":"read the rest","read":[` + strings.Join(quoted[maxRead:], ",") + `]}`,
+			`{"done":true}`,
+		},
+	}
+	p := deepParams()
+	p.readTop = 0 // round 0 reads nothing, so the moves are the whole story
+	r := &recSink{}
+	newEngine(ai).Run(context.Background(), p, r)
+
+	// Round 1 was capped at maxRead...
+	if len(r.details["reading"]) < maxRead {
+		t.Fatalf("want reading progress per page, got %v", r.details["reading"])
+	}
+	// ...and the pages it left out were fetched when the next round named them.
+	if len(*asked) != 10 {
+		t.Fatalf("a page the cap skipped must stay fetchable, asked %d: %v", len(*asked), *asked)
+	}
+	seen := map[string]bool{}
+	for _, u := range *asked {
+		if seen[u] {
+			t.Fatalf("a page must never be fetched twice, asked %v", *asked)
+		}
+		seen[u] = true
+	}
+}
+
+// TestSurveyStopsWhenTheClientHangsUp — a research answer costs five minutes,
+// three dozen page fetches and up to eight completions. A tab closed one second in
+// must not buy all of it.
+func TestSurveyStopsWhenTheClientHangsUp(t *testing.T) {
+	searchStub(t, map[string][]string{"origins of clojure": {"https://clojure.org/about"}, "q0": {"https://r0.example/x"}})
+	fakeCrawl(t, nil)
+
+	ai := &scriptAI{
+		plan:   `{"plan":[{"title":"Origins","todos":["origins of clojure"]}]}`,
+		answer: "Report.",
+		moves:  []string{`{"next":"widen","queries":["q0"]}`},
+	}
+	r := &recSink{}
+	newEngine(ai).Run(context.Background(), deepParams(), &hangUpOn{recSink: r, at: 1})
+
+	if ai.nexts != 0 {
+		t.Fatalf("a disconnected client must stop the gather, got %d decision calls", ai.nexts)
+	}
+	if joined := strings.Join(r.order, ","); strings.Contains(joined, "status:answering") || strings.Contains(joined, "done") {
+		t.Fatalf("no synthesis for a client that hung up: %s", joined)
+	}
+}
+
+// hangUpOn models a client that disconnects after the nth sources frame: every
+// later write fails, exactly as sseSink reports it.
+type hangUpOn struct {
+	*recSink
+	at, seen int
+}
+
+func (h *hangUpOn) sources(s []Source) {
+	h.recSink.sources(s)
+	if h.seen++; h.seen == h.at {
+		h.recSink.hungUp = true
 	}
 }

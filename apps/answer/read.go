@@ -3,12 +3,13 @@ package answer
 // read.go — the READ stage: the loop's fourth stage, between rank and synthesize.
 // Search gives a ~600-char snippet; a research-grade answer needs the PAGE. read()
 // fetches the top sources through the ONE crawl (clients/crawl, in this binary) and
-// replaces each Source's Snippet with the fetched markdown.
+// fills each Source's Text with the fetched markdown.
 //
-// It enriches, it never re-identifies: URL/Title/Engine/Favicon are untouched, so
-// the `sources` frame the client already rendered stays valid. It is also STRICTLY
-// best-effort — a dead crawl service, a timeout, or an empty page degrades the
-// answer back to the search snippet and never breaks the stream.
+// It fills ONE field. URL/Title/Snippet/Engine/Favicon are untouched, so the
+// `sources` frame the client already rendered stays valid and the page text —
+// unbounded markup from a host we do not control — never reaches the wire. It is
+// also STRICTLY best-effort: a dead crawl service, a timeout, or an empty page
+// leaves Text empty and the answer grounds on the search snippet instead.
 
 import (
 	"context"
@@ -44,9 +45,9 @@ type Page struct {
 // fake and no test ever dials the crawl service.
 var crawl = crawlPages
 
-// read fetches exactly the URLs it is given and swaps the matching Sources'
-// Snippet for the page's markdown, clipped to limit. An empty url list is a
-// no-op. Never returns an error: every failure path yields the sources unchanged.
+// read fetches exactly the URLs it is given and fills the matching Sources' Text
+// with the page's markdown, clipped to limit. An empty url list is a no-op. Never
+// returns an error: every failure path yields the sources unchanged.
 //
 // WHICH urls is the CALLER's decision, not a mode lookup in here — the opening
 // round reads the best-ranked pages, a later round reads what the model asked
@@ -77,7 +78,7 @@ func read(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, srcs []S
 	}
 	for i := range srcs {
 		if md, ok := text[srcs[i].URL]; ok {
-			srcs[i].Snippet = clip(md, limit)
+			srcs[i].Text = clip(md, limit)
 		}
 	}
 	return srcs
@@ -149,6 +150,12 @@ func crawlPages(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, ur
 			}()
 			got, err := crawlpkg.Read(ctx, scope, u)
 			if err != nil || got == nil {
+				// A degradation nobody can see is a degradation nobody can fix.
+				// The answer is still served, so this line is the only evidence
+				// that it was served on snippets instead of pages.
+				if err != nil && log != nil {
+					log.Warn("crawl failed (answer degrades to snippet)", "url", u, "err", err)
+				}
 				return // p keeps an empty Markdown: this source stays on its snippet
 			}
 			p.Markdown = got.Markdown

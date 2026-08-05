@@ -41,24 +41,29 @@ func srcs(urls ...string) []Source {
 	return out
 }
 
-func TestReadEnrichesSnippetKeepingIdentity(t *testing.T) {
+func TestReadFillsTextKeepingIdentity(t *testing.T) {
 	asked := fakeCrawl(t, map[string]string{"https://a.com/x": "# A\n\nThe full page body."})
 	in := srcs("https://a.com/x", "https://b.com/y")
 	var progress []string
 	out := read(context.Background(), nil, crawlpkg.Scope{}, in,
 		urlsOf(in), maxPageText, func(h string) { progress = append(progress, h) })
 
-	if !strings.Contains(out[0].Snippet, "The full page body.") {
-		t.Fatalf("fetched page must replace the snippet, got %q", out[0].Snippet)
+	if !strings.Contains(out[0].Text, "The full page body.") {
+		t.Fatalf("fetched page must land in Text, got %q", out[0].Text)
+	}
+	// THE WIRE IS UNTOUCHED. Snippet is what the `sources` frame carries, and the
+	// fetched page — thousands of runes we did not author — must never displace it.
+	if out[0].Snippet != "snippet https://a.com/x" {
+		t.Fatalf("read must not put page text on the wire, got %q", out[0].Snippet)
 	}
 	// identity is untouched — the `sources` frame the client already rendered stays valid.
 	if out[0].URL != "https://a.com/x" || out[0].Title != "T https://a.com/x" ||
 		out[0].Engine != "bing" || out[0].Favicon != "f https://a.com/x" {
 		t.Fatalf("read must not re-identify a source: %+v", out[0])
 	}
-	// a source the crawl did not return keeps its search snippet.
-	if out[1].Snippet != "snippet https://b.com/y" {
-		t.Fatalf("un-fetched source must keep its snippet, got %q", out[1].Snippet)
+	// a source the crawl did not return has no page text at all.
+	if out[1].Text != "" {
+		t.Fatalf("un-fetched source must have no page text, got %q", out[1].Text)
 	}
 	if len(*asked) != 2 {
 		t.Fatalf("both sources should have been requested, got %v", *asked)
@@ -86,8 +91,8 @@ func TestReadTopZeroIsNoOp(t *testing.T) {
 	if len(*asked) != 0 {
 		t.Fatalf("no urls must not crawl, asked %v", *asked)
 	}
-	if out[0].Snippet != "snippet https://a.com/x" {
-		t.Fatalf("no urls must leave snippets untouched, got %q", out[0].Snippet)
+	if out[0].Text != "" || out[0].Snippet != "snippet https://a.com/x" {
+		t.Fatalf("no urls must leave the source untouched, got %+v", out[0])
 	}
 }
 
@@ -119,8 +124,8 @@ func TestReadDegradesOnCrawlFailure(t *testing.T) {
 	fakeCrawl(t, nil) // returns no pages for anything
 	out := read(context.Background(), nil, crawlpkg.Scope{}, srcs("https://a.com/x"),
 		[]string{"https://a.com/x"}, maxPageText, nil)
-	if out[0].Snippet != "snippet https://a.com/x" {
-		t.Fatalf("a failed crawl must preserve the snippet, got %q", out[0].Snippet)
+	if out[0].Text != "" || out[0].Snippet != "snippet https://a.com/x" {
+		t.Fatalf("a failed crawl must leave the source on its snippet, got %+v", out[0])
 	}
 }
 
@@ -130,8 +135,8 @@ func TestReadEmptyPageKeepsSnippet(t *testing.T) {
 	fakeCrawl(t, map[string]string{"https://a.com/x": "   \n\t "})
 	out := read(context.Background(), nil, crawlpkg.Scope{}, srcs("https://a.com/x"),
 		[]string{"https://a.com/x"}, maxPageText, nil)
-	if out[0].Snippet != "snippet https://a.com/x" {
-		t.Fatalf("blank page must preserve the snippet, got %q", out[0].Snippet)
+	if out[0].Text != "" || out[0].Snippet != "snippet https://a.com/x" {
+		t.Fatalf("blank page must leave the source on its snippet, got %+v", out[0])
 	}
 }
 
@@ -141,7 +146,7 @@ func TestReadClipsPageText(t *testing.T) {
 	fakeCrawl(t, map[string]string{"https://a.com/x": strings.Repeat("x", maxPageText*3)})
 	out := read(context.Background(), nil, crawlpkg.Scope{}, srcs("https://a.com/x"),
 		[]string{"https://a.com/x"}, maxPageText, nil)
-	if n := len([]rune(out[0].Snippet)); n != maxPageText {
+	if n := len([]rune(out[0].Text)); n != maxPageText {
 		t.Fatalf("page text must clip to %d runes, got %d", maxPageText, n)
 	}
 }
