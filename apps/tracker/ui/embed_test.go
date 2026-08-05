@@ -118,3 +118,62 @@ func TestHandlerServesIndexAndAssets(t *testing.T) {
 		t.Errorf("POST / = %d, want 405", rec.Code)
 	}
 }
+
+// TestTheBundleTellsNoTales pins what the handler must NOT give away or get
+// wrong. Each of these was live: the handler served whatever it could stat, and
+// fell back to the SPA shell for everything it could not.
+func TestTheBundleTellsNoTales(t *testing.T) {
+	h := Handler()
+	get := func(p string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		return rec
+	}
+
+	t.Run("the asset directory is not a listing", func(t *testing.T) {
+		// fs.Stat succeeds on a directory and http.FileServer LISTS it, so this
+		// published the whole build manifest. A directory is not a page.
+		for _, p := range []string{"/assets", "/assets/"} {
+			rec := get(p)
+			if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "<a href=") {
+				t.Errorf("GET %s returned a directory listing:\n%s", p, rec.Body.String())
+			}
+		}
+	})
+
+	t.Run("the provenance stamp is not embedded", func(t *testing.T) {
+		// dist/.sync-stamp names the source repository, branch and commit. It is
+		// a fact for the repo, not a file to publish — `//go:embed dist` (no
+		// `all:`) is what keeps it out of the binary.
+		if _, err := fs.Stat(FS(), ".sync-stamp"); err == nil {
+			t.Error(".sync-stamp is embedded — it names the source repo/branch/commit")
+		}
+		if rec := get("/.sync-stamp"); rec.Code == http.StatusOK &&
+			strings.Contains(rec.Body.String(), "source=") {
+			t.Errorf("GET /.sync-stamp served the stamp:\n%s", rec.Body.String())
+		}
+	})
+
+	t.Run("a missing asset is 404, not the shell", func(t *testing.T) {
+		// A stale index referencing a purged chunk must fail as a miss. Answering
+		// index.html hands a <script> tag an HTML document, which surfaces as
+		// "Unexpected token '<'" — a corrupt-bundle report for a cache problem.
+		rec := get("/assets/index-DOESNOTEXIST.js")
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("missing asset = %d, want 404 (body: %.80s)", rec.Code, rec.Body.String())
+		}
+		if ct := rec.Header().Get("Content-Type"); strings.HasPrefix(ct, "text/html") &&
+			strings.Contains(rec.Body.String(), "<div id=\"root\">") {
+			t.Error("missing asset answered the SPA shell")
+		}
+	})
+
+	t.Run("a client route still falls back to the shell", func(t *testing.T) {
+		// The 404 above must be scoped to assets/ — everywhere else the fallback
+		// is what makes a deep-link reload work.
+		rec := get("/boards/ENG")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `<div id="root">`) {
+			t.Errorf("client route = %d, want the SPA shell", rec.Code)
+		}
+	})
+}

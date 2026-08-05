@@ -345,6 +345,33 @@ func TestScheduleCrossesTheWire(t *testing.T) {
 		}
 	})
 
+	t.Run("an unreadable scheduled= is refused, not read as false", func(t *testing.T) {
+		// zip binds a bool with ParseBool and leaves the zero value on failure, so
+		// `scheduled=yes` used to answer the WHOLE board — the caller believing it
+		// had filtered. Every other filter here refuses its unknown values; so does
+		// this one.
+		for _, q := range []string{"scheduled=yes", "scheduled=no", "scheduled=1.0", "scheduled=on"} {
+			if code, raw := doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues?"+q, org, nil); code != http.StatusBadRequest {
+				t.Errorf("?%s = %d, want 400 (%s)", q, code, raw)
+			}
+		}
+		// The legal spellings still work, including the bare flag.
+		for _, tc := range []struct {
+			q    string
+			rows int
+		}{
+			{"scheduled=true", 2}, {"scheduled=1", 2}, {"scheduled=True", 2}, {"scheduled", 2},
+			{"scheduled=false", 3}, {"scheduled=0", 3},
+		} {
+			code, raw := doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues?"+tc.q, org, nil)
+			var arr []map[string]any
+			_ = json.Unmarshal(raw, &arr)
+			if code != http.StatusOK || len(arr) != tc.rows {
+				t.Errorf("?%s = %d with %d rows, want 200 with %d", tc.q, code, len(arr), tc.rows)
+			}
+		}
+	})
+
 	t.Run("a PATCH reschedules, and 0 clears", func(t *testing.T) {
 		code, raw := doWire(t, app, http.MethodPatch, "/v1/tracker/projects/ENG/issues/1", org,
 			map[string]any{"dueAt": base + 14*day})
@@ -405,6 +432,186 @@ func TestScheduleCrossesTheWire(t *testing.T) {
 		_ = json.Unmarshal(raw, &v)
 		if _, ok := v["startAt"]; ok {
 			t.Errorf("the refused patch still wrote a startAt: %s", raw)
+		}
+	})
+}
+
+// TestAmbientCookieWritesNeedCSRF pins the anti-CSRF gate on the browser path.
+//
+// A browser authenticates this surface from an httpOnly session cookie, which is
+// AMBIENT — carried on a cross-site page's request too — and the deployment's
+// CORS policy reflects *.hanzo.ai with credentials, a wildcard that covers hosts
+// serving arbitrary user content. So a cookie-authenticated WRITE must carry the
+// same-origin CSRF token, and one that does not is refused.
+//
+// The gate is method-discriminating and installed once on the group, so this also
+// pins what must NOT change: reads pass untouched, and a header-authenticated
+// caller (API client, gateway-fronted request) is not CSRF-able and is unaffected.
+func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
+	app := mountWire(t)
+	const org = "org_csrf"
+
+	// Seed over the header path, which is not CSRF-able and therefore ungated.
+	if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects", org,
+		map[string]any{"key": "ENG", "name": "Engineering"}); code != http.StatusCreated {
+		t.Fatalf("seed project: %d %s", code, raw)
+	}
+	if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org,
+		map[string]any{"title": "seed"}); code != http.StatusCreated {
+		t.Fatalf("seed issue: %d %s", code, raw)
+	}
+
+	// browser issues a request the way a signed-in tab does: a session COOKIE and
+	// no Authorization header. The identity headers stand in for what the
+	// composer's identity check parks from that cookie in production.
+	browser := func(t *testing.T, method, path, csrf string, body any) int {
+		t.Helper()
+		var r io.Reader
+		if body != nil {
+			b, _ := json.Marshal(body)
+			r = bytes.NewReader(b)
+		}
+		rq := httptest.NewRequest(method, path, r)
+		if body != nil {
+			rq.Header.Set("Content-Type", "application/json")
+		}
+		rq.Header.Set("Cookie", "hanzo_iam_token=session-value")
+		rq.Header.Set("X-Org-Id", org)
+		rq.Header.Set("X-User-Id", "u_"+org)
+		if csrf != "" {
+			rq.Header.Set("X-CSRF-Token", csrf)
+		}
+		resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	t.Run("every write is refused without a token", func(t *testing.T) {
+		for _, tc := range []struct {
+			method, path string
+			body         any
+		}{
+			{http.MethodPost, "/v1/tracker/projects", map[string]any{"key": "OPS", "name": "Ops"}},
+			{http.MethodPatch, "/v1/tracker/projects/ENG", map[string]any{"name": "Renamed"}},
+			{http.MethodDelete, "/v1/tracker/projects/ENG", nil},
+			{http.MethodPost, "/v1/tracker/projects/ENG/issues", map[string]any{"title": "x"}},
+			{http.MethodPatch, "/v1/tracker/projects/ENG/issues/1", map[string]any{"status": "done"}},
+			{http.MethodDelete, "/v1/tracker/projects/ENG/issues/1", nil},
+		} {
+			if got := browser(t, tc.method, tc.path, "", tc.body); got != http.StatusForbidden {
+				t.Errorf("%s %s with a session cookie and no CSRF token = %d, want 403",
+					tc.method, tc.path, got)
+			}
+		}
+	})
+
+	t.Run("a forged token is refused", func(t *testing.T) {
+		if got := browser(t, http.MethodPatch, "/v1/tracker/projects/ENG",
+			"not-a-real-token", map[string]any{"name": "Renamed"}); got != http.StatusForbidden {
+			t.Errorf("write with a forged CSRF token = %d, want 403", got)
+		}
+	})
+
+	t.Run("the refusal changed nothing", func(t *testing.T) {
+		// The gate runs BEFORE the handler, so a refused write must not have
+		// touched the board — otherwise it is an audit trail, not a gate.
+		code, raw := doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG", org, nil)
+		if code != http.StatusOK {
+			t.Fatalf("read back: %d %s", code, raw)
+		}
+		var p map[string]any
+		_ = json.Unmarshal(raw, &p)
+		if p["name"] != "Engineering" {
+			t.Errorf("name = %v — a CSRF-refused PATCH still wrote", p["name"])
+		}
+		code, raw = doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues", org, nil)
+		var arr []map[string]any
+		_ = json.Unmarshal(raw, &arr)
+		if code != http.StatusOK || len(arr) != 1 {
+			t.Errorf("issues = %d rows, want the 1 seeded (a refused create/delete landed)", len(arr))
+		}
+	})
+
+	t.Run("reads are not gated", func(t *testing.T) {
+		for _, path := range []string{
+			"/v1/tracker/projects",
+			"/v1/tracker/projects/ENG",
+			"/v1/tracker/projects/ENG/issues",
+			"/v1/tracker/projects/ENG/issues/1",
+		} {
+			if got := browser(t, http.MethodGet, path, "", nil); got != http.StatusOK {
+				t.Errorf("GET %s from a signed-in tab = %d, want 200 — reads change nothing", path, got)
+			}
+		}
+	})
+
+	t.Run("a header-authenticated caller is unaffected", func(t *testing.T) {
+		// Not CSRF-able: a cross-site page cannot set Authorization. Gating it
+		// would break every API client and the gateway-fronted path for no gain.
+		if code, raw := doWire(t, app, http.MethodPatch, "/v1/tracker/projects/ENG", org,
+			map[string]any{"description": "still works"}); code != http.StatusOK {
+			t.Errorf("header-auth write = %d, want 200 (%s)", code, raw)
+		}
+	})
+}
+
+// TestScheduleHasAHorizon pins the bound that keeps a stored date from being a
+// weapon. checkSchedule accepted any non-negative int64, so dueAt=2^63-1 was a
+// legal write — and the timeline sizes its grid from the data, so that one row
+// made every member of the org who opened the view render an unbounded number of
+// ticks. The refusal is at the WRITE because that is where the row becomes
+// everyone else's problem.
+func TestScheduleHasAHorizon(t *testing.T) {
+	app := mountWire(t)
+	const org = "org_horizon"
+	if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects", org,
+		map[string]any{"key": "ENG", "name": "Engineering"}); code != http.StatusCreated {
+		t.Fatalf("seed project: %d %s", code, raw)
+	}
+	if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org,
+		map[string]any{"title": "seed"}); code != http.StatusCreated {
+		t.Fatalf("seed issue: %d %s", code, raw)
+	}
+
+	const maxInt64 = int64(1<<63 - 1)
+	beyond := []struct {
+		name string
+		body map[string]any
+	}{
+		{"int64 max as a due date", map[string]any{"title": "boom", "dueAt": maxInt64}},
+		{"int64 max as a start", map[string]any{"title": "boom", "startAt": maxInt64}},
+		{"just past the horizon", map[string]any{"title": "boom", "dueAt": maxScheduleAt + 1}},
+	}
+	for _, tc := range beyond {
+		t.Run("create: "+tc.name, func(t *testing.T) {
+			if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org, tc.body); code != http.StatusBadRequest {
+				t.Errorf("create %v = %d, want 400 (%s)", tc.body, code, raw)
+			}
+		})
+	}
+	t.Run("patch is bounded too", func(t *testing.T) {
+		if code, raw := doWire(t, app, http.MethodPatch, "/v1/tracker/projects/ENG/issues/1", org,
+			map[string]any{"dueAt": maxInt64}); code != http.StatusBadRequest {
+			t.Errorf("patch to int64 max = %d, want 400 (%s)", code, raw)
+		}
+		// And nothing was stored — a refused patch must leave the row unscheduled.
+		_, raw := doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues/1", org, nil)
+		var v map[string]any
+		_ = json.Unmarshal(raw, &v)
+		if _, ok := v["dueAt"]; ok {
+			t.Errorf("the refused patch stored a dueAt: %s", raw)
+		}
+	})
+	t.Run("the horizon itself is still a date", func(t *testing.T) {
+		// The bound is inclusive: a plan that lands exactly on it is legal. A
+		// bound that refused its own edge would be an off-by-one nobody notices
+		// until the one caller who hits it.
+		if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org,
+			map[string]any{"title": "the last day", "dueAt": maxScheduleAt}); code != http.StatusCreated {
+			t.Errorf("dueAt at the horizon = %d, want 201 (%s)", code, raw)
 		}
 	})
 }
