@@ -99,7 +99,7 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 		// A void reply is not a zero balance. Nothing was read, so nothing is known.
 		return 0, true, fmt.Errorf("balance: commerce answered nothing")
 	}
-	// Round DOWN, explicitly, because this is a DISPLAY.
+	// Round DOWN, explicitly, because this figure is SPENT AGAINST.
 	//
 	// plane.Money.Minor() refuses a value finer than a cent rather than round
 	// behind the caller — right for a debit, and its own doc says a caller that
@@ -111,28 +111,24 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	// while the money sat there. It worsens as usage accumulates, because a longer
 	// history makes a sub-cent tail likelier.
 	//
-	// Minor() RESCALES, and hanzoai/decimal's Rescale rounds half-away-from-zero
-	// (decimal.go:145) — it does not truncate. Measured live: the ledger's
-	// …078983985999994361 came back as 14991308 cents, a tenth of a cent ABOVE the
-	// true balance. That is acceptable here and nowhere else: this number is a
-	// DISPLAY, nothing is billed from it, and the gate that admits or refuses
-	// spend reads the exact decimal itself. A caller that must not overstate —
-	// any debit — has to round down deliberately rather than reuse this.
+	// The direction is not cosmetic, and this comment used to get it backwards by
+	// calling the number a display. It is not. It is `available` on
+	// /v1/billing/balance — the field hanzoai/ai's balance gate reads over the S2S
+	// HTTP path — and gpu_charge.go compares the same value against a GPU's price.
+	// Money is spent against it.
 	//
-	// (apps/ai carries a comment calling this "truncated toward zero" for the same
-	// call. That is wrong in the same way and worth correcting there; its gate
-	// compares > 0, so a sub-cent rounding cannot change its verdict.)
-	amt, perr := out.Amount.Parse()
+	// Minor() RESCALES, and hanzoai/decimal's Rescale rounds HALF-AWAY-FROM-ZERO
+	// (decimal.go:145) — it does not truncate. Measured: 4.995 comes back as 500
+	// cents, so a 500-cent charge was admitted against a balance that could not
+	// cover it, and the exact debit that follows leaves a negative balance nobody
+	// authorized. FloorMinor is that choice made once, in plane, for every caller
+	// that compares rather than debits.
+	cents, perr := out.Amount.FloorMinor()
 	if perr != nil {
 		// The peer ANSWERED and the reply did not parse. That is a real failure, not
 		// an absent ledger, and it must surface: a corrupt reply rendered as zero is
 		// a funded account shown as broke.
 		return 0, true, perr
 	}
-	minor := amt.Minor() // big.Int of cents; Rescale rounds half-away-from-zero
-	if !minor.IsInt64() {
-		return 0, true, fmt.Errorf("balance %s %s exceeds int64 cents",
-			out.Amount.Decimal, out.Amount.Currency)
-	}
-	return minor.Int64(), true, nil
+	return cents, true, nil
 }
