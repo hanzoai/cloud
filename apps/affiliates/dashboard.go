@@ -167,10 +167,10 @@ func (o ops) earnings(ctx context.Context, _ *noInput) (*affiliateEarnings, erro
 
 // ── shareable links ─────────────────────────────────────────────────────────────
 
-// linkView is one shareable link with its derived stats: clicks (tracked), signups
+// codeView is one shareable link with its derived stats: clicks (tracked), signups
 // (orgs attributed with this code), conversions (of those, how many produced a
 // commission). Signups/conversions are DERIVED from the ledger, never stored.
-type linkView struct {
+type codeView struct {
 	Code        string `json:"code"`
 	Label       string `json:"label"`
 	URL         string `json:"url"`
@@ -185,7 +185,7 @@ type linkView struct {
 type affiliateLinks struct {
 	IsAffiliate bool `json:"isAffiliate"`
 	// Links is the caller's share links, each with its URL and funnel.
-	Links *[]linkView `json:"links,omitempty"`
+	Links *[]codeView `json:"links,omitempty"`
 	// MaxLinks is how many share links one affiliate may hold.
 	MaxLinks int    `json:"maxLinks"`
 	Status   string `json:"status,omitempty"`
@@ -238,10 +238,10 @@ func (o ops) links(ctx context.Context, _ *noInput) (*affiliateLinks, error) {
 	}, nil
 }
 
-func linkViews(s *cloud.Service[state], links []Link, signups, conversions map[string]int) []linkView {
-	out := make([]linkView, 0, len(links))
+func linkViews(s *cloud.Service[state], links []Link, signups, conversions map[string]int) []codeView {
+	out := make([]codeView, 0, len(links))
 	for _, l := range links {
-		out = append(out, linkView{
+		out = append(out, codeView{
 			Code: l.Code, Label: l.Label, URL: affiliateLink(s, l.Code), Clicks: l.Clicks,
 			Signups: signups[l.Code], Conversions: conversions[l.Code], CreatedAt: l.CreatedAt,
 		})
@@ -262,7 +262,7 @@ type createLinkRequest struct {
 
 // linkMint is the minted share link, answered 201.
 type linkMint struct {
-	Link linkView `json:"link"`
+	Link codeView `json:"link"`
 }
 
 // mintLink mints a new share link for the caller's own affiliate and answers it
@@ -339,7 +339,7 @@ func mintResult(s *cloud.Service[state], link Link, err error) (*linkMint, error
 	switch err {
 	case nil:
 		return &linkMint{
-			Link: linkView{Code: link.Code, Label: link.Label, URL: affiliateLink(s, link.Code), CreatedAt: link.CreatedAt},
+			Link: codeView{Code: link.Code, Label: link.Label, URL: affiliateLink(s, link.Code), CreatedAt: link.CreatedAt},
 		}, nil
 	case errInvalidCode:
 		return nil, zip.ErrBadRequest("code must be 3–32 chars of a–z, 0–9, hyphen")

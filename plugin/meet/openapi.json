@@ -29,11 +29,54 @@
     "/v1/meet/health": {
       "get": {
         "operationId": "get_v1_meet_health",
-        "summary": "Whether the office can mint join tokens",
-        "description": "Reports whether this deployment holds the LiveKit key pair it needs. `ready:true` with 200 when tokens can be minted; the SAME body with `ready:false`, `status:\"degraded\"` and 503 when they cannot, so a probe and a dashboard both read the degraded state instead of someone grepping a boot log.\n\nIt takes no credential and is reachable on every public host, so it withholds both the reason and the signing key's name on purpose: `ready` is the whole dashboard fact, and the reason — which names the key file and the Secret — is written to the boot log where an operator already is.",
+        "summary": "Health reports whether the office can mint join tokens.",
+        "description": "Health reports whether the office can mint join tokens.\n\nIt reports whether this deployment holds the LiveKit key pair it needs:\nready:true with 200 when tokens can be minted, the SAME body with ready:false,\nstatus \"degraded\" and 503 when they cannot — so a probe and a dashboard both\nread the degraded state instead of someone grepping a boot log.\n\nIt takes no credential and is reachable on every public host, so it withholds\nboth the reason and the signing key's name on purpose: ready is the whole\ndashboard fact, and the reason — which names the key file and the Secret — is\nwritten to the boot log where an operator already is.",
         "tags": [
           "meet"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meetHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meetHealth"
+                }
+              }
+            },
+            "description": "service unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "meetHealth": {
+        "properties": {
+          "ready": {
+            "description": "Ready reports whether this deployment can mint join tokens. False is the 503.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service names the subsystem answering — always \"meet\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when tokens can be minted and \"degraded\" when they cannot.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

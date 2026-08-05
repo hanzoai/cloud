@@ -71,4 +71,3 @@ func caller(ctx context.Context) (org, user string, err error) {
 	}
 	return org, c.User(), nil
 }
-

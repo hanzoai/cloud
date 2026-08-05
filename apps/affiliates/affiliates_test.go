@@ -550,7 +550,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	if a0.AccruedCents != wantCommission || a0.PendingCents != wantCommission {
 		t.Fatalf("admin row accrual: accrued=%d pending=%d, want %d", a0.AccruedCents, a0.PendingCents, wantCommission)
 	}
-	var sum adminSummary
+	var sum totals
 	if err := json.Unmarshal(data["summary"], &sum); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}

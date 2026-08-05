@@ -59,11 +59,11 @@ func resolveRange(label string, now time.Time) (from, to time.Time, err error) {
 
 // ── views ────────────────────────────────────────────────────────────────────
 
-// sampleView is one window instance on the wire. Unknown values are OMITTED rather
+// readingView is one window instance on the wire. Unknown values are OMITTED rather
 // than sent as zero, and `confidence` says whether the counters that remain mean
 // anything — so a console renders "—" where the meter knew nothing, and never a
 // fabricated 0.
-type sampleView struct {
+type readingView struct {
 	// Lane names the meter's own lane label for this measurement.
 	Lane string `json:"lane"`
 	// Window is the window class: 6h, day, week or month.
@@ -108,8 +108,8 @@ type sampleView struct {
 	Machine string `json:"machine,omitempty"`
 }
 
-func toSampleView(x Sample) sampleView {
-	return sampleView{
+func toSampleView(x Sample) readingView {
+	return readingView{
 		Lane: x.Lane, Window: x.Window, WindowMinutes: x.WindowMinutes,
 		WindowStart: rfc3339Of(x.WindowStart), ResetsAt: rfc3339Of(x.ResetsAt),
 		UsedPct: x.UsedPct, Confidence: x.Confidence, Synthetic: x.Synthetic,
@@ -162,7 +162,7 @@ func toTotalView(t Total) totalView {
 
 // ── ingest ───────────────────────────────────────────────────────────────────
 
-// sampleReq is one reported sample.
+// readingReq is one reported sample.
 //
 // THERE IS NO `ts`. The server owns the observation clock, always — and that is a
 // security property, not a convenience. `ts` is the version that decides which read
@@ -175,7 +175,7 @@ func toTotalView(t Total) totalView {
 // clocks a single `ts` would braid together: WHEN THE WINDOW WAS (the client's fact
 // to state) and WHEN WE LEARNED IT (ours). A backfill of a real historical window
 // lands at the right instant with an honest observation time.
-type sampleReq struct {
+type readingReq struct {
 	// Provider is the AI provider whose meter reported this sample. Required.
 	Provider string `json:"provider"`
 	// Account is the provider-side account the sample belongs to.
@@ -226,23 +226,23 @@ type sampleReq struct {
 	Currency string `json:"currency"`
 }
 
-// reportReq accepts one sample or many: a poller reports its lanes in one call.
-type reportReq struct {
+// ingestReq accepts one sample or many: a poller reports its lanes in one call.
+type ingestReq struct {
 	// Samples is the batch form, up to 256 samples; leave it empty to send one
 	// sample inline on the same fields.
-	Samples []sampleReq `json:"samples"`
-	sampleReq
+	Samples []readingReq `json:"samples"`
+	readingReq
 }
 
 // samplesOf flattens the one-or-many body into the batch.
-func (r reportReq) samplesOf() []sampleReq {
+func (r ingestReq) samplesOf() []readingReq {
 	if len(r.Samples) > 0 {
 		return r.Samples
 	}
 	if r.Provider == "" && r.Window == "" {
 		return nil
 	}
-	return []sampleReq{r.sampleReq}
+	return []readingReq{r.readingReq}
 }
 
 // parseSample validates a reported sample and turns it into a bounded value. The
@@ -250,7 +250,7 @@ func (r reportReq) samplesOf() []sampleReq {
 // rewritten — a caller whose window class we did not understand must be told, or
 // their dash would quietly fill with a class they never reported. Everything else
 // is clamped by Sanitize.
-func parseSample(in sampleReq, now time.Time) (Sample, error) {
+func parseSample(in readingReq, now time.Time) (Sample, error) {
 	if trim(in.Provider) == "" {
 		return Sample{}, zip.ErrBadRequest("provider is required")
 	}
@@ -290,8 +290,8 @@ func parseInstant(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, trim(s))
 }
 
-// reportResp is the collector's receipt for one report.
-type reportResp struct {
+// ingestResp is the collector's receipt for one report.
+type ingestResp struct {
 	// Accepted is how many samples this report landed.
 	Accepted int `json:"accepted"`
 	// Stored reports whether history was durably written; false means the
@@ -319,7 +319,7 @@ type reportResp struct {
 // is a provider, window class or kind outside the closed vocabulary — an
 // unrecognized window is refused rather than rewritten, because a silently
 // reclassified sample would fill a dashboard with a class nobody reported.
-func (o ops) reportUsage(ctx context.Context, body *reportReq) (*reportResp, error) {
+func (o ops) reportUsage(ctx context.Context, body *ingestReq) (*ingestResp, error) {
 	org, user, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -369,7 +369,7 @@ func (o ops) reportUsage(ctx context.Context, body *reportReq) (*reportResp, err
 		o.s.Log.Debug("account usage write skipped", "org", org, "err", err)
 		stored = false
 	}
-	return &reportResp{Accepted: len(samples), Stored: stored, Links: links}, nil
+	return &ingestResp{Accepted: len(samples), Stored: stored, Links: links}, nil
 }
 
 // account is one account's slice of a reported batch, folded into the shape the
@@ -506,8 +506,8 @@ type dashIn struct {
 	Range string `json:"range"`
 }
 
-// dashResp is one provider account's own usage series over one window.
-type dashResp struct {
+// boardResp is one provider account's own usage series over one window.
+type boardResp struct {
 	// Provider is the provider whose meter answered.
 	Provider string `json:"provider"`
 	// Account is the account the series narrows to, when one was named.
@@ -525,9 +525,9 @@ type dashResp struct {
 	// have no data", NOT zero usage.
 	Available bool `json:"available"`
 	// Current is the live state of each lane — the dash headline.
-	Current []sampleView `json:"current"`
+	Current []readingView `json:"current"`
 	// Windows is every window instance in range, newest first.
-	Windows []sampleView `json:"windows"`
+	Windows []readingView `json:"windows"`
 }
 
 // UsageDash shows one provider account's own usage dashboard.
@@ -540,7 +540,7 @@ type dashResp struct {
 // or range is 400, never a quiet fallback to a different one. When no series is
 // available the response is a 200 with available:false and empty lists — an
 // honest "we have no data", which is a different claim from zero usage.
-func (o ops) usageDash(ctx context.Context, in *dashIn) (*dashResp, error) {
+func (o ops) usageDash(ctx context.Context, in *dashIn) (*boardResp, error) {
 	org, user, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -568,11 +568,11 @@ func (o ops) usageDash(ctx context.Context, in *dashIn) (*dashResp, error) {
 	if rangeLabel == "" {
 		rangeLabel = Range24h
 	}
-	out := &dashResp{
+	out := &boardResp{
 		Provider: provider, Account: acct, Range: rangeLabel,
 		From: rfc3339Of(from), To: rfc3339Of(to),
 		Source: SourceAccount, Scope: ScopeUser,
-		Current: []sampleView{}, Windows: []sampleView{},
+		Current: []readingView{}, Windows: []readingView{},
 	}
 	rows, ok := o.s.State.store.Series(ctx, org, user, provider, acct, window, from, to)
 	if !ok {
