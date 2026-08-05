@@ -100,7 +100,8 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 	if err != nil {
 		return nil, err
 	}
-	obs, err := decideEvent(in).observation(time.Now())
+	ev := decideEvent(in)
+	obs, err := ev.observation(time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,19 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 	if err != nil {
 		return nil, wrap(err)
 	}
-	return answer(d), nil
+	// THE MODEL IS ONE OF TWO JUDGES. [determine] reads the stated facts the model
+	// does not model — the jurisdiction the payer acted from, and the value moving
+	// — and [fuse] takes the severer of the two verdicts. It runs on EVERY answer,
+	// including the refusals: the whole reason a rule sits here is that a fresh
+	// account's model is warming, and warming is exactly when a first large payment
+	// from a listed jurisdiction arrives.
+	//
+	// The value is [riskEvent.Nano] — the same number the model read, so the two
+	// judges cannot disagree about the amount. The posture is the ASSESSMENT's own
+	// ([anomaly.Assessment.Shadow], set on every path the engine returns by), not a
+	// fresh read of the regime: it is the posture this verdict was actually reached
+	// under, which is the same reason [decided] carries its policy version.
+	return fuse(answer(d), determine(signal(in.Signals, contract.SignalCountry), ev.Nano), d.A.Shadow), nil
 }
 
 // planeTenant mints the tenant a PLANE call acts for: the org the CALLER stated,

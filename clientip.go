@@ -181,6 +181,59 @@ func clientAddr(peerAddr string, forwarded [][]byte, tp proxySet) string {
 	return ""
 }
 
+// CountryHeader is the name our edge states the caller's jurisdiction under: the
+// ISO 3166-1 alpha-2 code it resolved from the connecting address. One name, so
+// an operator has one thing to set at the edge and one thing to STRIP from
+// inbound requests.
+const CountryHeader = "CF-IPCountry"
+
+// ClientCountry is the jurisdiction our edge resolved the caller from, or "" when
+// nothing trustworthy said.
+//
+// IT IS THE SAME TRUST RULE AS [ClientIP], applied to a header instead of a
+// chain, and it is written beside it so the two cannot drift into two rules. A
+// header is a claim; what makes a claim readable is WHO the socket peer is:
+//
+//	a direct caller's header is the CLIENT's own writing. It is refused outright
+//	— reading it would let any caller state its own jurisdiction, which on a rule
+//	that escalates on geography is the same as switching the rule off.
+//
+//	a trusted peer's header is our EDGE's, written after the edge resolved the
+//	address it saw. That is the only version of this fact anybody here holds.
+//
+// WHAT IT IS NOT. It is the country of the ADDRESS, never of the payer: an
+// address is what a VPN moves and a proxy relays, so this is a weak signal by
+// construction and is documented as one at its one consumer. The strong signal —
+// the billing or KYC jurisdiction of the account — is not derivable in this binary
+// today (there is no billing address, no KYC profile, and the card never touches
+// this process), and inventing one from this would be worse than stating that.
+//
+// The value is normalised to upper case and refused unless it is exactly two
+// letters. Cloudflare states "XX" for an address it could not place and "T1" for
+// Tor, and neither is a country; both fail the letters test and come back "",
+// which is the same answer as silence and the correct one — no jurisdiction was
+// established.
+func ClientCountry(c *zip.Ctx) string {
+	return clientCountry(c.Fiber().IP(), string(c.Fiber().Request().Header.Peek(CountryHeader)), trustedProxies())
+}
+
+// clientCountry IS the rule, as a pure function of the three facts it turns on —
+// the socket peer, what the header said, and which addresses are ours — for the
+// same reason [clientAddr] is one: it can be read and tested without a server.
+func clientCountry(peerAddr, stated string, tp proxySet) string {
+	peer, ok := parseClientAddr(peerAddr)
+	if !ok || !tp.has(peer) {
+		// No peer we can place, or a direct caller. Either way the header is not
+		// our edge's and is therefore not evidence.
+		return ""
+	}
+	code := strings.ToUpper(strings.TrimSpace(stated))
+	if len(code) != 2 || code[0] < 'A' || code[0] > 'Z' || code[1] < 'A' || code[1] > 'Z' {
+		return ""
+	}
+	return code
+}
+
 // parseClientAddr parses one chain entry or peer address into a canonical
 // address. It accepts a bare address and an address:port pair, and it UNMAPS
 // IPv4-in-IPv6 so "::ffff:1.2.3.4" and "1.2.3.4" are one key rather than two.
