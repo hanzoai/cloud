@@ -935,6 +935,40 @@ func init() {
 		openapi.Register(d.path, http.MethodPost, openapi.Binary{}, nil)
 		openapi.Describe(d.path, http.MethodPost, d.summary, d.description+sentryWire)
 	}
+	// The session-replay snapshot door (replay.go). It is not a `doors` row — its
+	// body is not the canonical wire and it lands no warehouse row — so it declares
+	// itself here beside the other route on this surface that is registered by hand.
+	// Its RESPONSE is the same CaptureResult every door answers, because the receipt
+	// is the one thing every write on this surface does share.
+	openapi.Register(replayPath, http.MethodPost, replayBody{}, CaptureResult{})
+	openapi.Describe(replayPath, http.MethodPost,
+		"Record a session-replay snapshot batch",
+		"Accepts a batch of rrweb events from a browser recorder and hands it to the session-replay "+
+			"pipeline, which stores the recording and derives the session summary a player reads back.\n\n"+
+			"ONE REQUEST IS ONE BATCH, and it is all-or-nothing: the recording is made durable before "+
+			"this answers, so a 200 {\"accepted\":1} means stored and never \"buffered somewhere\". "+
+			"There is no partial count, because a half-written recording is not a recording.\n\n"+
+			"`sessionId` is REQUIRED and bounded — at most 70 characters of ASCII letters, digits or "+
+			"'-'. It is the key every batch of one visit is grouped and ordered by, so an id outside "+
+			"that grammar is refused 400 here rather than accepted and dropped further down. "+
+			"`windowId` separates two tabs of one session and `distinctId` attributes the recording to "+
+			"a person; both are optional. `events` is the rrweb batch, each element a raw eventWithTime "+
+			"object, carried VERBATIM — the summary (click, keypress and mouse-activity counts, size) "+
+			"is derived downstream from exactly these bytes, so nothing is re-encoded or dropped.\n\n"+
+			"THE CALLER'S CREDENTIAL DECIDES THE TENANT, and the body never does: the recording lands "+
+			"in the org the presented credential resolves to. It takes the SAME credentials as "+
+			"/v1/event — a validated bearer, an org API key, or a publishable pk- key on "+
+			"Authorization: Bearer, x-hanzo-ingest-key or ?ingest_key= — so a browser bundle already "+
+			"holding a pk- for events needs nothing new to record. A caller that presents nothing is "+
+			"401 `ingest_key_required`; one whose key resolves to no project is 403 "+
+			"`ingest_key_unknown`; a reduced principal (a Hanzo Team workspace token) is 403 "+
+			"`insufficient_capability`, because a full-fidelity screen recording has no projected form "+
+			"that is safe for a guest to write into a host org.\n\n"+
+			"BOUNDS: 413 over 512 KiB of body, and that is the only bound on one batch — a recorder is "+
+			"expected to chunk a long session rather than send it whole, and the cap is the size one "+
+			"message can carry rather than an arbitrary number. 503 when the pipeline cannot take the "+
+			"batch: honest unavailability the caller can retry, never a 200 over a discarded "+
+			"recording.")
 }
 
 // sentryWire is the half of both Sentry doors' prose that is identical because the

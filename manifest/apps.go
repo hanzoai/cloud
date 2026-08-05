@@ -262,7 +262,12 @@ var Apps = []App{
 	// the tag script falls through to ai's "/v1" and the fleet publishes an address it
 	// routes elsewhere — which is what the router oracle caught the moment analytics'
 	// subset caught up and started publishing it.
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
+	// /v1/replay is the session-replay snapshot door (apps/analytics/replay.go) and
+	// it is a WRITE, so it belongs here for exactly the reason the comment above
+	// gives for /v1/event: a path this row omits is a path the fleet router hands to
+	// commerce's bare "/v1" catch-all, which does not serve it — 405, silently, for
+	// every recorder in the fleet.
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health", "/v1/replay"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
