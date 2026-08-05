@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/role"
@@ -269,22 +270,18 @@ type Config struct {
 	// gateway would 403 ("Publishable keys can only access read-only endpoints"). A
 	// completions-capable secret key (sk-) set here would instead drive both.
 	//
-	// AIDefaultModel is the served model an agent with no explicit model falls
-	// back to (CLOUD_AI_DEFAULT_MODEL, default DefaultModel — the bare "enso"
-	// alias the gateway resolves to a tier per call). Model routing is the
-	// gateway's job; this is the ONLY cloud-side model default, and its literal
-	// lives in exactly one place (model.go).
-	//
-	// AIFallbackModel is the reliable model the agent runner fails over to when
-	// the agent's own model stays throttled (429/overloaded) after bounded retries
-	// (CLOUD_AI_FALLBACK_MODEL, default "best" — the gateway's route-to-best
-	// meta-model). It keeps an autonomous bot reply landing when the default flash
-	// model is overloaded; the interactive chat path never uses it. Empty disables
-	// failover (retry-only).
-	AIBaseURL       string
-	AIAPIKey        string
-	AIDefaultModel  string
-	AIFallbackModel string
+	// The default and failover MODELS are NOT configured here. CLOUD_AI_DEFAULT_MODEL
+	// and CLOUD_AI_FALLBACK_MODEL are gone; the values are cloud.DefaultModel and
+	// cloud.FallbackModel (model.go), one literal each. A model name is a routing
+	// and pricing decision, not an address — there is nothing to connect to and
+	// nothing to fail — and holding it in two places (a constant AND the
+	// deployment's env) is what let production run a value the constant disagreed
+	// with, undetected, until someone read both. The failover value is worse than
+	// redundant: `best` is a SKU in the GATEWAY's catalog with its own server-side
+	// route and fallback chain, so a knob here could only disagree with the thing
+	// that actually decides. No deployment ever set it.
+	AIBaseURL string
+	AIAPIKey  string
 
 	// AIAuthClientID / AIAuthClientSecret are the binary's OWN IAM service
 	// identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET). The completions client (deps.AI)
@@ -337,7 +334,11 @@ func LoadConfig() *Config {
 		Role:                    role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
 		Replicas: getenvInt("CLOUD_REPLICAS", 0),
-		Domain:   getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
+		// Domain left empty here; derived from Brand below unless pinned — the
+		// literal "api.hanzo.ai" default used to live here, which meant a lux
+		// deployment that pinned nothing answered with Hanzo's host in every URL
+		// it built about itself.
+		Domain: getenv("CLOUD_DOMAIN", ""),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
 		IAMIssuer:         getenv("CLOUD_IAM_ISSUER", ""),
 		AdminOrg:          getenv("IAM_ADMIN_ORG", "admin"),
@@ -363,8 +364,6 @@ func LoadConfig() *Config {
 		// key, no expiry cliff. Never plaintext.
 		AIBaseURL:          getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"),
 		AIAPIKey:           getenv("CLOUD_AI_API_KEY", ""),
-		AIDefaultModel:     getenv("CLOUD_AI_DEFAULT_MODEL", DefaultModel),
-		AIFallbackModel:    getenv("CLOUD_AI_FALLBACK_MODEL", "best"),
 		AIAuthClientID:     getenv("IAM_CLIENT_ID", ""),
 		AIAuthClientSecret: getenv("IAM_CLIENT_SECRET", ""),
 		IAMZAPAddr:         getenv("CLOUD_IAM_ZAP_ADDR", ""),
@@ -397,11 +396,22 @@ func LoadConfig() *Config {
 
 	// White-label by brand (HIP-0111): when the operator does not pin
 	// CLOUD_IAM_ISSUER / --iam-issuer, derive the canonical OIDC issuer from the
-	// brand so a lux deployment validates against lux.id, zoo against zoo.id,
+	// brand so a lux deployment validates against lux.id, zoo against zoolabs.id,
 	// etc. — never silently defaulting every brand to iam.hanzo.ai.
-	if cfg.IAMIssuer == "" {
-		cfg.IAMIssuer = IssuerForBrand(cfg.Brand)
-	}
+	//
+	// issuerFor is THE resolution, shared with the package-level IAMIssuer()
+	// (iamurl.go). That function used to read CLOUD_IAM_ISSUER raw and stop, so on
+	// any deployment that let the brand supply the issuer — the documented happy
+	// path — this field held "https://lux.id" while IAMIssuer() held "". The two
+	// cannot differ now because there is one function.
+	cfg.IAMIssuer = issuerFor(cfg.IAMIssuer, cfg.Brand)
+
+	// The deployment's own public API host, by the same rule and for the same
+	// reason: api.<the brand's apex>. The brand registry already states each
+	// brand's apex (brand.Info.Domain) and already says base URLs derive from it
+	// — every brand but hanzo simply never got the derivation, so an unpinned lux
+	// or zoo deployment presented api.hanzo.ai as its own host.
+	cfg.Domain = domainFor(cfg.Domain, cfg.Brand)
 
 	// JWKS endpoint for the in-binary identity sanitizer. Default follows the
 	// HIP-0111 convention {IAMIssuer}/v1/iam/.well-known/jwks so a brand
@@ -493,6 +503,25 @@ func rootKeyRef() string {
 // default and a rollout cannot be verified from outside.
 func resolveVersion() string {
 	return getenv("CLOUD_VERSION", getenv("HANZO_VERSION", Version))
+}
+
+// domainFor is THE resolution of the deployment's own public API host: an
+// explicit pin wins, else api.<the brand's apex> from the registry. It is the
+// exact shape of issuerFor, for the exact same reason — one decision, one
+// function, no second place to hold a different answer.
+//
+// The old default was the bare literal "api.hanzo.ai", applied whatever the
+// brand. IAMIssuer derived from the brand and Domain did not, so an unpinned lux
+// deployment resolved issuer=https://lux.id alongside domain=api.hanzo.ai and
+// went on to build every self-referential URL — OAuth redirect_uri, avatar URL,
+// git clone URL — pointing at another brand's host. brand.Info.Domain already
+// carried each brand's apex and its own doc already said base URLs derive from
+// it; only hanzo ever got the derivation.
+func domainFor(pinned, brandID string) string {
+	if p := strings.TrimSpace(pinned); p != "" {
+		return p
+	}
+	return brand.APIHost(brandID)
 }
 
 // splitTrim splits a comma-separated list, trimming and dropping empties.

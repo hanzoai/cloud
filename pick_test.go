@@ -84,7 +84,6 @@ func prodLikeConfig(t *testing.T, g *gatewayStub, pkKey string) *Config {
 	return &Config{
 		AIBaseURL:          g.srv.URL,
 		AIAPIKey:           pkKey,
-		AIDefaultModel:     "deepseek-v4-flash",
 		AIAuthClientID:     "hanzo-cloud",
 		AIAuthClientSecret: "s3cr3t",
 	}
@@ -126,7 +125,7 @@ func TestPickCompletions_HonorsSecretKey(t *testing.T) {
 // key is refused, never sent to the write endpoint.
 func TestPickCompletions_PublishableOnly_FailsClosed(t *testing.T) {
 	g := newGatewayStub(t)
-	cfg := &Config{AIBaseURL: g.srv.URL, AIAPIKey: "pk-lf-readonly-embed", AIDefaultModel: "deepseek-v4-flash"}
+	cfg := &Config{AIBaseURL: g.srv.URL, AIAPIKey: "pk-lf-readonly-embed"}
 
 	ai := pickCompletionsClient(cfg, luxlog.New("test"))
 	_, err := ai.ChatCompletion(context.Background(), &ChatRequest{Prompt: "ping"})
