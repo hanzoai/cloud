@@ -34,6 +34,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/index"
+	"github.com/hanzoai/cloud/apps/projects"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -181,6 +182,58 @@ func TestUnkeyedRowsNeverReachTheIndex(t *testing.T) {
 	}
 	if got := docs[0]["id"]; got != "hanzo/keeper" {
 		t.Errorf("document id %v, want hanzo/keeper", got)
+	}
+}
+
+// TestLiveSitesCrossToTheProjectsProcess is the corpus's OTHER source, and it
+// failed even more quietly than the write: projects.LiveSites answers nil when
+// its package is unmounted, so in the catalog process "ask the process that owns
+// the store" and "nothing is serving" were the same answer, and the corpus lost
+// every site with no error to read anywhere.
+func TestLiveSitesCrossToTheProjectsProcess(t *testing.T) {
+	if projects.Ready() {
+		t.Fatal("split test: the projects store is in this process")
+	}
+	runDir(t)
+
+	app := zip.New(zip.Config{AppName: "projects", DisableStartupMessage: true})
+	zip.Post[plane.LiveSitesIn, plane.LiveSitesOut](app, "/sites/live",
+		func(context.Context, *plane.LiveSitesIn) (*plane.LiveSitesOut, error) {
+			return &plane.LiveSitesOut{Sites: []plane.LiveSite{
+				{Org: "hanzo", Slug: "folio", Name: "Folio", URL: "https://folio.hanzo.app",
+					Repo: "https://git.hanzo.ai/hanzo-apps/folio", UpdatedAt: 1750000000},
+				{Org: "maxpower", Slug: "dave", URL: "https://dave.hanzo.app", ForkedFrom: "hanzo/folio"},
+			}}, nil
+		}, zip.WithOperationID(plane.SitesLive))
+	go func() { _ = app.Listen(zip.SocketPath("projects")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for i := 0; i < 200; i++ {
+		if c, err := net.Dial("unix", zip.SocketPath("projects")); err == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	live, err := liveSites(context.Background())
+	if err != nil {
+		t.Fatalf("liveSites over the plane: %v", err)
+	}
+	if len(live) != 2 {
+		t.Fatalf("read %d live sites, want 2", len(live))
+	}
+	if live[0].Org != "hanzo" || live[0].Slug != "folio" || live[0].URL != "https://folio.hanzo.app" {
+		t.Errorf("first site came back as %+v", live[0])
+	}
+	// Lineage has to survive the wire: it is what files a remix in the community
+	// lane instead of leaving it looking like one of our own starters.
+	if live[1].ForkedFrom != "hanzo/folio" {
+		t.Errorf("forked-from came back as %q, want hanzo/folio", live[1].ForkedFrom)
+	}
+	// The trace back out of a demo. A live URL with no repo beside it is a
+	// screenshot, and this is the field that keeps it from being one.
+	if live[0].Repo == "" {
+		t.Error("the source repo did not survive the wire")
 	}
 }
 
