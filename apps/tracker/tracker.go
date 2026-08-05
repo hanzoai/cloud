@@ -48,6 +48,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	trackerui "github.com/hanzoai/cloud/apps/tracker/ui"
 	"github.com/hanzoai/cloud/openapi"
@@ -235,7 +236,7 @@ func init() {
 // above instead, through the registry openapi.Register shares.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
-	g := app.Group("/v1/tracker")
+	g := app.Group("/v1/tracker", requireCSRFOnWrites())
 	// cloud.Bridge is not installed here: the composer installs it once at the
 	// root, after the identity check that mints the validated org and before any
 	// subsystem registers a route — an order only the whole program can assert.
@@ -272,6 +273,46 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	ui := zip.AdaptNetHTTP(http.StripPrefix("/tracker", trackerui.Handler()))
 	app.All("/tracker", ui)
 	app.All("/tracker/*", ui)
+}
+
+// unsafe is the set of methods that CHANGE a board. Everything else is a read.
+var unsafe = map[string]bool{
+	http.MethodPost: true, http.MethodPut: true,
+	http.MethodPatch: true, http.MethodDelete: true,
+}
+
+// requireCSRFOnWrites is the anti-CSRF gate for every tracker write, installed
+// ONCE on the group rather than six times on the routes.
+//
+// THREAT. A browser authenticates this surface from an httpOnly session COOKIE,
+// which is AMBIENT: a page on any other origin that can reach us carries it too.
+// The deployment's CORS policy reflects `*.hanzo.ai` with credentials, and that
+// wildcard covers hosts that serve arbitrary user content — so a page there can
+// read and write another org's boards with the visitor's own session. The
+// positive control is a token the caller can only obtain by READING a same-origin
+// response (GET /v1/csrf; the Same-Origin Policy stops a cross-site page reading
+// it) and must echo in a CUSTOM header (which a simple form POST cannot set
+// without a preflight we do not grant).
+//
+// The gate itself is apps/account's — the estate has ONE anti-CSRF token, minted
+// by GET /v1/csrf and bound to the caller's validated identity, and it verifies
+// here byte-identically because both processes key it from the same KMS-sourced
+// CONSOLE_CSRF_KEY. This does not re-implement any of that; it only decides WHEN
+// to apply it.
+//
+// ON THE GROUP, BY METHOD, not per route: a gate written six times is a gate the
+// seventh write forgets. Reads pass through untouched (a GET changes nothing, and
+// requiring a token to list a board would break every server-side reader), and
+// account's own gate is a no-op for a Bearer/gateway caller, which cannot be
+// CSRF'd — so this costs an API client nothing.
+func requireCSRFOnWrites() zip.Handler {
+	gate := account.RequireCSRF()
+	return func(c *zip.Ctx) error {
+		if !unsafe[c.Method()] {
+			return c.Next()
+		}
+		return gate(c)
+	}
 }
 
 // ---- HTTP response shapes (the published contract) ----
@@ -566,13 +607,30 @@ func normSource(s string) (string, error) {
 	return s, nil
 }
 
+// maxScheduleAt is the far edge of the interval this tracker will store:
+// 2200-01-01T00:00:00Z. A project plan does not reach past it, and the number
+// beyond it is never a date — it is a value that got into a date field.
+//
+// It exists because "non-negative" was not a bound. A caller could store
+// dueAt = 2^63-1, which is a legal int64 and a nonsense instant, and the
+// timeline then tried to draw a grid from today to the year 292 billion: one
+// accepted write, and every member of that org loading the board's timeline hit
+// an unrecoverable render. A stored value that breaks the reader for everyone
+// who looks at it is the write's fault, so it is refused at the write.
+//
+// The client clamps too (ui timeline.ts domainOf) — the two are not redundant.
+// This stops the row existing; that stops any row, however it arrived, from
+// taking the view down. Neither is load-bearing alone.
+const maxScheduleAt int64 = 7258118400
+
 // checkSchedule validates the timeline interval an issue carries. Both bounds
 // are unix seconds and 0 means unset, so the three legal shapes are: neither
 // (unscheduled), a due date alone (a milestone — an interval of zero length),
-// and both (a bar). The two refusals are the ones an interval cannot survive:
+// and both (a bar). The refusals are the ones an interval cannot survive:
 //
 //   - a negative bound, which is not a point in time this tracker recognises and
 //     would render a bar reaching off the left edge of every viewport;
+//   - a bound past maxScheduleAt, which is not a plan (see above);
 //   - an end before its beginning, which is not an interval at all. Refused at
 //     the boundary rather than normalised, because silently swapping a caller's
 //     dates is a mutation they did not ask for and cannot see.
@@ -582,6 +640,9 @@ func normSource(s string) (string, error) {
 func checkSchedule(startAt, dueAt int64) error {
 	if startAt < 0 || dueAt < 0 {
 		return zip.ErrBadRequest("startAt and dueAt are unix seconds and cannot be negative")
+	}
+	if startAt > maxScheduleAt || dueAt > maxScheduleAt {
+		return zip.ErrBadRequest("startAt and dueAt must be before 2200-01-01")
 	}
 	if startAt > 0 && dueAt > 0 && dueAt < startAt {
 		return zip.ErrBadRequest("dueAt cannot be before startAt")
