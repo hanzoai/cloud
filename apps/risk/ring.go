@@ -134,12 +134,39 @@ const maxResident = 64
 // planeRingCeiling is the worst case, stated so a test can hold it.
 const planeRingCeiling = maxResident * residentRingBudget
 
-// ringWindow is the longest span the aggregates keep, and therefore both the
-// retention of the durable record and the horizon beyond which an observation
-// cannot be placed. It is the same thirty days the feature inventory's widest
-// window reads, because keeping a record the rings could never hold is keeping it
-// for nothing.
+// ringWindow is the longest span the aggregates keep, and therefore the retention
+// of the durable record and the horizon a wire door will accept a stamp inside. It
+// is the same thirty days the feature inventory's widest window reads, because
+// keeping a record the rings could never hold is keeping it for nothing.
 const ringWindow = 30 * 24 * time.Hour
+
+// burstWindow is the NARROWEST span the aggregates keep, which makes it the window
+// the aggregate RULES read ([rings.pace] takes the shortest one the store actually
+// holds) and therefore the horizon an observation must be placeable inside
+// ([placeable]).
+//
+// IT IS MEASURED OFF THE WINDOWS THE STORE IS BUILT WITH, never written down as an
+// hour. [newRings] is the one constructor and it takes velocity's own standard
+// windows, so this is the same set — and a deployment that changed them moves this
+// with them instead of leaving a rule reading a window nobody keeps.
+//
+// WHY THE NARROWEST IS THE ONE THAT BINDS. velocity folds an event older than a
+// window's span to that window's leading edge, so the horizon a placement must
+// clear is the SHORTEST window, not the longest: an event two hours old clears the
+// thirty-day ring at its own bucket and is folded to NOW in the one-hour ring. The
+// bound that used to be applied here was [ringWindow], which is the widest — it
+// refused an event the widest ring could not hold and admitted every event that
+// lands in the narrowest one as if it had just happened, which is the whole
+// mechanism the burst bounds are read over.
+var burstWindow = func() time.Duration {
+	var out time.Duration
+	for _, w := range velocity.StandardWindows() {
+		if out == 0 || w.Span < out {
+			out = w.Span
+		}
+	}
+	return out
+}()
 
 // maxRowBytes is what ONE recorded observation costs on the tenant's own shelf,
 // worst case, INCLUDING its covering index and SQLite's own per-row overhead. It
@@ -351,10 +378,31 @@ func within(at, now time.Time, back time.Duration) error {
 //     every window — the subject reads as having done nothing, permanently. The
 //     wire door refuses such a stamp with a 400 ([within]); this refuses it again,
 //     here, so no path into the rings can poison the edge.
-//   - BEHIND THE WINDOW. velocity folds anything older than a window's span to
-//     the leading edge — the right call for a compliance aggregate that must not
-//     drop a record, and the wrong one for a live detector, where it means an
-//     event from last month lands in the last hour's count.
+//   - BEHIND THE WINDOW THE RULES READ. velocity folds anything older than a
+//     window's span to the leading edge — the right call for a compliance
+//     aggregate that must not drop a record, and the wrong one for a live
+//     detector, where it means an event from last month lands in the last hour's
+//     count.
+//
+//     THE WINDOW IS [burstWindow] AND NOT [ringWindow], and that is the
+//     correction. The guard was applied against the WIDEST span the rings keep,
+//     which is the one span a fold cannot reach: an event an hour and a minute old
+//     is comfortably inside thirty days, so it was admitted — and then folded to
+//     NOW in the one-hour ring, which is the ring [onPace] reads its count and its
+//     accrual from. A backdated or out-of-order event therefore counted as having
+//     just happened in the only window that decides anything, which is a burst
+//     detector a caller can fill with history. Measuring against the narrowest
+//     window is what makes the rings' own claim — that they only move forward —
+//     true of the window the rules are read over.
+//
+//     What it costs is stated rather than hidden: an event more than an hour
+//     behind the edge no longer enters the WIDER rings either, because velocity
+//     writes all four windows in one call and the placement is per event, not per
+//     ring. The model reads those wider windows, so it loses a late arrival — and
+//     it still LEARNS from the event itself ([resident.mod] is told regardless).
+//     A wider aggregate missing one late event is a slightly stale baseline; the
+//     narrowest one gaining it is a rule freezing a payment for something that
+//     happened last month.
 //
 // An observation that fails either is still LEARNED FROM. It just does not get to
 // say it happened now.
@@ -362,7 +410,7 @@ func placeable(at, edge, now time.Time) bool {
 	if at.After(now.Add(skew)) {
 		return false
 	}
-	return edge.IsZero() || at.After(edge.Add(-ringWindow))
+	return edge.IsZero() || at.After(edge.Add(-burstWindow))
 }
 
 // ── the durable record ───────────────────────────────────────────────────────
