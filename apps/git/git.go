@@ -252,7 +252,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish the delivery inventory read on the internal plane, so apps/deploy
 	// renders from a tree read instead of cloning (files.go).
 	exposeFiles()
+	// Import, inbound sync AND repo status — one seam, three ops (import_plane.go).
 	exposeImport()
+	// The sync engine decides a mirror should exist; this app owns the repos and
+	// the reactor that pushes them. Registered above for the co-resident case, and
+	// published here for the split one (mirror_control.go).
+	exposeMirror()
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
