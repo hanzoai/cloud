@@ -3,6 +3,8 @@ package cloud
 import (
 	"context"
 	"errors"
+
+	"github.com/hanzoai/cloud/plane"
 )
 
 // tracker_seam.go is the inversion layer between the native TRACKER (clients/tracker)
@@ -70,10 +72,26 @@ func RegisterIssueSink(fn IssueSink) { issueSink = fn }
 var ErrIssueSinkUnavailable = errors.New("cloud: tracker issue sink not registered")
 
 // UpsertIssue mirrors one external work item into the native tracker via the
-// registered sink. Fails closed when the tracker is unmounted.
+// registered sink, or over the plane when the tracker is not co-resident.
+//
+// The FEEDER is integrations (it holds the GitHub App and verifies the webhook)
+// and the STORE is the tracker app's, so the sink is nil on exactly the path
+// that has work to file. Every mirrored issue and every backfill row was refused
+// with "tracker issue sink not registered" while the tracker was serving its own
+// surface in the next process.
 func UpsertIssue(ctx context.Context, in IssueUpsert) (IssueUpsertResult, error) {
-	if issueSink == nil {
-		return IssueUpsertResult{}, ErrIssueSinkUnavailable
+	if issueSink != nil {
+		return issueSink(ctx, in)
 	}
-	return issueSink(ctx, in)
+	out, err := Ask[plane.IssueIn, plane.IssueUpserted](For(ctx, in.Org), "tracker", plane.TrackerUpsert,
+		&plane.IssueIn{
+			Project: in.Project, Key: in.ProjectKey, TeamName: in.ProjectName,
+			Repo: in.Repo, ExtRef: in.ExtRef, Kind: in.Kind, Source: in.Source,
+			Title: in.Title, Description: in.Description, State: in.State,
+			Assignee: in.Assignee, Labels: in.Labels,
+		})
+	if err != nil {
+		return IssueUpsertResult{}, err
+	}
+	return IssueUpsertResult{Created: out.Created, Number: out.Number, Identifier: out.Identifier}, nil
 }
