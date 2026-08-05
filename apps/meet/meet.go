@@ -43,6 +43,7 @@
 package meet
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -109,6 +110,53 @@ type state struct {
 	apiSecret  string // LiveKit api secret — signs the minted token
 	ws         string // LIVEKIT_WS — where the browser dials; empty is legible, see wsEnv
 	reason     string // why this is unusable; empty means usable
+	authority  roster // who owns the membership rows; nil means the real peer, see rows
+}
+
+// roster is the workspace-membership authority — the process that OWNS the rows,
+// asked across a process boundary.
+//
+// It is an interface for ONE reason, and the reason is a bug it already hid. The
+// decisions above it are made HERE: whether a machine credential may take a seat,
+// whether a guest may, which workspaces to offer. But every one of them is reached
+// only AFTER the peer answers, and no test had a peer — so each IAM-lane test
+// stopped at an unanswerable ask and passed for the wrong reason. Mutation proved
+// it: deleting the machine-credential exclusion (p.Subject != "") changed nothing
+// the suite could see, because the machine got as far as the ask and was refused
+// by the missing peer rather than by the rule. A decision that only exists past a
+// boundary needs the boundary to be crossable in a test, or it is not tested.
+//
+// The org is NOT a parameter. It rides the context (cloud.As), exactly as it did
+// when these were bare cloud.Ask calls, so a caller cannot ask about another
+// tenant by naming one.
+type roster interface {
+	member(ctx context.Context, workspace, subject string) (*plane.Member, error)
+	workspaces(ctx context.Context, subject string) (*plane.Spaces, error)
+}
+
+// peer is the real authority: apps/team over the internal plane. Stateless, so
+// the zero value is the whole implementation.
+type peer struct{}
+
+func (peer) member(ctx context.Context, workspace, subject string) (*plane.Member, error) {
+	return cloud.Ask[plane.MemberIn, plane.Member](ctx, "team", plane.TeamMember,
+		&plane.MemberIn{Workspace: workspace, Subject: subject})
+}
+
+func (peer) workspaces(ctx context.Context, subject string) (*plane.Spaces, error) {
+	return cloud.Ask[plane.WorkspacesIn, plane.Spaces](ctx, "team", plane.TeamWorkspaces,
+		&plane.WorkspacesIn{Subject: subject})
+}
+
+// rows is the authority to ask. A state that names none asks the real peer — so
+// this is nil-safe by construction rather than by discipline, and every load()
+// failure path (which returns a state carrying only a reason) still answers a
+// lobby read the same way production does instead of panicking on it.
+func (s state) rows() roster {
+	if s.authority == nil {
+		return peer{}
+	}
+	return s.authority
 }
 
 // ready reports whether meet can mint. Fail-closed: an unconfigured deploy refuses
@@ -394,6 +442,15 @@ type lobby struct {
 // session answers GET /v1/meet/session. It admits on the SAME two lanes as mint
 // and refuses on the same terms, so a caller that could not join anything is told
 // so at the door rather than after composing a room name.
+//
+// It answers OUTSIDE ready(), deliberately, and for the same reason the bundle is
+// served outside it: an unconfigured deployment should render a client that states
+// the problem, not a 404 and a blank page. So a deploy whose key file is bad —
+// which drops the whole state, teamSecret included — still answers a lobby read on
+// the IAM lane (that lane never needed teamSecret) while every mint is 503. That
+// pair is honest rather than contradictory: the workspaces someone belongs to do
+// not stop being true because this binary cannot sign, and the refusal they get on
+// joining names the real fault instead of hiding it behind an empty list.
 func session(s *cloud.Service[state], c *zip.Ctx) error {
 	sp, ok := s.State.spaces(c)
 	if !ok {
@@ -431,8 +488,7 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 // does not read this route at all.
 func (s state) spaces(c *zip.Ctx) (plane.Spaces, bool) {
 	if p, ok := principal.Minted(c); ok && p.Subject != "" && p.Org != "" {
-		out, err := cloud.Ask[plane.WorkspacesIn, plane.Spaces](cloud.As(c, p.Org), "team", plane.TeamWorkspaces,
-			&plane.WorkspacesIn{Subject: p.Subject})
+		out, err := s.rows().workspaces(cloud.As(c, p.Org), p.Subject)
 		if err != nil || out == nil {
 			// An unreachable authority is a refusal, never an assumption — the same
 			// posture admitsMember takes when team cannot answer.
@@ -625,8 +681,7 @@ func (s state) admitsMember(c *zip.Ctx, room string, p principal.Principal) (joi
 	if ws == "" {
 		return joiner{}, false
 	}
-	m, err := cloud.Ask[plane.MemberIn, plane.Member](cloud.As(c, p.Org), "team", plane.TeamMember,
-		&plane.MemberIn{Workspace: ws, Subject: p.Subject})
+	m, err := s.rows().member(cloud.As(c, p.Org), ws, p.Subject)
 	if err != nil || m == nil || !m.Member {
 		return joiner{}, false
 	}

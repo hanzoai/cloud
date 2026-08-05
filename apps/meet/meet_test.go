@@ -945,7 +945,12 @@ func TestIAMLaneTakesTheAttestedPrincipalAndFailsClosed(t *testing.T) {
 	if _, ok := admitsOn(t, st, roomIn(workspaceA), iamTok, nil, true); ok {
 		t.Fatal("the IAM lane admitted a caller with no answer from the workspace rows")
 	}
-	// A room that names no workspace is refused before anything is asked.
+	// A room that names no workspace is refused. NOT "before anything is asked" —
+	// strings.Cut returns the whole string when there is no separator, so this is
+	// asked about as a workspace named "no-separator", which nobody has.
+	// roster_test.go's TestTheIAMLaneNeverWidensTheRoom pins that distinction with
+	// an authority that can actually answer; here there is none, so every IAM-lane
+	// call fails closed at the ask and this asserts only the refusal.
 	if _, ok := admitsOn(t, st, "no-separator", iamTok, nil, true); ok {
 		t.Fatal("the IAM lane admitted a room that names no workspace")
 	}
