@@ -18,6 +18,12 @@ include $(ROOT)/mk/go.mk
 # the mains do — no second list to fall out of step.
 APPDIRS := $(patsubst %/Makefile,%,$(wildcard $(ROOT)/apps/*/Makefile))
 
+# Where plugin.mk puts each app binary, spelled the same way here because the
+# fleet sweep is the one caller that builds ALL of them and therefore the one
+# that has to clean up after itself. Kept identical to mk/plugin.mk's BIN; if
+# that moves, this follows.
+BIN := $(ROOT)/bin
+
 # Three apps in the manifest have a plugin/<app> here and no source directory: they
 # are external modules (hanzoai/authz, hanzoai/licensing, hanzoai/metrics) wired
 # into apps.Wire() by import. There is nothing for a per-app Makefile to sit
@@ -135,10 +141,12 @@ surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	  esac; \
 	  out=$$($(MAKE) --no-print-directory -C $$d describe 2>&1) \
 	    || { echo "$$out"; echo "!! $$a cannot project its own document — an app that cannot describe itself is the bug"; exit 1; }; \
+	  rm -f $(BIN)/$$a; \
 	done; \
 	for a in $(EXTERNAL); do \
 	  out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe 2>&1) \
 	    || { echo "$$out"; echo "!! $$a cannot project its own document"; exit 1; }; \
+	  rm -f $(BIN)/$$a; \
 	done
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the weave refused; nothing was written"; exit 1; }
