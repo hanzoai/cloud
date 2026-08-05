@@ -125,9 +125,32 @@ func InboundGitSync(ctx context.Context, req GitInboundReq) (GitSyncResult, erro
 }
 
 // GitRepoStatuses returns the per-repo import + sync status for names (org-scoped).
+//
+// Absent co-residency it asks the git app, like the two calls above. It used to
+// return ErrGitImporterUnavailable here, which was honest about the seam and
+// wrong about the world: the statuses exist, in the process next door, and the
+// console repo list rendered every repo as never-imported because the app that
+// draws the list is not the app that owns the repos.
+//
+// A name git knows nothing about is simply MISSING from the reply, and stays
+// missing from the map — the same answer the in-process importer gives, so the
+// two legs cannot be told apart by their result.
 func GitRepoStatuses(ctx context.Context, org, project string, names []string) (map[string]GitRepoStatus, error) {
-	if gitImporter == nil {
-		return nil, ErrGitImporterUnavailable
+	if gitImporter != nil {
+		return gitImporter.RepoStatus(ctx, org, project, names)
 	}
-	return gitImporter.RepoStatus(ctx, org, project, names)
+	out, err := Ask[plane.StatusIn, plane.Statuses](For(ctx, org), "git", plane.GitStatus,
+		&plane.StatusIn{Project: project, Names: names})
+	if err != nil {
+		return nil, err
+	}
+	st := make(map[string]GitRepoStatus, len(out.Rows))
+	for _, r := range out.Rows {
+		st[r.Name] = GitRepoStatus{
+			Imported:     r.Imported,
+			Conflict:     r.Conflict,
+			LastSyncedAt: r.LastSyncedAt,
+		}
+	}
+	return st, nil
 }
