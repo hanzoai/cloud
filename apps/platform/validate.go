@@ -25,6 +25,7 @@ package platform
 
 import (
 	"fmt"
+	"golang.org/x/net/publicsuffix"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -196,6 +197,29 @@ func validateRepoURL(raw string) (string, error) {
 
 // hostAllowed reports whether host exactly matches, or is a subdomain of, the
 // cloud's own embedded-git apex or an allowlisted external git provider apex.
+// apexOf returns the registrable apex of a host: the domain one label below the
+// public suffix ("api.hanzo.ai" -> "hanzo.ai", "hanzo.ai" -> "hanzo.ai"). It is
+// what makes a deployment's SIBLING hosts — its forge, its CI — its own, since
+// hostAllowed grants a host and its subdomains and siblings are neither.
+//
+// publicsuffix is used rather than "last two labels" so a multi-label suffix
+// (co.uk, com.au) yields the registrable domain and not the suffix itself, which
+// would trust every domain under it.
+func apexOf(raw string) string {
+	h := strings.ToLower(strings.TrimSpace(raw))
+	if h == "" {
+		return ""
+	}
+	if i := strings.IndexByte(h, ':'); i >= 0 { // tolerate host:port
+		h = h[:i]
+	}
+	apex, err := publicsuffix.EffectiveTLDPlusOne(h)
+	if err != nil {
+		return h // not a registrable name (localhost, an IP): trust it verbatim
+	}
+	return apex
+}
+
 func hostAllowed(host string) bool {
 	if selfGitHost != "" && (host == selfGitHost || strings.HasSuffix(host, "."+selfGitHost)) {
 		return true
