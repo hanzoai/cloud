@@ -10,7 +10,7 @@ package org
 // store wires at its open/write/close seam. It composes the three orthogonal lanes,
 // each kept in its own package:
 //
-//	WHO writes   — ha election via CASFencer: HRW names the owner, the lease binds
+//	WHO writes   — ha election via CASLeases: HRW names the owner, the lease binds
 //	               it to a monotone Round. (github.com/hanzoai/ha)
 //	HOW it ships  — replica.FencedStore over the S3 conditional store: a ship at a
 //	               round below the recorded one is rejected (ErrStaleRound), and a
@@ -71,7 +71,7 @@ var errCorruptFrame = errors.New("org: durable payload is not a valid (sidecar,d
 // no per-org state — For() mints a Durable per org DB. nil ⇒ durability disabled
 // (local-only single-node/dev), the caller's default open path unchanged.
 type Durability struct {
-	fencer *CASFencer
+	leases *CASLeases
 	fenced *replica.FencedStore
 	cipher *Cipher
 }
@@ -83,7 +83,7 @@ type Durability struct {
 // share one linearizable register.
 func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher) *Durability {
 	return &Durability{
-		fencer: NewCASFencer(cond, view),
+		leases: NewCASLeases(cond, view),
 		fenced: replica.NewFencedStore(cond),
 		cipher: cipher,
 	}
@@ -131,7 +131,7 @@ type Durable struct {
 // quiesce-close-reopen on the cached entry is the future enhancement; until then the
 // safe, simple recovery is re-open.
 func (d *Durable) Hydrate(ctx context.Context) error {
-	lease, err := d.dy.fencer.Acquire(ctx, d.orgID)
+	lease, err := d.dy.leases.Acquire(ctx, d.orgID)
 	if err != nil {
 		// Not the elected writer, or no safe owner / unreachable store: serve reads
 		// off the freshest local copy we can get, writes fail closed via Sync.
