@@ -79,7 +79,7 @@ func TestJurisdictions_AnUndatedOperatorListingLosesToTheDatedDefault(t *testing
 	// End to end, through the rule itself: this process states no AML_JURISDICTIONS,
 	// so [jurisdictions] resolved to the same dated default the fallback selects, and
 	// a large payment from that tier FREEZES.
-	if d := determine("AF", freezeNano); d.Action != cloud.ActionRestrict {
+	if d := determine("AF", freezeNano, reading{}); d.Action != cloud.ActionRestrict {
 		t.Fatalf("determine(AF, freeze) = %q, want %q — the listing the misconfiguration falls "+
 			"back to does not actually freeze anything", d.Action, cloud.ActionRestrict)
 	}
