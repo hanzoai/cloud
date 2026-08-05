@@ -41,6 +41,17 @@ var allowedRequestUses = map[string]string{
 		"reason: a workflow run executes a component graph that bills a model provider, so it is gated " +
 		"before it runs and debited after. Same three facts the org cannot supply (payer, validated " +
 		"project, request id + client IP), same two call sites, same fail-closed silence off HTTP.",
+	"apps/commerce/risk.go": "screen.op / seen — the fraud screen in front of the typed mint op, and an " +
+		"identity gate reading strictly more than the org. The AMOUNT comes off the decoded In and the " +
+		"SETTLEMENT off the returned receipt, both deliberately not read from the wire (see screen.op), " +
+		"so the request is consulted for exactly the facts no projection can carry on a type: the payer " +
+		"(principal.Subject, which is the validated caller and not the tenant), the door actually reached " +
+		"(c.Path(), which is /mcp on the agent plane and the mint on the browser's), and the address + " +
+		"jurisdiction signals a credit decision is made on. None of those is the org, and none may become " +
+		"an In field — a caller that could name its own payer or jurisdiction would screen as someone " +
+		"else. It fails OPEN of nothing: a call with no request at all (the CLI's LocalInvoke) resolves " +
+		"no payer and is screened as that state rather than exempted from it, and the handler's own " +
+		"payingOrg gate refuses it after.",
 	"apps/dataset/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
 		"establishes who is asking. The TENANT is resolved through apps/tenant, which reads " +
 		"principal.OrgFrom and nothing else; the request is needed for the other half, which is a " +
