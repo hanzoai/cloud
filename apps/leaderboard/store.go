@@ -22,11 +22,10 @@ import (
 	"errors"
 	"fmt"
 
-	// cek is the ONE opener: the database is born encrypted under the key cek
-	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
+	// sqlpool.Open is the ONE opener: the database is born encrypted under the
+	// key cek derives from the process master and the system namespace, and comes
+	// back with the single-connection cap already applied.
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite" // registers the "sqlite" database/sql driver
 )
 
@@ -58,11 +57,10 @@ type optinStore struct {
 }
 
 func openOptinStore(dir string) (*optinStore, error) {
-	db, err := cek.Open(namespace.System(), "leaderboard", dir)
+	db, err := sqlpool.Open("leaderboard", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open leaderboard store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &optinStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

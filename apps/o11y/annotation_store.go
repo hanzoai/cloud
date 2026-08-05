@@ -11,9 +11,8 @@ import (
 
 	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
+
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -75,11 +74,10 @@ type annStore struct {
 }
 
 func openAnnStore(dir string) (*annStore, error) {
-	db, err := cek.Open(namespace.System(), "o11y_annotations", dir)
+	db, err := sqlpool.Open("o11y_annotations", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open o11y_annotations store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &annStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

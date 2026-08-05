@@ -10,10 +10,9 @@ import (
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/cloud/sqlpool"
 
-	// cek is the ONE opener: the database is born encrypted under the key cek
-	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
-	"github.com/hanzoai/namespace"
+	// sqlpool.Open is the ONE opener: it renders this subsystem's path from the
+	// system namespace, opens it under the key cek derives for that name, and
+	// applies the single-connection cap.
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags. Importing modernc
@@ -200,11 +199,10 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "projects", dir)
+	db, err := sqlpool.Open("projects", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open projects store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
