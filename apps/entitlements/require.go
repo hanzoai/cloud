@@ -36,11 +36,21 @@ import (
 // @hanzo/plans v1.4.4 licensing.product_ids. This is the ONE source of the app-key
 // set so the projection and any future consumer never re-list it.
 //
+// NOTE: "world" is no longer here. It was never a `licensing.product_ids` grant in any
+// catalog version; world access was conveyed by the tier-level `bundles` field pointing
+// at separate world-free/pro/team/enterprise PLANS, and @hanzo/plans carried that at
+// v1.4.4 and DELETED both the field and those plans at v1.4.11. Asking the licence
+// authority about a product it has never licensed answers Active:false for every org on
+// every tier, so the projection reported world LOCKED to every customer unconditionally —
+// a lock no purchase could lift. World is not a separately billable product; its limits
+// resolve to the free floor (apps/world/entitlement.go), which is now the whole answer
+// rather than a degraded one.
+//
 // NOTE: "admin" is intentionally NOT here. It is not a commerce product — it is the
 // platform-sudo predicate (principal.IsSuperAdmin / c.IsAdmin), strictly tighter
 // than any purchasable tier — so the projection resolves it separately and it is
 // never handed to CheckEntitlement.
-var appProducts = []string{"studio", "bot", "world", "platform", "team"}
+var appProducts = []string{"studio", "bot", "platform", "team"}
 
 // ── admin switches (the ONE flag engine — clients/flags) ────────────────────────
 
