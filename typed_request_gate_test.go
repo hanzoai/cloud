@@ -170,14 +170,15 @@ var allowedRequestUses = map[string]string{
 		"functions in ONE file, so fourteen typed ops share one seam; all fail closed off the HTTP path — no " +
 		"request means the default project, no actor, and no audit record, since an unattributable record is " +
 		"worse than none, and tenantOf refuses before any of them is reached.",
-	"apps/team/typed.go": "tokenOf / sessionOf / admin / noStore / cookie — team authenticates its billing, " +
-		"files and collaborator planes with its OWN HS256 session token, which rides in Authorization or the " +
-		"HttpOnly account-token cookie; principal.OrgFrom carries neither (nor the WORKSPACE claim the " +
-		"collaborator plane gates on), and bots/sync additionally needs admin-ness (X-User-IsAdmin). The " +
-		"cookie WRITER is the other end of that same identity — the account-token cookie is set on the " +
-		"RESPONSE, which only the request reaches. It is ONE file for the whole subsystem on purpose — the " +
-		"resolvers live here so the planes that use them do not each reach for the request. All of them fail " +
-		"closed off the HTTP path: no request, no token, no identity, and no browser to sign out.",
+	"apps/team/typed.go": "callerOf / sessionOf / admin / noStore / cookie — team authenticates its billing, " +
+		"files and collaborator planes with a CALLER (identity.who): an IAM access token, else team's own " +
+		"HS256 session token, riding Authorization or an HttpOnly cookie. principal.OrgFrom carries none of " +
+		"those (nor the WORKSPACE an HS256 workspace token pins, which the collaborator plane gates on), and " +
+		"bots/sync additionally needs admin-ness (X-User-IsAdmin). The cookie WRITER is the other end of that " +
+		"same identity — the account-token cookie is set on the RESPONSE, which only the request reaches. It " +
+		"is ONE file for the whole subsystem on purpose — the resolvers live here so the planes that use them " +
+		"do not each reach for the request. All of them fail closed off the HTTP path: no request, no " +
+		"credential, no identity, and no browser to sign out.",
 	"apps/ml/typed.go": "tenantFrom — ml's tenant boundary is a per-org(+project) KUBERNETES NAMESPACE, and " +
 		"deriving it takes two facts principal.OrgFrom does not carry: the org SUB-SCOPE (X-Project-Id, " +
 		"which suffixes the namespace) and platform-admin-ness (X-User-IsAdmin, which buckets an org-less " +

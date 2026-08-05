@@ -69,7 +69,7 @@ const collabPrefix = "/collaborator"
 type collabService struct {
 	vfs      types.VFSClient
 	accounts *accountStore
-	secret   string
+	ident    *identity
 	hub      *collabHub
 	degraded bool
 }
@@ -211,11 +211,11 @@ func (s *collabService) rpc(ctx context.Context, in *collabRequest) (*collabResu
 	if s.degraded {
 		return nil, unavailable()
 	}
-	t, err := tokenOf(ctx, s.secret)
+	cl, err := callerOf(ctx, s.ident)
 	if err != nil {
 		return nil, zip.ErrUnauthorized("invalid session token")
 	}
-	org := t.Org()
+	org := cl.org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("invalid session token")
 	}
@@ -223,19 +223,16 @@ func (s *collabService) rpc(ctx context.Context, in *collabRequest) (*collabResu
 	if err != nil {
 		return nil, zip.ErrBadRequest("malformed documentId")
 	}
-	// The workspace token names its workspace — the documentId must agree. A
-	// session token (no workspace claim) falls through to the membership check.
-	if t.Workspace != "" && t.Workspace != doc.workspace {
+	// An HS256 workspace token names its workspace — the documentId must agree. A
+	// credential that names none (a session token, and every IAM caller) falls
+	// through to the membership check, which is the whole authorization there.
+	if cl.workspace != "" && cl.workspace != doc.workspace {
 		return nil, zip.ErrNotFound("document not found")
 	}
 	if s.accounts == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "team: collaborator unavailable")
 	}
-	w, err := s.accounts.WorkspaceByUUID(ctx, org, doc.workspace)
-	if err != nil {
-		return nil, zip.ErrNotFound("document not found")
-	}
-	if _, ok := s.accounts.Membership(ctx, w.ID, t.Account); !ok {
+	if _, err := s.ident.admit(ctx, cl, doc.workspace); err != nil {
 		return nil, zip.ErrNotFound("document not found")
 	}
 
