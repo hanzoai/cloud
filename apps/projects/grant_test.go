@@ -226,3 +226,38 @@ func TestReconcileEmptyManifestDeletesNothing(t *testing.T) {
 		t.Fatal("an empty manifest deleted the live site")
 	}
 }
+
+// TestFailureOwnsProject pins which deployment may mark a project broken.
+//
+// The regression it exists for: `p.Status = "error"` used to be unconditional on
+// any non-live completion, so completing a SUPERSEDED deployment took down a site
+// that was up. Measured on hanzo-ai — v5 live and every byte correct in the
+// bucket, completing v3 (an older probe) as error flipped the project to "error"
+// and the host started 404ing. The same bug fires in ordinary use whenever a
+// rebuild fails while the previous build is still serving, which is precisely what
+// the "report a failed build" step in every CI workflow does.
+func TestFailureOwnsProject(t *testing.T) {
+	cases := []struct {
+		name          string
+		currentDeploy string
+		deployID      string
+		want          bool
+	}{
+		// Nothing has ever gone live, so there is no site to protect and the
+		// project HAS genuinely failed.
+		{"first deploy fails: project is broken", "", "dep_1", true},
+		// The live deployment itself failed — the thing being served is the thing
+		// that broke.
+		{"the live deployment fails: project is broken", "dep_1", "dep_1", true},
+		// The case that took hanzo-ai down.
+		{"a superseded deployment fails: site stays up", "dep_5", "dep_3", false},
+		// The ordinary shape: a rebuild fails while the previous build serves.
+		{"a newer build fails while the old one serves", "dep_1", "dep_2", false},
+	}
+	for _, c := range cases {
+		if got := failureOwnsProject(c.currentDeploy, c.deployID); got != c.want {
+			t.Errorf("%s: failureOwnsProject(%q, %q) = %v, want %v",
+				c.name, c.currentDeploy, c.deployID, got, c.want)
+		}
+	}
+}
