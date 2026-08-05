@@ -282,9 +282,18 @@ var Apps = []App{
 	{Name: "catalog", Prefixes: []string{"/v1/catalog"}},
 	{Name: "world", Prefixes: []string{"/v1/world"}},
 	{Name: "bot", Prefixes: []string{"/v1/bot/connect", "/v1/bot/nodes", "/v1/bot/peer/invoke"}},
-	{Name: "runtime", Prefixes: []string{"/v1/bot"}},
 	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
-	{Name: "bots", Prefixes: []string{"/v1/bots"}},
+	// bots is the headless bot: the run control plane at /v1/bots AND the door to
+	// @hanzo/bot, the service that executes a run, whose own ops paths it relays at
+	// /v1/bot. Those were two apps (bots, runtime) until the split was measured for
+	// what it was — a LANGUAGE boundary (Go surface, TS executor), not a product
+	// boundary. One product answers for one thing, so it holds both prefixes.
+	//
+	// /v1/bot here is the BARE prefix: bot's three deeper prefixes above still win
+	// on it by specificity, which is the only reason two apps could ever share it.
+	// That sharing is the remaining defect, and it is bot's to fix by vacating —
+	// its product is connected machines, not a bot.
+	{Name: "bots", Prefixes: []string{"/v1/bot", "/v1/bots"}},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/admin/referrals", "/v1/affiliates"}},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}},

@@ -11,7 +11,7 @@ import (
 )
 
 // These pin coding's wire contract with the runtime through the REAL transport
-// (clients/runtime) against a stub server — so the credential-custody and
+// (apps/bots' transport) against a stub server — so the credential-custody and
 // fail-closed properties are proven end to end over the seam, not against a fake
 // of it.
 

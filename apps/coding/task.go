@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hanzoai/cloud/apps/runtime"
+	"github.com/hanzoai/cloud/apps/bots"
 )
 
 // task.go is coding's WIRE CONTRACT with the bot runtime — the stub behind the
@@ -73,7 +73,7 @@ type runner struct{}
 func (runner) Run(ctx context.Context, org, userID string, req RunRequest, onStep func(Step)) (RunResult, error) {
 	var out RunResult
 	var terminal bool
-	err := runtime.Stream(ctx, runtime.Call{
+	err := bots.Stream(ctx, bots.Call{
 		Op:   taskOp,
 		Org:  org,
 		User: userID,

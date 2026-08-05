@@ -1,4 +1,4 @@
-package runtime
+package bots
 
 import (
 	"net/http"
