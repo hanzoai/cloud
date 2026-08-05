@@ -1,7 +1,9 @@
 package cloud
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -245,6 +247,88 @@ func TestApexIsOneDerivation(t *testing.T) {
 		t.Errorf("brand.Sibling(cloud.hanzo.ai, git) = %q, want git.hanzo.ai "+
 			"— the old TrimPrefix(\"api.\") rule returned git.cloud.hanzo.ai, "+
 			"a forge host platform's own allowlist would then refuse", got)
+	}
+}
+
+// TestJWKSHasOneDerivation pins the JWKS endpoint to one resolution.
+//
+// CLOUD_JWKS_URL exists because the public issuer host is fronted by Cloudflare,
+// which 403s a server-side loopback (iamurl.go), so production pins the
+// IN-CLUSTER address: CLOUD_JWKS_URL=http://iam.hanzo.svc/v1/iam/.well-known/jwks
+// against CLOUD_IAM_ISSUER=https://hanzo.id.
+//
+// JWKSURLFor honoured that and was unexported, so the two planes that could not
+// reach it — durable.go's gated ZAP listener and apps/base's per-app pool — each
+// concatenated the suffix onto the ISSUER instead and silently ignored the
+// override. Both were fetching signing keys from the public host that refuses
+// them, while the edge validator used the working in-cluster one: one fleet,
+// two answers, and the failure is a plane that cannot verify a token the front
+// door just accepted.
+func TestJWKSHasOneDerivation(t *testing.T) {
+	const issuer = "https://hanzo.id"
+	t.Setenv("CLOUD_JWKS_URL", "http://iam.hanzo.svc/v1/iam/.well-known/jwks")
+	got := JWKSURLFor(issuer)
+	if got != "http://iam.hanzo.svc/v1/iam/.well-known/jwks" {
+		t.Fatalf("JWKSURLFor ignored CLOUD_JWKS_URL: got %q", got)
+	}
+	if strings.HasPrefix(got, issuer) {
+		t.Fatalf("JWKSURLFor built the URL off the issuer (%q) instead of honouring the "+
+			"pin — that is the derivation durable.go and apps/base used to copy", got)
+	}
+	// Unset, it falls back to the HIP-0111 convention.
+	os.Unsetenv("CLOUD_JWKS_URL")
+	if want := issuer + "/v1/iam/.well-known/jwks"; JWKSURLFor(issuer) != want {
+		t.Fatalf("JWKSURLFor(%q) = %q, want %q", issuer, JWKSURLFor(issuer), want)
+	}
+	// And Config agrees with the function, in both directions.
+	t.Setenv("CLOUD_IAM_ISSUER", issuer)
+	t.Setenv("CLOUD_JWKS_URL", "http://iam.hanzo.svc/v1/iam/.well-known/jwks")
+	if cfg := LoadConfig(); cfg.JWKSURL != JWKSURLFor(cfg.IAMIssuer) {
+		t.Fatalf("Config.JWKSURL=%q, JWKSURLFor=%q — two answers again", cfg.JWKSURL, JWKSURLFor(cfg.IAMIssuer))
+	}
+
+	// The behaviour above cannot catch the actual defect: durable.go and
+	// apps/base did not call this function wrongly, they did not call it at all.
+	// So the recurrence is a subsystem BUILDING the path again, and the only
+	// thing that sees that is the source. One derivation means one place spells
+	// the suffix as a URL; everywhere else it is prose in a comment.
+	const suffix = `"/v1/iam/.well-known/jwks`
+	var builders []string
+	err := filepath.WalkDir(".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if n := d.Name(); n == "vendor" || n == ".git" || n == "node_modules" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+			return nil
+		}
+		if filepath.ToSlash(p) == "token_validator.go" {
+			return nil // the one derivation
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(b), suffix) {
+			builders = append(builders, p)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	if len(builders) > 0 {
+		sort.Strings(builders)
+		t.Errorf("%v build the JWKS path themselves.\n"+
+			"Call cloud.JWKSURLFor(issuer). Concatenating the suffix onto the issuer "+
+			"ignores CLOUD_JWKS_URL, and production pins it because the public issuer "+
+			"host 403s a server-side loopback — that is the fleet verifying one set of "+
+			"signing keys at the front door and a different set behind it.", builders)
 	}
 }
 

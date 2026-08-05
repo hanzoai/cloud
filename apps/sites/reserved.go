@@ -189,9 +189,15 @@ func SetSelfDomains(domains []string) {
 	policyMu.Unlock()
 }
 
-// apexOf is the published-site zone, normalized, with the product default. ONE
-// reading, so New and selfOf cannot disagree about which zone is ours.
-func apexOf(apex string) string {
+// siteZone is the published-site zone, normalized, with the product default
+// (hanzo.app) — the zone <slug>.<zone> sites are served under. ONE reading, so
+// New and selfOf cannot disagree about which zone is ours.
+//
+// It was called apexOf, which is a DIFFERENT question from the one brand.Apex
+// answers (the registrable apex of a host). Two functions one package apart,
+// same name, unrelated meanings, in the exact area where confusing a host for
+// its apex already caused an outage.
+func siteZone(apex string) string {
 	if a := strings.ToLower(strings.TrimSpace(apex)); a != "" {
 		return a
 	}
@@ -209,7 +215,7 @@ func apexOf(apex string) string {
 // candidate. Gated on the SAME fail-closed pair New requires (an apex AND an owning
 // org): with no owner nothing first-party ever serves, so nothing is self on it.
 func selfOf(cfg Config) []string {
-	apex := apexOf(cfg.Apex)
+	apex := siteZone(cfg.Apex)
 	out := []string{apex}
 	seen := map[string]bool{apex: true}
 	add := func(d string) {

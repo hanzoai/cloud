@@ -52,6 +52,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/namespace"
@@ -162,7 +163,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// ("hanzo.ai") admits every sibling the deployment owns — git., ci., cd. —
 	// for hanzo.ai, lux.network, zoo.network and any white-label domain alike,
 	// with no list to maintain per brand.
-	selfGitHost = apexOf(deps.Domain)
+	selfGitHost = brand.Apex(deps.Domain)
 
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git

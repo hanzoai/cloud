@@ -25,7 +25,6 @@ package platform
 
 import (
 	"fmt"
-	"github.com/hanzoai/cloud/brand"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -197,11 +196,6 @@ func validateRepoURL(raw string) (string, error) {
 
 // hostAllowed reports whether host exactly matches, or is a subdomain of, the
 // cloud's own embedded-git apex or an allowlisted external git provider apex.
-// apexOf is brand.Apex. It lived here as a private copy, which is how the same
-// reduction came to exist three times (here, apps/sites, apps/git) by three
-// different rules — see brand.Apex. One name, one implementation, one answer.
-var apexOf = brand.Apex
-
 func hostAllowed(host string) bool {
 	if selfGitHost != "" && (host == selfGitHost || strings.HasSuffix(host, "."+selfGitHost)) {
 		return true
