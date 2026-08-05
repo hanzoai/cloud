@@ -61,9 +61,13 @@ type caught struct {
 // watchTeaching substitutes the plane seam and hands back what leaves. The seam is a
 // variable for exactly this: the door's record can be asserted without standing up a
 // risk child to receive it.
+// The buffer holds a BURST rather than one payment, because the cross-door proof
+// (risk_payments_test.go) drives several payments before it reads any: teaching is
+// detached, so a buffer smaller than the burst blocks the goroutines under test
+// instead of recording them.
 func watchTeaching(t *testing.T) <-chan caught {
 	t.Helper()
-	seen := make(chan caught, 4)
+	seen := make(chan caught, 16)
 	prior := teach
 	teach = func(ctx context.Context, in *plane.RiskObserveIn) (*plane.RiskObserved, error) {
 		seen <- caught{org: cloud.Who(ctx).Org, in: in}
@@ -84,7 +88,7 @@ func doorApp(t *testing.T, status int, body string) *zip.App {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 	})
 	app := zip.New(zip.Config{Logger: luxlog.New("doortest"), DisableStartupMessage: true})
-	app.Post("/v1/billing/topup/token", riskGate(luxlog.New("doortest")), settledBody(status, body))
+	app.Post("/v1/billing/topup/token", screenChain(riskGate(luxlog.New("doortest"))), settledBody(status, body))
 	return app
 }
 
@@ -141,7 +145,7 @@ func none(t *testing.T, seen <-chan caught) {
 	}
 }
 
-// TestTopupFacts_StatesThePeerThatArmsTheFanOut is HIGH-1's positive half.
+// TestPaymentFacts_StatesThePeerThatArmsTheFanOut is HIGH-1's positive half.
 //
 // [risk.onFan] is the only half of the rule that can see account farming, because a
 // farm is unremarkable from every account taken by itself — the pattern exists only
@@ -149,20 +153,20 @@ func none(t *testing.T, seen <-chan caught) {
 // NEITHER: with ip, currency, country and nano the only facts, the counterparty and
 // device axes were empty on every top-up and that half could not fire for any input.
 //
-// Mutation proof: drop the peer from [topupFacts] and this fails; keep stating it as
+// Mutation proof: drop the peer from [paymentFacts] and this fails; keep stating it as
 // the empty string when the edge resolved nothing and the second half fails, because
 // every unresolvable payer would pool into one very busy identifier and reach the
 // fan-out bound on volume alone.
-func TestTopupFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
+func TestPaymentFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
 	const address = "198.51.100.22"
-	facts := topupFacts(address, "US", 4200, "USD")
+	facts := paymentFacts(address, "US", 4200, "USD")
 	if got := facts[plane.SignalPeer]; got != address {
 		t.Errorf("peer %q, want %q — an axis the door does not state cannot be read, and the "+
 			"fan-out half is unreachable without it", got, address)
 	}
 	// ABSENT, NEVER EMPTY. cloud.Facts drops an empty value, but the map itself must
 	// not carry one: a key present with no value is a gate claiming to have looked.
-	bare := topupFacts("", "", 4200, "USD")
+	bare := paymentFacts("", "", 4200, "USD")
 	if got, held := bare[plane.SignalPeer]; held {
 		t.Errorf("the door stated a peer of %q when the edge resolved none — every payer whose "+
 			"address we cannot resolve then shares ONE identifier, and the fan-out reports a "+
@@ -170,7 +174,7 @@ func TestTopupFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
 	}
 }
 
-// TestTopupAxes_MatchWhatTheDoorActuallyStates holds the boot declaration to the
+// TestPaymentAxes_MatchWhatTheDoorActuallyStates holds the boot declaration to the
 // door.
 //
 // The unarmed axis is announced at boot precisely so it cannot read as a rule that
@@ -178,27 +182,27 @@ func TestTopupFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
 // because it is a claim an operator will believe. This is what keeps them one fact:
 // every armed axis must be stateable, and every unarmed one must be unstated.
 //
-// Mutation proof: state a device in [topupFacts] without moving it out of
-// [topupUnarmed] (or add an axis to [topupAxes] the door never states) and this fails.
-func TestTopupAxes_MatchWhatTheDoorActuallyStates(t *testing.T) {
+// Mutation proof: state a device in [paymentFacts] without moving it out of
+// [paymentUnarmed] (or add an axis to [paymentAxes] the door never states) and this fails.
+func TestPaymentAxes_MatchWhatTheDoorActuallyStates(t *testing.T) {
 	// Everything the door can observe, stated at once, so this is the door's whole
 	// reach rather than one sample of it.
-	facts := topupFacts("198.51.100.22", "US", 4200, "USD")
-	for _, axis := range topupAxes {
+	facts := paymentFacts("198.51.100.22", "US", 4200, "USD")
+	for _, axis := range paymentAxes {
 		if facts[axis] == "" {
 			t.Errorf("the boot declaration claims %q is armed, and the door states nothing for "+
 				"it — an operator is being told a rule half can fire when it cannot", axis)
 		}
 	}
-	for _, axis := range topupUnarmed {
+	for _, axis := range paymentUnarmed {
 		if got, held := facts[axis]; held {
 			t.Errorf("the boot declaration says %q is UNARMED and the door states %q for it — "+
 				"the announcement an operator reads is false", axis, got)
 		}
 	}
 	// And the two lists are disjoint, or the declaration says both things at once.
-	for _, armed := range topupAxes {
-		for _, unarmed := range topupUnarmed {
+	for _, armed := range paymentAxes {
+		for _, unarmed := range paymentUnarmed {
 			if armed == unarmed {
 				t.Errorf("%q is declared both armed and unarmed", armed)
 			}
