@@ -1,0 +1,12 @@
+# Provenance of this embedded Tracker SPA build. See ../README.md to regenerate.
+#
+# NOT embedded in the binary: `//go:embed dist` (no `all:`) omits dot-files, so
+# this names the source without publishing it at /tracker/.sync-stamp.
+app=@hanzo/tracker (admin-tracker)
+base=/tracker/
+api_prefix=/v1/tracker
+auth=AuthGate (@hanzogui/admin) + @hanzo/iam@0.9.4 PKCE
+auth_server_url=<origin>/v1/iam   # polarity is version-bound; see src/auth.ts
+callback=/tracker/callback
+source=hanzoai/admin:apps/admin-tracker@d44ed43 (blue/tracker-ui)
+built=tsc --noEmit (clean) + vitest (4/4) + vite build
