@@ -8,5 +8,5 @@ api_prefix=/v1/tracker
 auth=AuthGate (@hanzogui/admin) + @hanzo/iam@0.9.4 PKCE
 auth_server_url=<origin>/v1/iam   # polarity is version-bound; see src/auth.ts
 callback=/tracker/callback
-source=hanzoai/admin:apps/admin-tracker@6dc58d0 (blue/tracker-ui)
+source=hanzoai/admin:apps/admin-tracker@d44ed43 (blue/tracker-ui)
 built=tsc --noEmit (clean) + vitest (4/4) + vite build
