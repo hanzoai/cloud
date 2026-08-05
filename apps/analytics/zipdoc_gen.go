@@ -162,4 +162,16 @@ func init() {
 			"insightsStatus.surface": "Surface is the path prefix this status covers: /v1/insights.",
 		},
 	})
+	zip.Describe("POST /event/capture", zip.Doc{
+		Description: "Captures ONE occurrence onto the calling organisation's own event plane — the\nsame plane the HTTP door fills and /v1/insights reads back, through the SAME\nwrite core.\n\nThe organisation is the CALLER's, minted from the plane principal and never\nfrom this body, which carries no field that could name one. A peer that states\nno principal writes nothing: an unidentified caller has no partition, and\ndefaulting one would be a shared store with a tenant anybody can reach.\n\nA name is REQUIRED and is refused rather than defaulted. Every other route into\nthis core has a server-chosen default name for the signal it carries (a page\nview, an error, a span); a peer's occurrence is a tracked act, and a tracked\nact with no name is unroutable by the plane's own rule — so the refusal is the\nnormalizer's, said at the boundary where the caller can still be told.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"EventCaptured.accepted": "Accepted is how many occurrences were admitted and published.",
+			"EventCaptured.dropped":  "Dropped is how many were not, because nothing about them named a landable\nrow.",
+			"EventIn.at":             "At is when it happened, RFC 3339. Empty means now, decided by the app that\nowns the plane (which is also the one that clamps a stated time).",
+			"EventIn.attributes":     "Attributes are the occurrence's own facts, as [Signal] — the plane's ONE\nname/value pair — because a map cannot cross this plane at all (see\n[Header], which learned it the expensive way). They land in the row's\nattributes map, so a new fact is a new value and never a schema change.",
+			"EventIn.name":           "Name is what happened, in the emitter's own verb-object vocabulary\n(risk_decided, secret_rotated). It is the column every lens groups by, so it\nmust come from a CLOSED set the emitter owns — never from a string a caller\nof the emitter chose, which is unbounded cardinality in the one column the\nplane indexes.",
+			"EventIn.product":        "Product is the emitting SURFACE — the app's own name. Empty attributes the\nrow to no surface, which is honest and unhelpful.",
+			"EventIn.subject":        "Subject is whom the occurrence concerned, as the value the emitter is\nwilling to have stored: the row's distinct id. An identifying value belongs\nhere only in an opaque form — the plane is a SHARED store read by every lens\nthe organisation has, not the emitter's private record.",
+		},
+	})
 }
