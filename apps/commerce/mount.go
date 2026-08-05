@@ -37,7 +37,10 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	commercemod "github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
+	"github.com/hanzoai/commerce/billing/paywall"
+	"github.com/hanzoai/commerce/util/permission"
 	catalogapi "github.com/hanzoai/commerce/api/catalog"
+	commerceresources "github.com/hanzoai/commerce/api/resources"
 	planapi "github.com/hanzoai/commerce/api/plan"
 	commercestore "github.com/hanzoai/commerce/api/store"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
@@ -372,6 +375,37 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The bundle binds the module's own route table, so no route in it is
 	// typed yet — module work, per the module-handler note.
 	planapi.AdminRoute(storeV1, commercebilling.SeedRows)
+
+	// THE MERCHANT RESOURCES, at the endpoint every Hanzo surface is told to
+	// use: api.hanzo.ai/v1/commerce/<kind> — products, variants, collections,
+	// discounts, sales channels, stock locations, subscribers, webhooks.
+	//
+	// Commerce is a PLUGIN of this binary, so its merchant surface is reachable
+	// through this binary or it is not reachable at all. It was not: there is no
+	// commerce backend pod, commerce-api.hanzo.ai routes here, and this embed
+	// carried no resource bundle — so every admin data view 404'd in production
+	// while sign-in, catalog and billing answered 200. Honest, and total.
+	//
+	// It calls the resources LEAF rather than commerce's api.Route. Route also
+	// binds an index route, a permissive CORS policy and a wildcard OPTIONS onto
+	// whatever router it is handed — right for a process that owns its tree,
+	// wrong in this shared one, where byte-identical patterns merge silently and
+	// two equal-specificity params with different names panic at registration.
+	// Importing that package would also drag checkout, subscriptions and
+	// thirdparty/netlify, which this binary deliberately does not carry.
+	//
+	// productEvents is nil: the storefront publish loop belongs to the
+	// standalone's event bus, and the CRUD does not depend on it.
+	commerceV1 := app.Group("/v1/commerce")
+	commerceV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
+	commerceV1.Use(iammiddleware.IAMTokenRequired())
+	commerceresources.Route(
+		commerceV1,
+		commercemid.TokenRequired(),
+		commercemid.TokenRequired(permission.Admin),
+		paywall.Require,
+		nil,
+	)
 
 	// Provider webhook intake at the LIVE registered path. Chain mirrors the
 	// commerce-standalone posture: gated request context, then the sessionless
