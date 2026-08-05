@@ -38385,6 +38385,23 @@ paths:
       operationId: get___commerce_providers
       summary: List the payment providers configured for your own tenant
       x-app: commerce
+  /_/commerce/providers/{name}:
+    put:
+      description: |-
+        Flips the enabled flag on the named provider in the caller's own tenant row, so a rail can be taken out of service — or put back — without touching its credentials. The KMS paths are never read, written or echoed here; this verb owns exactly one bit.
+
+        Disabling is what a checkout page sees immediately: only ENABLED providers are listed by the public tenant read, so a rail turned off here stops being offered rather than failing at authorization time. Re-enabling restores the same stored credential, which is why this is a switch and not a delete.
+
+        The tenant is derived from the IAM owner claim and from nothing else — there is no tenant parameter to supply, so a cross-tenant write is not expressible. A tenant admin or a platform admin may call it; a plain authenticated user is refused 403 and an anonymous one 401. A provider name with no row on that tenant is 404, the same answer a cross-tenant probe gets.
+      operationId: put___commerce_providers_by_name
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      summary: Turn one payment rail on or off for your own tenant
+      x-app: commerce
   /_/commerce/tenants:
     post:
       description: Registers a new hosted-checkout tenant so its hostnames resolve
