@@ -1,4 +1,4 @@
-package graph
+package explorer
 
 import (
 	"encoding/json"
