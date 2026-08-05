@@ -64,7 +64,7 @@ var unextracted = []string{
 	"leaderboard", "legal", "link", "marketplace", "meet", "membership",
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
 	"product", "projects", "prompts", "provisioning", "reference",
-	"referrals", "registry", "risk", "rollingcap", "runtime", "s3admin",
+	"referrals", "registry", "risk", "rollingcap", "s3admin",
 	"samples", "sbom", "search", "security", "settings", "share", "sites",
 	"storage", "sync", "templates", "tenant", "tools", "tracker", "translate",
 	"treasury", "validators", "venue", "wallets", "webhooks", "websearch",

@@ -1,25 +1,23 @@
-// Package runtime is the transport to the bot runtime service — the TS bot that
-// executes channels and skills — and it relays that service's own ops paths at
-// /v1/bot/* (ops.go), the only routes it serves.
+// transport.go is the transport to @hanzo/bot — the TS service that executes
+// channels and skills — and it is the ONE place that resolves the base address,
+// mints the server-originated identity, frames the stream, bounds a call, and
+// decides whether a cleartext hop is allowed.
 //
 // It knows how to MOVE BYTES to that service and nothing about what they mean.
-// There is no run here, no coding task, no tenant policy: the domains own their
-// own wire contracts (apps/bots' stop, apps/coding's task) and express them
-// as a Call. So exactly ONE place resolves the base address, mints the
-// server-originated identity, frames the stream, bounds a call, and decides
-// whether a cleartext hop is allowed.
+// There is no run here and no coding task: each caller owns its own wire contract
+// (this package's stop in wire.go, apps/coding's task) and expresses it as a Call.
+// Nothing in this file may learn what a run is — the moment it does, it has
+// stopped being a transport and the swap below stops being local.
 //
 // The edge is transport-agnostic on purpose. A caller states WHAT it wants done
 // (Call) and gets back a domain-shaped outcome — never an *http.Response, a
 // status code, a header map, or a framing detail. Today those bytes move over
 // HTTP; per HIP-0106/HIP-0120 they should move over ZAP, and that swap is meant
-// to be a change to THIS package's internals plus each domain's one stub file,
-// not a rewrite of the domains.
+// to be a change to THIS FILE plus each caller's one stub, not a rewrite.
 //
-// Dependencies point one way: bots -> runtime, coding -> runtime. runtime imports
-// neither, and must not: the moment it knows what a run is, it has stopped being
-// a transport.
-package runtime
+// The package doc lives once, in bots.go.
+
+package bots
 
 import (
 	"bufio"
@@ -187,7 +185,7 @@ func send(ctx context.Context, c Call, method, accept string) (*http.Response, e
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url()+c.Op, body)
+	req, err := http.NewRequestWithContext(ctx, method, executorURL()+c.Op, body)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: build call: %w", err)
 	}
@@ -264,8 +262,8 @@ func ErrBody(resp *http.Response) string {
 	return strings.TrimSpace(string(b))
 }
 
-// url resolves the runtime base, no trailing slash.
-func url() string {
+// executorURL resolves the executor base, no trailing slash.
+func executorURL() string {
 	if v := getenv(urlEnv); v != "" {
 		return strings.TrimRight(v, "/")
 	}
@@ -282,7 +280,7 @@ func url() string {
 // entry point pins X25519MLKEM768 and refuses a classical-only peer structurally,
 // which is what makes this check unnecessary rather than merely satisfied.
 func requireSecure() error {
-	u := url()
+	u := executorURL()
 	if strings.HasPrefix(u, "https://") || getenv(plaintextEnv) == "1" {
 		return nil
 	}

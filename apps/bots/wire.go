@@ -3,8 +3,6 @@ package bots
 import (
 	"context"
 	"net/url"
-
-	"github.com/hanzoai/cloud/apps/runtime"
 )
 
 // wire.go is bots' WIRE CONTRACT with the bot runtime — the stub behind the
@@ -44,7 +42,7 @@ func (wire) List(ctx context.Context, org string) ([]Run, error) {
 	var answer struct {
 		Bots []runRow `json:"bots"`
 	}
-	if err := runtime.Read(ctx, runtime.Call{Op: listOp, Org: org}, &answer); err != nil {
+	if err := Read(ctx, Call{Op: listOp, Org: org}, &answer); err != nil {
 		return nil, err
 	}
 	out := make([]Run, 0, len(answer.Bots))
@@ -64,5 +62,5 @@ func (wire) List(ctx context.Context, org string) ([]Run, error) {
 // unserved, or a failure — so the handler decides what each MEANS rather than this
 // stub deciding for it.
 func (wire) Stop(ctx context.Context, org, runID string) error {
-	return runtime.Do(ctx, runtime.Call{Op: stopOp(runID), Org: org})
+	return Do(ctx, Call{Op: stopOp(runID), Org: org})
 }

@@ -42,7 +42,37 @@ var untypedByDesign = map[string]string{
 	"POST /v1/bots/run": "answers 501 unconditionally — a typed op publishes a SUCCESS response it can " +
 		"never send, and mints an MCP tool and CLI command for an operation that cannot succeed; it is also " +
 		"body-tolerant, which op.invoke's unconditional 400 on an unparseable body cannot express.",
+
+	// The relay face. All seven ARE one registration — app.All("/v1/bot/*",
+	// s.proxy) in relay.go — so they share one reason.
+	"DELETE /v1/bot/{wildcard1}":  reasonProxy,
+	"GET /v1/bot/{wildcard1}":     reasonProxy,
+	"OPTIONS /v1/bot/{wildcard1}": reasonProxy,
+	"PATCH /v1/bot/{wildcard1}":   reasonProxy,
+	"POST /v1/bot/{wildcard1}":    reasonProxy,
+	"PUT /v1/bot/{wildcard1}":     reasonProxy,
+	"TRACE /v1/bot/{wildcard1}":   reasonProxy,
 }
+
+// reasonProxy is the one reason the seven relay operations share. Three wire facts
+// each independently forbid a typed op:
+//
+//   - ONE registration, EVERY method. zip's typed registrars are per-method and
+//     there is no All[In, Out].
+//   - a GREEDY wildcard whose value the proxy RE-MOUNTS on the executor
+//     (Params("*") → target). fiber names it `*1` and the document `{wildcard1}`,
+//     and a whole sub-path is not a scalar zip's bindURL can set on an In field.
+//   - a VERBATIM response. proxy answers c.Bytes(resp.StatusCode, rb) under the
+//     executor's own Content-Type, which is frequently not JSON at all. A typed op
+//     can only answer c.JSON(out) under the status it DECLARED, so both move.
+//
+// The seven publish no MCP tool and no CLI command. They DO carry prose:
+// openapi.Describe declares it beside the wire fact in relay.go, which is the seam
+// for exactly an operation the wire refuses to type.
+const reasonProxy = "proxy. One All() registration for every method, over a greedy wildcard the proxy " +
+	"re-mounts on the runtime, relaying the runtime's own status code and Content-Type verbatim. zip has " +
+	"no All[In, Out], no In field can bind a whole sub-path, and a typed op can only answer c.JSON(out) " +
+	"under its declared status (zip v1.18.12 typed.go:302-311) — method, path and response all move."
 
 // botOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed registry

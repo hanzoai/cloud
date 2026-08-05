@@ -49597,7 +49597,7 @@ paths:
       summary: Relay one of the bot runtime's own operational paths
       tags:
       - bot
-      x-app: runtime
+      x-app: bots
     get:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
@@ -49617,7 +49617,7 @@ paths:
       summary: Relay one of the bot runtime's own operational paths
       tags:
       - bot
-      x-app: runtime
+      x-app: bots
     options:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
@@ -49637,7 +49637,7 @@ paths:
       summary: Relay one of the bot runtime's own operational paths
       tags:
       - bot
-      x-app: runtime
+      x-app: bots
     patch:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
@@ -49657,7 +49657,7 @@ paths:
       summary: Relay one of the bot runtime's own operational paths
       tags:
       - bot
-      x-app: runtime
+      x-app: bots
     post:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
@@ -49677,7 +49677,7 @@ paths:
       summary: Relay one of the bot runtime's own operational paths
       tags:
       - bot
-      x-app: runtime
+      x-app: bots
     put:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
@@ -49697,7 +49697,7 @@ paths:
       summary: Relay one of the bot runtime's own operational paths
       tags:
       - bot
-      x-app: runtime
+      x-app: bots
     trace:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
@@ -49717,7 +49717,7 @@ paths:
       summary: Relay one of the bot runtime's own operational paths
       tags:
       - bot
-      x-app: runtime
+      x-app: bots
   /v1/bot/connect:
     get:
       description: |-

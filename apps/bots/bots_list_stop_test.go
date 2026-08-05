@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/runtime"
+
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -69,7 +69,7 @@ func (f *fakeRuntime) Stop(_ context.Context, org, runID string) error {
 	k := runKey{org, runID}
 	if _, ok := f.rows[k]; !ok {
 		// The real runtime resolves under tenants/{org}/ and ANSWERS absent.
-		return runtime.ErrNotFound
+		return ErrNotFound
 	}
 	delete(f.rows, k)
 	return nil
@@ -114,6 +114,12 @@ func mountWith(t *testing.T, rt Runtime) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	compose(app)
 	routes(app, s)
+	// The relay is the same product's second face, so the surface every gate reads
+	// is the WHOLE product — otherwise the typed-or-named gate goes blind on half
+	// of it. /v1/bot/* cannot shadow /v1/bots: the wildcard needs the slash.
+	if err := mountRelay(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+		t.Fatalf("mountRelay: %v", err)
+	}
 	return app
 }
 
@@ -330,7 +336,7 @@ func TestStopHaltsTheRun(t *testing.T) {
 func TestStopFailsClosedWhenTheRuntimeDoesNotServeStop(t *testing.T) {
 	rt := newFake()
 	rt.seed("acme", Run{ID: "run_1", Status: "running"})
-	rt.stopErr = runtime.ErrNotServed
+	rt.stopErr = ErrNotServed
 	app := mountWith(t, rt)
 
 	code, body := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme")
