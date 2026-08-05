@@ -217,6 +217,56 @@ const freezeNano = 10_000 * nanoPerUSD
 // anything is wrong: it is a reason to look, which is exactly what review means.
 const reviewNano = 50_000 * nanoPerUSD
 
+// THE TWO VALUE BOUNDS ABOVE ARE A PAYMENTS APPETITE, AND THE POPULATION THEY ARE
+// READ OVER IS PAYMENTS.
+//
+// [onPace] reads them over a WINDOW rather than over one event, which is what makes
+// a payment split into pieces visible — and a windowed accrual is only a statement
+// about payments if everything in it is a payment. It was not. The aggregates accrue
+// whatever an observation states it moved, and this plane folds an organisation's own
+// metered inference spend into observations too (feature.go's `account` rollup sums
+// hanzo.cloud_usage.billed_nano). Under one subject kind a customer's inference bill
+// and its top-ups accrued on ONE key, so fifty thousand dollars of legitimate
+// month-end inference read as fifty thousand dollars of payments inside an hour: a
+// customer examined, and eventually frozen, for buying a lot of what we sell. There
+// is no number that fixes it, because one appetite stated over two populations is two
+// appetites — raising it to clear the spenders lowers it out of reach of the payers.
+//
+// So the populations are SEPARATE SUBJECTS, not separate numbers ([contract.KindPayer]).
+// A payment is observed under the payer kind, taught only by a settlement this
+// deployment watched happen ([plane.RiskObserve]), and no rollup writes that kind — so
+// the accrual these two bounds are read over holds money that moved IN and nothing
+// else, and one statement of appetite still has one reading.
+
+// The credit door's ARMED AXES, stated because the alternative is a half of a rule
+// that is silently inert.
+//
+// [onFan] reads two link identifiers — the device and the counterparty — and a
+// determination on either is only reachable if the asking gate STATES one.
+// apps/commerce's credit door states the counterparty ([axisPeer]) as the address our
+// own edge resolved, which is the one identifier at that door that several nominally
+// unrelated payers can share, and it is what makes the fan-out reachable there.
+//
+// IT STATES NO DEVICE, AND THAT IS A FACT ABOUT THE DOOR AND NOT A GAP IN THE RULE.
+// No device fingerprint reaches this binary from a top-up: the request body is a card
+// token, an amount and a currency; the card is tokenised in the browser and its number
+// never arrives; the browser does not run the payment SDK's buyer-verification step, so
+// there is no verification token either; and no header carries one. The DEVICE half of
+// the fan-out is therefore UNARMED at the credit door, deliberately, and it is declared
+// at boot (apps/commerce's [topupAxes]) rather than left to read as a rule that found
+// nothing.
+//
+// What is emphatically NOT done is inventing one. A user-agent string, or a digest of
+// the request's headers, is shared by millions of unrelated people — stated as a device
+// it would put every customer past [fanSubjects] and summon a person for every payment,
+// which is the same control being useless in the louder direction. The axis stays
+// unarmed until a real fingerprint is collected, and the day it is, the door states it
+// in one line.
+//
+// The device half remains armed on the LEARN door, where a caller that has a
+// fingerprint states one — so the rule is exercised, and it is exercised on the axis
+// where a real value exists.
+
 // burstEvents is how many events on ONE of an event's identifiers — its subject,
 // its counterparty pair or its device — inside the aggregates' narrowest window
 // make a BURST ([onPace]).
