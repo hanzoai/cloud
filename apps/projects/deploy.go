@@ -487,7 +487,7 @@ func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*pro
 		// publishSite — going live there takes the pointer back from any release.
 		// (onPublish already ran above, where the owned URL was decided.)
 		p.CurrentRelease = ""
-	} else {
+	} else if failureOwnsProject(p.CurrentDeploy, d.ID) {
 		p.Status = "error"
 	}
 	if err := s.State.store.UpdateProject(ctx, p); err != nil {
@@ -504,6 +504,31 @@ func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*pro
 	}
 	out := toDeployment(d)
 	return &out, nil
+}
+
+
+// failureOwnsProject reports whether a FAILED deployment is entitled to mark the
+// whole project broken. Only the deployment a project is actually pointing at can
+// — plus the case where it points at nothing, because a first deploy that fails
+// leaves a project that has genuinely never served.
+//
+// A FAILED DEPLOYMENT MUST NOT TAKE DOWN A SITE IT IS NOT SERVING. This was an
+// unconditional `p.Status = "error"`, which made "broken" reachable from ANY
+// deployment row the org could name, including one already superseded. Measured
+// on hanzo-ai: v5 live and serving, completing v3 (a superseded probe) as error
+// flipped the project to "error" and the host began 404ing while every byte of v5
+// was still correct in the bucket.
+//
+// The ordinary production shape is the same bug with worse timing: a rebuild that
+// fails while the PREVIOUS build is live. The old content is still served and the
+// site is up, yet the project was marked broken — and the "report a failed build"
+// step every CI workflow carries is exactly what would do it.
+//
+// The deployment row is still error either way and LifecycleDeployFailed still
+// fires, so the failure stays visible where it belongs: on the deployment, not on
+// the health of a site that is up.
+func failureOwnsProject(currentDeploy, deployID string) bool {
+	return currentDeploy == "" || currentDeploy == deployID
 }
 
 // nonEmptyStr returns s trimmed, or fallback when blank.
