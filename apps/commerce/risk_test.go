@@ -56,8 +56,8 @@ func gateApp(t *testing.T) *zip.App {
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
-	// The screen in the CHAIN position, exactly as mount.go registers the browser door.
-	app.Post("/v1/billing/topup/token", screenChain(riskGate(luxlog.New("gatetest"))), charged)
+	// The screen WRAPPING THE HANDLER, exactly as mount.go registers the browser door.
+	app.Post("/v1/billing/topup/token", riskGate(luxlog.New("gatetest")).route(charged))
 	return app
 }
 
@@ -440,8 +440,11 @@ func TestPaymentSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
 			var got map[string]string
+			// The RAW door's whole read: the wire parse and the signal rule it feeds,
+			// which is the pair mount.go's top-up runs through [screen.route].
 			app.Post("/probe", func(c *zip.Ctx) error {
-				got = cloud.Facts(paymentSignals(c))
+				cents, currency := wireAmount(c)
+				got = cloud.Facts(paymentSignals(c, cents, currency))
 				return c.JSON(http.StatusOK, "ok")
 			})
 			r := httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader(tc.body))
