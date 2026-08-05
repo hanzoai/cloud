@@ -2,5 +2,5 @@
 app=@hanzo/meet (admin-meet)
 base=/meet/
 api_prefix=/v1/meet
-source=hanzoai/admin:apps/admin-meet@9715f5dcb8cef13bd05b73023a453caa2ba62154 (blue/meet-ui)
+source=hanzoai/admin:apps/admin-meet@db21f5d9107b7b074fd4c449f296181f08652798 (blue/meet-ui)
 built=tsc --noEmit && vite build
