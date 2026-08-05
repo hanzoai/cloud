@@ -6,6 +6,9 @@
 package meet
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -272,4 +275,43 @@ func truncate(s string) string {
 		return s[:400] + "…"
 	}
 	return s
+}
+
+// TestNoAccountIsNoOffer closes the last way the lobby and the mint could
+// disagree. mint refuses a token that carries no account — the account IS the
+// identity the seat is taken under — so a lobby that offered a workspace off one
+// would show a room, take the choice, and then decline it. token.Generate cannot
+// mint this shape (it validates the account as a uuid), which is exactly why the
+// invariant is written down at the offer instead of inferred from the grant.
+func TestNoAccountIsNoOffer(t *testing.T) {
+	app := mount(t, teamSecret, apiKey, apiSecret)
+	tok := rawToken(t, map[string]any{
+		"extra":     map[string]any{"role": token.RoleOwner},
+		"account":   "",
+		"workspace": workspaceA,
+		"exp":       time.Now().Add(time.Hour).Unix(),
+	})
+	if code, _, body := read(t, app, tok); code != http.StatusUnauthorized {
+		t.Fatalf("session with an account-less token = %d, want 401\n%s", code, body)
+	}
+	// And the mint refuses it too, which is the agreement being pinned.
+	if mintCode, _ := ask(t, app, roomIn(workspaceA), "", tok); mintCode != http.StatusUnauthorized {
+		t.Errorf("getToken with an account-less token = %d, want 401", mintCode)
+	}
+}
+
+// rawToken signs an arbitrary payload with the team secret. token.Generate
+// validates its inputs, so a shape it refuses to mint can only be built here —
+// and a shape nothing mints is still a shape the server must decide about.
+func rawToken(t *testing.T, payload map[string]any) string {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT","alg":"HS256"}`))
+	signing := head + "." + base64.RawURLEncoding.EncodeToString(body)
+	mac := hmac.New(sha256.New, []byte(teamSecret))
+	mac.Write([]byte(signing))
+	return signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
