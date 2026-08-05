@@ -416,10 +416,10 @@ func LoadConfig() *Config {
 	// JWKS endpoint for the in-binary identity sanitizer. Default follows the
 	// HIP-0111 convention {IAMIssuer}/v1/iam/.well-known/jwks so a brand
 	// deployment validates against its own IAM; override with CLOUD_JWKS_URL.
-	// jwksURLFor is the ONE derivation, shared with NewTokenValidator so a
+	// JWKSURLFor is the ONE derivation, shared with NewTokenValidator so a
 	// subsystem that verifies a token resolves the same keys this boundary does.
 	if cfg.JWKSURL == "" {
-		cfg.JWKSURL = jwksURLFor(cfg.IAMIssuer)
+		cfg.JWKSURL = JWKSURLFor(cfg.IAMIssuer)
 	}
 
 	// Browser ZAP-over-WS Origin allowlist. Default to the console SPA hosts so
