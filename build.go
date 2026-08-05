@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/ha"
 	"github.com/hanzoai/metrics"
 	s3 "github.com/hanzoai/s3-go"
@@ -24,9 +25,9 @@ import (
 
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/clients"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -427,15 +428,33 @@ func RegisterPushBuilder(f func(ctx context.Context, ev GitPushEvent) error) {
 	pushBuilder = f
 }
 
-// OnGitPush fires the registered push-to-deploy trigger for a landed push. It is a
-// no-op when no builder is registered (git server running without the platform
-// subsystem co-resident). Best-effort by contract: the caller must never fail the
-// push the client already committed just because a build could not be triggered.
+// OnGitPush fires the push-to-deploy trigger for a landed push: the registered
+// builder when platform is co-resident, the platform app over the plane when it
+// is not.
+//
+// IT USED TO RETURN NIL WHEN NOTHING WAS REGISTERED, and that nil was the single
+// most expensive value in this package. The push lands on GIT's embedded server
+// and the builder belongs to PLATFORM — two apps, therefore two processes, so the
+// builder was nil on every push that has ever landed in the split fleet. Each one
+// returned success to a caller that had committed the client's objects and then
+// triggered nothing, and no log line anywhere recorded that a build had not
+// happened. "It compiles" and "HTTP 200" both held the whole time.
+//
+// Best-effort stays the CALLER's contract, not this function's silence: a push
+// already committed must not fail because a build could not be triggered. But the
+// caller can only honor that contract if it is told. ErrNoPeer says "no
+// push-to-deploy in this fleet" — the one error a caller may read as fall back —
+// and anything else is an outage worth alarming on. Erasing both into nil is what
+// made those two indistinguishable.
 func OnGitPush(ctx context.Context, ev GitPushEvent) error {
-	if pushBuilder == nil {
-		return nil
+	if pushBuilder != nil {
+		return pushBuilder(ctx, ev)
 	}
-	return pushBuilder(ctx, ev)
+	_, err := Ask[plane.PushIn, plane.Built](For(ctx, ev.Org), "platform", plane.PlatformPush, &plane.PushIn{
+		Project: ev.Project, Repo: ev.Repo, Ref: ev.Ref,
+		Commit: ev.Commit, CloneURL: ev.CloneURL,
+	})
+	return err
 }
 
 // ---- first-party service release (push→build→image→CR rollout) ----
@@ -472,22 +491,29 @@ func RegisterServiceReleaser(f func(ctx context.Context, ev ServiceReleaseEvent)
 	serviceReleaser = f
 }
 
-// ServiceReleaserRegistered reports whether a first-party CR-rollout hook is
-// installed (the paas control plane is co-resident). A caller uses it to know
-// whether OnServiceRelease actually patches a CR or is a no-op, so it can be
-// honest about which rollout path took effect.
-func ServiceReleaserRegistered() bool { return serviceReleaser != nil }
-
 // OnServiceRelease rolls a proven image live by patching the matching hanzo.ai/v1
-// Service CR's spec.image (the operator then reconciles the Deployment). It is a
-// no-op when no releaser is registered (a binary without the paas control plane
-// co-resident). The releaser enforces the clean-semver gate and CR-name
-// resolution; this is only the dispatch seam.
+// Service CR's spec.image (the operator then reconciles the Deployment). The
+// releaser enforces the clean-semver gate and CR-name resolution; this is only
+// the dispatch seam.
+//
+// Like OnGitPush it used to return nil when unregistered, with the same result:
+// a release that patched no CR, reported as a successful rollout. The proving
+// build and the CR control plane are different apps, so that was every release.
+//
+// There is no ServiceReleaserRegistered() any more. A bool cannot carry "the app
+// is elsewhere": it answered false both for a fleet with no paas control plane
+// and for the ordinary split fleet where platform is simply the next process
+// over, and apps/deploy turned that false into a 503 telling operators the
+// release plane did not exist while it was up and reachable. Presence is
+// answered by making the call — which is the only moment it is knowable anyway,
+// since the router may start a lazy app on demand.
 func OnServiceRelease(ctx context.Context, ev ServiceReleaseEvent) error {
-	if serviceReleaser == nil {
-		return nil
+	if serviceReleaser != nil {
+		return serviceReleaser(ctx, ev)
 	}
-	return serviceReleaser(ctx, ev)
+	_, err := Ask[plane.ReleaseIn, plane.Released](ctx, "platform", plane.PlatformRelease,
+		&plane.ReleaseIn{Service: ev.Service, Image: ev.Image, SHA: ev.SHA})
+	return err
 }
 
 // ---- git lifecycle event stream ----
