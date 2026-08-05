@@ -22,7 +22,7 @@
 //	PATCH  /v1/tracker/projects/:key                     update a project        -> Project
 //	DELETE /v1/tracker/projects/:key                     delete a project (+ issues)
 //	POST   /v1/tracker/projects/:key/issues              create an issue         -> Issue (201)
-//	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&source=]  list  -> [Issue]
+//	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&source=&scheduled=]  -> [Issue]
 //	GET    /v1/tracker/projects/:key/issues/:num         issue detail            -> Issue
 //	PATCH  /v1/tracker/projects/:key/issues/:num         update an issue         -> Issue
 //	DELETE /v1/tracker/projects/:key/issues/:num         delete an issue
@@ -203,6 +203,12 @@ func init() {
 			"kind=issue&source=helpdesk. `status` defaults to backlog, `priority` to none. A value "+
 			"outside one of these closed sets is 400, never silently defaulted. `labels` may not "+
 			"contain a comma, the storage separator.\n\n"+
+			"`startAt` and `dueAt` place the item on the TIMELINE, in unix seconds, and both "+
+			"default to unset. A due date on its own is a milestone — an interval of zero length "+
+			"— and the two together are a bar; a start with no due date is work under way with no "+
+			"deadline. There is no separate milestone resource: a milestone is this row, dated. A "+
+			"negative bound, or a due date before its start, is 400 rather than a silently "+
+			"reordered interval.\n\n"+
 			"`repo` and `extRef` RECORD an external binding; they do not create one. Filing here "+
 			"writes to your tracker and reaches no external system — nothing is pushed to GitHub. The "+
 			"GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n"+
@@ -281,6 +287,8 @@ type issueView struct {
 	Priority    string   `json:"priority"`
 	Assignee    string   `json:"assignee,omitempty"`
 	Labels      []string `json:"labels"`
+	StartAt     int64    `json:"startAt,omitempty"` // unix seconds; absent = unscheduled
+	DueAt       int64    `json:"dueAt,omitempty"`   // unix seconds; absent = no due date
 	CreatedAt   int64    `json:"createdAt"`
 	UpdatedAt   int64    `json:"updatedAt"`
 }
@@ -294,7 +302,8 @@ func toIssueView(projectKey string, i Issue) issueView {
 		Kind:       i.Kind, Source: i.Source, Repo: i.Repo, ExtRef: i.ExtRef,
 		Title: i.Title, Description: i.Description,
 		Status: i.Status, Priority: i.Priority, Assignee: i.Assignee,
-		Labels:    splitLabels(i.Labels),
+		Labels:  splitLabels(i.Labels),
+		StartAt: i.StartAt, DueAt: i.DueAt,
 		CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
 	}
 }
@@ -385,6 +394,8 @@ type createIssueReq struct {
 	Priority    string   `json:"priority"`
 	Assignee    string   `json:"assignee"`
 	Labels      []string `json:"labels"`
+	StartAt     int64    `json:"startAt"` // unix seconds; 0/omitted = unscheduled
+	DueAt       int64    `json:"dueAt"`   // unix seconds; 0/omitted = no due date
 }
 
 func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
@@ -444,6 +455,9 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(extRef) > maxField {
 		return zip.ErrBadRequest("extRef too long")
 	}
+	if err := checkSchedule(body.StartAt, body.DueAt); err != nil {
+		return err
+	}
 
 	// Billing category is the constant "issue" tracker row — an issue costs the
 	// same whatever kind it discriminates into, and ops prices it via
@@ -464,7 +478,9 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 		ID: id, ProjectID: p.ID, Org: org,
 		Kind: kind, Source: source, Repo: repo, ExtRef: extRef,
 		Title: title, Description: desc, Status: status, Priority: priority,
-		Assignee: assignee, Labels: labels, CreatedAt: now, UpdatedAt: now,
+		Assignee: assignee, Labels: labels,
+		StartAt: body.StartAt, DueAt: body.DueAt,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	created, err := store.CreateIssue(c.Context(), i)
 	if err != nil {
@@ -527,6 +543,29 @@ func normSource(s string) (string, error) {
 		return "", zip.ErrBadRequest("unknown source")
 	}
 	return s, nil
+}
+
+// checkSchedule validates the timeline interval an issue carries. Both bounds
+// are unix seconds and 0 means unset, so the three legal shapes are: neither
+// (unscheduled), a due date alone (a milestone — an interval of zero length),
+// and both (a bar). The two refusals are the ones an interval cannot survive:
+//
+//   - a negative bound, which is not a point in time this tracker recognises and
+//     would render a bar reaching off the left edge of every viewport;
+//   - an end before its beginning, which is not an interval at all. Refused at
+//     the boundary rather than normalised, because silently swapping a caller's
+//     dates is a mutation they did not ask for and cannot see.
+//
+// A start with no due date IS legal: work that has begun and has no deadline is
+// a real state, and the timeline draws it from its start to today.
+func checkSchedule(startAt, dueAt int64) error {
+	if startAt < 0 || dueAt < 0 {
+		return zip.ErrBadRequest("startAt and dueAt are unix seconds and cannot be negative")
+	}
+	if startAt > 0 && dueAt > 0 && dueAt < startAt {
+		return zip.ErrBadRequest("dueAt cannot be before startAt")
+	}
+	return nil
 }
 
 // normLabels trims, validates and comma-joins labels for storage. A label is a

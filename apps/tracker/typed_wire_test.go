@@ -260,6 +260,155 @@ func TestTypedOpsPreserveTheTrackerWire(t *testing.T) {
 	})
 }
 
+// TestScheduleCrossesTheWire pins the timeline half of the surface end to end:
+// the create accepts an interval, the view carries it back, the bool filter
+// binds from the query string, the PATCH reschedules and clears, and an interval
+// that cannot exist is refused at the boundary — including when only ONE of its
+// bounds is in the request.
+func TestScheduleCrossesTheWire(t *testing.T) {
+	app := mountWire(t)
+	const org = "org_sched"
+	const day = 86400
+	const base = 1_700_000_000
+
+	if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects", org,
+		map[string]any{"key": "ENG", "name": "Engineering"}); code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", code, raw)
+	}
+
+	t.Run("a create carries an interval and the view answers with it", func(t *testing.T) {
+		code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org,
+			map[string]any{"title": "migrate store", "startAt": base, "dueAt": base + 7*day})
+		if code != http.StatusCreated {
+			t.Fatalf("create scheduled issue: %d %s", code, raw)
+		}
+		var v map[string]any
+		if err := json.Unmarshal(raw, &v); err != nil {
+			t.Fatalf("decode: %v (%s)", err, raw)
+		}
+		if v["startAt"] != float64(base) || v["dueAt"] != float64(base+7*day) {
+			t.Errorf("created schedule = (%v,%v), want (%d,%d)", v["startAt"], v["dueAt"], base, base+7*day)
+		}
+	})
+
+	t.Run("a due date alone is a milestone, and an undated issue omits both", func(t *testing.T) {
+		code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org,
+			map[string]any{"title": "GA", "kind": "epic", "dueAt": base + 30*day})
+		if code != http.StatusCreated {
+			t.Fatalf("create milestone: %d %s", code, raw)
+		}
+		var m map[string]any
+		_ = json.Unmarshal(raw, &m)
+		if _, ok := m["startAt"]; ok {
+			t.Errorf("milestone carried a startAt: %s", raw)
+		}
+		if m["dueAt"] != float64(base+30*day) {
+			t.Errorf("milestone dueAt = %v", m["dueAt"])
+		}
+
+		code, raw = doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org,
+			map[string]any{"title": "triage inbox"})
+		if code != http.StatusCreated {
+			t.Fatalf("create undated: %d %s", code, raw)
+		}
+		var u map[string]any
+		_ = json.Unmarshal(raw, &u)
+		if _, ok := u["startAt"]; ok {
+			t.Errorf("undated issue carried a startAt: %s", raw)
+		}
+		if _, ok := u["dueAt"]; ok {
+			t.Errorf("undated issue carried a dueAt: %s", raw)
+		}
+	})
+
+	t.Run("scheduled=true binds from the query string and composes", func(t *testing.T) {
+		code, raw := doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues?scheduled=true", org, nil)
+		if code != http.StatusOK {
+			t.Fatalf("timeline list: %d %s", code, raw)
+		}
+		var arr []map[string]any
+		_ = json.Unmarshal(raw, &arr)
+		if len(arr) != 2 {
+			t.Errorf("scheduled=true returned %d rows, want 2 (%s)", len(arr), raw)
+		}
+		// Absent, the filter is off — the board keeps every row.
+		code, raw = doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues", org, nil)
+		_ = json.Unmarshal(raw, &arr)
+		if code != http.StatusOK || len(arr) != 3 {
+			t.Errorf("unfiltered board returned %d rows, want 3", len(arr))
+		}
+		// Composes with the closed-set filters rather than replacing them.
+		code, raw = doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues?scheduled=true&kind=epic", org, nil)
+		_ = json.Unmarshal(raw, &arr)
+		if code != http.StatusOK || len(arr) != 1 || arr[0]["title"] != "GA" {
+			t.Errorf("scheduled epics = %s", raw)
+		}
+	})
+
+	t.Run("a PATCH reschedules, and 0 clears", func(t *testing.T) {
+		code, raw := doWire(t, app, http.MethodPatch, "/v1/tracker/projects/ENG/issues/1", org,
+			map[string]any{"dueAt": base + 14*day})
+		if code != http.StatusOK {
+			t.Fatalf("reschedule: %d %s", code, raw)
+		}
+		var v map[string]any
+		_ = json.Unmarshal(raw, &v)
+		if v["dueAt"] != float64(base+14*day) {
+			t.Errorf("dueAt = %v after reschedule", v["dueAt"])
+		}
+		if v["startAt"] != float64(base) {
+			t.Errorf("startAt = %v — a dueAt-only patch moved the start", v["startAt"])
+		}
+
+		code, raw = doWire(t, app, http.MethodPatch, "/v1/tracker/projects/ENG/issues/1", org,
+			map[string]any{"startAt": 0, "dueAt": 0})
+		if code != http.StatusOK {
+			t.Fatalf("clear: %d %s", code, raw)
+		}
+		// A FRESH map: decoding into one that already holds a key merges rather
+		// than replaces, which would report a cleared field as still present.
+		var cleared map[string]any
+		_ = json.Unmarshal(raw, &cleared)
+		if _, ok := cleared["startAt"]; ok {
+			t.Errorf("cleared issue still carries a startAt: %s", raw)
+		}
+		if _, ok := cleared["dueAt"]; ok {
+			t.Errorf("cleared issue still carries a dueAt: %s", raw)
+		}
+		code, raw = doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues?scheduled=true", org, nil)
+		var arr []map[string]any
+		_ = json.Unmarshal(raw, &arr)
+		if code != http.StatusOK || len(arr) != 1 {
+			t.Errorf("after clearing, timeline has %d rows, want 1", len(arr))
+		}
+	})
+
+	t.Run("an interval that cannot exist is refused, on create and on patch", func(t *testing.T) {
+		for _, body := range []map[string]any{
+			{"title": "backwards", "startAt": base + day, "dueAt": base},
+			{"title": "negative", "startAt": -1},
+		} {
+			if code, raw := doWire(t, app, http.MethodPost, "/v1/tracker/projects/ENG/issues", org, body); code != http.StatusBadRequest {
+				t.Errorf("create %v = %d, want 400 (%s)", body, code, raw)
+			}
+		}
+		// The PATCH check is against the RESULTING interval: issue 2 is the
+		// milestone at base+30d with no start, so a start after it is backwards even
+		// though the request never names a due date.
+		if code, raw := doWire(t, app, http.MethodPatch, "/v1/tracker/projects/ENG/issues/2", org,
+			map[string]any{"startAt": base + 60*day}); code != http.StatusBadRequest {
+			t.Errorf("patch a start past the stored due = %d, want 400 (%s)", code, raw)
+		}
+		// And the row is untouched by the refusal.
+		_, raw := doWire(t, app, http.MethodGet, "/v1/tracker/projects/ENG/issues/2", org, nil)
+		var v map[string]any
+		_ = json.Unmarshal(raw, &v)
+		if _, ok := v["startAt"]; ok {
+			t.Errorf("the refused patch still wrote a startAt: %s", raw)
+		}
+	})
+}
+
 // TestTenancyIsNeverACallerField pins the one rule a typed op can silently break:
 // the org must come from the VALIDATED principal (cloud.Bridge parks it), never
 // from an In field. An unvalidated caller — no X-User-Id, so principal.Org
