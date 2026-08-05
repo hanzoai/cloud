@@ -577,13 +577,20 @@ func TestScheduleHasAHorizon(t *testing.T) {
 	}
 
 	const maxInt64 = int64(1<<63 - 1)
+	// ABSOLUTE dates, not maxScheduleAt arithmetic. A case written as
+	// `maxScheduleAt + 1` moves with the constant, so loosening the horizon —
+	// the exact regression this test exists to catch — would keep it green.
+	// These are fixed instants the tracker must refuse whatever the constant says.
+	const year2300 = int64(10413792000) // 2300-01-01T00:00:00Z
+	const year9999 = int64(253370764800)
 	beyond := []struct {
 		name string
 		body map[string]any
 	}{
 		{"int64 max as a due date", map[string]any{"title": "boom", "dueAt": maxInt64}},
 		{"int64 max as a start", map[string]any{"title": "boom", "startAt": maxInt64}},
-		{"just past the horizon", map[string]any{"title": "boom", "dueAt": maxScheduleAt + 1}},
+		{"the year 2300", map[string]any{"title": "boom", "dueAt": year2300}},
+		{"the year 9999", map[string]any{"title": "boom", "dueAt": year9999}},
 	}
 	for _, tc := range beyond {
 		t.Run("create: "+tc.name, func(t *testing.T) {
@@ -603,6 +610,14 @@ func TestScheduleHasAHorizon(t *testing.T) {
 		_ = json.Unmarshal(raw, &v)
 		if _, ok := v["dueAt"]; ok {
 			t.Errorf("the refused patch stored a dueAt: %s", raw)
+		}
+	})
+	t.Run("the horizon is where it is documented to be", func(t *testing.T) {
+		// Pinned against the absolute instant, so moving the constant is a
+		// deliberate edit here rather than a silent widening.
+		const year2200 = int64(7258118400) // 2200-01-01T00:00:00Z
+		if maxScheduleAt != year2200 {
+			t.Fatalf("maxScheduleAt = %d, want %d (2200-01-01T00:00:00Z)", maxScheduleAt, year2200)
 		}
 	})
 	t.Run("the horizon itself is still a date", func(t *testing.T) {
