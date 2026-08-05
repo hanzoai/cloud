@@ -236,7 +236,12 @@ var Apps = []App{
 	// aliases under it are retired — and /v1/errors, /v1/insights/events and
 	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:
 	// the tracker product owns that name (its row is above, and it wins the prefix).
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/events", "/v1/insights/health"}},
+	// "/v1/event.js" is its OWN entry and not covered by "/v1/event": a prefix owns a
+	// SEGMENT subtree, and ".js" makes this a sibling segment, not a child. Without it
+	// the tag script falls through to ai's "/v1" and the fleet publishes an address it
+	// routes elsewhere — which is what the router oracle caught the moment analytics'
+	// subset caught up and started publishing it.
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
