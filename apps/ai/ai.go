@@ -133,12 +133,32 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// and answers 401 to a service; routing our own calls back through it is what
 	// once fail-closed every completion at 503 on a healthy pod.
 	//
-	// deep_research is deliberately NOT installed yet: apps/answer builds its Params
-	// from unexported fields and exposes no constructor, so wiring it means giving
-	// that package an entry point rather than reaching into it from here. Until then
-	// the tool reports that it is unavailable in this deployment — which is the
-	// honest answer, and specifically not an empty result, because an agent told "no
-	// results" concludes the web holds nothing and answers from memory.
+	// deep_research is deliberately NOT installed, and the reason is MONEY rather
+	// than plumbing.
+	//
+	// Research carries an explicit per-answer FEE — 25 cents, apps/answer/mode.go —
+	// charged through Bill.Gate on the request path, where a payer has been
+	// resolved and can be refused. A tool call has no payer. Installing this seam
+	// with a direct call to the engine would therefore be an unbilled 25-cent
+	// operation an agent may invoke in a loop: free inference, arrived at by the
+	// exact route this codebase keeps closing.
+	//
+	// That apps/answer makes it awkward is not an accident to route around:
+	// Params is built from request-scoped billing context and Sink's methods are
+	// unexported, so the money gate is structurally hard to bypass. Wiring this
+	// properly means giving the package an entry that takes a payer and charges
+	// it — a billing decision, not an adapter.
+	//
+	// The two tools above are different in kind, not merely cheaper: their HTTP
+	// routes gate on AUTHENTICATION (a validated principal or the service key),
+	// and the agent request that reaches this tool was already authenticated and
+	// metered at /v1/responses. Using them in-process is consistent with how they
+	// are reached over HTTP; deep_research is not.
+	//
+	// Until then the tool reports that it is unavailable in this deployment — the
+	// honest answer, and specifically NOT an empty result: an agent told "no
+	// results" concludes the web holds nothing on the subject and answers from
+	// memory in a confident voice.
 	webtools.SetSearch(func(ctx context.Context, query string, limit int) ([]webtools.SearchResult, error) {
 		hits := websearch.Search(ctx, query, "")
 		if limit > 0 && len(hits) > limit {
