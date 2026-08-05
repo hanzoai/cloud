@@ -30,10 +30,41 @@ func IAMBaseURL(publicIssuer string) string {
 	return strings.TrimRight(strings.TrimSpace(publicIssuer), "/")
 }
 
-// IAMIssuer is the PUBLIC identity host this deployment presents (hanzo.id).
-// One name for one fact: the issuer stamped into a token and the issuer a
-// validator checks are the same string, so they are read in one place.
-func IAMIssuer() string { return strings.TrimSpace(os.Getenv("CLOUD_IAM_ISSUER")) }
+// issuerFor is THE resolution of the deployment's OIDC issuer: an explicit pin
+// wins, else the brand's canonical issuer from the registry. Both callers — this
+// file's IAMIssuer() and LoadConfig (config.go) — go through it, so the process
+// cannot hold two answers to "which IAM signs my tokens".
+//
+// It used to be two answers. LoadConfig applied the brand fallback and this file
+// did not, so on any deployment that let the brand supply the issuer — the
+// documented white-label path, and how lux/zoo/pars are meant to run —
+// Config.IAMIssuer was "https://lux.id" while IAMIssuer() was "". Empty is not a
+// harmless disagreement here: it flows to IAMBase(), which is what the sk- API
+// key resolver dials, and auth_apikey.go treats an empty base as "unresolved
+// key" and returns nil — which middleware_identity.go reads as ANONYMOUS. Every
+// API-key request on the fleet would authenticate as nobody, with no error and
+// no log line, while the JWT boundary kept working perfectly.
+//
+// IssuerForBrand never returns empty (an unknown brand folds to hanzo), so that
+// failure is now unreachable rather than merely unlikely.
+func issuerFor(pinned, brandID string) string {
+	if p := strings.TrimRight(strings.TrimSpace(pinned), "/"); p != "" {
+		return p
+	}
+	return IssuerForBrand(brandID)
+}
+
+// IAMIssuer is the PUBLIC identity host this deployment presents (hanzo.id for
+// the Hanzo brand, lux.id for Lux, ...). One name for one fact: the issuer
+// stamped into a token and the issuer a validator checks are the same string, so
+// they are read in one place.
+//
+// For a caller holding a Config, cfg.IAMIssuer is the same value by
+// construction — see issuerFor. This form exists for the callers that have no
+// Config in hand.
+func IAMIssuer() string {
+	return issuerFor(os.Getenv("CLOUD_IAM_ISSUER"), getenv("CLOUD_BRAND", DefaultBrand))
+}
 
 // IAMBase is IAMBaseURL against this deployment's OWN issuer — what a caller
 // with no Config value in hand uses. It exists so "which IAM do I call" has one

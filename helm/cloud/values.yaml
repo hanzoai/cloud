@@ -33,12 +33,25 @@ terminationGracePeriodSeconds: 60
 # Brand / domain / enabled subsystems mirror the binary's CLI flags
 # (cmd/cloud/main.go).
 hanzo:
+  # brand is the ONE value a white-label deployment states. domain and iamIssuer
+  # DERIVE from it (brand.APIHost / brand.IssuerFor) and are empty here on
+  # purpose: an empty flag is skipped rather than forwarded (cmd/cloud forward),
+  # so the binary's brand derivation runs. Set either one only to PIN a value
+  # that is not the brand's own — a vanity API host, a staging issuer.
   brand: hanzo
-  domain: api.hanzo.ai
+  # domain: api.hanzo.ai   <- derived from brand; state it only to override.
+  domain: ""
   dataDir: /var/lib/cloud
-  # OIDC issuer — REQUIRED. Without this the IAM mount refuses and the
-  # process exits at start.
-  iamIssuer: https://iam.hanzo.id
+  # OIDC issuer. Derived from brand — hanzo→https://hanzo.id, lux→https://lux.id,
+  # zoo→https://zoolabs.id — so leave it empty unless pinning.
+  #
+  # This read `https://iam.hanzo.id`, which is not in the brand registry and is
+  # not the issuer IAM actually stamps. Because the template renders the flag
+  # unconditionally, that wrong value WON on every chart deployment and the brand
+  # derivation never ran. An issuer that does not equal the token's `iss` fails
+  # every real token and anonymizes every principal — see brand/brand.go, which
+  # spells out that exact failure for the near-miss spelling iam.hanzo.ai.
+  iamIssuer: ""
   # Comma-separated subsystem list (empty = all in manifest/apps.go).
   # Payments + Vault are NEVER co-resident per HIP-0106 PCI isolation;
   # leave them off unless you fully understand the implications.

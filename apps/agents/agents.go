@@ -117,12 +117,6 @@ type state struct {
 	// tenancy.go for why that is the whole isolation argument.
 	stores *cloud.OrgStore[*Store]
 	ai     types.AIClient
-	// defaultModel is the deployment's configured default served model
-	// (deps.AIDefaultModel). An agent created without an explicit model is
-	// stored with it, so the ONE model default lives in config, never hardcoded
-	// per subsystem. Empty only on a deployment that configured no default, in
-	// which case create still requires an explicit model.
-	defaultModel string
 	// failoverModel is the reliable model a run falls over to when the agent's own
 	// model stays throttled (429/overloaded) after bounded retries
 	// (deps.AIFallbackModel, default "best"). It makes an autonomous bot reply
@@ -307,14 +301,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{
 		Base: b,
 		State: state{
-			stores: cloud.NewOrgStore[*Store](b, "agents", openStore),
-			ai:     deps.AI,
-			// cloud.ZenModel guards the CONFIG boundary: an operator who points
-			// CLOUD_AI_DEFAULT_MODEL at an upstream name still gets the Hanzo name
-			// stamped on every agent seeded or created without one. The caller
-			// boundary is guarded separately, in create/update.
-			defaultModel:  cloud.ZenModel(deps.AIDefaultModel),
-			failoverModel: strings.TrimSpace(deps.AIFallbackModel),
+			stores:        cloud.NewOrgStore[*Store](b, "agents", openStore),
+			ai:            deps.AI,
+			failoverModel: cloud.FallbackModel,
 			bill:          cloud.NewResourceMeter(deps, meterKind),
 			bus:           newBus(),
 			// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
@@ -506,9 +495,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 	// rather than a lie about what the agent runs on.
 	model := strings.TrimSpace(body.Model)
 	if model == "" {
-		if model = s.State.defaultModel; model == "" {
-			return nil, zip.ErrBadRequest("model is required")
-		}
+		model = cloud.DefaultModel
 	} else if err := validateModel(s, ctx, model); err != nil {
 		return nil, err
 	}

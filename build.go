@@ -81,17 +81,14 @@ func BuildDeps(cfg *Config) Deps {
 	)
 
 	deps := Deps{
-		Logger:          logger,
-		Brand:           cfg.Brand,
-		Version:         cfg.Version,
-		Env:             cfg.Env,
-		Domain:          cfg.Domain,
-		IAMIssuer:       cfg.IAMIssuer,
-		Self:            selfID(cfg),
-		DataDir:         cfg.DataDir,
-		MasterKey:       masterKeyBytes(cfg),
-		AIDefaultModel:  cfg.AIDefaultModel,
-		AIFallbackModel: cfg.AIFallbackModel,
+		Logger:    logger,
+		Brand:     cfg.Brand,
+		Version:   cfg.Version,
+		Env:       cfg.Env,
+		Domain:    cfg.Domain,
+		IAMIssuer: cfg.IAMIssuer,
+		DataDir:   cfg.DataDir,
+		MasterKey: masterKeyBytes(cfg),
 	}
 
 	// For each subsystem: enabled → leave nil (Mount fills it); not
@@ -682,8 +679,8 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 	// peer is. Only the address and the route it travels change.
 	via, base := aiRoute(cfg)
 	if base != "" && cfg.AIAPIKey != "" && !publishableKey(cfg.AIAPIKey) {
-		log.Info("deps.AI (completions) → static secret key", "at", base, "socket", via != nil, "default_model", cfg.AIDefaultModel)
-		return clients.AIHTTPOn(base, cfg.AIAPIKey, cfg.AIDefaultModel, via)
+		log.Info("deps.AI (completions) → static secret key", "at", base, "socket", via != nil, "default_model", DefaultModel)
+		return clients.AIHTTPOn(base, cfg.AIAPIKey, DefaultModel, via)
 	}
 	if cfg.AIAPIKey != "" && publishableKey(cfg.AIAPIKey) {
 		log.Info("deps.AI (completions) → refusing read-only publishable (pk-) key for chat; using M2M", "at", base)
@@ -691,8 +688,8 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 	if base != "" && cfg.AIAuthClientID != "" && cfg.AIAuthClientSecret != "" {
 		if tokenURL := aiM2MTokenURL(cfg); tokenURL != "" {
 			log.Info("deps.AI (completions) → IAM M2M", "at", base, "socket", via != nil,
-				"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", cfg.AIDefaultModel)
-			return clients.AIHTTPM2MOn(base, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel, via)
+				"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", DefaultModel)
+			return clients.AIHTTPM2MOn(base, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, DefaultModel, via)
 		}
 	}
 	log.Info("deps.AI (completions) → disabled (no secret key, no IAM M2M identity, no gateway configured)")
@@ -711,8 +708,8 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
 	via, base := aiRoute(cfg)
 	if base != "" && cfg.AIAPIKey != "" {
-		log.Info("deps.Embed → static embed key", "at", base, "socket", via != nil, "default_model", cfg.AIDefaultModel)
-		return clients.AIHTTPOn(base, cfg.AIAPIKey, cfg.AIDefaultModel, via)
+		log.Info("deps.Embed → static embed key", "at", base, "socket", via != nil, "default_model", DefaultModel)
+		return clients.AIHTTPOn(base, cfg.AIAPIKey, DefaultModel, via)
 	}
 	return pickCompletionsClient(cfg, log)
 }

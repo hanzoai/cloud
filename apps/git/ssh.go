@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/brand"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -69,17 +70,22 @@ func gitSSHHost(domain string) string {
 	return defaultSSHHost(domain)
 }
 
-// defaultSSHHost derives the git SSH host from the primary domain: the registered
-// domain with a "git." prefix (api.hanzo.ai → git.hanzo.ai). Falls back to
-// "git.hanzo.ai" when the domain is empty or unparseable.
+// defaultSSHHost derives the git SSH host from the primary domain: the
+// deployment's own forge, the "git" sibling of its registrable apex
+// (api.hanzo.ai → git.hanzo.ai). Falls back to the Hanzo brand's forge when the
+// domain is empty.
+//
+// It used to strip a leading "api." and prefix "git.", which is the same
+// reduction brand.Apex performs but only for hosts literally starting "api." —
+// cloud.hanzo.ai yielded git.cloud.hanzo.ai, a forge host that apps/platform's
+// own allowlist (which trusts the apex and its subdomains) would then REFUSE.
+// That is the identical failure dc84b46d fixed in platform: the fix was right
+// and incomplete, because the derivation was copied rather than shared.
 func defaultSSHHost(domain string) string {
-	domain = strings.TrimSpace(domain)
-	if domain == "" {
-		return "git.hanzo.ai"
+	if h := brand.Sibling(domain, "git"); h != "" {
+		return h
 	}
-	// Strip a leading "api." (the common cloud host) and prefix "git.".
-	base := strings.TrimPrefix(domain, "api.")
-	return "git." + base
+	return brand.Sibling(brand.APIHost(brand.Default), "git")
 }
 
 // sshConfig resolves the SSH runtime config from deps/env. The host key is
