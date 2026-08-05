@@ -727,11 +727,48 @@ func (p *plane) prior(t tenant, o observation) (reading, error) {
 	if err != nil {
 		return reading{}, err
 	}
+	// THE EDGE, TAKEN ONCE, UNDER THE MODEL'S OWN LOCK. It is what makes the pace
+	// reading below a statement about NOW rather than about whenever this tenant was
+	// last taught anything; read outside the lock it could be torn by a concurrent
+	// learn advancing it.
+	r.mu.Lock()
+	edge := r.edge
+	r.mu.Unlock()
+	now := p.now().UTC()
 	var out reading
 	for _, k := range anomaly.Keys(o.tx(t)) {
 		w, kept := r.vel.pace(k)
 		if !kept {
 			return reading{}, fmt.Errorf("risk: this organisation's aggregates keep no window, so no bound over them can be read")
+		}
+		// A STALE READING IS NOT A READING, and without this test it is a permanent
+		// finding. A velocity window is anchored to the LAST EVENT the rings were
+		// taught, not to the clock: the ring sums the buckets in [lead-N, lead], so a
+		// subject that did sixty things in one hour last Tuesday reads sixty events in
+		// "the last hour" forever after. Nothing clears it, because the only op that
+		// could — a decide — deliberately records nothing, so the edge never advances
+		// and the window never slides off. One busy hour, and every later payment by
+		// that organisation is frozen by a burst that finished a week ago.
+		//
+		// So the reading is believed only while the aggregates have been taught
+		// something inside the span they claim to describe. Past that the two aggregate
+		// halves fall silent for this axis and the event's own stated facts are the
+		// whole rule, which is the same reading a subject with no history gets — and
+		// the honest one, since a window with nothing in it is what "has done nothing
+		// lately" means. It is what makes the narrowest-window claim ([burstWindow])
+		// true of the number a rule acts on rather than only of the ring it came from.
+		//
+		// THE EDGE IS THE TENANT'S, NOT THE KEY'S, and that is a stated limitation
+		// rather than a hidden one. [velocity.Observation] carries no per-key leading
+		// edge, so the finest recency this plane can test is "has this organisation
+		// been taught anything inside the span". It clears the case that matters — a
+		// self-serve organisation is its own payer, so its edge IS its payer's edge —
+		// and it leaves one open: a busy organisation's quiet subject can still read a
+		// week-old hour as current, because another subject's traffic keeps the edge
+		// fresh. Closing that needs the per-key edge from the engine; until then this
+		// is the bound that exists, said out loud.
+		if now.Sub(edge) > w.Span {
+			continue
 		}
 		out.Pace = append(out.Pace, paced{
 			Axis: axisOf(k.Kind), Events: w.Count, Nano: nanoOfUSD(w.Sum), Span: w.Span,
