@@ -155,3 +155,35 @@ func TestWorkspacesOfIsSubjectOnly(t *testing.T) {
 		t.Fatalf("an unknown subject resolved to %+v", none)
 	}
 }
+
+// TestAccountIsPresentWheneverAWorkspaceIs pins the ONE-WAY invariant plane.Spaces
+// documents: an offered workspace always has an identity to seat the person under.
+//
+// The converse is deliberately NOT pinned, because it is not true — the account is
+// resolved before the rows are walked, so a subject known to this deployment with
+// no current membership answers with an account and an empty list. That is the
+// honest "we know who you are, and you are in nothing", and the doc used to claim
+// the opposite.
+func TestAccountIsPresentWheneverAWorkspaceIs(t *testing.T) {
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const sub = "ada@acme.test"
+	if _, err := s.EnsureWorkspace(ctx, "acme", accountID(sub), "Ada"); err != nil {
+		t.Fatalf("EnsureWorkspace: %v", err)
+	}
+	got, err := workspacesOf(fromOrg("acme"), s, &plane.WorkspacesIn{Subject: sub})
+	if err != nil {
+		t.Fatalf("workspacesOf: %v", err)
+	}
+	if len(got.Items) > 0 && got.Account == "" {
+		t.Fatalf("SECURITY: %d workspace(s) offered with no identity to seat under: %+v", len(got.Items), got)
+	}
+	// An identity this deployment has never seen resolves to neither.
+	none, err := workspacesOf(fromOrg("acme"), s, &plane.WorkspacesIn{Subject: "nobody@acme.test"})
+	if err != nil {
+		t.Fatalf("workspacesOf: %v", err)
+	}
+	if none.Account != "" || len(none.Items) != 0 {
+		t.Fatalf("an unknown subject resolved to %+v", none)
+	}
+}
