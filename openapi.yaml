@@ -66940,7 +66940,7 @@ paths:
       summary: Reports the deployment's chain indexer(s) and how far each has indexed.
       tags:
       - indexers
-      x-app: graph
+      x-app: explorer
   /v1/ingress/middlewares:
     get:
       description: |-
@@ -83114,7 +83114,7 @@ paths:
         registry.
       tags:
       - oracles
-      x-app: graph
+      x-app: explorer
   /v1/org/settings:
     delete:
       description: |-
@@ -97131,7 +97131,7 @@ tags:
   name: images
 - description: Package index is fast full-text search over your own data, typos forgiven.
   name: index
-- description: 'Package graph is chain data: your block indexers and how far each
+- description: 'Package explorer is chain data: your block indexers and how far each
     has caught up, plus the on-chain price feeds.'
   name: indexers
 - description: 'Package ingress is your front door: automatic TLS certificates and
@@ -97226,7 +97226,7 @@ tags:
 - description: 'Package o11y is your logs, metrics and traces: ship them in, query
     them, chart them.'
   name: o11y
-- description: 'Package graph is chain data: your block indexers and how far each
+- description: 'Package explorer is chain data: your block indexers and how far each
     has caught up, plus the on-chain price feeds.'
   name: oracles
 - description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
