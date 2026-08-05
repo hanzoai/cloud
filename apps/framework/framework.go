@@ -39,12 +39,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/sqlpool"
 	engine "github.com/hanzoai/framework"
-	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -80,8 +79,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// down from a library cannot be. A per-org DocType store would come through
 	// OrgDB, which names its owner.
 	eng, err := engine.Open(engine.Config{
-		Dir:    deps.DataDir,
-		OpenDB: func(string) (*sql.DB, error) { return cek.Open(namespace.System(), "framework", deps.DataDir) },
+		Dir: deps.DataDir,
+		// sqlpool.Open, not a bare cek.Open: this handle needs the single-connection
+		// cap like every other store in the binary, and opening it by hand is how it
+		// went without one. The opener applies it now, so there is nothing to forget.
+		OpenDB: func(string) (*sql.DB, error) { return sqlpool.Open("framework", deps.DataDir) },
 		Logger: log,
 	})
 	if err != nil {

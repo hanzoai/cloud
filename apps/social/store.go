@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// The ONE Hanzo "sqlite" driver; blank import registers it.
 	_ "github.com/hanzoai/sqlite"
@@ -33,11 +31,10 @@ type Store struct {
 }
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "social", dir)
+	db, err := sqlpool.Open("social", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open social store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
