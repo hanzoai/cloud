@@ -9,7 +9,7 @@ package org
 // hanzoai/s3-go's native If-Match / If-None-Match conditional PUT against the same
 // SeaweedFS S3 gateway clients/s3 already speaks to. It satisfies
 // github.com/hanzoai/vfs/replica.ConditionalStore, the seam FencedStore (per-org
-// DB ship) and CASFencer (per-org lease) compose over.
+// DB ship) and CASLeases (per-org lease) compose over.
 //
 // WHY the S3 client directly and not vfs's block layer: the vfs content-addressable
 // backend exposes NO conditional-write primitive — "overwriting is allowed" is its
@@ -22,7 +22,7 @@ package org
 //	client, err := a.Client()          // admin-credentialed S3 client
 //	cs := &S3ConditionalStore{Client: client, Bucket: orgBucket}
 //	dbFence := replica.NewFencedStore(cs)      // per-org DB fenced ship
-//	fencer  := NewCASFencer(cs, membership)    // per-org monotone lease round
+//	leases  := NewCASLeases(cs, membership)    // per-org monotone lease round
 
 import (
 	"bytes"

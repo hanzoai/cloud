@@ -37,11 +37,11 @@ type (
 	Option = replica.Option
 
 	// Lease binds an elected owner to the monotone round it writes at (the fencing
-	// value). Round is that monotone epoch. Fencer issues a Lease from a
-	// linearizable round source (CASFencer here; the Lux BFT round later).
+	// value). Round is that monotone epoch. Leases issues a Lease from a
+	// linearizable round source (CASLeases here; the Lux BFT round later).
 	Lease  = ha.Lease
 	Round  = ha.Round
-	Fencer = ha.Fencer
+	Leases = ha.Leases
 	// FencedStore admits a per-org-DB ship only at a round >= the recorded one,
 	// fencing a deposed writer. ConditionalStore is its atomic-CAS backing seam.
 	FencedStore      = replica.FencedStore
@@ -63,8 +63,8 @@ var (
 	DBPath = replica.DBPath
 	// NewFencedStore wraps a ConditionalStore as the round-fenced per-org ship path.
 	NewFencedStore = replica.NewFencedStore
-	// StaticFencer is the single-process Fencer (round always 1) for dev and tests.
-	StaticFencer = ha.StaticFencer
+	// StaticLeases is the single-process Leases (round always 1) for dev and tests.
+	StaticLeases = ha.StaticLeases
 
 	// ErrStaleRound is the deposed-writer rejection: a ship below the recorded round.
 	ErrStaleRound = replica.ErrStaleRound
