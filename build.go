@@ -24,9 +24,9 @@ import (
 
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/clients"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -1024,7 +1024,19 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 // property: middleware a subsystem installs lands on the subtrees its App
 // declares, never over the binary. Routes register exactly as before — absolute
 // paths, same precedence. See scope.go. A subsystem that genuinely gates
-// everything sets App instead and gets the bare app.
+// everything sets [Plugin.Global] and receives the bare app THROUGH THIS SAME
+// TYPE; the grant changes which Router arrives, never the signature.
+//
+// THIS IS THE CONTRACT'S ONLY ENFORCEMENT, AND IT IS THE COMPILER. There is no
+// second entry-point field to launder a divergent shape through, so an app whose
+// Mount takes *zip.App, or a differently-aliased Router, cannot be assigned here
+// and cannot reach a composition root. A doc comment stating the signature is
+// what let five apps diverge from it unnoticed; a type is what checks it.
+//
+// A subsystem that needs the concrete *zip.App (a typed registrar, an embedded
+// module's own mount) recovers it with [ZipApp] — the named hole, which reports
+// nil rather than pretending, so a mount that truly needs the registry fails
+// instead of serving routes no projection knows.
 type MountFunc func(app Router, deps Deps) error
 
 // ShutdownFunc releases a subsystem's process-lifetime resources (background
@@ -1059,7 +1071,17 @@ func CtxShutdown(f func() error) ShutdownFunc {
 // package hanzoai/metrics itself. It is the ONLY one of the four mount adapters
 // that is: commerce would add 527 packages to the core, and zen (via
 // hanzoai/ai/controllers) and ai import hanzoai/cloud — a cycle, not a weight.
-func MountMetrics(a *zip.App, deps Deps) error {
+//
+// It is a MountFunc — the doc above always CLAIMED it was one and the signature
+// said otherwise, which is the whole reason a per-entry-point escape hatch is a
+// bad idea. metrics installs no middleware anywhere (hanzoai/metrics calls Use
+// nowhere), so it mounts SCOPED like everyone else; it only ever needed the
+// concrete app to register routes, and cloud.ZipApp is the named hole for that.
+func MountMetrics(app Router, deps Deps) error {
+	a := ZipApp(app)
+	if a == nil {
+		return fmt.Errorf("metrics: router is not a zip app")
+	}
 	return metrics.Mount(a, metrics.Deps{Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand})
 }
 
@@ -1363,10 +1385,28 @@ type Plugin struct {
 	// routes still register at absolute paths anywhere, as they always have.
 	Prefixes []string
 
-	// App mounts against the whole binary instead of a scope, for a subsystem
-	// that gates everything. Set App or Mount, never both — the field IS the
-	// grant, so it is stated once and apps.TestWireFrozen fails on a new one.
-	App func(*zip.App, Deps) error
+	// Global grants app-wide middleware: Mount receives the BARE app as its
+	// Router instead of a scope, so what it installs runs for the whole binary.
+	// It is the answer for a subsystem that genuinely gates everything (commerce
+	// wraps all of /v1) and a lie for anyone else.
+	//
+	// IT IS A BOOL, AND THAT IS THE POINT. It used to be
+	// `App func(*zip.App, Deps) error` — a second Mount FIELD with a second Mount
+	// SIGNATURE — which braided two unrelated questions into one declaration:
+	// "may this subsystem gate the binary" (policy) and "what shape is its entry
+	// point" (type). Because the grant carried its own shape, a subsystem that
+	// merely wanted the concrete *zip.App could get it by taking the grant, and
+	// three did: agent, ai and commerce each held app-wide middleware authority
+	// they had not asked for, purely because their Mount named a concrete type.
+	// Nothing reported it — the doc comment claimed apps.TestWireFrozen policed
+	// new grants, and no such test exists anywhere in this repo.
+	//
+	// Unbraided, the shape question has ONE answer for all 140 subsystems —
+	// [MountFunc] — so the compiler checks it at every composition root and a
+	// sixth divergent signature cannot link. The concrete app is still reachable
+	// through [ZipApp], which is the named hole for it and always was; a global
+	// subsystem simply gets one whose Router IS the app.
+	Global bool
 
 	// Door is this subsystem's PER-CALLER contribution to the MCP door: the tools
 	// that exist because of who is asking, which the build-time projection cannot
@@ -1400,11 +1440,16 @@ func door(plugins []Plugin) (zip.Source, error) {
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
 // the composition root's (apps.Wire()); MountAll does NOT sort.
 //
-// app is the concrete *zip.App from Serve. An App spec receives it. Everyone else
-// receives a scope bound to their declared Prefixes, so a subsystem's middleware
-// reaches its own subtrees and nothing else, whatever its slice position. A
-// subsystem that installs middleware outside them fails the mount — the binary
-// refuses to boot half-gated rather than serving with a stranger's gate on.
+// app is the concrete *zip.App from Serve. A Global spec receives it as its
+// Router. Everyone else receives a scope bound to their declared Prefixes, so a
+// subsystem's middleware reaches its own subtrees and nothing else, whatever its
+// slice position. A subsystem that installs middleware outside them fails the
+// mount — the binary refuses to boot half-gated rather than serving with a
+// stranger's gate on.
+//
+// Every spec goes through spec.Mount, whatever the grant: the Router it receives
+// is the only difference, which is what makes [MountFunc] the fleet's ONE mount
+// signature and lets the compiler check it at all 123 composition roots.
 //
 // Teardown is wired HERE, at mount time: right after a subsystem mounts, its
 // ShutdownFunc (if any) is registered via app.OnShutdown. zip drains those hooks
@@ -1425,19 +1470,20 @@ func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 			logger.Debug("subsystem disabled", "name", spec.Name)
 			continue
 		}
-		if spec.App != nil && spec.Mount != nil {
-			return fmt.Errorf("mount %s: has both App and Mount — a subsystem is scoped or global, not both", spec.Name)
+		if spec.Mount == nil {
+			return fmt.Errorf("mount %s: no Mount — a subsystem that registers nothing is not composed, it is absent", spec.Name)
 		}
+		// The grant decides WHICH Router, never which signature. Global hands over
+		// the bare app (a *zip.App is a Router); everyone else gets a scope bound
+		// to their declared prefixes. One call, one shape, either way.
 		var sc *scope
-		if spec.App != nil {
-			if err := spec.App(app, deps); err != nil {
-				return fmt.Errorf("mount %s: %w", spec.Name, err)
-			}
-		} else {
+		r := Router(app)
+		if !spec.Global {
 			sc = newScope(app, spec.Name, spec.Prefixes)
-			if err := spec.Mount(sc, deps); err != nil {
-				return fmt.Errorf("mount %s: %w", spec.Name, err)
-			}
+			r = sc
+		}
+		if err := spec.Mount(r, deps); err != nil {
+			return fmt.Errorf("mount %s: %w", spec.Name, err)
 		}
 		if sc != nil {
 			if err := sc.err(); err != nil {

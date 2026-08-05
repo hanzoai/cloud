@@ -16,10 +16,10 @@ import (
 // `metrics openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "metrics",
+		Name:       "metrics",
 		OwnsHealth: true,
-		Price: cloud.Free,
-		App:   cloud.MountMetrics,
+		Price:      cloud.Free,
+		Mount:      cloud.MountMetrics,
 	}}, []string{"metrics"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

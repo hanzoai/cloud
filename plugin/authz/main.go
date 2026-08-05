@@ -8,7 +8,6 @@ import (
 	"github.com/hanzoai/authz/serve"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/zap-proto/zip"
 )
 
 // The PROSE for authz's three routes, declared HERE for the same reason the Mount
@@ -56,13 +55,14 @@ func init() {
 // `authz openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "authz",
+		Name:       "authz",
 		OwnsHealth: true,
-		Price: cloud.Free,
+		Price:      cloud.Free,
 		// The adapter lives HERE, on cloud's side: authz is a leaf and must never
 		// import cloud, so cloud's plugin contract bends to the leaf rather than the
 		// leaf learning about Deps.
-		App: func(app *zip.App, deps cloud.Deps) error { return serve.Mount(app, deps.Logger) },
+		Mount:  func(app cloud.Router, deps cloud.Deps) error { return serve.Mount(cloud.ZipApp(app), deps.Logger) },
+		Global: true,
 	}}, []string{"authz"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
