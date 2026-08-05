@@ -2,7 +2,7 @@
 
 package commerce
 
-// ledger_wire_test.go drives the REAL peer path a customer's finance pages take when
+// ledger_peer_test.go drives the REAL peer path a customer's finance pages take when
 // the ledger lives in another process: a real per-org finance ledger, the real
 // /finance/txns op published on a real socket, and the real /v1/finance/* reader in
 // apps/billing on the other end of it.
@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -42,7 +43,17 @@ import (
 // the canonical "commerce" socket — the exact pair Mount publishes at boot.
 func servePeerLedger(t *testing.T) finance.Client {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	// A unix socket address is capped near a hundred bytes, and t.TempDir embeds
+	// this test's own long name — on darwin the bind failed on the discarded
+	// goroutine error and every dial below refused, so the suite was red on any
+	// Mac while green in CI. An anonymous short-named dir keeps the address
+	// inside the cap on every platform.
+	sockDir, err := os.MkdirTemp("", "zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(sockDir) })
+	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
 
 	fin := finance.New(t.TempDir())
 	finance.Publish(fin)
