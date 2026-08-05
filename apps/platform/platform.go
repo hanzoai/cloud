@@ -169,6 +169,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
 	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error { return buildFromPush(mounted, ctx, ev) })
 
+	// The same trigger on the plane. git and platform are separate processes, so
+	// the registration above is nil in the process where pushes actually land —
+	// which made OnGitPush's nil-when-unregistered a silent no-op for every push
+	// the fleet has ever served.
+	exposePush()
+
 	// Own the git build→deploy handoff: a background reconciler that applies the
 	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads
 	// "building" deployments from the store, so it resumes across a cloud restart.
