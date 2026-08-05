@@ -44,6 +44,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	log "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -67,7 +68,45 @@ func installRiskScorer(lg log.Logger) {
 	cloud.SetRiskScorer(func(ctx context.Context, org string, q cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return scoreOverPlane(ctx, lg, org, q)
 	})
+	// THE UNARMED AXIS IS ANNOUNCED, ONCE, AT BOOT. A rule half that cannot fire
+	// because nothing states its axis is indistinguishable from a rule half that
+	// found nothing, and the second reads as a clean bill of health. Said here, where
+	// the seam is published, so it is on the record before any payment needs it —
+	// which is the same reason apps/risk announces a jurisdiction listing it cannot
+	// use at mount rather than on the first decision that wanted one.
+	lg.Info("credit door risk axes", "armed", topupAxes, "unarmed", topupUnarmed,
+		"why", "no device fingerprint reaches this binary from a card top-up")
 }
+
+// topupAxes is exactly what the credit door STATES, and [topupUnarmed] exactly what
+// it does not. They are stated rather than left to be inferred from
+// [topupSignals] because the difference decides which halves of the risk rule can
+// fire at this door, and a half that cannot fire must never be mistaken for a half
+// that found nothing. A test holds [topupSignals] to these two lists, so the
+// declaration cannot drift from the door.
+var topupAxes = []string{plane.SignalNano, plane.SignalCountry, plane.SignalPeer}
+
+// topupUnarmed is the DEVICE axis, and the reason is a fact about the payment path
+// rather than a decision of this file's.
+//
+// No device fingerprint reaches this binary from a top-up. The request body is a card
+// token, an amount and a currency; the card is tokenised in the browser and its
+// number never arrives here; the browser does not run the payment SDK's
+// buyer-verification step, so there is no verification token either; and no header
+// carries a device id. There is nothing to state.
+//
+// AND NOTHING IS INVENTED IN ITS PLACE. A user-agent string — or a digest of the
+// request's headers — is shared by millions of unrelated people, so stated as a
+// device it would put ordinary customers past the fan-out bound and summon a person
+// for every payment: the same control useless in the louder direction, and wearing
+// the name of a fingerprint while holding nothing of the kind. The axis stays unarmed
+// and says so. When a real fingerprint is collected, [topupSignals] states it in one
+// line and this list loses an entry.
+//
+// The device half of the fan-out is not dead everywhere: POST /v1/risk/learn takes a
+// device from a caller that has one, so the rule is exercised where a real value
+// exists.
+var topupUnarmed = []string{plane.SignalDevice}
 
 // scoreOverPlane asks the risk child, and translates the two vocabularies.
 //
@@ -245,14 +284,27 @@ func wakeScorer(lg log.Logger) {
 func riskGate(lg log.Logger) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org := payerOrg(c)
+		// THE SUBJECT IS RESOLVED ONCE and used by both halves of this middleware — the
+		// screen below and the record after it. A screen that judged one subject while
+		// the record taught another would be two subjects, and the velocity of the one
+		// being judged would be empty forever however many payments settled.
+		subject := principal.Subject(c, org)
+		facts := topupSignals(c)
 		v := cloud.Decide(c.Context(), org, cloud.RiskQuery{
-			Stage:   cloud.StagePayment,
-			Subject: cloud.RiskSubject{Kind: plane.KindAccount, ID: principal.Subject(c, org)},
+			Stage: cloud.StagePayment,
+			// THE PAYER, not the account. They are different populations and this door
+			// judges the first: an account's learned history is its metered inference
+			// spend, so screening a payment as an account compares money moving IN
+			// against a distribution of money spent OUT — and the windowed value bounds
+			// the aggregate rule reads are a PAYMENTS appetite accruing on the very same
+			// key. A customer with a large inference bill was examined for it. See
+			// [plane.KindPayer].
+			Subject: cloud.RiskSubject{Kind: plane.KindPayer, ID: subject},
 			// STATED, never derived. cloud.Privileged() does not match this route
 			// and the default is fail-open, so an unset bit here is a scorer outage
 			// minting balance.
 			Privileged: true,
-			Signals:    cloud.Facts(topupSignals(c)),
+			Signals:    cloud.Facts(facts),
 		})
 		// EVERY decision is recorded, including the allows — an unscored allow and a
 		// clean one are different rows, and the refusal is what tells them apart.
@@ -260,7 +312,15 @@ func riskGate(lg log.Logger) zip.Handler {
 			"org", org, "action", v.Action, "scored", v.Scored(), "refusal", v.Refusal,
 			"cause", v.Cause, "score", v.Score, "shape", v.Shape, "policy", v.Policy)
 		if v.Allowed() {
-			return c.Next()
+			if err := c.Next(); err != nil {
+				return err
+			}
+			// AND WHAT ACTUALLY HAPPENED GOES BACK TO THE MODEL. The screen above reads
+			// history; this is the only thing in the fleet that WRITES any. It runs after
+			// the handler because a settlement is a fact about the past, and only the
+			// handler's own answer says whether there was one.
+			teachSettlement(c, lg, org, subject, facts)
+			return nil
 		}
 		// A NO-DECISION IS A BLOCK CARRYING A REFUSAL, and both halves are the test.
 		// [cloud.riskUnavailable] is the ONLY producer of that pair — it is what the
@@ -285,6 +345,205 @@ func riskGate(lg log.Logger) zip.Handler {
 		// short of "proceed" is a refusal — never a quiet proceed.
 		return zip.ErrForbidden("this top-up was not authorised")
 	}
+}
+
+// ── what settled ─────────────────────────────────────────────────────────────
+
+// maxTeaching is how many settlement observations may be in flight at once. Past it
+// one is DROPPED rather than queued, for [risk.emit]'s reason: a queue defers the
+// loss instead of bounding it, and the memory this process holds must not be a
+// function of how fast money is arriving.
+const maxTeaching = 32
+
+// teaching is that ceiling, as a counting semaphore. A send that cannot proceed is
+// an answer — there is no room — and never a place to block a settled payment.
+var teaching = make(chan struct{}, maxTeaching)
+
+// teach is the ONE plane call, held in a variable for the one thing a variable buys
+// here: a test can observe exactly what LEAVES this process — the subject, the kind,
+// the settlement key and the signals — without standing up a risk child to receive
+// it. It is never reassigned in production; the only writer is a test, and the
+// compiler holds the signature to the generated client's.
+var teach = riskpeer.RiskObserve
+
+// teachBudget bounds ONE teaching call end to end, including waking the risk child.
+// It is generous where the decide budget is tight because it bounds a DETACHED
+// goroutine rather than a request: the customer has already been charged and
+// answered, so nothing here is on anybody's critical path, and a cold risk child
+// needs room to come up (plane.Ask reaches the peer and single-flights the start).
+const teachBudget = 5 * time.Second
+
+// teachSettlement tells the risk plane that a top-up SETTLED.
+//
+// # This is the only thing that teaches the credit door's rule anything
+//
+// The screen reads what a subject had already done; nothing was making that true.
+// [plane.RiskDecide] records nothing by design, the published learn door is an
+// organisation calling itself, and at a self-serve credit door the organisation IS
+// the payer — so a fresh org's pace and fan-out read an empty history, which is
+// precisely the subject those halves exist for. Five payments of eleven thousand
+// looked like five first payments. After this, the fifth reads forty-four thousand of
+// prior accrual and the sixth reads fifty-five.
+//
+// # Why the payer cannot steer it
+//
+//	IT IS DRIVEN BY THE SETTLEMENT, NOT THE REQUEST. Nothing is stated unless the
+//	handler ANSWERED that money moved: the status is the handler's, the processor
+//	reference is the gateway's, and both are read off the response this process
+//	produced rather than off the body the customer sent. A request that fails, is
+//	declined, or is refused upstream teaches nothing at all.
+//
+//	THE AMOUNT IS THE AMOUNT THAT SETTLED. It is the same value the screen was given
+//	— which is the body's, because that is what a card door charges — but it is only
+//	ever recorded once a real card actually paid it. A payer inflating it inflates
+//	their own bill; a payer understating it is charged the smaller amount. Either way
+//	the accrual and the money agree, which is the property a velocity bound needs.
+//
+//	IT CANNOT BE LOWERED. The accrual is a sum of non-negative payments
+//	([risk.observe] refuses a negative), so there is no observation a payer can add
+//	that reduces it, and none they can withhold: this states it, not them.
+//
+//	IT CANNOT BE PRE-EMPTED. The record deduplicates on the settlement id, so an id
+//	the payer could guess is an id they could claim first — after which the real
+//	observation is inert. The id lands in the risk plane's reserved namespace, which
+//	the public learn door refuses outright.
+//
+// # Idempotent, on the settlement's own identifier
+//
+// Settlement is at-least-once: the door retries, a webhook replays, an event is
+// redelivered. The key is therefore the PROCESSOR's reference for the charge — the
+// gateway's own payment id, which is the one identifier that is the same across every
+// path that can credit one payment — falling back to the ledger receipt only where
+// the processor stated none. Velocity that double-counted a retry would freeze a
+// customer for paying once.
+//
+// # It can never fail the payment
+//
+// The money has moved and the customer has been answered by the time this runs. So it
+// is detached, bounded, dropped under pressure and panic-guarded, and its errors are
+// logged and discarded — the same discipline apps/risk applies to stating a decision
+// on the event plane, for the same reason. A telemetry row is expendable; a settled
+// payment is not.
+func teachSettlement(c *zip.Ctx, lg log.Logger, org, subject string, facts map[string]string) {
+	if org == "" || subject == "" {
+		return
+	}
+	// THE HANDLER'S OWN ANSWER IS THE SETTLEMENT FACT. A non-2xx is a top-up that did
+	// not credit — declined, refused, or broken — and teaching from one would tell the
+	// model money moved when none did, which is a velocity bound a caller fills by
+	// sending payments that fail.
+	res := c.Fiber().Response()
+	if res.StatusCode() < 200 || res.StatusCode() > 299 {
+		return
+	}
+	ref, ok := settlementOf(res.Body())
+	if !ok {
+		// The door answered success and named nothing this process can key on. Say so
+		// rather than minting a key: an observation under an invented id counts the same
+		// money again on the next retry, which is worse than the one it did not record.
+		lg.Warn("a settled top-up could not be taught to the risk model: the answer named no settlement",
+			"org", org)
+		return
+	}
+	nano := facts[plane.SignalNano]
+	if nano == "" {
+		// No amount this door could state in USD ([topupSignals]). The event still
+		// happened, so it is still taught — the value features read blind, which is a
+		// different and honest fact from a payment of nothing.
+		lg.Debug("teaching a settled top-up with no stated value", "org", org)
+	}
+	in := &plane.RiskObserveIn{
+		Stage:      cloud.StagePayment,
+		Kind:       plane.KindPayer,
+		Subject:    subject,
+		Settlement: ref,
+		// THE SAME SIGNALS THE SCREEN WAS GIVEN, minus the ones that describe the
+		// question rather than the event. The axes must match what [riskGate] asked
+		// about or the screen reads a history taught under different identifiers.
+		Signals: signalsOf(map[string]string{
+			plane.SignalNano: nano,
+			plane.SignalPeer: facts[plane.SignalPeer],
+		}),
+	}
+	select {
+	case teaching <- struct{}{}:
+	default:
+		lg.Debug("a settled top-up was not taught to the risk model: teachings in flight are at the ceiling",
+			"ceiling", maxTeaching)
+		return
+	}
+	// The peer call is read HERE, on the request's own goroutine, so the detached
+	// goroutine below holds a VALUE rather than reading a package variable while
+	// something else writes it — a seam read from a goroutine nobody joins is a seam
+	// no test can put back.
+	call := teach
+	// THE VALUE IS BUILT BEFORE THE GOROUTINE and the context is NOT the request's,
+	// for two different reasons that both point the same way. The request's context is
+	// dead the moment this middleware returns, so it cannot bound the call — and it is
+	// request-DERIVED, which is the one shape [cloud.For] will not restate a tenant on:
+	// it prefers the gateway's inbound assertion and returns before it reads a stated
+	// org, and the org that PAYS is not always the org that asked. The same correction
+	// [scoreOverPlane] makes, for the same reason. What is lost is the request's trace
+	// values; what would be lost otherwise is the tenant.
+	go func() {
+		defer func() { <-teaching }()
+		defer func() {
+			if r := recover(); r != nil {
+				lg.Error("teaching a settled top-up panicked", "err", r)
+			}
+		}()
+		// THE TENANT IS STATED, for [scoreOverPlane]'s reason: cloud.For on a
+		// request-derived context prefers the gateway's assertion and returns before it
+		// reads a stated one, and the org that PAYS is not always the org that asked.
+		ask, cancel := context.WithTimeout(cloud.For(context.Background(), org), teachBudget)
+		defer cancel()
+		out, err := call(ask, in)
+		switch {
+		case err != nil:
+			// Every failure is the same fact and none of them is the payment's: an absent
+			// peer, a refusing one and a timed-out one all mean the model does not know
+			// about this payment. There is nothing this process may do to the settlement.
+			lg.Debug("a settled top-up was not taught to the risk model", "org", org, "err", err)
+		case out != nil && out.Learned == 0:
+			// The idempotent answer. Worth a line at debug: it is what a retried or
+			// replayed settlement looks like, and it is the property working.
+			lg.Debug("a settled top-up was already in the risk model's record", "org", org)
+		}
+	}()
+}
+
+// settlementOf reads the settlement's own identifier out of the door's answer.
+//
+// THE PROCESSOR'S REFERENCE FIRST, because it is the one identifier that is the same
+// across every path that can credit ONE payment — the synchronous door and a replayed
+// webhook both carry the gateway's payment id, while each writes its own ledger row
+// with its own receipt. Keyed on the reference, two paths crediting one payment teach
+// ONE observation; keyed on the receipt they would teach two, and the velocity bound
+// would count money that arrived once as having arrived twice.
+//
+// The ledger receipt is the fallback and not the default: a processor that states no
+// reference still settled, and refusing to teach it would leave a real payment out of
+// the accrual. Both are minted by us or by the gateway and neither is a field the
+// paying customer can set.
+//
+// ok=false means the answer named neither, which is a door this process cannot key an
+// idempotent record on — reported by the caller rather than papered over with a
+// generated id.
+func settlementOf(body []byte) (string, bool) {
+	var out struct {
+		ProcessorRef  string `json:"processorRef"`
+		TransactionID string `json:"transactionId"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", false
+	}
+	if ref := strings.TrimSpace(out.ProcessorRef); ref != "" {
+		return ref, true
+	}
+	if id := strings.TrimSpace(out.TransactionID); id != "" {
+		return id, true
+	}
+	return "", false
 }
 
 // payerOrg is the org whose ledger this top-up will credit, and therefore the
@@ -335,6 +594,29 @@ func payerOrg(c *zip.Ctx) string {
 // into silence; it cannot be forged upward into somebody else's freeze, and
 // silence is the state this door was already in. Wiring the billing or KYC
 // jurisdiction, when there is one to wire, replaces this signal at this one line.
+// THE PEER IS THE ADDRESS, AND THAT IS WHAT ARMS THE FAN-OUT. Two of the rule's
+// four halves read aggregation AXES rather than one event's numbers, and an axis a
+// gate never states does not exist: with only ip, currency, country and nano stated,
+// the counterparty and device axes were empty on every top-up, so [risk.onFan] — the
+// half that exists to see one actor behind twenty nominally unrelated accounts —
+// could not fire at this door for any input at all, and [risk.onPace] read one axis
+// where it reads three. Account farming is unremarkable from every account taken by
+// itself; the only place the pattern exists is in what the accounts SHARE.
+//
+// So the strongest shared identifier this door actually has is stated on the peer
+// axis: the address our own edge resolved, from the same trusted-hop path the country
+// comes from ([cloud.ClientIP]). It is not a counterparty in the settlement sense —
+// nothing at a card door is — but it is exactly what that axis is for: an identifier
+// several nominally unrelated subjects can be found behind. It is also observed by us
+// rather than stated by the payer, so it can be evaded (a fresh address per account,
+// which costs the attacker something) and cannot be forged into somebody else's
+// finding.
+//
+// WHAT IT IS NOT is a fabricated device. See [topupAxes].
+// It SUPPLIES THE ARGUMENTS, and [topupFacts] is the rule — the same split
+// [cloud.ClientIP] makes over [cloud.clientAddr], for the same reason. What this
+// door states decides which halves of the risk rule can fire at it, and that is a
+// property worth testing without a socket, a proxy set or a request.
 func topupSignals(c *zip.Ctx) map[string]string {
 	var body struct {
 		AmountCents int64  `json:"amountCents"`
@@ -344,23 +626,37 @@ func topupSignals(c *zip.Ctx) map[string]string {
 	// handler behind it validates its own wire and answers 400 in its own words.
 	// Here it simply means the amount was not observed.
 	_ = json.Unmarshal(c.Body(), &body)
+	return topupFacts(cloud.ClientIP(c), cloud.ClientCountry(c), body.AmountCents, body.Currency)
+}
 
+// topupFacts IS the rule, as a pure function of the four facts the door observed:
+// the address our own edge resolved, the jurisdiction it resolved from it, and the
+// amount and currency the request asked to move.
+func topupFacts(address, country string, amountCents int64, currency string) map[string]string {
 	signals := map[string]string{
-		"ip":       cloud.ClientIP(c),
-		"currency": strings.ToLower(strings.TrimSpace(body.Currency)),
+		"ip":       address,
+		"currency": strings.ToLower(strings.TrimSpace(currency)),
+	}
+	// THE PEER AXIS, and it is omitted when the edge resolved nothing — for the
+	// country's reason below and one of its own. An axis stated as the empty string
+	// is every payer whose address we could not resolve pooling into ONE identifier,
+	// which reaches the fan-out bound on volume alone and reports a farm made of
+	// strangers.
+	if address != "" {
+		signals[plane.SignalPeer] = address
 	}
 	// Omitted when nothing trustworthy stated one. An absent country is a fact the
 	// rule reads as "the geography half cannot judge"; an empty string sent as a
 	// value would be a gate claiming to have looked.
-	if country := cloud.ClientCountry(c); country != "" {
+	if country != "" {
 		signals[plane.SignalCountry] = country
 	}
 	// NANO IS USD. A minor unit in another currency converted as though it were
 	// cents would be a number the value features read as a different amount of
 	// money, so an amount this gate cannot state in USD is not stated at all —
 	// absent, blind, and counted as blind on the org's own model state.
-	if body.AmountCents > 0 && (signals["currency"] == "" || signals["currency"] == "usd") {
-		signals[plane.SignalNano] = strconv.FormatInt(body.AmountCents*nanoPerCent, 10)
+	if amountCents > 0 && (signals["currency"] == "" || signals["currency"] == "usd") {
+		signals[plane.SignalNano] = strconv.FormatInt(amountCents*nanoPerCent, 10)
 	}
 	return signals
 }

@@ -137,6 +137,37 @@ type riskEvent struct {
 // the wire carries integers because money is not a float, and the model carries
 // a ratio because every feature is dimensionless.
 func (e riskEvent) observation(now time.Time) (observation, error) {
+	id := strings.TrimSpace(e.ID)
+	if id == "" {
+		id = eventID()
+	}
+	// THE RESERVED NAMESPACES ARE THIS PLANE'S OWN, and a caller may not write into
+	// them. The record deduplicates on (tenant, id) and the FIRST writer of an id
+	// wins, so an id this plane will later mint for itself is an id a caller can
+	// claim in advance — after which the plane's own observation is silently inert.
+	//
+	// Two of them exist and both are load-bearing. A SETTLEMENT observation
+	// ([planeObserve]) is the only thing teaching the aggregate rules any payment
+	// velocity at all, so pre-empting one switches those rules off for that subject
+	// — available to the paying party, which at a self-serve credit door is the
+	// organisation itself. A FOLDED bucket ([bucketID]) is a piece of the
+	// organisation's own history, and a claimed id makes the fold skip it.
+	//
+	// It is refused HERE, on the CALLER's shape, and nowhere else. This method is the
+	// one that reads an id a caller chose; [riskEvent.under] is the conversion beneath
+	// it, and the plane's own doors reach that one with an id they minted themselves.
+	// A guard on the conversion would refuse the plane its own namespaces.
+	if ns, taken := reservedOf(id); taken {
+		return observation{}, zip.ErrBadRequest("'id' may not begin with " + ns +
+			" — that namespace is this plane's own, and an event written into it would displace one of your organisation's records")
+	}
+	return e.under(id, now)
+}
+
+// under is the conversion itself, under an id its caller has already settled on. It
+// holds the TIME bound — the one definition of it, [within] — so every door reaches
+// that bound through here and none of them can be the door that forgot it.
+func (e riskEvent) under(id string, now time.Time) (observation, error) {
 	at := now
 	if e.At != "" {
 		parsed, err := time.Parse(time.RFC3339, e.At)
@@ -151,10 +182,6 @@ func (e riskEvent) observation(now time.Time) (observation, error) {
 			return observation{}, err
 		}
 		at = parsed
-	}
-	id := strings.TrimSpace(e.ID)
-	if id == "" {
-		id = eventID()
 	}
 	return observe(id, actor{
 		Kind:    strings.TrimSpace(e.Kind),
