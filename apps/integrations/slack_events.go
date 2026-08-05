@@ -258,9 +258,11 @@ func slackCodingEvent(s *cloud.Service[state], org string, d slackRoute, codingT
 
 // slackSlashTurn is the async slash body dispatched on the bridge. An empty org means
 // the workspace's Hanzo connection was removed. A `code:` prompt branches to the
-// coding flow (slack_coding.go). Otherwise it runs the ONE agent brain (bridgeReply)
-// and delivers via the (host-pinned) response_url: an answer goes in_channel; the
-// account-link prompt goes ephemeral (only the invoker sees it).
+// coding flow (slack_coding.go). A body that NAMES a registry command runs it as the
+// linked user (slack_command.go); anything else runs the ONE agent brain
+// (bridgeReply). Delivery is via the (host-pinned) response_url: an agent answer goes
+// in_channel; a command's result and the account-link prompt go ephemeral (only the
+// invoker sees them).
 func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
 	defer cancel()
@@ -272,7 +274,24 @@ func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL
 		handleSlackSlashCoding(s, ctx, org, in.ExternalID, in.Channel, in.User, codingText, responseURL)
 		return
 	}
+	if cmds := commands(s); len(cmds) > 0 {
+		if argv, named := resolve(cmds, in.Text); named {
+			// EPHEMERAL, and decided here because it is one fact about the whole
+			// branch: a command's result is org data the caller asked for and the
+			// link prompt carries a URL, so both belong to the person who typed it.
+			slackSlashReply(s, ctx, in, responseURL, slackCommandTurn(s, ctx, org, in, cmds, argv), true)
+			return
+		}
+	}
 	text, ephemeral := bridgeReply(s, ctx, org, in.Provider, in.ExternalID, in.User, in.Text)
+	slackSlashReply(s, ctx, in, responseURL, text, ephemeral)
+}
+
+// slackSlashReply delivers a slash answer through the (host-pinned) response_url.
+// One function for both branches, so what is ephemeral is decided by whoever
+// produced the answer and stated once here — a link prompt or a command result
+// reaches only the person who asked; an agent answer goes to the channel.
+func slackSlashReply(s *cloud.Service[state], ctx context.Context, in Inbound, responseURL, text string, ephemeral bool) {
 	if text == "" {
 		return
 	}
