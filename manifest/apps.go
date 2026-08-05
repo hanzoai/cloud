@@ -268,7 +268,13 @@ var Apps = []App{
 	// and the typed RPC — published in openapi.yaml and therefore in every generated
 	// SDK and the MCP tool list — reached no app at all.
 	{Name: "team", Prefixes: []string{"/collaborator", "/v1/team"}},
-	{Name: "meet", Prefixes: []string{"/v1/meet/getToken", "/v1/meet/health"}},
+	// /meet is the native call client, embedded in meet's own binary and served
+	// from the same origin as its API — the same one-binary/one-origin shape
+	// tasks has just above. The API side is the whole /v1/meet subtree now that
+	// there are three routes under it and the client reads two of them; naming
+	// each leaf was a list that had to be edited every time a route was added,
+	// and an unnamed leaf falls to whichever row holds the bare remainder.
+	{Name: "meet", Prefixes: []string{"/meet", "/v1/meet"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
