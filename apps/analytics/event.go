@@ -964,11 +964,10 @@ func init() {
 			"`ingest_key_unknown`; a reduced principal (a Hanzo Team workspace token) is 403 "+
 			"`insufficient_capability`, because a full-fidelity screen recording has no projected form "+
 			"that is safe for a guest to write into a host org.\n\n"+
-			"BOUNDS: 413 over 512 KiB of body and 400 over 2000 events in one batch — a recorder is "+
+			"BOUNDS: 413 over 512 KiB of body, and that is the only bound on one batch — a recorder is "+
 			"expected to chunk a long session rather than send it whole, and the cap is the size one "+
-			"message can carry rather than an arbitrary number. 503 `replay_not_configured` when the "+
-			"caller's org has no replay ingest mapping, and 503 when the pipeline cannot take the "+
-			"batch: both are honest unavailability the caller can retry, never a 200 over a discarded "+
+			"message can carry rather than an arbitrary number. 503 when the pipeline cannot take the "+
+			"batch: honest unavailability the caller can retry, never a 200 over a discarded "+
 			"recording.")
 }
 
