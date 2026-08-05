@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package graph is chain data: your block indexers and how far each has caught up, plus the on-chain price feeds.",
+    "description": "Package explorer is chain data: your block indexers and how far each has caught up, plus the on-chain price feeds.",
     "version": "v1"
   },
   "servers": [
