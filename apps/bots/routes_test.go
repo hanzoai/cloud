@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/runtime"
+
 	"github.com/hanzoai/cloud/apps/visor"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -85,8 +85,8 @@ func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	if err := visor.Mount(app, deps); err != nil { // Wire order: visor first — the shadowing mount
 		t.Fatalf("visor.Mount: %v", err)
 	}
-	if err := runtime.Mount(app, deps); err != nil {
-		t.Fatalf("runtime.Mount: %v", err)
+	if err := mountRelay(app, deps); err != nil {
+		t.Fatalf("mountRelay: %v", err)
 	}
 	if err := Mount(app, deps); err != nil { // …bots last, as in Wire
 		t.Fatalf("bots.Mount: %v", err)

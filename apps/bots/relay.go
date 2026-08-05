@@ -1,19 +1,19 @@
-// ops.go mounts /v1/bot/* — the runtime's OWN operational paths (health, and the
+// relay.go mounts /v1/bot/* — @hanzo/bot's OWN operational paths (health, and the
 // surfaces the console Bot module links out to), relayed verbatim. It is the
-// runtime's ops face, not a control plane: a liveness probe is not a
+// executor's ops face, not a control plane: a liveness probe is not a
 // tenant-scoped resource, so it stays a relay rather than being reimplemented in
-// Go. Everything a tenant can ACT on is native and lives in its own domain —
-// /v1/bots is the run control plane (apps/bots).
+// Go. Everything a tenant can ACT on is native and typed beside it — /v1/bots is
+// the run control plane (bots.go).
 //
-// Path mapping: the runtime serves bare paths (/health, /v1/chat/completions),
+// Path mapping: the executor serves bare paths (/health, /v1/chat/completions),
 // NOT the /v1/bot/* prefix — the edge strips it. So this face strips /v1/bot too:
-// /v1/bot/<rest> → {runtime}/<rest> (e.g. /v1/bot/health → /health).
+// /v1/bot/<rest> → {executor}/<rest> (e.g. /v1/bot/health → /health).
 //
 // Order 143 — binds /v1/bot/* before the AI subsystem's /v1/* catch-all (150).
 //
-// The package doc lives once, in runtime.go.
+// The package doc lives once, in bots.go.
 
-package runtime
+package bots
 
 import (
 	"bytes"
@@ -69,23 +69,24 @@ var identityHeaders = []string{
 	"Authorization", "X-Org-Id", "X-User-Id", "X-User-Email", "X-Project-Id", "X-Environment",
 }
 
-type service struct {
-	target string // runtime base, no trailing slash
+type relay struct {
+	target string // executor base, no trailing slash
 	log    luxlog.Logger
 	cc     *http.Client
 }
 
-// Mount registers the /v1/bot/* surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// mountRelay registers the /v1/bot/* surface on app per HIP-0106. Mount (bots.go)
+// calls it: one product, one entry point, two faces.
+func mountRelay(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("runtime.Mount: nil app")
+		return fmt.Errorf("bots.mountRelay: nil app")
 	}
 	if deps.Logger == nil {
-		return fmt.Errorf("runtime.Mount: nil deps.Logger")
+		return fmt.Errorf("bots.mountRelay: nil deps.Logger")
 	}
-	s := &service{
-		target: url(),
-		log:    deps.Logger.New("subsystem", "runtime"),
+	s := &relay{
+		target: executorURL(),
+		log:    deps.Logger.New("subsystem", "bots"),
 		cc:     &http.Client{Timeout: 60 * time.Second},
 	}
 	// UNTYPED BY DESIGN — and it is the only route here, so this whole subsystem
@@ -105,13 +106,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//     serialises its Out as JSON, so both move.
 	//
 	// The tenant-actionable surface is native and typed elsewhere: /v1/bots is the
-	// run control plane (clients/bots). This face is ops, and it stays a relay.
+	// run control plane (bots.go). This face is ops, and it stays a relay.
 	app.All("/v1/bot/*", s.proxy)
-	s.log.Info("runtime ops surface mounted", "target", s.target, "brand", deps.Brand)
+	s.log.Info("bots relay surface mounted", "target", s.target, "brand", deps.Brand)
 	return nil
 }
 
-func (s *service) proxy(c *zip.Ctx) error {
+func (s *relay) proxy(c *zip.Ctx) error {
 	// Gate on a validated principal before forwarding X-Org-Id to the runtime,
 	// which trusts these headers as the gateway-minted tenant context. Off-gateway,
 	// the identity middleware restores a forged X-Org-Id but leaves X-User-Id empty;
