@@ -47,11 +47,12 @@ func TestPlans_Vocab(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	// Lower bound, not an exact pin: the entitlement vocabulary only GROWS as the
-	// @hanzo/plans catalog adds products (10 at v1.4.1, 12 at v1.4.4), so an exact
-	// count is a staleness magnet — matches the `Keys < 40` lower bound just below.
-	if len(body.Namespaces) < 10 {
-		t.Fatalf("namespaces = %d, want >=10", len(body.Namespaces))
+	// Lower bound, not an exact pin — an exact count is a staleness magnet. The bound
+	// is a FLOOR on the vocabulary the catalog must still speak, not a growth curve:
+	// it read >=10 on the premise that the vocabulary only grows, and v1.4.10 falsified
+	// that by retiring the base/sites product lines along with their namespaces.
+	if len(body.Namespaces) < 9 {
+		t.Fatalf("namespaces = %d, want >=9", len(body.Namespaces))
 	}
 	if len(body.Keys) < 40 {
 		t.Fatalf("entitlement keys = %d, want >=40", len(body.Keys))
@@ -138,11 +139,16 @@ func TestEntitlements_UnknownPlanErrors(t *testing.T) {
 	}
 }
 
-// TestPlans_Ladder pins the hanzo.team commercial model (plans v1.4.1) on the
-// surface GET /v1/plans/subscriptions serves: the personal ladder pro $20 /
-// plus $100 / max $200, and team $25 per-seat with a 2-seat minimum. Stripe
-// lookup keys are part of the contract — pro moved to hanzo_pro_20 (the old
-// hanzo_pro stays on the immutable $49 price).
+// TestPlans_Ladder pins the commercial model on the surface GET
+// /v1/plans/subscriptions serves: the personal ladder go $9 / dev $19 / pro $49 /
+// max $99, and team $25 per-seat with a 2-seat minimum. Stripe lookup keys are part
+// of the contract — each carries its price, so a reprice mints a new key rather than
+// moving an immutable one.
+//
+// This is a CANARY on a money surface: it is meant to fail loudly when the catalog
+// reprices, so the change is deliberate and reviewed. It last fired for real when
+// plans v1.4.10 replaced the pro $20 / plus $100 / max $200 ladder — the same change
+// that retired plus/team-max/custom (see paid_test.go).
 func TestPlans_Ladder(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
@@ -168,8 +174,8 @@ func TestPlans_Ladder(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	price := map[string]float64{"pro": 20, "plus": 100, "max": 200, "team": 25}
-	lookup := map[string]string{"pro": "hanzo_pro_20", "plus": "hanzo_plus", "max": "hanzo_max", "team": "hanzo_team_25"}
+	price := map[string]float64{"go": 9, "dev": 19, "pro": 49, "max": 99, "team": 25}
+	lookup := map[string]string{"go": "hanzo_go_9", "dev": "hanzo_dev_19", "pro": "hanzo_pro_49", "max": "hanzo_max_99", "team": "hanzo_team_25"}
 	seen := map[string]bool{}
 	for _, p := range body.Plans {
 		want, ok := price[p.ID]
@@ -200,8 +206,8 @@ func TestPlans_Ladder(t *testing.T) {
 }
 
 // TestLicenseEntitlement_TeamProduct is the entitlement gate contract for
-// hanzo.team: a signed license for pro, plus, max AND team must carry
-// licensing.product:team, and developer (free) must NOT — the gate fails
+// hanzo.team: a signed license for dev, pro, max AND team must carry
+// licensing.product:team, and go (the entry tier) must NOT — the gate fails
 // closed for a tier that never bought team access.
 func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	prev := host
@@ -209,7 +215,7 @@ func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	defer func() { host.Close(); host = prev }()
 	ctx := context.Background()
 
-	for _, id := range []string{"pro", "plus", "max", "team"} {
+	for _, id := range []string{"dev", "pro", "max", "team"} {
 		ents, feats, found, err := LicenseEntitlement(ctx, id)
 		if err != nil {
 			t.Fatalf("LicenseEntitlement(%s): %v", id, err)
@@ -229,10 +235,10 @@ func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	} else if !slices.Contains(feats, "licensing.product:engine") {
 		t.Errorf("max license_features = %v, want licensing.product:engine", feats)
 	}
-	if _, feats, found, err := LicenseEntitlement(ctx, "developer"); err != nil || !found {
-		t.Fatalf("LicenseEntitlement(developer): found=%v err=%v", found, err)
+	if _, feats, found, err := LicenseEntitlement(ctx, "go"); err != nil || !found {
+		t.Fatalf("LicenseEntitlement(go): found=%v err=%v", found, err)
 	} else if slices.Contains(feats, "licensing.product:team") {
-		t.Error("developer must not carry licensing.product:team")
+		t.Error("go must not carry licensing.product:team")
 	}
 }
 
