@@ -69,6 +69,7 @@ import (
 	// because the app package this file also imports is the SAME word: one is the
 	// index in this process, the other is how to reach it in another.
 	indexpeer "github.com/hanzoai/cloud/plane/index"
+	projectspeer "github.com/hanzoai/cloud/plane/projects"
 	"github.com/zap-proto/zip"
 )
 
@@ -532,5 +533,38 @@ var (
 	}
 	// The corpus's two sources, one seam each: what we BUILT and what is LIVE.
 	fromOrgs  = orgRepos
-	liveSites = projects.LiveSites
+	liveSites = serving
 )
+
+// serving is what is LIVE, wherever the projects store happens to be — the same
+// two legs as lexical and write, for the third source that was reaching for an
+// in-process global across a process boundary.
+//
+// This one failed the most quietly of the three. projects.LiveSites reports nil
+// when its package is unmounted, because a deployment that hosts no sites is not
+// an error — true of a deployment, and false of a PROCESS. In the catalog process
+// it meant "you asked the wrong half of the fleet", and nil and empty are the
+// same answer, so the corpus simply had no sites in it and nothing anywhere said
+// so. That is the whole `site` kind, every demo URL, and the deployed starters
+// the template lane is mostly made of.
+func serving(ctx context.Context) ([]projects.LiveSite, error) {
+	if projects.Ready() {
+		return projects.LiveSites(ctx)
+	}
+	out, err := projectspeer.SitesLive(ctx, &plane.LiveSitesIn{})
+	if err != nil {
+		return nil, err
+	}
+	if out == nil {
+		return nil, nil
+	}
+	live := make([]projects.LiveSite, 0, len(out.Sites))
+	for _, s := range out.Sites {
+		live = append(live, projects.LiveSite{
+			Org: s.Org, Slug: s.Slug, Name: s.Name, URL: s.URL,
+			Repo: s.Repo, ForkedFrom: s.ForkedFrom, UpdatedAt: s.UpdatedAt,
+			Upstream: s.Upstream, License: s.License,
+		})
+	}
+	return live, nil
+}

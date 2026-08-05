@@ -44,8 +44,20 @@ type LiveSite struct {
 	Upstream, License string
 }
 
+// Ready reports whether the projects store is in THIS binary, so a caller can
+// tell "nothing is serving" from "ask the process that owns the store".
+//
+// LiveSites cannot make that distinction itself: it answers nil for both, which
+// is the right answer for a deployment that hosts nothing and the wrong one for
+// a process that simply is not the host. The catalog read it as the former for
+// as long as the two apps have been split, and published a corpus with no sites
+// in it. A caller that can ask this question first can take the other leg
+// (apps/catalog serving()).
+func Ready() bool { return mounted != nil && mounted.State.store != nil }
+
 // LiveSites returns every project currently serving at its site host, newest
-// first. Unmounted ⇒ no sites (a deployment that does not host is not an error).
+// first. Unmounted ⇒ no sites (a deployment that does not host is not an error)
+// — see Ready above before treating that as a fact about the FLEET.
 func LiveSites(ctx context.Context) ([]LiveSite, error) {
 	s := mounted
 	if s == nil || s.State.store == nil {
