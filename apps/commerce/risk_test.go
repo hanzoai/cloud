@@ -77,10 +77,19 @@ func gateApp(t *testing.T) *zip.App {
 // topup posts the credit door's own body as a validated customer.
 func topup(t *testing.T, app *zip.App) (int, string) {
 	t.Helper()
+	return topupAs(t, app, map[string]string{"X-Org-Id": gateOrg, "X-User-Id": gateUser})
+}
+
+// topupAs is topup for a caller the boundary minted differently — a SuperAdmin acting in
+// another org, say. The identity is the headers and nothing else, exactly as the gateway
+// hands it to this process.
+func topupAs(t *testing.T, app *zip.App, hdr map[string]string) (int, string) {
+	t.Helper()
 	r := httptest.NewRequest(http.MethodPost, "/v1/billing/topup/token", strings.NewReader(gateBody))
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("X-Org-Id", gateOrg)
-	r.Header.Set("X-User-Id", gateUser)
+	for k, v := range hdr {
+		r.Header.Set(k, v)
+	}
 	resp, err := app.Test(r)
 	if err != nil {
 		t.Fatalf("topup: %v", err)
