@@ -1,15 +1,12 @@
 # Provenance of this embedded Tracker SPA build. See ../README.md to regenerate.
+#
 # NOT embedded in the binary: `//go:embed dist` (no `all:`) omits dot-files, so
 # this names the source without publishing it at /tracker/.sync-stamp.
-#
-# Regenerating with `rsync -a --delete` REMOVES this file — the source dist has
-# no copy of it. Rewrite it after every sync; embed_test.go cannot catch its
-# absence, because absence is exactly what that test asserts.
 app=@hanzo/tracker (admin-tracker)
 base=/tracker/
 api_prefix=/v1/tracker
 auth=AuthGate (@hanzogui/admin) + @hanzo/iam@0.9.4 PKCE
 auth_server_url=<origin>/v1/iam   # polarity is version-bound; see src/auth.ts
 callback=/tracker/callback
-source=hanzoai/admin:apps/admin-tracker@3debe26 (blue/tracker-ui)
+source=hanzoai/admin:apps/admin-tracker@6dc58d0 (blue/tracker-ui)
 built=tsc --noEmit (clean) + vitest (4/4) + vite build
