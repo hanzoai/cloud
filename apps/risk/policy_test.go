@@ -114,8 +114,9 @@ func TestPolicy_EveryScoreCitesTheRegimeItWasDecidedUnder(t *testing.T) {
 			"fact to report, not a version to invent", got)
 	}
 
-	// State one, and the next score cites it.
-	code, body = req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
+	// State one, and the next score cites it. It ARMS, so the caller is an admin of
+	// its own org ([admitArming]).
+	code, body = reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
 		`{"review":0.02,"sample":0.10,"live":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("appetite = %d %s", code, body)
@@ -130,7 +131,7 @@ func TestPolicy_EveryScoreCitesTheRegimeItWasDecidedUnder(t *testing.T) {
 
 	// Restate it DIFFERENTLY, and the citation moves with it — which is the whole
 	// point: the earlier decision above is still attributable to version 1.
-	code, body = req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
+	code, body = reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
 		`{"review":0.05,"sample":0.20,"live":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("second appetite = %d %s", code, body)
@@ -229,7 +230,7 @@ func TestPolicy_HistoryIsPerTenantOverTheWire(t *testing.T) {
 		`{"review":0.02,"sample":0.10,"live":true}`,
 		`{"review":0.04,"sample":0.20,"live":true}`,
 	} {
-		if code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, spec); code != http.StatusOK {
+		if code, body := reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, spec); code != http.StatusOK {
 			t.Fatalf("orgA appetite = %d %s", code, body)
 		}
 	}
@@ -668,8 +669,11 @@ func TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing(t *testin
 	probe.reset(true)
 	app := mountBilled(t, &ledger{available: 1_000_000})
 
-	// A regime the contract admits, so there is something in force to protect.
-	if code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
+	// A regime the contract admits, so there is something in force to protect. The
+	// caller is an org admin throughout, so every refusal below is the CONTRACT's
+	// and never [admitArming]'s — a bounds test that passed because the caller
+	// lacked authority would be a test that cannot fail for its own reason.
+	if code, body := reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA,
 		`{"review":0.02,"sample":0.10,"live":true}`); code != http.StatusOK {
 		t.Fatalf("the admissible regime was refused %d %s — the test would prove nothing", code, body)
 	}
@@ -689,7 +693,7 @@ func TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing(t *testin
 		{"a negative sample rate", `{"review":0.02,"sample":-0.1,"live":true}`},
 		{"a sample rate above one", `{"review":0.02,"sample":1.5,"live":true}`},
 	} {
-		code, body := req(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, bad.body)
+		code, body := reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, bad.body)
 		if code != http.StatusBadRequest {
 			t.Fatalf("%s: PUT %s answered %d %s, want 400 — the published contract is enforced by "+
 				"nothing", bad.what, bad.body, code, body)
