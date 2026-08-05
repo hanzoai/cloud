@@ -29,6 +29,18 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
+	"apps/auto/billing.go": "gate + meter — a durable run is a priced act, and the money gate needs " +
+		"strictly more of the validated principal than the org: the PAYER (principal.Payer, which is " +
+		"the org's pool or the person's wallet — account.Payer decides, and in the shared signup org " +
+		"they differ), the validated project sub-scope (principal.ValidatedProject: the project AND " +
+		"whether a claim backs it), and the request id + client IP the debit is attributed with. None " +
+		"is the org and none can be an In field — a caller that could name its own payer would bill " +
+		"another org. Two call sites, one per half of the pair, and both fail closed off the HTTP " +
+		"path, where there is no principal and so nobody to charge.",
+	"apps/flow/billing.go": "gate + meter — identical to apps/auto/billing.go above, for the same " +
+		"reason: a workflow run executes a component graph that bills a model provider, so it is gated " +
+		"before it runs and debited after. Same three facts the org cannot supply (payer, validated " +
+		"project, request id + client IP), same two call sites, same fail-closed silence off HTTP.",
 	"apps/dataset/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
 		"establishes who is asking. The TENANT is resolved through apps/tenant, which reads " +
 		"principal.OrgFrom and nothing else; the request is needed for the other half, which is a " +

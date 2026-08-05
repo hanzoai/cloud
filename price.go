@@ -78,6 +78,36 @@ func (p Price) Cents() int64 {
 // Declared reports whether somebody answered what this surface costs.
 func (p Price) Declared() bool { return p != Undeclared }
 
+// Consumes reports whether a request by this METHOD spends resource somebody has
+// to pay a provider for. It is the one fact that lets a price be declared per
+// SURFACE without a per-route table: a surface's cost basis is shared by its
+// writes, and its reads have no cost basis at all.
+//
+// THE BUG IT CLOSES, MEASURED. DefaultPrice priced by PATH alone, so a surface
+// declared at 25¢ charged 25¢ for `GET /v1/<surface>/list` — a directory listing
+// billed like the work it lists. That is why no surface in the fleet had ever
+// declared a positive price: the only safe declaration was Free, and 95 of them
+// took it. The read/write distinction is a RULE, not a table, so it belongs in
+// one function rather than in 1100 route declarations nobody can keep true.
+//
+// The rule and its justification are not new here — spend.go's Billable has
+// carried them since the standing gate was written: "gating reads already caused
+// one outage, a balance view that 402s is unusable, and no read this binary
+// serves calls a paid provider." What is new is that the CHARGE now asks the same
+// question the STANDING check does, from the same line, so the two can no longer
+// disagree about what a read is.
+//
+// A surface whose paid unit of work is a read is therefore unpriceable at the
+// edge, deliberately. It is not a gap to paper over with a second knob: such a
+// surface meters its own units downstream and declares Metered.
+func Consumes(method string) bool {
+	switch method {
+	case "GET", "HEAD", "OPTIONS":
+		return false
+	}
+	return true
+}
+
 // String renders the declaration for logs, the admin inventory and test failures.
 func (p Price) String() string {
 	switch p {

@@ -27,6 +27,18 @@ import (
 // one metered unit; a metering.Client publish bills it when configured.
 const meterKind = "security.scan"
 
+// feeEnvPrefix is the operator knob for what one scan costs:
+// CLOUD_SECURITY_FEE_CENTS[_SCAN], defaulting to cloud.DefaultResourceFeeCents
+// ($1.00) — the same policy default every other provisioned unit resolves through,
+// never a price invented here. Set it to 0 to make scanning free (and un-gated).
+//
+// The surface declared cloud.Metered from the start, and the Meter call below passed
+// a literal 0 for the amount. A zero debit posts NO ledger entry, so the promise the
+// declaration makes — "a meter downstream of the edge owns the charge" — was kept by
+// nothing: the platform required standing to run a scan and then charged for none of
+// them. One constant, resolved the one way, closes it.
+const feeEnvPrefix = "CLOUD_SECURITY_FEE_CENTS"
+
 // maxFiles / maxBytes bound a single scan submission so one request can't OOM
 // the process or wedge the engine. A caller with more source splits it into
 // multiple scans.
@@ -289,6 +301,14 @@ func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest(fmt.Sprintf("scan too large (%d bytes, max %d)", total, maxBytes))
 	}
 
+	// Prepaid: the balance covers the scan BEFORE the engine runs, never after. A
+	// gate downstream of the work is a bill for compute already spent.
+	fee := cloud.ResourceFeeCents(feeEnvPrefix, "scan")
+	scopeProject, projectValidated := principal.ValidatedProject(c)
+	if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), scopeProject, projectValidated, meterKind, fee); err != nil {
+		return cloud.DenyResource(c, err)
+	}
+
 	scanID, err := genID("scan")
 	if err != nil {
 		return zip.Errorf(500, "rng: %v", err)
@@ -327,8 +347,10 @@ func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(500, "save scan: %v", err)
 	}
 
-	// One metered unit per scan (product=security). Nil/disabled meter → no-op.
-	s.State.bill.Meter(principal.Ledger(c), principal.Project(c), meterKind, 0, c.RequestID(), clientIP(c))
+	// One metered unit per scan (product=security), at the fee the Gate above
+	// authorized — the same number, read once, so the charge can never exceed what
+	// the balance was checked against. Nil/disabled meter → no-op.
+	s.State.bill.Meter(principal.Ledger(c), principal.Project(c), meterKind, fee, c.RequestID(), clientIP(c))
 
 	// Audit: the scan happened, by whom, with what tally. The redacted findings
 	// (never the secrets) are the evidence; the tally is the AU-3 outcome.

@@ -41,6 +41,32 @@ type Wallet struct {
 	Account string
 }
 
+// Payer is the wallet KEY this request spends from — WalletOf's Account half, and
+// the empty string when there is no payer at all.
+//
+// It exists because the in-handler meter (cloud.ResourceMeter) addresses money with
+// ONE string, and the string it was handed was Ledger — the ORG. For a tenant org
+// that is the same value account.Payer returns, so nothing looked wrong; in the
+// SHARED SIGNUP ORG it is not, and that is exactly where a self-serve stranger
+// lives. There, the balance the customer is shown, the edge gate, and the paywall
+// all read <org>/<username> while every metered product debited the bare <org> —
+// the platform's own pool. A stranger's top-up was therefore unspendable, and their
+// usage landed on Hanzo's books. spend.go names this premise ("prepaid billing is
+// per-org") as false in so many words; this is the accessor that lets the meter stop
+// assuming it.
+//
+// It is TOTAL where WalletOf is partial: a caller handing this to a gate wants the
+// gate's own refusal for an unresolvable payer, not a second branch of its own.
+// Empty reaches ResourceMeter.Gate as ErrNoLedger — the same fail-closed answer an
+// empty org gave — so substituting it changes nothing about who is refused.
+func Payer(c *zip.Ctx) string {
+	w, ok := WalletOf(c)
+	if !ok {
+		return ""
+	}
+	return w.Account
+}
+
 // WalletOf resolves the wallet this request spends from, or ok=false when the
 // request may not touch money at all: no validated principal (never key a ledger on
 // a restored, client-forged X-Org-Id, or an anonymous caller could probe and drain a
