@@ -18,7 +18,10 @@ package risk
 //
 //	IT DOES NOT LEARN. Score is pure — it moves no counter and writes no row —
 //	so screening a payment cannot teach the model that the payment was normal.
-//	Learning is [ops.learn]'s, from the caller's own events, in its own call.
+//	Learning is a SEPARATE op, and on this plane it is [planeObserve]: a fact
+//	the asking process WATCHED HAPPEN, stated after it happened. Asking and
+//	being told are two acts with two truth conditions, and the reason they must
+//	not be one call is the whole of [planeObserve]'s own header.
 //
 //	IT DOES NOT CHARGE. Every HTTP op on this surface gates on the caller's own
 //	balance first ([ops.gate]), and that rule cannot cross to this one: the
@@ -31,6 +34,7 @@ package risk
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -61,6 +65,15 @@ func exposeDecide() {
 	zip.Post[contract.RiskDecideIn, contract.RiskDecided](cloud.Plane(), "/risk/decide", planeDecide,
 		zip.WithOperationID(contract.RiskDecide),
 		zip.WithSummary("Judge one subject against the calling organisation's own model"))
+}
+
+// exposeObserve publishes the LEARN half on the internal plane. Mount calls it
+// beside [exposeDecide], because a plane that can be asked and cannot be told is
+// what made the aggregate rules structurally dead.
+func exposeObserve() {
+	zip.Post[contract.RiskObserveIn, contract.RiskObserved](cloud.Plane(), "/risk/observe", planeObserve,
+		zip.WithOperationID(contract.RiskObserve),
+		zip.WithSummary("Teach the calling organisation's own model from something that settled"))
 }
 
 // Judges one subject against the CALLING organisation's own model and answers
@@ -151,6 +164,117 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 	// able to refuse one.
 	emit(ctx, s.Log, t, decision(t, in, ev.Nano, d, out))
 	return out, nil
+}
+
+// Teaches the CALLING organisation's own model from something that settled.
+//
+// # Why the plane needs a learn door at all
+//
+// The aggregate halves of the credit door's rule — pace and fan-out — read what an
+// event's identifiers had ALREADY done. Nothing was teaching them. [planeDecide]
+// records nothing by design, the published learn door is an organisation calling
+// itself over HTTP, and the organisation at a self-serve credit door IS the payer:
+// a fresh org signs up, tops up, and teaches its model nothing at all. So the two
+// halves read an empty history for precisely the subject they were built for, and a
+// payment split into five pieces looked like five first payments.
+//
+// This is the source that fills them, and it has the three properties that make an
+// accrual worth reading:
+//
+//	IT IS THE SERVER'S OBSERVATION, NOT A CLAIM. The caller is a process in this
+//	fleet reporting what it watched settle. The value is the amount that moved at
+//	the gateway, the moment is a server clock, and the subject is the one the
+//	credit landed on. None of it is a field the paying customer filled in, which is
+//	the difference between a velocity bound and a velocity suggestion.
+//
+//	IT IS IDEMPOTENT ON THE SETTLEMENT. [plane.note] deduplicates on (tenant, id)
+//	and this states the settlement's own identifier as that id, so a retried
+//	request, a replayed webhook and a redelivered event converge on ONE
+//	observation. Learned=0 is the answer for a settlement already held — an
+//	honest receipt rather than a second count of the same money.
+//
+//	IT CANNOT BE PRE-EMPTED. Dedupe means the FIRST writer of an id wins, so an id
+//	a customer could guess is an id a customer could claim in advance, after which
+//	the real settlement is silently inert — velocity switched off by the party it
+//	bounds. The id lands in [reserved] namespace and the public learn door refuses
+//	that namespace outright ([riskEvent.observation]), so the only writer of a
+//	settlement observation is a settlement.
+//
+// # It is a LEARN and it is priced like one — which is to say, not
+//
+// The HTTP learn door meters per event ([ops.learn] calls pay). This one does not,
+// for [planeDecide]'s reason one step further on: the settlement it records is a
+// customer's payment ARRIVING, so the balance a charge would be taken from is the
+// balance being filled. Charging for the record of a payment is a fee on paying.
+// The per-tenant in-flight slot still applies, because that is a bound on this
+// process rather than a price.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeObserve(ctx context.Context, in *contract.RiskObserveIn) (*contract.RiskObserved, error) {
+	s := mounted
+	if s == nil {
+		return nil, zip.Errorf(503, "risk: this process serves the plane without having mounted the model")
+	}
+	o := ops{s: s}
+	p, err := o.plane()
+	if err != nil {
+		return nil, err
+	}
+	if !knownStage(in.Stage) {
+		return nil, zip.ErrBadRequest("'stage' must be one of " +
+			cloud.StageSignup + ", " + cloud.StageUsage + ", " + cloud.StagePayment)
+	}
+	// THE SETTLEMENT IS REQUIRED, because it is the whole of the idempotency. An
+	// observation with no settlement id would take a random one ([eventID]) and every
+	// retry would count the money again — the defect this op exists to be free of, so
+	// it is refused rather than defaulted.
+	settlement := strings.TrimSpace(in.Settlement)
+	if settlement == "" {
+		return nil, zip.ErrBadRequest("'settlement' is required — it is what a retry converges on, and an observation without one counts the same money twice")
+	}
+	t, err := planeTenant(ctx, s.Brand)
+	if err != nil {
+		return nil, err
+	}
+	// THROUGH THE CONVERSION AND NOT THE CALLER'S DOOR. [riskEvent.under] is the
+	// shared conversion — same time bound, same one constructor — while
+	// [riskEvent.observation] is the caller-facing wrapper that refuses this plane's
+	// own id namespaces. Reaching it from here would refuse the very namespace that
+	// makes the settlement key un-claimable.
+	obs, err := observeEvent(in).under(settled+settlement, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if err := p.enter(t); err != nil {
+		return nil, err
+	}
+	defer p.leave(t)
+	learned, err := p.learn(t, obs)
+	if err != nil {
+		return nil, wrap(err)
+	}
+	return &contract.RiskObserved{Learned: learned}, nil
+}
+
+// observeEvent projects one stated settlement onto the model's own event. It is
+// [decideEvent]'s twin and reads the SAME signal names, so a process that asked
+// about a payment and then reports it teaches the model from the values it asked
+// with — a screen and a record that resolved their identifiers differently would be
+// two subjects, and the velocity of one of them is always empty.
+//
+// It states NO id, exactly as [decideEvent] does, because the id is not a property
+// of the event — it is the key the record converges on, and the caller of this
+// function is what supplies it ([planeObserve] states the settlement's, in the
+// [reserved] namespace no caller of the public door can write).
+func observeEvent(in *contract.RiskObserveIn) riskEvent {
+	return riskEvent{
+		Kind:    in.Kind,
+		Subject: in.Subject,
+		Nano:    nanoOf(signal(in.Signals, contract.SignalNano)),
+		Peer:    signal(in.Signals, contract.SignalPeer),
+		Device:  signal(in.Signals, contract.SignalDevice),
+		At:      signal(in.Signals, contract.SignalAt),
+	}
 }
 
 // planeTenant mints the tenant a PLANE call acts for: the org the CALLER stated,

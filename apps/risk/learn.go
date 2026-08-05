@@ -55,6 +55,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -140,6 +141,22 @@ type actor struct {
 // would silently become one set of aggregates, which is a wrong answer wearing a
 // right one's clothes.
 //
+// A NEGATIVE VALUE IS REFUSED, and it is refused here because this is where every
+// other bound is. The aggregates accrue a SUM over a window and the stated value
+// bounds are read off that sum, so a negative amount is not a small event — it is
+// a subtraction from the finding. One taught event of minus fifty thousand cancels
+// an hour of real payments, the converted accrual reads zero ([nanoOfUSD] floors a
+// negative sum, because a wrapped or negative nano would make the largest accrual
+// there is look like the smallest), and the pace rule goes quiet with nothing to
+// see. At a self-serve credit door the payer IS the organisation, so that is
+// self-suppression available for the price of one authenticated call.
+//
+// Nothing legitimate is lost. A refund or a chargeback is a different fact with a
+// different sign convention and it is not an observation of the payer moving money
+// in; teaching it as a negative payment would corrupt the very accrual it belongs
+// beside. When there is a reversal to model it gets its own stage and its own
+// bound, not a minus sign on this one.
+//
 // The stamp is truncated to ONE SECOND, the resolution the durable record carries,
 // so a rebuild from that record is identical to the live rings rather than merely
 // close to them.
@@ -149,6 +166,13 @@ func observe(id string, a actor, usd float64, at time.Time) (observation, error)
 	}
 	if a.Subject == "" {
 		return observation{}, zip.ErrBadRequest("'subject' is required — an event that names nobody has nobody to be unusual for")
+	}
+	// NaN is refused with it: it is neither negative nor positive, it poisons every
+	// sum it enters, and no comparison against a bound is true of it — a silent
+	// disarming of the same rule by the same door.
+	if usd < 0 || math.IsNaN(usd) {
+		return observation{}, zip.ErrBadRequest(
+			"the value moved must not be negative — the aggregates accrue a sum and the stated bounds are read off it, so a negative amount cancels real activity rather than describing any")
 	}
 	for _, f := range []struct{ name, value string }{
 		{"id", id}, {"subject", a.Subject}, {"peer", a.Peer}, {"device", a.Device},
@@ -165,6 +189,40 @@ func observe(id string, a actor, usd float64, at time.Time) (observation, error)
 	}, nil
 }
 
+// The id namespaces THIS PLANE mints for itself, and therefore the ones a caller
+// may not write into ([riskEvent.observation] refuses them).
+//
+// The record deduplicates on (tenant, id) and the first writer of an id wins. So a
+// namespace this plane will later write is a namespace a caller can claim in
+// advance, and the plane's own record then lands as a duplicate — inert, silent, and
+// exactly as clean-looking as an organisation with nothing to hide.
+//
+// Both are one word plus one separator, and the separator is what makes the
+// namespaces disjoint from every id a caller would naturally send.
+const (
+	// folded prefixes one bucket of an organisation's own feature surface
+	// ([bucketID]). Claiming one makes the fold skip that piece of its history.
+	folded = "fold_"
+	// settled prefixes one settlement this deployment watched happen
+	// ([planeObserve]). Claiming one leaves the payment untaught, which is the
+	// aggregate rules disarmed for that subject by the party they bound.
+	settled = "settled_"
+)
+
+// reserved is the closed set, so the door that refuses them and the doors that mint
+// them read one list.
+var reserved = []string{folded, settled}
+
+// reservedOf reports which of this plane's own namespaces an id falls in, if any.
+func reservedOf(id string) (string, bool) {
+	for _, ns := range reserved {
+		if strings.HasPrefix(id, ns) {
+			return ns, true
+		}
+	}
+	return "", false
+}
+
 // bucketID names the one observation a surface bucket becomes. It is a DIGEST and
 // not the parts concatenated, for two reasons that are both bounds: the parts
 // together can exceed [maxField] while every one of them is legal on its own, and
@@ -173,7 +231,7 @@ func observe(id string, a actor, usd float64, at time.Time) (observation, error)
 // below-the-line review sample the same way.
 func bucketID(kind, subject string, bucket time.Time) string {
 	sum := sha256.Sum256([]byte(kind + "\x00" + subject + "\x00" + strconv.FormatInt(bucket.Unix(), 10)))
-	return "fold_" + hex.EncodeToString(sum[:16])
+	return folded + hex.EncodeToString(sum[:16])
 }
 
 // tx renders an observation as the engine's transaction, under the QUALIFIED
