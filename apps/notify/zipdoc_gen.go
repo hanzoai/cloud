@@ -15,12 +15,57 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/notify/send", zip.Doc{
-		Description: "Returns the POST /v1/notify/send handler. pinnedChannel is set on the\nper-channel convenience routes (/send/sms, /send/email) and left empty on the\ngeneric route, which reads the channel from the body.",
+		Description: "Delivers one transactional message by email or SMS through the caller\norg's own provider credential.\n\nThe channel comes from the body — sms or email — and the provider credential is\nread from KMS at orgs/<org>/notify/<service>/<key>, never from the environment.\nThe org is the validated principal's, never a client-supplied value, so a caller\ncan only ever send as their own tenant; an unauthenticated caller gets 401.\nNaming no provider picks the one whose credentials are actually configured\n(Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed\nwhen none is. Delivery is synchronous and per recipient: one recipient answers\nthe bare {message_id,status} outcome, several answer the {items:[…]} envelope. A\nterminal provider failure is a 200 whose status is failed with the reason in\nerror, never a transport error. sync=true is REQUIRED — an async dispatch\nanswers 503, because the queue plane that would run it is owned elsewhere. The\nmessage body wins verbatim when present; otherwise template_id (or the event\nname) selects a built-in template rendered against template_vars.",
+		Fields: map[string]string{
+			"notifyDelivery.items":     "Items is the per-recipient outcome, in request order. A single-recipient\nsend answers items[0] BARE — the object itself, not this envelope.",
+			"notifyOutcome.error":      "Error carries the provider's failure reason when Status is \"failed\".",
+			"notifyOutcome.message_id": "MessageID is the opaque per-recipient message handle this service minted.",
+			"notifyOutcome.status":     "Status is \"sent\" on success and \"failed\" on a terminal provider failure —\nwhich is still a 200, never a transport error, so a batch reports every\nrecipient's outcome instead of dying on the first.",
+			"notifySend.body":          "Body is the message text, sent verbatim when present — the no-template path.",
+			"notifySend.channel":       "Channel selects the delivery channel, sms or email. The per-channel routes\n(/send/sms, /send/email) pin it, overriding whatever the body names; on the\ngeneric route it is required.",
+			"notifySend.event":         "Event is the event name, which doubles as the template id when TemplateID is\nempty — the IAM OTP path sends event=iam.otp_sent and nothing else.",
+			"notifySend.provider":      "Provider pins a provider service name (twilio, plivo, twilio_email, mail).\nEmpty picks the one whose org credentials are actually configured in KMS.",
+			"notifySend.subject":       "Subject is the message subject, carried on the email channel only.",
+			"notifySend.sync":          "Sync must be exactly \"true\": delivery here is synchronous, and anything else\nanswers 503 because the queue plane that would run an async dispatch is owned\nelsewhere. Over REST it rides as ?sync=true (the URL binds over the body); a\nby-name call states it in its arguments.",
+			"notifySend.template_id":   "TemplateID selects a built-in template when Body is empty.",
+			"notifySend.template_vars": "TemplateVars carries the values the selected template renders against, as\na raw JSON object. Raw on purpose: the by-name call plane computes an\ninput's layout before reading any payload and refuses a map field\noutright, which would make every typed call to these ops fail — and that\ncall is the reason they are typed at all (IAM's OTP sender). deliver\ndecodes it right before the template renders, so REST bodies decode\nbyte-identically to the map this replaced.",
+			"notifySend.to":            "To is the destination address per recipient — a phone number for sms, an\nemail address for email. Several recipients fan out into one provider call\neach, and the response shape follows the count (see the items field).",
+		},
 	})
 	zip.Describe("POST /v1/notify/send/email", zip.Doc{
-		Description: "Returns the POST /v1/notify/send handler. pinnedChannel is set on the\nper-channel convenience routes (/send/sms, /send/email) and left empty on the\ngeneric route, which reads the channel from the body.",
+		Description: "Delivers one transactional email through the caller org's own\nprovider credential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to email, OVERRIDING whatever the body names —\nso a body that says sms still goes out as mail. The provider is the org's own\nemail credential from KMS (Twilio Email, then SMTP), resolved for the validated\nprincipal's org; an unauthenticated caller gets 401. Subject is carried on the\nemail channel only.",
+		Fields: map[string]string{
+			"notifyDelivery.items":     "Items is the per-recipient outcome, in request order. A single-recipient\nsend answers items[0] BARE — the object itself, not this envelope.",
+			"notifyOutcome.error":      "Error carries the provider's failure reason when Status is \"failed\".",
+			"notifyOutcome.message_id": "MessageID is the opaque per-recipient message handle this service minted.",
+			"notifyOutcome.status":     "Status is \"sent\" on success and \"failed\" on a terminal provider failure —\nwhich is still a 200, never a transport error, so a batch reports every\nrecipient's outcome instead of dying on the first.",
+			"notifySend.body":          "Body is the message text, sent verbatim when present — the no-template path.",
+			"notifySend.channel":       "Channel selects the delivery channel, sms or email. The per-channel routes\n(/send/sms, /send/email) pin it, overriding whatever the body names; on the\ngeneric route it is required.",
+			"notifySend.event":         "Event is the event name, which doubles as the template id when TemplateID is\nempty — the IAM OTP path sends event=iam.otp_sent and nothing else.",
+			"notifySend.provider":      "Provider pins a provider service name (twilio, plivo, twilio_email, mail).\nEmpty picks the one whose org credentials are actually configured in KMS.",
+			"notifySend.subject":       "Subject is the message subject, carried on the email channel only.",
+			"notifySend.sync":          "Sync must be exactly \"true\": delivery here is synchronous, and anything else\nanswers 503 because the queue plane that would run an async dispatch is owned\nelsewhere. Over REST it rides as ?sync=true (the URL binds over the body); a\nby-name call states it in its arguments.",
+			"notifySend.template_id":   "TemplateID selects a built-in template when Body is empty.",
+			"notifySend.template_vars": "TemplateVars carries the values the selected template renders against, as\na raw JSON object. Raw on purpose: the by-name call plane computes an\ninput's layout before reading any payload and refuses a map field\noutright, which would make every typed call to these ops fail — and that\ncall is the reason they are typed at all (IAM's OTP sender). deliver\ndecodes it right before the template renders, so REST bodies decode\nbyte-identically to the map this replaced.",
+			"notifySend.to":            "To is the destination address per recipient — a phone number for sms, an\nemail address for email. Several recipients fan out into one provider call\neach, and the response shape follows the count (see the items field).",
+		},
 	})
 	zip.Describe("POST /v1/notify/send/sms", zip.Doc{
-		Description: "Returns the POST /v1/notify/send handler. pinnedChannel is set on the\nper-channel convenience routes (/send/sms, /send/email) and left empty on the\ngeneric route, which reads the channel from the body.",
+		Description: "Delivers one transactional SMS through the caller org's own provider\ncredential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to sms, OVERRIDING whatever the body names —\nso a body that says email still goes out as a text message. The provider is the\norg's own SMS credential from KMS (Twilio, then Plivo), resolved for the\nvalidated principal's org; an unauthenticated caller gets 401.",
+		Fields: map[string]string{
+			"notifyDelivery.items":     "Items is the per-recipient outcome, in request order. A single-recipient\nsend answers items[0] BARE — the object itself, not this envelope.",
+			"notifyOutcome.error":      "Error carries the provider's failure reason when Status is \"failed\".",
+			"notifyOutcome.message_id": "MessageID is the opaque per-recipient message handle this service minted.",
+			"notifyOutcome.status":     "Status is \"sent\" on success and \"failed\" on a terminal provider failure —\nwhich is still a 200, never a transport error, so a batch reports every\nrecipient's outcome instead of dying on the first.",
+			"notifySend.body":          "Body is the message text, sent verbatim when present — the no-template path.",
+			"notifySend.channel":       "Channel selects the delivery channel, sms or email. The per-channel routes\n(/send/sms, /send/email) pin it, overriding whatever the body names; on the\ngeneric route it is required.",
+			"notifySend.event":         "Event is the event name, which doubles as the template id when TemplateID is\nempty — the IAM OTP path sends event=iam.otp_sent and nothing else.",
+			"notifySend.provider":      "Provider pins a provider service name (twilio, plivo, twilio_email, mail).\nEmpty picks the one whose org credentials are actually configured in KMS.",
+			"notifySend.subject":       "Subject is the message subject, carried on the email channel only.",
+			"notifySend.sync":          "Sync must be exactly \"true\": delivery here is synchronous, and anything else\nanswers 503 because the queue plane that would run an async dispatch is owned\nelsewhere. Over REST it rides as ?sync=true (the URL binds over the body); a\nby-name call states it in its arguments.",
+			"notifySend.template_id":   "TemplateID selects a built-in template when Body is empty.",
+			"notifySend.template_vars": "TemplateVars carries the values the selected template renders against, as\na raw JSON object. Raw on purpose: the by-name call plane computes an\ninput's layout before reading any payload and refuses a map field\noutright, which would make every typed call to these ops fail — and that\ncall is the reason they are typed at all (IAM's OTP sender). deliver\ndecodes it right before the template renders, so REST bodies decode\nbyte-identically to the map this replaced.",
+			"notifySend.to":            "To is the destination address per recipient — a phone number for sms, an\nemail address for email. Several recipients fan out into one provider call\neach, and the response shape follows the count (see the items field).",
+		},
 	})
 }
