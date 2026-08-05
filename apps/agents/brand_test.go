@@ -38,11 +38,12 @@ func scanUpstream(t *testing.T, what string, body []byte) {
 // TestNoUpstreamNameOnTheWire is the regression guard. It walks every
 // customer-visible read of the agents registry and scans the raw response.
 func TestNoUpstreamNameOnTheWire(t *testing.T) {
-	// The adversarial deployment: an operator who set CLOUD_AI_DEFAULT_MODEL to an
-	// upstream name, and a gateway whose catalog serves upstream names — exactly
-	// the configuration that produced the live leak.
+	// A gateway whose catalog serves upstream names — half of the configuration
+	// that produced the live leak. The other half, an operator pointing
+	// CLOUD_AI_DEFAULT_MODEL at an upstream name, is no longer expressible: the
+	// default is cloud.DefaultModel and nothing can move it.
 	ai := &catalogAI{content: "pong", ids: []string{"enso", "enso-flash", "deepseek-v4-flash", "glm-5.2"}}
-	app := mountAppModel(t, ai, "deepseek-v4-flash")
+	app := mountAppModel(t, ai)
 
 	// 1. An agent created with NO model. The configured default is an upstream
 	//    name; normalization must still store and answer the Hanzo name.
@@ -195,11 +196,11 @@ func TestMigrateModelRewritesStoredRows(t *testing.T) {
 }
 
 // TestSeedPersonalitiesUsesHanzoModel proves the built-in crew (dev/des/vi) is
-// seeded on a Hanzo model even when the deployment default is an upstream name —
-// the seed path that put deepseek-v4-flash on three live agents.
+// seeded on a Hanzo model — the seed path that put deepseek-v4-flash on three
+// live agents.
 func TestSeedPersonalitiesUsesHanzoModel(t *testing.T) {
-	ai := &catalogAI{content: "pong", ids: []string{"enso", "deepseek-v4-flash"}}
-	app := mountAppModel(t, ai, "deepseek-v4-flash")
+	ai := &catalogAI{content: "pong", ids: []string{"enso", cloud.DefaultModel, "deepseek-v4-flash"}}
+	app := mountAppModel(t, ai)
 
 	n, err := SeedPersonalities(context.Background(), "acme")
 	if err != nil {

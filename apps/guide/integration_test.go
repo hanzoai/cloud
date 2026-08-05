@@ -39,7 +39,7 @@ func mountFullPlane(t *testing.T, ai cloud.AIClient) *zip.App {
 		t.Fatalf("automations.Mount: %v", err)
 	}
 	// guide with the REAL invoke seam (automations.InvokeTool) — no fake.
-	if err := Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir(), AI: ai, AIDefaultModel: "zen"}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("guide.Mount: %v", err)
 	}
 	// Keep only the store-backed "acted" detector so the read never hits a live warehouse.
