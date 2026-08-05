@@ -28,7 +28,6 @@ import (
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
-	"github.com/zap-proto/zip"
 )
 
 // The MODEL API IS THE DOOR'S REGISTRY, and it is asked rather than described.
@@ -93,7 +92,15 @@ func aiProse() map[string]openapi.Said {
 // Mount installs the money, ingest and telemetry wiring, then mounts ai. A nil
 // callback is left alone — cloud leaves one nil exactly when that subsystem
 // isn't co-resident, and the module's own fallback applies.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
+	// The typed MCP op and hanzoai/ai's own mount both register on the concrete
+	// App, which cloud.ZipApp is the named hole for. ai's app-wide reach is
+	// DECLARED as Plugin.Global at its composition root — it is a policy fact, not
+	// something a parameter type should be able to grant on its own.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("ai.Mount: router is not a zip app — the typed op registry is unreachable")
+	}
 	// One provider, one wire. cloud.Listen installed the process-global tracer
 	// provider before MountAll; DECLARE it to ai here so ai emits every gen_ai span
 	// through THAT provider instead of forking its own. Without this ai's
@@ -249,7 +256,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// The MCP door's inventory, registered BEFORE the wildcard below so the
 	// reading order is the routing order (see mcp.go — the router would pick the
 	// static path over All("/v1/*") either way).
-	mountMCP(app)
+	mountMCP(zapp)
 	// The door: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
 	// beego ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
 	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
@@ -262,5 +269,5 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// projects routers.App's own table through it, so the published surface is ai's
 	// 192 paths rather than one wildcard. Typed request and response schemas for them
 	// are still work in github.com/hanzoai/ai, where those handlers live.
-	return aimod.Mount(app, deps)
+	return aimod.Mount(zapp, deps)
 }
