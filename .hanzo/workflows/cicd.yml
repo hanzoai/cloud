@@ -100,7 +100,18 @@ jobs:
     # and the forge runner does not set it, and `set -u` turned the miss into an
     # abort — so every step after it, build through deploy, reported skipped.
     # v1.0.17 defaults the variable; nothing else about the lane changed.
-    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1.0.17
+    #
+    # PINNED TO @v1, NOT @v1.0.17, AND THE DIFFERENCE IS THAT THE TESTS RUN.
+    # v1.0.17 declares the reusable's `tests` input as `type: boolean`, and the
+    # forge substitutes a workflow_call input's DECLARED-TYPE ZERO VALUE — so
+    # `inputs.tests` was always false and the test step was SKIPPED on every run.
+    # Measured on this repo: 20 skipped, 0 executed. The most critical service in
+    # the fleet has been shipping without its suite ever running.
+    # @v1 declares it `type: string` with `default: 'true'` and guards on
+    # `inputs.tests != 'false'`, so the `tests:` expression below finally means
+    # what it says. Verified before moving: v1 (8e43277) CONTAINS v1.0.17
+    # (81b3c18), so the set -u default this pin was taken for comes with it.
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
       # AND the image built AND it smoked, so a tag build re-tests a proven
