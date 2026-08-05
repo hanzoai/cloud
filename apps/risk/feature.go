@@ -483,6 +483,21 @@ type rollupStmt struct {
 //
 // event.fact holds every signal in one table, so its readers pin signal='act' —
 // without it a person's error and span rows count as things they did.
+//
+// AND IT HOLDS OUR OWN FACTS TOO, which is why the person rollup names the
+// product it will not fold. This app STATES every decision it reaches onto that
+// same table (emit.go): one `risk_decided` row per decide, under product 'risk',
+// with the decided subject as its distinct id. Rolled up as activity, those rows
+// become a surface subject whose "events" are the decisions taken about it — so
+// the model learns from its own output, one hop later, and the "a score records
+// nothing" invariant holds for exactly one hop. A subject screened often enough
+// becomes unusual for having been screened, which is a control measuring itself.
+//
+// [notOurOwn] is the predicate, spelled from [surface] rather than from a literal
+// so the emitter and the exclusion cannot drift to two different words for one
+// product. Only the PERSON rollup needs it: the session rollup requires a
+// non-empty session_id and this app states none, and the fault rollup reads
+// event.error, which this app never writes.
 var rollups = []rollupStmt{
 	{
 		Name: "person",
@@ -492,7 +507,7 @@ var rollups = []rollupStmt{
 		        SELECT if(person_id != '', person_id, if(distinct_id != '', distinct_id, anonymous_id)) AS s,
 		               toStartOfFiveMinute(time) AS b, session_id, distinct_id, path
 		        FROM event.fact
-		        WHERE org = ? AND signal = 'act' AND time >= ? AND time < ?
+		        WHERE org = ? AND signal = 'act' AND ` + notOurOwn + ` AND time >= ? AND time < ?
 		      )
 		      WHERE s != ''
 		      GROUP BY s, b
@@ -532,6 +547,17 @@ var rollups = []rollupStmt{
 		      LIMIT ?`,
 	},
 }
+
+// notOurOwn keeps THIS APP's own facts out of the surface its models learn from.
+//
+// It is a CONSTANT EXPRESSION over [surface] and not a bound placeholder, for the
+// reason the rest of these statements bind nothing but tenants and windows: the
+// product excluded is a fact about this program, not about a caller, and the
+// binding order every rollup shares ("the qualified key, the bare org, the window,
+// the cap") is part of the contract [plane.rollup] reads. A literal 'risk' here
+// would be the emitter's own name spelled a second time, which is the drift the
+// single constant exists to prevent.
+const notOurOwn = `product != '` + surface + `'`
 
 // errStore is the honest gap: the warehouse is not reachable, so there is no
 // surface to read. Never zeroes — a model that learns from a fabricated absence
