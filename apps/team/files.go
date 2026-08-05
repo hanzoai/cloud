@@ -91,8 +91,7 @@ const maxBlobSize = 100 << 20
 // op cannot be wrapped by Mount's guard, so it asks for itself — see typed.go.
 type filesService struct {
 	vfs      types.VFSClient
-	accounts *accountStore
-	secret   string
+	ident    *identity
 	degraded bool
 }
 
@@ -116,32 +115,20 @@ func (s *filesService) register(app cloud.Router, guard guardFn) {
 	zip.Delete(g, "/files/:workspace/:filename", s.deleteBlob, zip.WithStatus(http.StatusNoContent))
 }
 
-// principal resolves (account, org) from the request's VERIFIED session or
-// workspace token (bearer or the HttpOnly account cookie) — the shared
-// orgPrincipal resolution (billing.go).
-func (s *filesService) principal(c *zip.Ctx) (account, org string, err error) {
-	return orgPrincipal(c, s.secret)
-}
-
-// authorize asserts :workspace belongs to org AND the caller is a MEMBER of it
-// (Red F-C: bind files to workspace membership, not just same-org). Any failure is
-// a 404 — no oracle distinguishing "no such workspace", "not your org", or "not a
-// member". It takes the CONTEXT rather than the request because it needs nothing
-// else off the wire, which is what lets the typed delete and the untyped
-// upload/download share the one gate.
-func (s *filesService) authorize(ctx context.Context, account, org, wsUUID string) error {
-	wsUUID = strings.TrimSpace(wsUUID)
-	if wsUUID == "" {
+// authorize asserts :workspace belongs to the caller's org AND the caller is a
+// MEMBER of it (Red F-C: bind files to workspace membership, not just same-org) —
+// identity.admit, the one membership gate. Any failure is a 404: no oracle
+// distinguishing "no such workspace", "not your org", or "not a member". It takes
+// the CONTEXT rather than the request because it needs nothing else off the wire,
+// which is what lets the typed delete and the untyped upload/download share it.
+func (s *filesService) authorize(ctx context.Context, cl caller, wsUUID string) error {
+	if strings.TrimSpace(wsUUID) == "" {
 		return zip.ErrBadRequest("workspace required")
 	}
-	if s.accounts == nil {
+	if s.ident == nil || s.ident.accounts == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "team: file storage unavailable")
 	}
-	w, err := s.accounts.WorkspaceByUUID(ctx, org, wsUUID)
-	if err != nil {
-		return zip.ErrNotFound("workspace not found")
-	}
-	if _, ok := s.accounts.Membership(ctx, w.ID, account); !ok {
+	if _, err := s.ident.admit(ctx, cl, wsUUID); err != nil {
 		return zip.ErrNotFound("workspace not found")
 	}
 	return nil
@@ -152,12 +139,12 @@ func (s *filesService) authorize(ctx context.Context, account, org, wsUUID strin
 // (front.ts: formData.append('file', file, uuid)). Response body is irrelevant
 // (uploadFile discards it); we echo the id for curl/debug.
 func (s *filesService) upload(c *zip.Ctx) error {
-	account, org, err := s.principal(c)
+	cl, err := s.ident.who(c)
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
 	ws := c.Param("workspace")
-	if err := s.authorize(c.Context(), account, org, ws); err != nil {
+	if err := s.authorize(c.Context(), cl, ws); err != nil {
 		return err
 	}
 	fh, err := c.Fiber().FormFile("file")
@@ -189,7 +176,7 @@ func (s *filesService) upload(c *zip.Ctx) error {
 	if len(data) == 0 {
 		return zip.ErrBadRequest("empty upload")
 	}
-	if err := s.vfs.Put(c.Context(), blobKey(org, ws, blobID), data); err != nil {
+	if err := s.vfs.Put(c.Context(), blobKey(cl.org, ws, blobID), data); err != nil {
 		// deps.VFS is DisabledVFS (fail-closed) unless the operator wires a real VFS
 		// backend — an honest 502, never a silent success.
 		return zip.Errorf(http.StatusBadGateway, "file storage unavailable")
@@ -203,19 +190,19 @@ func (s *filesService) upload(c *zip.Ctx) error {
 // image/svg+xml → active XSS). Anything not a recognized raster image is served
 // inert: application/octet-stream + attachment + nosniff.
 func (s *filesService) download(c *zip.Ctx) error {
-	account, org, err := s.principal(c)
+	cl, err := s.ident.who(c)
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
 	ws := c.Param("workspace")
-	if err := s.authorize(c.Context(), account, org, ws); err != nil {
+	if err := s.authorize(c.Context(), cl, ws); err != nil {
 		return err
 	}
 	blobID := strings.TrimSpace(c.Query("file"))
 	if blobID == "" {
 		return zip.ErrBadRequest("file (blob id) required")
 	}
-	data, err := s.vfs.Get(c.Context(), blobKey(org, ws, blobID))
+	data, err := s.vfs.Get(c.Context(), blobKey(cl.org, ws, blobID))
 	switch {
 	case errors.Is(err, types.ErrBlobNotFound), err == nil && data == nil:
 		// Genuine miss (working backend). A cross-org/-workspace blobId is a DIFFERENT
@@ -270,12 +257,12 @@ func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, erro
 	if s.degraded {
 		return nil, unavailable()
 	}
-	account, org, err := sessionOf(ctx, s.secret)
+	cl, err := callerOf(ctx, s.ident)
 	if err != nil {
 		return nil, zip.ErrUnauthorized("invalid session token")
 	}
 	ws := in.Workspace
-	if err := s.authorize(ctx, account, org, ws); err != nil {
+	if err := s.authorize(ctx, cl, ws); err != nil {
 		return nil, err
 	}
 	// deleteFile calls getFileUrl(ws, file) with no filename → path segment == the
@@ -289,7 +276,7 @@ func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, erro
 	// deleting never confirms existence and a foreign blobId is a harmless no-op.
 	// But a backend that is unavailable/disabled (any OTHER error) fails CLOSED with
 	// 502 — never a silent success lie, never a nil-deref 500.
-	if err := s.vfs.Delete(ctx, blobKey(org, ws, blobID)); err != nil && !errors.Is(err, types.ErrBlobNotFound) {
+	if err := s.vfs.Delete(ctx, blobKey(cl.org, ws, blobID)); err != nil && !errors.Is(err, types.ErrBlobNotFound) {
 		return nil, zip.Errorf(http.StatusBadGateway, "file storage unavailable")
 	}
 	return nil, nil

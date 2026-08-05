@@ -22,7 +22,6 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/valyala/fasthttp"
 
-	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/wsx"
@@ -53,13 +52,13 @@ type BotLister func(ctx context.Context, org string) ([]Bot, error)
 // transServer holds the transactor's shared, process-lifetime state: the per-
 // workspace SQLite docs store (the structured data plane — no KV, no Postgres),
 // the class hierarchy parsed from the embedded model, the live-broadcast hub, the
-// shared HS256 secret, and the two roster sources (the account store's members +
+// identity seam, and the two roster sources (the account store's members +
 // the in-process agents lister).
 type transServer struct {
 	store    *docStore
 	hier     *hierarchy
 	hub      *hub
-	secret   string
+	ident    *identity     // who is calling, and what may they touch (account.go)
 	accounts *accountStore // human members (this deployment's workspaces)
 	bots     BotLister     // bot members (the org's in-process agents)
 	runAgent AgentRunner   // the Chunter responder's LLM seam (agents.RunOnBehalf); nil = responder OFF
@@ -105,7 +104,9 @@ func init() {
 			"rather than being long-lived like the session token. It is decoded and verified "+
 			"(signature and expiry) BEFORE the upgrade, so a bad one is a 401 and never a socket "+
 			"that is accepted and then dropped, and it must carry both an account and a "+
-			"workspace claim.\n\n"+
+			"workspace claim. Nothing ambient authorizes this socket: a WebSocket is exempt from "+
+			"CORS, so a cookie-borne credential would make the Origin check the only access "+
+			"control on the whole data plane.\n\n"+
 			"The tenant is the token's SIGNED org claim and it keys every store path, so no "+
 			"header can name another workspace's data. The upgrade ALSO refuses a browser Origin "+
 			"outside the team surfaces with 403 — otherwise any page could open an authenticated "+
@@ -116,24 +117,30 @@ func init() {
 			"workspace people without a separate sync call.")
 }
 
-// serveWS decodes + AUTHORIZES the workspace token BEFORE the WebSocket upgrade
-// (fail-secure: a bad token is a 401, never an upgraded-then-dropped socket),
-// then upgrades and runs the frame loop. The org is the token's VERIFIED extra.org
-// claim — the tenant key for every store path — never a client header.
+// serveWS AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a
+// refusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs
+// the frame loop. The org is the VERIFIED tenant — the key for every store path —
+// never a client header.
+//
+// The path segment carries whichever lane the caller is on, and a UUID is not a
+// JWT so the two can never be read as each other:
+//
+// THE PATH SEGMENT IS THE CREDENTIAL — the workspace token selectWorkspace minted,
+// whose signed claims name both the account and the workspace. Nothing ambient
+// authorizes this socket; see admitWS for why it must stay that way and what the
+// IAM lane here will look like.
 func (srv *transServer) serveWS(c *zip.Ctx) error {
-	raw := c.Param("token")
-	t, err := token.Decode(raw, srv.secret, true)
-	if err != nil || t.Account == "" || t.Workspace == "" {
+	cl, ws, err := srv.admitWS(c.Param("token"))
+	if err != nil || ws == "" {
 		return zip.ErrUnauthorized("invalid workspace token")
 	}
-	org := t.Org()
 	sess := &session{
 		server:    srv,
 		store:     srv.store,
 		hier:      srv.hier,
-		account:   t.Account,
-		org:       org,
-		workspace: t.Workspace,
+		account:   cl.account,
+		org:       cl.org,
+		workspace: ws,
 		sessionID: c.Query("sessionId"),
 	}
 	return wsx.Upgrade(func(conn *wsx.Conn) error {
@@ -147,6 +154,39 @@ func (srv *transServer) serveWS(c *zip.Ctx) error {
 	}, wsx.Config{CheckOrigin: wsOriginOK})(c)
 }
 
+// admitWS resolves the socket's caller and the workspace it may open, from the
+// CREDENTIAL IN THE PATH SEGMENT and nothing ambient.
+//
+// THE TRANSACTOR HAS NO IAM LANE, and that is a decision rather than an omission.
+// A browser can put a credential on a WebSocket in exactly two places: the URL, or
+// a cookie. The URL is where the HS256 workspace token already sits, which is
+// survivable only because that token is scoped to one workspace for twelve hours —
+// an estate-wide IAM bearer in a path that proxies and access logs record is not.
+// And the cookie is worse here than anywhere else in this file: a WebSocket is
+// EXEMPT FROM CORS, so a foreign page may open one and read every frame, and
+// SameSite=Lax is scoped to the registrable domain — so any first-party page that
+// can be made to run script opens an authenticated workspace socket with the
+// victim's ambient cookie and reads and writes the whole stream. An Origin check is
+// then the only access control, which makes one wildcard in an allowlist a total
+// compromise of the data plane.
+//
+// The shape that works is the one the sibling socket already uses: collabws.go
+// upgrades first and takes the credential IN-BAND in an Auth frame, so nothing
+// ambient authorizes anything. Giving the transactor that lane means the client
+// sends a frame it does not send today, which is a front change and therefore a
+// later phase — named here so the next reader implements THAT rather than
+// re-deriving the cookie.
+func (srv *transServer) admitWS(seg string) (caller, string, error) {
+	cl, err := srv.ident.hs256(seg)
+	if err != nil {
+		return caller{}, "", err
+	}
+	// An HS256 SESSION token names no workspace, and that is not an error here: the
+	// statistics read answers it with an empty session map. serveWS, which cannot
+	// open a socket onto nothing, imposes its own requirement.
+	return cl, cl.workspace, nil
+}
+
 // wsOriginOK is the browser-Origin gate on the transactor upgrade: without it
 // ANY page could open an authenticated socket with a token it holds (or lure a
 // logged-in browser into one). Absent Origin is allowed — non-browser clients
@@ -155,9 +195,25 @@ func wsOriginOK(ctx *fasthttp.RequestCtx) bool {
 	return originAllowed(string(ctx.Request.Header.Peek("Origin")), string(ctx.Host()))
 }
 
-// originAllowed admits: no Origin (non-browser), the request's own host, the
-// team surfaces (hanzo.team, team.hanzo.ai, api.hanzo.team), any *.hanzo.ai
-// (+ apex), and loopback for local dev. Everything else is refused.
+// teamOrigins is the EXPLICIT set of pages allowed to open a team socket. It is a
+// NAMED set with no suffix arm, and the missing arm is the point.
+//
+// This gate used to admit any *.hanzo.ai host. A WebSocket is exempt from CORS —
+// a page may open one cross-origin and read every frame — so this check is the
+// access control for the socket, not a hint about it. A wildcard over a registrable
+// domain therefore means every first-party host is part of the team data plane's
+// TCB: one marketing subdomain, one preview host, one page that renders
+// user-supplied markdown, and a script there opens an authenticated workspace
+// socket. The blast radius of a wildcard here is the whole workspace, so the set is
+// enumerated and grows only on purpose.
+var teamOrigins = map[string]bool{
+	"hanzo.team": true, "team.hanzo.ai": true, "api.hanzo.team": true,
+	"hanzo.ai": true, "localhost": true, "127.0.0.1": true,
+}
+
+// originAllowed admits: no Origin (a non-browser client sends none, and a browser
+// cannot omit it), the request's own host, and the named team surfaces. Everything
+// else is refused.
 func originAllowed(origin, host string) bool {
 	origin = strings.TrimSpace(origin)
 	if origin == "" {
@@ -170,12 +226,7 @@ func originAllowed(origin, host string) bool {
 	if strings.EqualFold(u.Host, host) {
 		return true
 	}
-	switch h := strings.ToLower(u.Hostname()); h {
-	case "hanzo.team", "team.hanzo.ai", "api.hanzo.team", "hanzo.ai", "localhost", "127.0.0.1":
-		return true
-	default:
-		return strings.HasSuffix(h, ".hanzo.ai")
-	}
+	return teamOrigins[strings.ToLower(u.Hostname())]
 }
 
 // statsIn is the statistics read's whole input: the workspace token, which the
@@ -235,25 +286,26 @@ type statsOut struct {
 	Admin bool `json:"admin"`
 }
 
-// Statistics returns the transactor's live sessions for the workspace the
-// caller's token names — the endpoint the front's workspace switcher and server
-// panel poll on the transactor base. The token is verified exactly like the
-// WebSocket upgrade is, and activeSessions carries ONLY that token's own
-// workspace, never another tenant's sessions. An invalid or expired token is
-// 401.
+// Statistics returns the transactor's live sessions for the workspace the caller's
+// credential names — the endpoint the front's workspace switcher and server panel
+// poll on the transactor base. `token` carries the same two lanes the socket's path
+// segment does: a workspace UUID names the workspace and is authorized against the
+// membership rows, an HS256 workspace token names it in its signed claims.
+// activeSessions carries ONLY that one workspace, never another tenant's sessions.
+// An unverifiable credential, or one the caller is no member under, is 401.
 //
 // Example: {"token": "eyJhbGciOiJIUzI1NiJ9…"}
 func (srv *transServer) statistics(ctx context.Context, in *statsIn) (*statsOut, error) {
 	if srv.degraded {
 		return nil, unavailable()
 	}
-	t, err := token.Decode(in.Token, srv.secret, true)
-	if err != nil || t.Account == "" {
+	_, ws, err := srv.admitWS(in.Token)
+	if err != nil {
 		return nil, zip.ErrUnauthorized("invalid token")
 	}
 	active := map[string][]statsUser{}
-	if t.Workspace != "" {
-		active[t.Workspace] = srv.hub.users(t.Workspace)
+	if ws != "" {
+		active[ws] = srv.hub.users(ws)
 	}
 	// Metrics needs no initialiser: the zero value of an empty struct already
 	// marshals to the `{}` the front reads, so there is nothing to allocate.
