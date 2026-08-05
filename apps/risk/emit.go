@@ -93,6 +93,7 @@ const (
 	attrValue   = "value"        // the BRACKET the amount fell in — never the amount
 	attrCountry = "country"      // the stated jurisdiction, alpha-2 or absent
 	attrPosture = "posture"      // whether the verdict was live or shadow
+	attrBrand   = "brand"        // the ISSUER half of the tenant this was decided for
 )
 
 // The postures a verdict is reached under. Two values, spelled once: SHADOW is
@@ -164,6 +165,30 @@ var inflight = make(chan struct{}, maxEmits)
 // principal — and saying it here is what keeps them the same value: the row is
 // filed under the org this verdict was REACHED for, which is the only org it
 // describes.
+//
+// AND IT IS THE BARE ORG, DELIBERATELY, WITH THE BRAND CARRIED AS A FACT ON THE ROW.
+// The event plane's tenant column is the bare slug for every product that writes to
+// it — that is where the organisation's own pageviews, its errors and its metered
+// calls are filed, and filing risk's rows under a qualified `<brand>/<org>` instead
+// would put them in a partition none of the organisation's own lenses read, which is
+// the "answerable in the same query as the traffic that produced it" property this
+// file exists for. So the column stays what the plane's column is.
+//
+// That leaves the collision that column has always had, and it is not ours to close
+// here: an org name is unique within an ISSUER, not across issuers, and ONE warehouse
+// serves every brand's deployments (there is no brand in the datastore address, the
+// database name, or anything else that reaches [apps/datastore] — two brands are two
+// deployments of one artifact differing in a `--brand` flag). Two brands' `acme`
+// organisations are therefore one value in that column, in this table and in every
+// other table on that plane.
+//
+// What this app can do, and does, is refuse to ADD to it. The subject column already
+// cannot collide, because [digest] hashes the QUALIFIED tenant — one subject under
+// two brands is two digests. And the brand itself travels as a server-minted
+// attribute ([attrBrand]), so a risk_decided row states which issuer's `acme` it
+// describes and a read can bind it. Qualifying rather than assuming is the safe
+// direction: it costs one bounded attribute, and it is correct whether or not a
+// second brand ever shares the warehouse.
 func emit(ctx context.Context, log luxlog.Logger, t tenant, in *contract.EventIn) {
 	if in == nil {
 		return
@@ -242,6 +267,21 @@ func decision(t tenant, in *contract.RiskDecideIn, nano int64, d decided, out *c
 		{Name: attrPosture, Value: posture},
 		{Name: attrValue, Value: bracket(nano)},
 		{Name: attrPolicy, Value: strconv.Itoa(out.Policy)},
+		// THE BRAND, because the org column alone does not identify the tenant this
+		// row was decided for. See [emit]'s own note on the org: the column carries
+		// the BARE org slug, one warehouse serves every brand's deployments, and an
+		// org name is unique within an issuer rather than across issuers — so two
+		// brands' identically named organisations are one value in that column. The
+		// qualified tenant survives inside [digest], which is why the SUBJECT column
+		// is already safe; this is the same qualification made readable, so a row can
+		// be attributed and a read can be predicated on the brand rather than on the
+		// assumption that only one exists.
+		//
+		// It is SERVER-MINTED from the tenant this verdict was reached for, and the
+		// brand half of a tenant comes from the deployment's own flag and never from a
+		// header or a body — so it is bounded by the brand registry, which is what the
+		// LowCardinality column this lands in requires.
+		{Name: attrBrand, Value: t.brandOf()},
 	}
 	add := func(name, value string) {
 		if value != "" {
