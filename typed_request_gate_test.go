@@ -421,6 +421,22 @@ var allowedRequestUses = map[string]string{
 		"start rejecting a body that named a project — a wire the route has never had. ONE function, which " +
 		"all four scoped ops ask, delegating to the same scope() the SSE handler beside them uses; fails " +
 		"closed off the HTTP path, where there is no principal and therefore no tenant.",
+	"apps/platform/ops.go": "caller / request / admit — the PaaS control plane's three identity seams, " +
+		"in one file, which every one of its 32 typed ops goes through. caller resolves the tenant with " +
+		"platform's own tenant(), not principal.OrgFrom: this surface keys NAMESPACES and per-tenant image " +
+		"refs on the org, so it needs the injective namespace.Sanitize form and the \"admin\" bucket a " +
+		"validated SuperAdmin with no org falls into — neither of which principal.OrgFrom can express, since " +
+		"it returns the owner claim verbatim and refuses an empty org outright. It also hands the request " +
+		"back because this plane SPENDS the caller's identity rather than only reading it: /v1/run gates and " +
+		"meters the caller's own ledger (principal.Ledger, the request id and the client IP), and every " +
+		"deploy, preview, promote and rollback writes the actor and request id to the audit log. request is " +
+		"for the two ops that authorize on something OTHER than a tenant — /v1/runner compares a shared " +
+		"build credential in constant time off the Authorization header, and the release reads gate on " +
+		"cloud.Super — so asking for an org would refuse the machine caller the endpoint exists for. admit is " +
+		"the fleet board's role gate, cloud.Scope.Admits over cloud.AuthorityOf, which reads X-User-IsAdmin " +
+		"and X-User-IsOrgAdmin; it was cloud.Guard around the handler until these routes became typed ops, " +
+		"and a typed op has no zip.Handler for a wrapper to compose with. All three fail closed off the HTTP " +
+		"path: no request, no tenant, no attested authority, no answer.",
 	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +

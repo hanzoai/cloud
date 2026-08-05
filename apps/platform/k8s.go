@@ -565,7 +565,7 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 			map[string]any{"name": "data", "mountPath": volumeMount},
 		}
 	}
-	if ing := ingressSpec(domainList(a.DomainsJSON)); ing != nil {
+	if ing := ingressSpec(activeHosts(a.DomainsJSON)); ing != nil {
 		spec["ingress"] = ing
 	}
 	// Container-serverless autoscaling: the /v1/run path sets MaxScale>0 to declare an
@@ -1592,7 +1592,11 @@ func renderEnv(secretName, envJSON string) []any {
 	return out
 }
 
-func domainList(domainsJSON string) []string {
+// activeHosts is the app's ACTIVE ingress host set, decoded from the record. It
+// is named for what it returns rather than for the column it reads, so the type
+// that answers the domains route can be called domainList without the two
+// colliding.
+func activeHosts(domainsJSON string) []string {
 	var hosts []string
 	if domainsJSON == "" {
 		return nil

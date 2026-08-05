@@ -15,6 +15,7 @@
 package platform
 
 import (
+	"context"
 	"crypto/subtle"
 	"net/http"
 	"strings"
@@ -27,44 +28,73 @@ import (
 
 // runnerBuildReq mirrors the CLI BuildReq (cli/platform.go). repo + image are
 // required; the rest are optional build knobs.
+//
+// Every field carries `url:"-"`. This is a PRIVILEGED build trigger, and zip's
+// binder fills an In field from the query string as well as the body: without the
+// opt-out `?image=…` would choose the pushed artifact, and the whole authorization
+// argument below reads req.Image.
 type runnerBuildReq struct {
-	Repo         string `json:"repo"`
-	SHA          string `json:"sha"`
-	Image        string `json:"image"`
-	Branch       string `json:"branch,omitempty"`
-	Ref          string `json:"ref,omitempty"`
-	Dockerfile   string `json:"dockerfile,omitempty"`
-	Context      string `json:"context,omitempty"`
-	DockerTarget string `json:"dockerTarget,omitempty"`
-	OS           string `json:"os,omitempty"`
-	Arch         string `json:"arch,omitempty"`
-	OrgID        string `json:"organizationId,omitempty"`
+	// Repo is the repository clone URL to build. Required on the image lane.
+	Repo string `json:"repo" url:"-"`
+	// SHA is the commit to pin; it wins over Ref and Branch.
+	SHA string `json:"sha" url:"-"`
+	// Image is the output image ref to push. Required on the image lane, and it
+	// must target a registry namespace the caller's org owns.
+	Image string `json:"image" url:"-"`
+	// Branch is the branch to build when no SHA or Ref is given.
+	Branch string `json:"branch,omitempty" url:"-"`
+	// Ref is the git ref to build when no SHA is given.
+	Ref string `json:"ref,omitempty" url:"-"`
+	// Dockerfile is the path to build from; empty uses the zero-config frontend.
+	Dockerfile string `json:"dockerfile,omitempty" url:"-"`
+	// Context is the build context path within the repo.
+	Context string `json:"context,omitempty" url:"-"`
+	// DockerTarget is the multi-stage build target to stop at.
+	DockerTarget string `json:"dockerTarget,omitempty" url:"-"`
+	// OS is the target operating system for the artifact lane.
+	OS string `json:"os,omitempty" url:"-"`
+	// Arch is the target architecture for the artifact lane.
+	Arch string `json:"arch,omitempty" url:"-"`
+	// OrgID attributes the build to an org. On the IAM path it defaults to the
+	// caller's own validated org, and a foreign one is refused unless the caller
+	// is a platform SuperAdmin.
+	OrgID string `json:"organizationId,omitempty" url:"-"`
 	// Release requests native release semantics for cloud's self-publish: compute
 	// the next version, build+push ghcr.io/hanzoai/cloud, smoke it, then tag (the
-	// receipt) and notify universe. It owns its output image (release.go).
-	Release bool `json:"release,omitempty"`
+	// receipt) and notify universe. It owns its output image (release.go), and it
+	// takes SuperAdmin.
+	Release bool `json:"release,omitempty" url:"-"`
 
 	// Binaries selects the ARTIFACT lane (artifact.go): build what the repo's
 	// hanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust
 	// binary — and publish it to hanzoai/s3 instead of pushing an image. It is the
 	// same recipe hanzoai/ci reads, sent verbatim, so `image` is meaningless here
-	// and must be absent. Bucket/Tag mirror hanzo.yml's `bucket:` and the tag the
-	// GitHub lane publishes under, so both front doors write ONE index at ONE URL.
-	Binaries []binarySpec `json:"binaries,omitempty"`
-	Bucket   string       `json:"bucket,omitempty"`
-	Tag      string       `json:"tag,omitempty"`
+	// and must be absent.
+	Binaries []binarySpec `json:"binaries,omitempty" url:"-"`
+	// Bucket mirrors hanzo.yml's `bucket:` — where the artifact lane publishes.
+	Bucket string `json:"bucket,omitempty" url:"-"`
+	// Tag is the publish path segment, so both front doors write ONE index at ONE
+	// URL. It defaults to the pinned ref, and must be named explicitly for a
+	// branch.
+	Tag string `json:"tag,omitempty" url:"-"`
 }
 
 // runnerBuildResp is the 202 acceptance (matches the CLI BuildJob). Index is the
 // artifact lane's output — the binaries.json a host reads — where Image is the
 // image lane's; a build produces exactly one of the two.
 type runnerBuildResp struct {
+	// BuildJobID is the queued build's id, and what a release is followed by.
 	BuildJobID string `json:"buildJobId"`
-	Status     string `json:"status"`
+	// Status is `queued` for an ordinary build, `releasing` for a self-publish.
+	Status string `json:"status"`
+	// RunnerPool is the runner class the build was placed on.
 	RunnerPool string `json:"runnerPool"`
-	Image      string `json:"image,omitempty"`
-	Target     string `json:"target,omitempty"`
-	Index      string `json:"index,omitempty"`
+	// Image is the ref the image lane will push.
+	Image string `json:"image,omitempty"`
+	// Target is the multi-stage build target, echoed back.
+	Target string `json:"target,omitempty"`
+	// Index is the binaries.json URL the artifact lane will publish.
+	Index string `json:"index,omitempty"`
 }
 
 // ownedRegistryHosts are the registry hosts the fabric operates. An image on any
@@ -234,8 +264,52 @@ func runnerIAMAdmin(c *zip.Ctx) bool {
 	return principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c)
 }
 
-// runnerBuild serves POST /v1/runner — enqueue a native, privileged build.
-func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
+// runnerBuild triggers a native build — an image, or the binaries a repo declares.
+//
+// The fabric's own build trigger, and what `hanzo build`, git-push-to-deploy and
+// cloud's own self-release all call. It answers 202 with the build job id: a queued
+// build, not a pushed artifact.
+//
+// Two lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and
+// the output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane
+// takes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes
+// to object storage instead; it must carry no `image`, because a build produces
+// binaries or an image, never both. `release: true` is the third mode: cloud
+// self-publishing its own image, version computed, built, smoke-tested, tagged and
+// announced.
+//
+// PRIVILEGED, with exactly two credentials and never a third: the shared
+// build-callback token compared in constant time — the machine path, which a user
+// never holds — or a validated IAM principal who is an ADMIN of their org, which is
+// the `hanzo build` user path and means one IAM login authorizes a build with no
+// separate build token. A plain member is refused.
+//
+// Both paths are bounded the same way: the output must push to a registry the
+// fabric owns, and on the IAM path the image's registry namespace must MATCH the
+// caller's own validated org — so an org admin can only publish into their own
+// brand and can never overwrite another's through the shared push credential. The
+// same confinement applies to the artifact lane's repo owner.
+//
+// `release: true` is the exception, and takes SUPERADMIN. It publishes the
+// platform's own image — the binary the whole fleet runs — so what it lands reaches
+// every org at the next reconcile, and no role inside the caller's own org can
+// authorize that. An org admin is refused however the registry namespace lines up,
+// and the build token, which carries no identity at all, may enqueue an ordinary
+// build but never a release.
+//
+// The output image is parsed and validated as a single well-formed OCI ref before
+// any authorization decision reads it, so a crafted ref cannot smuggle a
+// build-exporter attribute past the check.
+func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuildResp, error) {
+	s := o.s
+	// The request itself, not a tenant: this route authorizes on a shared
+	// credential or on platform authority, and a machine caller carries no org at
+	// all — so asking for one would refuse the very path this endpoint exists for.
+	c, err := o.request(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req := *body
 	// Auth — ONE of two credentials, never a third:
 	//   (1) the shared build-callback token (constant-time): the MACHINE path
 	//       (git-push-to-deploy, cloud self-release, the operator). A user never
@@ -254,13 +328,9 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	viaToken := runnerTokenOK(c)
 	viaIAM := !viaToken && runnerIAMAdmin(c)
 	if !viaToken && !viaIAM {
-		return zip.ErrForbidden("invalid build token")
+		return nil, zip.ErrForbidden("invalid build token")
 	}
 
-	var req runnerBuildReq
-	if err := c.Bind(&req); err != nil {
-		return zip.ErrBadRequest("decode build request: " + err.Error())
-	}
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.Image = strings.TrimSpace(req.Image)
 
@@ -286,17 +356,17 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	// reading the request here would decide against a value the caller chooses.
 	if req.Release {
 		if err := mayRelease(c); err != nil {
-			return err
+			return nil, err
 		}
-		return startRelease(s, c, req)
+		return startRelease(s, ctx, req)
 	}
 
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	if len(req.Binaries) > 0 {
-		return runnerArtifactBuild(s, c, req, ref, viaIAM)
+		return runnerArtifactBuild(s, ctx, c, req, ref, viaIAM)
 	}
 	if req.Repo == "" || req.Image == "" {
-		return zip.ErrBadRequest("repo and image are required")
+		return nil, zip.ErrBadRequest("repo and image are required")
 	}
 	// Validate the output image as a single, well-formed OCI ref BEFORE any
 	// registry/authz decision reads it — so imageRegistryNamespace parses a clean
@@ -304,10 +374,10 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	// attribute (M1). launchDirectBuild re-validates at the k8s choke point
 	// (validateBuildInputs); this is the early, user-facing 400.
 	if _, err := validateImageRef(req.Image); err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if !imageAllowed(req.Image) {
-		return zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
+		return nil, zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
 	}
 
 	// H1 — bind the image's registry-org to the caller's VALIDATED org on the IAM
@@ -320,7 +390,7 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	if viaIAM && !principal.IsSuperAdmin(c) {
 		callerOrg, _ := principal.Org(c)
 		if !imageInOrgRegistry(req.Image, callerOrg) {
-			return zip.ErrForbidden("image registry-org must match your organization")
+			return nil, zip.ErrForbidden("image registry-org must match your organization")
 		}
 	}
 
@@ -335,32 +405,32 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 		case buildOrg == "":
 			buildOrg = callerOrg
 		case buildOrg != callerOrg && !principal.IsSuperAdmin(c):
-			return zip.ErrForbidden("organizationId must be your own org")
+			return nil, zip.ErrForbidden("organizationId must be your own org")
 		}
 	}
 
 	bldID, err := genID("bld")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 
-	jobName, err := s.State.k8s.launchDirectBuild(c.Context(), req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID)
+	jobName, err := s.State.k8s.launchDirectBuild(ctx, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID)
 	if err != nil {
-		return zip.Errorf(deployErrStatus(err), "launch build: %v", err)
+		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
 	}
 
 	// Record the build (org "platform" — a fabric-owned direct build, not
 	// tenant-scoped). Best-effort: a record miss must not fail a launched build.
 	now := time.Now().Unix()
 	b := Build{ID: bldID, Org: firstNonEmpty(buildOrg, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
-	if err := s.State.store.InsertBuild(c.Context(), b); err != nil {
+	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		s.Log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
 	s.Log.Info("runner build launched", "job", jobName, "image", req.Image, "ref", ref, "repo", req.Repo)
 
-	return c.JSON(http.StatusAccepted, runnerBuildResp{
+	return &runnerBuildResp{
 		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Image: req.Image, Target: strings.TrimSpace(req.DockerTarget),
-	})
+	}, nil
 }
 
 // runnerArtifactBuild serves the ARTIFACT lane of POST /v1/runner: build what the
@@ -369,23 +439,23 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 // the repo URL (the same allowlisted-git-host validator the image lane uses), the
 // recipe (binarySpec.validate), and — on the IAM path — the forge owner, which
 // must be one the caller's org owns.
-func runnerArtifactBuild(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq, ref string, viaIAM bool) error {
+func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, req runnerBuildReq, ref string, viaIAM bool) (*runnerBuildResp, error) {
 	if strings.TrimSpace(req.Image) != "" {
-		return zip.ErrBadRequest("a build produces binaries or an image, never both")
+		return nil, zip.ErrBadRequest("a build produces binaries or an image, never both")
 	}
 	if len(req.Binaries) > maxArtifactBinaries {
-		return zip.Errorf(http.StatusBadRequest, "at most %d binaries per build", maxArtifactBinaries)
+		return nil, zip.Errorf(http.StatusBadRequest, "at most %d binaries per build", maxArtifactBinaries)
 	}
 	repoURL, err := validateRepoURL(req.Repo)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if _, err := validateGitRef(ref); err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	for i := range req.Binaries {
 		if err := req.Binaries[i].validate(); err != nil {
-			return zip.ErrBadRequest(err.Error())
+			return nil, zip.ErrBadRequest(err.Error())
 		}
 	}
 	// The publish path segment. Defaults to the pinned ref (a tag publishes at
@@ -393,11 +463,11 @@ func runnerArtifactBuild(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq
 	// and would nest the layout, so it must be named explicitly.
 	tag := firstNonEmpty(strings.TrimSpace(req.Tag), ref)
 	if !artifactNameRE.MatchString(tag) {
-		return zip.ErrBadRequest("tag must be a flat version/commit segment (set `tag` when building a branch)")
+		return nil, zip.ErrBadRequest("tag must be a flat version/commit segment (set `tag` when building a branch)")
 	}
 	bucket := firstNonEmpty(strings.TrimSpace(req.Bucket), defaultArtifactBucket)
 	if !bucketRE.MatchString(bucket) {
-		return zip.ErrBadRequest("bucket must be a valid object-store bucket name")
+		return nil, zip.ErrBadRequest("bucket must be a valid object-store bucket name")
 	}
 	// Same H1 confinement the image lane applies to a registry namespace: an IAM
 	// org-admin publishes only its own brand's repos. The machine token is
@@ -405,19 +475,19 @@ func runnerArtifactBuild(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq
 	if viaIAM && !principal.IsSuperAdmin(c) {
 		callerOrg, _ := principal.Org(c)
 		if !repoOwnerInOrg(repoURL, callerOrg) {
-			return zip.ErrForbidden("repo owner must match your organization")
+			return nil, zip.ErrForbidden("repo owner must match your organization")
 		}
 	}
 
 	bldID, err := genID("bld")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	slug := repoSlug(repoURL)
 	base := artifactBase(bucket, slug, tag)
-	jobName, err := s.State.k8s.launchArtifactBuild(c.Context(), repoURL, ref, tag, base, artifactPutBase(bucket, slug, tag), req.Binaries, bldID)
+	jobName, err := s.State.k8s.launchArtifactBuild(ctx, repoURL, ref, tag, base, artifactPutBase(bucket, slug, tag), req.Binaries, bldID)
 	if err != nil {
-		return zip.Errorf(deployErrStatus(err), "launch build: %v", err)
+		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
 	}
 
 	// The build row records the INDEX as the output, the way the image lane
@@ -425,12 +495,12 @@ func runnerArtifactBuild(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq
 	index := base + "/binaries.json"
 	now := time.Now().Unix()
 	b := Build{ID: bldID, Org: platformBuildOrg, Status: "queued", Image: index, JobName: jobName, CreatedAt: now, UpdatedAt: now}
-	if err := s.State.store.InsertBuild(c.Context(), b); err != nil {
+	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		s.Log.Warn("runner artifact build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
 	s.Log.Info("runner artifact build launched", "job", jobName, "index", index, "ref", ref, "repo", repoURL, "binaries", len(req.Binaries))
 
-	return c.JSON(http.StatusAccepted, runnerBuildResp{
+	return &runnerBuildResp{
 		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Index: index,
-	})
+	}, nil
 }
