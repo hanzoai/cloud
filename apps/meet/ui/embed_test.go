@@ -140,3 +140,40 @@ func TestHandlerServesTheShellAndItsAssets(t *testing.T) {
 		t.Errorf("POST / = %d, want 405", rec.Code)
 	}
 }
+
+// TestTheAuthModuleIsBundledOnce is a regression test for a bug that only exists
+// in the SHIPPED artifact, which is why it is asserted here and not in the SPA's
+// own suite.
+//
+// AuthGate keeps "this OIDC code has been redeemed" in MODULE state. Vite
+// resolved @hanzogui/admin twice, so the bundle carried two copies of that
+// module — two guards, neither aware of the other — and the authorization code
+// was redeemed once per copy. The second redemption fails, because a code is
+// single-use, and the failure tore down the session the first had just
+// established: measured cold, two exchanges on the wire, the token never
+// persisted, and the visitor back at the sign-in screen.
+//
+// Nothing about that is visible in the source. It is a property of how the
+// bundler resolved the graph, so the only place it can be caught is the bytes
+// that ship. POST_LOGIN_KEY is the module's own private storage key — one copy
+// of the module, one occurrence.
+func TestTheAuthModuleIsBundledOnce(t *testing.T) {
+	const marker = "hanzo_iam_post_login" // AuthGate's module-private storage key
+	total := 0
+	_ = fs.WalkDir(FS(), "assets", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".js") {
+			return nil
+		}
+		b, err := fs.ReadFile(FS(), p)
+		if err == nil {
+			total += strings.Count(string(b), marker)
+		}
+		return nil
+	})
+	if total == 0 {
+		t.Fatal("the bundle carries no auth module at all — AuthGate did not ship, so this host cannot sign anyone in")
+	}
+	if total > 1 {
+		t.Errorf("the auth module is bundled %d times — each copy is its own one-code-one-redemption guard, so the OIDC code is redeemed once per copy and the second failure destroys the session the first established. Add the package to resolve.dedupe + optimizeDeps.include in the SPA's vite config.", total)
+	}
+}
