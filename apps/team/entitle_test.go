@@ -58,6 +58,7 @@ func gateApp(t *testing.T, commerce types.CommerceClient, planEnt func(context.C
 	t.Cleanup(func() { _ = store.Close() })
 	g := &api{
 		accounts: store,
+		ident:    testIdent(store),
 		cfg:      config{serverSecret: testSecret},
 		log:      luxlog.New("test"),
 		commerce: commerce,
