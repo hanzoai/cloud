@@ -301,7 +301,7 @@ func (o ops) listIssues(ctx context.Context, in *issueQuery) (*issueList, error)
 	if err != nil {
 		return nil, err
 	}
-	filter, err := issueQueryFilter(in)
+	filter, err := issueQueryFilter(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -316,10 +316,41 @@ func (o ops) listIssues(ctx context.Context, in *issueQuery) (*issueList, error)
 	return &out, nil
 }
 
+// boolSpellings is what `scheduled` accepts, and it is the ONLY thing it
+// accepts. zip binds a bool by strconv.ParseBool and leaves the field at its
+// zero value when the parse fails — so `?scheduled=yes` bound FALSE and the
+// caller got the whole board back believing it was filtered. Every other filter
+// on this route refuses a value outside its closed set rather than answering the
+// wrong rows silently; this one now does too.
+//
+// An empty value is deliberately absent from the set and legal: `?scheduled`
+// with no value is the flag convention zip already honours (present ⟹ true),
+// and it is indistinguishable here from an absent parameter, which is false.
+var boolSpellings = map[string]bool{
+	"1": true, "t": true, "T": true, "TRUE": true, "true": true, "True": true,
+	"0": true, "f": true, "F": true, "FALSE": true, "false": true, "False": true,
+}
+
+// checkBoolQuery refuses a query parameter that is present with a value zip
+// cannot read as a bool. It reads the RAW query rather than the bound field
+// because that is the only place the difference between "false" and "unparseable"
+// still exists — by the time the In is populated, both are the zero value.
+func checkBoolQuery(ctx context.Context, name string) error {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil // off the HTTP path there is no query string
+	}
+	raw := c.Query(name)
+	if raw == "" || boolSpellings[raw] {
+		return nil
+	}
+	return zip.ErrBadRequest("unknown " + name + " filter (expected true or false)")
+}
+
 // issueQueryFilter validates the typed listing's filters against the SAME closed
 // sets the untyped issueFilter checks — one vocabulary, two readers, so the typed
 // route and the raw one can never disagree about what a legal filter is.
-func issueQueryFilter(in *issueQuery) (IssueFilter, error) {
+func issueQueryFilter(ctx context.Context, in *issueQuery) (IssueFilter, error) {
 	status := strings.TrimSpace(in.Status)
 	if status != "" && !statuses[status] {
 		return IssueFilter{}, zip.ErrBadRequest("unknown status filter")
@@ -335,6 +366,9 @@ func issueQueryFilter(in *issueQuery) (IssueFilter, error) {
 	repo := strings.TrimSpace(in.Repo)
 	if len(repo) > maxField {
 		return IssueFilter{}, zip.ErrBadRequest("repo filter too long")
+	}
+	if err := checkBoolQuery(ctx, "scheduled"); err != nil {
+		return IssueFilter{}, err
 	}
 	return IssueFilter{Status: status, Kind: kind, Repo: repo, Source: source, Scheduled: in.Scheduled}, nil
 }
