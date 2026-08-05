@@ -173,7 +173,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	root := filepath.Join(deps.DataDir, "base")
 
-	// LANE 1 — platform waitlist app (public /v1/waitlist/*).
+	// LANE 1 — platform waitlist app (public /v1/waitlist/*). Raw because it
+	// relays the embedded Base engine's own bytes verbatim — the routes, shapes
+	// and refusals are that program's, not this package's to declare.
 	platformApp, waitlistMux, err := newPlatformApp(filepath.Join(root, platformSeg))
 	if err != nil {
 		return fmt.Errorf("base.Mount: platform waitlist app: %w", err)
@@ -182,7 +184,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	app.All("/v1/waitlist", wh)
 	app.All("/v1/waitlist/*", wh)
 
-	// LANE 2 — per-org Base hosting (authenticated /v1/base/*).
+	// LANE 2 — per-org Base hosting (authenticated /v1/base/*). Raw for the same
+	// reason as the waitlist lane: each request is served by the org's own Base
+	// app's mux verbatim, so there is no shape here for a typed op to state.
 	p := newPool(root, deps)
 	app.All("/v1/base/*", func(c *zip.Ctx) error { return serveOrg(p, log, c) })
 

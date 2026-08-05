@@ -908,39 +908,6 @@ func init() {
 		openapi.Register(d.path, http.MethodPost, d.wire, CaptureResult{})
 		openapi.Describe(d.path, http.MethodPost, d.summary, d.description)
 	}
-	openapi.Register("/v1/analytics/health", http.MethodGet, nil, healthReport{})
-	// What "healthy" ASSERTS, stated exactly, because a probe whose prose overclaims
-	// is worse than one with none: an operator wires a readiness gate to it and gets a
-	// green pod in front of a warehouse that cannot answer a query.
-	openapi.Describe("/v1/analytics/health", http.MethodGet,
-		"Whether the event plane can take a write and the warehouse can answer a read",
-		"Reports the analytics subsystem's own liveness in BOTH directions: `plane` is the "+
-			"event plane it WRITES (the bus and the JetStream stream every accepted event is "+
-			"published to, both named in the report), and `datastore` is the warehouse it READS, "+
-			"with each read lens's table reported as it is provisioned (the LLM usage ledger and "+
-			"the product-event table).\n\n"+
-			"EITHER ONE DOWN IS A 503, and the report says WHICH — they are probed independently "+
-			"and never collapse into a single bit. This endpoint used to report the read half "+
-			"only, and answered 200/ok while every POST /v1/event failed on a stream that could "+
-			"not bind: a total ingest outage behind a green probe. A readiness gate wired here "+
-			"now gates on the write path too.\n\n"+
-			"`plane.ready` IS A REAL PROBE and walks the ingest path itself — the same connection "+
-			"and the same stream a publish uses — so it cannot answer ready while a publish would "+
-			"503. `plane.reason` carries the plane's own error text when it is false.\n\n"+
-			"`datastore` IS NOT PROBED WITH A QUERY. It is the state of the process's own shared "+
-			"client — established, and not since closed — so a warehouse accepting connections and "+
-			"failing reads still reports true. Degraded CARRIES the report (status, the failing "+
-			"half, reason) as its body rather than an error envelope, so a gate reads the cause "+
-			"off the same object it got at 200.\n\n"+
-			"A MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens reported "+
-			"available:false answers honest-empty rather than erroring, so a fresh deployment "+
-			"whose collector has not emitted yet is legitimately 200 with the product-event lens "+
-			"unavailable. The lens block is reported whenever the warehouse is REACHABLE — "+
-			"including on a report degraded by the plane, where the tables genuinely were probed — "+
-			"and is absent only when the warehouse is not, having nothing to say about tables it "+
-			"could not reach.\n\n"+
-			"Unauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant "+
-			"data: table existence and stream presence only, never a row and never an event.")
 	// The Sentry error wire (registered in analytics.go's routes, on the same
 	// /v1/event door). Its body is an opaque envelope stream the o11y consumer reads
 	// itself, so openapi.Binary is the whole truth — no struct describes it, exactly

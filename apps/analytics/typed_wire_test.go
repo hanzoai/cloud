@@ -5,12 +5,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// typed_wire_test.go — the projection gate. Six of this package's thirteen
-// operations are TYPED ops; the other seven are not, and each of those has a WIRE
-// FACT that keeps it out. Both halves are MEASURED here rather than asserted in
-// prose, because prose cannot go red: a route added untyped goes red without anyone
-// remembering to name it, a reason naming a route this package no longer serves goes
-// red too, and every refusal's wire is re-proved against the live router.
+// typed_wire_test.go — the projection gate. The reads and the health probe are
+// TYPED ops; the ingest doors are not, and each of those has a WIRE FACT that
+// keeps it out. Both halves are MEASURED here rather than asserted in prose,
+// because prose cannot go red: a route added untyped goes red without anyone
+// remembering to name it, a reason naming a route this package no longer serves
+// goes red too, and every refusal's bytes are re-proved against the live router.
 package analytics
 
 import (
@@ -33,13 +33,6 @@ import (
 // written the way the DOCUMENT writes them, which is the identity every projection
 // keys on.
 var untypedByDesign = map[string]string{
-	"GET /v1/analytics/health": "answers 503 CARRYING the degraded report as its body " +
-		"(status/datastore/reason), and 200 with the per-lens table availability otherwise. zip stamps " +
-		"a non-nil Out with cmp.Or(op.Status, 200) and WithStatus refuses a non-2xx, so a typed op " +
-		"would turn the 503 into a 200; returning an error instead renders zip's flat " +
-		"{status,code,error} and drops the report. Writing the body from inside the op does not escape " +
-		"it either — a nil Out is stamped cmp.Or(op.Status, 204) over whatever was written.",
-
 	"GET /v1/event.js": "the tag is an ASSET, not an operation: its body is JavaScript and zip renders " +
 		"a typed Out as JSON, so there is no Out that can carry it. It also answers 304 with an empty " +
 		"body on a matching If-None-Match — WithStatus refuses a non-2xx and a nil Out is stamped " +
@@ -194,12 +187,6 @@ var proseless = map[string]bool{
 	"CaptureResult": true,
 	// The PostHog wire — now served on /v1/event, sniffed by decodeEvent.
 	"insightsBody": true, "insightsEvent": true,
-	// The health probe's report — the one body that is the same at 200 and 503 —
-	// including the event plane's own availability and the sink's irrecoverable-loss
-	// counters, which reach the document nested inside it through that same Register
-	// seam. Every one of these fields carries a doc comment in Go; reflection is what
-	// cannot see it.
-	"healthReport": true, "healthLenses": true, "healthLens": true, "healthPlane": true, "loss": true,
 }
 
 // TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
@@ -397,9 +384,11 @@ func TestArrayBodiedDoorsStillAnswer200(t *testing.T) {
 	}
 }
 
-// TestHealthStillCarriesItsReportAt503 is the measurement behind the /v1/analytics/health
-// refusal: the status and the body are ONE answer. A typed op can carry the body or
-// the status, never both, and this is the pair it would have to break.
+// TestHealthStillCarriesItsReportAt503 is the health conversion's parity proof:
+// the status and the body are ONE answer. The typed op declares WithStatus(200,
+// 503) and the report's own StatusCode picks between them, so the degraded answer
+// keeps carrying the report — and this test is what goes red if a change ever
+// drops it back to an error envelope.
 func TestHealthStillCarriesItsReportAt503(t *testing.T) {
 	app := mountApp(t)
 	code, body := do(t, app, http.MethodGet, "/v1/analytics/health", "", "")
