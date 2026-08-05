@@ -38,7 +38,7 @@ import (
 // drives the rule the way the door drives it: twenty nominally unrelated payers
 // behind one address, then a first ordinary payment from the twenty-first.
 //
-// Mutation proof: drop [plane.SignalPeer] from [topupFacts] (or the peer link from
+// Mutation proof: drop [plane.SignalPeer] from [paymentFacts] (or the peer link from
 // [plane.prior]) and this fails with action=allow.
 func TestFan_ThePeerAxisIsReachableFromTheCreditDoor(t *testing.T) {
 	probe.reset(true)
@@ -156,6 +156,93 @@ func TestObserve_ASettledPaymentTeachesTheModel(t *testing.T) {
 		t.Fatalf("action %q, want %q — five settled payments of $11,000 accrued $55,000 past a "+
 			"$50,000 examining bound and the sixth was allowed, which is the split-payment "+
 			"typology the accrual exists to see", out.Action, cloud.ActionReview)
+	}
+	if !strings.Contains(out.Cause, causeAccrued) {
+		t.Errorf("cause %q does not name the accrual", out.Cause)
+	}
+}
+
+// TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject — the accrual half of the
+// CROSS-DOOR proof, over the shape the settling process actually states.
+//
+// commerce has ONE card money move and the binary opens TWO addresses onto it: the
+// browser's top-up and the agent's typed payment (apps/commerce risk.go, payments.go).
+// Only one of them used to be screened, and screening the second one is worth nothing
+// unless the two ACCRUE TOGETHER — an attacker with a stolen card does not care which
+// URL takes it, so a per-door accrual halves every velocity bound just by alternating.
+//
+// This drives the plane the way the two doors drive it: six settlements naming ONE payer,
+// alternating between the two doors' gateway references, each far under [reviewNano] so
+// no point-in-time test can see any of them. What is remarkable is the sum.
+//
+// The commerce half — that both doors really do resolve one payer and state distinct
+// keys — is proven at the doors, in
+// [commerce.TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual].
+//
+// Mutation proof: namespace the observation by door (prefix the subject, or the tenant,
+// with which address it came from) and the final decide allows, because each half of the
+// burst is then a history of its own with nothing over the bound.
+func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
+	probe.reset(true)
+	mountApp(t)
+	p := mounted.State.plane
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	arm(t, p, k)
+
+	// $11,000 six times, alternating doors. The subject is ONE payer, because that is
+	// what both doors resolve through the one payer rule.
+	const each = "11000000000000"
+	const payer = "acme"
+	doors := []string{"sq_pay_browser_", "sq_pay_typed_"}
+	for i := 0; i < 6; i++ {
+		out, err := planeObserve(asPeer(orgA), &contract.RiskObserveIn{
+			Stage: cloud.StagePayment, Kind: contract.KindPayer, Subject: payer,
+			Settlement: doors[i%2] + itoa(i),
+			Signals:    []contract.Signal{{Name: contract.SignalNano, Value: each}},
+		})
+		if err != nil {
+			t.Fatalf("observe settlement %d: %v", i, err)
+		}
+		if out.Learned != 1 {
+			t.Fatalf("settlement %d learned %d, want 1 — a real payment deduplicated away", i, out.Learned)
+		}
+	}
+
+	// IDEMPOTENT ACROSS THE DOORS TOO. One payment reached through both addresses carries
+	// the gateway's SAME payment id (both doors return it out of one core), so the second
+	// arrival is an inert replay rather than a second count. Double-counting here would
+	// freeze a customer for paying once.
+	replay, err := planeObserve(asPeer(orgA), &contract.RiskObserveIn{
+		Stage: cloud.StagePayment, Kind: contract.KindPayer, Subject: payer,
+		Settlement: "sq_pay_typed_1",
+		Signals:    []contract.Signal{{Name: contract.SignalNano, Value: each}},
+	})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if replay.Learned != 0 {
+		t.Errorf("the same gateway payment arriving through the other door learned %d, want 0 — "+
+			"one payment is counted twice and the accrual describes our routing rather than "+
+			"the payer", replay.Learned)
+	}
+
+	// AND THE BURST IS VISIBLE WHOLE. Sixty-six thousand accrued across two addresses,
+	// past the examining bound, on the seventh ordinary-looking payment.
+	out, err := planeDecide(asPeer(orgA), &contract.RiskDecideIn{
+		Stage: cloud.StagePayment, Kind: contract.KindPayer, Subject: payer,
+		Signals: []contract.Signal{{Name: contract.SignalNano, Value: each}},
+	})
+	if err != nil {
+		t.Fatalf("planeDecide: %v", err)
+	}
+	if out.Refusal == "" {
+		t.Fatal("the model answered with an opinion — this test is meaningless unless it is warming")
+	}
+	if out.Action != cloud.ActionReview {
+		t.Fatalf("action %q, want %q — six settled payments of $11,000 split across the two credit "+
+			"doors accrued $66,000 past a $50,000 examining bound and the seventh was allowed, "+
+			"which is the same split-payment typology one door at a time", out.Action, cloud.ActionReview)
 	}
 	if !strings.Contains(out.Cause, causeAccrued) {
 		t.Errorf("cause %q does not name the accrual", out.Cause)
