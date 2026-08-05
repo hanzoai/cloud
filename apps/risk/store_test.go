@@ -48,6 +48,11 @@ type emitted struct {
 	Subject string
 	At      time.Time
 	Spend   int64
+	// Product is the emitting SURFACE on the row — event.fact's own `product` column.
+	// Empty is one of the organisation's own product events; [surface] is one of THIS
+	// APP's decisions, which the person rollup must not fold back into the model it
+	// decided with.
+	Product string
 }
 
 // warehouse is the recording store.
@@ -103,6 +108,14 @@ func (w *warehouse) fold(sql string, args []any) {
 	}
 	for _, e := range w.src[bare] {
 		if e.Plane != name || e.At.Before(from) || !e.At.Before(to) {
+			continue
+		}
+		// THE PRODUCT PREDICATE, honoured by READING IT OUT OF THE STATEMENT rather
+		// than by assuming which rollups carry it. A rollup that stopped excluding this
+		// app's own facts would stop being filtered here too — which is what makes the
+		// exclusion a measurement rather than a restatement of the same intent in a
+		// second place.
+		if e.Product != "" && strings.Contains(sql, notOurOwn) && e.Product == surface {
 			continue
 		}
 		bucket := e.At.UTC().Truncate(5 * time.Minute)
