@@ -56,6 +56,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
@@ -97,6 +98,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		s.Log.Error("model plane unavailable; every /v1/risk op will fail closed", "err", err)
 	} else {
 		s.State.plane = p
+	}
+	// THE LISTING IS RESOLVED AT MOUNT, so a misconfiguration is announced before a
+	// decision is taken rather than discovered by the first payment that needed it.
+	// It is otherwise resolved lazily, on whichever request first reaches the
+	// geography half — which is exactly when nobody is reading.
+	if gap := jurisdictions().Gap; gap != "" {
+		s.Log.Error("the stated jurisdiction listing cannot assess any country; the compiled "+
+			"default is in force and the freeze it arms is NOT the one you stated", "gap", gap)
 	}
 	mount(s, app)
 	mounted = s
@@ -233,6 +242,26 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	// A control that switches itself off must be visible from outside.
 	held, built, evicted, strained := s.State.plane.residents()
 	res["resident"], res["built"], res["evicted"], res["strained"] = held, built, evicted, strained
+	// THE LISTING, DATED. The geography half of the rule can only decide against a
+	// listing whose currency can be assessed, and a listing that has quietly gone
+	// stale — or one an operator stated that cannot decide at all — degrades the
+	// rule with nothing anywhere saying so. A date and an age are what let that be
+	// read from outside, which is the same argument `evicted` and `strained` above
+	// are here for.
+	//
+	// It is NOT a degradation. A stale listing still decides, the default is always
+	// dated, and a probe that failed on a listing's age would take the model plane
+	// down over a reference table. Reported, never fatal.
+	j := jurisdictions()
+	res["listed"] = j.AsOf.UTC().Format(time.RFC3339)
+	res["listed_days"] = int(j.Age(time.Now().UTC()).Hours() / 24)
+	res["listing"] = "default"
+	if j.Operator {
+		res["listing"] = "operator"
+	}
+	if j.Gap != "" {
+		res["listing_gap"] = j.Gap
+	}
 	return c.JSON(http.StatusOK, res)
 }
 
