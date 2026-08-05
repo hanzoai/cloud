@@ -105,6 +105,29 @@ func refusing(s screen, err error) screen {
 	return s
 }
 
+// asked is the (org, id) a door LOOKED THE RECEIPT UP UNDER — the two arguments every
+// other fixture in this file discards.
+//
+// Discarding them is what let a door read the right amount out of the wrong namespace
+// for a whole green suite: [stating] answers a settlement whatever it is asked, so a
+// test driving a caller whose receipt lives in one org and whose balance lives in
+// another still saw the credit land. What the read is KEYED ON is a property, and a
+// seam that cannot state it is a seam that cannot hold it.
+type asked struct {
+	org string
+	id  string
+}
+
+// capturing is [stating] that also RECORDS the lookup, so a test can assert the address
+// the production read would have used.
+func capturing(s screen, got settlement, seen *asked) screen {
+	s.receipt = func(_ context.Context, org, id string) (settlement, error) {
+		*seen = asked{org: org, id: id}
+		return got, nil
+	}
+	return s
+}
+
 // settling is the credit door's screen with the whole money path behind it: a
 // throwaway ledger published for the test, and a receipt read stating the $42 the
 // door's own body asks for. It is what every door fixture in this package resolves
@@ -372,6 +395,151 @@ func TestSettle_ASandboxChargeCreditsTheSandboxBooks(t *testing.T) {
 	}
 	if got := reportedBalance(t, mountReader(t)); got != 0 {
 		t.Errorf("/v1/billing/balance reports %d cents of sandbox money as live, want 0", got)
+	}
+}
+
+// adminOrg is the reserved platform org — the `owner` claim a SuperAdmin carries while
+// its X-Org-Id is whichever org it is acting in.
+const adminOrg = "admin"
+
+// TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn — TWO ORGS, and the caller
+// that separates them.
+//
+// A card top-up names two organisations. The RECEIPT is written by commerce under the
+// EFFECTIVE org — the org the door is acting in, which is what iammiddleware resolves
+// for the browser route and [payingOrg] for the typed op — and the BALANCE it funds is
+// principal.WalletOf's, which for a platform SuperAdmin is its OWN books, because
+// platform sudo is not a statement about who pays. For every other caller the two are
+// one string, which is exactly why one value could do both jobs through a green suite.
+//
+// For a SuperAdmin masquerading into a customer's org they are not. The receipt read was
+// keyed on the PAYER, so it looked in the admin's books for a row commerce had written in
+// the customer's, found nothing, and refused a charge that had already cleared — and
+// permanently: the retry replays the same receipt into the same absent namespace, while a
+// fresh idempotency key charges the card again.
+//
+// It asserts the ARGUMENTS of the receipt read, because the amount alone cannot see this:
+// [stating] answers a settlement whatever it is asked, so a door reading the right figure
+// out of the wrong namespace looks identical to a correct one. It also asserts the money,
+// because the address is the half that must NOT move.
+//
+// Mutation proof: read the receipt from p.ledger (the shipped defect) and the masquerade
+// row fails on the captured org — "admin", where the charge was never written — while
+// both other rows still pass. Deposit to p.org instead of p.ledger and the masquerade row
+// fails on the balance: the credit lands in the customer's books, which is a SuperAdmin
+// funding the org it is inspecting.
+func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		hdr  map[string]string
+		// charged is the namespace the money core WROTE the receipt in, and therefore the
+		// one the read must be keyed on.
+		charged string
+		// ledger is the org whose spendable balance the credit must land in.
+		ledger string
+	}{
+		{
+			"an ordinary member charges and is credited in the one org it has",
+			map[string]string{"X-Org-Id": gateOrg, "X-User-Id": gateUser},
+			gateOrg, gateOrg,
+		},
+		{
+			"a SuperAdmin at home is that same one org",
+			map[string]string{
+				"X-Org-Id": adminOrg, "X-User-Id": gateUser,
+				"X-User-Owner": adminOrg, "X-User-IsAdmin": "true",
+			},
+			adminOrg, adminOrg,
+		},
+		{
+			"a SuperAdmin masquerading charges where it is ACTING and is credited where it PAYS",
+			map[string]string{
+				"X-Org-Id": gateOrg, "X-User-Id": gateUser,
+				"X-User-Owner": adminOrg, "X-User-IsAdmin": "true",
+			},
+			gateOrg, adminOrg,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fin := funded(t)
+			var seen asked
+			app := creditDoorBody(t,
+				capturing(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}, &seen),
+				`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
+
+			if code, body := topupAs(t, app, tc.hdr); code != http.StatusOK {
+				t.Fatalf("the top-up answered %d %s, want 200", code, body)
+			}
+
+			// THE ADDRESS THE RECEIPT WAS READ AT.
+			if seen.org != tc.charged {
+				t.Errorf("the settled receipt was looked up in %q, want %q — the read is keyed on the "+
+					"wrong organisation, so in production commerce answers not-found for a row it "+
+					"wrote and the door 500s on a card that cleared", seen.org, tc.charged)
+			}
+			if seen.id != settledReceipt {
+				t.Errorf("the receipt read named %q, want the settlement's own receipt %q", seen.id, settledReceipt)
+			}
+
+			// AND THE ADDRESS THE MONEY LANDED AT, which is the other org and must not move.
+			subject := account.Payer(account.Credential{Owner: tc.ledger, Name: gateUser}).Subject()
+			paid, err := fin.Balance(context.Background(), tc.ledger, subject, "usd", false)
+			if err != nil {
+				t.Fatalf("read the payer's wallet: %v", err)
+			}
+			if paid.Cents() != gateCents {
+				t.Fatalf("the wallet %s/%s holds %d cents, want %d — the credit did not land at the "+
+					"address the spend gate reads", tc.ledger, subject, paid.Cents(), gateCents)
+			}
+			if tc.charged == tc.ledger {
+				return
+			}
+			// A SuperAdmin funds ITS OWN books, never the books of the org it is inspecting.
+			other := account.Payer(account.Credential{Owner: tc.charged, Name: gateUser}).Subject()
+			stray, err := fin.Balance(context.Background(), tc.charged, other, "usd", false)
+			if err != nil {
+				t.Fatalf("read the acted-in org's wallet: %v", err)
+			}
+			if stray.Cents() != 0 {
+				t.Errorf("the org being acted in holds %d cents, want 0 — a SuperAdmin's card just "+
+					"funded the customer it was inspecting", stray.Cents())
+			}
+		})
+	}
+}
+
+// TestSettle_ARefusedCreditStillTeachesTheModel — teaching is telemetry, and telemetry
+// is never gated on the money path.
+//
+// [screen.settle] can refuse a charge that CLEARED: a currency this ledger does not hold,
+// a receipt it could not read, no ledger in the process. The card was still charged in
+// every one of them — the settlement is a fact about the past — so a payment dropped from
+// the payer's velocity there is a real payment the screen will never see. A caller who
+// can provoke the refusal could then pay all day and accrue nothing, which is the bound
+// the screen exists to apply, switched off by the door's own error path.
+//
+// Mutation proof: return early on settle's error (the shipped ordering) and this reads
+// nothing on the channel.
+func TestSettle_ARefusedCreditStillTeachesTheModel(t *testing.T) {
+	funded(t)
+	// A charge that settled in yen: a real settlement this USD ledger must refuse.
+	app := creditDoorBody(t,
+		stating(riskGate(luxlog.New("settletest")), settlement{cents: 500000, currency: "jpy"}),
+		`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
+	// AFTER the fixture: creditDoorBody substitutes the same seam ([quiet]), and the
+	// watcher has to be the one in place when the door runs.
+	seen := watchTeaching(t)
+
+	if code, _ := topup(t, app); code != http.StatusInternalServerError {
+		t.Fatalf("a settled charge that credited nothing answered %d, want 500", code)
+	}
+
+	got := await(t, seen)
+	if got.in.Settlement != settledRef {
+		t.Errorf("the record keys on %q, want the settlement %q", got.in.Settlement, settledRef)
+	}
+	if got.org != gateOrg {
+		t.Errorf("the record was stated for %q, want the payer's org %q", got.org, gateOrg)
 	}
 }
 
