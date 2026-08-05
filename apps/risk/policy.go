@@ -60,9 +60,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luxfi/aml/pkg/anomaly"
+	"github.com/luxfi/aml/pkg/reference"
 	"github.com/zap-proto/zip"
 )
 
@@ -175,6 +177,100 @@ func (p *plane) regimeNow(t tenant) (int, error) {
 	defer r.mu.Unlock()
 	return r.pol, nil
 }
+
+// ── the determination's stated bounds ────────────────────────────────────────
+//
+// A rule over stated facts needs stated bounds, and they are policy in exactly
+// the sense the rest of this file is: numbers and listings an operator has to be
+// able to read, defend and change, rather than literals buried in the rule that
+// applies them. [determine] reads them and holds none of its own.
+//
+// THEY ARE THE DEPLOYMENT'S, NOT THE ORGANISATION'S, and the reason is the row
+// above. A version is FIXED WIDTH ([maxPolicyRowBytes]) — three numbers, a flag
+// and two bounded identifiers — and that is precisely what makes a version count
+// a byte bound. A per-organisation list of countries is the variable-length value
+// that bound forbids, so stating these per organisation is a second record with
+// its own budget and its own retention: a later cut, never a field smuggled onto
+// this one.
+
+// nanoPerUSD converts the wire's unit to a figure a person states thresholds in.
+// A nano is 10^-9 USD, which is the unit [riskEvent.Nano] carries and the one
+// [riskEvent.observation] divides by to reach the model's dimensionless ratio.
+const nanoPerUSD = 1_000_000_000
+
+// freezeNano is the value at or above which a top-up from a jurisdiction the
+// listing CALLS FOR ACTION on is frozen rather than merely examined.
+//
+// Ten thousand USD. It is the figure supervisors build their own reporting
+// obligations around, and it is far past what self-serve credit at a card door is
+// for — the door exists so a customer can buy inference, not move money.
+const freezeNano = 10_000 * nanoPerUSD
+
+// reviewNano is the value at or above which a top-up is examined WHATEVER the
+// jurisdiction, including one carrying no risk signal at all.
+//
+// Fifty thousand USD, and it is deliberately a review and never a freeze. Review
+// PROCEEDS ([cloud.RiskVerdict.Allowed]) — it summons a person and serves the
+// customer — so setting it where a large legitimate top-up lands costs a look
+// rather than a refusal. An amount on its own is also not a determination that
+// anything is wrong: it is a reason to look, which is exactly what review means.
+const reviewNano = 50_000 * nanoPerUSD
+
+// listedAsOf dates [defaultJurisdictions]. A listing with no date cannot have its
+// currency assessed, and [reference.Jurisdictions] refuses one that has none —
+// correctly, because "not listed" from an undated listing is not a fact.
+var listedAsOf = time.Date(2026, time.June, 27, 0, 0, 0, 0, time.UTC)
+
+// defaultJurisdictions is the higher-risk country listing in force when the
+// operator has stated none, and it is a RISK tier — never a sanctions
+// determination.
+//
+// THE DISTINCTION IS THE WHOLE POINT. A formal designation (OFAC, UN, EU, OFSI)
+// is a legal finding about a named party, it is made by the screening engine that
+// holds the designations, and nothing in this app makes one. What this is, is the
+// tier a jurisdiction sits in for the purpose of pricing RISK at a credit door —
+// which is a judgement an operator is entitled to make and must be able to state.
+// The two lists stay separate because the required response differs:
+//
+//	ACTION      countermeasures are called for. This tier may freeze.
+//	MONITORING  increased monitoring. This tier may examine, and no further.
+//
+// Collapsing them into one "risky" flag loses exactly the distinction the rule
+// needs in order to choose between the two, which is why [reference.Jurisdictions]
+// keeps them apart and why this does too.
+//
+// WHY A COMPILED DEFAULT EXISTS AT ALL, given that the listing it defaults to is
+// stated by an operator and changes several times a year: without one, an
+// unconfigured deployment answers "not listed" for every country on earth, and the
+// geography half of the rule is silently inert at the one door it was built for.
+// A control that switches itself off without saying so is worse than no control.
+// So the default is stated here, dated, and it LOSES to anything the operator
+// states — and because the rule ships in shadow, a stale entry cannot refuse
+// anybody until an organisation is deliberately armed.
+var defaultJurisdictions = reference.Jurisdictions{
+	AsOf: listedAsOf,
+	// Jurisdictions with no functioning anti-money-laundering supervision to
+	// assess a payer against, or subject to comprehensive restrictions.
+	Action: []string{"AF", "CU", "IR", "KP", "MM", "SY"},
+	// Jurisdictions under increased monitoring.
+	Monitoring: []string{"HT", "LY", "SS", "VE", "YE"},
+}
+
+// jurisdictions is the listing the rule evaluates against: the OPERATOR's if they
+// stated one, and [defaultJurisdictions] otherwise.
+//
+// The operator's wins whole rather than merging, because a merged listing is one
+// nobody stated and nobody can reproduce. It is resolved once per process —
+// membership is not something a request may move — and [reference.Jurisdictions]
+// itself refuses to answer from a listing that is empty or undated, so a
+// mis-stated one degrades to "cannot assess" and says so, rather than to "nowhere
+// is risky".
+var jurisdictions = sync.OnceValue(func() reference.Jurisdictions {
+	if j := reference.JurisdictionsFromEnv(); len(j.Action) > 0 || len(j.Monitoring) > 0 {
+		return j
+	}
+	return defaultJurisdictions
+})
 
 // policyWindow is the rolling window the rate bound is measured over.
 const policyWindow = 24 * time.Hour

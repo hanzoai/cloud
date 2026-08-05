@@ -192,3 +192,85 @@ func TestTrustedProxy(t *testing.T) {
 		t.Fatal("a non-address is not a proxy")
 	}
 }
+
+// The country rule is the SAME rule as the address one, applied to a header, and
+// the attack it stops is the mirror image: a caller able to state its own
+// jurisdiction could state one the risk plane does not act on, which on a rule
+// that escalates on geography is the same as switching the rule off.
+func TestClientCountry(t *testing.T) {
+	cases := []struct {
+		name         string
+		peer, stated string
+		want         string
+	}{{
+		name: "our own edge stated it, so it is evidence",
+		peer: "10.0.0.5", stated: "AF", want: "AF",
+	}, {
+		name: "a DIRECT caller's header is the caller's own writing",
+		// The whole rule. 203.0.113.9 is not one of ours, so nothing it says about
+		// where it is counts for anything.
+		peer: "203.0.113.9", stated: "US", want: "",
+	}, {
+		name: "a direct caller cannot state a listed jurisdiction either",
+		// The inverse direction: the header is ignored whatever it says, so a
+		// caller cannot forge somebody else into a freeze.
+		peer: "203.0.113.9", stated: "AF", want: "",
+	}, {
+		name: "case and padding are normalised",
+		peer: "10.0.0.5", stated: " af ", want: "AF",
+	}, {
+		name: "a non-country code is refused by shape",
+		// T1 is what an edge states for Tor. It is not a jurisdiction.
+		peer: "10.0.0.5", stated: "T1", want: "",
+	}, {
+		name: "silence stays silence",
+		peer: "10.0.0.5", stated: "", want: "",
+	}, {
+		name: "a country name is not a country code",
+		peer: "10.0.0.5", stated: "Afghanistan", want: "",
+	}, {
+		name: "an unparseable peer trusts nothing",
+		peer: "not-an-address", stated: "AF", want: "",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := clientCountry(tc.peer, tc.stated, ourProxies); got != tc.want {
+				t.Errorf("clientCountry(%q, %q) = %q, want %q", tc.peer, tc.stated, got, tc.want)
+			}
+		})
+	}
+}
+
+// And over a real request, so the header NAME and the peer plumbing are exercised
+// rather than only the rule beneath them.
+func TestClientCountry_OverARealRequest(t *testing.T) {
+	var got string
+	app := zip.New(zip.Config{})
+	app.Get("/probe", func(c *zip.Ctx) error {
+		got = ClientCountry(c)
+		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req.Header.Set(CountryHeader, "af")
+	if _, err := app.Test(req); err != nil {
+		t.Fatal(err)
+	}
+	// An in-memory test connection reports the unspecified address, which the
+	// default set trusts as one of ours — so the header IS read here, which is
+	// what this exercises: the header NAME and the normalisation, end to end.
+	// The direct-caller refusal is the table above.
+	if got != "AF" {
+		t.Fatalf("ClientCountry over a request = %q, want %q", got, "AF")
+	}
+
+	// No header is no country, which is a different fact from a country nobody
+	// listed and must stay distinguishable from one.
+	req = httptest.NewRequest(http.MethodGet, "/probe", nil)
+	if _, err := app.Test(req); err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("a request stating no jurisdiction produced %q", got)
+	}
+}
