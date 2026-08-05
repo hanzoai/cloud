@@ -681,7 +681,7 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	if err := mountPlaneIngest(deps); err != nil {
 		return err
 	}
-	if err := mountProbes(deps); err != nil { // fleet health probes -> hanzo_service_up
+	if err := mountProbes(deps, a.Metrics()); err != nil { // fleet health probes -> hanzo_service_up
 		return err
 	}
 	// The gauge leaves this process by being PUSHED to the telemetry store
