@@ -522,11 +522,22 @@ func (p *plane) rebuild(t tenant) (*rings, time.Time, int, error) {
 			return vel, time.Time{}, 0, fmt.Errorf("risk: replay observations: %w", err)
 		}
 		// THROUGH THE ONE DOOR, even on the way back in. A row written before a
-		// bound existed, or by a build that did not have one, is refused here rather
-		// than silently rebuilding aggregates the ceiling does not cover.
+		// bound existed, or by a build that did not have one, does not enter the
+		// aggregates: the ceilings this plane publishes are counts of what [observe]
+		// admits, so a row it would refuse is a row the ceiling does not cover.
+		//
+		// THE ROW IS SKIPPED AND SAID; THE REPLAY IS NOT ABANDONED. Refusing the whole
+		// rebuild would make one unplaceable row a tenant-wide outage that repeats on
+		// every residency until the row ages out of retention — every velocity feature
+		// blind for up to thirty days, for a single bad value written by an older
+		// build. That is a denial of service reachable through the learn door, and the
+		// door is the tenant's own. Losing the row degrades the one subject on it,
+		// which is the blast radius every other bound in this file is held to.
 		o, err := observe(id, actor{Kind: kind, Subject: subject, Peer: peer, Device: device}, usd, time.Unix(at, 0).UTC())
 		if err != nil {
-			return vel, time.Time{}, 0, fmt.Errorf("risk: replay observations: %w", err)
+			p.log.Warn("a recorded observation cannot enter the aggregates; that subject rebuilds without it",
+				"tenant", string(t), "event", id, "err", err)
+			continue
 		}
 		held = append(held, o)
 	}
