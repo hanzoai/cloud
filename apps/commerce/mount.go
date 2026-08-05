@@ -520,6 +520,31 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// reads its subject from the BODY (customerId), and the pin overwrites the
 	// subject keys there while preserving card/type/sourceId — so a caller can
 	// only ever attach a card to its OWN account, whatever the body claims.
+	// THE CUSTOMER ADDRESS for saved cards. cloud's billing app used to forward
+	// these to commerce over HTTP, and that proxy is unconfigured here — so a
+	// signed-in customer got 401 listing their own cards and the checkout's
+	// prefill failed on every load. Served in-process instead: no hop to
+	// misconfigure, and the same pinned-subject gate as its portal twin, which
+	// is what keeps a caller inside its own account whatever it sends.
+	app.Get("/v1/billing/methods",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.ListPaymentMethods,
+	)
+	app.Post("/v1/billing/methods",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.CreatePaymentMethod,
+	)
+	app.Delete("/v1/billing/methods/:id",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.DetachPaymentMethod,
+	)
+
 	app.Post("/v1/billing/portal/methods",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
