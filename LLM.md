@@ -1897,11 +1897,11 @@ finding is not in the count:
   large-int precision. Wire preservation wins; the fix is the one `reflect.Interface`
   case in zip's `schemaOf` (an unconstrained element is `{}`, not an object).
 - Three `cloud.Request` entries were added and each is a request FACT, not a
-  tenant: graph FORWARDS the caller's `Authorization` to the indexer/graph when no
+  tenant: explorer FORWARDS the caller's `Authorization` to the indexer/graph when no
   service token is configured, prefs' isolation key is the qualified
   `<owner>/<name>` rather than the org, and admission's `?host=` default is the
   request's own Host. All three fail closed off the HTTP path. Two of them had NO
-  test at all before — `apps/graph`'s forwarding and `apps/admission`'s Host
+  test at all before — `apps/explorer`'s forwarding and `apps/admission`'s Host
   fallback both would have degraded silently (a 200 with an anonymous upstream
   read; a 200 with `known:false` for every guard that omits the query).
 
