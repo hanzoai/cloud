@@ -82,7 +82,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		source:  src,
 		cost:    noCost{}, // revenue-only until the cloud_usage cost projection is wired (see costSource)
 		ai:      deps.AI,
-		model:   strings.TrimSpace(deps.AIDefaultModel),
+		model:   cloud.DefaultModel,
 		kms:     deps.KMS,
 		log:     b.Log,
 	}
