@@ -23,6 +23,63 @@ import (
 // org-scoped op answers 403 for a reason production could never produce.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
+// doer drives the mounted subsystem over HTTP. Both tests here build one.
+type doer func(method, path, body string, hdr map[string]string) (*http.Response, []byte)
+
+// slashed reports whether an id is provider-qualified ("anthropic/claude-…"),
+// which is the shape the greedy wildcard route exists for.
+func slashed(id string) bool { return strings.Contains(id, "/") }
+
+// modelFrom returns a model id the MOUNTED catalog actually serves, chosen by
+// SHAPE rather than written down.
+//
+// A literal catalog id is a claim about the snapshot, and snapshots retire
+// models: zen4 was dropped from between zen3 and zen5, and every push after that
+// bump went red on the lines that named it — a 404 far from its cause, because
+// "model not found" and "model hidden from you" reach the wire identically. What
+// these tests are actually about is the SHAPE (a provider-qualified id proves the
+// greedy wildcard, a single-segment one proves the ordinary route), so the shape
+// is the argument and which id has it is the catalog's business.
+//
+// The read is the PUBLIC view on purpose: an id in it is one a normal org sees at
+// baseline, which is what makes "disabled → 404 for a customer" and "beta → only
+// acme sees it" mean anything. An id only an admin could see would satisfy both
+// vacuously.
+func modelFrom(t *testing.T, do doer, want func(id string) bool) string {
+	t.Helper()
+	_, body := do("GET", "/v1/pricing/models", "", nil)
+	var wrap struct {
+		Models []Model `json:"models"`
+	}
+	if err := json.Unmarshal(body, &wrap); err != nil {
+		t.Fatalf("decode /v1/pricing/models: %v", err)
+	}
+	for _, m := range wrap.Models {
+		if id := modelID(m); id != "" && want(id) {
+			return id
+		}
+	}
+	t.Fatal("the mounted catalog serves no public model id of the shape this test needs")
+	return ""
+}
+
+// TestCatalog_ServesBothRouteShapes pins the precondition every route-shape test
+// below rests on: the mounted catalog publicly serves BOTH a provider-qualified
+// id (which the greedy wildcard exists for) and a single-segment one (which the
+// ordinary route serves). Those tests derive their ids by shape rather than
+// naming one, so a snapshot that stopped carrying a shape would strand them in a
+// 404 far from the cause — which is exactly what retiring zen4 did. This says it
+// in one line, against the catalog itself.
+func TestCatalog_ServesBothRouteShapes(t *testing.T) {
+	do := mountEnablement(t)
+	if id := modelFrom(t, do, slashed); !slashed(id) {
+		t.Errorf("modelFrom(slashed) = %q, which is not provider-qualified", id)
+	}
+	if id := modelFrom(t, do, func(id string) bool { return !slashed(id) }); slashed(id) {
+		t.Errorf("modelFrom(single-segment) = %q, which is provider-qualified", id)
+	}
+}
+
 // TestAdminCatalog_HTTP drives the real subsystem over HTTP: it Mounts
 // pricing on a zip app and exercises the admin write surface + the gated
 // read path end-to-end. This verifies the load-bearing pieces the pure-gate
@@ -58,10 +115,16 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 		return resp, b
 	}
 
-	const slashID = "anthropic/claude-opus-4.6"
 	admin := map[string]string{"X-User-IsAdmin": "true"}
 	acme := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}
 	other := map[string]string{"X-Org-Id": "other", "X-User-Id": "u_other"}
+
+	// Both ids are READ from the catalog this test just mounted, before anything
+	// below mutates it — never written as literals. See modelFrom: the sections
+	// prove ROUTE SHAPES (greedy wildcard vs single segment, the visibility gate,
+	// the over-deep 400) against whatever the catalog actually carries.
+	slashID := modelFrom(t, do, slashed)
+	single := modelFrom(t, do, func(id string) bool { return id != slashID && !slashed(id) })
 
 	// --- gating of the admin surface itself ---------------------------------
 	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+slashID, `{"enabled":false}`, nil); resp.StatusCode != http.StatusForbidden {
@@ -117,30 +180,6 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 	}
 	if _, rAdmin := do("GET", "/v1/pricing", "", admin); !rootContainsModel(rAdmin, slashID) {
 		t.Errorf("FIX#2: admin must see the disabled model in the root blob")
-	}
-
-	// The single-segment id for the sections below is READ from the catalog
-	// this test just mounted, never written as a literal: a literal is a claim
-	// about the snapshot, and the snapshot retires models — these sections
-	// hardcoded zen4/zen5 and broke the day the catalog dropped the retired
-	// generation. Any single-segment id proves the route shapes; the slashed-id
-	// case is covered above.
-	_, mlb := do("GET", "/v1/pricing/models", "", admin)
-	var mlc struct {
-		Models []Model `json:"models"`
-	}
-	if err := json.Unmarshal(mlb, &mlc); err != nil {
-		t.Fatalf("decode /v1/pricing/models: %v", err)
-	}
-	single := ""
-	for _, m := range mlc.Models {
-		if id := modelID(m); id != "" && id != slashID && !strings.Contains(id, "/") {
-			single = id
-			break
-		}
-	}
-	if single == "" {
-		t.Fatal("catalog carries no single-segment model id to exercise the single-model gate")
 	}
 
 	// --- FIX #5: oversized / over-deep overrides are rejected at the boundary
