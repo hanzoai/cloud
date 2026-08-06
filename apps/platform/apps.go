@@ -187,6 +187,16 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if build && strings.TrimSpace(req.Repo) == "" {
 		return zip.ErrBadRequest("repo is required to build")
 	}
+	// Building AND committing to main in one call can never succeed, so it is
+	// refused BEFORE a privileged build is spent on it: a commit proves the image
+	// pullable, and the image this call would build does not exist until the Job
+	// finishes. The two-step is the real flow and the error names it — build here,
+	// then commit that tag once the build is green.
+	if build && mode == modeCommit {
+		return zip.ErrBadRequest(
+			"mode=commit proves the image is pullable, and a build launched by this same call has not produced one yet — " +
+				"deploy first (the default branch mode returns the build's tag), then commit that tag once the build is green")
+	}
 
 	port := req.Port
 	if port == 0 {
