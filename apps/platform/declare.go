@@ -126,6 +126,10 @@ type Declaration struct {
 	Digest     string   `json:"digest,omitempty"`     // image.digest — wins over tag
 	Hosts      []string `json:"hosts"`                // ingress.hosts, both shapes flattened
 	Replicas   int      `json:"replicas,omitempty"`
+	// Env is the declared container environment, as the chart's list of
+	// {name,value}. It is read back so a re-declare of an identical body is a
+	// no-op rather than a refusal — idempotency is what makes a retry safe.
+	Env []declareEnv `json:"env,omitempty"`
 	// Automated is cd.automated: false means the Application reports drift and
 	// NOTHING moves. It is off by default for a new file on purpose.
 	Automated bool `json:"automated"`
@@ -156,8 +160,8 @@ type declareSpec struct {
 // {name,value}, never a map. The schema sets additionalProperties:false, so a
 // third key fails the render rather than being ignored.
 type declareEnv struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name  string `json:"name" yaml:"name"`
+	Value string `json:"value" yaml:"value"`
 }
 
 // project mirrors the ApplicationSet's own derivation. Stated here so the record
@@ -292,7 +296,8 @@ type valuesDoc struct {
 	CD struct {
 		Automated bool `yaml:"automated"`
 	} `yaml:"cd"`
-	Replicas int `yaml:"replicas"`
+	Replicas int          `yaml:"replicas"`
+	Env      []declareEnv `yaml:"env"`
 	Image    struct {
 		Repository string `yaml:"repository"`
 		Tag        string `yaml:"tag"`
@@ -335,6 +340,7 @@ func readDeclaration(root, namespace, name string) (Declaration, error) {
 		Tag:         v.Image.Tag,
 		Digest:      v.Image.Digest,
 		Replicas:    v.Replicas,
+		Env:         v.Env,
 		Automated:   v.CD.Automated,
 		Hosts:       []string{},
 	}
@@ -560,6 +566,22 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 	}
 
 	err = universeClone(ctx, env, func(dir string) error {
+		// A branch write BASES ON ITS OWN BRANCH when that ref already exists.
+		//
+		// Without this a retry of the same deploy — which any client does — is a
+		// second commit over main with a different timestamp, so a different sha,
+		// so a non-fast-forward push and a git error the caller cannot act on.
+		// Basing on the branch makes the push a fast-forward and, when the
+		// declaration is already exactly this, makes the whole call a clean no-op.
+		// It is a fetch that is ALLOWED to fail: the first declaration of an app
+		// has no branch yet, and that is not an error.
+		if mode == modeBranch {
+			if _, err := runGit(ctx, dir, env, "fetch", "--depth", "1", "origin", target); err == nil {
+				if _, err := runGit(ctx, dir, env, "reset", "--hard", "FETCH_HEAD"); err != nil {
+					return fmt.Errorf("re-read %s: %w", target, err)
+				}
+			}
+		}
 		for attempt := 1; attempt <= pinAttempts; attempt++ {
 			if attempt > 1 {
 				if _, err := runGit(ctx, dir, env, "fetch", "--depth", "1", "origin", universeBranch); err != nil {
@@ -618,7 +640,10 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 			if !changed {
 				// Already exactly this. There is nothing to commit and nothing to
 				// push; the declaration is already what the caller asked for.
-				res.Ref, res.Live = universeBranch, true
+				res.Ref, res.Live = target, mode == modeCommit
+				if mode == modeBranch {
+					res.Review = reviewURL(target)
+				}
 				return nil
 			}
 
@@ -686,11 +711,31 @@ func checkDeclared(root string, spec declareSpec) error {
 		return fmt.Errorf("%s already declares hosts %v and this request asks for %v — refusing to rewrite a declaration; edit %s to change its hosts",
 			d.Path, d.Hosts, spec.Hosts, d.Path)
 	}
-	if len(spec.Env) > 0 {
-		return fmt.Errorf("%s already exists and env is set on it there — refusing to rewrite a declaration; edit %s to change its environment",
+	if len(spec.Env) > 0 && !sameEnv(d.Env, spec.Env) {
+		return fmt.Errorf("%s already declares a different environment — refusing to rewrite a declaration; edit %s to change its environment",
 			d.Path, d.Path)
 	}
 	return nil
+}
+
+// sameEnv compares two environments as SETS of name=value. Order in the file is
+// a human's choice and carries no meaning, so a re-declare that lists the same
+// pairs differently is the same declaration.
+func sameEnv(a, b []declareEnv) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	have := make(map[string]string, len(a))
+	for _, e := range a {
+		have[e.Name] = e.Value
+	}
+	for _, e := range b {
+		v, ok := have[e.Name]
+		if !ok || v != e.Value {
+			return false
+		}
+	}
+	return true
 }
 
 func sameHosts(a, b []string) bool {
