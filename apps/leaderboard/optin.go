@@ -25,21 +25,43 @@ import (
 // key, only display text, but bounding it keeps the board tidy and abuse-resistant).
 var handleRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._'-]{0,39}$`)
 
+// userOptinView is the caller's own public-listing state.
 type userOptinView struct {
-	Listed bool   `json:"listed"`
+	// Listed is true when the caller's board row is published under Handle to other
+	// viewers. False — the default for anyone who never opted in — anonymizes the row;
+	// the metric still counts, only the name is withheld.
+	Listed bool `json:"listed"`
+	// Handle is the display name on the caller's listed row. Empty when they never
+	// chose one; opting in without a handle sets it to their username, so a listed row
+	// is never blank.
 	Handle string `json:"handle"`
-	CanSet bool   `json:"canSet"` // false when the caller's identity can't be resolved
+	// CanSet is false when the caller's ledger identity cannot be resolved (no user
+	// name on the principal). Writing the preference would fail, so hide the control.
+	CanSet bool `json:"canSet"`
 }
 
+// orgOptinView is the org's public-listing state on the cross-org board.
 type orgOptinView struct {
-	Listed    bool   `json:"listed"`
-	Display   string `json:"display"`
-	CanManage bool   `json:"canManage"` // may the caller edit the org opt-in
+	// Listed is true when the org has opted onto the cross-org global board. False —
+	// the default — keeps the org off it entirely; the org's own members still see
+	// their own board. Listing consents to publishing usage VOLUME, never spend.
+	Listed bool `json:"listed"`
+	// Display is the name shown for the org on that board. Empty when none was chosen;
+	// opting in without one defaults it to the org id.
+	Display string `json:"display"`
+	// CanManage is true only for an admin of this org (or a platform SuperAdmin) — the
+	// callers whose write of the org preference will be accepted.
+	CanManage bool `json:"canManage"`
 }
 
+// optinView is both listing preferences the caller can see at once.
 type optinView struct {
+	// User is the caller's OWN listing preference, and whether they may change it.
 	User userOptinView `json:"user"`
-	Org  orgOptinView  `json:"org"`
+	// Org is the caller's org's listing preference on the cross-org board, and whether
+	// this caller is allowed to change it. It is read for every caller — a member sees
+	// where their org stands even though only an admin may edit it.
+	Org orgOptinView `json:"org"`
 }
 
 // GetOptin returns the caller's own public-listing preference and their org's,
