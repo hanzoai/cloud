@@ -56,6 +56,12 @@ const execdir = "/mnt/data"
 // how a sidecar someone adds later silently starts receiving the commands.
 const container = "sandbox"
 
+// serviceAccount is the identity a sandbox pod runs as. A constant and not an
+// env var: which account exists in the sandbox namespace is decided by the same
+// manifest that creates the namespace, so a second knob here could only ever
+// disagree with it. It is declared in infra/k8s/sandboxes/registry.yaml.
+const serviceAccount = "sandbox"
+
 // Labels a sandbox's objects carry, so an operator can find a tenant's sandbox
 // with kubectl and without reading a database.
 const (
@@ -276,6 +282,17 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		// that code. This is also why nothing else needs to strip credentials on
 		// the way in — there are none to strip.
 		"automountServiceAccountToken": false,
+		// The account is NAMED, and naming it is the fix for a real outage rather
+		// than tidiness. Unnamed means `default`, and DOKS's registry integration
+		// re-attaches its own DigitalOcean pull secrets to every namespace's
+		// `default` account whenever it reconciles — so a sandbox inherited a
+		// credential for a registry that is not ours and died asking
+		// registry.hanzo.ai for its image ANONYMOUSLY, with a 401 that reads like a
+		// bad password and was in fact no password at all. `sandbox` is ours, DOKS
+		// does not manage it, and it carries exactly one thing: the pull secret.
+		// See infra/k8s/sandboxes/registry.yaml. It grants nothing — it is bound to
+		// no Role, and the line above still refuses it a token.
+		"serviceAccountName": serviceAccount,
 		// No service environment variables either. Kubernetes injects the address
 		// of every Service in the namespace as env vars by default, which is a
 		// free map of the neighbourhood for anything running inside.
