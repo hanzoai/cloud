@@ -187,7 +187,7 @@ func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency stri
 // ONCE. An empty Ref takes a fresh id, so grants stay additive (they stack).
 //
 // A REPLAY IS THE SAME MONEY TO THE SAME WALLET, and a ref hit that is not that is
-// [errRefTaken] rather than a credit or a borrowed entry id — the idempotency key carries
+// [ErrRefTaken] rather than a credit or a borrowed entry id — the idempotency key carries
 // neither subject nor amount, so being the same key is not being the same payment.
 //
 // AND A DEPOSIT THAT FAILS ON MONEY ALREADY IN THE BOOKS ANSWERS WITH IT. The
@@ -239,7 +239,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 		return tx.Insert(e, postings)
 	}); err != nil {
 		// A REF THAT IS SOMEBODY ELSE'S IS NOT A FAILURE A RE-READ CAN CLEAR.
-		if errors.Is(err, errRefTaken) {
+		if errors.Is(err, ErrRefTaken) {
 			return "", err
 		}
 		posted, taken := creditedUnder(ctx, store, in)
@@ -258,7 +258,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	return entryID, nil
 }
 
-// errRefTaken is what a deposit gets when its Ref is ALREADY posted for a different
+// ErrRefTaken is what a deposit gets when its Ref is ALREADY posted for a different
 // (subject, amount): the ref names a payment that is not this one.
 //
 // It is an error and not an entry, and that is the whole finding. The idempotency key is
@@ -273,12 +273,19 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 // A conflict cannot be resolved here. Crediting anyway would break the exactly-once the
 // ref exists to give, and answering with the other payment's entry is the swallow itself.
 // So it is refused, loudly, and the caller picks a ref that is its own.
-var errRefTaken = errors.New("already used for a different (subject,amount)")
+//
+// EXPORTED for the reason [ErrRefReused] is, and it is the deposit twin of exactly that:
+// a conflict is the ONE deposit failure no retry can clear, so a caller that renders it
+// as a transient billing fault sends a customer round a loop that cannot end. The credit
+// door tells the two apart to say whether its refusal is terminal (commerce settle.go),
+// and the backfill reads its own fixed ref back through it (migrate.go). One error, one
+// meaning, both sides of the money plane.
+var ErrRefTaken = errors.New("already used for a different (subject,amount)")
 
 // depositByRef is the ONE reading of what a deposit's Ref already holds: the original
 // entry id when the SAME (subject, amount) is posted under it — a genuine replay, which
 // answers with the first credit and posts nothing — the empty string when the ref is free,
-// and [errRefTaken] when the ref is posted for a different payment.
+// and [ErrRefTaken] when the ref is posted for a different payment.
 //
 // Both callers ask the same question and must not answer it two ways: the in-transaction
 // branch asks it against the insert's own tx (so two concurrent replays cannot both post),
@@ -295,7 +302,7 @@ func depositByRef(tx ledger.Tx, in types.DepositInput) (string, error) {
 	// THE WHOLE POSTING, not the key. A replay is the same money to the same wallet; a ref
 	// hit that differs in either is another payment, however identical the key.
 	if credited(e) != walletAcct(in.Subject) || e.Amount.Cmp(in.Amount) != 0 {
-		return "", fmt.Errorf("finance: deposit ref %q %w", in.Ref, errRefTaken)
+		return "", fmt.Errorf("finance: deposit ref %q %w", in.Ref, ErrRefTaken)
 	}
 	return e.ID, nil
 }
@@ -318,7 +325,7 @@ const creditReadBudget = 5 * time.Second
 
 // creditedUnder is [depositByRef] asked again, on a transaction of its own, after the
 // deposit's own transaction failed. It answers the entry THIS deposit is already posted
-// under, [errRefTaken] when the ref turns out to be a different payment's, and ("", nil)
+// under, [ErrRefTaken] when the ref turns out to be a different payment's, and ("", nil)
 // when the ref is free or the question could not be asked at all.
 //
 // A read failure is simply "no" rather than an error of its own: a deposit that cannot
@@ -343,7 +350,7 @@ func creditedUnder(ctx context.Context, store *sqlstore.Store, in types.DepositI
 		id = posted
 		return ferr
 	})
-	if errors.Is(err, errRefTaken) {
+	if errors.Is(err, ErrRefTaken) {
 		return "", err
 	}
 	if err != nil {
