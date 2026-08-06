@@ -146,7 +146,7 @@ func init() {
 }
 
 // apply is the UNAUTHENTICATED public application endpoint. It validates, drops
-// honeypot hits, dedups on (email, company), writes the Application (+ a
+// honeypot hits, dedups on (email, company), writes the ProgramApplication (+ a
 // best-effort CRM Company/Contact for sales visibility), and kicks off the AI
 // screen. It NEVER calls tenant(): the org is the fixed program org.
 func apply(s *cloud.Service[state], c *zip.Ctx) error {
@@ -203,7 +203,7 @@ func apply(s *cloud.Service[state], c *zip.Ctx) error {
 	if gerr != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
 	}
-	app := Application{
+	app := ProgramApplication{
 		ID: id, Org: org, Company: company, Website: clip(req.Website),
 		ContactName: name, Email: email, Role: clip(req.Role),
 		Stage: StageApplied, Tier1: tier1, Metadata: meta,
@@ -224,9 +224,9 @@ func apply(s *cloud.Service[state], c *zip.Ctx) error {
 
 // projectToCRM creates a thin CRM Company + Contact linked to the application, so
 // the startup also appears in the org's standard CRM. Best-effort: any failure
-// is non-fatal (the Application remains the source of truth) and returns empty
+// is non-fatal (the ProgramApplication remains the source of truth) and returns empty
 // ids. Reuses the same store + referential-integrity rules as the CRM handlers.
-func projectToCRM(s *cloud.Service[state], ctx context.Context, org string, app Application, req applyRequest) (companyID, contactID string) {
+func projectToCRM(s *cloud.Service[state], ctx context.Context, org string, app ProgramApplication, req applyRequest) (companyID, contactID string) {
 	now := time.Now().Unix()
 	cid, err := genID("comp")
 	if err != nil {
@@ -300,7 +300,7 @@ type applicationPage struct {
 // applicationList is a page of the org's Startup Program applications.
 type applicationList struct {
 	// Data is the page of applications, newest first.
-	Data []Application `json:"data"`
+	Data []ProgramApplication `json:"data"`
 }
 
 // ListApplications returns the org's Startup Program applications, newest first.
@@ -326,7 +326,7 @@ func (o ops) listApplications(ctx context.Context, in *applicationPage) (*applic
 // An id belonging to another org reads as not found.
 //
 // Example: {"id": "appl_1"}
-func (o ops) getApplication(ctx context.Context, in *ref) (*Application, error) {
+func (o ops) getApplication(ctx context.Context, in *ref) (*ProgramApplication, error) {
 	org, err := tenant(ctx)
 	if err != nil {
 		return nil, err
@@ -361,7 +361,7 @@ type patchApplicationIn struct {
 // no stage change is still recorded.
 //
 // Example: {"id": "appl_1", "stage": "rejected", "reason": "not a fit this round"}
-func (o ops) patchApplication(ctx context.Context, in *patchApplicationIn) (*Application, error) {
+func (o ops) patchApplication(ctx context.Context, in *patchApplicationIn) (*ProgramApplication, error) {
 	org, err := tenant(ctx)
 	if err != nil {
 		return nil, err
@@ -502,7 +502,7 @@ func runScreen(s *cloud.Service[state], ctx context.Context, org, id string) {
 	saveScreen(s, ctx, app)
 }
 
-func saveScreen(s *cloud.Service[state], ctx context.Context, app Application) {
+func saveScreen(s *cloud.Service[state], ctx context.Context, app ProgramApplication) {
 	app.UpdatedAt = time.Now().Unix()
 	if _, err := s.State.store.UpdateApplication(ctx, app); err != nil {
 		s.Log.Warn("screen: save failed", "id", app.ID, "err", err)
@@ -510,7 +510,7 @@ func saveScreen(s *cloud.Service[state], ctx context.Context, app Application) {
 }
 
 // screenPrompt renders the strict-JSON scoring instruction for one application.
-func screenPrompt(app Application) string {
+func screenPrompt(app ProgramApplication) string {
 	payload, _ := json.MarshalIndent(app.Metadata, "", "  ")
 	var b strings.Builder
 	b.WriteString("You are an analyst screening applications to the Hanzo Startup Program, ")
