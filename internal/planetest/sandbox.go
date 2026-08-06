@@ -57,6 +57,11 @@ type Sandboxes struct {
 	// Run is the program every leased sandbox executes. Assign it before the call
 	// under test; it is read under the peer's own lock.
 	Run Program
+
+	// OnLease observes the ORG each lease was taken for — the caller's plane
+	// identity, which is the only thing a cross-tenant test can assert on. A
+	// sandbox id says nothing about whose it is; this says exactly that.
+	OnLease func(org string)
 }
 
 // ServeSandboxes binds the sandboxes peer's socket and returns it. It shares the
@@ -146,6 +151,9 @@ func (s *Sandboxes) lease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.OnLease != nil {
+		s.OnLease(zip.CallerOf(ctx).Org)
+	}
 	id := strings.TrimSpace(in.ID)
 	if id == "" || s.pods[id] == nil {
 		id = "m_" + strings.Repeat("0", 4) + string(rune('a'+len(s.pods)))
@@ -242,10 +250,19 @@ func (s *Sandboxes) run(ctx context.Context, in *plane.RunIn) (*plane.Ran, error
 		return &plane.Ran{Stdout: strings.Join(names, "\n")}, nil
 
 	case strings.Contains(line, "date -u -r"):
+		// The RECURSIVE listing: stamp then path, one pair per file, at any depth.
+		// The fake keeps paths flat-keyed with separators in them, which is exactly
+		// what `find . -type f` reports, so a nested artifact appears here the same
+		// way it appears in the artifact sweep above — the two used to disagree.
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		var rows []string
 		for _, n := range sorted(p.Files) {
+			// `-maxdepth 1` means top level only, which is what the fake must honour
+			// for a test of nested artifacts to be able to fail.
+			if strings.Contains(line, "-maxdepth 1") && strings.Contains(n, "/") {
+				continue
+			}
 			rows = append(rows, p.mtime[n].UTC().Format("2006-01-02T15:04:05Z"), "./"+n)
 		}
 		return &plane.Ran{Stdout: strings.Join(rows, "\n")}, nil

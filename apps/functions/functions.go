@@ -22,7 +22,7 @@
 //	GET    /v1/functions/:name/logs         last invocation output   -> {logs:"..."}
 //	POST   /v1/functions/:name/invoke       run the function {input} -> Invocation
 //
-// Invoke delegates to the sandboxed code executor (CODE_EXEC_UPSTREAM) — this
+// Invoke delegates to a SANDBOX through apps/exec — this
 // binary NEVER runs org code in-process. When the sandbox is not configured
 // invoke fails closed (503) and fabricates nothing. Every metric the Overview
 // shows is DERIVED from real invocation rows; there is no invented rollup.

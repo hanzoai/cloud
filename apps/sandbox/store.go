@@ -139,6 +139,18 @@ func (s *Store) List(ctx context.Context, org, project, status string) ([]Sandbo
 	return out, rows.Err()
 }
 
+// Live counts the org's sandboxes of one class that are still holding a pod.
+//
+// A COUNT and not a len(List): List is LIMIT 200, so a cap read through it would
+// stop counting at 200 and stop refusing at exactly the point refusing matters.
+func (s *Store) LiveOfClass(ctx context.Context, org, class string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sandbox WHERE org=? AND class=? AND status IN ('running','pending')`,
+		org, class).Scan(&n)
+	return n, err
+}
+
 // Expired is what a reaper reads: every sandbox whose lease has run out.
 func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Sandbox, error) {
 	rows, err := s.db.QueryContext(ctx,
