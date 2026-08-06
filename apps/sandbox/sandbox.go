@@ -1,14 +1,14 @@
-// Package machines is the ONE compute primitive: a machine is a gVisor pod that
+// Package sandbox is the ONE compute primitive: a sandbox is a gVisor pod that
 // runs somebody else's code, and every lifetime is the same object.
 //
-//	a function invoke      = a machine with a seconds-long lease
-//	a code-exec call       = a machine with a session lease
-//	an agentic coding run  = a machine with a project volume and a long lease
+//	a function invoke      = a sandbox with a seconds-long lease
+//	a code-exec call       = a sandbox with a session lease
+//	an agentic coding run  = a sandbox with a project volume and a long lease
 //
 // Not three subsystems, not three schedulers. One record, one pod spec, one way
 // in. What differs between them is `ttlSec` and whether a volume is attached.
 //
-//	POST   /v1/sandboxes             {kind:"sandbox", class, project?, ttlSec?} -> Machine
+//	POST   /v1/sandboxes             {kind:"sandbox", class, project?, ttlSec?} -> Sandbox
 //	GET    /v1/sandboxes             ?kind=&project=&status=
 //	GET    /v1/sandboxes/:id
 //	DELETE /v1/sandboxes/:id         ?purge=1 drops the volume too
@@ -16,7 +16,7 @@
 //	GET    /v1/sandboxes/:id/fs      ?path=  read a file, or list a directory
 //	POST   /v1/sandboxes/:id/fs      ?path=  write a file
 //
-// THERE IS EXACTLY ONE WAY INTO A MACHINE, and it is the Kubernetes exec
+// THERE IS EXACTLY ONE WAY INTO A SANDBOX, and it is the Kubernetes exec
 // subresource. fs read/list/write are not a second channel — they are `cat`,
 // `ls` and `tee` over that one channel, which is also how `kubectl cp` has
 // always worked. The predecessor shipped an in-pod HTTP daemon with eleven
@@ -24,12 +24,12 @@
 // gone, because Kubernetes already had the channel and we were re-implementing
 // it badly.
 //
-// A MACHINE IS ADDRESSED BY POD NAME THROUGH THE APISERVER, NEVER BY IP. That is
+// A SANDBOX IS ADDRESSED BY POD NAME THROUGH THE APISERVER, NEVER BY IP. That is
 // not a style preference, it is the fix for a real cross-tenant read: a pod that
 // dies on its own — evicted, OOM-killed, drained — never runs a release path, so
 // a row keeps a Host the CNI has since handed to another tenant's replacement
 // pod, and a call to that address is served by a stranger with every credential
-// checking out. A pod NAME is minted per machine and never reused, so the same
+// checking out. A pod NAME is minted per sandbox and never reused, so the same
 // mistake cannot be spelled. The header-stamping protocol that was invented to
 // defend the IP scheme is deleted along with the scheme.
 //
@@ -37,7 +37,7 @@
 // be. It creates Kubernetes objects and streams bytes to the apiserver; the work
 // happens inside the pod, under runsc, on the far side of a runtime boundary.
 //
-// THERE IS NO POOL. A machine is created for a lease and deleted at its end.
+// THERE IS NO POOL. A sandbox is created for a lease and deleted at its end.
 // Claiming from a warm pool is what forced the recycle, the pod-IP address book
 // and the label-patch race arbitration; it also grows, inevitably, into a
 // scheduler beside Kubernetes' own. If a warm pool is ever wanted, it is a
@@ -45,7 +45,7 @@
 //
 // AUTH is the ordinary one: IAM terminates identity at the edge and this package
 // reads principal.Org. It never mints a credential, and no caller credential
-// reaches a machine — the pod carries no service-account token at all.
+// reaches a sandbox — the pod carries no service-account token at all.
 package sandbox
 
 import (
@@ -61,28 +61,28 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// classes is the CLOSED set of machine shapes. Each is one image tag and one
+// classes is the CLOSED set of sandbox shapes. Each is one image tag and one
 // resource envelope; they are not independent, which is why this is one field
 // and not three.
 //
 //	exec    — a chat or function code run. No volume, seconds to minutes.
-//	dev     — a coding machine. Project volume, a toolchain, hours.
+//	dev     — a coding sandbox. Project volume, a toolchain, hours.
 //	desktop — dev plus a virtual display for computer use.
 var classes = map[string]bool{"exec": true, "dev": true, "desktop": true}
 
-// KindSandbox is the machine this package provisions: a gVisor pod in our own
+// KindSandbox is the sandbox this package provisions: a gVisor pod in our own
 // cluster. It is a VALUE on the shared /v1/sandboxes resource, beside the kinds
-// the compute control plane provisions (droplets, GPUs, bot machines), because
-// "a machine the org has" is one noun and splitting it by who provisions it
+// the compute control plane provisions (droplets, GPUs, bot sandbox), because
+// "a sandbox the org has" is one noun and splitting it by who provisions it
 // would publish two.
 const KindSandbox = "sandbox"
 
-// IDPrefix is how a machine of ours is told apart from one the compute control
+// IDPrefix is how a sandbox of ours is told apart from one the compute control
 // plane owns, on a resource both answer for. It is a prefix on the id rather
 // than a lookup, so dispatch costs nothing and cannot go stale.
 const IDPrefix = "m_"
 
-// Ours reports whether an id names a machine this package provisions.
+// Ours reports whether an id names a sandbox this package provisions.
 func Ours(id string) bool { return strings.HasPrefix(strings.TrimSpace(id), IDPrefix) }
 
 type state struct {
@@ -101,30 +101,30 @@ func storeFor(s *cloud.Service[state], org string) (*Store, error) {
 	return s.State.stores.For(ns)
 }
 
-// Mount registers the sandbox-machine half of /v1/sandboxes.
+// Mount registers the sandbox-sandbox half of /v1/sandboxes.
 //
 // It is composed INTO the app that already owns the /v1/sandboxes prefix rather
 // than claiming a manifest row of its own: zip refuses two owners for one
 // prefix, the compute surface has held that prefix in production for months,
-// and a second `machines` noun is exactly the duplication this package exists to
+// and a second `sandbox` noun is exactly the duplication this package exists to
 // remove. See apps/visor's mount, which is the only caller.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("machines.Mount: nil app")
+		return fmt.Errorf("sandbox.Mount: nil app")
 	}
 	if deps.Logger == nil {
-		return fmt.Errorf("machines.Mount: nil deps.Logger")
+		return fmt.Errorf("sandbox.Mount: nil deps.Logger")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("machines.Mount: empty DataDir")
+		return fmt.Errorf("sandbox.Mount: empty DataDir")
 	}
-	b := cloud.NewBase(deps, "machines")
+	b := cloud.NewBase(deps, "sandbox")
 	s := &cloud.Service[state]{Base: b, State: state{
-		stores: cloud.NewOrgStore(b, "machines", openStore),
+		stores: cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:     newRuntime(),
 	}}
 	Routes(app, s)
-	s.Log.Info("machines mounted",
+	s.Log.Info("sandbox mounted",
 		"namespace", s.State.rt.ns, "image", s.State.rt.image,
 		"runtimeClass", s.State.rt.runtimeClass, "cluster", s.State.rt.ready() == nil)
 	return nil
@@ -134,7 +134,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //
 // The collection and member routes used to be left out, on the reasoning that
 // they were "shared with the compute surface" — true while this served
-// /v1/machines, which visor owns and where a second registration of one
+// /v1/sandbox, which visor owns and where a second registration of one
 // resource is a conflict. It is /v1/sandboxes now, owned outright, and leaving
 // them out meant Create, List, Get and Delete existed as exported functions
 // that no request could ever reach: a caller could exec in a sandbox it had no
@@ -170,19 +170,19 @@ type Service = cloud.Service[state]
 // to dispatch the shared collection routes itself.
 func New(deps cloud.Deps) (*Service, error) {
 	if deps.Logger == nil {
-		return nil, fmt.Errorf("machines.New: nil deps.Logger")
+		return nil, fmt.Errorf("sandbox.New: nil deps.Logger")
 	}
 	if deps.DataDir == "" {
-		return nil, fmt.Errorf("machines.New: empty DataDir")
+		return nil, fmt.Errorf("sandbox.New: empty DataDir")
 	}
-	b := cloud.NewBase(deps, "machines")
+	b := cloud.NewBase(deps, "sandbox")
 	return &cloud.Service[state]{Base: b, State: state{
-		stores: cloud.NewOrgStore(b, "machines", openStore),
+		stores: cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:     newRuntime(),
 	}}, nil
 }
 
-// Create leases a machine. It is the only path that creates cluster objects.
+// Create leases a sandbox. It is the only path that creates cluster objects.
 func Create(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
@@ -205,8 +205,8 @@ func Create(s *Service, c *zip.Ctx) error {
 	if !classes[class] {
 		return zip.ErrBadRequest("class must be one of exec, dev, desktop")
 	}
-	// A project is what makes a machine RESUMABLE — it names the volume. An exec
-	// machine has no project and no volume, which is why it can be created and
+	// A project is what makes a sandbox RESUMABLE — it names the volume. An exec
+	// sandbox has no project and no volume, which is why it can be created and
 	// destroyed freely and why two of them never contend.
 	project := slug(body.Project)
 	if class != "exec" && project == "" {
@@ -217,16 +217,16 @@ func Create(s *Service, c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 
-	// One live machine per (org, project), and the refusal is deliberate: the
-	// project volume is single-attach, so a second concurrent machine would
+	// One live sandbox per (org, project), and the refusal is deliberate: the
+	// project volume is single-attach, so a second concurrent sandbox would
 	// either fail to attach or silently get a cold empty disk. "Silently cold" is
-	// the worse of the two — the user sees a machine that works and reinstalls
-	// everything on every call — so it is refused in the open, naming the machine
+	// the worse of the two — the user sees a sandbox that works and reinstalls
+	// everything on every call — so it is refused in the open, naming the sandbox
 	// that already holds the volume.
 	if project != "" {
 		if live, err := store.Live(c.Context(), o, project); err == nil && live.ID != "" {
 			return zip.Errorf(http.StatusConflict,
-				"project %q already has a live machine (%s); delete it first", project, live.ID)
+				"project %q already has a live sandbox (%s); delete it first", project, live.ID)
 		}
 	}
 
@@ -235,7 +235,7 @@ func Create(s *Service, c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "id: %v", err)
 	}
 	now := time.Now().Unix()
-	m := Machine{
+	m := Sandbox{
 		ID: id, Org: o, Kind: KindSandbox, Class: class, Project: project,
 		Image: firstNonEmpty(body.Image, s.State.rt.imageFor(class)),
 		Pod:   podName(id), Status: "pending",
@@ -244,7 +244,7 @@ func Create(s *Service, c *zip.Ctx) error {
 	if project != "" {
 		m.Volume = volumeName(o, project)
 	}
-	// The lease. Unbounded is not an option for a machine running submitted code
+	// The lease. Unbounded is not an option for a sandbox running submitted code
 	// on our nodes, so an unset ttl takes the class default rather than forever.
 	ttl := body.TTLSec
 	if ttl <= 0 {
@@ -264,7 +264,7 @@ func Create(s *Service, c *zip.Ctx) error {
 	if err := s.State.rt.start(c.Context(), m); err != nil {
 		m.Status, m.Error = "error", err.Error()
 		_ = store.Put(c.Context(), m)
-		return zip.Errorf(http.StatusServiceUnavailable, "start machine: %v", err)
+		return zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
 	}
 	m.Status = "running"
 	if err := store.Put(c.Context(), m); err != nil {
@@ -273,9 +273,9 @@ func Create(s *Service, c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, m)
 }
 
-// List answers the caller org's machines. Returns the slice so a host that also
+// List answers the caller org's sandbox. Returns the slice so a host that also
 // has upstream sources can fold them into one answer.
-func List(s *Service, c *zip.Ctx) ([]Machine, error) {
+func List(s *Service, c *zip.Ctx) ([]Sandbox, error) {
 	o, ok := orgOf(c)
 	if !ok {
 		return nil, zip.ErrForbidden("X-Org-Id required")
@@ -291,7 +291,7 @@ func List(s *Service, c *zip.Ctx) ([]Machine, error) {
 	return ms, nil
 }
 
-// Get answers one machine THIS org owns.
+// Get answers one sandbox THIS org owns.
 func Get(s *Service, c *zip.Ctx) error {
 	m, _, err := load(s, c)
 	if err != nil {
@@ -307,7 +307,7 @@ func Delete(s *Service, c *zip.Ctx) error {
 		return err
 	}
 	if serr := s.State.rt.stop(c.Context(), m); serr != nil {
-		s.Log.Warn("stop machine", "id", m.ID, "err", serr)
+		s.Log.Warn("stop sandbox", "id", m.ID, "err", serr)
 	}
 	// purge=1 drops the VOLUME as well, and it is opt-in because the volume holds
 	// the only copy of the checkout and the caches. Ending a lease is cheap and
@@ -324,10 +324,10 @@ func Delete(s *Service, c *zip.Ctx) error {
 	return nil
 }
 
-// ExecIn runs argv inside the machine and answers its exit code and output.
+// ExecIn runs argv inside the sandbox and answers its exit code and output.
 //
 // A non-zero exit is a SUCCESSFUL call carrying a failed program: the HTTP
-// status stays 200, because "the tests failed" and "the machine is broken" are
+// status stays 200, because "the tests failed" and "the sandbox is broken" are
 // different facts and a caller has to be able to tell them apart.
 func ExecIn(s *Service, c *zip.Ctx) error {
 	m, store, err := load(s, c)
@@ -412,28 +412,28 @@ func FsWrite(s *Service, c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"path": path, "bytes": len(c.Body())})
 }
 
-// load resolves :id to a machine THIS org owns. The org comes from the validated
+// load resolves :id to a sandbox THIS org owns. The org comes from the validated
 // principal and the query is scoped by it, so a caller cannot address another
-// org's machine by guessing an id — a miss is 404 and not 403, because "that
-// machine belongs to someone else" is itself a cross-tenant fact.
-func load(s *Service, c *zip.Ctx) (Machine, *Store, error) {
+// org's sandbox by guessing an id — a miss is 404 and not 403, because "that
+// sandbox belongs to someone else" is itself a cross-tenant fact.
+func load(s *Service, c *zip.Ctx) (Sandbox, *Store, error) {
 	o, ok := orgOf(c)
 	if !ok {
-		return Machine{}, nil, zip.ErrForbidden("X-Org-Id required")
+		return Sandbox{}, nil, zip.ErrForbidden("X-Org-Id required")
 	}
 	store, err := storeFor(s, o)
 	if err != nil {
-		return Machine{}, nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return Sandbox{}, nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	m, err := store.Get(c.Context(), o, idParam(c))
 	if err == errNotFound {
-		return Machine{}, nil, zip.ErrNotFound("machine not found")
+		return Sandbox{}, nil, zip.ErrNotFound("sandbox not found")
 	}
 	if err != nil {
-		return Machine{}, nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return Sandbox{}, nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	if m.Status != "running" {
-		// Only the routes that reach INTO the machine care; get and delete are
+		// Only the routes that reach INTO the sandbox care; get and delete are
 		// happy with a stopped row, and they do not come through here for that
 		// check — this returns the row and the caller decides.
 		return m, store, nil
@@ -441,9 +441,9 @@ func load(s *Service, c *zip.Ctx) (Machine, *Store, error) {
 	return m, store, nil
 }
 
-// touch records use, so an idle reaper can tell an actively-worked machine from
+// touch records use, so an idle reaper can tell an actively-worked sandbox from
 // one whose owner walked away.
-func touch(c *zip.Ctx, store *Store, m Machine) {
+func touch(c *zip.Ctx, store *Store, m Sandbox) {
 	m.LastUsedAt = time.Now().Unix()
 	_ = store.Put(c.Context(), m)
 }
@@ -462,7 +462,7 @@ func argvOf(argv []string, command string) ([]string, error) {
 	return nil, zip.ErrBadRequest("argv or command required")
 }
 
-// confine resolves a caller path under the project root. The machine mounts the
+// confine resolves a caller path under the project root. The sandbox mounts the
 // project at workdir and nothing above it is addressable — a path that climbs
 // out is refused here rather than being sanitized into something else, because
 // silently rewriting a path is how a caller ends up reading a file it did not
@@ -512,21 +512,21 @@ func atoiOr(s string, def int) int {
 // document would otherwise publish operationIds and nothing else.
 func init() {
 	openapi.Describe("/v1/sandboxes/:id/exec", http.MethodPost,
-		"Run a command in a machine",
-		"Runs a command inside the machine and returns its exit code, stdout and stderr. "+
+		"Run a command in a sandbox",
+		"Runs a command inside the sandbox and returns its exit code, stdout and stderr. "+
 			"A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status "+
-			"stays 200, because \"the tests failed\" and \"the machine is broken\" are "+
+			"stays 200, because \"the tests failed\" and \"the sandbox is broken\" are "+
 			"different facts.\n\n"+
 			"NOTHING RUNS IN cloud. The command is streamed to the Kubernetes exec "+
-			"subresource of the machine's pod, which runs under the gVisor runtime class. "+
-			"The machine is addressed by pod NAME through the apiserver, never by address.")
+			"subresource of the sandbox's pod, which runs under the gVisor runtime class. "+
+			"The sandbox is addressed by pod NAME through the apiserver, never by address.")
 	openapi.Describe("/v1/sandboxes/:id/fs", http.MethodGet,
 		"Read a file, or list a directory",
-		"Reads one file from the machine's project directory as text, or lists the entries "+
+		"Reads one file from the sandbox's project directory as text, or lists the entries "+
 			"when the path names a directory. Paths resolve under the project root and a path "+
 			"that climbs out is refused rather than rewritten.")
 	openapi.Describe("/v1/sandboxes/:id/fs", http.MethodPost,
 		"Write a file",
-		"Writes the request body to one file in the machine's project directory, creating "+
+		"Writes the request body to one file in the sandbox's project directory, creating "+
 			"parent directories. Same confinement as the read above.")
 }
