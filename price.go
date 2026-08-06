@@ -32,7 +32,10 @@ package cloud
 // spend.go already had to split apart — "we charge nothing HERE" silently meaning
 // "we authorize NOTHING here". They stay distinguishable values.
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // Price is what ONE request to a subsystem's surface costs at the edge gate.
 //
@@ -106,6 +109,52 @@ func Consumes(method string) bool {
 		return false
 	}
 	return true
+}
+
+// DefaultPrice is what ONE invocation of the operation (method, path) costs.
+//
+// IT TAKES TWO STRINGS, AND THAT IS THE WHOLE POINT. It used to take a *zip.Ctx,
+// which made the price a property of an HTTP REQUEST — so the only seam that could
+// ask it was HTTP middleware, and middleware reads the path the TRANSPORT carried.
+// Over MCP that path is /mcp; over the ZAP plane it is /.well-known/zip/op/<name>.
+// Neither names a declared surface, so both resolved to Undeclared and both were
+// free, silently and permanently, however the operation inside them was priced.
+// A price is a fact about an operation, and an operation is a method and a path,
+// so those are the arguments. Every seam that knows an operation can now ask.
+//
+// It holds NO table: it reads the price the surface DECLARED at the composition
+// root (Plugin.Price → PriceOf), so the number the gate charges and the number a
+// reviewer approved are the same number, in one place. It used to be the table,
+// and its last line was `return 0` for anything unlisted — which made a new route
+// free forever. That default is gone: an unpriced surface fails TestPriceDeclared
+// before it can ship. Undeclared still charges nothing HERE (Price.Cents), because
+// a missing declaration must break the build, never a customer's card.
+//
+// Two things it does on its own:
+//
+//   - Health probes are Free regardless of the surface they sit under. A liveness
+//     probe that 402s hides whether the process is up, and /v1/<svc>/health is a
+//     route of the same surface as everything else under /v1/<svc> — so the moment
+//     any surface carries a positive price, its probe has to be exempted here or the
+//     exemption has to be written 119 times.
+//   - A surface declared Metered charges 0, because its meter is downstream: an edge
+//     charge on top of it bills the same work twice. That is Price.Cents's job, not a
+//     prefix list's.
+func DefaultPrice(method, path string) int64 {
+	// Liveness/health probes are never billed.
+	if path == "/health" || path == "/healthz" || strings.HasSuffix(path, "/health") {
+		return 0
+	}
+	// A read spends nothing, so a read costs nothing — the SAME rule the standing
+	// gate applies (Consumes, above). Without it a declared surface price bills its
+	// own listings and its own error pages, which is why every surface in the fleet
+	// was Free: the declaration had no way to say "charge the work, not the index".
+	// Checked before the price so an unpriced read costs nothing either way and the
+	// two paths cannot diverge.
+	if !Consumes(method) {
+		return 0
+	}
+	return PriceOf(path).Cents()
 }
 
 // String renders the declaration for logs, the admin inventory and test failures.
