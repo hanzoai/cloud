@@ -17,8 +17,8 @@
 // lands in event.fact under its own signal; nothing here writes storage.
 // This file used to sit beside a second storage write (the wide hanzo.events INSERT)
 // and hand the plane its only copy of each batch; that double-write is gone — the
-// fact publish IS the commit — and what remains here are the two SUBSCRIBER
-// hand-offs an accepted batch still owes:
+// fact publish IS the commit — and what remains here are the SUBSCRIBER hand-offs an
+// accepted batch still owes:
 //
 //   - the ENVELOPE onto the plane (PublishEvents, bus.go) — the webhook-delivery
 //     contract (apps/webhooks): orgs subscribe to event.<folded name> subjects and
@@ -28,19 +28,27 @@
 //   - a COPY-taking downstream SINK — the destinations subsystem — which translates
 //     and forwards each event to the org's connected ad/analytics platforms (GA4, Meta
 //     CAPI, …).
+//   - the ERROR sinks: the error-signal slice of the batch, handed to consumers that
+//     project a failure onto another surface. apps/o11y installs one (errorsink.go)
+//     that lands each error on the embedded Sentry plane, so a /v1/event error
+//     surfaces on sentry.hanzo.ai beside the errors a Sentry SDK posts directly.
 //
 // The seam is:
 //
-//   - ONE-WAY. analytics never imports its consumers; a sink (destinations) calls
-//     AddSink from its own Mount. No sinks means no sink fan-out, so this file changes
-//     nothing about ingest when they are absent.
+//   - ONE-WAY. analytics never imports its consumers; a sink (destinations, o11y)
+//     calls AddSink / AddErrorSink from its own Mount. No sinks means no sink fan-out,
+//     so this file changes nothing about ingest when they are absent.
 //   - RAW. The sink receives the event BEFORE the warehouse privacy scrub, because a
 //     server-side Conversions-API forwarder must hash the match keys (email/phone/
 //     click ids) the warehouse deliberately drops. The org connected the destination
 //     and owns that consent; the destination adapters SHA-256 every PII field before
-//     it leaves the process.
-//   - FAIL-SOFT. The sink runs detached (a panic-guarded goroutine) so a slow or
-//     broken destination can never block, fail, or crash an ingest.
+//     it leaves the process. The exception text an error sink reads is already the
+//     folded copy foldException scrubbed, and the Sentry normalizer scrubs again on
+//     its side.
+//   - FAIL-SOFT. Each sink runs detached (a panic-guarded goroutine) so a slow or
+//     broken consumer can never block, fail, or crash an ingest.
+//   - ADDITIVE. A projection failure is invisible to the ingest — the fact publish
+//     already committed and the honest receipt already returned.
 
 package analytics
 
@@ -83,15 +91,62 @@ func AddSink(fn func(org string, evs []SinkEvent)) (remove func()) {
 	return func() { sinks[i] = nil }
 }
 
-// fanOut hands the accepted batch to the sink, detached and fail-soft. org is the
-// SERVER-resolved tenant (already an owned copy from principal.Org). It builds
-// SinkEvents from the RAW events (skipping unroutable ones, mirroring the write
-// core's drop rule) and, if any remain and a sink is installed, dispatches them on a
-// panic-guarded goroutine so ingest is never blocked or failed by a destination.
+// ErrorEvent is one accepted error occurrence handed to the error fan-out. It is a
+// carrier of exactly the fields an error projection needs, so analytics stays
+// orthogonal to its consumers — apps/o11y builds the Sentry wire event on its side.
+// The exception text is the folded, scrubbed copy (foldException); the tenant is the
+// org argument to the sink, never a field here.
+type ErrorEvent struct {
+	MessageID     string // client idempotency id / minted; becomes the projection's event id
+	Time          time.Time
+	ExceptionType string // e.g. "TypeError"; "" ⇒ the consumer groups on the message
+	Message       string // the exception message (the grouping value)
+	Stack         string // raw client stack string, when the wire carried one
+	Handled       *bool  // whether the app caught it (nil ⇒ unknown)
+	Level         string // "error" for these events
+	Platform      string // e.g. "javascript" (properties.$platform; descriptive)
+	Release       string // build the error fired in
+	Environment   string // deployment the error fired in
+	Transaction   string // the route the error fired on (path, else url)
+	URL           string
+	Path          string
+	DistinctID    string // the reporting visitor (user id — never PII)
+	SessionID     string
+	Product       string // emitting surface: console|chat|app|site|admin
+	Site          string // deployed property the error came from
+	Service       string // emitting service, when the wire named one
+	Library       string
+	TraceID       string // trace linkage
+	SpanID        string
+}
+
+// errorSinks are the error fan-out consumers, on the same terms as sinks: registered
+// at Mount, package-global, each dispatch detached and panic-guarded.
+var errorSinks []func(org string, errs []ErrorEvent)
+
+// AddErrorSink registers an error fan-out consumer and returns its remover.
+func AddErrorSink(fn func(org string, errs []ErrorEvent)) (remove func()) {
+	i := len(errorSinks)
+	errorSinks = append(errorSinks, fn)
+	return func() { errorSinks[i] = nil }
+}
+
+// fanOut hands the accepted batch to the plane envelope and to every installed sink,
+// each detached and fail-soft. org is the SERVER-resolved tenant (already an owned
+// copy from principal.Org). One call site — the ingestEvents tail.
 func fanOut(org string, evs []CaptureEvent) {
 	if len(evs) == 0 {
 		return
 	}
+	fanOutEvents(org, evs)
+	fanOutErrors(org, evs)
+}
+
+// fanOutEvents builds SinkEvents from the RAW events (skipping unroutable ones,
+// mirroring the write core's drop rule), publishes the envelope onto the plane, and
+// dispatches each installed sink on a panic-guarded goroutine so ingest is never
+// blocked or failed by a consumer.
+func fanOutEvents(org string, evs []CaptureEvent) {
 	live := make([]func(string, []SinkEvent), 0, len(sinks))
 	for _, fn := range sinks {
 		if fn != nil {
@@ -138,4 +193,118 @@ func fanOut(org string, evs []CaptureEvent) {
 			fn(org, out)
 		}()
 	}
+}
+
+// fanOutErrors filters the batch to the events the plane routes as the error signal —
+// routeOf is the ONE routing rule, so the projection can never carry a fact the plane
+// filed as something else — builds ErrorEvents, and dispatches each installed error
+// sink on a panic-guarded goroutine. Non-error events (the overwhelming majority) are
+// skipped, so a normal batch never touches this path.
+func fanOutErrors(org string, evs []CaptureEvent) {
+	live := make([]func(string, []ErrorEvent), 0, len(errorSinks))
+	for _, fn := range errorSinks {
+		if fn != nil {
+			live = append(live, fn)
+		}
+	}
+	if len(live) == 0 {
+		return
+	}
+	now := time.Now()
+	out := make([]ErrorEvent, 0)
+	for _, e := range evs {
+		if routeOf(e).signal != signalError {
+			continue
+		}
+		typ, msg, stack, handled := exceptionOf(e)
+		out = append(out, ErrorEvent{
+			MessageID:     firstNonEmptyStr(trim(e.MessageID), randID()),
+			Time:          clampTS(e.Timestamp, now),
+			ExceptionType: trim(typ),
+			Message:       trim(msg),
+			Stack:         stack,
+			Handled:       handled,
+			Level:         "error",
+			Platform:      propStr(e.Properties, "$platform"),
+			Release:       firstNonEmptyStr(trim(e.Release), propStr(e.Properties, "$release")),
+			Environment:   firstNonEmptyStr(trim(e.Environment), propStr(e.Properties, "$environment")),
+			Transaction:   firstNonEmptyStr(trim(e.Path), trim(e.URL)),
+			URL:           trim(e.URL),
+			Path:          trim(e.Path),
+			DistinctID:    trim(e.DistinctID),
+			SessionID:     trim(e.SessionID),
+			Product:       trim(e.Product),
+			Site:          trim(e.Site),
+			Service:       trim(e.Service),
+			Library:       trim(e.Library),
+			TraceID:       firstNonEmptyStr(trim(e.TraceID), propStr(e.Properties, "$trace_id")),
+			SpanID:        firstNonEmptyStr(trim(e.SpanID), propStr(e.Properties, "$span_id")),
+		})
+	}
+	if len(out) == 0 {
+		return
+	}
+	for _, fn := range live {
+		fn := fn
+		go func() {
+			defer func() { _ = recover() }()
+			fn(org, out)
+		}()
+	}
+}
+
+// exceptionOf extracts the exception's (type, message, stack, handled) from whichever
+// carrier holds it: the typed Error (folded events carry it), or properties.$exception
+// as either the typed *Exception (post-fold, same process) or a decoded map (from the
+// JSON wire). Returns zero values for an error event that carries no exception — a
+// bare error-typed event, which the consumer then groups on its message/transaction.
+func exceptionOf(e CaptureEvent) (typ, message, stack string, handled *bool) {
+	if e.Error != nil {
+		return e.Error.Type, e.Error.Message, e.Error.Stack, e.Error.Handled
+	}
+	raw, ok := e.Properties["$exception"]
+	if !ok {
+		return "", "", "", nil
+	}
+	switch x := raw.(type) {
+	case *Exception:
+		if x == nil {
+			return "", "", "", nil
+		}
+		return x.Type, x.Message, x.Stack, x.Handled
+	case Exception:
+		return x.Type, x.Message, x.Stack, x.Handled
+	case map[string]any:
+		return mapStr(x, "type"), mapStr(x, "message"), mapStr(x, "stack"), mapBool(x, "handled")
+	default:
+		return "", "", "", nil
+	}
+}
+
+// propStr reads a string-valued property, "" when absent or non-string. The ingest
+// never trusts these for tenancy — they are descriptive only.
+func propStr(p map[string]any, key string) string {
+	if p == nil {
+		return ""
+	}
+	if v, ok := p[key].(string); ok {
+		return trim(v)
+	}
+	return ""
+}
+
+// mapStr reads a string value from a decoded exception map.
+func mapStr(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// mapBool reads a *bool from a decoded exception map (JSON bools decode to bool).
+func mapBool(m map[string]any, key string) *bool {
+	if v, ok := m[key].(bool); ok {
+		return &v
+	}
+	return nil
 }
