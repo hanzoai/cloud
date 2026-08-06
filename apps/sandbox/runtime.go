@@ -105,7 +105,7 @@ type streamer interface {
 
 type runtime struct {
 	ns           string
-	image        string // registry.hanzo.ai/hanzoai/sandbox, without a tag
+	image        string // oci.hanzo.ai/hanzoai/sandbox, without a tag
 	tag          string
 	runtimeClass string
 	startTimeout time.Duration
@@ -123,7 +123,7 @@ func newRuntime() *runtime {
 		// and a sandbox must not sit beside the datastores it is forbidden to
 		// reach. One namespace, one policy, everything that runs submitted code.
 		ns:           envOr("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
-		image:        envOr("SANDBOX_IMAGE_REPO", "registry.hanzo.ai/hanzoai/sandbox"),
+		image:        envOr("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
 		tag:          envOr("SANDBOX_IMAGE_TAG", ""),
 		runtimeClass: strings.TrimSpace(os.Getenv("SANDBOX_RUNTIME_CLASS")),
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
@@ -287,7 +287,7 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		// re-attaches its own DigitalOcean pull secrets to every namespace's
 		// `default` account whenever it reconciles — so a sandbox inherited a
 		// credential for a registry that is not ours and died asking
-		// registry.hanzo.ai for its image ANONYMOUSLY, with a 401 that reads like a
+		// oci.hanzo.ai for its image ANONYMOUSLY, with a 401 that reads like a
 		// bad password and was in fact no password at all. `sandbox` is ours, DOKS
 		// does not manage it, and it carries exactly one thing: the pull secret.
 		// See infra/k8s/sandboxes/registry.yaml. It grants nothing — it is bound to
