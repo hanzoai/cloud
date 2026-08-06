@@ -7,13 +7,6 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /_/commerce/healthz", zip.Doc{
-		Description: "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated, and under /_ so the ingress withholds it\npublicly.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
-		Fields: map[string]string{
-			"liveness.service": "Service names the answering subsystem; it is always commerce.",
-			"liveness.status":  "Status is always ok: mounted is the only state that can answer.",
-		},
-	})
 	zip.Describe("GET /v1/billing/invoices/:id", zip.Doc{
 		Description: "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{

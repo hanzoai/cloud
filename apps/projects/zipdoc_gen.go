@@ -178,8 +178,18 @@ func init() {
 			"projectsUpdate.visibility":    "Visibility flips an existing project between \"public\" and \"private\". Same\nONE rule as at create: public is free, private needs a paid plan.",
 		},
 	})
+	zip.Describe("POST /projects/ownership", zip.Doc{
+		Description: "Answers whether the CALLER's org owns the named project and\nwhether some other org does.\n\nThe org is the caller's plane identity and never the argument — plane.OwnerIn\nhas no org field, deliberately, because the org is precisely what the answer is\nrelative to: a caller able to state it could ask the question about somebody\nelse and act on the answer. An anonymous caller is refused rather than defaulted.\n\nBoth false is a REAL answer: nobody has registered this identifier, so it is a\nfree-form within-org label and the boundary keeps it. That third outcome is why\nthe reply carries two booleans instead of one verdict — collapsing \"nobody owns\nit\" into either \"mine\" or \"another's\" would respectively open the guard or break\nevery subsystem that uses a free-form project label.",
+		Fields: map[string]string{
+			"Ownership.mine":  "Mine is true when the caller's own org owns a project with this id/slug.",
+			"Ownership.other": "Other is true when some org OTHER than the caller's owns one.",
+		},
+	})
 	zip.Describe("POST /projects/resolve-key", zip.Doc{
 		Description: "Answers which (org, project) a key names. Not-found is\n`Found:false`, never an error: the door turns that into an honest refusal, and\nan error into a 5xx. Collapsing them would refuse every live site's beacons\nduring a transient failure of this app.",
+	})
+	zip.Describe("POST /sites/live", zip.Doc{
+		Description: "Answers the cross-org directory read for the process that\nassembles the catalog, which is never this one.\n\nLiveSites returns nil when this package is unmounted, on the reasoning that a\ndeployment which hosts nothing is not a fault. That reads correctly here — the\nprocess that owns the store is the one answering — and read WRONG in the\ncatalog process, where nil meant \"ask somewhere else\" and was silently\npublished as \"nothing is live\". Every demo URL, the whole `site` kind, and the\ntemplate lane's deployed starters left the corpus without an error anywhere.\n\nNo org, on purpose, exactly like the resolve above. This is the one cross-org\nread in the package and the visibility rule that makes it safe lives in its\nquery, not in its caller.",
 	})
 	zip.Describe("POST /sites/resolve", zip.Doc{
 		Description: "Answers the multi-tenant product URL (<slug>.hanzo.app) and\nbound custom domains. Not-found is `Found:false`, never an error: the edge\nturns that into an honest 404, and an error into a 503. Collapsing the two\nwould serve 404s for real live sites during a transient failure.",

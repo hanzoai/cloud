@@ -176,7 +176,7 @@
                     "u_1",
                     "u_2"
                   ],
-                  "source": "event.event",
+                  "source": "event.fact",
                   "unmatched": 497
                 },
                 "schema": {
