@@ -348,35 +348,17 @@ components:
       type: object
     Artifact:
       properties:
-        content:
-          description: base64 bytes on write; the server hashes + stores them (never
-            returned)
+        cosign_cert:
           type: string
-        git_branch:
+        cosign_signature:
           type: string
-        git_dirty:
-          type: boolean
-        git_sha:
+        download_url:
+          description: |-
+            DownloadURL is a short-lived signed URL to the artifact bytes. The
+            scaffold returns the ArtifactRef as-is; production issues a signed URL.
           type: string
-        kind:
-          type: string
-        lib_versions: {}
-        project:
-          type: string
-        ref:
-          description: server-derived content address (sha256:<hash>)
-          type: string
-        retention_class:
-          type: string
-        run_id:
-          type: string
-        sha256:
-          description: SERVER-derived on write; the identity
-          type: string
-        ts:
-          type: integer
-        visibility:
-          type: string
+        release:
+          $ref: '#/components/schemas/Release'
       type: object
     AskAnswer:
       properties:
@@ -1967,6 +1949,37 @@ components:
             type: string
           type: array
       type: object
+    DeviceSignals:
+      properties:
+        arch:
+          type: string
+        cpuid:
+          description: CPUID is a CPU/board identifier string.
+          type: string
+        disk_serial:
+          description: DiskSerial of the boot/root volume.
+          type: string
+        hostname:
+          description: Hostname is a weak signal, used only as a tiebreaker.
+          type: string
+        install_id:
+          description: InstallID is a per-install random the agent persists locally
+            on first run.
+          type: string
+        machine_id:
+          description: |-
+            MachineID is a stable per-host id (e.g. /etc/machine-id, IOPlatformUUID,
+            MachineGuid). Strongest single signal where present.
+          type: string
+        macs:
+          description: MAC addresses of stable interfaces (order-insensitive; we sort).
+          items:
+            type: string
+          type: array
+        os:
+          description: OS / Arch coarse platform tags.
+          type: string
+      type: object
     DoCost:
       properties:
         accountBalanceCents:
@@ -2625,6 +2638,29 @@ components:
         title:
           type: string
       type: object
+    FingerprintRequest:
+      properties:
+        signals:
+          $ref: '#/components/schemas/DeviceSignals'
+          description: |-
+            Signals is the host material the client agent collected. Which fields
+            actually participate in the binding is deliberately unspecified — send
+            everything available and let the server decide.
+      type: object
+    FingerprintResponse:
+      properties:
+        fingerprint:
+          description: |-
+            Fingerprint is the OPAQUE binding value to pass to POST /v1/licensing/issue.
+            It is one-way: the raw signals cannot be recovered from it and are never
+            echoed back.
+          type: string
+        version:
+          description: |-
+            Version is the binding algorithm revision, so a stored fingerprint stays
+            recognizable across a recipe rotation.
+          type: string
+      type: object
     Flow:
       properties:
         created:
@@ -3205,6 +3241,24 @@ components:
             degraded.
           type: string
       type: object
+    HealthView:
+      properties:
+        env:
+          description: Env is the deployment environment ("dev" | "staging" | "prod").
+          type: string
+        service:
+          description: Service is always "licensing".
+          type: string
+        signer:
+          description: |-
+            Signer names the KMS provider signing licenses here. "local" means a
+            development key: tokens it mints are not production credentials.
+          type: string
+        status:
+          description: Status is "ok" whenever the process is up — this is not a dependency
+            probe.
+          type: string
+      type: object
     Host:
       properties:
         addr:
@@ -3394,6 +3448,96 @@ components:
           type: string
         total:
           type: integer
+      type: object
+    IssueRequest:
+      properties:
+        fingerprint:
+          description: |-
+            Fingerprint is a previously-registered device binding value, as returned by
+            POST /v1/licensing/fingerprint. Leave it empty and pass Signals to bind the
+            device at issue time instead.
+          type: string
+        holder:
+          description: |-
+            Holder overrides who the token is issued to; defaults to the caller's own
+            validated subject. It NAMES the token's bearer and grants nothing on its
+            own — the entitlement checked is always the caller's org's.
+          type: string
+        product:
+          description: Product is the licensed commerce product the caller wants a
+            token for.
+          type: string
+        release:
+          description: |-
+            Release scopes the token to one signed binary release, recorded as a
+            "release:<id>" feature so a single bad release can be revoked on its own.
+          type: string
+        signals:
+          $ref: '#/components/schemas/DeviceSignals'
+          description: |-
+            Signals binds the device at issue time, as an alternative to a
+            pre-registered fingerprint. The raw signals are never stored or echoed —
+            they are folded immediately into the one-way binding value.
+        ttl_seconds:
+          description: |-
+            TTLSeconds requests a token lifetime in seconds. It is clamped to the
+            deployment maximum AND to the entitlement's own expiry — a token never
+            outlives the subscription that paid for it.
+          type: integer
+      required:
+      - product
+      type: object
+    IssueResponse:
+      properties:
+        app_id:
+          description: |-
+            AppID is the brand this token runs under ("hanzo" | "lux" | "zoo"). The
+            engine refuses a token whose app_id is not the one it was built for.
+          type: string
+        exp:
+          description: Exp is the token's expiry, Unix seconds.
+          type: integer
+        features:
+          description: |-
+            Features are the capability grants copied verbatim from the plan the org
+            bought. The engine enforces exactly these.
+          items:
+            type: string
+          type: array
+        fingerprint_bound:
+          description: |-
+            Bound reports whether a device fingerprint was folded into the token. An
+            unbound token runs on any machine; a bound one runs only on the machine it
+            was bound to.
+          type: boolean
+        holder:
+          description: Holder is who the token was issued to.
+          type: string
+        nonce:
+          description: |-
+            Nonce uniquely identifies this token, and is what a per-token revocation
+            names.
+          type: string
+        token:
+          description: |-
+            Token is the signed license, `base64url(payload).base64url(ed25519_sig)`.
+            It is the credential the engine runs on — treat it as a secret.
+          type: string
+      type: object
+    JWK:
+      properties:
+        crv:
+          description: Crv is always "Ed25519".
+          type: string
+        kty:
+          description: Kty is always "OKP".
+          type: string
+        use:
+          description: Use is always "sig".
+          type: string
+        x:
+          description: X is the public key, base64url (the JWK convention).
+          type: string
       type: object
     JournalEntry:
       properties:
@@ -4876,6 +5020,37 @@ components:
         status:
           type: string
       type: object
+    PubkeyView:
+      properties:
+        alg:
+          description: Alg is always "Ed25519".
+          type: string
+        keys:
+          description: |-
+            Keys is the same key as a single-entry JWKS (OKP/Ed25519), for JWKS-shaped
+            consumers.
+          items:
+            $ref: '#/components/schemas/JWK'
+          type: array
+        provider:
+          description: |-
+            Provider names the KMS holding the private half ("local" | "aws" | ...).
+            "local" means a development key — never trust it in production.
+          type: string
+        public_key:
+          description: |-
+            PublicKey is the 32-byte Ed25519 public key, standard base64. This is the
+            form the engine embeds for offline verification.
+          type: string
+        schema:
+          description: Schema is the license payload schema version this key signs.
+          type: integer
+        token_format:
+          description: |-
+            TokenFormat states the wire layout so an implementer can verify a token
+            without this service's source.
+          type: string
+      type: object
     PublishInput:
       properties:
         doctype:
@@ -5518,6 +5693,69 @@ components:
             the key the register sorts on (newest activity first).
           type: integer
       type: object
+    Release:
+      properties:
+        app_id:
+          description: AppID scopes the release to an app build ("hanzo" | "lux" |
+            "zoo").
+          type: string
+        artifact_ref:
+          description: ArtifactRef is where the binary lives (object-store key / OCI
+            ref / path).
+          type: string
+        cosign_cert:
+          description: |-
+            CosignCert is the cosign/Fulcio cert (keyless) or public key ref used to
+            verify CosignSignature. The download response hands this to the client.
+          type: string
+        cosign_signature:
+          description: CosignSignature is the base64 cosign signature over the artifact
+            digest.
+          type: string
+        created_at:
+          type: integer
+        id:
+          description: |-
+            ID is the release identifier, e.g. "engine-rocm-0.4.2-linux-amd64". The
+            accelerator belongs here — one product is built several ways — and never
+            in Product below.
+          type: string
+        min_features:
+          description: MinFeatures, when set, are features the license must include
+            to download.
+          items:
+            type: string
+          type: array
+        platform:
+          description: Platform is "<os>/<arch>", e.g. "linux/amd64".
+          type: string
+        product:
+          description: |-
+            Product is the licensed product this artifact belongs to (commerce SKU):
+            "engine" for every one of those builds.
+          type: string
+        sha256:
+          description: SHA256 is the hex digest of the artifact (integrity + cosign
+            subject).
+          type: string
+        version:
+          description: Version is the semantic version of the binary.
+          type: string
+        yanked:
+          description: |-
+            Yanked marks a pulled release (download refused; tokens may be revoked
+            release-scoped too).
+          type: boolean
+      type: object
+    ReleaseList:
+      properties:
+        releases:
+          description: Releases is the published releases, always an array and never
+            null.
+          items:
+            $ref: '#/components/schemas/Release'
+          type: array
+      type: object
     ReleaseState:
       properties:
         endedAt:
@@ -5572,6 +5810,38 @@ components:
             Version is a release tag, resolved to a URL and digest through the
             origin's binaries.json index — the same index CI publishes, so there is
             no second table mapping versions to digests.
+          type: string
+      type: object
+    ResearchArtifact:
+      properties:
+        content:
+          description: base64 bytes on write; the server hashes + stores them (never
+            returned)
+          type: string
+        git_branch:
+          type: string
+        git_dirty:
+          type: boolean
+        git_sha:
+          type: string
+        kind:
+          type: string
+        lib_versions: {}
+        project:
+          type: string
+        ref:
+          description: server-derived content address (sha256:<hash>)
+          type: string
+        retention_class:
+          type: string
+        run_id:
+          type: string
+        sha256:
+          description: SERVER-derived on write; the identity
+          type: string
+        ts:
+          type: integer
+        visibility:
           type: string
       type: object
     ResearchTotals:
@@ -5750,6 +6020,51 @@ components:
             Tier is the engine tier the entry belongs to, quality (the default) or bulk.
             Part of the entry's identity: the two tiers keep separate renderings.
           type: string
+      type: object
+    RevocationEntry:
+      properties:
+        at:
+          type: integer
+        by:
+          type: string
+        reason:
+          type: string
+        scope:
+          type: string
+        value:
+          type: string
+      type: object
+    RevokeRequest:
+      properties:
+        reason:
+          description: |-
+            Reason is the operator's note, echoed back by verify so a support agent can
+            explain the refusal.
+          type: string
+        scope:
+          description: |-
+            Scope is what the revocation matches on: "nonce" kills one token,
+            "holder" every token issued to one bearer, "fingerprint" every token bound
+            to one device, and "release" every token scoped to one binary release.
+          type: string
+        value:
+          description: Value is the concrete nonce, holder, fingerprint or release
+            id to revoke.
+          type: string
+      required:
+      - scope
+      - value
+      type: object
+    RevokeResponse:
+      properties:
+        entry:
+          $ref: '#/components/schemas/RevocationEntry'
+          description: Entry is the stored revocation, including who recorded it and
+            when.
+        revoked:
+          description: Revoked is always true — a failure is an error status, not
+            a false here.
+          type: boolean
       type: object
     Role:
       properties:
@@ -7666,6 +7981,55 @@ components:
           type: string
         status:
           type: string
+      type: object
+    VerifyRequest:
+      properties:
+        app:
+          description: |-
+            App overrides the app_id the token is expected to carry. Leave it empty and
+            the token's own app_id is used — an online verify is informational, and it
+            is the ENGINE that enforces the app at boot.
+          type: string
+        token:
+          description: Token is the license token to check.
+          type: string
+      required:
+      - token
+      type: object
+    VerifyResponse:
+      properties:
+        app_id:
+          description: AppID is the brand the token runs under.
+          type: string
+        exp:
+          description: Exp is the token's expiry, Unix seconds.
+          type: integer
+        features:
+          description: Features are the capability grants the token carries.
+          items:
+            type: string
+          type: array
+        fingerprint_bound:
+          description: Bound reports that the token carries a device binding.
+          type: boolean
+        holder:
+          description: Holder is who the token was issued to.
+          type: string
+        nonce:
+          description: Nonce uniquely identifies the token.
+          type: string
+        reason:
+          description: Reason says why an invalid token was rejected. Empty when Valid.
+          type: string
+        revoked:
+          description: Revoked reports that the signature was good but the token has
+            been revoked.
+          type: boolean
+        valid:
+          description: |-
+            Valid is the single answer: signature, schema, expiry, app and revocation
+            all passed.
+          type: boolean
       type: object
     VersionMeta:
       properties:
@@ -9706,7 +10070,7 @@ components:
           description: Data are the artifacts, newest first. Content bytes are never
             returned here.
           items:
-            $ref: '#/components/schemas/Artifact'
+            $ref: '#/components/schemas/ResearchArtifact'
           type: array
         total:
           description: Total is len(data).
@@ -56780,6 +57144,108 @@ paths:
       tags:
       - commerce
       x-app: commerce
+  /v1/commerce/collection/:
+    get:
+      description: |-
+        Returns this tenant's collection records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_collection
+      summary: List collection records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one collection record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_collection
+      summary: Create a collection record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/collection/{collectionid}:
+    delete:
+      description: |-
+        Deletes the collection record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_collection_by_collectionid
+      parameters:
+      - in: path
+        name: collectionid
+        required: true
+        schema:
+          type: string
+      summary: Delete a collection record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the collection record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_collection_by_collectionid
+      parameters:
+      - in: path
+        name: collectionid
+        required: true
+        schema:
+          type: string
+      summary: Read one collection record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_collection_by_collectionid
+      parameters:
+      - in: path
+        name: collectionid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a collection record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_collection_by_collectionid
+      parameters:
+      - in: path
+        name: collectionid
+        required: true
+        schema:
+          type: string
+      summary: Act on one collection record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the collection record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_collection_by_collectionid
+      parameters:
+      - in: path
+        name: collectionid
+        required: true
+        schema:
+          type: string
+      summary: Replace a collection record
+      tags:
+      - commerce
+      x-app: commerce
   /v1/commerce/currencies:
     get:
       description: Returns every reference currency as one global list, so a store
@@ -56788,6 +57254,1026 @@ paths:
         data, and it is public and cacheable.
       operationId: get_v1_commerce_currencies
       summary: The reference currency list the price and settings pickers render
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/disclosure/:
+    get:
+      description: |-
+        Returns this tenant's disclosure records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_disclosure
+      summary: List disclosure records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one disclosure record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_disclosure
+      summary: Create a disclosure record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/disclosure/{disclosureid}:
+    delete:
+      description: |-
+        Deletes the disclosure record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_disclosure_by_disclosureid
+      parameters:
+      - in: path
+        name: disclosureid
+        required: true
+        schema:
+          type: string
+      summary: Delete a disclosure record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the disclosure record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_disclosure_by_disclosureid
+      parameters:
+      - in: path
+        name: disclosureid
+        required: true
+        schema:
+          type: string
+      summary: Read one disclosure record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_disclosure_by_disclosureid
+      parameters:
+      - in: path
+        name: disclosureid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a disclosure record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_disclosure_by_disclosureid
+      parameters:
+      - in: path
+        name: disclosureid
+        required: true
+        schema:
+          type: string
+      summary: Act on one disclosure record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the disclosure record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_disclosure_by_disclosureid
+      parameters:
+      - in: path
+        name: disclosureid
+        required: true
+        schema:
+          type: string
+      summary: Replace a disclosure record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/discount/:
+    get:
+      description: |-
+        Returns this tenant's discount records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_discount
+      summary: List discount records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one discount record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_discount
+      summary: Create a discount record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/discount/{discountid}:
+    delete:
+      description: |-
+        Deletes the discount record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_discount_by_discountid
+      parameters:
+      - in: path
+        name: discountid
+        required: true
+        schema:
+          type: string
+      summary: Delete a discount record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the discount record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_discount_by_discountid
+      parameters:
+      - in: path
+        name: discountid
+        required: true
+        schema:
+          type: string
+      summary: Read one discount record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_discount_by_discountid
+      parameters:
+      - in: path
+        name: discountid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a discount record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_discount_by_discountid
+      parameters:
+      - in: path
+        name: discountid
+        required: true
+        schema:
+          type: string
+      summary: Act on one discount record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the discount record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_discount_by_discountid
+      parameters:
+      - in: path
+        name: discountid
+        required: true
+        schema:
+          type: string
+      summary: Replace a discount record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/movie/:
+    get:
+      description: |-
+        Returns this tenant's movie records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_movie
+      summary: List movie records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one movie record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_movie
+      summary: Create a movie record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/movie/{movieid}:
+    delete:
+      description: |-
+        Deletes the movie record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_movie_by_movieid
+      parameters:
+      - in: path
+        name: movieid
+        required: true
+        schema:
+          type: string
+      summary: Delete a movie record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the movie record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_movie_by_movieid
+      parameters:
+      - in: path
+        name: movieid
+        required: true
+        schema:
+          type: string
+      summary: Read one movie record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_movie_by_movieid
+      parameters:
+      - in: path
+        name: movieid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a movie record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_movie_by_movieid
+      parameters:
+      - in: path
+        name: movieid
+        required: true
+        schema:
+          type: string
+      summary: Act on one movie record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the movie record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_movie_by_movieid
+      parameters:
+      - in: path
+        name: movieid
+        required: true
+        schema:
+          type: string
+      summary: Replace a movie record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/note/:
+    get:
+      description: |-
+        Returns this tenant's note records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_note
+      summary: List note records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one note record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_note
+      summary: Create a note record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/note/{noteid}:
+    delete:
+      description: |-
+        Deletes the note record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_note_by_noteid
+      parameters:
+      - in: path
+        name: noteid
+        required: true
+        schema:
+          type: string
+      summary: Delete a note record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the note record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_note_by_noteid
+      parameters:
+      - in: path
+        name: noteid
+        required: true
+        schema:
+          type: string
+      summary: Read one note record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_note_by_noteid
+      parameters:
+      - in: path
+        name: noteid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a note record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_note_by_noteid
+      parameters:
+      - in: path
+        name: noteid
+        required: true
+        schema:
+          type: string
+      summary: Act on one note record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the note record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_note_by_noteid
+      parameters:
+      - in: path
+        name: noteid
+        required: true
+        schema:
+          type: string
+      summary: Replace a note record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/product/:
+    get:
+      description: |-
+        Returns this tenant's product records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_product
+      summary: List product records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one product record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_product
+      summary: Create a product record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/product/{productid}:
+    delete:
+      description: |-
+        Deletes the product record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_product_by_productid
+      parameters:
+      - in: path
+        name: productid
+        required: true
+        schema:
+          type: string
+      summary: Delete a product record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the product record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_product_by_productid
+      parameters:
+      - in: path
+        name: productid
+        required: true
+        schema:
+          type: string
+      summary: Read one product record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_product_by_productid
+      parameters:
+      - in: path
+        name: productid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a product record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_product_by_productid
+      parameters:
+      - in: path
+        name: productid
+        required: true
+        schema:
+          type: string
+      summary: Act on one product record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the product record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_product_by_productid
+      parameters:
+      - in: path
+        name: productid
+        required: true
+        schema:
+          type: string
+      summary: Replace a product record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/return/:
+    get:
+      description: |-
+        Returns this tenant's return records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_return
+      summary: List return records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one return record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_return
+      summary: Create a return record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/return/{returnid}:
+    delete:
+      description: |-
+        Deletes the return record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_return_by_returnid
+      parameters:
+      - in: path
+        name: returnid
+        required: true
+        schema:
+          type: string
+      summary: Delete a return record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the return record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_return_by_returnid
+      parameters:
+      - in: path
+        name: returnid
+        required: true
+        schema:
+          type: string
+      summary: Read one return record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_return_by_returnid
+      parameters:
+      - in: path
+        name: returnid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a return record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_return_by_returnid
+      parameters:
+      - in: path
+        name: returnid
+        required: true
+        schema:
+          type: string
+      summary: Act on one return record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the return record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_return_by_returnid
+      parameters:
+      - in: path
+        name: returnid
+        required: true
+        schema:
+          type: string
+      summary: Replace a return record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/saleschannel/:
+    get:
+      description: |-
+        Returns this tenant's saleschannel records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_saleschannel
+      summary: List saleschannel records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one saleschannel record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_saleschannel
+      summary: Create a saleschannel record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/saleschannel/{saleschannelid}:
+    delete:
+      description: |-
+        Deletes the saleschannel record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_saleschannel_by_saleschannelid
+      parameters:
+      - in: path
+        name: saleschannelid
+        required: true
+        schema:
+          type: string
+      summary: Delete a saleschannel record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the saleschannel record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_saleschannel_by_saleschannelid
+      parameters:
+      - in: path
+        name: saleschannelid
+        required: true
+        schema:
+          type: string
+      summary: Read one saleschannel record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_saleschannel_by_saleschannelid
+      parameters:
+      - in: path
+        name: saleschannelid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a saleschannel record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_saleschannel_by_saleschannelid
+      parameters:
+      - in: path
+        name: saleschannelid
+        required: true
+        schema:
+          type: string
+      summary: Act on one saleschannel record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the saleschannel record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_saleschannel_by_saleschannelid
+      parameters:
+      - in: path
+        name: saleschannelid
+        required: true
+        schema:
+          type: string
+      summary: Replace a saleschannel record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/stocklocation/:
+    get:
+      description: |-
+        Returns this tenant's stocklocation records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_stocklocation
+      summary: List stocklocation records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one stocklocation record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_stocklocation
+      summary: Create a stocklocation record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/stocklocation/{stocklocationid}:
+    delete:
+      description: |-
+        Deletes the stocklocation record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_stocklocation_by_stocklocationid
+      parameters:
+      - in: path
+        name: stocklocationid
+        required: true
+        schema:
+          type: string
+      summary: Delete a stocklocation record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the stocklocation record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_stocklocation_by_stocklocationid
+      parameters:
+      - in: path
+        name: stocklocationid
+        required: true
+        schema:
+          type: string
+      summary: Read one stocklocation record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_stocklocation_by_stocklocationid
+      parameters:
+      - in: path
+        name: stocklocationid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a stocklocation record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_stocklocation_by_stocklocationid
+      parameters:
+      - in: path
+        name: stocklocationid
+        required: true
+        schema:
+          type: string
+      summary: Act on one stocklocation record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the stocklocation record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_stocklocation_by_stocklocationid
+      parameters:
+      - in: path
+        name: stocklocationid
+        required: true
+        schema:
+          type: string
+      summary: Replace a stocklocation record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/submission/:
+    get:
+      description: |-
+        Returns this tenant's submission records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_submission
+      summary: List submission records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one submission record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_submission
+      summary: Create a submission record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/submission/{submissionid}:
+    delete:
+      description: |-
+        Deletes the submission record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_submission_by_submissionid
+      parameters:
+      - in: path
+        name: submissionid
+        required: true
+        schema:
+          type: string
+      summary: Delete a submission record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the submission record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_submission_by_submissionid
+      parameters:
+      - in: path
+        name: submissionid
+        required: true
+        schema:
+          type: string
+      summary: Read one submission record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_submission_by_submissionid
+      parameters:
+      - in: path
+        name: submissionid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a submission record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_submission_by_submissionid
+      parameters:
+      - in: path
+        name: submissionid
+        required: true
+        schema:
+          type: string
+      summary: Act on one submission record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the submission record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_submission_by_submissionid
+      parameters:
+      - in: path
+        name: submissionid
+        required: true
+        schema:
+          type: string
+      summary: Replace a submission record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/subscriber/:
+    get:
+      description: |-
+        Returns this tenant's subscriber records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_subscriber
+      summary: List subscriber records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one subscriber record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_subscriber
+      summary: Create a subscriber record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/subscriber/{subscriberid}:
+    delete:
+      description: |-
+        Deletes the subscriber record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_subscriber_by_subscriberid
+      parameters:
+      - in: path
+        name: subscriberid
+        required: true
+        schema:
+          type: string
+      summary: Delete a subscriber record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the subscriber record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_subscriber_by_subscriberid
+      parameters:
+      - in: path
+        name: subscriberid
+        required: true
+        schema:
+          type: string
+      summary: Read one subscriber record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_subscriber_by_subscriberid
+      parameters:
+      - in: path
+        name: subscriberid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a subscriber record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_subscriber_by_subscriberid
+      parameters:
+      - in: path
+        name: subscriberid
+        required: true
+        schema:
+          type: string
+      summary: Act on one subscriber record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the subscriber record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_subscriber_by_subscriberid
+      parameters:
+      - in: path
+        name: subscriberid
+        required: true
+        schema:
+          type: string
+      summary: Replace a subscriber record
       tags:
       - commerce
       x-app: commerce
@@ -56805,6 +58291,618 @@ paths:
         tenants; a successful answer is cacheable for a minute.
       operationId: get_v1_commerce_tenant
       summary: The public tenant configuration a checkout page boots from
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/tokentransaction/:
+    get:
+      description: |-
+        Returns this tenant's tokentransaction records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_tokentransaction
+      summary: List tokentransaction records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one tokentransaction record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_tokentransaction
+      summary: Create a tokentransaction record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/tokentransaction/{tokentransactionid}:
+    delete:
+      description: |-
+        Deletes the tokentransaction record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_tokentransaction_by_tokentransactionid
+      parameters:
+      - in: path
+        name: tokentransactionid
+        required: true
+        schema:
+          type: string
+      summary: Delete a tokentransaction record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the tokentransaction record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_tokentransaction_by_tokentransactionid
+      parameters:
+      - in: path
+        name: tokentransactionid
+        required: true
+        schema:
+          type: string
+      summary: Read one tokentransaction record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_tokentransaction_by_tokentransactionid
+      parameters:
+      - in: path
+        name: tokentransactionid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a tokentransaction record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_tokentransaction_by_tokentransactionid
+      parameters:
+      - in: path
+        name: tokentransactionid
+        required: true
+        schema:
+          type: string
+      summary: Act on one tokentransaction record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the tokentransaction record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_tokentransaction_by_tokentransactionid
+      parameters:
+      - in: path
+        name: tokentransactionid
+        required: true
+        schema:
+          type: string
+      summary: Replace a tokentransaction record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/transfer/:
+    get:
+      description: |-
+        Returns this tenant's transfer records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_transfer
+      summary: List transfer records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one transfer record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_transfer
+      summary: Create a transfer record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/transfer/{transferid}:
+    delete:
+      description: |-
+        Deletes the transfer record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_transfer_by_transferid
+      parameters:
+      - in: path
+        name: transferid
+        required: true
+        schema:
+          type: string
+      summary: Delete a transfer record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the transfer record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_transfer_by_transferid
+      parameters:
+      - in: path
+        name: transferid
+        required: true
+        schema:
+          type: string
+      summary: Read one transfer record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_transfer_by_transferid
+      parameters:
+      - in: path
+        name: transferid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a transfer record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_transfer_by_transferid
+      parameters:
+      - in: path
+        name: transferid
+        required: true
+        schema:
+          type: string
+      summary: Act on one transfer record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the transfer record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_transfer_by_transferid
+      parameters:
+      - in: path
+        name: transferid
+        required: true
+        schema:
+          type: string
+      summary: Replace a transfer record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/variant/:
+    get:
+      description: |-
+        Returns this tenant's variant records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_variant
+      summary: List variant records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one variant record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_variant
+      summary: Create a variant record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/variant/{variantid}:
+    delete:
+      description: |-
+        Deletes the variant record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_variant_by_variantid
+      parameters:
+      - in: path
+        name: variantid
+        required: true
+        schema:
+          type: string
+      summary: Delete a variant record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the variant record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_variant_by_variantid
+      parameters:
+      - in: path
+        name: variantid
+        required: true
+        schema:
+          type: string
+      summary: Read one variant record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_variant_by_variantid
+      parameters:
+      - in: path
+        name: variantid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a variant record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_variant_by_variantid
+      parameters:
+      - in: path
+        name: variantid
+        required: true
+        schema:
+          type: string
+      summary: Act on one variant record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the variant record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_variant_by_variantid
+      parameters:
+      - in: path
+        name: variantid
+        required: true
+        schema:
+          type: string
+      summary: Replace a variant record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/wallet/:
+    get:
+      description: |-
+        Returns this tenant's wallet records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_wallet
+      summary: List wallet records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one wallet record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_wallet
+      summary: Create a wallet record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/wallet/{walletid}:
+    delete:
+      description: |-
+        Deletes the wallet record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_wallet_by_walletid
+      parameters:
+      - in: path
+        name: walletid
+        required: true
+        schema:
+          type: string
+      summary: Delete a wallet record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the wallet record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_wallet_by_walletid
+      parameters:
+      - in: path
+        name: walletid
+        required: true
+        schema:
+          type: string
+      summary: Read one wallet record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_wallet_by_walletid
+      parameters:
+      - in: path
+        name: walletid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a wallet record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_wallet_by_walletid
+      parameters:
+      - in: path
+        name: walletid
+        required: true
+        schema:
+          type: string
+      summary: Act on one wallet record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the wallet record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_wallet_by_walletid
+      parameters:
+      - in: path
+        name: walletid
+        required: true
+        schema:
+          type: string
+      summary: Replace a wallet record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/watchlist/:
+    get:
+      description: |-
+        Returns this tenant's watchlist records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_watchlist
+      summary: List watchlist records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one watchlist record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_watchlist
+      summary: Create a watchlist record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/watchlist/{watchlistid}:
+    delete:
+      description: |-
+        Deletes the watchlist record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_watchlist_by_watchlistid
+      parameters:
+      - in: path
+        name: watchlistid
+        required: true
+        schema:
+          type: string
+      summary: Delete a watchlist record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the watchlist record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_watchlist_by_watchlistid
+      parameters:
+      - in: path
+        name: watchlistid
+        required: true
+        schema:
+          type: string
+      summary: Read one watchlist record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_watchlist_by_watchlistid
+      parameters:
+      - in: path
+        name: watchlistid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a watchlist record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_watchlist_by_watchlistid
+      parameters:
+      - in: path
+        name: watchlistid
+        required: true
+        schema:
+          type: string
+      summary: Act on one watchlist record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the watchlist record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_watchlist_by_watchlistid
+      parameters:
+      - in: path
+        name: watchlistid
+        required: true
+        schema:
+          type: string
+      summary: Replace a watchlist record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/webhook/:
+    get:
+      description: |-
+        Returns this tenant's webhook records.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_webhook
+      summary: List webhook records
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Creates one webhook record and returns it, including the id every other operation on this resource addresses it by.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_webhook
+      summary: Create a webhook record
+      tags:
+      - commerce
+      x-app: commerce
+  /v1/commerce/webhook/{webhookid}:
+    delete:
+      description: |-
+        Deletes the webhook record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: delete_v1_commerce_webhook_by_webhookid
+      parameters:
+      - in: path
+        name: webhookid
+        required: true
+        schema:
+          type: string
+      summary: Delete a webhook record
+      tags:
+      - commerce
+      x-app: commerce
+    get:
+      description: |-
+        Returns the webhook record with this id.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: get_v1_commerce_webhook_by_webhookid
+      parameters:
+      - in: path
+        name: webhookid
+        required: true
+        schema:
+          type: string
+      summary: Read one webhook record
+      tags:
+      - commerce
+      x-app: commerce
+    patch:
+      description: |-
+        Updates only the fields present in the body and leaves the rest as they are.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: patch_v1_commerce_webhook_by_webhookid
+      parameters:
+      - in: path
+        name: webhookid
+        required: true
+        schema:
+          type: string
+      summary: Update part of a webhook record
+      tags:
+      - commerce
+      x-app: commerce
+    post:
+      description: |-
+        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: post_v1_commerce_webhook_by_webhookid
+      parameters:
+      - in: path
+        name: webhookid
+        required: true
+        schema:
+          type: string
+      summary: Act on one webhook record
+      tags:
+      - commerce
+      x-app: commerce
+    put:
+      description: |-
+        Replaces the webhook record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+
+        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+      operationId: put_v1_commerce_webhook_by_webhookid
+      parameters:
+      - in: path
+        name: webhookid
+        required: true
+        schema:
+          type: string
+      summary: Replace a webhook record
       tags:
       - commerce
       x-app: commerce
@@ -69428,7 +71526,7 @@ paths:
         Returns the kinds of record this directory provisions and
         the address of each, so your identity provider discovers them rather than
         having them configured by hand.
-      operationId: get_v1_iam_scim_v2_ResourceTypes
+      operationId: get_v1_iam_scim_v2_resourcetypes
       responses:
         "200":
           content:
@@ -69445,7 +71543,7 @@ paths:
   /v1/iam/scim/v2/ResourceTypes/{name}:
     get:
       description: Returns one provisionable record kind in full.
-      operationId: get_v1_iam_scim_v2_ResourceTypes_name
+      operationId: get_v1_iam_scim_v2_resourcetypes_by_name
       parameters:
       - in: path
         name: name
@@ -69473,7 +71571,7 @@ paths:
         Returns the attribute definitions this directory understands, so
         your identity provider knows which fields it may send and what they mean
         before it sends any.
-      operationId: get_v1_iam_scim_v2_Schemas
+      operationId: get_v1_iam_scim_v2_schemas
       responses:
         "200":
           content:
@@ -69490,7 +71588,7 @@ paths:
   /v1/iam/scim/v2/Schemas/{id}:
     get:
       description: Returns one attribute definition in full.
-      operationId: get_v1_iam_scim_v2_Schemas_id
+      operationId: get_v1_iam_scim_v2_schemas_by_id
       parameters:
       - in: path
         name: id
@@ -69520,7 +71618,7 @@ paths:
 
         Filtering and partial updates are supported. Bulk operations, sorting and
         entity tags are not — an IdP that reads this will not attempt them.
-      operationId: get_v1_iam_scim_v2_ServiceProviderConfig
+      operationId: get_v1_iam_scim_v2_serviceproviderconfig
       responses:
         "200":
           content:
@@ -73387,133 +75485,341 @@ paths:
       tags:
       - legal
       x-app: legal
-  /v1/licensing/{wildcard1}:
-    delete:
-      description: |-
-        The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only. A DELETE to a real licensing path is 405, with an `Allow` header naming the methods that path does serve; a DELETE to a path the subtree does not have is 404.
-
-        The delete-shaped operation here is revocation, and it is POST /v1/licensing/revoke. It APPENDS a revocation entry rather than removing anything, because a token already in the field cannot be recalled — it can only be denied at verify and download time, and the entry is the record of who denied it and why.
-      operationId: delete_v1_licensing_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served — a license is revoked, never deleted
-      tags:
-      - licensing
-      x-app: licensing
+  /v1/licensing/download/{release}:
     get:
       description: |-
-        The subtree is mounted as ONE wildcard route, so the path segment selects the real operation. Under GET those are:
+        Download resolves a release to its artifact, gated on a valid license.
 
-        - `/v1/licensing/releases` — every release the deployment knows.
-        - `/v1/licensing/releases/{release}` — one release's metadata; an unknown id is 404.
-        - `/v1/licensing/download/{release}` — the license-gated artifact download. It is gated on the minted LICENSE token rather than the OIDC bearer, because that is exactly what the engine runs on: present it as an `X-License-Token` header or a `?token=` query parameter. No token is 401; a token whose signature, app or expiry fails, or that has been revoked, or that lacks the features the release requires, is 403; a yanked release is 410. The answer carries the artifact AND its cosign signature, so a client verifies the binary before trusting it.
-        - `/v1/licensing/pubkey` and `/v1/licensing/jwks` — the same Ed25519 PUBLIC key, in raw base64 and as a JWK. This is the only public-safe surface here, and it is what lets an engine verify tokens OFFLINE. The private key never enters this process: signing goes through the KMS signer abstraction, not key material.
-        - `/v1/licensing/healthz` — status, deployment env, and which signer provider is in use.
+        The gate is the LICENSE token, not the IAM bearer: being signed in is not
+        permission to download a paid binary — holding a good license for it is. The
+        token must verify against this deployment's public key, be unrevoked, be
+        scoped to the release's app, and carry every feature the release requires.
+        Present it as the `X-License-Token` header (preferred, since a header does not
+        land in proxy logs) or as `?token=`.
 
-        Any other path under the subtree is 404.
-      operationId: get_v1_licensing_by_wildcard1
+        The response pairs the artifact URL with its cosign signature so the client
+        verifies the binary BEFORE trusting it: a signed URL alone proves where the
+        bytes came from, not what they are. A yanked release is 410 Gone.
+      operationId: get_v1_licensing_download_by_release
       parameters:
       - in: path
-        name: wildcard1
+        name: release
         required: true
         schema:
           type: string
-      summary: 'Read the licensing subtree: releases, the public verification key,
-        health'
-      tags:
-      - licensing
-      x-app: licensing
-    options:
-      description: The subtree is mounted as ONE wildcard route, so every method that
-        route can carry is published — but the mux behind it registers GET and POST
-        handlers only, and OPTIONS is not among them. An OPTIONS to a real licensing
-        path is therefore 405 rather than a capability answer; it does still carry
-        the `Allow` header naming that path's real methods, which is the part a client
-        was asking for. An OPTIONS to a path the subtree does not have is 404.
-      operationId: options_v1_licensing_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
+      - in: query
+        name: token
+        required: false
         schema:
           type: string
-      summary: Not served — but the refusal still names the methods a path allows
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Artifact'
+          description: ok
+      summary: Download resolves a release to its artifact, gated on a valid license.
       tags:
       - licensing
       x-app: licensing
-    patch:
+  /v1/licensing/fingerprint:
+    post:
       description: |-
-        The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only. A PATCH to a real licensing path is 405, with an `Allow` header naming the methods that path does serve; a PATCH to a path the subtree does not have is 404.
+        Fingerprint turns raw device signals into the opaque value that binds a license
+        to one machine.
 
-        Nothing here is mutable in part. A license is an immutable signed token — you issue a new one — and a release is republished whole.
-      operationId: patch_v1_licensing_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
+        This is the anti-copy step: the value returned here is folded into the signed
+        token, so a token minted with it runs only on the device it was bound to. The
+        derivation is one-way and salted — the signals are never stored and never
+        echoed back — so the response is safe to persist client-side and pass to
+        issue. Signals too weak to identify a machine (a hostname alone) are refused
+        rather than turned into a binding that would collide with other machines.
+      operationId: post_v1_licensing_fingerprint
+      requestBody:
+        content:
+          application/json:
+            example:
+              signals:
+                arch: arm64
+                cpuid: …
+                machine_id: …
+                os: linux
+            schema:
+              $ref: '#/components/schemas/FingerprintRequest'
         required: true
-        schema:
-          type: string
-      summary: Not served — nothing in the licensing subtree is patched
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FingerprintResponse'
+          description: ok
+      summary: Fingerprint turns raw device signals into the opaque value that binds
+        a license to one machine.
+      tags:
+      - licensing
+      x-app: licensing
+  /v1/licensing/healthz:
+    get:
+      description: |-
+        Health reports which signer this deployment mints with, and in which env.
+
+        It answers 200 whenever the process is up: there is nothing downstream to
+        probe, since the KMS is reached only when a token is actually minted. Its
+        value is the `signer` field — `"signer":"local"` on a production host says
+        that deployment is signing licenses with a development key, which is a
+        misconfiguration worth paging on rather than a healthy 200.
+      operationId: get_v1_licensing_healthz
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthView'
+          description: ok
+      summary: Health reports which signer this deployment mints with, and in which
+        env.
+      tags:
+      - licensing
+      x-app: licensing
+  /v1/licensing/issue:
+    post:
+      description: |-
+        Issue mints a signed license token for a product the caller's org already pays
+        for.
+
+        The order is the whole security argument: the caller is an IAM-validated
+        principal, commerce is then asked whether that principal's ORG holds an ACTIVE
+        entitlement for the product, and only then is a token signed — by the KMS,
+        never by key material in this process. A product the org does not own answers
+        403 and no token. The signed features are the plan's features verbatim, so the
+        engine enforces exactly what was bought, and the expiry is clamped to the
+        entitlement's so a token cannot outlive the subscription that paid for it.
+
+        The token is the credential the engine runs on. Treat it as a secret.
+      operationId: post_v1_licensing_issue
+      requestBody:
+        content:
+          application/json:
+            example:
+              product: engine
+              signals:
+                machine_id: …
+                os: linux
+            schema:
+              $ref: '#/components/schemas/IssueRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueResponse'
+          description: ok
+      summary: Issue mints a signed license token for a product the caller's org already
+        pays for.
+      tags:
+      - licensing
+      x-app: licensing
+  /v1/licensing/jwks:
+    get:
+      description: |-
+        Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and
+        /jwks.
+
+        This is the only public-safe surface here and the reason the whole scheme
+        works offline: the engine embeds or fetches this key once and then verifies
+        every license itself, with no call home per launch. The private half never
+        enters this process — it lives in the KMS — so nothing served here is a
+        secret. `provider` names the KMS holding that half; `"local"` means a
+        development key, and a token signed by one is not a production credential.
+      operationId: get_v1_licensing_jwks
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PubkeyView'
+          description: ok
+      summary: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey
+        and /jwks.
+      tags:
+      - licensing
+      x-app: licensing
+  /v1/licensing/pubkey:
+    get:
+      description: |-
+        Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and
+        /jwks.
+
+        This is the only public-safe surface here and the reason the whole scheme
+        works offline: the engine embeds or fetches this key once and then verifies
+        every license itself, with no call home per launch. The private half never
+        enters this process — it lives in the KMS — so nothing served here is a
+        secret. `provider` names the KMS holding that half; `"local"` means a
+        development key, and a token signed by one is not a production credential.
+      operationId: get_v1_licensing_pubkey
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PubkeyView'
+          description: ok
+      summary: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey
+        and /jwks.
+      tags:
+      - licensing
+      x-app: licensing
+  /v1/licensing/releases:
+    get:
+      description: |-
+        Lists the signed binary releases this deployment can serve.
+
+        Metadata only, and no download URL: the artifact is behind GET
+        /v1/licensing/download/{release}, which is gated on a valid license token.
+        Knowing that a release exists is not permission to run it, which is why this
+        list needs no license of its own.
+      operationId: get_v1_licensing_releases
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseList'
+          description: ok
+      summary: Lists the signed binary releases this deployment can serve.
       tags:
       - licensing
       x-app: licensing
     post:
       description: |-
-        The subtree is mounted as ONE wildcard route, so the path segment selects the real operation. Under POST those are:
+        Publishes a signed binary release, answering 201 Created.
 
-        - `/v1/licensing/issue` — mints an Ed25519 license token for a paid product. The caller must be authenticated (mounted in cloud, that is an IAM-verified bearer), and the entitlement is then checked in commerce for that caller's org and subject: a caller who does not own the product is 403, never a token. The token's `app_id` is the DEPLOYMENT's brand, so a hanzo deployment can never mint a lux- or zoo-scoped token. Device binding comes from a `fingerprint` you registered earlier or from `signals` bound at issue time, and a deployment configured to require one refuses without it. The lifetime is clamped both to policy and to the entitlement's own expiry, so a token never outlives the entitlement that justified it. Naming a `release` scopes the token to it as a `release:<id>` feature, which is what makes release-scoped revocation reach it.
-        - `/v1/licensing/verify` — an online, unauthenticated check of a token: signature, app and expiry, then the revocation list. The rule worth knowing is that an INVALID token is still 200 — the answer is `{valid:false, reason}`, not an HTTP error — because this read is informational and the engine is what enforces the license, offline, from the public key.
-        - `/v1/licensing/revoke` — appends a revocation entry scoped by `nonce`, `holder`, `fingerprint` or `release`, stamped with the admin who did it. Authenticated; any other scope, or a missing value, is 400.
-        - `/v1/licensing/fingerprint` — turns device signals into the opaque binding value `/issue` accepts. Authenticated, and the raw signals are never echoed back.
-        - `/v1/licensing/releases` — publishes a release, answering 201. Authenticated, and outside dev a release carrying no cosign signature is refused, so an unsigned binary cannot enter the download path.
-
-        Any other path under the subtree is 404.
-      operationId: post_v1_licensing_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
+        Outside dev a release MUST carry its cosign signature: this is how a binary
+        becomes downloadable, so accepting an unsigned one would let an unverifiable
+        artifact into the distribution path. Org-admin only — publishing is an
+        operator action, not something a licensee does.
+      operationId: post_v1_licensing_releases
+      requestBody:
+        content:
+          application/json:
+            example:
+              artifact_ref: s3://…
+              cosign_signature: MEUCIQ…
+              id: engine-1.4.0-linux-arm64
+              platform: linux/arm64
+              product: engine
+              version: 1.4.0
+            schema:
+              $ref: '#/components/schemas/Release'
         required: true
-        schema:
-          type: string
-      summary: Issue, verify and revoke license tokens, bind a device, publish a release
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+          description: created
+      summary: Publishes a signed binary release, answering 201 Created.
       tags:
       - licensing
       x-app: licensing
-    put:
+  /v1/licensing/releases/{release}:
+    get:
       description: |-
-        The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only. A PUT to a real licensing path (`/v1/licensing/issue`, `/v1/licensing/releases`, and the rest) is 405, with an `Allow` header naming the methods that path does serve; a PUT to a path the subtree does not have at all is 404.
+        Reads one release's metadata: its product, version, platform and the
+        cosign material a client verifies the binary against.
 
-        There is no replace-in-place anywhere here: a release is published again through POST /v1/licensing/releases, and a license is re-issued rather than edited.
-      operationId: put_v1_licensing_by_wildcard1
+        An unknown id is 404. Like the list, this is metadata only — the bytes are
+        behind the license-gated download.
+      operationId: get_v1_licensing_releases_by_release
       parameters:
       - in: path
-        name: wildcard1
+        name: release
         required: true
         schema:
           type: string
-      summary: Not served — nothing in the licensing subtree is replaced by PUT
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+          description: ok
+      summary: 'Reads one release''s metadata: its product, version, platform and
+        the cosign material a client verifies the binary against.'
       tags:
       - licensing
       x-app: licensing
-    trace:
-      description: The subtree is mounted as ONE wildcard route, so every method that
-        route can carry is published — but the mux behind it registers GET and POST
-        handlers only. A TRACE to a real licensing path is 405 with an `Allow` header
-        naming that path's real methods, and a TRACE to a path the subtree does not
-        have is 404. No request is ever echoed back, which is what you want of a surface
-        that carries bearer tokens and license tokens in headers.
-      operationId: trace_v1_licensing_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
+  /v1/licensing/revoke:
+    post:
+      description: |-
+        Revoke turns off tokens that have already been issued.
+
+        A signed token cannot be un-signed, so revocation is the only way to withdraw
+        one: this appends an entry that verify and the license-gated download both
+        consult. It is a POST rather than a DELETE because it APPENDS a durable,
+        attributed record — the entry names the admin who recorded it and when —
+        rather than removing one.
+
+        Org-admin only. Scope it as narrowly as the incident allows: "nonce" for one
+        leaked token, "holder" for one compromised account, "fingerprint" for one
+        stolen machine, "release" when a whole build is bad.
+      operationId: post_v1_licensing_revoke
+      requestBody:
+        content:
+          application/json:
+            example:
+              reason: leaked in a public gist
+              scope: nonce
+              value: 9f2c…
+            schema:
+              $ref: '#/components/schemas/RevokeRequest'
         required: true
-        schema:
-          type: string
-      summary: Not served — the licensing subtree does not echo requests
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeResponse'
+          description: ok
+      summary: Revoke turns off tokens that have already been issued.
+      tags:
+      - licensing
+      x-app: licensing
+  /v1/licensing/verify:
+    post:
+      description: |-
+        Verify checks a license token online: signature, schema, expiry, app_id and
+        the revocation list.
+
+        It is UNAUTHENTICATED and always answers 200 — a bad token is `valid:false`
+        with a reason rather than an error status, because "is this token good" is a
+        question anyone may ask about a credential they already hold and the answer is
+        the same either way. It is also OPTIONAL: the engine verifies OFFLINE against
+        the published public key (GET /v1/licensing/pubkey) and needs this endpoint
+        only to learn about revocation, so an outage here never stops a paid customer
+        working.
+      operationId: post_v1_licensing_verify
+      requestBody:
+        content:
+          application/json:
+            example:
+              token: eyJ2Ijox….Ab3…
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+          description: ok
+      summary: 'Verify checks a license token online: signature, schema, expiry, app_id
+        and the revocation list.'
       tags:
       - licensing
       x-app: licensing
@@ -92640,7 +94946,7 @@ paths:
               kind: snapshot
               run_id: benchmark:zen-1:mmlu
             schema:
-              $ref: '#/components/schemas/Artifact'
+              $ref: '#/components/schemas/ResearchArtifact'
         required: true
       responses:
         "200":

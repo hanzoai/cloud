@@ -32,6 +32,7 @@ func init() {
 	describePlans()
 	describeStore()
 	describeCheckout()
+	describeResources()
 }
 
 // ---- /_/commerce — the operator surface the ingress withholds publicly ----
@@ -930,4 +931,71 @@ func describeCheckout() {
 			"namespacing and store resolution happen first, so a missing token is still 401 and an "+
 			"unloadable store still 500. It is the same handler as the unprefixed cancel address, "+
 			"with the same outcome.")
+}
+
+// ---- the generated resource surface ----
+
+// resources are the CRUD families the commerce module registers wholesale — one
+// collection route and one item route each, over the same store. There are 17 of
+// them and each publishes 7 operations, which is 119 sentences that differ in
+// exactly one word.
+//
+// So they are DERIVED, for the same reason openapi.DescribeSPA derives the two
+// SPA addresses: prose written 119 times is prose that drifts 119 ways, and the
+// next resource the module adds would arrive undescribed and stop the surface
+// gate again. Adding a family here is one line.
+//
+// The vocabulary is deliberately plain. These are generic store resources with no
+// per-resource semantics worth inventing — a caller learns what a `product` is
+// from the product, not from this document — so each sentence states the SHAPE
+// (what the address is, what the method does to it, what the id means) and stops.
+// Where a resource genuinely needs its own prose it gets an explicit Describe
+// above, which wins: Describe panics on a duplicate, so a hand-written sentence
+// and this loop cannot both claim one address.
+var resources = []string{
+	"collection", "disclosure", "discount", "movie", "note", "product", "return",
+	"saleschannel", "stocklocation", "submission", "subscriber", "tokentransaction",
+	"transfer", "variant", "wallet", "watchlist", "webhook",
+}
+
+func describeResources() {
+	for _, r := range resources {
+		coll := "/v1/commerce/" + r + "/"
+		item := "/v1/commerce/" + r + "/:" + r + "id"
+		tenant := "\n\nScoped to the caller's own tenant: the org comes from the validated " +
+			"session, never from the body or a header, so one tenant's " + r + " is not " +
+			"addressable by another even by exact id — an id outside the caller's tenant " +
+			"answers 404, the same as one that does not exist."
+
+		openapi.Describe(coll, http.MethodGet,
+			"List "+r+" records",
+			"Returns this tenant's "+r+" records."+tenant)
+		openapi.Describe(coll, http.MethodPost,
+			"Create a "+r+" record",
+			"Creates one "+r+" record and returns it, including the id every other "+
+				"operation on this resource addresses it by."+tenant)
+
+		openapi.Describe(item, http.MethodGet,
+			"Read one "+r+" record",
+			"Returns the "+r+" record with this id."+tenant)
+		openapi.Describe(item, http.MethodPut,
+			"Replace a "+r+" record",
+			"Replaces the "+r+" record with this id: fields absent from the body are "+
+				"reset, which is what makes this different from PATCH."+tenant)
+		openapi.Describe(item, http.MethodPatch,
+			"Update part of a "+r+" record",
+			"Updates only the fields present in the body and leaves the rest as they "+
+				"are."+tenant)
+		openapi.Describe(item, http.MethodDelete,
+			"Delete a "+r+" record",
+			"Deletes the "+r+" record with this id."+tenant)
+
+		// POST on the ITEM address is published because the router binds every method
+		// here, not because it does something separate from create.
+		openapi.Describe(item, http.MethodPost,
+			"Act on one "+r+" record",
+			"Published because this address accepts every method the generator knows. "+
+				"Creation is POST on the collection above; POST here addresses a record "+
+				"that already exists."+tenant)
+	}
 }
