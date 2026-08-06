@@ -258,8 +258,17 @@ func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) er
 	return err
 }
 
+// Capture records the debit for a registration/renewal/transfer. ref names the ACT (the
+// registration's own ref, "domain:renew:<name>", "domain:transfer:<name>") — the ledger's
+// idempotency key, so re-capturing one registration charges once. It rides as
+// [metering.Usage.Ref] and NOT as the request id, which is a correlation header the
+// caller controls and would key the ledger on a value the payer picks.
 func (m *meterBiller) Capture(org string, cents int64, ref string) {
-	m.rm.Meter(org, "", "domain.register", cents, ref, "")
+	m.rm.MeterUsage(org, "domain.register", metering.Usage{
+		Model:       "domain.register",
+		AmountCents: cents,
+		Ref:         ref,
+	})
 }
 
 // ── DNS adapter (hanzoai/dns) ──────────────────────────────────────────────────────
