@@ -3011,6 +3011,30 @@ and the logs.
 The machines/GPU fold (`managedMachines`) has the same shape and is **not** covered
 yet — it feeds three surfaces through a different type.
 
+### `/v1/k8s/nodes` is Visor's first TYPED op, and the wire moved with it
+
+Upstream it is now `zip.Get[controllers.Scope, controllers.Nodes]`
+(`visor/routers/router.go`), so it is in the registry the OpenAPI document, the MCP
+tool list, the CLI and every SDK are generated from — where the rest of Visor's `/v1`
+surface still is not. A typed op answers its **Out directly**: `{"nodes":[…]}`, no
+`{status,msg,data}` around it.
+
+Cloud therefore reads it with `cl.op` rather than `cl.call` (`apps/visor/client.go`).
+Both go through the same `do` — one request path, two readings — because Visor really
+does serve two shapes right now. `call` and `envelope` shrink as routes are typed and
+are deleted with the last one.
+
+**The trap this closes.** Decoding an envelope into `visorNodes` does not fail: the
+keys are simply unknown, `Nodes` stays nil, and an operator running eight clusters is
+told *with a 200* that they have no workers. So the op always writes the key, and a
+nil list means "this Visor does not serve this op" — `listK8sNodes` answers 502 and
+`managedMachines` drops that one source and logs why. `TestK8sNodesRefusesTheOldEnvelope`
+and `TestMachinesDropDOKSNodesOnSkew` pin both halves.
+
+**Deploy order.** Visor first, then cloud — but the window is not dangerous either
+way, because both directions of the skew now report instead of under-reporting, and
+the route 404s in production today regardless (see the release note above).
+
 ## Two CR kinds, and the documented endpoint had the empty one
 
 `hanzo.ai/v1 App` is the TENANT plane (per-tenant namespace, org-labelled).

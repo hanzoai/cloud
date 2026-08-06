@@ -20,6 +20,10 @@ import (
 // saw for assertions.
 type fakeVisor struct {
 	lastOwner string
+	// nodesSpeakTheOldEnvelope makes /v1/k8s/nodes answer the pre-typed
+	// {status,msg,data} shape — an un-upgraded Visor, which is the deploy skew
+	// this endpoint has actually been in.
+	nodesSpeakTheOldEnvelope bool
 	// machinesByOwner is the per-tenant REGISTRY inventory (/v1/get-machines).
 	machinesByOwner map[string][]map[string]any
 	// liveByOwner is the per-tenant LIVE DigitalOcean reseller list
@@ -27,14 +31,35 @@ type fakeVisor struct {
 	// listMachines now unions with the registry.
 	liveByOwner map[string][]map[string]any
 	// nodesByOwner is the per-tenant DOKS worker NODES list (/v1/k8s/nodes →
-	// ListComputeKubernetesNodes) — the THIRD machine source managedMachines unions.
+	// visor's TYPED ListNodes op) — the THIRD machine source managedMachines unions.
 	nodesByOwner map[string][]map[string]any
 	poolsByOwner map[string][]map[string]any
 }
 
+// envelope200 answers the way one of Visor's UNTYPED controller routes does:
+// the payload wrapped in {status,msg,data}.
 func envelope200(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "msg": "", "data": data})
+}
+
+// op200 answers the way one of Visor's TYPED ops does: the declared Out, with
+// nothing wrapped around it. The two spellings sit side by side because Visor's
+// surface really does have both, and a fake that spoke only one would let cloud
+// read the wrong wire and still pass.
+func op200(w http.ResponseWriter, out any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// nodesOut renders visor's controllers.Nodes: the key is ALWAYS present, so an
+// org with none gets [] rather than null — the property cloud reads to tell an
+// empty fleet from an upstream that does not serve the op.
+func nodesOut(nodes []map[string]any) map[string]any {
+	if nodes == nil {
+		nodes = []map[string]any{}
+	}
+	return map[string]any{"nodes": nodes}
 }
 
 func (f *fakeVisor) server(t *testing.T) *httptest.Server {
@@ -52,11 +77,15 @@ func (f *fakeVisor) server(t *testing.T) *httptest.Server {
 		f.lastOwner = owner
 		envelope200(w, f.liveByOwner[owner])
 	})
-	// DOKS worker nodes (ListComputeKubernetesNodes) — the third machine source.
+	// DOKS worker nodes (visor's typed ListNodes op) — the third machine source.
 	mux.HandleFunc("/v1/k8s/nodes", func(w http.ResponseWriter, r *http.Request) {
 		owner := r.URL.Query().Get("owner")
 		f.lastOwner = owner
-		envelope200(w, f.nodesByOwner[owner])
+		if f.nodesSpeakTheOldEnvelope {
+			envelope200(w, f.nodesByOwner[owner])
+			return
+		}
+		op200(w, nodesOut(f.nodesByOwner[owner]))
 	})
 	mux.HandleFunc("/v1/get-machine", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id") // owner/name
@@ -338,6 +367,50 @@ func TestMachinesMergeDOKSNodes(t *testing.T) {
 	}
 	if nodeOnly.Provider != "DigitalOcean" || nodeOnly.Status != "running" || nodeOnly.Type != "s-4vcpu-8gb" {
 		t.Errorf("DOKS-only node view mismatch: got %+v want provider=DigitalOcean status=running type=s-4vcpu-8gb", nodeOnly)
+	}
+}
+
+// TestMachinesDropDOKSNodesOnSkew is the fleet fold's half of the deploy-skew
+// case: a Visor still answering the pre-typed envelope for /v1/k8s/nodes must
+// cost the fleet its DOKS source and NOTHING else.
+//
+// The fold's rule is that each source fails independently — a blip in one never
+// hides the others — and that has to survive the wire change. What must NOT
+// happen is the middle outcome: reading the old envelope as a valid answer of
+// zero nodes, which would look identical to a healthy org that owns no clusters.
+func TestMachinesDropDOKSNodesOnSkew(t *testing.T) {
+	f := &fakeVisor{
+		nodesSpeakTheOldEnvelope: true,
+		liveByOwner: map[string][]map[string]any{
+			"acme": {{"owner": "acme", "name": "standalone-1", "id": "drop-1",
+				"provider": "DigitalOcean", "size": "s-2vcpu-4gb", "region": "sfo3", "state": "running"}},
+		},
+		nodesByOwner: map[string][]map[string]any{
+			"acme": {{"owner": "acme", "name": "prod-default-bbb", "id": "drop-node-2",
+				"provider": "DigitalOcean", "size": "s-4vcpu-8gb", "region": "sfo3", "state": "running"}},
+		},
+	}
+	app := mountApp(t, f)
+
+	code, body := do(t, app, http.MethodGet, "/v1/machines", "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("a degraded source must not fail the whole list: got %d (%s)", code, body)
+	}
+	var listed struct {
+		Machines []machineView `json:"machines"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	byName := map[string]machineView{}
+	for _, m := range listed.Machines {
+		byName[m.ID] = m
+	}
+	if _, ok := byName["standalone-1"]; !ok {
+		t.Errorf("the live source must survive a degraded k8s source: %+v", listed.Machines)
+	}
+	if _, ok := byName["prod-default-bbb"]; ok {
+		t.Errorf("a node read off an envelope cloud cannot decode must not be surfaced: %+v", listed.Machines)
 	}
 }
 
