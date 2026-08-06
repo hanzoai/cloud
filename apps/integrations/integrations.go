@@ -813,6 +813,11 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	app.Use(zip.H(bridgeFacts))
 
 	zip.Get(zapp, "/v1/integrations", o.list)
+	// The Marketplace / "Add to Slack" entry point. A literal, so it is matched
+	// before the /:provider wildcards below, and Terminal like its siblings: it
+	// carries no principal by design and must not be gated into a 403, because the
+	// person clicking Install in Slack's directory has no Hanzo session yet.
+	app.Get("/v1/integrations/slack/install", cloud.Terminal(cloud.Handle(s, slackInstall)))
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))
 	app.Post("/v1/integrations/slack/commands", cloud.Terminal(cloud.Handle(s, slackCommands)))
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
