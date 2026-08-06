@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -14,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
@@ -33,14 +37,12 @@ type fakeCommerce struct {
 
 func newFakeCommerce() *fakeCommerce { return &fakeCommerce{spend: map[string]int64{}} }
 
-func (f *fakeCommerce) configured() bool { return true }
-
-func (f *fakeCommerce) spendCents(_ context.Context, org, _ string) (int64, error) {
+func (f *fakeCommerce) spendCents(_ context.Context, org string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reads++
 	if org == f.failOn {
-		return 0, errUnconfigured
+		return 0, errNoLedger
 	}
 	return f.spend[org], nil
 }
@@ -292,39 +294,76 @@ func TestGetIsPureReadAndAdvancesNothing(t *testing.T) {
 
 // TestLedgerReceivesZeroDeposits proves the absence of the mint at the WIRE, not
 // at an interface a test could fake into agreement: the service is bound to the
-// REAL payout client, pointed at a stub commerce that fails the test if anything
-// ever posts to a money-in endpoint.
+// REAL payout client, and the money plane it reaches is stood up here with the
+// two money-MOVING ops registered beside the read — each one failing the test if
+// it is ever invoked.
 //
 // It then drives every route on the surface, in the state that used to pay out.
-// The only request commerce may see is the read-only usage rollup.
+// The only op commerce may see is the read.
+//
+// It used to point the real client at an httptest.Server and assert on paths.
+// That server answered a wire this fleet does not serve: co-resident, the
+// transport dispatched GET /v1/billing/usage/rollup back into a router with no
+// such route, and split, the client had no address at all. The proof was real and
+// the wire under it was not.
 func TestLedgerReceivesZeroDeposits(t *testing.T) {
 	var mu sync.Mutex
 	var hits []string
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		hits = append(hits, r.Method+" "+r.URL.Path)
-		mu.Unlock()
+	sockDir, err := os.MkdirTemp("", "zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
+	plane.Unbind()
+	t.Cleanup(plane.Unbind)
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
 
-		// ANY write to the money plane is the bug. Fail loudly rather than 500 and
-		// let a swallowed error look like success.
-		if r.Method != http.MethodGet {
-			t.Errorf("commerce received a WRITE the referrals surface must never make: %s %s", r.Method, r.URL.Path)
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		if strings.Contains(r.URL.Path, "deposit") || strings.Contains(r.URL.Path, "credit") {
-			t.Errorf("commerce received a money-in call: %s %s", r.Method, r.URL.Path)
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		// The qualify signal: orgB has spent.
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"consumedCents":4242}`))
-	}))
-	defer srv.Close()
+	p := cloud.Plane()
+	zip.Post[plane.SpendIn, plane.Spend](p, "/finance/spend",
+		func(_ context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+			mu.Lock()
+			hits = append(hits, plane.FinanceSpend)
+			mu.Unlock()
+			// The qualify signal: the referee has spent.
+			return &plane.Spend{
+				Consumed: plane.Money{Decimal: "42.42", Currency: "USD"},
+				Balance:  plane.Money{Decimal: "0", Currency: "USD"},
+			}, nil
+		}, zip.WithOperationID(plane.FinanceSpend))
 
-	app, s := mountWith(t, newCommerceClient(srv.URL, "test-service-token"))
+	// The two money-IN ops, live on the same plane and reachable by name. ANY
+	// call to either is the bug this test exists to catch — and unlike a stub
+	// server keyed on a URL, a caller cannot reach these by accident through a
+	// path it half-matched. It has to name the op.
+	mint := func(op string) func(context.Context, *plane.CreditIn) (*plane.Credited, error) {
+		return func(_ context.Context, _ *plane.CreditIn) (*plane.Credited, error) {
+			mu.Lock()
+			hits = append(hits, op)
+			mu.Unlock()
+			t.Errorf("the referrals surface called %s — it issues no credit; a referral reward is an affiliate payable, settled by wire or wallet", op)
+			return nil, errors.New("refused")
+		}
+	}
+	zip.Post[plane.CreditIn, plane.Credited](p, "/finance/credit", mint(plane.FinanceCredit),
+		zip.WithOperationID(plane.FinanceCredit))
+	zip.Post[plane.CreditIn, plane.Credited](p, "/finance/deposit", mint("finance_deposit_probe"),
+		zip.WithOperationID("finance_deposit_probe"))
+
+	sock := zip.SocketPath("commerce")
+	go func() { _ = p.Listen(sock) }()
+	t.Cleanup(func() { _ = p.Shutdown() })
+	for i := 0; i < 300; i++ {
+		if c, derr := net.Dial("unix", sock); derr == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	app, s := mountWith(t, newCommerceClient())
 	ctx := context.Background()
 	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
 
@@ -338,9 +377,12 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
+	if len(hits) == 0 {
+		t.Fatal("the money plane was never reached at all — the no-mint proof would be vacuous")
+	}
 	for _, h := range hits {
-		if !strings.HasPrefix(h, "GET /v1/billing/usage/rollup") {
-			t.Fatalf("unexpected commerce call %q — the only call this surface may make is the usage rollup (all hits: %v)", h, hits)
+		if h != plane.FinanceSpend {
+			t.Fatalf("unexpected commerce op %q — the only op this surface may invoke is the spend read (all: %v)", h, hits)
 		}
 	}
 	// The referral did qualify over that run, so the surface was genuinely exercised
@@ -370,8 +412,8 @@ func TestCommerceSeamIsReadOnly(t *testing.T) {
 		}
 	}
 	// And it is exactly the read it claims to be.
-	if got := typ.NumMethod(); got != 2 {
-		t.Fatalf("commerce seam has %d methods, want 2 (configured, spendCents)", got)
+	if got := typ.NumMethod(); got != 1 {
+		t.Fatalf("commerce seam has %d methods, want 1 (spendCents). It asks ONE question", got)
 	}
 }
 
