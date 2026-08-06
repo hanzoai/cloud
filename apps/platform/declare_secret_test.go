@@ -24,6 +24,7 @@ const declareSecretValue = "sk_live_51H8xQ2LkdIwHu7ixR0Nn7Yq2vB3mZ9pK"
 func TestRenderCarriesAReferenceAndNeverTheSecret(t *testing.T) {
 	spec := testSpec()
 	spec.Env = []declareEnv{{Name: "PORT", Value: "3000"}}
+	spec.Public = []string{"PORT"}
 	spec.SecretKeys = []string{"STRIPE_SK"}
 
 	out := string(spec.render())
@@ -76,10 +77,16 @@ func TestDeclareRefusesToCommitCredentialBytes(t *testing.T) {
 	defer swapRegistryBase(reg.URL)()
 
 	spec := testSpec()
-	spec.Env = []declareEnv{{Name: "INNOCENT_NAME", Value: declareSecretValue}} // never split
+	// Reaches the render WITHOUT the caller ever declaring it public — the shape
+	// a bug in the split (or a future second writer) would produce. The name is
+	// deliberately innocuous and the value deliberately credential-shaped, so
+	// neither a key rule nor a value rule is what catches it: the audit does,
+	// because the caller never authorised a cleartext write for this name.
+	spec.Env = []declareEnv{{Name: "INNOCENT_NAME", Value: declareSecretValue}}
+	spec.Public = nil
 	_, err := declare(serviceWithKMS(kmsWithPinToken(t)), context.Background(), spec, modeCommit)
 	if err == nil {
-		t.Fatal("a declaration carrying credential material was committed to universe")
+		t.Fatal("a declaration carrying unauthorised cleartext was committed to universe")
 	}
 	if !strings.Contains(err.Error(), "INNOCENT_NAME") {
 		t.Errorf("the refusal must name the offending entry: %v", err)
@@ -99,6 +106,7 @@ func TestABranchDeclarationIsAlsoRefused(t *testing.T) {
 	defer swapUniverseRemote(remote)()
 	spec := testSpec()
 	spec.Env = []declareEnv{{Name: "X", Value: declareSecretValue}}
+	spec.Public = nil
 	if _, err := declare(serviceWithKMS(kmsWithPinToken(t)), context.Background(), spec, modeBranch); err == nil {
 		t.Fatal("credential material reached a branch; git history is the leak, not the ref")
 	}
@@ -160,4 +168,105 @@ func writeSet(t *testing.T, body string) string {
 		t.Fatal(err)
 	}
 	return root
+}
+
+// ── seal by default kills the miss CLASS, not eight instances ───────────────
+
+// Red proved mustSeal missed 8 of 8 real credential shapes, each for a different
+// reason. Under seal-by-default none of them can be published, and no new shape
+// can either — the default does not depend on recognising anything.
+func TestSealByDefaultPublishesNothingUnmarked(t *testing.T) {
+	for _, tc := range []struct{ name, value, why string }{
+		{"PGPASSWORD", "s3cr3t", "libpq's own variable; one token to any splitter"},
+		{"DB_PW", "s3cr3t", "`pw` is not a token"},
+		{"ADMIN_PW", "Tr0ub4dor&3", "short and symbol-rich"},
+		{"APP_PASSPHRASE", "correct horse battery staple", "spaces, so no token shape at all"},
+		{"KUBECONFIG", "apiVersion: v1\nclusters:\n- cluster:\n    certificate-authority-data: LS0tL", "cluster-admin, base64 material, no PEM armour"},
+		{"MFA_SEED", "JBSWY3DPEHPK3PXP", "base32, short, low entropy"},
+		{"SIGNING_MATERIAL", "n0t-v3ry-r4ndom", "symbol-rich but short"},
+		{"OPAQUE", "aB3", "too short for any entropy rule"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Unmarked ⇒ sealed. It never reaches spec.Env, so it cannot render.
+			e := declareEnv{Name: tc.name, Value: tc.value}
+			if e.Public {
+				t.Fatal("the zero value of declareEnv must be SECRET")
+			}
+			spec := testSpec()
+			spec.SecretKeys = []string{tc.name}
+			body := string(spec.render())
+			if strings.Contains(body, tc.value) {
+				t.Fatalf("GIT PLAINTEXT (%s): %s reached the values file:\n%s", tc.why, tc.name, body)
+			}
+			if !strings.Contains(body, "secretKeyRef:") {
+				t.Fatalf("%s did not render as a reference:\n%s", tc.name, body)
+			}
+		})
+	}
+}
+
+// V3's other half: a config value the operator NEEDS to read is marked public
+// and stays readable. Seal-by-default is not seal-everything.
+func TestPublicConfigurationStaysReadable(t *testing.T) {
+	spec := testSpec()
+	spec.Env = []declareEnv{
+		{Name: "GIT_COMMIT", Value: "a9af1cb6", Public: true},
+		{Name: "IMAGE_DIGEST", Value: "sha256:abc", Public: true},
+		{Name: "TENANT_ID", Value: "acme", Public: true},
+	}
+	spec.Public = []string{"GIT_COMMIT", "IMAGE_DIGEST", "TENANT_ID"}
+	body := spec.render()
+	if err := auditRender(body, spec.publicSet()); err != nil {
+		t.Fatalf("public configuration was refused: %v", err)
+	}
+	for _, want := range []string{"value: 'a9af1cb6'", "value: 'sha256:abc'", "value: 'acme'"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("public configuration was sealed away: missing %q", want)
+		}
+	}
+}
+
+// The audit is INDEPENDENT of the classifier: an unauthorised cleartext value is
+// refused even when it looks like nothing at all.
+func TestAuditRefusesUnauthorisedCleartextWhateverItLooksLike(t *testing.T) {
+	spec := testSpec()
+	spec.Env = []declareEnv{{Name: "HARMLESS", Value: "3000"}} // not credential-shaped
+	spec.Public = nil                                          // ...and never authorised
+	if err := auditRender(spec.render(), spec.publicSet()); err == nil {
+		t.Fatal("the audit accepted a cleartext value the caller never marked public")
+	}
+}
+
+// ── V6: the patch guard reads what the patch PRODUCES ───────────────────────
+
+// A substring scan for "project" is defeated by the engine that runs it.
+func TestFenceRefusesAPatchThatEvadesASubstringScan(t *testing.T) {
+	for _, patch := range []string{
+		`spec:` + "\n" + `  {{ "pro" }}ject: hanzo-platform`,
+		`spec:` + "\n" + `  "\x70roject": hanzo-platform`,
+		`spec:` + "\n" + `  {{ printf "%s%s" "pro" "ject" }}: hanzo-platform`,
+	} {
+		body := "spec:\n  template:\n    spec:\n      project: '{{ .path.basename }}'\n" +
+			"  templatePatch: |\n    " + strings.ReplaceAll(patch, "\n", "\n    ") + "\n"
+		if _, err := fenceOf(writeSet(t, body), "acme"); err == nil {
+			t.Errorf("a templatePatch evading a substring scan was accepted:\n%s", patch)
+		}
+	}
+}
+
+// The REAL fleet patch touches no fence and must still be admitted, or this
+// check refuses the very template it exists to confirm.
+func TestFenceAdmitsTheRealFleetPatch(t *testing.T) {
+	body := "spec:\n  template:\n    spec:\n      project: '{{ .path.basename }}'\n" +
+		"  templatePatch: |\n" +
+		"    {{- if dig \"cd\" \"automated\" false . }}\n" +
+		"    spec:\n      syncPolicy:\n        automated:\n          prune: false\n          selfHeal: true\n" +
+		"    {{- else }}\n    {}\n    {{- end }}\n"
+	got, err := fenceOf(writeSet(t, body), "acme")
+	if err != nil {
+		t.Fatalf("the real fleet patch was refused: %v", err)
+	}
+	if got != "acme" {
+		t.Fatalf("fence = %q, want acme", got)
+	}
 }
