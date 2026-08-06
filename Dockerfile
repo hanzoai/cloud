@@ -84,7 +84,7 @@
 # lineage pushes that repo (its own `hanzo.yml` says so and pins the sha for exactly
 # this reason), and a mutable name is not an identity. `sha-<sha7>-amd64` is one
 # commit's output forever.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-54d6ce9-amd64
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-c709b1f-amd64
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
