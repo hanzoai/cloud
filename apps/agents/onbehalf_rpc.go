@@ -58,6 +58,23 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	if strings.TrimSpace(in.Subject) == "" {
 		return nil, fmt.Errorf("agents: run-on-behalf requires a linked subject")
 	}
+	// STATE THE TENANT for everything this run goes on to call.
+	//
+	// A run bills: the balance gate is a plane call to commerce, and commerce takes
+	// the org from the CALLER's identity and never from an argument — deliberately,
+	// so no caller can name the books it charges (apps/commerce/balance_rpc.go:36).
+	// A turn dispatched over the plane has no inbound request to carry that
+	// identity, so the gate answered `authorize: no org on the call` and every
+	// Slack message failed after the agent had already resolved.
+	//
+	// cloud.For is the sanctioned way to say it: it supplies a tenant where there
+	// is none and CANNOT launder one, because zip prefers a gateway assertion over
+	// it whenever a request exists (plane/ask.go:236-242). This is the background
+	// case that function names — a call acting for a tenant with no request behind
+	// it — and the org is trustworthy for the same reason every other Slack path
+	// trusts it: the bridge resolved it from the Slack-verified team_id through the
+	// install→org map, never from a payload field.
+	ctx = cloud.For(ctx, in.Org)
 	run, err := runOnBehalfModel(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input, in.Model)
 	if err != nil {
 		return nil, err
