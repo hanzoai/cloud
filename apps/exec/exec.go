@@ -48,7 +48,15 @@ import (
 // defaultUpstream is the in-cluster address of the sandboxed code executor.
 // Overridable via CODE_EXEC_UPSTREAM. It must speak the LibreChat
 // code-interpreter contract (/exec, /files/{sid}, /upload, /download/{id}).
-const defaultUpstream = "http://code-exec.hanzo.svc.cluster.local:8000"
+//
+// hanzo-boxes, NOT hanzo. Everything that runs submitted code lives in the one
+// namespace whose policy denies it the cluster, which is the same reasoning
+// apps/sandbox's pool records for the boxes it schedules: a box sitting beside
+// the datastores it is forbidden to reach is one policy edit away from reaching
+// them. The shared exec pool and a per-project box are the same binary running
+// the same submitted code under the same containment; only their lifetime
+// differs, so they do not get two different blast radii.
+const defaultUpstream = "http://code-exec.hanzo-boxes.svc.cluster.local:8000"
 
 // prefixes are the code-interpreter path surfaces this subsystem owns on /v1.
 // Each is forwarded verbatim to the executor (no path rewrite: the executor
