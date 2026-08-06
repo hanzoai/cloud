@@ -205,6 +205,29 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 	return renderToolResult(out), nil
 }
 
+// toolSubsystem names the app that answers for a tool, read out of the tool's OWN
+// name rather than looked up anywhere.
+//
+// The fleet door groups one tool per subsystem and carries the operation names in
+// its `op` enum (fleet/grouped.go), and those names are spelled
+// <method>_v1_<subsystem>_<rest> — so the owner is a fact the name already
+// states. Deriving it here keeps this a pure function of the value: it answers
+// the same way in the fused binary and in a single-app plugin process, whereas
+// cloud.SubsystemOf reads a boot-time mount index that in a plugin knows only
+// that plugin's own routes and would answer "" for every sibling's tool.
+//
+// A name that is not in that shape (a registry-local tool like "http") owns no
+// subsystem and says so with "", rather than with a guess.
+func toolSubsystem(op string) string {
+	parts := strings.Split(op, "_")
+	for i, p := range parts {
+		if p == "v1" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
 // actorSub reads the user subject back out of the run's "org/sub" billing actor,
 // so a dispatch runs as the person the run is billed to. A bare org (a scheduled
 // run, a service token) has no subject and lends none: the org is the authority
@@ -262,25 +285,26 @@ func truncateToolResult(s string) string {
 // return the model's last tool REQUEST as if it were an answer; offering nothing
 // forces the model to say what it has, which is a real reply to the person
 // waiting on it.
-func completeWithTools(ctx context.Context, ai types.AIClient, org, actor, prompt, model, fallback string, defs []types.ToolDef) (*types.ChatResponse, string, error) {
+func completeWithTools(ctx context.Context, ai types.AIClient, org, actor, prompt, model, fallback string, defs []types.ToolDef, runID string) (*types.ChatResponse, string, error, int) {
 	ctx, cancel := context.WithTimeout(ctx, toolRunBudget)
 	defer cancel()
 
 	msgs := []types.ChatMessage{{Role: types.RoleUser, Content: prompt}}
 	used := model
+	calls := 0
 	for round := 0; round <= maxToolRounds; round++ {
 		offer := defs
 		if round == maxToolRounds {
 			offer = nil // budget spent — answer in words
 		}
 		resp, m, err := completeWithFailover(ctx, ai,
-			&types.ChatRequest{Model: model, Org: org, Messages: msgs, Tools: offer}, fallback)
+			&types.ChatRequest{Model: model, Org: org, Messages: msgs, Tools: offer, RunID: runID}, fallback)
 		used = m
 		if err != nil {
-			return nil, used, err
+			return nil, used, err, calls
 		}
 		if resp == nil || len(resp.ToolCalls) == 0 || offer == nil {
-			return resp, used, nil
+			return resp, used, nil, calls
 		}
 		msgs = append(msgs, types.ChatMessage{
 			Role:      types.RoleAssistant,
@@ -288,17 +312,18 @@ func completeWithTools(ctx context.Context, ai types.AIClient, org, actor, promp
 			ToolCalls: resp.ToolCalls,
 		})
 		for _, tc := range resp.ToolCalls {
+			calls++
 			msgs = append(msgs, types.ChatMessage{
 				Role:       types.RoleTool,
 				ToolCallID: tc.ID,
 				Name:       tc.Name,
-				Content:    dispatchOne(ctx, org, actor, tc),
+				Content:    dispatchOne(ctx, org, actor, tc, runID, round),
 			})
 		}
 	}
 	// Unreachable: the round==maxToolRounds pass returns above whatever the model
 	// does. Stated rather than assumed, so the loop has one exit per outcome.
-	return nil, used, errors.New("agents: tool loop ended without an answer")
+	return nil, used, errors.New("agents: tool loop ended without an answer"), calls
 }
 
 // dispatchOne runs one tool call and returns the text the model is handed —
@@ -310,15 +335,34 @@ func completeWithTools(ctx context.Context, ai types.AIClient, org, actor, promp
 // and are resolved by the source that owns them, so nothing secret is in scope
 // here to leak into a transcript: what goes back is the tool's own output or our
 // own sentence about why there is none.
-func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall) string {
-	ctx, span := agentTracer.Start(ctx, "agent.tool", trace.WithSpanKind(trace.SpanKindInternal))
+func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall, runID string, round int) string {
+	ctx, span := agentTracer.Start(ctx, "agent.tool "+tc.Name, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
+	// Everything an operator needs to read one dispatch out of a run: which run,
+	// which tenant, which person, which tool, which subsystem answers for it, and
+	// where in the loop it happened. The round is what makes "it called six tools
+	// and failed on the fourth" a readable fact rather than an ordering guess
+	// across spans that may be exported out of order.
 	span.SetAttributes(
 		attribute.String("gen_ai.tool.name", tc.Name),
+		attribute.String("gen_ai.tool.call.id", tc.ID),
 		attribute.String("hanzo.agent.org", org),
+		attribute.String("hanzo.agent.run_id", runID),
+		attribute.String("hanzo.agent.tool_subsystem", toolSubsystem(tc.Name)),
+		attribute.Int("hanzo.agent.tool_round", round),
 	)
+	if sub := actorSub(org, actor); sub != "" {
+		span.SetAttributes(attribute.String("hanzo.user", sub))
+	}
+	// The outcome is SET on every exit, including the happy one. A span whose
+	// status is only ever written on failure cannot distinguish "succeeded" from
+	// "never finished" — and a tool that hangs until the run's budget expires is
+	// exactly the case an operator is looking for.
+	outcome := "ok"
+	defer func() { span.SetAttributes(attribute.String("hanzo.agent.tool_outcome", outcome)) }()
 
 	if len(tc.Arguments) > maxToolArgs {
+		outcome = "rejected"
 		span.SetStatus(codes.Error, "arguments too large")
 		return "error: the arguments for this call were too large to run"
 	}
@@ -327,10 +371,12 @@ func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall) stri
 
 	out, err := runTools.call(ctx, org, actor, tc.Name, tc.Arguments)
 	if err != nil {
+		outcome = "error"
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "tool call failed")
 		return "error: " + err.Error()
 	}
+	span.SetStatus(codes.Ok, "")
 	if strings.TrimSpace(out) == "" {
 		// An empty result and a failure look identical to a model reading a blank
 		// string, and only one of them means "it worked".
