@@ -215,8 +215,12 @@ func TestSpendGate(t *testing.T) {
 	}{
 		{
 			name: "DARK by default: a $0 stranger is admitted and NO authority is consulted",
-			// This is the shipped posture. It must stay this way until a starter-credit
-			// path exists, or enforcement 402s every new signup on day one.
+			// This is the shipped posture, and the flip is now safe to make: a new
+			// customer org is funded by the rung below the refusal (starter.go), so
+			// enforcement no longer 402s a legitimate signup on day one. The caller
+			// here is in the SHARED SIGNUP ORG, which the rung deliberately never
+			// funds — a login is not an account — so this row's verdict is the same
+			// with the rung in place as without it.
 			enforced: false, plans: &planStub{}, ledger: &spendLedger{credit: atto(0)},
 			hdr: member, want: 200,
 		},
