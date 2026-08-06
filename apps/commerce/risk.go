@@ -299,9 +299,15 @@ func wakeScorer(lg log.Logger) {
 //
 // TWO NAMES IS FOR READING, NOT FOR MINTING. Every read here is right to hold both —
 // the receipt comes out of `org` and the model judges `ledger` — but a CREDIT has one
-// address and both names claim it, so [screen.settle] refuses a mint whose two names
-// differ rather than picking one. A card charged on one org's merchant account cannot
-// fund another org's wallet whichever way round it is spelled.
+// address and both names claim it, so a payment whose two names differ is refused rather
+// than landed at one of them. A card charged on one org's merchant account cannot fund
+// another org's wallet whichever way round it is spelled.
+//
+// AND IT IS REFUSED BEFORE THE CARD MOVES. Both names are resolved HERE, by [seen], off a
+// request that has not charged anything yet — so [screen.decide] asks the question at the
+// only point where the answer is still free. [screen.settle] asks it again at the ledger
+// boundary, where it is a backstop rather than the control: a charge that reaches a mint
+// through any path this screen does not compose still refuses.
 type payment struct {
 	// org is the organisation the charge is WRITTEN under — the commerce namespace
 	// holding the receipt the money core produced ([chargedOrg], the EFFECTIVE org).
@@ -327,6 +333,23 @@ type payment struct {
 	// facts are the observations in the scorer's vocabulary ([paymentSignals]).
 	facts map[string]string
 }
+
+// diverged reports whether this payment's two organisations are TWO organisations: the
+// charge written under one org's books and the credit addressed to another's.
+//
+// It is the ONE reading of that fact. Both the pre-charge refusal ([screen.decide]) and
+// the ledger boundary ([screen.settle]) ask it through this method rather than spelling
+// `p.org != p.ledger` twice, because a rule written at two call sites is a rule that can
+// be fixed at one of them — and these two must never disagree about which payments may
+// mint.
+//
+// IT IS FALSE FOR EVERY CALLER THAT PAYS FOR ITSELF, which is what makes refusing on it
+// safe at a door. [principal] answers ONE string for both names for an ordinary member,
+// for a trusted service token ([serviceOrg] answers both), and for a SuperAdmin at home
+// (Owner == Org) — and answers "" for both where the payer does not resolve at all. The
+// only identity the two names can differ for is a SuperAdmin acting inside another
+// organisation.
+func (p payment) diverged() bool { return p.org != p.ledger }
 
 // screen is THE credit screen — one VALUE, resolved once at the composition root
 // (mount.go) and composed onto the HANDLER of every door that mints.
@@ -498,8 +521,13 @@ func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandle
 
 // decide is THE decision — one screen, every door, every projection.
 //
-// It refuses in TWO different sentences because they are two different facts, and
-// a customer can act on only one of them:
+// It refuses in THREE different sentences because they are three different facts, and
+// a customer can act on only two of them:
+//
+//	the payment CANNOT BE CREDITED AT ALL — 409, naming the door that can. The
+//	charge and the credit name two organisations, so there is no address to land
+//	the money at whatever the model says. Said first and said here, because this
+//	is the last point at which no card has moved.
 //
 //	the scorer is here and could not answer — 503, retry. The model exists, this
 //	question went unanswered, and a privileged grant waits rather than proceeds.
@@ -520,6 +548,34 @@ func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandle
 // It is never a 402. Out of funds is what a 402 means at this door and this is
 // not that — the whole point of the door is that the caller has no funds yet.
 func (s screen) decide(ctx context.Context, p payment) error {
+	// A PAYMENT THAT CANNOT MINT IS REFUSED BEFORE THE CARD IS CHARGED, and WHERE that
+	// is asked is the whole of the property.
+	//
+	// The mint has always refused a payment whose two names are two names — but it
+	// refused from BEHIND the handler that charges the card ([screen.settle], which
+	// [screen.record] runs after the money core has already taken the money). So the one
+	// caller the rule exists for got the worst of both: the customer's merchant account
+	// was charged, the credit had nowhere to land, and the door answered 500 over real
+	// money that was now permanently uncreditable — and chargeable again on the next
+	// attempt, because a fresh idempotency key takes a fresh card authorisation.
+	//
+	// Both names are already resolved here ([seen]) off a request that has moved no
+	// money, so this is the EARLIEST point the fact exists and the LAST one at which
+	// refusing it costs nobody anything. The boundary keeps its own check as a backstop.
+	//
+	// IT IS NOT A RISK VERDICT and does not wear one's clothes: nothing was scored, the
+	// scorer is not asked, and the answer is a 409 rather than the screen's own 403 so an
+	// operator reading the door's refusals never has to guess which of the two this was.
+	// The sentence names the door that CAN fund another organisation, because a platform
+	// operator meaning to fund a customer is not doing anything wrong — they are at the
+	// wrong door.
+	if p.diverged() {
+		s.lg.Warn("credit door refused a payment whose charge and credit are two organisations",
+			"door", p.door, "via", p.via, "org", p.org, "ledger", p.ledger, "subject", p.subject)
+		return zip.Errorf(http.StatusConflict,
+			"a card charged in %q cannot fund the balance of %q — fund another organisation "+
+				"with POST /v1/admin/grants", p.org, p.ledger)
+	}
 	// THE TENANT IS THE LEDGER, not the namespace the charge is written in: the model
 	// that judges a payment is the model of the organisation whose balance it funds,
 	// which is the same key the accrual [screen.learn] writes is filed under. A
