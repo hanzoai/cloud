@@ -53,24 +53,6 @@
           }
         ]
       },
-      "options": {
-        "operationId": "options_v1_dns_by_wildcard1",
-        "summary": "Not served by the DNS surface",
-        "description": "Published because this address accepts every method, but the DNS surface routes nothing here: no zone or record is read or changed. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.\n\nIt travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.\n\nFails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.",
-        "tags": [
-          "dns"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
       "patch": {
         "operationId": "patch_v1_dns_by_wildcard1",
         "summary": "Amend a DNS zone or record",
@@ -111,24 +93,6 @@
         "operationId": "put_v1_dns_by_wildcard1",
         "summary": "Replace a DNS zone or record",
         "description": "Replaces a DNS zone or record on the Hanzo DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.\n\nIt travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.\n\nFails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.",
-        "tags": [
-          "dns"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "trace": {
-        "operationId": "trace_v1_dns_by_wildcard1",
-        "summary": "Not served by the DNS surface",
-        "description": "Published because this address accepts every method, but the DNS surface routes nothing here: no zone or record is read or changed. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.\n\nIt travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.\n\nFails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.",
         "tags": [
           "dns"
         ],
