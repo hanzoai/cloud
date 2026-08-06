@@ -180,6 +180,19 @@ func currentResolver() Resolver {
 	return fb
 }
 
+// CurrentResolver is the resolver in force for this process — the in-process
+// store when projects is co-resident, else the cross-process fallback. nil means
+// nothing can answer "which release does this site serve", which is a wiring
+// fault, not a miss.
+//
+// It is exported because the site edge is no longer the only reader: the CONSOLE
+// is a published site too (webui/release), and it must read the active-release
+// pointer through this ONE registry. A second lookup path would be a second
+// answer to "where do a site's bytes live", and the two would drift the first
+// time one of them learned something — which is the defect SetFallbackResolver
+// was added to close, one layer down.
+func CurrentResolver() Resolver { return currentResolver() }
+
 // Config configures the site host-router. Apex is the zone whose subdomains are
 // site hosts (hanzo.app). Reserved is the set of subdomain labels that are NOT
 // sites (they belong to real app hosts) and must fall through to the normal
@@ -863,12 +876,37 @@ func CacheControlFor(key, htmlOverride string) string {
 	}
 }
 
-// fingerprintRE matches a content-hash segment in a filename (Vite/Next/webpack
-// emit e.g. `app.4f3a9c21.js` or `chunk-AB12CD34.css`). Such names are immutable:
-// a new build changes the hash, so the old URL is safe to cache forever.
+// buildOutputPrefixes are the directories a bundler writes its CONTENT-ADDRESSED
+// output to. Everything under one is immutable by construction — the bundler
+// renames the file whenever its bytes change — so the PATH answers the question
+// and the basename does not have to.
+//
+// This is the primary signal, and it has to be, because the basename test below
+// gets Next.js wrong. Next emits BARE-hash names (`_next/static/css/
+// bdec3a94ead6ad5f.css`, `_next/static/chunks/1a258343.a953edc46b595a62.js`) with
+// no separator before the hash run, which fingerprintRE requires — so 5 of the 44
+// `_next/static` objects of the console bundle were served
+// `public, max-age=3600` and re-fetched hourly forever. The embedded console
+// handler always keyed off the prefix (webui: `assets/` or `_next/`) and was
+// right; this is the site edge learning the same rule.
+var buildOutputPrefixes = []string{"_next/static/", "assets/"}
+
+// fingerprintRE matches a content-hash segment in a filename (Vite/webpack emit
+// e.g. `app.4f3a9c21.js` or `chunk-AB12CD34.css`). Such names are immutable: a new
+// build changes the hash, so the old URL is safe to cache forever. It is kept as
+// an ADDITIONAL signal, for the bundlers that fingerprint outside the two
+// directories above.
 var fingerprintRE = regexp.MustCompile(`[.\-_][0-9a-fA-F]{8,}\.[a-z0-9]+$`)
 
-func isFingerprinted(key string) bool { return fingerprintRE.MatchString(path.Base(key)) }
+func isFingerprinted(key string) bool {
+	k := strings.TrimPrefix(key, "/")
+	for _, p := range buildOutputPrefixes {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return fingerprintRE.MatchString(path.Base(key))
+}
 
 func htmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")

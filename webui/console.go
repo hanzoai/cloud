@@ -1,4 +1,4 @@
-// Package webui serves the embedded Hanzo Cloud console — the single-page app,
+// Package webui serves the Hanzo Cloud console — the single-page app,
 // white-labelled per request Host.
 //
 // It is a LEAF: stdlib + the brand registry + the fleet manifest's addresses +
@@ -9,20 +9,28 @@
 // at the front door and cannot import package cloud (that would relink the fleet
 // it was split to avoid). One console implementation, reachable from both.
 //
-// `all:` embeds the whole tree (dotfiles included). At a plain `go build` this is
-// the committed fallback shell (dist/index.html); the build pipeline runs
-// hanzoai/console's `npm run build:embed` (a static export) and OVERWRITES
-// webui/dist with the real @hanzo/gui static bundle BEFORE `go build`, so the
-// shipped binary carries the full console. That pipeline is the Dockerfile
-// console stage for the image, and the `make webui` target for a standalone
-// build. Either way there is exactly one artifact — no separate console Service,
-// no second origin. See webui/dist/index.html, the Makefile, and the Dockerfile
-// console-build stage.
+// IT CARRIES NO BYTES. The console used to be //go:embed'd from webui/dist, which
+// the image build overwrote with the real static export — so the frontend's
+// lifecycle was welded to this binary's: a CSS fix cost a ~22-minute cloud build
+// plus a `strategy: Recreate` single-replica rollout, measured at 2m15s of
+// api.hanzo.ai being down. The bytes are a PUBLISHED SITE RELEASE now (the same
+// release subsystem that serves cd.hanzo.ai), read into memory by webui/release
+// and handed in here as an fs.FS. A console release goes live in under a second
+// and rolls back just as fast, with no build and no restart.
+//
+// What did NOT change is the HOST ROUTING: console.hanzo.ai is still this binary
+// and still answers /v1 on the same origin, so the console's session cookie stays
+// first-party. Only the source of the bytes moved. The sites edge deliberately
+// does not own that host — a site host serves bytes and nothing else.
+//
+// This package decides how the bytes are SERVED: per-Host white-label <title>,
+// static-export route shells, precompressed negotiation, cache policy by asset
+// class, and the API-namespace 404 that keeps HTML out of a JSON caller's mouth.
 package webui
 
 import (
 	"bytes"
-	"embed"
+	"fmt"
 	"io"
 	"io/fs"
 	"mime"
@@ -34,9 +42,6 @@ import (
 	"github.com/hanzoai/cloud/brand"
 	"github.com/zap-proto/zip"
 )
-
-//go:embed all:dist
-var consoleFS embed.FS
 
 // apiPrefixes are the request-path prefixes the console catch-all must NEVER
 // answer. They belong to the API/RPC/ops planes, which are registered on the
@@ -63,21 +68,26 @@ var consoleTitleRe = regexp.MustCompile(`(?is)<title[^>]*>.*?</title>`)
 // consoleTitle is the white-label document <title> for a request Host:
 // "<Brand> Cloud Console" (console.lux.cloud → "Lux Cloud Console",
 // console.hanzo.ai → "Hanzo Cloud Console"). It mirrors hanzoai/console's own
-// `${brandName} Console` SSR output so the embedded static console and the
+// `${brandName} Console` SSR output so the served static console and the
 // standalone app render an identical per-host tab title. Brand is resolved from
 // the same brands registry as every other white-label surface (the brand leaf).
 func consoleTitle(host string) string {
 	return brand.Display(brand.ForHost(host)) + " Cloud Console"
 }
 
-// Mount registers the embedded console at the web root as the app's terminal
-// handler. Its caller registers it LAST — after every /v1 subsystem route, the
-// /zap plane, and the health contract — so the router's in-order matching gives
-// all real API routes precedence and only unmatched paths reach the SPA. Both
-// cloud.Listen (every plugin) and cmd/cloud (the host front door) call it, so the
-// "/" catch-all is spelled ONE way.
-func Mount(app *zip.App) error {
-	h, err := Handler()
+// Mount registers the console at the web root as the app's terminal handler. Its
+// caller registers it LAST — after every /v1 subsystem route, the /zap plane, and
+// the health contract — so the router's in-order matching gives all real API
+// routes precedence and only unmatched paths reach the SPA. Both cloud.Listen
+// (every plugin) and cmd/cloud (the host front door) call it, so the "/"
+// catch-all is spelled ONE way.
+//
+// fsys is the console bundle, supplied by the CALLER — this package holds no
+// bytes of its own (see the package doc). A nil fsys means this process serves no
+// console: the catch-all still keeps the API namespaces honest and still answers
+// the agent door, and a console path gets a 503 that says so.
+func Mount(app *zip.App, fsys fs.FS) error {
+	h, err := Handler(fsys)
 	if err != nil {
 		return err
 	}
@@ -89,28 +99,37 @@ func Mount(app *zip.App) error {
 // conditional GET, precompressed negotiation, SPA fallback) — the form Mount
 // adapts onto the zip router via zip.AdaptNetHTTP, and the form a test drives
 // directly.
-func Handler() (http.Handler, error) {
-	sub, err := fs.Sub(consoleFS, "dist")
-	if err != nil {
-		return nil, err
-	}
-	return newConsoleHandler(sub)
+func Handler(fsys fs.FS) (http.Handler, error) {
+	return newConsoleHandler(fsys)
 }
 
-// consoleHandler serves an embedded single-page app: exact-file when it exists,
+// consoleHandler serves a single-page app out of fsys: exact-file when it exists,
 // index.html otherwise (deep-link fallback), and a real 404 for the API/ops
 // namespaces so those never render as HTML.
+//
+// It holds NO copy of the shell. index.html used to be read once at startup,
+// which was free while the bundle was baked into the binary and is wrong now that
+// it is a live view of a site release: after a publish the cached shell would
+// still name the PREVIOUS build's chunk hashes, so every script it asked for
+// would miss and fall back to HTML. Reading the shell per request costs one copy
+// of ~10KB out of RAM and is always the release that is actually mounted.
 type consoleHandler struct {
-	fsys  fs.FS
-	index []byte // index.html, read once at startup (the SPA shell / fallback)
+	fsys fs.FS
 }
 
+// newConsoleHandler proves the source is a console before anything serves from
+// it: a bundle with no index.html has no shell to fall back to, so every
+// client-side route would 404 and the failure would surface as a broken product
+// rather than as a bad source. nil is the separate, stated case of "no bundle in
+// this process" and is not an error.
 func newConsoleHandler(fsys fs.FS) (*consoleHandler, error) {
-	index, err := fs.ReadFile(fsys, "index.html")
-	if err != nil {
-		return nil, err
+	if fsys == nil {
+		return &consoleHandler{}, nil
 	}
-	return &consoleHandler{fsys: fsys, index: index}, nil
+	if _, err := fs.Stat(fsys, "index.html"); err != nil {
+		return nil, fmt.Errorf("webui: console source has no index.html: %w", err)
+	}
+	return &consoleHandler{fsys: fsys}, nil
 }
 
 func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +173,15 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// No bundle in this process, said plainly. The alternative — a blank shell, or
+	// a placeholder that renders — is a page that LOOKS like the product and is
+	// not, which is the one answer a front door may never give. 503 also tells a
+	// probe the truth: this address is meant to serve a console and cannot.
+	if h.fsys == nil {
+		http.Error(w, "console unavailable: this process serves no console bundle", http.StatusServiceUnavailable)
+		return
+	}
+
 	name := path.Clean(strings.TrimPrefix(upath, "/"))
 	if name == "" || name == "." {
 		h.serveIndex(w, r)
@@ -177,10 +205,12 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.serveIndex(w, r)
 }
 
-// serveRouteHTML writes a route's own exported shell with the SAME treatment as
-// the index shell: no-cache (clients must pick up a new build immediately) and
-// the white-label <title> rewrite. Returns false when the export has no HTML
-// for the route, so the caller falls back to the SPA shell.
+// serveRouteHTML writes one exported shell — a route's own, or the index —
+// no-cache (clients must pick up a new release immediately) with the white-label
+// <title> rewritten for the request host. It is the ONE HTML-shell path: the
+// index used to be a second copy of these five lines that read a cached buffer,
+// which is how the two could disagree about a release. Returns false when the
+// bundle has no HTML for name, so the caller falls back to the SPA shell.
 func (h *consoleHandler) serveRouteHTML(w http.ResponseWriter, r *http.Request, name string) bool {
 	b, err := fs.ReadFile(h.fsys, name)
 	if err != nil {
@@ -195,7 +225,7 @@ func (h *consoleHandler) serveRouteHTML(w http.ResponseWriter, r *http.Request, 
 	return true
 }
 
-// serveAsset writes the embedded file at name if it exists, negotiating a
+// serveAsset writes the bundle's file at name if it exists, negotiating a
 // precompressed sibling (.br, then .gz) when the client accepts it and the build
 // produced one. Returns false (writing nothing) when name is missing or a
 // directory, so the caller can fall back to the SPA shell.
@@ -241,29 +271,24 @@ func (h *consoleHandler) serveAsset(w http.ResponseWriter, r *http.Request, name
 	return true
 }
 
-// serveIndex writes the SPA shell. index.html is never cached (clients must pick
-// up a new build immediately); the fingerprinted assets it references are cached
-// hard by setCacheHeaders. The shell's <title> is rewritten to the request
-// host's white-label brand (indexFor).
+// serveIndex writes the SPA shell — the SAME treatment every other shell gets
+// (serveRouteHTML), because it is one: no-cache, and the document <title>
+// rewritten to the request host's white-label brand. The published shell is a
+// STATIC export whose <title> is baked to the default (Hanzo) brand at BUILD
+// time; a static export cannot read the request Host, so the SERVING layer
+// injects the brand — otherwise a Lux/Zoo host leaks "Hanzo Cloud Console" in the
+// browser tab, a white-label violation. The fingerprinted assets the shell
+// references are cached hard by setCacheHeaders.
+//
+// The shell is proven present when the handler is built, so a miss here means it
+// went away UNDER a running process — the one shape a mounted release cannot
+// take (a swap installs a complete bundle or none). Answered as the outage it is,
+// never as a 200 of nothing.
 func (h *consoleHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	if r.Method != http.MethodHead {
-		_, _ = w.Write(h.indexFor(r.Host))
+	if h.serveRouteHTML(w, r, "index.html") {
+		return
 	}
-}
-
-// indexFor returns the SPA shell with its document <title> rewritten to the
-// request host's white-label brand. The shipped shell is a STATIC export whose
-// <title> is baked to the default (Hanzo) brand at BUILD time; a static export
-// cannot read the request Host, so the SERVING layer injects the brand here —
-// otherwise a Lux/Zoo host leaks "Hanzo Cloud Console" in the browser tab, a
-// white-label violation. When the baked title already equals the brand title
-// (the Hanzo/default host) or there is no <title> to rewrite, the embedded bytes
-// are returned unchanged.
-func (h *consoleHandler) indexFor(host string) []byte {
-	return brandTitle(h.index, host)
+	http.Error(w, "console unavailable: the bundle has no index.html", http.StatusServiceUnavailable)
 }
 
 // brandTitle rewrites a shell's <title> to the request host's white-label brand
