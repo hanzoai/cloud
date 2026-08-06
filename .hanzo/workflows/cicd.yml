@@ -143,6 +143,23 @@ jobs:
     # `inputs.tests != 'false'`, so the `tests:` expression below finally means
     # what it says. Verified before moving: v1 (8e43277) CONTAINS v1.0.17
     # (81b3c18), so the set -u default this pin was taken for comes with it.
+    # BACK ON @v1, and not because the alias is right.
+    #
+    # Pinning @v1.0.38 — which the paragraphs above call for — stopped the forge
+    # constructing a run AT ALL: no row, nothing to inspect, exactly the "dead CI
+    # is not red, it is absent" failure described above. A failing `gate` is worse
+    # than a passing one and better than no run, so this is reverted to the state
+    # that at least reports.
+    #
+    # The lane is still broken and was before this: `gate` never gets a runner
+    # (runner_id 0, zero steps, ~32 min, failure) while `containment` succeeds on
+    # the same run against an idle 10/10 fleet. Runs 925, 926 and 928 all died
+    # that way, so no release has minted since v1.801.490.
+    #
+    # Whoever picks this up: the question is why the forge declines to SCHEDULE a
+    # called workflow's jobs while scheduling sibling jobs in the same run, and
+    # why naming an immutable tag prevents run construction when that tag demonstrably
+    # carries .hanzo/workflows/build.yml. Both answers live in the forge, not here.
     uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
@@ -598,9 +615,24 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: true
           provenance: false
           tags: ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}
+          # `outputs:` in place of `push: true` — the only way to reach buildkit's
+          # exporter attributes through this action, and `push: true` cannot be set
+          # alongside it because both ask for an image exporter.
+          #
+          # zstd because this image is ONE 1.63GB layer (the per-app plugin
+          # binaries, 98.8% of it) and gzip writes a layer as a single stream on a
+          # single core: 175.0s to export, seven of eight CPUs idle. Measured on the
+          # same bytes, both orderings, 2026-08-06: gzip 245.5s/256.1s against zstd
+          # 58.1s/53.3s, and the zstd image is 1.2% smaller.
+          #
+          # This lane matches apps/platform/k8s.go deliberately. The two build the
+          # SAME Dockerfile into the SAME repository, and a compression setting that
+          # differs between them is not a preference — it decides the manifest media
+          # type, which decides whether imagePullable's Accept negotiation gets a
+          # 200 or a 404 (see the note in apps/platform/pin.go).
+          outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
           # VERSION is what the binary reports as X-Api-Version. Without it the
           # ldflag falls back to the `dev` default and a released image cannot
           # say which release it is — and every car below keys off that header.

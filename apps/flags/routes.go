@@ -50,7 +50,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// "/v1/flags" with an empty leaf yields "/v1/flags/", a different path from the
 	// one this route has always served.
 	zip.Post(zapp, "/v1/flags", o.evaluate)
-	zip.Post(g, "/decide", o.evaluate) // PostHog /decide alias
+	// The SDK protocol spells this leaf; both paths reach the one evaluator, so a
+	// client that speaks the wire needs no special case here.
+	zip.Post(g, "/decide", o.evaluate)
 	zip.Get(g, "/defs", o.listDefs)
 	zip.Get(g, "/defs/:key", o.getDef)
 	zip.Put(g, "/defs/:key", o.putDef)
@@ -74,6 +76,12 @@ type caller struct {
 	actor   string
 }
 
+// The refusal names what would satisfy it. A verdict is org-scoped, and this
+// surface reads the tenant from the request alone, so a caller holding only a
+// project key has no way in here — saying "X-Org-Id required" to an SDK that
+// never sends one reads as a bug in the SDK rather than the shape of this door.
+const errNoTenant = "a signed-in principal is required: this surface reads the tenant from the request, and a project key does not carry one"
+
 // callerOf resolves the caller for a TYPED op, which receives a context and its
 // decoded In and nothing else. The three facts here are all REQUEST facts and
 // never In fields: an In field is caller-supplied, so a tenant key read from one
@@ -82,11 +90,11 @@ type caller struct {
 func callerOf(ctx context.Context) (caller, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return caller{}, zip.ErrForbidden("X-Org-Id required")
+		return caller{}, zip.ErrForbidden(errNoTenant)
 	}
 	org, project, ok := tenant(c)
 	if !ok {
-		return caller{}, zip.ErrForbidden("X-Org-Id required")
+		return caller{}, zip.ErrForbidden(errNoTenant)
 	}
 	return caller{org: org, project: project, actor: c.UserEmail()}, nil
 }

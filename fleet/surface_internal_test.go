@@ -1,0 +1,304 @@
+// Copyright © 2026 Hanzo AI. MIT License.
+
+package fleet
+
+import (
+	"strings"
+	"testing"
+)
+
+// The rule, against the names it was written for.
+//
+// Every name below is a REAL operation id from this fleet's own composed
+// document (openapi.yaml) or from plugin/o11y/openapi.json, with its route
+// beside it, because a policy tested on names someone invented for the test is a
+// policy tested on nothing. The o11y ones are specifically the ops MEASURED
+// inside Slack's 128-tool window on api.hanzo.ai.
+
+// refusals is the dangerous half: what must never reach an agent.
+var refusals = []struct{ name, why string }{
+	// --- clause 1, disclosure: the secret is the payload, at any verb. ---
+	{"CreateServiceAccountKey", "POST /v1/o11y/service_accounts/{id}/keys — mints an API key; its own description says this is the one time the secret is shown"},
+	{"CreateSessionByEmailPassword", "POST /v1/o11y/sessions/email_password — logs in as a user"},
+	{"CreateResetPasswordToken", "PUT /v1/o11y/users/{id}/reset_password_tokens — mints a password reset"},
+	{"GetResetPasswordToken", "GET of the same token: READING it is disclosing it, which is why clause 1 is verb-blind"},
+	{"GetResetPasswordTokenDeprecated", "the deprecated spelling of the same disclosure"},
+	{"VerifyResetPasswordToken", "verify still carries the token"},
+	{"ForgotPassword", "POST /v1/o11y/factor_password/forgot"},
+	{"UpdateMyPassword", "PUT /v1/o11y/users/me/factor_password"},
+	{"GetConnectionCredentials", "GET /v1/o11y/cloud_integrations/{p}/credentials — a GET that returns cloud creds"},
+	{"getToken", "POST /v1/iam/tokens/get"},
+	{"addToken", "POST /v1/iam/tokens"},
+	{"listTokens", "GET /v1/iam/tokens"},
+	{"getWebauthnCredential", "POST /v1/iam/webauthn-credentials/get"},
+	{"post_v1_iam_oauth_token", "the OAuth token endpoint"},
+	{"post_v1_iam_registry_token", "a registry pull credential"},
+	{"post_v1_iam_mint-user-keys", "mints keys for a user"},
+	{"get_v1_kms_secrets", "the secret store, read"},
+	{"delete_v1_kms_secrets_by_wildcard1", "the secret store, written"},
+	{"get_v1_functions_secrets", "a function's environment secrets"},
+	// Sessions that nothing owns are identity sessions — read or write.
+	{"getSession", "POST /v1/iam/sessions/get — the session object IS the credential"},
+	{"listSessions", "GET /v1/iam/sessions"},
+	{"createSession", "POST /v1/iam/sessions/create"},
+	{"DeleteSession", "DELETE /v1/o11y/sessions"},
+	{"RotateSession", "POST /v1/o11y/sessions/rotate"},
+	{"post_v1_ai_signin-sessions", "explicitly a sign-in session"},
+	{"get_v1_ai_signin-sessions", "…and reading one hands back what it holds"},
+
+	// --- clause 2, authority mutation: the verb changes who may do what. ---
+	{"CreateUser", "POST /v1/o11y/users"},
+	{"DeleteUser", "DELETE /v1/o11y/users/{id}"},
+	{"UpdateUser", "PUT /v1/o11y/users/{id}"},
+	{"CreateAuthDomain", "POST /v1/o11y/domains — an auth domain, not a DNS one"},
+	{"DeleteAuthDomain", "DELETE /v1/o11y/domains/{id}"},
+	{"CreateRole", "POST /v1/o11y/roles"},
+	{"DeleteRole", "DELETE /v1/o11y/roles/{id}"},
+	{"SetRoleByUserID", "POST /v1/o11y/users/{id}/roles — grants a role"},
+	{"RemoveUserRoleByUserIDAndRoleID", "DELETE of the same"},
+	{"CreateServiceAccount", "POST /v1/o11y/service_accounts — a new principal"},
+	{"CreateServiceAccountRole", "…and its authority"},
+	{"RevokeServiceAccountKey", "DELETE /v1/o11y/service_accounts/{id}/keys/{fid}"},
+	{"CreateInvite", "POST /v1/o11y/invite — adds a person to the org"},
+	{"CreateBulkInvite", "POST /v1/o11y/invite/bulk"},
+	{"CreateIngestionKey", "POST /v1/o11y/gateway/ingestion_keys"},
+	{"CreateRoutePolicy", "POST /v1/o11y/route_policies"},
+	{"post_v1_iam_add-user", "POST /v1/iam/add-user"},
+	{"post_v1_iam_scim_v2_users", "SCIM user provisioning"},
+	{"delete_v1_framework_roles_user_role", "DELETE /v1/framework/roles/{user}/{role}"},
+	{"post_v1_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},
+	{"delete_v1_git_keys_id", "and removing one is still key management"},
+	{"post_v1_agents_targets_id_key", "POST /v1/agents/targets/{id}/key — enrols a machine agent"},
+	{"delete_v1_keys", "DELETE /v1/keys — the head resource, so no store owns it"},
+}
+
+// survivors is the useful half: what an agent is FOR. Several of these are here
+// because an earlier draft of the rule refused them — the note says which word
+// did it, so re-adding that word turns this red.
+var survivors = []struct{ name, why string }{
+	// The inference surface, whole.
+	{"post_v1_chat_completions", "POST /v1/chat/completions — the flagship"},
+	{"post_v1_responses", "POST /v1/responses"},
+	{"post_v1_embeddings", "POST /v1/embeddings"},
+	{"post_v1_rerank", "POST /v1/rerank"},
+	{"get_v1_models", "GET /v1/models"},
+	{"post_v1_messages_count_tokens", "POST /v1/messages/count_tokens — `token` is a UNIT here; the counting neighbour says so"},
+	{"get_v1_validators_tokenId", "a chain token id, not a bearer token"},
+
+	// The agent loop. Every one of these was refused while `session` was an
+	// unqualified authority noun.
+	{"post_v1_agents_sessions", "POST /v1/agents/sessions — an agent session is a unit of WORK"},
+	{"post_v1_agents_sessions_by_id_message", "the turn itself"},
+	{"post_v1_agents_sessions_by_id_stop", "…and stopping it"},
+	{"patch_v1_agents_sessions_id", "…and steering it"},
+	{"get_v1_agents_sessions_stream", "…and watching it"},
+	{"post_v1_agents_by_ref_run", "POST /v1/agents/{ref}/run"},
+	{"post_v1_agents_targets_id_claim", "claiming a target is not minting its key"},
+
+	// Code, search, git, deploy, exec.
+	{"post_v1_code_ask", "POST /v1/code/ask"},
+	{"post_v1_code_index", "POST /v1/code/index"},
+	{"get_v1_code_search", "GET /v1/code/search"},
+	{"post_v1_search", "POST /v1/search"},
+	{"post_v1_git_repos", "POST /v1/git/repos — repos are not credentials"},
+	{"post_v1_git_repos_name_push", "POST /v1/git/repos/{name}/push"},
+	{"post_v1_deploy_applications_by_name_sync", "POST /v1/deploy/applications/{name}/sync"},
+	{"post_v1_exec", "POST /v1/exec"},
+
+	// Reads of the identity surface survive: knowing who holds a role is not
+	// granting one, and an agent that cannot see the org cannot reason about it.
+	{"GetUser", "GET /v1/o11y/users/{id}"},
+	{"GetRole", "GET /v1/o11y/roles/{id}"},
+	{"GetRolesByUserID", "GET /v1/o11y/users/{id}/roles"},
+	{"GetUserPreference", "GET /v1/o11y/user/preferences/{name} — Slack's 128th tool, and harmless"},
+	{"GetMyUser", "GET /v1/o11y/users/me"},
+
+	// Words that LOOK dangerous and are not. Each names a store entry or a
+	// schema name, not a credential — see keyOfAStore.
+	{"get_v1_o11y_deployments_attribute_keys", "metric label names"},
+	{"delete_v1_pubsub_kv_bucket_key", "DELETE /v1/pubsub/kv/{bucket}/{key}"},
+	{"delete_v1_flags_defs_key", "a feature-flag key"},
+	{"delete_v1_tracker_projects_key", "a tracker project key, e.g. CLOUD-1"},
+	{"patch_v1_tracker_projects_key_issues_num", "…and an issue under it"},
+	{"delete_v1_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
+	{"delete_v1_cloudflare_kv_namespaces_namespace_values_key", "a KV value"},
+
+	// The whole ai CRUD surface, which zip names `by_owner_by_name`. All 45 of
+	// these were refused while `owner` was an authority noun.
+	{"patch_v1_ai_chats_by_owner_by_name", "PATCH /v1/ai/chats/{owner}/{name}"},
+	{"delete_v1_ai_workflows_by_owner_by_name", "DELETE /v1/ai/workflows/{owner}/{name}"},
+	{"post_v1_ai_deployments_by_owner_by_name_deploy", "POST …/deploy"},
+
+	// Money is a different boundary and this rule does not claim it. Named here
+	// so the scope is a decision on the record rather than an oversight.
+	{"post_v1_research_grants", "a research grant is money, not authority"},
+}
+
+func TestRefuse_DangerousOpsAreNotProjected(t *testing.T) {
+	for _, c := range refusals {
+		if !refuse(c.name) {
+			t.Errorf("refuse(%q) = false — this op WOULD reach an agent.\n    %s\n    words: %v",
+				c.name, c.why, words(c.name))
+		}
+	}
+}
+
+func TestRefuse_ProductOpsSurvive(t *testing.T) {
+	for _, c := range survivors {
+		if refuse(c.name) {
+			t.Errorf("refuse(%q) = true — the rule ate a tool an agent needs.\n    %s\n    words: %v",
+				c.name, c.why, words(c.name))
+		}
+	}
+}
+
+// TestRefuse_TheTwoSetsAgreeWithTheRuleStatement checks the CLAUSE that fired,
+// not just the verdict — so a name refused for the wrong reason (a bug that
+// would pass the two tests above) is still caught.
+func TestRefuse_TheTwoSetsAgreeWithTheRuleStatement(t *testing.T) {
+	for _, c := range refusals {
+		w := words(c.name)
+		if !discloses(w) && !(mutates(w) && authority(w)) {
+			t.Errorf("%q is refused by neither stated clause, so refuse() and %s disagree", c.name, "TheRule")
+		}
+	}
+	// A read of an authority object must fail clause 2 on the VERB, not sneak
+	// past on the object — otherwise GetRole surviving would be an accident.
+	for _, name := range []string{"GetRole", "GetUser", "GetRolesByUserID"} {
+		w := words(name)
+		if !authority(w) {
+			t.Errorf("%q does not read as an authority object; the survival of its READ is then untested", name)
+		}
+		if mutates(w) {
+			t.Errorf("%q reads as a mutation; it is a GET", name)
+		}
+	}
+}
+
+// TestRefuse_IsVerbBlindAboutSecrets is clause 1's whole point, isolated: the
+// same object, four verbs, four refusals. GetResetPasswordToken is the op that
+// proves a mutation-only rule would have been wrong.
+func TestRefuse_IsVerbBlindAboutSecrets(t *testing.T) {
+	for _, n := range []string{"GetResetPasswordToken", "CreateResetPasswordToken", "VerifyResetPasswordToken", "listTokens"} {
+		if !refuse(n) {
+			t.Errorf("refuse(%q) = false; clause 1 must not depend on the verb", n)
+		}
+	}
+}
+
+// TestRefuse_ClassifiesNamesItHasNeverSeen is the property a hand-typed roster
+// of 36 op names cannot have, and the reason the rule is made of nouns.
+func TestRefuse_ClassifiesNamesItHasNeverSeen(t *testing.T) {
+	// Shapes that do not exist in this fleet today. If someone adds them
+	// tomorrow, they are already classified.
+	for _, n := range []string{
+		"CreateOrganizationApiKey", "post_v1_iam_users_by_id_impersonate",
+		"MintDelegatedCredential", "put_v1_billing_saml_metadata",
+		"RotateSigningKey", "post_v1_notify_channels_by_id_oauth_authorize",
+	} {
+		if !refuse(n) {
+			t.Errorf("refuse(%q) = false — a NEW dangerous op slipped through; words: %v", n, words(n))
+		}
+	}
+	for _, n := range []string{
+		"post_v1_chat_conversations", "get_v1_zen_models", "post_v1_code_review",
+		"get_v1_agents_sessions_by_id_diff", "post_v1_search_reindex",
+	} {
+		if refuse(n) {
+			t.Errorf("refuse(%q) = true — a NEW product op was eaten; words: %v", n, words(n))
+		}
+	}
+}
+
+// TestRank_PutsTheProductSurfaceInFrontOfTheConsole is mechanism (b).
+//
+// The failure it encodes is the measured one: Slack keeps the first 128 tools,
+// alphabetical order handed it 128 o11y console ops and zero product tools, and
+// 'C' < 'a' means no amount of renaming on the product side would have fixed it.
+func TestRank_PutsTheProductSurfaceInFrontOfTheConsole(t *testing.T) {
+	chat := rank("post_v1_chat_completions")
+	if chat != 0 {
+		t.Errorf("rank(post_v1_chat_completions) = %d, want 0 — chat leads the surface", chat)
+	}
+	console := rank("AgentCheckIn") // sorts FIRST alphabetically, fleet-wide
+	if console != len(productStems) {
+		t.Errorf("rank(AgentCheckIn) = %d — a declared PascalCase id carries no path and cannot match a stem", console)
+	}
+	if chat >= console {
+		t.Fatal("the flagship tool does not outrank the tool that used to be first; the truncation window is unchanged")
+	}
+	// Stem matching is on a '_' boundary, so a longer name under the prefix is
+	// promoted and an unrelated one that merely starts with the same letters is not.
+	if got := rank("get_v1_agents_sessions_stream"); got == len(productStems) {
+		t.Error("a route UNDER a product stem must inherit its rank")
+	}
+	if got := rank("get_v1_agentsomething"); got != len(productStems) {
+		t.Errorf("rank(get_v1_agentsomething) = %d — `v1_agent` must not match across a word boundary", got)
+	}
+	if got := rank("CreateUserFromGit"); got != len(productStems) {
+		t.Errorf("rank(%q) = %d — a name with no HTTP-method word has no path to rank by", "CreateUserFromGit", got)
+	}
+}
+
+// TestRank_TheProductSurfaceFitsATruncatingClient.
+//
+// Ordering only helps if the promoted set is SMALLER than the window. Measured
+// against the fleet's own document, the stems through `v1_exec` promote 126 ops
+// — so a client that keeps 128 keeps chat, models, the agent loop, code, search,
+// git, deploy and exec. `v1_projects` and `v1_websearch` are last precisely
+// because they are the two that spill.
+func TestRank_TheProductSurfaceFitsATruncatingClient(t *testing.T) {
+	const window = 128
+	head := 0
+	for i, stem := range productStems {
+		if stem == "v1_projects" {
+			head = i
+		}
+	}
+	if head == 0 {
+		t.Fatal("v1_projects left the surface; this test's premise is stale")
+	}
+	if head >= len(productStems) {
+		t.Fatal("v1_projects is last; nothing is being kept inside the window")
+	}
+	// The claim is about counts measured elsewhere (see the doc comment); what
+	// is checkable HERE is that the spill-over stems really are at the end.
+	for i := head; i < len(productStems); i++ {
+		if rank("post_"+productStems[i]) < head {
+			t.Errorf("%q ranks inside the head of the surface", productStems[i])
+		}
+	}
+	if head > window {
+		t.Errorf("the surface has %d stems before the spill, which cannot fit a %d-tool window", head, window)
+	}
+}
+
+func TestWords_ReadsBothNamingConventions(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want []string
+	}{
+		{"CreateServiceAccountKey", []string{"create", "service", "account", "key"}},
+		{"CreateLLMScore", []string{"create", "llm", "score"}},
+		{"GetRolesByUserID", []string{"get", "roles", "by", "user", "id"}},
+		{"delete_v1_ai_signin-sessions_by_owner_by_name",
+			[]string{"delete", "v1", "ai", "signin", "sessions", "by", "owner", "by", "name"}},
+		{"post_v1_git_by_org_by_repo_git-upload-pack",
+			[]string{"post", "v1", "git", "by", "org", "by", "repo", "git", "upload", "pack"}},
+	} {
+		got := words(c.in)
+		if strings.Join(got, " ") != strings.Join(c.want, " ") {
+			t.Errorf("words(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+// TestRefuse_ANamelessToolIsNotProjectable: the door must not carry a descriptor
+// it cannot route or reason about.
+func TestRefuse_ANamelessToolIsNotProjectable(t *testing.T) {
+	for _, n := range []string{"", "___", "-"} {
+		if !refuse(n) {
+			t.Errorf("refuse(%q) = false", n)
+		}
+	}
+}

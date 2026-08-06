@@ -3,20 +3,27 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// Package ui embeds the built Hanzo Tracker SPA (@hanzo/tracker, the
-// admin-tracker app in hanzoai/admin, Vite + hanzogui shell over the forge's
-// own board CSS) into the cloud binary and serves it at /tracker/*.
+// Package ui embeds the built Hanzo Tracker SPA (@hanzo/tracker, the tracker
+// app in hanzoai/admin, Vite + hanzogui shell over the forge's own board CSS)
+// into the cloud binary and serves it at /tracker/*.
 //
 // WHY cloud owns this embed: cloud is the ONE process that answers
 // /v1/tracker (apps/tracker's per-org board store), so it serves the UI for
-// that store too — one binary, one origin, one deploy. Same-origin is not
-// cosmetic here: the SPA sends no tenancy of its own, because cloud's gateway
-// mints the validated org from the IAM session BEFORE any tracker handler
-// runs. A UI served from a second host would have to carry a token and assert
-// an org, which is exactly the client-supplied tenancy the tracker refuses.
+// that store too — one binary, one origin, one deploy.
+//
+// WHAT THE PAGE ASSERTS, and what it merely asks for. The SPA signs in at
+// hanzo.id and holds the bearer; it never asserts an org. It does SELECT one,
+// as X-Org-Id, and that is a request rather than a claim: SanitizeIdentity
+// deletes the header on ingress and re-mints it from the validated token,
+// honouring the selection only when the token's signed `orgs` membership claim
+// contains it and falling back to the caller's home org otherwise. So the
+// tenant key a handler reads is still minted here and never taken from the
+// client — which is what lets the board offer an org switcher without the
+// client-supplied tenancy the tracker refuses.
 //
 // This is what lets tracker.hanzo.ai serve a native board and retire the Huly
-// tracker that answered that host.
+// tracker that answered that host — a front that ran its own login form, and
+// so was a second place identity could be established on a host we own.
 //
 // dist/ is the committed, content-addressed Vite build. The SPA is built with
 // base '/tracker/' and API prefix '/v1/tracker' (see the admin-tracker
