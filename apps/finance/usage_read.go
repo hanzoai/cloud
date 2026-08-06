@@ -37,8 +37,11 @@ type UsageRow struct {
 // this binary, so proxying that path self-dispatches straight back into the customer
 // handler. Reading the ledger here is the same move balance() already makes, so the
 // usage view can never self-answer "sign in to view billing".
-func (f *ledgerFinance) ListUsage(ctx context.Context, org string, limit int) ([]UsageRow, error) {
-	store, err := f.storeFor(org, false)
+// test selects the SANDBOX books, the same selector every other read on this
+// ledger takes (Balance, SumUsageSince). These two list reads arrived later and
+// forgot it, so a sandbox caller was silently answered from real money.
+func (f *ledgerFinance) ListUsage(ctx context.Context, org string, test bool, limit int) ([]UsageRow, error) {
+	store, err := f.storeFor(org, test)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +91,8 @@ type TxnRow struct {
 // ListEntries returns org's ledger entries, most-recent-first, up to limit
 // (limit <= 0 lists all). Same read as ListUsage and the same tenant boundary — the
 // org's own file — but unfiltered: the caller decides which kinds its page shows.
-func (f *ledgerFinance) ListEntries(ctx context.Context, org string, limit int) ([]TxnRow, error) {
-	store, err := f.storeFor(org, false)
+func (f *ledgerFinance) ListEntries(ctx context.Context, org string, test bool, limit int) ([]TxnRow, error) {
+	store, err := f.storeFor(org, test)
 	if err != nil {
 		return nil, err
 	}

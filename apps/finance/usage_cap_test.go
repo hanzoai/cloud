@@ -113,7 +113,7 @@ func TestListUsage_CarriesTheExactDebit(t *testing.T) {
 		t.Fatalf("RecordUsage: %v", err)
 	}
 
-	rows, err := f.ListUsage(ctx, org, 0)
+	rows, err := f.ListUsage(ctx, org, false, 0)
 	if err != nil {
 		t.Fatalf("ListUsage: %v", err)
 	}

@@ -28,7 +28,7 @@ func BenchmarkListUsage(b *testing.B) {
 			}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				rows, err := f.ListUsage(ctx, "acme", n+1)
+				rows, err := f.ListUsage(ctx, "acme", false, n+1)
 				if err != nil {
 					b.Fatalf("ListUsage: %v", err)
 				}
