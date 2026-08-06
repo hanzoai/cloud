@@ -262,6 +262,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Delegate ONE ref write to a process running untrusted work, so it does not
 	// have to hold a credential that opens the rest of the tenant (grant.go).
 	exposeGrant()
+	// What the org keeps in git, as headline numbers — the read a caller makes
+	// when it does not yet know a repo's name (figures_rpc.go).
+	exposeFigures()
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
