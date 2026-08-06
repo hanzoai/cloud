@@ -113,7 +113,10 @@ func writeFrame(w http.ResponseWriter, f *zapmcp.Frame) {
 		http.Error(w, "the MCP door could not render its answer", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// zip's media type exactly, not this file's usual `; charset=utf-8`. An agent
+	// must not be able to tell which adapter carried the answer — that difference
+	// would be the second door reappearing as a header.
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
 }
