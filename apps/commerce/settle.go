@@ -60,6 +60,15 @@ package commerce
 // and the deposit on [payment.ledger] (whose balance it funds): one value was doing two
 // jobs, and they are two values now.
 //
+// AND WHERE THOSE TWO NAMES DIVERGE, THE MINT REFUSES. Two names is the right shape for
+// a READ and the wrong shape for a CREDIT. The card cleared on ONE org's merchant
+// account, so a deposit into the OTHER's wallet is money crossing between two customers'
+// books on nothing but a masqueraded session's say-so. Splitting the value fixed the read
+// and left the mint quietly landing at the wrong address behind a 200; the deposit now
+// refuses a payment whose two names are not one name. There is no correct wallet to pick
+// there — see the guard's own note — and a SuperAdmin funding a customer has the admin
+// grant, which is a credit that states whose it is.
+//
 // This is also what closes the divergence payments.go records at exposePayments:
 // commerce's typed door credits its store under the ORG POOL (org.Name), while for
 // a member of a shared signup org — or a credential carrying a signed `person:`
@@ -219,6 +228,32 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	}
 	if cur != "usd" {
 		return s.uncredited(p, ref, "the charge settled in %q and this ledger holds usd", cur)
+	}
+
+	// A MINT IS THE ONE PLACE THE TWO NAMES MUST BE ONE NAME.
+	//
+	// Everything above this line is a READ, and the split is right for every one of them:
+	// the receipt is read out of the books the charge was WRITTEN in, and the model judges
+	// the org whose balance is at stake. A DEPOSIT is not a read. It takes money a CARD
+	// cleared — on the effective org's merchant account, against a receipt commerce wrote
+	// in [payment.org] — and turns it into spendable credit at (ledger, subject). While
+	// those two organisations are one string that is one movement; when they are two, the
+	// customer's card funded the SuperAdmin's own wallet and the door answered 200.
+	//
+	// THERE IS NO ADDRESS HERE THAT IS NOT SURPRISING, which is why this refuses instead of
+	// choosing. Crediting [payment.ledger] moves a customer's money into a platform admin's
+	// balance; crediting [payment.org] has a masqueraded session top up the very org it is
+	// only supposed to be inspecting. A platform operator who means to fund a customer has
+	// a door that SAYS SO — the admin grant, a credit whose whole subject is whose it is —
+	// and a card taken inside someone else's org is not it.
+	//
+	// It cannot fire for the callers that pay for themselves: [principal] answers one
+	// string for both names for an ordinary member and for a SuperAdmin at home, so
+	// org == ledger there and this is only ever the masquerade.
+	if p.org != p.ledger {
+		return s.uncredited(p, ref,
+			"the card was charged in %q and this credit belongs to %q — a settled %d-cent top-up cannot "+
+				"mint in books the charge was never taken against", p.org, p.ledger, got.cents)
 	}
 
 	fin, err := books("credit a settled top-up")
