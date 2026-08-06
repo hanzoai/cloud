@@ -11,7 +11,7 @@
 // cannot: the light host mounts no subsystem, so [MountFleet] weaves the
 // projections 116 app binaries wrote when they were BUILT (fleet.go). Between the
 // projection and the request sit two gaps no reading of any router closes: the
-// subset can be older than the code (mk/fleet.mk surface-check regenerates it
+// subset can be older than the code (mk/fleet.mk check regenerates it
 // from source and refuses the diff), and the deployed front door can hand the
 // path to somebody else entirely (only a probe of the live host sees that). See
 // fleetInfo for what the published document may therefore claim.

@@ -208,7 +208,7 @@ it byte-for-byte.
 `plugin/o11y/openapi.json` is the build-time subset the fleet document is woven
 from. It was STALE at 34 operations (including a `/v1/o11y/{wildcard1}` and three
 `/api/v2` probes that v1.5.46 deleted); it now carries 389, and `make -f
-mk/fleet.mk openapi-weave` composes them into `openapi.yaml`.
+mk/fleet.mk weave` composes them into `openapi.yaml`.
 
 It could not, for one commit-and-a-half, because the weave refused — rightly:
 

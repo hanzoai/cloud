@@ -12,7 +12,7 @@ import (
 //
 // Every gate this package already has compares the document to something that
 // moved with it. The weave compares the golden to the subsets — both derived, so
-// they can agree while both are wrong. surface-check regenerates the subsets from
+// they can agree while both are wrong. check regenerates the subsets from
 // source — which catches a stale artifact, and passes cleanly on an artifact that
 // is freshly and correctly generated from code that stopped registering half its
 // routes. Nothing held a line across time.
