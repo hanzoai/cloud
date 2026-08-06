@@ -5,21 +5,22 @@ package lsp
 // the composition root builds, and the prepaid Commerce ledger behind it is the
 // one ledger. Nothing here is a second accounting of anything.
 //
-// # What is billed, and why it is the cold start
+// # What is billed, and why it is the prepare
 //
-// A COLD start is a git checkout, a dependency fetch and a language server
+// PREPARING a revision is a tree write, a dependency fetch and a language server
 // indexing a repository: seconds to minutes of CPU, hundreds of megabytes, and a
 // process that then sits resident. That is the cost this service actually incurs,
-// so that is the event that carries a fee.
+// so that is the event that carries a fee. There are two Models on the ledger and
+// they name exactly that difference: "prepare" and "query".
 //
-// A WARM point query is a JSON-RPC round trip to a process that is already
-// running and already holds the index. It costs microseconds. Charging per query
-// would price the cheap thing and hide the expensive one, which teaches callers
-// to re-key their workspace instead of reusing it — the opposite of what the pool
-// is for. Warm queries are recorded for attribution and cost nothing.
+// A QUERY against a prepared revision is a JSON-RPC round trip to a process that
+// is already running and already holds the index. It costs microseconds. Charging
+// per query would price the cheap thing and hide the expensive one, which teaches
+// callers to re-key their revision instead of reusing it — the opposite of what
+// the daemon's pool is for. Queries are recorded for attribution and cost nothing.
 //
 // The GATE runs before the work, not after: an out-of-funds caller gets a clean
-// 402 instead of a checkout we performed and cannot bill.
+// 402 instead of a dependency fetch we paid for and cannot bill.
 
 import (
 	"context"
@@ -35,11 +36,19 @@ import (
 // the one string commerce groups these charges by.
 const kind = "lsp"
 
-// coldCents is the flat fee for one cold start. Flat rather than measured because
-// the caller chooses the repository, not the cost of indexing it, and a bill that
-// varies with how large somebody else's dependency tree turned out to be is not
-// one anybody can predict.
-const coldCents = 2
+// prepareCents is the flat fee for preparing one revision. Flat rather than
+// measured because the caller chooses the repository, not the cost of indexing
+// it, and a bill that varies with how large somebody else's dependency tree
+// turned out to be is not one anybody can predict.
+const prepareCents = 2
+
+// The two Models this surface books under — what the ledger row says the money
+// bought. They are the only two things that happen here, and which one it was is
+// the daemon's answer, never a guess made on this side.
+const (
+	modelPrepare = "prepare"
+	modelQuery   = "query"
+)
 
 // payer is the org whose ledger this request debits: principal.Ledger, the
 // SELECTED billing org, which a SuperAdmin masquerade deliberately moves off the
@@ -57,12 +66,13 @@ func payer(c *zip.Ctx, org string) string {
 	return org
 }
 
-// gate refuses the request unless the payer can cover a cold start.
+// gate refuses the request unless the payer can cover a prepare.
 //
-// It gates the COLD price on every request, including ones that will turn out to
-// be warm, because whether a workspace is warm is not known until the pool is
-// asked — and it is not a fact about the caller. Gating the worst case and
-// charging the real one is the order that never bills for work it refused.
+// It gates the PREPARE price on every request, including ones the daemon will
+// answer from a revision it already holds, because whether it holds one is not
+// known until it is asked — and it is not a fact about the caller. Gating the
+// worst case and charging the real one is the order that never bills for work it
+// refused.
 func (s *state) gate(ctx context.Context, c *zip.Ctx, org string) error {
 	subject := payer(c, org)
 	if subject == "" {
@@ -72,25 +82,26 @@ func (s *state) gate(ctx context.Context, c *zip.Ctx, org string) error {
 	// the gate enforces — which is a different question from the attribution
 	// scope the ledger records below, and answered by a different call.
 	project, validated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(ctx, subject, project, validated, kind, coldCents); err != nil {
+	if err := s.Bill.Gate(ctx, subject, project, validated, kind, prepareCents); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 	return nil
 }
 
-// charge records the debit once the work is done. A warm query debits zero — it
-// is still recorded, so per-project attribution sees the traffic.
-func (s *state) charge(c *zip.Ctx, org, method string, cold bool) {
+// charge records the debit once the work is done. A query against an already
+// prepared revision debits zero — it is still recorded, so per-project
+// attribution sees the traffic.
+func (s *state) charge(c *zip.Ctx, org string, prepared bool) {
 	subject := payer(c, org)
 	if subject == "" {
 		return
 	}
-	var cents int64
-	if cold {
-		cents = coldCents
+	model, cents := modelQuery, int64(0)
+	if prepared {
+		model, cents = modelPrepare, prepareCents
 	}
 	s.Bill.MeterUsage(subject, kind, metering.Usage{
-		Model:       method,
+		Model:       model,
 		AmountCents: cents,
 		Project:     principal.ProjectScope(c),
 		RequestID:   strings.Clone(strings.TrimSpace(c.Header("X-Request-Id"))),
