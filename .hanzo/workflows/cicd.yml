@@ -17,8 +17,8 @@ name: CI/CD
 # `gate` was still running — or after it had gone red. That is not a
 # hypothetical: the drift gate (`make -f mk/fleet.mk surface-check`) was RED on
 # main while 87 commits and 6 releases went out in 24 hours, and what shipped was
-# a binary serving /v1/billing/gpu/eligibility and publishing
-# /v1/billing/gpu-eligibility. One build, two answers, both signed off.
+# a binary serving a renamed billing route under its new name while still
+# publishing the old one. One build, two answers, both signed off.
 #
 # So deploy.yml is GONE and its jobs are here, behind `needs:`. The gate was
 # always correct; it simply had no edge to the thing it was meant to stop.
