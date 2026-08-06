@@ -55,22 +55,40 @@ const (
 // 30x to their result pages). Separate from the crawl httpClient (45s).
 var searchClient = &http.Client{Timeout: 12 * time.Second}
 
-// searchResult is one web result in the SearXNG JSON contract the LibreChat
+// webResult is one web result in the SearXNG JSON contract the LibreChat
 // searxng client decodes: {url,title,content,img_src?}. `engine` is additive
 // (SearXNG includes it; the client ignores unknown fields).
-type searchResult struct {
-	URL     string `json:"url"`
-	Title   string `json:"title"`
+//
+// It is named for its product rather than searchResult, and webSearchResults
+// likewise: the schema namespace is FLAT across the whole fleet and both are
+// PUBLISHED now that POST /v1/websearch is a typed op, so the generic spelling
+// would have claimed two of the most collidable names in the API for one
+// subsystem. Only the Go names moved; every json tag is the one SearXNG's
+// contract froze.
+type webResult struct {
+	// URL is the page's address, as the engine reported it.
+	URL string `json:"url"`
+	// Title is the page's title.
+	Title string `json:"title"`
+	// Content is the ENGINE's snippet — the few lines shown under the title, not
+	// the page's text. Read the page itself with POST /v1/crawl.
 	Content string `json:"content"`
-	Engine  string `json:"engine,omitempty"`
+	// Engine names the backend that found this hit, so one engine's view of a
+	// query can be told from another's.
+	Engine string `json:"engine,omitempty"`
 }
 
-// searchResponse is the SearXNG /search?format=json envelope. `results` is always
+// webSearchResults is the SearXNG /search?format=json envelope. `results` is always
 // a non-nil array so the client never decodes null.
-type searchResponse struct {
-	Query           string         `json:"query"`
-	NumberOfResults int            `json:"number_of_results"`
-	Results         []searchResult `json:"results"`
+type webSearchResults struct {
+	// Query is the query that ran, echoed back.
+	Query string `json:"query"`
+	// NumberOfResults is len(results) — what this answer carries, never an
+	// estimate of what the web holds.
+	NumberOfResults int `json:"number_of_results"`
+	// Results are the merged hits, deduplicated by normalised URL and capped at
+	// 20. Always an array and never null: no hits is an ANSWER, not a fault.
+	Results []webResult `json:"results"`
 }
 
 // engine is one keyless public web-search backend: build a request URL for a
@@ -79,7 +97,7 @@ type searchResponse struct {
 type engine struct {
 	name  string
 	build func(query, lang string) string
-	parse func(root *html.Node) []searchResult
+	parse func(root *html.Node) []webResult
 }
 
 // ── engine endpoints (functions, not vars, so tests override via env) ────────
@@ -150,9 +168,9 @@ func enabledEngines() []engine {
 // deduped by normalized URL, capped at maxResults. Engine order is preserved
 // (deterministic ranking: first engine's hits lead). A failing/challenged engine
 // contributes nothing — the request never fails on its account.
-func metaSearch(ctx context.Context, query, lang string) searchResponse {
+func metaSearch(ctx context.Context, query, lang string) webSearchResults {
 	engs := enabledEngines()
-	perEngine := make([][]searchResult, len(engs))
+	perEngine := make([][]webResult, len(engs))
 
 	var wg sync.WaitGroup
 	for i := range engs {
@@ -168,7 +186,7 @@ func metaSearch(ctx context.Context, query, lang string) searchResponse {
 	wg.Wait()
 
 	seen := make(map[string]bool)
-	merged := make([]searchResult, 0, maxResults)
+	merged := make([]webResult, 0, maxResults)
 	for _, rs := range perEngine {
 		for _, s := range rs {
 			key := normalizeURL(s.URL)
@@ -178,17 +196,17 @@ func metaSearch(ctx context.Context, query, lang string) searchResponse {
 			seen[key] = true
 			merged = append(merged, s)
 			if len(merged) >= maxResults {
-				return searchResponse{Query: query, NumberOfResults: len(merged), Results: merged}
+				return webSearchResults{Query: query, NumberOfResults: len(merged), Results: merged}
 			}
 		}
 	}
-	return searchResponse{Query: query, NumberOfResults: len(merged), Results: merged}
+	return webSearchResults{Query: query, NumberOfResults: len(merged), Results: merged}
 }
 
 // fetchEngine GETs one engine's result page with a realistic UA and parses it.
 // Returns an error on transport/HTTP failure; a bot-challenge page parses to
 // zero results (not an error), so it simply contributes nothing.
-func fetchEngine(ctx context.Context, e engine, query, lang string) ([]searchResult, error) {
+func fetchEngine(ctx context.Context, e engine, query, lang string) ([]webResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.build(query, lang), nil)
 	if err != nil {
 		return nil, err
@@ -217,8 +235,8 @@ func fetchEngine(ctx context.Context, e engine, query, lang string) ([]searchRes
 // is base64url-encoded in the ck/a redirect's u= param (a1 prefix). <cite> holds
 // a display URL as a fallback. Snippet is the caption <p>.
 
-func parseBing(root *html.Node) []searchResult {
-	var out []searchResult
+func parseBing(root *html.Node) []webResult {
+	var out []webResult
 	forEach(root, func(n *html.Node) {
 		if n.Type != html.ElementNode || n.Data != "li" || !hasClass(n, "b_algo") {
 			return
@@ -249,7 +267,7 @@ func parseBing(root *html.Node) []searchResult {
 		if snip == nil {
 			snip = findFirst(n, func(x *html.Node) bool { return x.Type == html.ElementNode && x.Data == "p" })
 		}
-		out = append(out, searchResult{URL: u, Title: title, Content: textContent(snip), Engine: bingName})
+		out = append(out, webResult{URL: u, Title: title, Content: textContent(snip), Engine: bingName})
 	})
 	return out
 }
@@ -304,7 +322,7 @@ func normalizeCiteURL(cite string) string {
 // page, which has no result-link nodes → parseDDG returns nil and DDG contributes
 // nothing. Result hrefs may be direct or //duckduckgo.com/l/?uddg=<target>.
 
-func parseDDG(root *html.Node) []searchResult {
+func parseDDG(root *html.Node) []webResult {
 	var links, snips []*html.Node
 	forEach(root, func(n *html.Node) {
 		if n.Type != html.ElementNode {
@@ -317,7 +335,7 @@ func parseDDG(root *html.Node) []searchResult {
 			snips = append(snips, n)
 		}
 	})
-	out := make([]searchResult, 0, len(links))
+	out := make([]webResult, 0, len(links))
 	for i, a := range links {
 		u := ddgRealURL(attr(a, "href"))
 		title := textContent(a)
@@ -328,7 +346,7 @@ func parseDDG(root *html.Node) []searchResult {
 		if i < len(snips) {
 			content = textContent(snips[i])
 		}
-		out = append(out, searchResult{URL: u, Title: title, Content: content, Engine: ddgName})
+		out = append(out, webResult{URL: u, Title: title, Content: content, Engine: ddgName})
 	}
 	return out
 }
