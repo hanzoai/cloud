@@ -78,7 +78,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke zipdoc-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -250,15 +250,44 @@ TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)
 # the shipped build carries, so the suite exercises the same schema surface.
 TEST_TAGS := sqlite_fts5
 
+# Go drops comments at compile time, so cmd/zipdoc is the ONLY path from a typed
+# handler's prose to /v1/openapi.json — the document the SDK repos and the CLI
+# read. Its output is COMMITTED, and that is what lets a bare `go build` (and the
+# release image) produce a binary that still describes itself without anyone
+# paying to lift the prose again. The image used to pay: `go generate -run zipdoc
+# ./...` ran on the build's critical path for 355.9s of a 17-minute build, to
+# reproduce 99 files that were already in the tree.
+#
+# Committed means it can go STALE, so exactly one thing has to stay true:
+# regenerating from source changes nothing. This asserts it by running THE
+# GENERATOR and diffing, rather than asking a -check mode for a second opinion —
+# a gate must never be able to disagree with the tool it polices. It is also the
+# only form that catches the case below.
+#
+# `git status --porcelain`, not `git diff`: a NEW package's zipdoc_gen.go is
+# untracked and therefore invisible to a diff, which is the failure that matters
+# most. The pathspec scopes it to the generator's own files, so an unrelated
+# dirty tree neither hides a stale lift nor invents one.
+zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
+	@$(GO) generate -run zipdoc ./...
+	@stale=$$(git status --porcelain -- '*zipdoc_gen.go'); \
+	if [ -n "$$stale" ]; then \
+	  echo "$$stale"; \
+	  echo ""; \
+	  echo "STALE: a doc comment moved without its lift being regenerated. The files above"; \
+	  echo "are the only path from source prose to the published document, so a stale one"; \
+	  echo "ships an operation that describes itself with words its source no longer says."; \
+	  echo ""; \
+	  echo "They have ALREADY been regenerated in your tree by this target — commit them."; \
+	  echo "From a clean checkout the same fix is:"; \
+	  echo ""; \
+	  echo "  go generate -run zipdoc ./..."; \
+	  echo ""; \
+	  exit 1; \
+	fi
+
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
-	# The lifted prose is COMMITTED (zipdoc_gen.go) because bare `go build` cannot
-	# regenerate it; -check writes nothing and goes red when a lift no longer
-	# matches its source, which is the drift being committed makes possible.
-	# Per PACKAGE, not ./...: the checker must load exactly the way `go generate`
-	# does, one package at a time — whole-module loading extracts differently
-	# (zap-proto/zip zipdoc: single-vs-module load divergence) and a gate must
-	# never disagree with the generator it polices.
-	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; 	done
+	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 	# The drift gate: regenerate the document FROM SOURCE and fail on any diff.
 	# The weave above proves the subsets compose; this proves they are still the
@@ -276,9 +305,7 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
 	@echo ">>            a route added without regenerating will pass here and fail CI."
 	@echo ">>            the real gate:  make -f mk/fleet.mk surface-check"
-	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
-	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
-	done
+	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
 # THE spec, in three steps, in the only order they work in:
