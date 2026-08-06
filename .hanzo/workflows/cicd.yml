@@ -726,7 +726,7 @@ jobs:
           # broker has, so it 404'd on every release since the car was written.
           PIN_TOKEN=$(curl -sS \
             "${KMS_ENDPOINT}/v1/kms/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty' || true)
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
           [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
           echo "::add-mask::${PIN_TOKEN}"
 
@@ -898,7 +898,7 @@ jobs:
           # Same route correction as the pin above: no org in a KMS path.
           TOKEN=$(curl -sS \
             "${KMS_ENDPOINT}/v1/kms/secrets/deploy/FLEET_DISPATCH_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty' || true)
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
           if [ -z "$TOKEN" ]; then
             echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential). Create it with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,java-sdk,cli} hanzo-go/sdk hanzo-rs/sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzo-docs/docs — six owners, so a fine-grained PAT cannot carry it; use a classic PAT with repo scope or a GitHub App installed on all six. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
             exit 1
