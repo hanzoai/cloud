@@ -92,8 +92,6 @@ var untypedByDesign = map[string]string{
 	"PUT /v1/sentry/{wildcard1}":     sentryReason,
 	"PATCH /v1/sentry/{wildcard1}":   sentryReason,
 	"DELETE /v1/sentry/{wildcard1}":  sentryReason,
-	"OPTIONS /v1/sentry/{wildcard1}": sentryReason,
-	"TRACE /v1/sentry/{wildcard1}":   sentryReason,
 
 	// The upstream module's own hatches. hanzoai/o11y no longer registers a
 	// /v1/o11y/* catch-all — every route it serves is named — so the routes a

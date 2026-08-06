@@ -25,11 +25,9 @@ import (
 var untypedByDesign = map[string]string{
 	"DELETE /v1/dns/{wildcard1}":  reasonForward,
 	"GET /v1/dns/{wildcard1}":     reasonForward,
-	"OPTIONS /v1/dns/{wildcard1}": reasonForward,
 	"PATCH /v1/dns/{wildcard1}":   reasonForward,
 	"POST /v1/dns/{wildcard1}":    reasonForward,
 	"PUT /v1/dns/{wildcard1}":     reasonForward,
-	"TRACE /v1/dns/{wildcard1}":   reasonForward,
 }
 
 // reasonForward is the one reason all seven share, because all seven ARE one

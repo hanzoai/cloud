@@ -47,11 +47,9 @@ var untypedByDesign = map[string]string{
 	// s.proxy) in relay.go — so they share one reason.
 	"DELETE /v1/bot/{wildcard1}":  reasonProxy,
 	"GET /v1/bot/{wildcard1}":     reasonProxy,
-	"OPTIONS /v1/bot/{wildcard1}": reasonProxy,
 	"PATCH /v1/bot/{wildcard1}":   reasonProxy,
 	"POST /v1/bot/{wildcard1}":    reasonProxy,
 	"PUT /v1/bot/{wildcard1}":     reasonProxy,
-	"TRACE /v1/bot/{wildcard1}":   reasonProxy,
 }
 
 // reasonProxy is the one reason the seven relay operations share. Three wire facts
@@ -138,11 +136,14 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			len(typed), len(untypedByDesign), got, want)
 	}
 	// The MEASURED partition, so the prose cannot drift from the binary.
-	// 10 since zip v1.26.0: the document now carries every method of the
-	// relay's one All() registration — the eight ledger entries above plus
-	// the two typed ops. Before, the wildcard collapsed and served read 3.
-	if len(served) != 10 || len(typed) != 2 {
-		t.Errorf("served = %d (want 10), typed = %d (want 2)", len(served), len(typed))
+	//
+	// It read 10 while the projection published every method an All() binds.
+	// It is 8 now that TRACE and OPTIONS are excluded: All() still binds them —
+	// the ROUTER is unchanged — but they are transport rather than product, so
+	// they are not operations anyone is offered. The relay's six product methods
+	// plus the two typed ops.
+	if len(served) != 8 || len(typed) != 2 {
+		t.Errorf("served = %d (want 8), typed = %d (want 2)", len(served), len(typed))
 	}
 }
 
