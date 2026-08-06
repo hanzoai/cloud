@@ -4,9 +4,9 @@ package fleet
 
 import (
 	"encoding/json"
+	"slices"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/zap-proto/zip"
 )
@@ -25,7 +25,7 @@ import (
 // an OPERATION, and there are two orders of magnitude between them. So the door
 // projects one tool per SUBSYSTEM and carries the operation in an argument:
 //
-//	hanzo_git   {"op":"post_v1_git_repos","input":{…}}
+//	git   {"op":"post_v1_git_repos","input":{…}}
 //
 // The `op` enum carries NAMES ONLY. That is the whole saving — the 977 KB is
 // almost entirely input schemas, and a schema is only needed for the ONE
@@ -50,17 +50,33 @@ import (
 //     package exists to delete — and it could go stale in the one way that
 //     matters, by describing an operation the rule has since refused.
 
-// groupPrefix namespaces the tools this door composes ITSELF, as opposed to the
-// ones its children declare. A child's operation id is either `<method>_<path>`
-// or a declared PascalCase verb, so nothing a subsystem serves lands in here.
-const groupPrefix = "hanzo_"
+// A TOOL IS NAMED FOR WHAT IT IS, and nothing else.
+//
+// These tools were `hanzo_<app>` for a few hours. The server is Hanzo — the MCP
+// server IS the namespace, and a client reaches these names through it and
+// through nothing else — so the prefix said, once per tool per turn, a thing
+// every one of its neighbours also said. It was not disambiguating anything:
+// there is no second `git` in here to tell it apart from. So it is gone, and the
+// door's tools are the app names themselves.
+//
+// The prefix was also carrying a second job, and that is the part worth stating
+// rather than rediscovering: [Door.composed] used it to tell one of THIS door's
+// tools from an operation a child declared. A convention doing load-bearing work
+// is a convention that will be broken by someone who thinks it is cosmetic — so
+// that test is now a membership check against the door's own app set, which is
+// exact where a prefix was only probable.
 
 // Describe is the door's own tool: the input schema of ONE operation, by name.
 //
 // It is the fetch half of the surface — the enums say what exists, this says
 // what an operation takes — and it is exported because the fleet's own agent
 // runs are clients of this door like any other (apps/agents/door.go).
-const Describe = groupPrefix + "describe"
+//
+// It shares a namespace with the app names, so no subsystem may be called
+// `describe` — asserted against the manifest in fleet/grouped_test.go, which is
+// where a fact about the app list can be checked before it ships rather than
+// discovered as a shadowed tool at runtime.
+const Describe = "describe"
 
 // group projects the surviving operations as one tool per OWNING app, behind
 // [Describe].
@@ -113,7 +129,7 @@ func group(all []named) []map[string]any {
 // subsystemTool is one app's whole operation set as a single MCP tool.
 func subsystemTool(app string, ops []string) map[string]any {
 	return map[string]any{
-		"name": groupPrefix + app,
+		"name": app,
 		"description": app + ": " + strconv.Itoa(len(ops)) + " operations. Name one in \"op\" and pass " +
 			"that operation's own arguments in \"input\". " + Describe + " returns an operation's input schema.",
 		"inputSchema": map[string]any{
@@ -140,9 +156,20 @@ func describeTool() map[string]any {
 	}
 }
 
-// composed reports whether a tools/call names one of THIS door's own tools
-// rather than an operation a child declared. See [groupPrefix].
-func composed(tool string) bool { return strings.HasPrefix(tool, groupPrefix) }
+// composed reports whether a tools/call names one of THIS door's own tools —
+// a SUBSYSTEM, carrying its operation in an argument — rather than an operation
+// a child declared.
+//
+// The door's tools ARE its apps, so the question is membership in the set it was
+// mounted over. Nothing a subsystem serves can be mistaken for one: a child's
+// operation id is either `<method>_<path>` or a declared PascalCase verb, and an
+// app name is a bare lowercase word, which is neither.
+//
+// It reads d.apps rather than the last gather because a call must be classified
+// BEFORE anything is asked — and because the composed set is what the deployment
+// runs, which does not change between requests, while what an app is serving at
+// this instant does.
+func (d *Door) composed(tool string) bool { return slices.Contains(d.apps, tool) }
 
 // envelope is what a subsystem tool carries: the operation to run, and that
 // operation's own arguments.

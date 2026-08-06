@@ -26,7 +26,7 @@ package fleet_test
 //
 // It asserts the OPERATIONS, not the tool count. The door projects one tool per
 // subsystem and carries the operations in that tool's `op` enum (fleet/grouped.go),
-// so `hanzo_websearch` existing is not the claim — `post_v1_websearch` being
+// so a `websearch` tool existing is not the claim — `post_v1_websearch` being
 // inside it is.
 
 import (
