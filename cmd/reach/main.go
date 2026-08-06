@@ -2,7 +2,7 @@
 // document publishes?
 //
 // The document is a build-time weave of each app's own projection of its own
-// router (plugin/embed.go). `surface-check` proves that weave equals the source.
+// router (plugin/embed.go). `check` proves that weave equals the source.
 // Neither proves the thing a caller actually needs: that the address is
 // reachable in production. Three things break that and nothing else checks any
 // of them —

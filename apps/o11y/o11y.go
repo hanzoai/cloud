@@ -559,7 +559,7 @@ func eventToRuntimePath(method, path string) (string, bool) {
 // one components block: a refusal at the weave (openapi/weave.go — "one name, two
 // shapes: every generated SDK would bind whichever it read last"), and had it not
 // been refused, an SDK binding whichever the merge read last. `make -f
-// mk/fleet.mk openapi-weave` could not run at all, so nobody could regenerate
+// mk/fleet.mk weave` could not run at all, so nobody could regenerate
 // openapi.yaml or add an API surface and prove it.
 //
 // ONE origin for the whole product, not one for the module and none for the rest.

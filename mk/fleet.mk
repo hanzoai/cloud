@@ -28,7 +28,7 @@ BIN := $(ROOT)/bin
 # are external modules (hanzoai/authz, hanzoai/licensing, hanzoai/metrics) wired
 # into apps.Wire() by import. There is nothing for a per-app Makefile to sit
 # beside, so they are named here and run through the SAME mk/plugin.mk recipe by
-# name instead of by location. When those repos publish their own subsets this
+# name instead of by location. When those repos publish their own documents this
 # list goes away and the loop below with it.
 EXTERNAL := authz licensing metrics
 
@@ -58,18 +58,18 @@ OPENAPI_NEEDS_BROKER := kafka
 # glob below simply never saw it and nothing said so.
 CORESIDENT := $(shell sed -n 's/.*{Name: "\([^"]*\)".*Coresident: true.*/\1/p' $(ROOT)/manifest/apps.go)
 
-.PHONY: openapi-weave describe-apps surface-check
+.PHONY: describe openapi check
 
 # FIRST, so a bare `make -f mk/fleet.mk` runs the two-second check and not the
 # twelve-minute rebuild. (Included at the root it changes nothing: the default
 # goal is still the root Makefile's own first target.)
 #
-# The composition proof: weave the subsets and check the result against the
-# fully-mounted golden. It links no subsystem and mounts nothing, so it is cheap
-# enough to run on every push — see openapi/weave_test.go for what it refuses.
-# OUT=<path> also writes the woven document (the artifact the SDK repos pull).
-openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equals openapi.yaml. OUT=<path> to write it.
-	@$(GO) test -count=1 $(ROOT)/openapi $(if $(OUT),-weave="$(abspath $(OUT))")
+# The composition proof: compose the apps' documents and check the result against
+# the fully-mounted golden. It links no subsystem and mounts nothing — see
+# openapi/weave_test.go for what it refuses. OUT=<path> writes it elsewhere.
+openapi: ## Compose every app's document into openapi.yaml. OUT=<path> to write it elsewhere.
+	@$(GO) test -count=1 $(ROOT)/openapi -weave="$(abspath $(if $(OUT),$(OUT),$(ROOT)/openapi.yaml))"
+	@echo ">> openapi.yaml — $$(grep -c '^  /' $(ROOT)/openapi.yaml) paths"
 
 # The exemptions are honoured HERE as well as in the gate, because the gate's
 # own failure message says "fix: make describe" — and that fix routed through this
@@ -86,7 +86,8 @@ openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equ
 # `meet`. Two real defects were braided by one truncation. A gate that hides
 # what it did not check is worse than one that checks nothing, because it is
 # believed.
-describe-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slow by construction).
+describe: ## Every app describes itself (one binary per app; slow by construction).
+	$(GO) generate -run zipdoc ./...
 	@failed=""; for d in $(APPDIRS); do \
 	  a=$$(basename $$d); \
 	  case " $(OPENAPI_NEEDS_BROKER) " in \
@@ -102,20 +103,20 @@ describe-apps: ## Regenerate EVERY app's own spec subset (one binary per app; sl
 	done; \
 	if [ -n "$$failed" ]; then \
 	  echo; echo ">> describe FAILED for:$$failed"; \
-	  echo ">> every other app was still attempted; the subsets above are current."; \
+	  echo ">> every other app was still attempted; the documents above are current."; \
 	  exit 1; \
 	fi
-	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app subsets"
+	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app documents"
 
 # The drift gate. It REGENERATES FROM SOURCE and fails on any diff, which is the
-# whole difference between it and openapi-weave.
+# whole difference between it and openapi.
 #
-# openapi-weave compares two COMMITTED artifacts — the subsets and the golden they
-# weave into. Both are derived, and nothing forces either back to the routes, so
+# openapi compares two COMMITTED artifacts — the apps' documents and the golden
+# they compose into. Both are derived, and nothing forces either back to the routes, so
 # they agree with each other while both are wrong. That is not hypothetical: it is
 # how plugin/ingress lost eight paths (/v1/ingress/routes, /services, /middlewares,
 # /tls, /status and their :id forms). Routes were added, the subset was never
-# regenerated, the golden was woven from that same stale subset, the weave passed,
+# regenerated, the golden was composed from that same stale document, openapi passed,
 # and the entire ingress API was absent from openapi.yaml — and therefore from every
 # SDK generated off it, so no Python, Go or TS caller could reach it at all.
 #
@@ -129,7 +130,7 @@ describe-apps: ## Regenerate EVERY app's own spec subset (one binary per app; sl
 # It checks with `git status --porcelain`, not `git diff`: a NEW app produces a
 # NEW subset, which is untracked and therefore invisible to a diff — the failure
 # that matters most is exactly the one a diff would miss.
-surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail on any diff. The drift gate.
+check: ## Regenerate every document + openapi.yaml FROM SOURCE and fail on any diff. The drift gate.
 	@set -e; \
 	for d in $(APPDIRS); do \
 	  a=$$(basename $$d); \
@@ -148,8 +149,8 @@ surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	    || { echo "$$out"; echo "!! $$a cannot project its own document"; exit 1; }; \
 	  rm -f $(BIN)/$$a; \
 	done
-	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml 2>&1) \
-	  || { echo "$$out"; echo "!! the weave refused; nothing was written"; exit 1; }
+	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/openapi.yaml 2>&1) \
+	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
 	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml openapi/floor.json plugin/); \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \

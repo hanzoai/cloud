@@ -14,7 +14,7 @@
 # for every tool it is shown and cannot choose one that says nothing; that exact
 # bug shipped here once (zipdoc blind to group prefixes), so it is asserted.
 #
-#   usage:  make cloud && make -f mk/fleet.mk describe-apps   # host + plugins into ./bin
+#   usage:  make cloud && make -f mk/fleet.mk subsets   # host + plugins into ./bin
 #           e2e/mcp-door.sh
 set -euo pipefail
 

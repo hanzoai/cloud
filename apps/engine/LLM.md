@@ -97,7 +97,7 @@ family 404s on the live router and is absent from the document):
 2. Add the typed op + extend the fake upstream in typed_wire_test.go with the
    measured wire.
 3. Delete the family's `intentRefused` row — the test forces this ordering.
-4. `make -C apps/engine describe` and re-weave (surface-check).
+4. `make -C apps/engine describe` and re-weave (check).
 
 An opt-in end-to-end test drives the WHOLE mounted app against a real server:
 `ENGINE_E2E_UPSTREAM=http://127.0.0.1:1234 make -C apps/engine test`

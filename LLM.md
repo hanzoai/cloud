@@ -714,7 +714,7 @@ document pipeline" below.)
   unrouted but MISrouted: it fell to ai's bare `/v1`, and api.hanzo.ai published
   the ai child's own 8-path document as the whole API, 200 OK, to every SDK
   generator that read it. The host answers from `plugin.Spec` — the same committed
-  subsets `surface-check` regenerates — through `openapi.Fleet`, the same
+  subsets `check` regenerates — through `openapi.Fleet`, the same
   composition that WRITES `openapi.yaml`. So the served bytes and the artifact are
   one document by construction; `cmd/cloud/openapi_test.go` asserts exactly that
   (byte equality) and that a plugin never answers the door.
@@ -777,7 +777,7 @@ document pipeline" below.)
 - **`openapi/floor.json` is THE RATCHET — the surface may grow and may not quietly
   shrink** (`openapi/floor.go`). Every other gate here compares the document to
   something that moved WITH it: the weave compares two derived artifacts,
-  `surface-check` regenerates them both from source. Neither holds a line across
+  `check` regenerates them both from source. Neither holds a line across
   time, so a surface can lose products with everything green — and has: the CLI's
   capture went from 151 products to 4 in one bad reading and shipped 46 products
   short, and `plugin/ingress` lost eight paths because a subset was never
@@ -1198,7 +1198,7 @@ zip is getting multi-status `responses`, and these convert when it lands.
    (`/v1/ingress/routes|services|middlewares|tls|status` + `:id` forms) — absent
    from `openapi.yaml` and therefore from every generated SDK, so no Python, Go
    or TS caller could reach the ingress API at all, with every gate green. The
-   cure is `make -f mk/fleet.mk surface-check`, which REGENERATES and diffs.
+   cure is `make -f mk/fleet.mk check`, which REGENERATES and diffs.
    It RECURS, and the gate is what finds it: `e83d7e90` moved websearch's scrape
    to `/v1/scrape` without re-emitting `plugin/websearch/openapi.json`, so main
    published two paths nobody serves (`/v1/websearch/scrape`,
@@ -1233,7 +1233,7 @@ zip is getting multi-status `responses`, and these convert when it lands.
 3. **Verify what CI actually invokes before trusting a gate you add to a make
    target.** cloud's CI never ran `make test` — no `.github/workflows`, and
    `hanzo.yml` names steps directly. A gate added to `make test` protected
-   nobody. `hanzo.yml` calls `surface-check` now.
+   nobody. `hanzo.yml` calls `check` now.
 4. **`git status --porcelain`, not `git diff`.** A NEW app produces a NEW
    UNTRACKED subset, invisible to a diff — the failure that matters most is the
    one a diff cannot see.
@@ -2017,7 +2017,7 @@ and a silent shadow the moment `ai` adds OpenAI's own `/v1/files`.
 
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
-**rebase onto main, then regenerate** (`make -f mk/fleet.mk surface-check`). The
+**rebase onto main, then regenerate** (`make -f mk/fleet.mk check`). The
 generator is deterministic, so a regenerated golden is a function of the routes,
 never a merge to hand-resolve. Never hand-edit `openapi.yaml` or a
 `plugin/*/openapi.json`.
@@ -2590,7 +2590,7 @@ migration silently strips request shapes from every generated CLI and SDK.
   composition against `openapi.yaml`, so an app whose subset no longer matches its
   routes fails there — and a MISSING subset fails immediately, naming the file.
   The fix is to re-emit: `make -C apps/<app> describe` for one,
-  `make -f mk/fleet.mk describe-apps` for all of them. Never edit the JSON, and
+  `make -f mk/fleet.mk subsets` for all of them. Never edit the JSON, and
   never relax the gate. The same test also LOGS `UNROUTED: <app> serves <path>,
   which the fleet routes nowhere` — reported rather than refused, because that one
   is a composition-root defect (a prefix missing from a `Wire()` entry) and the
@@ -3429,7 +3429,7 @@ containment ─┘
 
 | car | what it does | what it refuses |
 |---|---|---|
-| **gate** | hanzoai/ci reusable → `hanzo.yml` `test:` → `make -f mk/fleet.mk surface-check` | a route added, renamed or deleted without regenerating the document |
+| **gate** | hanzoai/ci reusable → `hanzo.yml` `test:` → `make -f mk/fleet.mk check` | a route added, renamed or deleted without regenerating the document |
 | **containment** | apps/controlplane is unreachable from every real binary | stub crypto in a serve binary |
 | **image** | version derived ONCE → build → push → resolve → smoke | a tag naming an image that did not boot |
 | **rollout** | tag → universe pin → **poll `x-api-version` until it is ours** | describing a version that is not running |
