@@ -75,11 +75,32 @@ func LinkedSubject(org, provider, extUser string) (string, bool, error) {
 // fails closed for unmounted/unknown/not-connected/KMS-down, so an org that
 // never connected Slack cannot post — the per-org token IS the tenancy gate.
 func SendSlack(ctx context.Context, org, channel, threadTS, text string) error {
+	_, err := SendSlackAt(ctx, org, channel, threadTS, "", text)
+	return err
+}
+
+// SendSlackAt is the ONE Slack write, and it either POSTS or EDITS depending on
+// whether it was given a message to edit. It returns the message's timestamp —
+// Slack's id for it — which is what a later edit addresses.
+//
+// The two are one function because they are one act: put this text at this
+// address. A long-running coding run needs the edit form because Slack has no
+// server-sent stream to push progress down; the platform's own answer is to post
+// one message and rewrite it (chat.update), and a run that posted a fresh
+// message per phase would bury the channel it is reporting into.
+//
+// The org's bot token is fetched here and nowhere else, so a caller in another
+// process reports progress into its own workspace without ever holding the
+// token that does it.
+func SendSlackAt(ctx context.Context, org, channel, threadTS, updateTS, text string) (string, error) {
 	tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return slackPostThread(ctx, string(tok), channel, threadTS, text)
+	if strings.TrimSpace(updateTS) != "" {
+		return slackChatUpdate(ctx, string(tok), channel, updateTS, text)
+	}
+	return slackPostThreadTS(ctx, string(tok), channel, threadTS, text)
 }
 
 // SendTelegram posts text to chatID via the Bot API sendMessage, threaded under
