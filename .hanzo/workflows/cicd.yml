@@ -1025,6 +1025,10 @@ jobs:
     runs-on: [hanzo-build-linux-amd64]
     timeout-minutes: 15
     steps:
+      # This job used to need no source. It does now: the invariant re-checked at
+      # the end of it lives in .hanzo/scripts/orphans.sh, beside the list of
+      # images already known to breach it.
+      - uses: actions/checkout@v4
       - name: Write release.json onto the tag
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
@@ -1073,3 +1077,34 @@ jobs:
             exit 1
           fi
           echo "${TAG} is complete: document, image, production, reachability and all nine projections."
+
+      # THE INVARIANT ITSELF, not this release's part in it.
+      #
+      # Every check above answers a question about the run it is in: did MY image
+      # build, did MY tag survive, did MY pin go live. None of them can see an
+      # image published by a lane that never entered this workflow — and that is
+      # not a hypothetical gap, it is the one that happened. v1.801.478, 479, 480
+      # and 484 were published with no tag in any repo while every cicd.yml run
+      # on either side of them was green, because none of those runs was looking
+      # at the registry as a whole. 480 served production, reporting
+      # {"revision":"unknown"} on its own health endpoint.
+      #
+      # So the last thing a release does is re-ask the question about EVERYTHING
+      # published: does every version in the registry have a receipt. It runs
+      # last because release.json above is this release's receipt and should be
+      # written whatever the wider state is, and it runs HERE rather than in
+      # rollout because a pre-existing orphan must not be able to block a deploy
+      # — a gate that wedges production on someone else's old mess gets switched
+      # off within a day, and a switched-off gate is how this started.
+      #
+      # It is on the main path, not a cron, for the same reason: a scheduled
+      # reconciliation is a thing that can quietly stop running and look
+      # identical to a clean fleet. This cannot stop running without the release
+      # train stopping with it.
+      - name: Every published image has a receipt
+        env:
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+        run: bash .hanzo/scripts/orphans.sh

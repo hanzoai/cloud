@@ -1,0 +1,121 @@
+# Published images that no git tag names. Read by .hanzo/scripts/orphans.sh.
+#
+# Each line states that an image was published without a receipt, that this is
+# KNOWN, and that it cannot be repaired now. It is not permission for the next
+# one: orphans.sh is red for any published version neither tagged nor listed
+# here, so a new untagged image fails the release that follows it.
+#
+# TAGGED MEANS TAGGED ON A REMOTE. Two entries below (1.801.319, 1.801.340) look
+# tagged from a checkout and are not: the tag exists only in a local clone and
+# was never pushed anywhere. A ref on one machine is not a receipt, and reading
+# `git tag` instead of the remotes is how they stayed invisible.
+#
+# WHY NONE OF THESE WERE TAGGED RETROACTIVELY. Fifteen of the 82 carry a real
+# commit in org.opencontainers.image.revision, and several name a commit that is
+# on main — those could be tagged, and deliberately were not. Here a v* tag is
+# not a label, it is a RECEIPT: hanzo.yml defines it as minted only after build
+# and smoke pass ("a RECEIPT for a proven image, never a build trigger"). Minting
+# one now would assert that a pipeline proved something it never ran. That trades
+# a gap everyone can see for a false claim nobody can detect later, which is the
+# more expensive of the two mistakes.
+#
+# The image -> commit link those fifteen DO have is already recorded where it
+# belongs — the image's own label, which .hanzo/scripts/image-revision.sh reads —
+# and is repeated in column two so it is greppable without a registry call.
+# Recording it costs nothing and claims nothing. The other 67 report
+# revision=unknown: their commit is not recoverable from the image, and NO
+# mapping is guessed for them. "We cannot tell what this was built from" is true
+# and useful; a plausible-looking guess is not.
+#
+# v1.801.480 is the one that matters most: it served api.hanzo.ai in production
+# and reported {"revision":"unknown"} on its own health endpoint. What source ran
+# in production during that window is not knowable from anything that survives.
+#
+# 328 and 330-336 are the images hanzo.yml already names — the detached release
+# that terminated the pod running it, mid-pipeline, before it could tag. That
+# this list did not stop at 336 is the point: the same hole kept producing
+# images, and 485 was published untagged while this file was being written.
+#
+#   <version>  <commit or "unknown">  # <built>  <why>
+v0.2.2         unknown  # 2026-06-19T04:59:38Z  no commit recorded — unreconstructable
+v1.763.0       unknown  # 2026-02-14T18:11:34Z  no commit recorded — unreconstructable
+v1.785.0       unknown  # 2026-06-19T06:00:06Z  no commit recorded — unreconstructable
+v1.785.1       unknown  # 2026-06-19T06:02:38Z  no commit recorded — unreconstructable
+v1.785.27      5fa3647a3be1e5660ad293dcefbf80da6bebfe57  # 2026-06-30T21:33:14Z  names a commit not in main history (rebased away)
+v1.797.0       3b137a474ba4ba840807824d080e932078d26c50  # 2026-07-03T21:58:04Z  names a commit absent from forge and every fetched mirror
+v1.799.1       49a20d69aca5f2a4f6b8f28594e35e3f8631d0ea  # 2026-07-04T00:06:08Z  names a commit absent from forge and every fetched mirror
+v1.801.210     unknown  # 2026-07-25T01:44:00Z  no commit recorded — unreconstructable
+v1.801.211     unknown  # 2026-07-25T14:02:37Z  no commit recorded — unreconstructable
+v1.801.212     unknown  # 2026-07-25T15:48:37Z  no commit recorded — unreconstructable
+v1.801.213     unknown  # 2026-07-25T20:16:12Z  no commit recorded — unreconstructable
+v1.801.214     unknown  # 2026-07-25T21:07:41Z  no commit recorded — unreconstructable
+v1.801.215     unknown  # 2026-07-25T21:46:34Z  no commit recorded — unreconstructable
+v1.801.216     unknown  # 2026-07-25T22:07:18Z  no commit recorded — unreconstructable
+v1.801.244     unknown  # 2026-07-27T15:34:03Z  no commit recorded — unreconstructable
+v1.801.252     unknown  # 2026-07-27T19:19:07Z  no commit recorded — unreconstructable
+v1.801.258     unknown  # 2026-07-27T21:11:40Z  no commit recorded — unreconstructable
+v1.801.263     unknown  # 2026-07-28T00:15:43Z  no commit recorded — unreconstructable
+v1.801.265     unknown  # 2026-07-28T00:40:25Z  no commit recorded — unreconstructable
+v1.801.274     unknown  # 2026-07-28T04:18:33Z  no commit recorded — unreconstructable
+v1.801.277     unknown  # 2026-07-28T05:36:44Z  no commit recorded — unreconstructable
+v1.801.281     unknown  # 2026-07-28T06:29:47Z  no commit recorded — unreconstructable
+v1.801.285     unknown  # 2026-07-28T07:39:58Z  no commit recorded — unreconstructable
+v1.801.287     unknown  # 2026-07-28T08:08:03Z  no commit recorded — unreconstructable
+v1.801.288     unknown  # 2026-07-28T08:19:41Z  no commit recorded — unreconstructable
+v1.801.292     unknown  # 2026-07-28T10:03:05Z  no commit recorded — unreconstructable
+v1.801.294     unknown  # 2026-07-28T16:03:04Z  no commit recorded — unreconstructable
+v1.801.295     unknown  # 2026-07-28T16:14:39Z  no commit recorded — unreconstructable
+v1.801.296     unknown  # 2026-07-28T16:29:17Z  no commit recorded — unreconstructable
+v1.801.309     unknown  # 2026-07-28T21:48:14Z  no commit recorded — unreconstructable
+v1.801.310     unknown  # 2026-07-28T23:05:08Z  no commit recorded — unreconstructable
+v1.801.311     unknown  # 2026-07-28T23:41:11Z  no commit recorded — unreconstructable
+v1.801.312     unknown  # 2026-07-29T00:31:00Z  no commit recorded — unreconstructable
+v1.801.313     unknown  # 2026-07-29T00:46:09Z  no commit recorded — unreconstructable
+v1.801.314     unknown  # 2026-07-29T01:16:34Z  no commit recorded — unreconstructable
+v1.801.315     unknown  # 2026-07-29T02:17:35Z  no commit recorded — unreconstructable
+v1.801.316     unknown  # 2026-07-29T03:02:16Z  no commit recorded — unreconstructable
+v1.801.317     unknown  # 2026-07-29T03:37:24Z  no commit recorded — unreconstructable
+v1.801.318     unknown  # 2026-07-29T03:58:29Z  no commit recorded — unreconstructable
+v1.801.319     unknown  # 2026-07-29T18:10:12Z  no commit recorded — unreconstructable
+v1.801.326     unknown  # 2026-07-30T12:41:22Z  no commit recorded — unreconstructable
+v1.801.328     unknown  # 2026-07-31T03:01:24Z  no commit recorded — unreconstructable
+v1.801.330     unknown  # 2026-07-31T16:10:51Z  no commit recorded — unreconstructable
+v1.801.331     unknown  # 2026-07-31T06:21:16Z  no commit recorded — unreconstructable
+v1.801.332     unknown  # 2026-07-31T15:54:33Z  no commit recorded — unreconstructable
+v1.801.333     unknown  # 2026-07-31T16:16:17Z  no commit recorded — unreconstructable
+v1.801.334     unknown  # 2026-07-31T16:45:30Z  no commit recorded — unreconstructable
+v1.801.336     unknown  # 2026-07-31T18:02:49Z  no commit recorded — unreconstructable
+v1.801.337     unknown  # 2026-07-31T18:24:00Z  no commit recorded — unreconstructable
+v1.801.338     unknown  # 2026-07-31T21:22:19Z  no commit recorded — unreconstructable
+v1.801.339     unknown  # 2026-07-31T22:11:36Z  no commit recorded — unreconstructable
+v1.801.340     unknown  # 2026-07-31T22:37:37Z  no commit recorded — unreconstructable
+v1.801.343     unknown  # 2026-08-02T01:28:01Z  no commit recorded — unreconstructable
+v1.801.344     unknown  # 2026-08-01T00:50:04Z  no commit recorded — unreconstructable
+v1.801.345     unknown  # 2026-08-01T01:17:38Z  no commit recorded — unreconstructable
+v1.801.346     unknown  # 2026-08-01T01:38:50Z  no commit recorded — unreconstructable
+v1.801.349     084ae0ba691f162bcf01da2d2619f0cc600129e9  # 2026-08-01T05:41:49Z  names a commit absent from forge and every fetched mirror
+v1.801.351     2cadb47bb2189252efdef1ad2e198df535d7c7e2  # 2026-08-01T12:19:10Z  names a commit absent from forge and every fetched mirror
+v1.801.352     9bd7c2a4b1e820671c8d01e0d3ca0dcc598d78a3  # 2026-08-01T13:01:18Z  names a commit absent from forge and every fetched mirror
+v1.801.353     34ed2f5d7c22f9c8a81524facaa11bb8ba016a0b  # 2026-08-01T14:33:00Z  names a commit absent from forge and every fetched mirror
+v1.801.354     unknown  # 2026-08-01T18:17:04Z  no commit recorded — unreconstructable
+v1.801.355     unknown  # 2026-08-01T19:53:37Z  no commit recorded — unreconstructable
+v1.801.359     unknown  # 2026-08-02T01:03:52Z  no commit recorded — unreconstructable
+v1.801.370     6965c345367856d2d8cd747c9c1b994bd1d14a15  # 2026-08-02T16:54:11Z  names a commit absent from forge and every fetched mirror
+v1.801.372     unknown  # 2026-08-02T19:44:29Z  no commit recorded — unreconstructable
+v1.801.379     754fb82173fb81d6df232e8b5b5674ff1504f50a  # 2026-08-02T22:57:59Z  names a commit on main
+v1.801.395     unknown  # 2026-08-03T22:15:04Z  no commit recorded — unreconstructable
+v1.801.397     unknown  # 2026-08-03T23:48:11Z  no commit recorded — unreconstructable
+v1.801.403     unknown  # 2026-08-04T04:31:20Z  no commit recorded — unreconstructable
+v1.801.405     93a578e4ab5485861fca8a70d2a851769ddb1d8e  # 2026-08-04T05:38:14Z  names a commit on main
+v1.801.406     5a8229c8f98f421de13b63b1cd4f6f25b17d6145  # 2026-08-04T06:02:35Z  names a commit on main
+v1.801.432     unknown  # 2026-08-04T18:51:03Z  no commit recorded — unreconstructable
+v1.801.453     07ff50327a67fd71c0e06f023e648386ff15f282  # 2026-08-05T03:34:02Z  names a commit on main
+v1.801.457     unknown  # 2026-08-05T05:55:53Z  no commit recorded — unreconstructable
+v1.801.478     unknown  # 2026-08-05T23:57:07Z  no commit recorded — unreconstructable
+v1.801.479     unknown  # 2026-08-06T00:25:57Z  no commit recorded — unreconstructable
+v1.801.480     unknown  # 2026-08-06T01:00:10Z  no commit recorded — unreconstructable
+v1.801.481     a649d23fb69c807a2cb0aca7192a145b88fa2042  # 2026-08-06T02:17:42Z  names a commit not in main history (rebased away)
+v1.801.482     98b33ebb6cc413485d81c20fde5e9302086cea9b  # 2026-08-06T02:46:00Z  names a commit not in main history (rebased away)
+v1.801.483     80723cc0004690ddb677b460b8814d972595ced1  # 2026-08-06T03:34:03Z  names a commit not in main history (rebased away)
+v1.801.484     unknown  # 2026-08-06T06:50:36Z  no commit recorded — unreconstructable
+v1.801.485     unknown  # 2026-08-06T07:26:36Z  no commit recorded — unreconstructable
