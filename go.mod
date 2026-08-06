@@ -45,6 +45,7 @@ require (
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/http v0.3.1
+	github.com/zap-proto/mcp v1.0.5
 	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zip v1.27.0
 	golang.org/x/term v0.45.0
@@ -102,7 +103,6 @@ require (
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
-	github.com/zap-proto/mcp v1.0.5 // indirect
 	github.com/zap-proto/zap2pb v0.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opentelemetry.io/collector/component v1.54.0 // indirect
@@ -689,7 +689,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.832.31
+	github.com/hanzoai/ai v1.832.35
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.15
 	github.com/hanzoai/licensing v0.1.10

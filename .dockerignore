@@ -39,3 +39,23 @@ Thumbs.db
 # The Dockerfile itself doesn't need to be in the context it builds
 Dockerfile
 .dockerignore
+
+# Agent worktrees. .claude/ is gitignored — it is a whole SECOND CHECKOUT of this
+# repository, and COPY . . was shipping it into the image context: 92 MB of a
+# copy of ourselves, cache-keyed so every agent run invalidated the layer. The
+# same second-checkout problem the zipdoc gate hit when its walk read 203
+# packages where there are 104.
+.claude/
+
+# Compiled binaries left at the ROOT by a local `make`. /bin/ was already
+# excluded, but these do not live there — `hanzo` alone is 586 MB, and none of
+# the three is tracked in git, so nothing in the build can want them. They are
+# named rather than globbed because a glob here would also catch source.
+# Measured: context 1087 MB -> 251 MB.
+#
+# NOT excluded: `sandboxes`, which IS tracked in git. COPY . . may legitimately
+# carry it, and a build output that someone committed is a question for that
+# commit, not something to silently drop from the image.
+/hanzo
+/o11y
+/host

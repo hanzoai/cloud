@@ -175,6 +175,9 @@ func (r *runtime) ready() error {
 // version; nothing here resolves `latest`, because an image decided by WHEN the
 // pod started rather than by what was shipped is not a deployment.
 func (r *runtime) imageFor(class string) string {
+	if d := r.digestFor(class); d != "" {
+		return r.image + "@" + d
+	}
 	tag := r.tag
 	if tag == "" {
 		tag = envOr("SANDBOX_IMAGE_TAG_"+strings.ToUpper(class), "")
@@ -182,7 +185,33 @@ func (r *runtime) imageFor(class string) string {
 	if tag == "" {
 		return r.image + ":" + class
 	}
-	return r.image + ":" + class + "-" + tag
+	// <version>-<class>, which is the order CI PUBLISHES. This read
+	// `class + "-" + tag` and asked for `dev-2026.6.7` while the registry held
+	// `2026.6.7-dev`, so the default path 404'd on an image that was sitting
+	// right there. The publisher wins that argument: hanzoai/ci appends its
+	// per-image `tag-suffix` to the version, so every image in the fleet is
+	// <version>-<suffix> and a consumer that spells it the other way is simply
+	// wrong.
+	return r.image + ":" + tag + "-" + class
+}
+
+// DigestFor pins by CONTENT when the deployment names a digest, and it is the
+// only pin that cannot move.
+//
+// A version tag looks immutable and is not: hanzoai/bot ships the sandbox image
+// under bot's own package.json version, which was last bumped 2026-06-07, so a
+// rebuild TODAY republished `2026.6.7-dev` from a commit two months newer. A tag
+// that gets rewritten is not a pin, and one that LOOKS like a pin is worse than
+// `latest`, which at least admits what it is.
+//
+// SANDBOX_IMAGE_DIGEST is therefore honoured ahead of any tag: `repo@sha256:…`
+// names bytes, and bytes do not change under a running fleet.
+// It is PER CLASS, because the three classes are three different images and one
+// digest names one of them. A single SANDBOX_IMAGE_DIGEST would have quietly
+// given every class the exec image — the same shape of bug as a tag that looks
+// pinned and is not, which is what this function exists to end.
+func (r *runtime) digestFor(class string) string {
+	return strings.TrimSpace(os.Getenv("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class)))
 }
 
 func (r *runtime) pods() dynamic.ResourceInterface {

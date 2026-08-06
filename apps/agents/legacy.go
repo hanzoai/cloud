@@ -148,7 +148,7 @@ func (s *Store) copyOrgTo(ctx context.Context, org string, dst *Store) error {
 			`INSERT OR IGNORE INTO agents (` + agentCols + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`},
 		{"runs",
 			`SELECT ` + runCols + ` FROM agent_runs WHERE org=?`,
-			`INSERT OR IGNORE INTO agent_runs (` + runCols + `) VALUES (?,?,?,?,?,?,?,?,?,?)`},
+			`INSERT OR IGNORE INTO agent_runs (` + runCols + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`},
 		{"sessions",
 			`SELECT ` + sessionCols + ` FROM agent_sessions WHERE org=?`,
 			`INSERT OR IGNORE INTO agent_sessions (` + sessionCols + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`},

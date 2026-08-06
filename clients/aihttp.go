@@ -60,6 +60,23 @@ func StartGenAISpan(ctx context.Context, system, operation, model, org, project 
 	return ctx, span
 }
 
+// setRunAttr names the agent run a model call was made FOR, when one was.
+//
+// The call already nests under that run's span, so the relationship is in the
+// trace — but only as a shape, recoverable by walking parents. Carrying the id on
+// the row itself is what makes "every model call this run made" a filter instead
+// of a graph traversal, and it survives the cases where the shape does not: a
+// parent dropped by sampling, a batch exported after the root, a query that has
+// one span and needs to know whose it is.
+//
+// A direct API completion belongs to no run and carries no attribute, rather than
+// an empty one that would read as a run whose name is "".
+func setRunAttr(span trace.Span, runID string) {
+	if runID != "" {
+		span.SetAttributes(attribute.String("hanzo.agent.run_id", runID))
+	}
+}
+
 // httpAI is the real, in-process types.AIClient: it runs chat completions
 // against an OpenAI-compatible endpoint — the Hanzo LLM gateway
 // (https://api.hanzo.ai/v1). This is the ONE concrete inference client the
@@ -191,6 +208,7 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 	// GenAI client span (OTel semantic conventions) — one span per LLM call,
 	// nested under any active agent-run span carried on ctx.
 	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
+	setRunAttr(span, req.RunID)
 	defer span.End()
 
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
@@ -334,6 +352,7 @@ func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit fu
 	}
 
 	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
+	setRunAttr(span, req.RunID)
 	defer span.End()
 
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)

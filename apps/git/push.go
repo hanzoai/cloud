@@ -205,13 +205,44 @@ func corePush(s *cloud.Service[state], ctx context.Context, org, project string,
 		return "", "", fmt.Errorf("store commit: %w", err)
 	}
 
+	// THE REF POLICY, on the client-less door.
+	//
+	// This is the write Red walked through when the policy guarded only
+	// receive-pack: one JSON POST, no git wire protocol, and a FAST-FORWARD CHILD
+	// lands on the branch a reviewer just approved. Worse than a force-push,
+	// because it is append-only and so trips no "the branch was rewritten"
+	// signal — the reviewer approved A and merges A+B.
+	//
+	// The command is stated in the same value the wire door parses out of
+	// pkt-lines, and judged by the same function, so the two doors cannot come to
+	// different answers about the same request. `before` is empty when the branch
+	// is new, which is exactly what Creates() reads.
+	//
+	// It runs here, after the objects are written and before the ref moves,
+	// because the new commit's hash is part of what is being asked. A refused
+	// push therefore leaves loose objects behind, which the repo's own
+	// housekeeping collects; it does NOT leave a ref.
+	old := before
+	if old == "" {
+		old = zeroOID // the ref does not exist on our side: this is a create
+	}
+	if verr := checkRefPolicy([]refCommand{{Old: old, New: ch.String(), Ref: branchRef.String()}},
+		defaultBranchOf(ctx, s.State.storage.absRepoPath(org, project, name)), ""); verr != nil {
+		return "", "", badInput("%s", verr.Error())
+	}
+
 	// Advance the branch ref. On a brand-new branch that is the repo default,
 	// point HEAD at it too (matching `git push` making the first branch the head).
 	newRef := plumbing.NewHashReference(branchRef, ch)
 	if err := st.SetReference(newRef); err != nil {
 		return "", "", fmt.Errorf("update ref: %w", err)
 	}
-	if _, herr := st.Reference(plumbing.HEAD); herr != nil {
+	// …but never point it at a machine branch. On a repository with no HEAD yet
+	// the FIRST branch pushed becomes the default, and a run's branch becoming
+	// the default is how unreviewed work turns into what a clone checks out —
+	// and, since the deploy reactors gate on the default branch, into what
+	// deploys. Same rule the importers apply to the HEAD they are handed.
+	if _, herr := st.Reference(plumbing.HEAD); herr != nil && checkHeadRef(branchRef.String()) == nil {
 		_ = st.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, branchRef))
 	}
 
