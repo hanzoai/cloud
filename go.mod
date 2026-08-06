@@ -5,6 +5,7 @@ go 1.26.5
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
+	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/coder/websocket v1.8.14
 	github.com/digitalocean/godo v1.197.0
@@ -60,7 +61,6 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/lightsail v1.53.0 // indirect
 	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
