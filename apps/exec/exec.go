@@ -67,6 +67,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -136,11 +137,23 @@ type CodeRun struct {
 // CodeFile is one file in a session. ID is its path RELATIVE to the session's
 // artifact directory, which is what makes a download a read and not a lookup: there
 // is no id table to keep, because the id already says where the bytes are.
+//
+// TWO SPELLINGS OF ONE FIELD, and both are read. @hanzochat/agents' FileRef calls it
+// `storage_session_id` (tools.d.ts, and the split from the execution session is
+// deliberate there); hanzo.chat's own primer sends `session_id`
+// (Files/Code/process.js pushFile). Reading only the first meant every file a user
+// attached arrived with an empty session, was skipped by the copy loop, and was
+// skipped by the "not available" note as well — so the CSV was invisible and nothing
+// said so. Answering with `storage_session_id` keeps the reply on the agents shape.
 type CodeFile struct {
 	ID               string `json:"id"`
 	Name             string `json:"name"`
 	StorageSessionID string `json:"storage_session_id,omitempty"`
+	SessionID        string `json:"session_id,omitempty"`
 }
+
+// Session is the session a file's bytes live in, whichever name the caller used.
+func (f CodeFile) Session() string { return firstNonEmpty(f.StorageSessionID, f.SessionID) }
 
 // CodeResult is one run. A program that exited non-zero is a SUCCESSFUL call carrying a
 // failed program — its diagnostics are on Stderr and the status stays 200, because
@@ -176,8 +189,20 @@ type uploadedFile struct {
 
 // ---- the composition -------------------------------------------------------
 
-// run is the typed op: the caller's tenant, then the interpreter.
-func run(ctx context.Context, in *CodeRun) (*CodeResult, error) { return Run(ctx, brandOrg, in) }
+// run is the typed op: resolve the tenant, then the interpreter.
+//
+// The resolution is what makes THIS door safe. A typed op is also an MCP tool and
+// an op-plane op; MCP's tools/call invokes it directly, with no route and therefore
+// no middleware, so nothing there could have checked a credential. tenantOf refuses
+// a context that carries neither a validated principal nor exec's own admission
+// marker, so those doors fail closed without a second gate to keep in step.
+func run(ctx context.Context, in *CodeRun) (*CodeResult, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return Run(ctx, org, in)
+}
 
 // Run is the whole interpreter, and it is composition rather than implementation:
 // lease a sandbox, put the program in it, run it, read back what changed.
@@ -212,7 +237,15 @@ func Run(ctx context.Context, org string, in *CodeRun) (*CodeResult, error) {
 	// code the model wrote.
 	var missing []string
 	for _, f := range in.Files {
-		if f.StorageSessionID == "" || f.StorageSessionID == sb.ID {
+		src := f.Session()
+		if src == "" {
+			// A file with no session at all names bytes this deployment cannot find.
+			// Reported rather than skipped: the previous silence is what made an
+			// attached CSV invisible with no error anywhere.
+			missing = append(missing, f.Name)
+			continue
+		}
+		if src == sb.ID {
 			continue
 		}
 		if err := carry(ctx, f, sb.ID); err != nil {
@@ -272,7 +305,7 @@ func produced(ctx context.Context, id string) []CodeFile {
 // two pods and there is no third place for them to meet.
 func carry(ctx context.Context, f CodeFile, into string) error {
 	b, err := cloud.Ask[plane.PathIn, plane.Blob](ctx, peer, plane.SandboxRead,
-		&plane.PathIn{ID: f.StorageSessionID, Path: f.ID})
+		&plane.PathIn{ID: f.Session(), Path: f.ID})
 	if err != nil || b.Dir {
 		return fmt.Errorf("read %s: %v", f.ID, err)
 	}
@@ -302,29 +335,85 @@ func write(ctx context.Context, id, p string, data []byte) (*plane.Wrote, error)
 		&plane.WriteIn{ID: id, Path: p, Data: data})
 }
 
-// callCtx is the context every sandbox call is made on, and it decides WHOSE
-// sandboxes that call makes.
+// admitted is the fact THIS subsystem's credential check produced, carried on the
+// context rather than re-derived downstream.
 //
-// The chat server forwards the end user's validated IAM bearer when it can resolve
-// one (crud.js codeAuthHeaders), so a request that arrived with a principal already
-// names its tenant — and that context is passed through UNCHANGED. Not re-stated,
-// not re-pointed: the identity the edge minted is the one the peer must apply its
-// rules to.
+// It exists because the check and its consequence had drifted apart. The credential
+// was verified in middleware keyed on a lowercase path list, and the TENANT was
+// decided separately in callCtx — so a request that never passed the check could
+// still reach a handler, and a handler had no way to ask whether it had. Two ways
+// in that the list did not cover:
 //
-// A request with no principal is the shared service key, which carries no tenant at
-// all. The honest reading of that is the deployment's own brand org — one key, one
-// deployment, one tenant — and stating it needs a context with NO REQUEST behind it,
-// because zip reads a stated caller only there. That is not an obstacle to work
-// around, it is the anti-laundering rule: on a request context the header wins, so
-// no handler can ever assert an org a caller did not arrive with.
+//   - PATH CASE. fiber routes case-insensitively (cloud.RoutePath exists for
+//     exactly this), so `POST /V1/EXEC` matched the route and missed the list.
+//     With no key at all it ran code; with CODE_EXEC_API_KEY unset it ran code
+//     where the documented behaviour is a 503.
+//   - THE OTHER DOORS. A typed op is also an MCP tool and an op-plane op, and
+//     neither is a `/v1/...` request. MCP's tools/call invokes the op DIRECTLY
+//     (zip typed.go:474, registeredOp.direct) — no route, so no route middleware,
+//     so no list could ever have covered it.
 //
-// Detaching would also drop the client's disconnect, which on a code run means a
-// sandbox executing for nobody. AfterFunc puts exactly that one thing back: the
-// values are the deployment's, the cancellation is still the request's.
-func callCtx(ctx context.Context, org string) (context.Context, func()) {
-	if cloud.Who(ctx).Org != "" {
-		return context.WithCancel(ctx)
+// Both are the same defect: authorization inferred from the SPELLING of a request
+// instead of being a property of the request. So the middleware now parks this
+// marker, and every path into this subsystem reads it. A door that does not run
+// exec's middleware does not carry the marker and is refused — by construction,
+// not by remembering to add it to a list.
+type admittedKey struct{}
+
+func admit(ctx context.Context) context.Context {
+	return context.WithValue(ctx, admittedKey{}, true)
+}
+
+func isAdmitted(ctx context.Context) bool {
+	ok, _ := ctx.Value(admittedKey{}).(bool)
+	return ok
+}
+
+// tenantOf is the ONE tenant decision, and it never reads a header.
+//
+// THE BUG IT REPLACES: it used to prefer cloud.Who(ctx).Org. cloud.Who is
+// zip.CallerOf, which reads the X-Org-Id REQUEST HEADER (zip caller.go:377) — and
+// for a request carrying no validated bearer, SanitizeIdentity deliberately
+// RESTORES the client's own header (middleware_identity.go:455). So the caller
+// named the tenant, storeFor opened that org's SQLite file, and `X-Org-Id:
+// victim-corp` ran code in the victim's store and read its artifacts back out.
+//
+// principal.OrgFrom is the org a VALIDATED principal resolved to and nothing else
+// (principal.OrgOf: an empty user claim means "the org that rode along is
+// untrusted"). Every other app in this repo resolves through it; this one was the
+// outlier, and plane.go's own note — "an org in the argument is an org the caller
+// chose" — is the rule it was breaking.
+//
+// The untenanted fallback is the deployment's brand org, and it is reachable ONLY
+// through the admission marker. That is what keeps it from being a way in: the
+// shared service key carries no tenant, so a request bearing it acts for the
+// deployment — but a request that never presented it acts for nobody and is
+// refused.
+func tenantOf(ctx context.Context) (string, error) {
+	if org, ok := principal.OrgFrom(ctx); ok {
+		return org, nil
 	}
+	if isAdmitted(ctx) {
+		return brandOrg, nil
+	}
+	return "", zip.ErrForbidden("code execution requires a validated principal or the service key")
+}
+
+// callCtx is the context every sandbox call is made on.
+//
+// It ALWAYS detaches and states the resolved tenant, with no branch. The earlier
+// version passed the request context through whenever it already carried a caller,
+// which meant the peer read the org off the request headers — the same
+// attacker-controlled value tenantOf now refuses to trust. One path, and the org
+// the peer sees is exactly the one this subsystem decided.
+//
+// zip reads a STATED caller only on a context with no request behind it
+// (zip.CallerOf prefers the request), which is the anti-laundering rule and the
+// reason the detach is not optional. Detaching would also drop the client's
+// disconnect, which on a code run means a sandbox executing for nobody — AfterFunc
+// puts exactly that one thing back: the values are ours, the cancellation is still
+// the request's.
+func callCtx(ctx context.Context, org string) (context.Context, func()) {
 	out, cancel := context.WithCancel(cloud.For(context.Background(), org))
 	stop := context.AfterFunc(ctx, cancel)
 	return out, func() { stop(); cancel() }
@@ -338,8 +427,8 @@ var brandOrg = "hanzo"
 
 func storageSession(fs []CodeFile) string {
 	for _, f := range fs {
-		if f.StorageSessionID != "" {
-			return f.StorageSessionID
+		if s := f.Session(); s != "" {
+			return s
 		}
 	}
 	return ""
@@ -383,7 +472,11 @@ func upload(c *zip.Ctx) error {
 	if _, err := readFull(f, buf); err != nil {
 		return zip.Errorf(http.StatusBadRequest, "read upload: %v", err)
 	}
-	ctx, done := callCtx(c.Context(), brandOrg)
+	org, err := tenantOf(c.Context())
+	if err != nil {
+		return err
+	}
+	ctx, done := callCtx(c.Context(), org)
 	defer done()
 	sb, err := lease(ctx, strings.TrimSpace(c.Fiber().FormValue("session_id")))
 	if err != nil {
@@ -410,7 +503,11 @@ func download(c *zip.Ctx) error {
 	if !ok || sid == "" || p == "" {
 		return zip.ErrBadRequest("download path is {session_id}/{fileId}")
 	}
-	ctx, done := callCtx(c.Context(), brandOrg)
+	org, err := tenantOf(c.Context())
+	if err != nil {
+		return err
+	}
+	ctx, done := callCtx(c.Context(), org)
 	defer done()
 	b, err := cloud.Ask[plane.PathIn, plane.Blob](ctx, peer, plane.SandboxRead,
 		&plane.PathIn{ID: sid, Path: p})
@@ -437,39 +534,39 @@ func files(c *zip.Ctx) error {
 	if sid == "" {
 		return zip.ErrBadRequest("session id required")
 	}
-	ctx, done := callCtx(c.Context(), brandOrg)
-	defer done()
-	b, err := cloud.Ask[plane.PathIn, plane.Blob](ctx, peer, plane.SandboxRead, &plane.PathIn{ID: sid})
+	org, err := tenantOf(c.Context())
 	if err != nil {
 		return err
 	}
-	// One stat pass for the whole listing, not one call per entry: `lastModified` is
-	// what the client reads, and asking the sandbox once for every mtime beats N
-	// round trips through the apiserver to assemble the same table.
-	stamps := modtimes(ctx, sid)
-	out := make([]listing, 0, len(b.Entries))
-	for _, e := range b.Entries {
-		out = append(out, listing{Name: sid + "/" + e, LastModified: stamps[e]})
-	}
-	return c.JSON(http.StatusOK, out)
-}
+	ctx, done := callCtx(c.Context(), org)
+	defer done()
 
-// modtimes reads every entry's mtime in one command, as RFC3339 so the client's
-// Date parse of it is unambiguous. A sandbox that cannot answer yields an empty
-// table rather than a failed listing: the names are the answer, the stamps are the
-// freshness hint beside them.
-func modtimes(ctx context.Context, sid string) map[string]string {
+	// ONE `find`, RECURSIVE, and it is the same traversal the artifact sweep makes.
+	//
+	// The listing used to be `ls -1A` — top level only — while `produced` collected
+	// with `find`. So a run that wrote /mnt/data/out/plot.png reported that artifact
+	// in its reply and then omitted it here, and the client's
+	// `name.startsWith(session/id)` found nothing and read the file as EXPIRED. Two
+	// traversals of one directory is two answers about what a session holds; there is
+	// one now.
 	ran, err := cloud.Ask[plane.RunIn, plane.Ran](ctx, peer, plane.SandboxRun, &plane.RunIn{
 		ID: sid, Argv: []string{"sh", "-c",
-			`find . -maxdepth 1 -mindepth 1 -exec date -u -r {} +%Y-%m-%dT%H:%M:%SZ \; -exec echo {} \;`}})
-	if err != nil || ran.ExitCode != 0 {
-		return map[string]string{}
+			`find . -type f -exec date -u -r {} +%Y-%m-%dT%H:%M:%SZ \; -print`}})
+	if err != nil {
+		return err
 	}
-	out, rows := map[string]string{}, strings.Split(ran.Stdout, "\n")
+	// The rows come in pairs: the stamp, then the path it belongs to.
+	rows := strings.Split(ran.Stdout, "\n")
+	out := make([]listing, 0, len(rows)/2)
 	for i := 0; i+1 < len(rows); i += 2 {
-		out[strings.TrimPrefix(strings.TrimSpace(rows[i+1]), "./")] = strings.TrimSpace(rows[i])
+		p := strings.TrimPrefix(strings.TrimSpace(rows[i+1]), "./")
+		if p == "" {
+			continue
+		}
+		out = append(out, listing{Name: sid + "/" + p, LastModified: strings.TrimSpace(rows[i])})
 	}
-	return out
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return c.JSON(http.StatusOK, out)
 }
 
 // programmatic refuses, and names what it would take to stop refusing.
@@ -512,20 +609,21 @@ func readFull(r interface{ Read([]byte) (int, error) }, b []byte) (int, error) {
 // KMS-sourced and synced into the pod env as CODE_EXEC_API_KEY.
 func apiKey() string { return strings.TrimSpace(os.Getenv("CODE_EXEC_API_KEY")) }
 
-// guard enforces that key in constant time. Unset ⇒ 503 (fail closed, never open);
-// wrong ⇒ 401. It wraps the whole surface, so no route can be added past it.
-func guard(next zip.Handler) zip.Handler {
-	return func(c *zip.Ctx) error {
-		want := apiKey()
-		if want == "" {
-			return zip.Errorf(http.StatusServiceUnavailable, "code execution not configured")
-		}
-		got := strings.TrimSpace(c.Header("X-API-Key"))
-		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			return zip.Errorf(http.StatusUnauthorized, "invalid api key")
-		}
-		return next(c)
+// checkKey enforces the shared service key in constant time. Unset ⇒ 503 (fail
+// closed, never open); wrong ⇒ 401.
+//
+// It answers an error instead of wrapping a handler, because a wrapper is a thing a
+// route can be registered around and this must be a thing a route cannot avoid.
+func checkKey(c *zip.Ctx) error {
+	want := apiKey()
+	if want == "" {
+		return zip.Errorf(http.StatusServiceUnavailable, "code execution not configured")
 	}
+	got := strings.TrimSpace(c.Header("X-API-Key"))
+	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+		return zip.Errorf(http.StatusUnauthorized, "invalid api key")
+	}
+	return nil
 }
 
 // Mount registers the code-interpreter surface.
@@ -539,16 +637,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if b := strings.TrimSpace(deps.Brand); b != "" {
 		brandOrg = b
 	}
-	// ONE credential check for the whole surface, installed as middleware rather
-	// than wrapped around each handler — because a TYPED op takes no handler chain,
-	// so a per-route wrap could not have covered POST /v1/exec at all. cloud's scope
-	// already bounds this to the subsystem's own prefixes; the `owned` check keeps it
-	// true when the router is a bare app, which is what a test mounts on.
+	// The credential check, and the two facts it produces.
+	//
+	// cloud.RoutePath, not c.Path(): fiber routes case-insensitively and ignores a
+	// trailing slash, so the raw spelling is what the CLIENT sent and RoutePath is
+	// the form THE ROUTER MATCHED. `POST /V1/EXEC` reached this middleware, missed a
+	// lowercase prefix test, and ran code with no key at all. Every other gate in
+	// this repo already normalizes here (middleware_abuse.go:160,
+	// middleware_ratelimit.go:100); this one did not.
+	//
+	// It parks BOTH facts on the request context, which is what makes the check
+	// reach past the router: principal.WithOrg carries the VALIDATED org so a typed
+	// op can resolve it (typed.go:82 rebuilds from c.Context(), so this is inherited),
+	// and admit records that the service key checked out. Nothing downstream re-reads
+	// a header or a path to decide either one.
 	app.Use(zip.H(func(c *zip.Ctx) error {
-		if !owned(c.Path()) {
+		if !owned(cloud.RoutePath(c.Path())) {
 			return c.Continue()
 		}
-		return guard(func(c *zip.Ctx) error { return c.Continue() })(c)
+		if err := checkKey(c); err != nil {
+			return err
+		}
+		c.SetContext(principal.WithOrg(admit(c.Context()), c))
+		return c.Continue()
 	}))
 
 	zip.Post[CodeRun, CodeResult](app, Path, run,
@@ -563,8 +674,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// prefixes are the /v1 segments this subsystem owns. The guard reads it, so a route
-// added under any of them is credential-checked without anyone remembering to.
+// prefixes are the /v1 segments this subsystem owns.
+//
+// It is still a list that mirrors the router, and a list that mirrors the router
+// will eventually diverge from it. What changed is the CONSEQUENCE of that
+// divergence: a path this list misses no longer reaches a handler that will act —
+// tenantOf refuses a context with no admission marker on it — so a stale entry here
+// is now a 403 on a route that should have worked, and never a route that works
+// without a credential. Fail-closed on drift instead of fail-open.
+//
+// p must already be cloud.RoutePath-normalized.
 var prefixes = []string{Path, "/v1/upload", "/v1/download", "/v1/files"}
 
 func owned(p string) bool {

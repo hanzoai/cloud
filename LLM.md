@@ -2037,16 +2037,92 @@ dispatch where the fleet fuses two apps (`zip.Serving`/`zip.Here`), so the ONE
 call is a function call when they are co-resident and a socket hop when they are
 not, and which it is, is not the caller's business.
 
+**TWO WAYS IN THAT A RED TEAM WALKED THROUGH, and they were one defect.** Both
+are pinned by `apps/exec/auth_test.go`, and both fail on the code that had them:
+
+1. **The tenant came off a header.** `callCtx` preferred `cloud.Who(ctx).Org` —
+   which is `zip.CallerOf`, which reads the **X-Org-Id REQUEST HEADER**
+   (zip caller.go:377). And for a request with no validated bearer,
+   `SanitizeIdentity` deliberately **restores the client's own header**
+   (middleware_identity.go:455, and it is right to: that is the Phase-1 data
+   path). So `X-Org-Id: victim-corp` made `storeFor` open the victim's SQLite
+   file — the run executed in their store and `/v1/files` + `/v1/download` read
+   their artifacts straight back out. Every other app resolves through
+   `principal.OrgFrom`, which yields an org ONLY from a validated principal
+   (`principal.OrgOf`: an empty user claim means the org that rode along is
+   untrusted). exec was the outlier, and `plane.go`'s own note — "an org in the
+   argument is an org the caller chose" — is the rule it was breaking.
+2. **The credential check was a lowercase prefix list over `c.Path()`.** fiber
+   routes **case-insensitively** — `cloud.RoutePath` exists in this repo for
+   exactly that, and `middleware_abuse.go:160` / `middleware_ratelimit.go:100`
+   both already normalize. `POST /V1/EXEC` matched the route and missed the
+   list: with no key at all it ran code, with a wrong key it read another
+   session's bytes, and with `CODE_EXEC_API_KEY` **unset** — the documented
+   fail-closed 503 — it still ran code.
+
+Same root: **authorization inferred from the SPELLING of a request instead of
+being a property of the request.** So the answer is not a better list. The
+middleware normalizes with `cloud.RoutePath` AND parks two facts on the request
+context — `principal.WithOrg` (the validated org, inherited by the typed op
+because typed.go:82 rebuilds from `c.Context()`) and an unexported `admitted`
+marker. `tenantOf` is then the ONE tenant decision, and it refuses a context
+carrying neither. The prefix list still exists and may still drift; what changed
+is that **drift is now fail-CLOSED** — a missed path is a 403 on a route that
+should have worked, never a route that works without a credential.
+
+**THE DOOR NO PATH LIST COULD EVER HAVE COVERED.** A typed op is also an MCP
+tool and an op-plane op, and `tools/call` invokes it **directly** (zip
+typed.go:474, `registeredOp.direct`) — no route, so no route middleware. `POST
+/mcp` with `name=post_v1_exec` and no key ran code. Typing `/v1/exec` for its
+SDK/CLI/MCP value is what opened that door; the handler-side `tenantOf` check is
+what closes it, because those doors park no marker and carry no validated
+principal. This is the general lesson for any app whose auth is NOT the
+platform's IAM edge: a bespoke credential checked in middleware covers exactly
+one of a typed op's three doors.
+
+**A related sharp edge, left as found:** `cloud.Router`'s `scope.owns` →
+`under()` (scope.go:262) is case-SENSITIVE over the raw `ctx.Path()`. So in a
+scoped mount a case-flipped path skips a subsystem's middleware entirely. For
+exec that is now harmless — no marker, so 403 — but any subsystem whose scoped
+middleware is a security gate rather than a decorator inherits the same bypass.
+
+**AN EXEC SANDBOX HAD NO CEILING.** The single-attach rule bounds `dev` and
+`desktop` because they carry a project; an `exec` sandbox carries none, so
+nothing bounded how many an org could hold — and the code tool sends no
+`session_id`, so every call mints a fresh pod on a 15-minute lease. 40 calls took
+40 pods, each a real 250m/512Mi/2Gi reservation. **The reaper is the floor, not
+the ceiling**: it ends leases that are over, so it bounds the steady state and
+never the burst, and the burst is what fills a node. `maxLiveExec` (16, written
+in node capacity: 16 x 512Mi = 8Gi, 16 x 250m = 4 cores) is refused with **429**
+and not 409, because the caller's correct response is to wait.
+
 **TENANCY, and the trap in it.** `cloud.For` states a caller only on a context
 with NO REQUEST behind it — `zip.CallerOf` reads the request's headers first,
 deliberately, so no handler can assert an org a caller did not arrive with. A
 typed op's ctx HAS a request behind it and a `*zip.Ctx` handler's `c.Context()`
 does not, so `cloud.For(typedCtx, org)` silently states nothing and the peer
-answers 403. `exec.callCtx` is the one rule: pass the ctx through unchanged when
-it already carries a principal (hanzo.chat forwards the end user's IAM bearer —
-crud.js `codeAuthHeaders`), and otherwise detach to `context.Background()`, state
-the deployment's BRAND org, and put the request's cancellation back with
-`context.AfterFunc` so a disconnected client does not leave a run executing.
+answers 403. `exec.callCtx` ALWAYS detaches to `context.Background()` and states the org
+`tenantOf` resolved, with no branch — passing the request context through was
+the first bug above wearing a different hat, since the peer would then read the
+org off the headers. `context.AfterFunc` puts the request's cancellation back, so
+a disconnected client does not leave a run executing.
+
+**THE REAL CLIENT'S CREDENTIAL IS UNSETTLED.** `EnvVar.CODE_API_KEY` is
+undefined in the installed `@hanzochat/agents`, `handleTools.js` sends no auth
+header, and the chat pod carries no `LIBRECHAT_CODE_API_KEY` — so the guard 401s
+every legitimate request while the bypasses above were open. Fixing the bypasses
+does not make the feature work; deciding what the chat actually presents does,
+and per the house rule that is Hanzo IAM rather than a second shared secret.
+
+**TWO CLIENT-SHAPE BUGS, both silent.** hanzo.chat primes an attachment as
+`{id, session_id, name}` (Files/Code/process.js) while `@hanzochat/agents` spells
+the same field `storage_session_id` (tools.d.ts FileRef) — reading only the
+second skipped every attached file AND skipped the "not available" note, so a
+user's CSV was invisible with no error. `CodeFile.Session()` reads both. And
+artifacts were COLLECTED recursively (`find`) but LISTED top-level (`ls -1A`), so
+a nested artifact was reported in the reply and then missing from
+`/v1/files/{sid}` — the client's `name.startsWith(...)` found nothing and read it
+as expired. One `find` answers both now.
 
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:

@@ -68,6 +68,16 @@ const (
 // not an option for a pod running submitted code on our nodes.
 var defaultTTL = map[string]int{"exec": 900, "dev": 14400, "desktop": 14400}
 
+// maxLiveExec is how many `exec` sandboxes ONE org may hold at once.
+//
+// An exec sandbox has no project, so the single-attach rule that bounds `dev` and
+// `desktop` does not reach it, and nothing else did either. Sixteen is written in
+// node capacity rather than chosen for roundness: 16 x 512Mi requested memory is
+// 8Gi and 16 x 250m is 4 cores, which is one worker node's worth for a single
+// tenant — enough that a busy conversation never meets it, small enough that a
+// runaway caller cannot take a node with it.
+const maxLiveExec = 16
+
 // maxTTL caps what a caller may ask for. A longer-lived sandbox is a Deployment
 // an operator declares, not a lease a request can extend to forever.
 const maxTTL = 86400
