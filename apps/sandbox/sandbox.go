@@ -190,6 +190,24 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 		_ = store.Put(c.Context(), bx)
 		return zip.Errorf(http.StatusServiceUnavailable, "no box available: %v", err)
 	}
+	// Tell the box which box it is, before anyone can reach it.
+	//
+	// The pool hands out pods that are identical until claimed, so the box has no
+	// way to know its own id — and without it, the X-Box-Id every later call
+	// carries is checked against nothing. Binding here is the moment: the claim
+	// has happened, the address is known, and nothing else holds it yet.
+	//
+	// A failure here is fatal to the claim rather than logged and ignored. An
+	// unbound box refuses every named call, so continuing would hand back an
+	// address that answers 409 to its own owner — and the pod is released so the
+	// pool does not lose a slot to a box nobody can use.
+	if err := s.State.bind(c.Context(), host, bx.ID); err != nil {
+		_ = s.State.pool.release(c.Context(), bx)
+		bx.Status, bx.Error = "error", err.Error()
+		_ = store.Put(c.Context(), bx)
+		return zip.Errorf(http.StatusServiceUnavailable, "bind box: %v", err)
+	}
+
 	bx.Status, bx.Host = "running", host
 	if err := store.Put(c.Context(), bx); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "put: %v", err)

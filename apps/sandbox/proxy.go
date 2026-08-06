@@ -18,6 +18,9 @@ package sandbox
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -86,6 +89,13 @@ func forward(s *cloud.Service[state], c *zip.Ctx) error {
 	// The service key, never the caller's. A box runs the caller's code; handing
 	// it the caller's IAM token would let that code act as the user everywhere.
 	req.Header.Set(wire.KeyHeader, s.State.key)
+	// And WHICH box we mean. The key is shared pool-wide, so it proves the caller
+	// is cloud and nothing about the destination — and bx.Host can be stale in
+	// the one way that matters, pointing at a recycled address now serving
+	// another tenant. The box compares this against its own id and refuses when
+	// it does not match, which is the only check that cannot be fooled by the
+	// row being wrong.
+	req.Header.Set(wire.BoxHeader, bx.ID)
 
 	resp, err := boxClient.Do(req)
 	if err != nil {
@@ -127,4 +137,34 @@ func boxPath(path, id string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+// bind names a freshly claimed box to itself.
+//
+// It is the ONE call that carries no X-Box-Id, because it is the call that
+// establishes one — see boxd's guard, which exempts this path for exactly that
+// reason. Everything after it is checked.
+func (st *state) bind(ctx context.Context, host, id string) error {
+	body, err := json.Marshal(wire.Bind{ID: id})
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+wire.PathBind, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(wire.KeyHeader, st.key)
+	resp, err := boxClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("box refused the bind: %d %s", resp.StatusCode, bytes.TrimSpace(msg))
+	}
+	return nil
 }
