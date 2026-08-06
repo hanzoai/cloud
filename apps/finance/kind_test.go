@@ -41,7 +41,7 @@ func TestKind_WrittenKindsReadBack(t *testing.T) {
 		t.Fatalf("deposit: %v", err)
 	}
 	if err := fin.RecordUsage(ctx, types.UsageInput{
-		Org: "acme", Subject: "acme", Amount: money.FromCents(120), Currency: "usd", RequestID: "u1",
+		Org: "acme", Subject: "acme", Amount: money.FromCents(120), Currency: "usd", Ref: "u1",
 	}); err != nil {
 		t.Fatalf("record usage: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRecordUsageOnce_AnswersTheLedgersOwnKey(t *testing.T) {
 	}
 	in := types.UsageInput{
 		Org: "acme", Subject: "acme", Amount: money.FromCents(24_000), Currency: "usd",
-		RequestID: "launch-abc",
+		Ref: "launch-abc",
 	}
 
 	id, posted, err := fin.RecordUsageOnce(ctx, in)
@@ -90,7 +90,7 @@ func TestRecordUsageOnce_AnswersTheLedgersOwnKey(t *testing.T) {
 		t.Fatalf("replay: %v", err)
 	}
 	if posted2 {
-		t.Error("a replay of the same RequestID must not post a second time")
+		t.Error("a replay of the same Ref must not post a second time")
 	}
 	if again != id {
 		t.Errorf("a replay must answer the ORIGINAL entry: want %q, got %q", id, again)

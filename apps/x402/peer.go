@@ -138,7 +138,7 @@ func payeePeer(org, walletID string) (wallets.PaymentTarget, bool) {
 
 // debitPeer debits the payer through the process that owns the ledger. It is the
 // metering op resource_billing_peer.go already uses — one meter, one debit shape —
-// with the settlement id as the request id, which is what makes a retried
+// with the settlement id as the ACT's ref, which is what makes a retried
 // authorization charge once.
 func debitPeer(st *Settlement, amount money.Amount) error {
 	cctx, cancel := peerCtx(st.PayerOrg)
@@ -149,10 +149,10 @@ func debitPeer(st *Settlement, amount money.Amount) error {
 			Subject: st.PayerOrg,
 			Amount:  plane.Amount(amount.Unwrap()),
 			Usage: plane.Usage{
-				Model:     st.Resource,
-				Provider:  providerLabel,
-				Service:   providerLabel,
-				RequestID: st.ID,
+				Model:    st.Resource,
+				Provider: providerLabel,
+				Service:  providerLabel,
+				Ref:      st.ID,
 			},
 		})
 	if err != nil {
