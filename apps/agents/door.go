@@ -93,13 +93,36 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 	if org == "" || len(want) == 0 {
 		return nil
 	}
+	// ToolsAll is the ONE way to say "whatever the fleet serves", and it has to be
+	// said rather than implied.
+	//
+	// An agent that declares nothing gets nothing — that default is correct and
+	// stays, because a user-defined agent's tool list is its authority and an
+	// empty one means it asked for none. But the DEFAULT ASSISTANT cannot enumerate
+	// its tools: the door's surface is discovered at runtime (88 grouped tools
+	// today, and the whole point of grouping was that the set changes without a
+	// code edit), so any list written here would be stale the next time a
+	// subsystem ships.
+	//
+	// Not stating it cost a full turn of user-visible wrongness: the assistant was
+	// told in its instructions that it had tools and how to call them, then handed
+	// an empty offer by this function, so it correctly reported that it could not
+	// reach the cloud — while the door was serving 88 tools one socket away. The
+	// two halves have to agree, and this is the half that was missing.
+	all := false
+	for _, n := range want {
+		if strings.TrimSpace(n) == ToolsAll {
+			all = true
+			break
+		}
+	}
 	wanted := make(map[string]bool, len(want))
 	for _, n := range want {
-		if n = strings.TrimSpace(n); n != "" {
+		if n = strings.TrimSpace(n); n != "" && n != ToolsAll {
 			wanted[n] = true
 		}
 	}
-	if len(wanted) == 0 {
+	if len(wanted) == 0 && !all {
 		return nil
 	}
 	res, err := askDoor(ctx, org, actor, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
@@ -136,6 +159,29 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 			offered[op] = true
 		}
 	}
+	// ToolsAll offers the door's tools AS THE DOOR GROUPS THEM — hanzo_<subsystem>
+	// carrying an `op` enum, plus hanzo_describe — and not the ops flattened back
+	// out.
+	//
+	// The grouping is the whole reason the surface is affordable: 1,189 flat tools
+	// were 977 KB (~244k tokens) merely to LIST, and the same operations grouped
+	// are 88 tools in 63 KB. Expanding them here would hand back every byte the
+	// door just saved and blow the context before the question is read.
+	//
+	// It is also what the assistant's instructions describe — pick a subsystem,
+	// choose an op from its enum, call hanzo_describe for a shape you do not know.
+	// The prose and the offer have to be the same surface or the model is being
+	// taught a protocol it cannot practise.
+	if all {
+		out := make([]types.ToolDef, 0, len(listed.Tools))
+		for _, t := range listed.Tools {
+			out = append(out, types.ToolDef{
+				Name: t.Name, Description: t.Description, Schema: t.InputSchema,
+			})
+		}
+		return out
+	}
+
 	// In the agent's own declared order, which is the order the model meets them
 	// in, and once each however often it was declared.
 	out := make([]types.ToolDef, 0, len(wanted))
