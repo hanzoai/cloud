@@ -30,8 +30,16 @@ const App = "iam"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.IAMApproval,
 	plane.IAMMailable,
 	plane.IAMProjects,
+}
+
+// IAMApproval whether the caller is off the waitlist.
+//
+// Calls plane.IAMApproval on iam over the peer plane.
+func IAMApproval(ctx context.Context) (*plane.Approval, error) {
+	return plane.Ask[struct{}, plane.Approval](ctx, App, plane.IAMApproval, &struct{}{})
 }
 
 // IAMMailable who this org may mail.
