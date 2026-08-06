@@ -59,9 +59,10 @@ const modPath = "github.com/hanzoai/cloud"
 // are never scaffolded, so they need no entry: this map is consulted ONLY when a
 // plugin/<name> is missing, and those are not.
 var pkgOf = map[string]string{
-	"audit":      "auditlog",
-	"evals":      "eval",
-	"plugins":    "plugin",
+	"audit":     "auditlog",
+	"sandboxes": "sandbox",
+	"evals":     "eval",
+	"plugins":   "plugin",
 }
 
 // notApps are the plugin/ directories that are tools, not fleet subsystems: the

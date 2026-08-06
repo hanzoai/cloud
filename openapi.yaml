@@ -79382,7 +79382,7 @@ paths:
         /v1/models lists — the same source, projected.
       tags:
       - models
-      x-app: github.com/hanzoai/ai
+      x-app: ai
   /v1/mq/health:
     get:
       description: Reports whether the message plane behind this surface answers.
@@ -91002,8 +91002,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91033,8 +91033,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91064,8 +91064,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91095,8 +91095,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91126,8 +91126,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91158,8 +91158,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91189,8 +91189,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91220,8 +91220,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91251,8 +91251,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -91282,8 +91282,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97339,8 +97339,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97370,8 +97370,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97401,8 +97401,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97432,8 +97432,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97463,8 +97463,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97508,8 +97508,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97539,8 +97539,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97570,8 +97570,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97601,8 +97601,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97632,8 +97632,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97701,8 +97701,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97732,8 +97732,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97763,8 +97763,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97794,8 +97794,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97825,8 +97825,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97857,8 +97857,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97888,8 +97888,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97919,8 +97919,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97950,8 +97950,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -97981,8 +97981,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -98013,8 +98013,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -98044,8 +98044,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -98075,8 +98075,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -98106,8 +98106,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -98137,8 +98137,8 @@ paths:
         The HTTP transport binding for the RESTful router-config
         nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
         /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
+        the SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200
+        handler serves over the gateway transport. The native ZAP
         handler is the ONE and ONLY implementation of these routes; this is purely the
         api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
         split-brain the router refactor removed stays removed.
@@ -98586,481 +98586,106 @@ paths:
       tags:
       - s3
       x-app: storage
-  /v1/sandbox/boxes:
+  /v1/sandboxes:
     get:
-      description: Lists this org's boxes with their class, status, project, image
-        and volume. Filterable by project and status. Scoped to the caller's org by
-        the validated identity, never by a value in the request.
-      operationId: get_v1_sandbox_boxes
-      summary: Every box the caller's org holds
+      description: |-
+        Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, and both are read from the QUERY STRING.
+
+        It answers from the org's own store rather than from the cluster, so a sandbox whose pod has since died still appears, carrying the status it was last known to have. That is deliberate: a lease you are being charged for should not vanish from the list because the thing behind it fell over.
+      operationId: get_v1_sandboxes
+      summary: The sandboxes this org holds
       tags:
-      - sandbox
-      x-app: sandbox
+      - sandboxes
+      x-app: sandboxes
     post:
       description: |-
-        Claims an isolated execution box for the caller's org and returns it. A box is one pod running the box daemon with the project's volume attached: `exec` is a short-lived interpreter with no volume and no network, `dev` adds the project checkout and a toolchain, `desktop` adds a virtual display for computer use.
+        Creates a sandbox and returns it. `class` is one of `exec`, `dev` or `desktop`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.
 
-        A claim comes from a WARM POOL where one is available, so the usual cost is a label patch and a volume attach rather than an image pull.
-
-        One live box per project: the project volume is single-attach, so a second concurrent claim is REFUSED with the id of the box already holding it rather than silently given an empty volume that reinstalls everything.
-      operationId: post_v1_sandbox_boxes
-      summary: Claim a sandbox box
+        This is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.
+      operationId: post_v1_sandboxes
+      summary: Lease a sandbox
       tags:
-      - sandbox
-      x-app: sandbox
-  /v1/sandbox/boxes/{id}:
-    delete:
-      description: Releases the pod. The project VOLUME is kept — it holds the checkout
-        and the dependency caches, which is what makes the next claim fast. Pass purge=1
-        to drop the volume too; that is irreversible and deletes uncommitted work.
-      operationId: delete_v1_sandbox_boxes_by_id
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Release a box
-      tags:
-      - sandbox
-      x-app: sandbox
-    get:
-      description: The box's current state, or 404 if this org does not hold it.
-      operationId: get_v1_sandbox_boxes_by_id
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: One box
-      tags:
-      - sandbox
-      x-app: sandbox
-  /v1/sandbox/boxes/{id}/fs:
-    delete:
-      description: The root of the box's project volume — list what is there, or write
-        into it without naming a subpath. Same forwarding and same path confinement
-        as the entries below it; this is the route for the directory itself, which
-        a wildcard cannot address because there is no remainder to match.
-      operationId: delete_v1_sandbox_boxes_by_id_fs
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: The box's project directory
-      tags:
-      - sandbox
-      x-app: sandbox
-    get:
-      description: The root of the box's project volume — list what is there, or write
-        into it without naming a subpath. Same forwarding and same path confinement
-        as the entries below it; this is the route for the directory itself, which
-        a wildcard cannot address because there is no remainder to match.
-      operationId: get_v1_sandbox_boxes_by_id_fs
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: The box's project directory
-      tags:
-      - sandbox
-      x-app: sandbox
-    patch:
-      description: The root of the box's project volume — list what is there, or write
-        into it without naming a subpath. Same forwarding and same path confinement
-        as the entries below it; this is the route for the directory itself, which
-        a wildcard cannot address because there is no remainder to match.
-      operationId: patch_v1_sandbox_boxes_by_id_fs
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: The box's project directory
-      tags:
-      - sandbox
-      x-app: sandbox
-    post:
-      description: The root of the box's project volume — list what is there, or write
-        into it without naming a subpath. Same forwarding and same path confinement
-        as the entries below it; this is the route for the directory itself, which
-        a wildcard cannot address because there is no remainder to match.
-      operationId: post_v1_sandbox_boxes_by_id_fs
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: The box's project directory
-      tags:
-      - sandbox
-      x-app: sandbox
-    put:
-      description: The root of the box's project volume — list what is there, or write
-        into it without naming a subpath. Same forwarding and same path confinement
-        as the entries below it; this is the route for the directory itself, which
-        a wildcard cannot address because there is no remainder to match.
-      operationId: put_v1_sandbox_boxes_by_id_fs
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: The box's project directory
-      tags:
-      - sandbox
-      x-app: sandbox
-  /v1/sandbox/boxes/{id}/fs/{wildcard1}:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/{id}:
     delete:
       description: |-
-        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
+        Stops the sandbox's pod and drops the lease. The VOLUME survives by default, so a `dev` or `desktop` sandbox can be leased again over the same project and find its checkout where it left it.
 
-        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
-      operationId: delete_v1_sandbox_boxes_by_id_fs_by_wildcard1
+        `purge=1` deletes the volume too. It is opt-in because it is the one part of this that cannot be undone.
+      operationId: delete_v1_sandboxes_by_id
       parameters:
       - in: path
         name: id
         required: true
         schema:
           type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The box's filesystem
+      summary: End a sandbox
       tags:
-      - sandbox
-      x-app: sandbox
+      - sandboxes
+      x-app: sandboxes
     get:
-      description: |-
-        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
-
-        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
-      operationId: get_v1_sandbox_boxes_by_id_fs_by_wildcard1
+      description: Returns one of the caller org's sandboxes. An id belonging to another
+        org answers 404 and not 403 — a 403 would confirm the id exists, and whether
+        a given sandbox exists is itself a cross-tenant fact.
+      operationId: get_v1_sandboxes_by_id
       parameters:
       - in: path
         name: id
         required: true
         schema:
           type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The box's filesystem
+      summary: One sandbox
       tags:
-      - sandbox
-      x-app: sandbox
-    patch:
-      description: |-
-        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
-
-        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
-      operationId: patch_v1_sandbox_boxes_by_id_fs_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The box's filesystem
-      tags:
-      - sandbox
-      x-app: sandbox
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/{id}/exec:
     post:
       description: |-
-        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
+        Runs a command inside the sandbox and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because "the tests failed" and "the sandbox is broken" are different facts.
 
-        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
-      operationId: post_v1_sandbox_boxes_by_id_fs_by_wildcard1
+        NOTHING RUNS IN cloud. The command is streamed to the Kubernetes exec subresource of the sandbox's pod, which runs under the gVisor runtime class. The sandbox is addressed by pod NAME through the apiserver, never by address.
+      operationId: post_v1_sandboxes_by_id_exec
       parameters:
       - in: path
         name: id
         required: true
         schema:
           type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The box's filesystem
+      summary: Run a command in a sandbox
       tags:
-      - sandbox
-      x-app: sandbox
-    put:
-      description: |-
-        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
-
-        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
-      operationId: put_v1_sandbox_boxes_by_id_fs_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The box's filesystem
-      tags:
-      - sandbox
-      x-app: sandbox
-  /v1/sandbox/boxes/{id}/git/{wildcard1}:
-    delete:
-      description: Clones a repository into the box's project volume, or commits and
-        pushes the branch the agent worked on. Git credentials travel in the request
-        BODY only — never a URL, never a command line, never a log.
-      operationId: delete_v1_sandbox_boxes_by_id_git_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Clone into the box, or push what it changed
-      tags:
-      - sandbox
-      x-app: sandbox
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/{id}/fs:
     get:
-      description: Clones a repository into the box's project volume, or commits and
-        pushes the branch the agent worked on. Git credentials travel in the request
-        BODY only — never a URL, never a command line, never a log.
-      operationId: get_v1_sandbox_boxes_by_id_git_by_wildcard1
+      description: Reads one file from the sandbox's project directory as text, or
+        lists the entries when the path names a directory. Paths resolve under the
+        project root and a path that climbs out is refused rather than rewritten.
+      operationId: get_v1_sandboxes_by_id_fs
       parameters:
       - in: path
         name: id
         required: true
         schema:
           type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Clone into the box, or push what it changed
+      summary: Read a file, or list a directory
       tags:
-      - sandbox
-      x-app: sandbox
-    patch:
-      description: Clones a repository into the box's project volume, or commits and
-        pushes the branch the agent worked on. Git credentials travel in the request
-        BODY only — never a URL, never a command line, never a log.
-      operationId: patch_v1_sandbox_boxes_by_id_git_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Clone into the box, or push what it changed
-      tags:
-      - sandbox
-      x-app: sandbox
+      - sandboxes
+      x-app: sandboxes
     post:
-      description: Clones a repository into the box's project volume, or commits and
-        pushes the branch the agent worked on. Git credentials travel in the request
-        BODY only — never a URL, never a command line, never a log.
-      operationId: post_v1_sandbox_boxes_by_id_git_by_wildcard1
+      description: Writes the request body to one file in the sandbox's project directory,
+        creating parent directories. Same confinement as the read above.
+      operationId: post_v1_sandboxes_by_id_fs
       parameters:
       - in: path
         name: id
         required: true
         schema:
           type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Clone into the box, or push what it changed
+      summary: Write a file
       tags:
-      - sandbox
-      x-app: sandbox
-    put:
-      description: Clones a repository into the box's project volume, or commits and
-        pushes the branch the agent worked on. Git credentials travel in the request
-        BODY only — never a URL, never a command line, never a log.
-      operationId: put_v1_sandbox_boxes_by_id_git_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Clone into the box, or push what it changed
-      tags:
-      - sandbox
-      x-app: sandbox
-  /v1/sandbox/boxes/{id}/proc/{wildcard1}:
-    delete:
-      description: Runs a command in the box's project directory and returns its exit
-        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
-        program — the HTTP status stays 200, because 'the tests failed' and 'the box
-        is broken' are different facts.
-      operationId: delete_v1_sandbox_boxes_by_id_proc_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Run a command in the box
-      tags:
-      - sandbox
-      x-app: sandbox
-    get:
-      description: Runs a command in the box's project directory and returns its exit
-        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
-        program — the HTTP status stays 200, because 'the tests failed' and 'the box
-        is broken' are different facts.
-      operationId: get_v1_sandbox_boxes_by_id_proc_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Run a command in the box
-      tags:
-      - sandbox
-      x-app: sandbox
-    patch:
-      description: Runs a command in the box's project directory and returns its exit
-        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
-        program — the HTTP status stays 200, because 'the tests failed' and 'the box
-        is broken' are different facts.
-      operationId: patch_v1_sandbox_boxes_by_id_proc_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Run a command in the box
-      tags:
-      - sandbox
-      x-app: sandbox
-    post:
-      description: Runs a command in the box's project directory and returns its exit
-        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
-        program — the HTTP status stays 200, because 'the tests failed' and 'the box
-        is broken' are different facts.
-      operationId: post_v1_sandbox_boxes_by_id_proc_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Run a command in the box
-      tags:
-      - sandbox
-      x-app: sandbox
-    put:
-      description: Runs a command in the box's project directory and returns its exit
-        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
-        program — the HTTP status stays 200, because 'the tests failed' and 'the box
-        is broken' are different facts.
-      operationId: put_v1_sandbox_boxes_by_id_proc_by_wildcard1
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Run a command in the box
-      tags:
-      - sandbox
-      x-app: sandbox
-  /v1/sandbox/boxes/{id}/resume:
-    post:
-      description: Claims a pod and reattaches the project volume, optionally moving
-        to a different git ref. The checkout and the caches are already on the disk.
-      operationId: post_v1_sandbox_boxes_by_id_resume
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Resume a suspended box
-      tags:
-      - sandbox
-      x-app: sandbox
-  /v1/sandbox/boxes/{id}/suspend:
-    post:
-      description: Releases the pod and keeps the volume, so a later resume is a fetch
-        and a checkout rather than a clone and a cold install.
-      operationId: post_v1_sandbox_boxes_by_id_suspend
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Suspend a box, keeping its disk
-      tags:
-      - sandbox
-      x-app: sandbox
+      - sandboxes
+      x-app: sandboxes
   /v1/sbom:
     post:
       description: |-
@@ -105726,9 +105351,9 @@ tags:
 - description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
     document, vector, search or object store, wired straight into your app.'
   name: s3
-- description: 'Package sandbox is the box scheduler: the control plane for the executor
-    every other subsystem in this binary was already pointing at.'
-  name: sandbox
+- description: 'Package sandbox is the ONE compute primitive: a sandbox is a gVisor
+    pod that runs somebody else''s code, and every lifetime is the same object.'
+  name: sandboxes
 - description: 'Package sbom is what is inside a container image: every component,
     resolvable by digest or image ref.'
   name: sbom
