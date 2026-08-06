@@ -75,7 +75,7 @@ func TestApplyCreatesRecords(t *testing.T) {
 	// Staff read (org=hanzo, validated principal).
 	code, body = do(t, app, http.MethodGet, "/v1/crm/applications", "hanzo", nil)
 	var list struct {
-		Data []Application `json:"data"`
+		Data []ProgramApplication `json:"data"`
 	}
 	_ = json.Unmarshal(body, &list)
 	if code != http.StatusOK || len(list.Data) != 1 {
@@ -126,7 +126,7 @@ func TestApplyHoneypot(t *testing.T) {
 	}
 	_, lb := do(t, app, http.MethodGet, "/v1/crm/applications", "hanzo", nil)
 	var list struct {
-		Data []Application `json:"data"`
+		Data []ProgramApplication `json:"data"`
 	}
 	_ = json.Unmarshal(lb, &list)
 	if len(list.Data) != 0 {
@@ -173,7 +173,7 @@ func TestApplyIdempotent(t *testing.T) {
 	}
 	_, lb := do(t, app, http.MethodGet, "/v1/crm/applications", "hanzo", nil)
 	var list struct {
-		Data []Application `json:"data"`
+		Data []ProgramApplication `json:"data"`
 	}
 	_ = json.Unmarshal(lb, &list)
 	if len(list.Data) != 1 {
@@ -196,7 +196,7 @@ func TestApplyScreenEndToEnd(t *testing.T) {
 	}
 	_, lb := do(t, app, http.MethodGet, "/v1/crm/applications", "hanzo", nil)
 	var list struct {
-		Data []Application `json:"data"`
+		Data []ProgramApplication `json:"data"`
 	}
 	_ = json.Unmarshal(lb, &list)
 	if len(list.Data) != 1 {
@@ -233,7 +233,7 @@ func TestScreenNonFatal(t *testing.T) {
 	}
 	_, lb := do(t, app, http.MethodGet, "/v1/crm/applications", "hanzo", nil)
 	var list struct {
-		Data []Application `json:"data"`
+		Data []ProgramApplication `json:"data"`
 	}
 	_ = json.Unmarshal(lb, &list)
 	if len(list.Data) != 1 {
@@ -281,7 +281,7 @@ func TestPatchStageMachine(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("reject with reason want 200, got %d (%s)", code, rb)
 	}
-	var rejected Application
+	var rejected ProgramApplication
 	_ = json.Unmarshal(rb, &rejected)
 	if rejected.Stage != StageRejected || rejected.Reason != "not a fit this round" {
 		t.Fatalf("reject state mismatch: %+v", rejected)

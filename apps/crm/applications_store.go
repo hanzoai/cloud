@@ -82,12 +82,12 @@ type StageEvent struct {
 	Note string `json:"note,omitempty"`
 }
 
-// Application is one startup-program submission plus its AI screen and pipeline
+// ProgramApplication is one startup-program submission plus its AI screen and pipeline
 // state. Metadata carries the FULL submitted payload (all form fields, including
 // arrays like tier1Investors/useCases); the promoted columns are query/display
 // projections. Tier1 is deterministically derived at intake from the submitted
 // fund list (independent of the AI screen's judgement).
-type Application struct {
+type ProgramApplication struct {
 	// ID is the server-minted application id ("appl_" + 128 random bits).
 	ID string `json:"id"`
 	// Org is the owning tenant — the program org, which is the deployment brand.
@@ -172,15 +172,15 @@ CREATE INDEX IF NOT EXISTS ix_crm_apps_org_email   ON crm_applications(org, emai
 
 const appCols = `id,org,company,website,contact_name,email,role,stage,tier1,metadata,screen,events,company_id,contact_id,reason,created_at,updated_at`
 
-func scanApplication(sc interface{ Scan(...any) error }) (Application, error) {
-	var a Application
+func scanApplication(sc interface{ Scan(...any) error }) (ProgramApplication, error) {
+	var a ProgramApplication
 	var tier1 int
 	var meta, screen, events string
 	err := sc.Scan(&a.ID, &a.Org, &a.Company, &a.Website, &a.ContactName, &a.Email,
 		&a.Role, &a.Stage, &tier1, &meta, &screen, &events, &a.CompanyID, &a.ContactID,
 		&a.Reason, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
-		return Application{}, err
+		return ProgramApplication{}, err
 	}
 	a.Tier1 = tier1 != 0
 	a.Metadata = map[string]any{}
@@ -206,7 +206,7 @@ func jsonOr(v any, fallback string) string {
 	return string(b)
 }
 
-func (s *Store) CreateApplication(ctx context.Context, a Application) (Application, error) {
+func (s *Store) CreateApplication(ctx context.Context, a ProgramApplication) (ProgramApplication, error) {
 	meta := jsonOr(a.Metadata, "{}")
 	screen := jsonOr(a.Screen, "{}")
 	events := jsonOr(a.Events, "[]")
@@ -215,26 +215,26 @@ func (s *Store) CreateApplication(ctx context.Context, a Application) (Applicati
 		a.ID, a.Org, a.Company, a.Website, a.ContactName, a.Email, a.Role, a.Stage,
 		b2i(a.Tier1), meta, screen, events, a.CompanyID, a.ContactID, a.Reason,
 		a.CreatedAt, a.UpdatedAt); err != nil {
-		return Application{}, fmt.Errorf("insert application: %w", err)
+		return ProgramApplication{}, fmt.Errorf("insert application: %w", err)
 	}
 	return a, nil
 }
 
-func (s *Store) GetApplication(ctx context.Context, org, id string) (Application, error) {
+func (s *Store) GetApplication(ctx context.Context, org, id string) (ProgramApplication, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+appCols+` FROM crm_applications WHERE org=? AND id=?`, org, id)
 	a, err := scanApplication(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Application{}, errNotFound
+		return ProgramApplication{}, errNotFound
 	}
 	if err != nil {
-		return Application{}, fmt.Errorf("get application: %w", err)
+		return ProgramApplication{}, fmt.Errorf("get application: %w", err)
 	}
 	return a, nil
 }
 
 // ListApplications lists an org's applications, optionally filtered by pipeline
 // stage (stage=="" means all). Newest first.
-func (s *Store) ListApplications(ctx context.Context, org, stage string, limit int) ([]Application, error) {
+func (s *Store) ListApplications(ctx context.Context, org, stage string, limit int) ([]ProgramApplication, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -250,7 +250,7 @@ func (s *Store) ListApplications(ctx context.Context, org, stage string, limit i
 		return nil, fmt.Errorf("list applications: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]Application, 0, 16)
+	out := make([]ProgramApplication, 0, 16)
 	for rows.Next() {
 		a, err := scanApplication(rows)
 		if err != nil {
@@ -264,24 +264,24 @@ func (s *Store) ListApplications(ctx context.Context, org, stage string, limit i
 // FindApplicationByEmailCompany returns the org's application matching a
 // case-insensitive (email, company) pair, or errNotFound. Basis for idempotent
 // intake (a resubmission updates rather than duplicates).
-func (s *Store) FindApplicationByEmailCompany(ctx context.Context, org, email, company string) (Application, error) {
+func (s *Store) FindApplicationByEmailCompany(ctx context.Context, org, email, company string) (ProgramApplication, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+appCols+` FROM crm_applications
 		 WHERE org=? AND lower(email)=lower(?) AND lower(company)=lower(?)
 		 ORDER BY created_at DESC LIMIT 1`, org, email, company)
 	a, err := scanApplication(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Application{}, errNotFound
+		return ProgramApplication{}, errNotFound
 	}
 	if err != nil {
-		return Application{}, fmt.Errorf("find application: %w", err)
+		return ProgramApplication{}, fmt.Errorf("find application: %w", err)
 	}
 	return a, nil
 }
 
 // UpdateApplication persists the mutable columns (stage, tier1, metadata,
 // screen, events, links, reason). ID/Org/CreatedAt are immutable keys.
-func (s *Store) UpdateApplication(ctx context.Context, a Application) (Application, error) {
+func (s *Store) UpdateApplication(ctx context.Context, a ProgramApplication) (ProgramApplication, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE crm_applications
 		 SET company=?,website=?,contact_name=?,email=?,role=?,stage=?,tier1=?,
@@ -291,10 +291,10 @@ func (s *Store) UpdateApplication(ctx context.Context, a Application) (Applicati
 		jsonOr(a.Metadata, "{}"), jsonOr(a.Screen, "{}"), jsonOr(a.Events, "[]"),
 		a.CompanyID, a.ContactID, a.Reason, a.UpdatedAt, a.Org, a.ID)
 	if err != nil {
-		return Application{}, fmt.Errorf("update application: %w", err)
+		return ProgramApplication{}, fmt.Errorf("update application: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return Application{}, errNotFound
+		return ProgramApplication{}, errNotFound
 	}
 	return s.GetApplication(ctx, a.Org, a.ID)
 }

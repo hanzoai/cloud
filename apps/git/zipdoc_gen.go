@@ -285,8 +285,25 @@ func init() {
 			"Synced.noOp":        "NoOp is true when native was already at that tip.",
 		},
 	})
+	zip.Describe("POST /git/mirror", zip.Doc{
+		Description: "Registers (Enabled) or removes (!Enabled) one outbound mirror\ntarget on a repo of the CALLER's org, idempotently either way.\n\nIt declares the target and nothing more: the pushing stays with the mirror_out\nreactor on the native push lifecycle, so a mirror that exists is a fact about\nthis repo rather than a job somebody has to keep running. EnsureMirror is the\nsame func the in-process controller exposes, so the URL crossing the plane\npasses the identical validateMirrorTarget gate — https, no userinfo, host on\nthe outbound allowlist — and a remote caller cannot register a push to an\ninternal host that a local one could not.\n\nThe error is returned as it comes: a rejected URL is already an HTTPError(400)\nand survives the crossing whole, while a store failure carries no status and\nlands as the 500 it is. Wrapping both would turn the caller's own mistake into\nour fault.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"MirrorIn.enabled": "Enabled registers the target when true and removes it when false.",
+			"MirrorIn.url":     "URL is the outbound target to push to.",
+		},
+	})
 	zip.Describe("POST /git/publish", zip.Doc{
 		Description: "Reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
+	})
+	zip.Describe("POST /git/status", zip.Doc{
+		Description: "Reports which of the named repos the CALLER's org has imported and\nwhich a prior inbound sync left in conflict.\n\nThe app that DRAWS the repo list is integrations (it has the provider's\ncatalogue of what could be imported); the app that knows what WAS is this one.\nIn a split fleet the in-process importer is nil over there, so the list\nrendered every repo as never-imported — a wrong answer delivered confidently,\nwhich is worse than the import failure the same split caused, because nothing\nerrored.\n\nThe reply is a SLICE, not a map: a map cannot cross this wire, so each row\ncarries the name it answers for. A name git holds nothing under is ABSENT\nrather than a false row — the caller reads absence as not-imported, which is\nthe same value the in-process leg's zero entry yields, so neither leg can be\ntold from the other by its result.\n\nIt calls the in-process implementation directly rather than\ncloud.GitRepoStatuses: the package func dispatches to whatever is registered,\nand in THIS process that resolution would come back around through the plane\nto this same handler.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"RepoStatus.conflict":     "Conflict is true when a branch diverged on a prior inbound sync and native\nwas preserved.",
+			"RepoStatus.imported":     "Imported is true when a native repo exists for this name.",
+			"RepoStatus.lastSyncedAt": "LastSyncedAt is unix seconds of the last import/sync; 0 means never.",
+			"StatusIn.names":          "Names are the repo names to report on.",
+			"StatusIn.project":        "Project is the sub-scope; empty means the org's default store.",
+		},
 	})
 	zip.Describe("POST /v1/git/:org/:project/:repo/git-receive-pack", zip.Doc{
 		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",

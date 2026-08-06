@@ -93,7 +93,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Application"
+                "$ref": "#/components/schemas/Application"
               }
             }
           },
@@ -104,7 +104,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -136,7 +136,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.CreateOrganizationInput"
+                "$ref": "#/components/schemas/CreateOrganizationInput"
               }
             }
           },
@@ -147,7 +147,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -169,7 +169,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Input"
+                "$ref": "#/components/schemas/Input"
               }
             }
           },
@@ -180,7 +180,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -202,7 +202,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
+                "$ref": "#/components/schemas/Provider"
               }
             }
           },
@@ -213,7 +213,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -235,7 +235,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.roles.Input"
+                "$ref": "#/components/schemas/roles.Input"
               }
             }
           },
@@ -246,7 +246,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -268,7 +268,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.userBody"
+                "$ref": "#/components/schemas/userBody"
               }
             }
           },
@@ -279,7 +279,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -301,7 +301,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Input"
+                "$ref": "#/components/schemas/workspaces.Input"
               }
             }
           },
@@ -312,7 +312,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -383,7 +383,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteResult"
+                  "$ref": "#/components/schemas/DeleteResult"
                 }
               }
             },
@@ -422,7 +422,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
+                  "$ref": "#/components/schemas/Application"
                 }
               }
             },
@@ -442,7 +442,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Application"
+                "$ref": "#/components/schemas/Application"
               }
             }
           },
@@ -453,7 +453,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
+                  "$ref": "#/components/schemas/Application"
                 }
               }
             },
@@ -473,7 +473,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Application"
+                "$ref": "#/components/schemas/Application"
               }
             }
           },
@@ -484,7 +484,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
+                  "$ref": "#/components/schemas/Application"
                 }
               }
             },
@@ -516,7 +516,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.ApplicationListResult"
+                  "$ref": "#/components/schemas/ApplicationListResult"
                 }
               }
             },
@@ -535,7 +535,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Application"
+                "$ref": "#/components/schemas/Application"
               }
             }
           },
@@ -546,7 +546,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
+                  "$ref": "#/components/schemas/Application"
                 }
               }
             },
@@ -567,7 +567,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.ApplicationRef"
+                "$ref": "#/components/schemas/ApplicationRef"
               }
             }
           },
@@ -578,7 +578,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteResult"
+                  "$ref": "#/components/schemas/DeleteResult"
                 }
               }
             },
@@ -618,7 +618,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
+                  "$ref": "#/components/schemas/Application"
                 }
               }
             },
@@ -639,7 +639,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Application"
+                "$ref": "#/components/schemas/Application"
               }
             }
           },
@@ -650,7 +650,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
+                  "$ref": "#/components/schemas/Application"
                 }
               }
             },
@@ -682,7 +682,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.ListOutput"
+                  "$ref": "#/components/schemas/ListOutput"
                 }
               }
             },
@@ -701,7 +701,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.auditlogs.Input"
+                "$ref": "#/components/schemas/auditlogs.Input"
               }
             }
           },
@@ -712,7 +712,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.AuditLog"
+                  "$ref": "#/components/schemas/AuditLog"
                 }
               }
             },
@@ -733,7 +733,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Ref"
+                "$ref": "#/components/schemas/Ref"
               }
             }
           },
@@ -744,7 +744,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteOutput"
+                  "$ref": "#/components/schemas/DeleteOutput"
                 }
               }
             },
@@ -765,7 +765,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Ref"
+                "$ref": "#/components/schemas/Ref"
               }
             }
           },
@@ -776,7 +776,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.AuditLog"
+                  "$ref": "#/components/schemas/AuditLog"
                 }
               }
             },
@@ -797,7 +797,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.auditlogs.Input"
+                "$ref": "#/components/schemas/auditlogs.Input"
               }
             }
           },
@@ -808,7 +808,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.AuditLog"
+                  "$ref": "#/components/schemas/AuditLog"
                 }
               }
             },
@@ -860,7 +860,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.certs.ListOutput"
+                  "$ref": "#/components/schemas/certs.ListOutput"
                 }
               }
             },
@@ -879,7 +879,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Cert"
+                "$ref": "#/components/schemas/Cert"
               }
             }
           },
@@ -890,7 +890,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Cert"
+                  "$ref": "#/components/schemas/Cert"
                 }
               }
             },
@@ -911,7 +911,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.certs.Ref"
+                "$ref": "#/components/schemas/certs.Ref"
               }
             }
           },
@@ -922,7 +922,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.certs.DeleteOutput"
+                  "$ref": "#/components/schemas/certs.DeleteOutput"
                 }
               }
             },
@@ -943,7 +943,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.certs.Ref"
+                "$ref": "#/components/schemas/certs.Ref"
               }
             }
           },
@@ -954,7 +954,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Cert"
+                  "$ref": "#/components/schemas/Cert"
                 }
               }
             },
@@ -975,7 +975,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Cert"
+                "$ref": "#/components/schemas/Cert"
               }
             }
           },
@@ -986,7 +986,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Cert"
+                  "$ref": "#/components/schemas/Cert"
                 }
               }
             },
@@ -1026,7 +1026,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Application"
+                "$ref": "#/components/schemas/Application"
               }
             }
           },
@@ -1037,7 +1037,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -1079,7 +1079,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.DeleteOrganizationInput"
+                "$ref": "#/components/schemas/DeleteOrganizationInput"
               }
             }
           },
@@ -1090,7 +1090,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -1112,7 +1112,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.projects.Ref"
+                "$ref": "#/components/schemas/projects.Ref"
               }
             }
           },
@@ -1123,7 +1123,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -1145,7 +1145,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
+                "$ref": "#/components/schemas/Provider"
               }
             }
           },
@@ -1156,7 +1156,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -1178,7 +1178,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.roles.Ref"
+                "$ref": "#/components/schemas/roles.Ref"
               }
             }
           },
@@ -1189,7 +1189,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -1211,7 +1211,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.userBody"
+                "$ref": "#/components/schemas/userBody"
               }
             }
           },
@@ -1222,7 +1222,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -1244,7 +1244,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Ref"
+                "$ref": "#/components/schemas/workspaces.Ref"
               }
             }
           },
@@ -1255,7 +1255,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -1507,7 +1507,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.invitations.ListOutput"
+                  "$ref": "#/components/schemas/invitations.ListOutput"
                 }
               }
             },
@@ -1526,7 +1526,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.invitations.Input"
+                "$ref": "#/components/schemas/invitations.Input"
               }
             }
           },
@@ -1537,7 +1537,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Invitation"
+                  "$ref": "#/components/schemas/Invitation"
                 }
               }
             },
@@ -1558,7 +1558,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.invitations.Ref"
+                "$ref": "#/components/schemas/invitations.Ref"
               }
             }
           },
@@ -1569,7 +1569,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.invitations.DeleteOutput"
+                  "$ref": "#/components/schemas/invitations.DeleteOutput"
                 }
               }
             },
@@ -1590,7 +1590,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.invitations.Ref"
+                "$ref": "#/components/schemas/invitations.Ref"
               }
             }
           },
@@ -1601,7 +1601,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Invitation"
+                  "$ref": "#/components/schemas/Invitation"
                 }
               }
             },
@@ -1622,7 +1622,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.invitations.Input"
+                "$ref": "#/components/schemas/invitations.Input"
               }
             }
           },
@@ -1633,7 +1633,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Invitation"
+                  "$ref": "#/components/schemas/Invitation"
                 }
               }
             },
@@ -1675,7 +1675,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.ListResponse"
+                  "$ref": "#/components/schemas/ListResponse"
                 }
               }
             },
@@ -1694,7 +1694,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Key"
+                "$ref": "#/components/schemas/Key"
               }
             }
           },
@@ -1705,7 +1705,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Key"
+                  "$ref": "#/components/schemas/Key"
                 }
               }
             },
@@ -1726,7 +1726,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.keys.Ref"
+                "$ref": "#/components/schemas/keys.Ref"
               }
             }
           },
@@ -1737,7 +1737,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteResponse"
+                  "$ref": "#/components/schemas/DeleteResponse"
                 }
               }
             },
@@ -1777,7 +1777,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Key"
+                  "$ref": "#/components/schemas/Key"
                 }
               }
             },
@@ -1790,7 +1790,7 @@
       "post": {
         "operationId": "post_v1_iam_keys_mint",
         "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
-        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. It used to stamp the\nsecret on schema.User.AccessKey, which nothing resolves — so the minted key\nauthenticated nobody AND overwrote any working legacy hk- in the same field,\nlocking the holder out with no recovery through the UI.",
+        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
           "iam"
         ]
@@ -1800,7 +1800,7 @@
       "post": {
         "operationId": "post_v1_iam_keys_revoke",
         "summary": "Clears the target user's key of the requested TYPE (immediate revoke).",
-        "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. For a secret key the stored value is sk- for anything\nminted since the key seam was unified, and hk- only for the legacy population that\nhas not been re-keyed.",
+        "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
         "tags": [
           "iam"
         ]
@@ -1818,7 +1818,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Key"
+                "$ref": "#/components/schemas/Key"
               }
             }
           },
@@ -1829,7 +1829,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Key"
+                  "$ref": "#/components/schemas/Key"
                 }
               }
             },
@@ -1930,7 +1930,7 @@
       "post": {
         "operationId": "post_v1_iam_mint-user-keys",
         "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
-        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. It used to stamp the\nsecret on schema.User.AccessKey, which nothing resolves — so the minted key\nauthenticated nobody AND overwrote any working legacy hk- in the same field,\nlocking the holder out with no recovery through the UI.",
+        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
           "iam"
         ]
@@ -1940,7 +1940,7 @@
       "get": {
         "operationId": "get_v1_iam_oauth_authorize",
         "summary": "Starts a sign-in — the address you send a browser to, and the beginning of every OAuth and OpenID Connect flow.",
-        "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIt shows the person the right way to sign in for the application they are\nsigning in to, hands off to another identity provider if that is what they\npick, and ends by returning them to the application with a one-time code.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
+        "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIf the person is ALREADY signed in here, it does not ask them again: it\nreturns them to the application with a one-time code and they never see this\npage. Otherwise it shows the right way to sign in for the application they are\nsigning in to, or hands off to another identity provider if that is what they\npick.\n\nA client can say what it wants with `prompt`: `none` means answer without any\nscreen at all — with the code if a session exists, with an error if not, but\nnever with a page; `login` means ask for the password again even if a session\nexists; `select_account` means let the person choose which identity to use.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
         "tags": [
           "iam"
         ]
@@ -1948,7 +1948,7 @@
       "post": {
         "operationId": "post_v1_iam_oauth_authorize",
         "summary": "Starts a sign-in — the address you send a browser to, and the beginning of every OAuth and OpenID Connect flow.",
-        "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIt shows the person the right way to sign in for the application they are\nsigning in to, hands off to another identity provider if that is what they\npick, and ends by returning them to the application with a one-time code.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
+        "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIf the person is ALREADY signed in here, it does not ask them again: it\nreturns them to the application with a one-time code and they never see this\npage. Otherwise it shows the right way to sign in for the application they are\nsigning in to, or hands off to another identity provider if that is what they\npick.\n\nA client can say what it wants with `prompt`: `none` means answer without any\nscreen at all — with the code if a session exists, with an error if not, but\nnever with a page; `login` means ask for the password again even if a session\nexists; `select_account` means let the person choose which identity to use.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
         "tags": [
           "iam"
         ]
@@ -2007,16 +2007,16 @@
     "/v1/iam/oauth/logout": {
       "get": {
         "operationId": "get_v1_iam_oauth_logout",
-        "summary": "Ends a sign-in session and sends the browser back to your application.",
-        "description": "Ends a sign-in session and sends the browser back to your\napplication. Accepts GET or POST, so it works as a plain link.\n\nIt returns only to an address the application has registered, and only when\nthe request carries an id_token whose signature verifies — so nobody can turn\nyour logout link into a redirect to a site of their choosing.",
+        "summary": "Ends a sign-in and sends the browser somewhere sensible.",
+        "description": "Ends a sign-in and sends the browser somewhere sensible. Accepts\nGET or POST, so it works as a plain link.\n\nIt ACTUALLY signs you out, which is worth stating because the endpoint spent a\nrelease not doing it: the whole body computed a redirect and answered\n{\"status\":\"ok\"} unconditionally — no session ended, no token revoked. A logout\nthat reports success while leaving the session live is worse than no logout at\nall, because the person on the shared machine believes it worked. Three things\nhappen here now, in this order:\n\n 1. The browser session dies — sid revoked server-side AND the cookie expired\n    (sessions.Clear). Server-side revocation is the load-bearing half: a copy\n    of the cookie taken before logout must not still resolve.\n 2. The relying party's tokens are revoked when an id_token_hint names it, so\n    the refresh token cannot mint a fresh access token after the human left.\n    Revocation state is authoritative — a JWT's `exp` still reads valid for\n    days, so expiry is necessary but never sufficient.\n 3. Only then is a redirect considered, and only to a REGISTERED uri.\n\nThe open-redirect guard is unchanged: a redirect happens only when a VERIFIED\nid_token_hint identifies the application and that application has registered\nthe target. Anything else refuses to redirect — nobody can turn your logout\nlink into a redirect to a site of their choosing.",
         "tags": [
           "iam"
         ]
       },
       "post": {
         "operationId": "post_v1_iam_oauth_logout",
-        "summary": "Ends a sign-in session and sends the browser back to your application.",
-        "description": "Ends a sign-in session and sends the browser back to your\napplication. Accepts GET or POST, so it works as a plain link.\n\nIt returns only to an address the application has registered, and only when\nthe request carries an id_token whose signature verifies — so nobody can turn\nyour logout link into a redirect to a site of their choosing.",
+        "summary": "Ends a sign-in and sends the browser somewhere sensible.",
+        "description": "Ends a sign-in and sends the browser somewhere sensible. Accepts\nGET or POST, so it works as a plain link.\n\nIt ACTUALLY signs you out, which is worth stating because the endpoint spent a\nrelease not doing it: the whole body computed a redirect and answered\n{\"status\":\"ok\"} unconditionally — no session ended, no token revoked. A logout\nthat reports success while leaving the session live is worse than no logout at\nall, because the person on the shared machine believes it worked. Three things\nhappen here now, in this order:\n\n 1. The browser session dies — sid revoked server-side AND the cookie expired\n    (sessions.Clear). Server-side revocation is the load-bearing half: a copy\n    of the cookie taken before logout must not still resolve.\n 2. The relying party's tokens are revoked when an id_token_hint names it, so\n    the refresh token cannot mint a fresh access token after the human left.\n    Revocation state is authoritative — a JWT's `exp` still reads valid for\n    days, so expiry is necessary but never sufficient.\n 3. Only then is a redirect considered, and only to a REGISTERED uri.\n\nThe open-redirect guard is unchanged: a redirect happens only when a VERIFIED\nid_token_hint identifies the application and that application has registered\nthe target. Anything else refuses to redirect — nobody can turn your logout\nlink into a redirect to a site of their choosing.",
         "tags": [
           "iam"
         ]
@@ -2026,7 +2026,7 @@
       "post": {
         "operationId": "post_v1_iam_oauth_revoke",
         "summary": "Retires a token before it expires — what you call when someone signs out or a credential may have leaked.",
-        "description": "Retires a token before it expires — what you call when someone\nsigns out or a credential may have leaked.\n\nRevoking an access token kills that token. Revoking a REFRESH token kills the\nwhole chain it belongs to, so no further access tokens can be minted from it\nand every token already minted from it dies with it.\n\nA token that is not yours, or that never existed, answers success and does\nnothing — so the endpoint cannot be used to discover which tokens are real.",
+        "description": "Retires a token before it expires — what you call when someone\nsigns out or a credential may have leaked.\n\nRevoking an access token kills that token. Revoking a REFRESH token kills the\nwhole chain it belongs to, so no further access tokens can be minted from it\nand every token already minted from it dies with it.\n\nA token that is not yours, or that never existed, answers success and does\nnothing — so the endpoint cannot be used to discover which tokens are real.\n\nPUBLIC clients revoke too, and must: sign-out is the only control a long-lived\nrefresh token has. hanzo-cli is a public PKCE client holding a 30-day rotating\nrefresh token, so a confidential-only revocation endpoint made `hanzo auth\nlogout` a LOCAL DELETE — the credential it dropped stayed spendable at\nhanzo.id for the rest of the month, with nothing able to kill it. Measured\n2026-08-01: revoke answered 401 invalid_client and the refresh token went on\nminting access tokens.\n\nWidening authentication does not widen authority. The caller must still POSSESS\nthe token — and possession already permits USE, of which revocation is the\nstrict opposite — and the row must belong to the client that presents it, so a\npublic client_id buys the ability to destroy exactly what its holder could\notherwise spend. RFC 6749 §3.2.1 is the same reading: a client with no\ncredentials identifies itself with client_id.",
         "tags": [
           "iam"
         ]
@@ -2109,7 +2109,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.ListOrganizationsOutput"
+                  "$ref": "#/components/schemas/ListOrganizationsOutput"
                 }
               }
             },
@@ -2128,7 +2128,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.CreateOrganizationInput"
+                "$ref": "#/components/schemas/CreateOrganizationInput"
               }
             }
           },
@@ -2139,7 +2139,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Organization"
+                  "$ref": "#/components/schemas/Organization"
                 }
               }
             },
@@ -2160,7 +2160,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.DeleteOrganizationInput"
+                "$ref": "#/components/schemas/DeleteOrganizationInput"
               }
             }
           },
@@ -2171,7 +2171,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteOrganizationOutput"
+                  "$ref": "#/components/schemas/DeleteOrganizationOutput"
                 }
               }
             },
@@ -2211,7 +2211,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Organization"
+                  "$ref": "#/components/schemas/Organization"
                 }
               }
             },
@@ -2232,7 +2232,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.UpdateOrganizationInput"
+                "$ref": "#/components/schemas/UpdateOrganizationInput"
               }
             }
           },
@@ -2243,7 +2243,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Organization"
+                  "$ref": "#/components/schemas/Organization"
                 }
               }
             },
@@ -2275,7 +2275,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.permission.ListResponse"
+                  "$ref": "#/components/schemas/permission.ListResponse"
                 }
               }
             },
@@ -2294,7 +2294,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Permission"
+                "$ref": "#/components/schemas/Permission"
               }
             }
           },
@@ -2305,7 +2305,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Permission"
+                  "$ref": "#/components/schemas/Permission"
                 }
               }
             },
@@ -2326,7 +2326,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.permission.Ref"
+                "$ref": "#/components/schemas/permission.Ref"
               }
             }
           },
@@ -2337,7 +2337,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.permission.DeleteResponse"
+                  "$ref": "#/components/schemas/permission.DeleteResponse"
                 }
               }
             },
@@ -2377,7 +2377,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Permission"
+                  "$ref": "#/components/schemas/Permission"
                 }
               }
             },
@@ -2398,7 +2398,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Permission"
+                "$ref": "#/components/schemas/Permission"
               }
             }
           },
@@ -2409,7 +2409,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Permission"
+                  "$ref": "#/components/schemas/Permission"
                 }
               }
             },
@@ -2451,7 +2451,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.projects.ListOutput"
+                  "$ref": "#/components/schemas/projects.ListOutput"
                 }
               }
             },
@@ -2470,7 +2470,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Input"
+                "$ref": "#/components/schemas/Input"
               }
             }
           },
@@ -2481,7 +2481,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Project"
+                  "$ref": "#/components/schemas/Project"
                 }
               }
             },
@@ -2502,7 +2502,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.projects.Ref"
+                "$ref": "#/components/schemas/projects.Ref"
               }
             }
           },
@@ -2513,7 +2513,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.projects.DeleteOutput"
+                  "$ref": "#/components/schemas/projects.DeleteOutput"
                 }
               }
             },
@@ -2534,7 +2534,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.projects.Ref"
+                "$ref": "#/components/schemas/projects.Ref"
               }
             }
           },
@@ -2545,7 +2545,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Project"
+                  "$ref": "#/components/schemas/Project"
                 }
               }
             },
@@ -2566,7 +2566,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Input"
+                "$ref": "#/components/schemas/Input"
               }
             }
           },
@@ -2577,7 +2577,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Project"
+                  "$ref": "#/components/schemas/Project"
                 }
               }
             },
@@ -2609,7 +2609,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.listProvidersOut"
+                  "$ref": "#/components/schemas/listProvidersOut"
                 }
               }
             },
@@ -2628,7 +2628,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
+                "$ref": "#/components/schemas/Provider"
               }
             }
           },
@@ -2639,7 +2639,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.providerResult"
+                  "$ref": "#/components/schemas/providerResult"
                 }
               }
             },
@@ -2660,7 +2660,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.providerKey"
+                "$ref": "#/components/schemas/providerKey"
               }
             }
           },
@@ -2671,7 +2671,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.mutationResult"
+                  "$ref": "#/components/schemas/mutationResult"
                 }
               }
             },
@@ -2692,7 +2692,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.providerKey"
+                "$ref": "#/components/schemas/providerKey"
               }
             }
           },
@@ -2703,7 +2703,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.providerResult"
+                  "$ref": "#/components/schemas/providerResult"
                 }
               }
             },
@@ -2724,7 +2724,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
+                "$ref": "#/components/schemas/Provider"
               }
             }
           },
@@ -2735,7 +2735,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.mutationResult"
+                  "$ref": "#/components/schemas/mutationResult"
                 }
               }
             },
@@ -2786,7 +2786,7 @@
       "post": {
         "operationId": "post_v1_iam_revoke-user-keys",
         "summary": "Clears the target user's key of the requested TYPE (immediate revoke).",
-        "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. For a secret key the stored value is sk- for anything\nminted since the key seam was unified, and hk- only for the legacy population that\nhas not been re-keyed.",
+        "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
         "tags": [
           "iam"
         ]
@@ -2815,7 +2815,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.roles.ListOutput"
+                  "$ref": "#/components/schemas/roles.ListOutput"
                 }
               }
             },
@@ -2834,7 +2834,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.roles.Input"
+                "$ref": "#/components/schemas/roles.Input"
               }
             }
           },
@@ -2845,7 +2845,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Role"
+                  "$ref": "#/components/schemas/Role"
                 }
               }
             },
@@ -2866,7 +2866,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.roles.Ref"
+                "$ref": "#/components/schemas/roles.Ref"
               }
             }
           },
@@ -2877,7 +2877,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.roles.DeleteOutput"
+                  "$ref": "#/components/schemas/roles.DeleteOutput"
                 }
               }
             },
@@ -2898,7 +2898,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.roles.Ref"
+                "$ref": "#/components/schemas/roles.Ref"
               }
             }
           },
@@ -2909,7 +2909,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Role"
+                  "$ref": "#/components/schemas/Role"
                 }
               }
             },
@@ -2930,7 +2930,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.roles.Input"
+                "$ref": "#/components/schemas/roles.Input"
               }
             }
           },
@@ -2941,7 +2941,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Role"
+                  "$ref": "#/components/schemas/Role"
                 }
               }
             },
@@ -3224,7 +3224,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.CreateSessionIn"
+                "$ref": "#/components/schemas/CreateSessionIn"
               }
             }
           },
@@ -3235,7 +3235,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Session"
+                  "$ref": "#/components/schemas/Session"
                 }
               }
             },
@@ -3256,7 +3256,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.SessionRef"
+                "$ref": "#/components/schemas/SessionRef"
               }
             }
           },
@@ -3267,7 +3267,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteSessionOut"
+                  "$ref": "#/components/schemas/DeleteSessionOut"
                 }
               }
             },
@@ -3288,7 +3288,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.SessionRef"
+                "$ref": "#/components/schemas/SessionRef"
               }
             }
           },
@@ -3299,7 +3299,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Session"
+                  "$ref": "#/components/schemas/Session"
                 }
               }
             },
@@ -3320,7 +3320,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.ListSessionsIn"
+                "$ref": "#/components/schemas/ListSessionsIn"
               }
             }
           },
@@ -3331,7 +3331,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.ListSessionsOut"
+                  "$ref": "#/components/schemas/ListSessionsOut"
                 }
               }
             },
@@ -3352,7 +3352,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.UpdateSessionIn"
+                "$ref": "#/components/schemas/UpdateSessionIn"
               }
             }
           },
@@ -3363,7 +3363,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Session"
+                  "$ref": "#/components/schemas/Session"
                 }
               }
             },
@@ -3433,7 +3433,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.listTokensOut"
+                  "$ref": "#/components/schemas/listTokensOut"
                 }
               }
             },
@@ -3452,7 +3452,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Token"
+                "$ref": "#/components/schemas/Token"
               }
             }
           },
@@ -3463,7 +3463,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.tokenResult"
+                  "$ref": "#/components/schemas/tokenResult"
                 }
               }
             },
@@ -3484,7 +3484,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.tokenKey"
+                "$ref": "#/components/schemas/tokenKey"
               }
             }
           },
@@ -3495,7 +3495,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.tokenMutation"
+                  "$ref": "#/components/schemas/tokenMutation"
                 }
               }
             },
@@ -3516,7 +3516,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.tokenKey"
+                "$ref": "#/components/schemas/tokenKey"
               }
             }
           },
@@ -3527,7 +3527,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.tokenResult"
+                  "$ref": "#/components/schemas/tokenResult"
                 }
               }
             },
@@ -3558,7 +3558,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Token"
+                "$ref": "#/components/schemas/Token"
               }
             }
           },
@@ -3569,7 +3569,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.tokenMutation"
+                  "$ref": "#/components/schemas/tokenMutation"
                 }
               }
             },
@@ -3601,7 +3601,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Application"
+                "$ref": "#/components/schemas/Application"
               }
             }
           },
@@ -3612,7 +3612,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -3634,7 +3634,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.UpdateOrganizationInput"
+                "$ref": "#/components/schemas/UpdateOrganizationInput"
               }
             }
           },
@@ -3645,7 +3645,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -3677,7 +3677,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
+                "$ref": "#/components/schemas/Provider"
               }
             }
           },
@@ -3688,7 +3688,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -3710,7 +3710,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.roles.Input"
+                "$ref": "#/components/schemas/roles.Input"
               }
             }
           },
@@ -3721,7 +3721,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -3743,7 +3743,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.userBody"
+                "$ref": "#/components/schemas/userBody"
               }
             }
           },
@@ -3754,7 +3754,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },
@@ -3802,7 +3802,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.users.ListOutput"
+                  "$ref": "#/components/schemas/users.ListOutput"
                 }
               }
             },
@@ -3821,7 +3821,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.CreateInput"
+                "$ref": "#/components/schemas/CreateInput"
               }
             }
           },
@@ -3832,7 +3832,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.User"
+                  "$ref": "#/components/schemas/User"
                 }
               }
             },
@@ -3853,7 +3853,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.users.Ref"
+                "$ref": "#/components/schemas/users.Ref"
               }
             }
           },
@@ -3864,7 +3864,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.users.DeleteOutput"
+                  "$ref": "#/components/schemas/users.DeleteOutput"
                 }
               }
             },
@@ -3904,7 +3904,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.User"
+                  "$ref": "#/components/schemas/User"
                 }
               }
             },
@@ -3925,7 +3925,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.UpdateInput"
+                "$ref": "#/components/schemas/UpdateInput"
               }
             }
           },
@@ -3936,7 +3936,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.User"
+                  "$ref": "#/components/schemas/User"
                 }
               }
             },
@@ -3998,7 +3998,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.listWebauthnCredentialsOut"
+                  "$ref": "#/components/schemas/listWebauthnCredentialsOut"
                 }
               }
             },
@@ -4017,7 +4017,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.WebauthnCredential"
+                "$ref": "#/components/schemas/WebauthnCredential"
               }
             }
           },
@@ -4028,7 +4028,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.webauthnCredentialResult"
+                  "$ref": "#/components/schemas/webauthnCredentialResult"
                 }
               }
             },
@@ -4049,7 +4049,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.webauthnCredentialKey"
+                "$ref": "#/components/schemas/webauthnCredentialKey"
               }
             }
           },
@@ -4060,7 +4060,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.webauthnCredentialMutationResult"
+                  "$ref": "#/components/schemas/webauthnCredentialMutationResult"
                 }
               }
             },
@@ -4081,7 +4081,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.webauthnCredentialKey"
+                "$ref": "#/components/schemas/webauthnCredentialKey"
               }
             }
           },
@@ -4092,7 +4092,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.webauthnCredentialResult"
+                  "$ref": "#/components/schemas/webauthnCredentialResult"
                 }
               }
             },
@@ -4113,7 +4113,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.WebauthnCredential"
+                "$ref": "#/components/schemas/WebauthnCredential"
               }
             }
           },
@@ -4124,7 +4124,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.webauthnCredentialMutationResult"
+                  "$ref": "#/components/schemas/webauthnCredentialMutationResult"
                 }
               }
             },
@@ -4166,7 +4166,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.workspaces.ListOutput"
+                  "$ref": "#/components/schemas/workspaces.ListOutput"
                 }
               }
             },
@@ -4185,7 +4185,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Input"
+                "$ref": "#/components/schemas/workspaces.Input"
               }
             }
           },
@@ -4196,7 +4196,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Workspace"
+                  "$ref": "#/components/schemas/Workspace"
                 }
               }
             },
@@ -4217,7 +4217,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Ref"
+                "$ref": "#/components/schemas/workspaces.Ref"
               }
             }
           },
@@ -4228,7 +4228,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.workspaces.DeleteOutput"
+                  "$ref": "#/components/schemas/workspaces.DeleteOutput"
                 }
               }
             },
@@ -4249,7 +4249,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Ref"
+                "$ref": "#/components/schemas/workspaces.Ref"
               }
             }
           },
@@ -4260,7 +4260,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Workspace"
+                  "$ref": "#/components/schemas/Workspace"
                 }
               }
             },
@@ -4281,7 +4281,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Input"
+                "$ref": "#/components/schemas/workspaces.Input"
               }
             }
           },
@@ -4292,7 +4292,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/iam.Workspace"
+                  "$ref": "#/components/schemas/Workspace"
                 }
               }
             },
@@ -4304,7 +4304,7 @@
   },
   "components": {
     "schemas": {
-      "iam.AccountItem": {
+      "AccountItem": {
         "properties": {
           "modifyRule": {
             "type": "string"
@@ -4327,7 +4327,7 @@
         },
         "type": "object"
       },
-      "iam.Address": {
+      "Address": {
         "properties": {
           "city": {
             "type": "string"
@@ -4353,7 +4353,7 @@
         },
         "type": "object"
       },
-      "iam.Application": {
+      "Application": {
         "properties": {
           "affiliationUrl": {
             "type": "string"
@@ -4365,7 +4365,7 @@
             "type": "string"
           },
           "certObj": {
-            "$ref": "#/components/schemas/iam.Cert"
+            "$ref": "#/components/schemas/Cert"
           },
           "certPublicKey": {
             "type": "string"
@@ -4395,7 +4395,7 @@
           },
           "customScopes": {
             "items": {
-              "$ref": "#/components/schemas/iam.ScopeDescription"
+              "$ref": "#/components/schemas/ScopeDescription"
             },
             "type": "array"
           },
@@ -4538,7 +4538,7 @@
             "type": "string"
           },
           "organizationObj": {
-            "$ref": "#/components/schemas/iam.Organization"
+            "$ref": "#/components/schemas/Organization"
           },
           "otherDomains": {
             "items": {
@@ -4554,7 +4554,7 @@
           },
           "providers": {
             "items": {
-              "$ref": "#/components/schemas/iam.ProviderItem"
+              "$ref": "#/components/schemas/ProviderItem"
             },
             "type": "array"
           },
@@ -4569,7 +4569,7 @@
           },
           "samlAttributes": {
             "items": {
-              "$ref": "#/components/schemas/iam.SamlItem"
+              "$ref": "#/components/schemas/SamlItem"
             },
             "type": "array"
           },
@@ -4581,7 +4581,7 @@
           },
           "scopes": {
             "items": {
-              "$ref": "#/components/schemas/iam.ScopeItem"
+              "$ref": "#/components/schemas/ScopeItem"
             },
             "type": "array"
           },
@@ -4590,13 +4590,13 @@
           },
           "signinItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.SigninItem"
+              "$ref": "#/components/schemas/SigninItem"
             },
             "type": "array"
           },
           "signinMethods": {
             "items": {
-              "$ref": "#/components/schemas/iam.SigninMethod"
+              "$ref": "#/components/schemas/SigninMethod"
             },
             "type": "array"
           },
@@ -4608,7 +4608,7 @@
           },
           "signupItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.SignupItem"
+              "$ref": "#/components/schemas/SignupItem"
             },
             "type": "array"
           },
@@ -4631,14 +4631,14 @@
             "type": "string"
           },
           "themeData": {
-            "$ref": "#/components/schemas/iam.ThemeData"
+            "$ref": "#/components/schemas/ThemeData"
           },
           "title": {
             "type": "string"
           },
           "tokenAttributes": {
             "items": {
-              "$ref": "#/components/schemas/iam.JwtItem"
+              "$ref": "#/components/schemas/JwtItem"
             },
             "type": "array"
           },
@@ -4670,18 +4670,18 @@
         },
         "type": "object"
       },
-      "iam.ApplicationListResult": {
+      "ApplicationListResult": {
         "properties": {
           "applications": {
             "items": {
-              "$ref": "#/components/schemas/iam.Application"
+              "$ref": "#/components/schemas/Application"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.ApplicationRef": {
+      "ApplicationRef": {
         "properties": {
           "name": {
             "type": "string"
@@ -4696,7 +4696,7 @@
         ],
         "type": "object"
       },
-      "iam.AuditLog": {
+      "AuditLog": {
         "properties": {
           "action": {
             "type": "string"
@@ -4757,7 +4757,7 @@
         },
         "type": "object"
       },
-      "iam.CartItem": {
+      "CartItem": {
         "properties": {
           "displayName": {
             "type": "string"
@@ -4777,7 +4777,7 @@
         },
         "type": "object"
       },
-      "iam.Cert": {
+      "Cert": {
         "properties": {
           "accessKey": {
             "type": "string"
@@ -4847,7 +4847,7 @@
         },
         "type": "object"
       },
-      "iam.ConsentRecord": {
+      "ConsentRecord": {
         "properties": {
           "application": {
             "type": "string"
@@ -4861,22 +4861,22 @@
         },
         "type": "object"
       },
-      "iam.CreateInput": {
+      "CreateInput": {
         "properties": {
           "password": {
             "type": "string"
           },
           "user": {
-            "$ref": "#/components/schemas/iam.User"
+            "$ref": "#/components/schemas/User"
           }
         },
         "type": "object"
       },
-      "iam.CreateOrganizationInput": {
+      "CreateOrganizationInput": {
         "properties": {
           "accountItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.AccountItem"
+              "$ref": "#/components/schemas/AccountItem"
             },
             "type": "array"
           },
@@ -5000,7 +5000,7 @@
           },
           "mfaItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaItem"
+              "$ref": "#/components/schemas/MfaItem"
             },
             "type": "array"
           },
@@ -5050,7 +5050,7 @@
             "type": "array"
           },
           "themeData": {
-            "$ref": "#/components/schemas/iam.ThemeData"
+            "$ref": "#/components/schemas/ThemeData"
           },
           "updatedAt": {
             "format": "date-time",
@@ -5089,7 +5089,7 @@
         },
         "type": "object"
       },
-      "iam.CreateSessionIn": {
+      "CreateSessionIn": {
         "properties": {
           "application": {
             "type": "string"
@@ -5117,7 +5117,7 @@
         ],
         "type": "object"
       },
-      "iam.DeleteOrganizationInput": {
+      "DeleteOrganizationInput": {
         "properties": {
           "name": {
             "type": "string"
@@ -5128,7 +5128,7 @@
         },
         "type": "object"
       },
-      "iam.DeleteOrganizationOutput": {
+      "DeleteOrganizationOutput": {
         "properties": {
           "affected": {
             "type": "boolean"
@@ -5136,7 +5136,7 @@
         },
         "type": "object"
       },
-      "iam.DeleteOutput": {
+      "DeleteOutput": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -5144,7 +5144,7 @@
         },
         "type": "object"
       },
-      "iam.DeleteResponse": {
+      "DeleteResponse": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -5152,7 +5152,7 @@
         },
         "type": "object"
       },
-      "iam.DeleteResult": {
+      "DeleteResult": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -5160,7 +5160,7 @@
         },
         "type": "object"
       },
-      "iam.DeleteSessionOut": {
+      "DeleteSessionOut": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -5168,7 +5168,7 @@
         },
         "type": "object"
       },
-      "iam.FaceId": {
+      "FaceId": {
         "properties": {
           "faceIdData": {
             "items": {
@@ -5185,7 +5185,7 @@
         },
         "type": "object"
       },
-      "iam.Input": {
+      "Input": {
         "properties": {
           "createdTime": {
             "type": "string"
@@ -5223,7 +5223,7 @@
         },
         "type": "object"
       },
-      "iam.Invitation": {
+      "Invitation": {
         "properties": {
           "application": {
             "type": "string"
@@ -5290,7 +5290,7 @@
         },
         "type": "object"
       },
-      "iam.JwtItem": {
+      "JwtItem": {
         "properties": {
           "category": {
             "type": "string"
@@ -5307,7 +5307,7 @@
         },
         "type": "object"
       },
-      "iam.Key": {
+      "Key": {
         "properties": {
           "accessKey": {
             "description": "AccessKey (pk-*) is the publishable identifier and lookup index;\nAccessSecret (sk-*) is the confidential secret.",
@@ -5375,25 +5375,25 @@
         },
         "type": "object"
       },
-      "iam.ListOrganizationsOutput": {
+      "ListOrganizationsOutput": {
         "properties": {
           "count": {
             "type": "integer"
           },
           "organizations": {
             "items": {
-              "$ref": "#/components/schemas/iam.Organization"
+              "$ref": "#/components/schemas/Organization"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.ListOutput": {
+      "ListOutput": {
         "properties": {
           "auditLogs": {
             "items": {
-              "$ref": "#/components/schemas/iam.AuditLog"
+              "$ref": "#/components/schemas/AuditLog"
             },
             "type": "array"
           },
@@ -5403,18 +5403,18 @@
         },
         "type": "object"
       },
-      "iam.ListResponse": {
+      "ListResponse": {
         "properties": {
           "keys": {
             "items": {
-              "$ref": "#/components/schemas/iam.Key"
+              "$ref": "#/components/schemas/Key"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.ListSessionsIn": {
+      "ListSessionsIn": {
         "properties": {
           "application": {
             "type": "string"
@@ -5431,18 +5431,18 @@
         ],
         "type": "object"
       },
-      "iam.ListSessionsOut": {
+      "ListSessionsOut": {
         "properties": {
           "sessions": {
             "items": {
-              "$ref": "#/components/schemas/iam.Session"
+              "$ref": "#/components/schemas/Session"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.ManagedAccount": {
+      "ManagedAccount": {
         "properties": {
           "application": {
             "type": "string"
@@ -5456,7 +5456,7 @@
         },
         "type": "object"
       },
-      "iam.MfaAccount": {
+      "MfaAccount": {
         "properties": {
           "accountName": {
             "type": "string"
@@ -5470,7 +5470,7 @@
         },
         "type": "object"
       },
-      "iam.MfaItem": {
+      "MfaItem": {
         "properties": {
           "name": {
             "type": "string"
@@ -5481,7 +5481,7 @@
         },
         "type": "object"
       },
-      "iam.MfaProps": {
+      "MfaProps": {
         "properties": {
           "countryCode": {
             "type": "string"
@@ -5504,11 +5504,11 @@
         },
         "type": "object"
       },
-      "iam.Organization": {
+      "Organization": {
         "properties": {
           "accountItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.AccountItem"
+              "$ref": "#/components/schemas/AccountItem"
             },
             "type": "array"
           },
@@ -5634,7 +5634,7 @@
           },
           "mfaItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaItem"
+              "$ref": "#/components/schemas/MfaItem"
             },
             "type": "array"
           },
@@ -5685,7 +5685,7 @@
             "type": "array"
           },
           "themeData": {
-            "$ref": "#/components/schemas/iam.ThemeData"
+            "$ref": "#/components/schemas/ThemeData"
           },
           "updatedAt": {
             "format": "date-time",
@@ -5724,7 +5724,7 @@
         },
         "type": "object"
       },
-      "iam.Permission": {
+      "Permission": {
         "properties": {
           "actions": {
             "items": {
@@ -5826,7 +5826,7 @@
         },
         "type": "object"
       },
-      "iam.Project": {
+      "Project": {
         "properties": {
           "createdAt": {
             "format": "date-time",
@@ -5878,7 +5878,7 @@
         },
         "type": "object"
       },
-      "iam.Provider": {
+      "Provider": {
         "properties": {
           "appId": {
             "type": "string"
@@ -6035,7 +6035,7 @@
         },
         "type": "object"
       },
-      "iam.ProviderItem": {
+      "ProviderItem": {
         "properties": {
           "bindingRule": {
             "items": {
@@ -6068,7 +6068,7 @@
             "type": "boolean"
           },
           "provider": {
-            "$ref": "#/components/schemas/iam.Provider"
+            "$ref": "#/components/schemas/Provider"
           },
           "rule": {
             "type": "string"
@@ -6079,7 +6079,7 @@
         },
         "type": "object"
       },
-      "iam.Ref": {
+      "Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -6090,7 +6090,7 @@
         },
         "type": "object"
       },
-      "iam.Response": {
+      "Response": {
         "properties": {
           "code": {
             "description": "Code is a STABLE machine-readable reason, where the human `msg` is\ndeliberately generic. `msg` is prose for a person and several distinct causes\nlegitimately share one sentence; a caller that must BRANCH on the cause — or\ntell its own user which of them happened — cannot parse prose. Optional, so\nevery existing envelope is byte-identical and no SDK changes.",
@@ -6120,7 +6120,7 @@
         },
         "type": "object"
       },
-      "iam.Role": {
+      "Role": {
         "properties": {
           "createdAt": {
             "format": "date-time",
@@ -6181,7 +6181,7 @@
         },
         "type": "object"
       },
-      "iam.SamlItem": {
+      "SamlItem": {
         "properties": {
           "name": {
             "type": "string"
@@ -6195,7 +6195,7 @@
         },
         "type": "object"
       },
-      "iam.ScopeDescription": {
+      "ScopeDescription": {
         "properties": {
           "description": {
             "type": "string"
@@ -6209,7 +6209,7 @@
         },
         "type": "object"
       },
-      "iam.ScopeItem": {
+      "ScopeItem": {
         "properties": {
           "description": {
             "type": "string"
@@ -6229,7 +6229,7 @@
         },
         "type": "object"
       },
-      "iam.Session": {
+      "Session": {
         "properties": {
           "application": {
             "type": "string"
@@ -6270,7 +6270,7 @@
         },
         "type": "object"
       },
-      "iam.SessionRef": {
+      "SessionRef": {
         "properties": {
           "application": {
             "type": "string"
@@ -6289,7 +6289,7 @@
         ],
         "type": "object"
       },
-      "iam.SigninItem": {
+      "SigninItem": {
         "properties": {
           "customCss": {
             "type": "string"
@@ -6315,7 +6315,7 @@
         },
         "type": "object"
       },
-      "iam.SigninMethod": {
+      "SigninMethod": {
         "properties": {
           "displayName": {
             "type": "string"
@@ -6329,7 +6329,7 @@
         },
         "type": "object"
       },
-      "iam.SignupItem": {
+      "SignupItem": {
         "properties": {
           "customCss": {
             "type": "string"
@@ -6370,7 +6370,7 @@
         },
         "type": "object"
       },
-      "iam.ThemeData": {
+      "ThemeData": {
         "properties": {
           "borderRadius": {
             "type": "integer"
@@ -6390,7 +6390,7 @@
         },
         "type": "object"
       },
-      "iam.Token": {
+      "Token": {
         "properties": {
           "accessToken": {
             "type": "string"
@@ -6492,22 +6492,22 @@
         },
         "type": "object"
       },
-      "iam.UpdateInput": {
+      "UpdateInput": {
         "properties": {
           "password": {
             "type": "string"
           },
           "user": {
-            "$ref": "#/components/schemas/iam.User"
+            "$ref": "#/components/schemas/User"
           }
         },
         "type": "object"
       },
-      "iam.UpdateOrganizationInput": {
+      "UpdateOrganizationInput": {
         "properties": {
           "accountItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.AccountItem"
+              "$ref": "#/components/schemas/AccountItem"
             },
             "type": "array"
           },
@@ -6631,7 +6631,7 @@
           },
           "mfaItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaItem"
+              "$ref": "#/components/schemas/MfaItem"
             },
             "type": "array"
           },
@@ -6681,7 +6681,7 @@
             "type": "array"
           },
           "themeData": {
-            "$ref": "#/components/schemas/iam.ThemeData"
+            "$ref": "#/components/schemas/ThemeData"
           },
           "updatedAt": {
             "format": "date-time",
@@ -6720,7 +6720,7 @@
         },
         "type": "object"
       },
-      "iam.UpdateSessionIn": {
+      "UpdateSessionIn": {
         "properties": {
           "application": {
             "type": "string"
@@ -6745,7 +6745,7 @@
         ],
         "type": "object"
       },
-      "iam.User": {
+      "User": {
         "properties": {
           "accessKey": {
             "description": "API credentials. AccessSecret / AccessSecretHash / the OAuth tokens are\nbearer material. AccessSecretHash MUST persist (orm stores via JSON; a\njson:\"-\" field is never saved), so it carries a real json tag and the\nhandler's redact() strips it (and AccessSecret + the token fields) before\nresponding.",
@@ -6768,7 +6768,7 @@
           },
           "addresses": {
             "items": {
-              "$ref": "#/components/schemas/iam.Address"
+              "$ref": "#/components/schemas/Address"
             },
             "type": "array"
           },
@@ -6789,7 +6789,7 @@
           },
           "applicationScopes": {
             "items": {
-              "$ref": "#/components/schemas/iam.ConsentRecord"
+              "$ref": "#/components/schemas/ConsentRecord"
             },
             "type": "array"
           },
@@ -6841,7 +6841,7 @@
           },
           "cart": {
             "items": {
-              "$ref": "#/components/schemas/iam.CartItem"
+              "$ref": "#/components/schemas/CartItem"
             },
             "type": "array"
           },
@@ -6943,7 +6943,7 @@
           },
           "faceIds": {
             "items": {
-              "$ref": "#/components/schemas/iam.FaceId"
+              "$ref": "#/components/schemas/FaceId"
             },
             "type": "array"
           },
@@ -7093,7 +7093,7 @@
           },
           "managedAccounts": {
             "items": {
-              "$ref": "#/components/schemas/iam.ManagedAccount"
+              "$ref": "#/components/schemas/ManagedAccount"
             },
             "type": "array"
           },
@@ -7102,7 +7102,7 @@
           },
           "mfaAccounts": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaAccount"
+              "$ref": "#/components/schemas/MfaAccount"
             },
             "type": "array"
           },
@@ -7111,7 +7111,7 @@
           },
           "mfaItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaItem"
+              "$ref": "#/components/schemas/MfaItem"
             },
             "type": "array"
           },
@@ -7144,7 +7144,7 @@
           },
           "multiFactorAuths": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaProps"
+              "$ref": "#/components/schemas/MfaProps"
             },
             "type": "array"
           },
@@ -7200,7 +7200,7 @@
           },
           "permissions": {
             "items": {
-              "$ref": "#/components/schemas/iam.Permission"
+              "$ref": "#/components/schemas/Permission"
             },
             "type": "array"
           },
@@ -7246,7 +7246,7 @@
           "roles": {
             "description": "Authorization attachments. Roles and Permissions are computed on read\nfrom the authz store and carried here for API parity with v1.",
             "items": {
-              "$ref": "#/components/schemas/iam.Role"
+              "$ref": "#/components/schemas/Role"
             },
             "type": "array"
           },
@@ -7364,7 +7364,7 @@
         },
         "type": "object"
       },
-      "iam.WebauthnCredential": {
+      "WebauthnCredential": {
         "properties": {
           "aaguid": {
             "contentEncoding": "base64",
@@ -7437,7 +7437,7 @@
         },
         "type": "object"
       },
-      "iam.Workspace": {
+      "Workspace": {
         "properties": {
           "bucket": {
             "type": "string"
@@ -7489,7 +7489,7 @@
         },
         "type": "object"
       },
-      "iam.auditlogs.Input": {
+      "auditlogs.Input": {
         "properties": {
           "action": {
             "type": "string"
@@ -7536,7 +7536,7 @@
         },
         "type": "object"
       },
-      "iam.certs.DeleteOutput": {
+      "certs.DeleteOutput": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -7544,11 +7544,11 @@
         },
         "type": "object"
       },
-      "iam.certs.ListOutput": {
+      "certs.ListOutput": {
         "properties": {
           "certs": {
             "items": {
-              "$ref": "#/components/schemas/iam.Cert"
+              "$ref": "#/components/schemas/Cert"
             },
             "type": "array"
           },
@@ -7558,7 +7558,7 @@
         },
         "type": "object"
       },
-      "iam.certs.Ref": {
+      "certs.Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -7569,7 +7569,7 @@
         },
         "type": "object"
       },
-      "iam.invitations.DeleteOutput": {
+      "invitations.DeleteOutput": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -7577,7 +7577,7 @@
         },
         "type": "object"
       },
-      "iam.invitations.Input": {
+      "invitations.Input": {
         "properties": {
           "application": {
             "type": "string"
@@ -7630,11 +7630,11 @@
         },
         "type": "object"
       },
-      "iam.invitations.ListOutput": {
+      "invitations.ListOutput": {
         "properties": {
           "invitations": {
             "items": {
-              "$ref": "#/components/schemas/iam.Invitation"
+              "$ref": "#/components/schemas/Invitation"
             },
             "type": "array"
           },
@@ -7644,7 +7644,7 @@
         },
         "type": "object"
       },
-      "iam.invitations.Ref": {
+      "invitations.Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -7655,7 +7655,7 @@
         },
         "type": "object"
       },
-      "iam.keys.Ref": {
+      "keys.Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -7666,51 +7666,51 @@
         },
         "type": "object"
       },
-      "iam.listProvidersOut": {
+      "listProvidersOut": {
         "properties": {
           "providers": {
             "items": {
-              "$ref": "#/components/schemas/iam.Provider"
+              "$ref": "#/components/schemas/Provider"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.listTokensOut": {
+      "listTokensOut": {
         "properties": {
           "tokens": {
             "items": {
-              "$ref": "#/components/schemas/iam.Token"
+              "$ref": "#/components/schemas/Token"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.listWebauthnCredentialsOut": {
+      "listWebauthnCredentialsOut": {
         "properties": {
           "webauthnCredentials": {
             "items": {
-              "$ref": "#/components/schemas/iam.WebauthnCredential"
+              "$ref": "#/components/schemas/WebauthnCredential"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.mutationResult": {
+      "mutationResult": {
         "properties": {
           "affected": {
             "type": "boolean"
           },
           "provider": {
-            "$ref": "#/components/schemas/iam.Provider"
+            "$ref": "#/components/schemas/Provider"
           }
         },
         "type": "object"
       },
-      "iam.permission.DeleteResponse": {
+      "permission.DeleteResponse": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -7718,18 +7718,18 @@
         },
         "type": "object"
       },
-      "iam.permission.ListResponse": {
+      "permission.ListResponse": {
         "properties": {
           "permissions": {
             "items": {
-              "$ref": "#/components/schemas/iam.Permission"
+              "$ref": "#/components/schemas/Permission"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.permission.Ref": {
+      "permission.Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -7740,7 +7740,7 @@
         },
         "type": "object"
       },
-      "iam.projects.DeleteOutput": {
+      "projects.DeleteOutput": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -7748,11 +7748,11 @@
         },
         "type": "object"
       },
-      "iam.projects.ListOutput": {
+      "projects.ListOutput": {
         "properties": {
           "projects": {
             "items": {
-              "$ref": "#/components/schemas/iam.Project"
+              "$ref": "#/components/schemas/Project"
             },
             "type": "array"
           },
@@ -7762,7 +7762,7 @@
         },
         "type": "object"
       },
-      "iam.projects.Ref": {
+      "projects.Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -7773,7 +7773,7 @@
         },
         "type": "object"
       },
-      "iam.providerKey": {
+      "providerKey": {
         "properties": {
           "name": {
             "type": "string"
@@ -7788,15 +7788,15 @@
         ],
         "type": "object"
       },
-      "iam.providerResult": {
+      "providerResult": {
         "properties": {
           "provider": {
-            "$ref": "#/components/schemas/iam.Provider"
+            "$ref": "#/components/schemas/Provider"
           }
         },
         "type": "object"
       },
-      "iam.roles.DeleteOutput": {
+      "roles.DeleteOutput": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -7804,7 +7804,7 @@
         },
         "type": "object"
       },
-      "iam.roles.Input": {
+      "roles.Input": {
         "properties": {
           "createdTime": {
             "type": "string"
@@ -7851,11 +7851,11 @@
         },
         "type": "object"
       },
-      "iam.roles.ListOutput": {
+      "roles.ListOutput": {
         "properties": {
           "roles": {
             "items": {
-              "$ref": "#/components/schemas/iam.Role"
+              "$ref": "#/components/schemas/Role"
             },
             "type": "array"
           },
@@ -7865,7 +7865,7 @@
         },
         "type": "object"
       },
-      "iam.roles.Ref": {
+      "roles.Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -7876,7 +7876,7 @@
         },
         "type": "object"
       },
-      "iam.tokenKey": {
+      "tokenKey": {
         "properties": {
           "name": {
             "type": "string"
@@ -7891,26 +7891,26 @@
         ],
         "type": "object"
       },
-      "iam.tokenMutation": {
+      "tokenMutation": {
         "properties": {
           "affected": {
             "type": "boolean"
           },
           "token": {
-            "$ref": "#/components/schemas/iam.Token"
+            "$ref": "#/components/schemas/Token"
           }
         },
         "type": "object"
       },
-      "iam.tokenResult": {
+      "tokenResult": {
         "properties": {
           "token": {
-            "$ref": "#/components/schemas/iam.Token"
+            "$ref": "#/components/schemas/Token"
           }
         },
         "type": "object"
       },
-      "iam.userBody": {
+      "userBody": {
         "properties": {
           "accessKey": {
             "type": "string"
@@ -7932,7 +7932,7 @@
           },
           "addresses": {
             "items": {
-              "$ref": "#/components/schemas/iam.Address"
+              "$ref": "#/components/schemas/Address"
             },
             "type": "array"
           },
@@ -7953,7 +7953,7 @@
           },
           "applicationScopes": {
             "items": {
-              "$ref": "#/components/schemas/iam.ConsentRecord"
+              "$ref": "#/components/schemas/ConsentRecord"
             },
             "type": "array"
           },
@@ -8004,7 +8004,7 @@
           },
           "cart": {
             "items": {
-              "$ref": "#/components/schemas/iam.CartItem"
+              "$ref": "#/components/schemas/CartItem"
             },
             "type": "array"
           },
@@ -8104,7 +8104,7 @@
           },
           "faceIds": {
             "items": {
-              "$ref": "#/components/schemas/iam.FaceId"
+              "$ref": "#/components/schemas/FaceId"
             },
             "type": "array"
           },
@@ -8251,7 +8251,7 @@
           },
           "managedAccounts": {
             "items": {
-              "$ref": "#/components/schemas/iam.ManagedAccount"
+              "$ref": "#/components/schemas/ManagedAccount"
             },
             "type": "array"
           },
@@ -8260,7 +8260,7 @@
           },
           "mfaAccounts": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaAccount"
+              "$ref": "#/components/schemas/MfaAccount"
             },
             "type": "array"
           },
@@ -8269,7 +8269,7 @@
           },
           "mfaItems": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaItem"
+              "$ref": "#/components/schemas/MfaItem"
             },
             "type": "array"
           },
@@ -8302,7 +8302,7 @@
           },
           "multiFactorAuths": {
             "items": {
-              "$ref": "#/components/schemas/iam.MfaProps"
+              "$ref": "#/components/schemas/MfaProps"
             },
             "type": "array"
           },
@@ -8359,7 +8359,7 @@
           },
           "permissions": {
             "items": {
-              "$ref": "#/components/schemas/iam.Permission"
+              "$ref": "#/components/schemas/Permission"
             },
             "type": "array"
           },
@@ -8404,7 +8404,7 @@
           },
           "roles": {
             "items": {
-              "$ref": "#/components/schemas/iam.Role"
+              "$ref": "#/components/schemas/Role"
             },
             "type": "array"
           },
@@ -8521,7 +8521,7 @@
         },
         "type": "object"
       },
-      "iam.users.DeleteOutput": {
+      "users.DeleteOutput": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -8529,21 +8529,21 @@
         },
         "type": "object"
       },
-      "iam.users.ListOutput": {
+      "users.ListOutput": {
         "properties": {
           "total": {
             "type": "integer"
           },
           "users": {
             "items": {
-              "$ref": "#/components/schemas/iam.User"
+              "$ref": "#/components/schemas/User"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.users.Ref": {
+      "users.Ref": {
         "properties": {
           "name": {
             "type": "string"
@@ -8558,7 +8558,7 @@
         ],
         "type": "object"
       },
-      "iam.webauthnCredentialKey": {
+      "webauthnCredentialKey": {
         "properties": {
           "name": {
             "type": "string"
@@ -8573,26 +8573,26 @@
         ],
         "type": "object"
       },
-      "iam.webauthnCredentialMutationResult": {
+      "webauthnCredentialMutationResult": {
         "properties": {
           "affected": {
             "type": "boolean"
           },
           "webauthnCredential": {
-            "$ref": "#/components/schemas/iam.WebauthnCredential"
+            "$ref": "#/components/schemas/WebauthnCredential"
           }
         },
         "type": "object"
       },
-      "iam.webauthnCredentialResult": {
+      "webauthnCredentialResult": {
         "properties": {
           "webauthnCredential": {
-            "$ref": "#/components/schemas/iam.WebauthnCredential"
+            "$ref": "#/components/schemas/WebauthnCredential"
           }
         },
         "type": "object"
       },
-      "iam.workspaces.DeleteOutput": {
+      "workspaces.DeleteOutput": {
         "properties": {
           "deleted": {
             "type": "boolean"
@@ -8600,7 +8600,7 @@
         },
         "type": "object"
       },
-      "iam.workspaces.Input": {
+      "workspaces.Input": {
         "properties": {
           "bucket": {
             "type": "string"
@@ -8638,21 +8638,21 @@
         },
         "type": "object"
       },
-      "iam.workspaces.ListOutput": {
+      "workspaces.ListOutput": {
         "properties": {
           "total": {
             "type": "integer"
           },
           "workspaces": {
             "items": {
-              "$ref": "#/components/schemas/iam.Workspace"
+              "$ref": "#/components/schemas/Workspace"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "iam.workspaces.Ref": {
+      "workspaces.Ref": {
         "properties": {
           "name": {
             "type": "string"

@@ -150,7 +150,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // doc comments on the In/Out struct fields, which zipdoc lifts per field. crm
 // shipped fully-described request types (companyReq, patchApplicationIn, …) beside
 // RESPONSE types with 65 bare properties: every field of Company, Contact,
-// Opportunity, Application, ScreenResult and StageEvent reached openapi.yaml, the
+// Opportunity, ProgramApplication, ScreenResult and StageEvent reached openapi.yaml, the
 // generated SDKs and the MCP inputSchemas with no description at all, because those
 // are store row types that nobody had written field prose on. A reader of the API
 // could see that `arr` is an integer and nowhere that it is CENTS.
