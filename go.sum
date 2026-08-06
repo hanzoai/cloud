@@ -990,8 +990,8 @@ github.com/hanzoai/account v0.2.1 h1:OpODtK/N+qcUy83yUj6br+yTTBoItJWneDtOZ3NlyFU
 github.com/hanzoai/account v0.2.1/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v0.1.3 h1:zzV4t8kN/m/wTLrqzEy0fxxONSZbx3XSVH7TIR9gZNU=
 github.com/hanzoai/agent v0.1.3/go.mod h1:Z3hCBdSeN/nGV4o+3F4psQ2bbFk17+tMP5l+G2ssNNA=
-github.com/hanzoai/ai v1.832.31 h1:9Pou2tRpZJar+WllXQEEzPCIVlbtut7At01rJbmiFb0=
-github.com/hanzoai/ai v1.832.31/go.mod h1:+iuYYEWUhWYTzy6Y5U/E9kATWk5/+xoQn3TqNv3DWQQ=
+github.com/hanzoai/ai v1.832.35 h1:q9vk2Wjj4gikryYXP+MNGRQSUprbXsnSJdJzWND4O2c=
+github.com/hanzoai/ai v1.832.35/go.mod h1:+iuYYEWUhWYTzy6Y5U/E9kATWk5/+xoQn3TqNv3DWQQ=
 github.com/hanzoai/authz v1.10.29 h1:b4vWtI9g4Mvay1zizW7cwly/hDk06r+oAdA/y+317Do=
 github.com/hanzoai/authz v1.10.29/go.mod h1:xkzFdiIFx4UQMlU0NkmSRz0dgRQYqSXpKgVjn8ijn3E=
 github.com/hanzoai/base v1.5.15 h1:IWPoiNpAyEdrRgvwm03LCPEyWaaqkpuahmCnTvSNyZU=
@@ -1002,8 +1002,6 @@ github.com/hanzoai/cd/gitops-engine v0.7.3 h1:NmPf8v3Ti8ejSI8M96wFmzOchQ2fgxZHhV
 github.com/hanzoai/cd/gitops-engine v0.7.3/go.mod h1:Jyc94hEnwpmaS4kBFmC4fP3t+VvZ8DZgxPtV4FdmL7M=
 github.com/hanzoai/cek v0.2.3 h1:wOVav3abWAWiIyqTr9pKK/b4PjUCT1j3mdU5LzKpxSQ=
 github.com/hanzoai/cek v0.2.3/go.mod h1:T9c9qr9x+0kHsk0J57KElY7l2jgWF08onbxZ3ck5nxM=
-github.com/hanzoai/commerce v1.50.16 h1:2ndeyGFO4DirSppq5PJLxwbsMdl5m7FZZ6hTK3x+Cr4=
-github.com/hanzoai/commerce v1.50.16/go.mod h1:TtxF3nlzmKav9XCVcNF2h03jFPukzTLemTuG9my38jY=
 github.com/hanzoai/commerce v1.50.20 h1:BLNRT2nRJXkCxGd2QJWtcP9J9Ze2Zez0nVZ84YLBP0g=
 github.com/hanzoai/commerce v1.50.20/go.mod h1:TtxF3nlzmKav9XCVcNF2h03jFPukzTLemTuG9my38jY=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
@@ -1052,8 +1050,6 @@ github.com/hanzoai/namespace v1.2.0 h1:FLEHzR/GyE/OltXozMvT2n2FfUUxTuVVbILKZBkEj
 github.com/hanzoai/namespace v1.2.0/go.mod h1:vGuxMDHg5MdhH5q2bqqjZL/afINBWJubP4WD1YwZTm4=
 github.com/hanzoai/notify v1.7.2 h1:xHaVVcOWLvLMpmtSH128FRgskj4WyfG371K6CI3OC/I=
 github.com/hanzoai/notify v1.7.2/go.mod h1:GZXKmj6UNtNBz32h0XPugNkYf8R34wlJqWuRstytXZE=
-github.com/hanzoai/o11y v1.5.58 h1:xp+lMkBwYRdd3TJeUB83Qq8XXnyLBX+nmOQ2hPEwhJU=
-github.com/hanzoai/o11y v1.5.58/go.mod h1:TrDmdeIBBwijyr5dti7+to4gkHOWxlvB0Lu/oRqS9uw=
 github.com/hanzoai/o11y v1.5.62 h1:wKEq7sTTZcBIDdBqIuBokLaM6KtRsaO+I1pFXHlM564=
 github.com/hanzoai/o11y v1.5.62/go.mod h1:ZFtyB6TjUGWJPdO689dvqk2ZaBu+WMqEvMRxP2Jb8tc=
 github.com/hanzoai/orm v0.6.21 h1:iqH7h8eUD3uDRKuga5jQJqAC+6oQRxXoApUJFQd+i38=

@@ -183,7 +183,18 @@ func (r *runtime) imageFor(class string) string {
 		tag = envOr("SANDBOX_IMAGE_TAG_"+strings.ToUpper(class), "")
 	}
 	if tag == "" {
-		return r.image + ":" + class
+		// FALL BACK TO A NAME NOTHING PUBLISHES, on purpose.
+		//
+		// The bare `exec`/`dev`/`desktop` tags exist in the registry and all
+		// three point at stock node:22 — no toolchain, no agent, and running as
+		// ROOT. So this fallback, which fires on one empty env var, quietly
+		// swapped a hardened sandbox for a root shell. It looked fine: the pod
+		// runs, the API answers, and the only tell is a `whoami`.
+		//
+		// `-unset` is published by nothing, so an unset tag now fails at the
+		// image pull with a name that says why, instead of succeeding into the
+		// wrong image. A loud stop beats a silent downgrade.
+		return r.image + ":" + class + "-unset"
 	}
 	// <version>-<class>, which is the order CI PUBLISHES. This read
 	// `class + "-" + tag` and asked for `dev-2026.6.7` while the registry held
