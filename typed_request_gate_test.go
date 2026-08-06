@@ -46,7 +46,8 @@ var allowedRequestUses = map[string]string{
 		"SETTLEMENT off the returned receipt, both deliberately not read from the wire (see screen.op), " +
 		"so the request is consulted for exactly the facts no projection can carry on a type: the payer " +
 		"(principal.Subject, which is the validated caller and not the tenant), the door actually reached " +
-		"(c.Path(), which is /mcp on the agent plane and the mint on the browser's), and the address + " +
+		"(c.Path(), which is /mcp on the agent plane and the mint on the browser's — the request is " +
+		"parked by the app-wide Bridge, which runs for both), and the address + " +
 		"jurisdiction signals a credit decision is made on. None of those is the org, and none may become " +
 		"an In field — a caller that could name its own payer or jurisdiction would screen as someone " +
 		"else. It fails OPEN of nothing: a call with no request at all (the CLI's LocalInvoke) resolves " +

@@ -112,7 +112,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:        store,
 		ai:           deps.AI,
-		defaultModel: strings.TrimSpace(deps.AIDefaultModel),
+		defaultModel: cloud.DefaultModel,
 	}}
 	mounted = s
 
