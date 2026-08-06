@@ -558,7 +558,7 @@ func unfit(absent map[string]string) map[string]string {
 //   - It is not a second source of truth. openapi.Fleet is the same composition
 //     that WRITES openapi.yaml, over the same committed files, so the served
 //     bytes and the committed artifact are one document by construction — and
-//     mk/fleet.mk surface-check regenerates those files from source and fails on
+//     mk/fleet.mk check regenerates those files from source and fails on
 //     any diff, so a drifted spec goes red in CI instead of shipping.
 //
 // Precedence is by SPECIFICITY, not registration order: a static path beats the

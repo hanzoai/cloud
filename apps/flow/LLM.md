@@ -78,7 +78,7 @@ Families and reasons (full prose in the ledger):
 2. Add the typed op + extend the fake upstream in typed_wire_test.go with the
    measured wire.
 3. Delete the family's `intentRefused` row — the test forces this ordering.
-4. `make -C apps/flow describe` and re-weave (surface-check).
+4. `make -C apps/flow describe` and re-weave (check).
 
 An opt-in end-to-end test drives the WHOLE mounted app against a real server:
 `FLOW_E2E_UPSTREAM=http://127.0.0.1:7860 FLOW_E2E_KEY=sk-… make -C apps/flow test`

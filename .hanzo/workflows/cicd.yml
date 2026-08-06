@@ -15,7 +15,7 @@ name: CI/CD
 # they were two files with the SAME TRIGGER. Actions cannot express `needs:`
 # across workflow files, so `deploy` built, smoked, tagged and pinned while
 # `gate` was still running — or after it had gone red. That is not a
-# hypothetical: the drift gate (`make -f mk/fleet.mk surface-check`) was RED on
+# hypothetical: the drift gate (`make -f mk/fleet.mk check`) was RED on
 # main while 87 commits and 6 releases went out in 24 hours, and what shipped was
 # a binary serving /v1/billing/gpu/eligibility and publishing
 # /v1/billing/gpu-eligibility. One build, two answers, both signed off.
@@ -73,7 +73,7 @@ jobs:
   # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
   #
   # The test gate, driven by hanzo.yml, whose `app-contract` step is
-  # `make -f mk/fleet.mk surface-check`: regenerate all 116 app subsets FROM
+  # `make -f mk/fleet.mk check`: regenerate all 116 app subsets FROM
   # SOURCE, re-weave openapi.yaml, and refuse any porcelain change. It
   # regenerates rather than comparing two derived artifacts (which is how
   # plugin/ingress silently lost eight paths) and checks with --porcelain rather
@@ -769,7 +769,7 @@ jobs:
 
   # ══ CAR 3 ══ THE DOCUMENT TELLS THE TRUTH ABOUT PRODUCTION.
   #
-  # `surface-check` proves the document equals the code. Nothing proved the
+  # `check` proves the document equals the code. Nothing proved the
   # address is REACHABLE, and three things break that independently: a stale
   # subset, a prefix missing from manifest/apps.go, and an edge worker that
   # intercepts before the origin. Every address here is a method in eight SDKs, a

@@ -3,7 +3,7 @@
 
 # Bare `make` shows help. Stated explicitly because make otherwise takes the FIRST
 # target it parses, and `include mk/fleet.mk` below inserts three targets ahead of
-# help — so without this line, typing `make` would silently run the openapi weave.
+# help — so without this line, typing `make` would silently run the openapi compose.
 .DEFAULT_GOAL := help
 
 GO              ?= go
@@ -85,14 +85,14 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-# ONE DOOR. mk/fleet.mk defines openapi-weave, describe-apps and surface-check, and
+# ONE DOOR. mk/fleet.mk defines weave, subsets and check, and
 # without this include they were reachable only as `make -f mk/fleet.mk <target>` —
 # a path nobody would guess and nothing in `make help` mentioned. Its own header
 # always said it was meant to be included here; it just never was, so the drift
-# gate (surface-check) sat behind a door with no handle.
+# gate (check) sat behind a door with no handle.
 include mk/fleet.mk
 
-.PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -280,7 +280,7 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 	# The drift gate: regenerate the document FROM SOURCE and fail on any diff.
 	# The weave above proves the subsets compose; this proves they are still the
 	# routes. Only the second one catches a route added without regenerating.
-	$(MAKE) -f mk/fleet.mk surface-check
+	$(MAKE) -f mk/fleet.mk check
 
 # The inner loop. Everything `test` runs EXCEPT the drift gate, which rebuilds one
 # binary per app and dominates the wall clock.
@@ -292,7 +292,7 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only — CI runs `test`.
 	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
 	@echo ">>            a route added without regenerating will pass here and fail CI."
-	@echo ">>            the real gate:  make -f mk/fleet.mk surface-check"
+	@echo ">>            the real gate:  make -f mk/fleet.mk check"
 	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
 	done
@@ -316,7 +316,7 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 # openapi.yaml is a golden file: written here, and verified two different ways —
 # and the difference between them is the whole lesson.
 #
-# The WEAVE (openapi-weave, run by `make test`) proves the subsets COMPOSE: no two
+# The WEAVE (weave, run by `make test`) proves the subsets COMPOSE: no two
 # apps claiming one path, no two claiming one schema name. It compares the subsets
 # to the golden they weave into. Both are derived artifacts, and nothing in that
 # comparison forces either back to the routes — so they agree with each other
@@ -326,16 +326,10 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 # same stale subset, `make test` stayed green, and the entire ingress API was
 # missing from the spec every SDK is generated from.
 #
-# The DRIFT GATE (surface-check) is the one that catches that: it REGENERATES
+# The DRIFT GATE (check) is the one that catches that: it REGENERATES
 # from source and fails on any diff. It is the expensive half — one binary per
 # app — and it is in `make test` anyway, because the cheap half is exactly the
 # check that passed while the published document was missing an entire API.
-describe: ## Regenerate every app's projections, then weave them into openapi.yaml.
-	$(GO) generate -run zipdoc ./...
-	$(MAKE) -f mk/fleet.mk describe-apps
-	$(MAKE) -f mk/fleet.mk openapi-weave OUT=openapi.yaml
-	@echo ">> openapi.yaml — $$(grep -c '^  /' openapi.yaml) paths. The MCP tool list is NOT an artifact: POST /v1/mcp asks every subsystem."
-
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
 	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "sqlite_purego $(TEST_TAGS)" ./...
 

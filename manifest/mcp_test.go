@@ -48,7 +48,7 @@ func TestNoAppClaimsTheDoor(t *testing.T) {
 //
 // This is the structural reason a fourth registry cannot grow back. A hand-rolled
 // JSON-RPC door can only exist as a route; every route an app serves is
-// regenerated into its own subset by the drift gate (mk/fleet.mk surface-check);
+// regenerated into its own subset by the drift gate (mk/fleet.mk check);
 // and the one true door is the host's own route, which is in no subset at all. So
 // the next hand-rolled envelope turns this red and the message names the door it
 // should have used instead.
