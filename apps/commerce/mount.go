@@ -724,6 +724,71 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		commercebilling.DeleteSpendAlert,
 	)
 
+	// THE CUSTOMER'S OWN LEDGER — the four reads billing.hanzo.ai's Transactions,
+	// Credits, Team and Settings tabs call, and which NOTHING in this binary served.
+	//
+	// commerce declares them on its api.Route() `user` group (api/billing/handlers.go),
+	// but that route table is never compiled here: the co-resident embed registers on
+	// the HOST's router, so a commerce route reaches production only if this file names
+	// it. The library had the handlers all along — so the symptom read as a stale image
+	// and was not one. Every unnamed route falls through to the account bridge's
+	// /v1/billing/* wildcard, whose allowlist does not include these four, so all four
+	// answered a bare 404 and four tabs of the billing app rendered empty forever.
+	//
+	// THE CHAIN IS GetTier's, and each link earns its place on a MONEY READ:
+	//   - IAMTokenRequired resolves the org from the gateway-validated X-User-Id +
+	//     X-Org-Id into Locals("organization") — the namespace every handler reads.
+	//     It FALLS THROUGH when there is no validated principal rather than refusing.
+	//   - PinBillingSubject is therefore both the gate and the IDOR control. It
+	//     fail-closes that fall-through with 401 "sign in to view billing" (401, not
+	//     403 — a browser re-authenticates on 401 and merely reports 403), and it
+	//     OVERWRITES every billing subject key {user,userId,customerId} with the
+	//     caller's own account.Payer subject. That is load-bearing here and not
+	//     decoration: ListTransactions filters on ?user and GetCreditBalance on
+	//     ?userId, both unpinned client values — an unpinned read returns every
+	//     subject's rows in the org namespace. Because the pin SETS the key rather
+	//     than merely validating it, the handlers' "required parameter" 400 can never
+	//     fire for a real caller, and the subject is exactly the one account.Payer
+	//     debits, so a read can never disagree with the wallet it describes.
+	//   - TokenRequired (no masks) runs AFTER the pin so the trusted S2S reader still
+	//     resolves an org — IAMTokenRequired admits only IAM principals and would
+	//     leave GetOrganization unset for a service token, which panics on a nil
+	//     Locals assertion. With no masks it passes any authenticated principal, so
+	//     the browser path is unchanged.
+	//
+	// accounts/:id/members carries no subject key and guards itself (:id must equal
+	// the resolved org, else 403), but it takes the same chain: one chain for the
+	// family, and the pin is what turns an anonymous call into 401 instead of a panic.
+	// None is typed yet — module work, per the module-handler note.
+	app.Get("/v1/billing/transactions",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercemid.TokenRequired(),
+		commercebilling.ListTransactions,
+	)
+	app.Get("/v1/billing/credit-balance",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercemid.TokenRequired(),
+		commercebilling.GetCreditBalance,
+	)
+	app.Get("/v1/billing/accounts",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercemid.TokenRequired(),
+		commercebilling.ListBillingAccounts,
+	)
+	app.Get("/v1/billing/accounts/:id/members",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercemid.TokenRequired(),
+		commercebilling.ListAccountMembers,
+	)
+
 	// POST /v1/billing/topup/token — the INLINE Square card top-up (the console's
 	// "Billing → Credits → add credits": the Square Web Payments SDK tokenizes the card
 	// IN THE BROWSER → a single-use nonce → this endpoint charges it and credits the
