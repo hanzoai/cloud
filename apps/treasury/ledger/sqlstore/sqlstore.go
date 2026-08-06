@@ -329,7 +329,7 @@ func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.JournalEntry, 
 		return nil, err
 	}
 	for i := range out {
-		ps, err := s.postingsOf(ctx, out[i].ID)
+		ps, err := postingsOf(ctx, s.db, out[i].ID)
 		if err != nil {
 			return nil, err
 		}
@@ -366,8 +366,16 @@ func (s *Store) SumByKindSince(ctx context.Context, kind string, since int64) (m
 	return sum, rows.Err()
 }
 
-func (s *Store) postingsOf(ctx context.Context, entryID string) ([]ledger.Posting, error) {
-	rows, err := s.db.QueryContext(ctx,
+// querier is the one read a *sql.DB and a *sql.Tx both answer, so the postings of an
+// entry are fetched by ONE query whether the caller is the journal listing (on the
+// connection) or the idempotency lookup (inside its own transaction, where a row the
+// same transaction just wrote must be visible).
+type querier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func postingsOf(ctx context.Context, q querier, entryID string) ([]ledger.Posting, error) {
+	rows, err := q.QueryContext(ctx,
 		`SELECT account, amount FROM treasury_postings WHERE entry_id=? ORDER BY id`, entryID)
 	if err != nil {
 		return nil, fmt.Errorf("list postings: %w", err)
@@ -453,6 +461,15 @@ func (t *txAdapter) EntryByRef(kind, program, ref string) (ledger.JournalEntry, 
 	}
 	if e.Amount, err = money.ParseInt(amt); err != nil {
 		return ledger.JournalEntry{}, false, fmt.Errorf("parse entry amount: %w", err)
+	}
+	// WITH ITS LEGS, because (kind, program, ref) does not say WHOSE money it was. The
+	// entry row carries the amount and nothing about the accounts, so a caller checking
+	// that a ref it is about to reuse belongs to the same posting it is making has only
+	// half the fact — and half was enough to hand one payer another payer's entry. The
+	// legs are where the subject lives, so the idempotency lookup returns the whole entry
+	// the way [Store.Entries] does, rather than a header a caller must complete.
+	if e.Postings, err = postingsOf(t.ctx, t.tx, e.ID); err != nil {
+		return ledger.JournalEntry{}, false, err
 	}
 	return e, true, nil
 }
