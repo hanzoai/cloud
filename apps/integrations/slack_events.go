@@ -32,7 +32,7 @@ import (
 //
 // ONE Slack-SPECIFIC branch stays, deliberately NOT folded into the chat bridge: a
 // `code:` prefix routes to the durable CODING agent (slack_coding.go) — its own pool
-// (codingLim) and detached run. The coding agent is a distinct flow from a chat turn.
+// and dispatch to the engine. The coding agent is a distinct flow from a chat turn.
 //
 // ISOLATION BAR: a workspace's events reach ONLY the org that connected that Slack
 // team. The org comes ONLY from OrgForExternalID("slack", team_id) — never a payload
@@ -60,14 +60,17 @@ var (
 )
 
 // slackBridgeReady lazily initializes the Slack adapter's OWN process state — the
-// coding pool (codingLim; the coding agent is a DISTINCT flow) and the single-use
-// link-state seen-set — plus the shared bridge state (bridgeReady: the bounded chat
-// pool + link seen-set). The durable dedupe table is created in the store's migrate()
-// at Mount. Cheap + idempotent; every Slack handler calls it first.
+// single-use link-state seen-set — plus the shared bridge state (bridgeReady: the
+// bounded chat pool + link seen-set). The durable dedupe table is created in the
+// store's migrate() at Mount. Cheap + idempotent; every Slack handler calls it first.
+//
+// It no longer sizes a coding pool. Admission for a coding run is the ENGINE's,
+// stated once where the run actually consumes a sandbox; a second pool here would
+// have been a second policy that the app door did not share and that could
+// disagree with the real one about what "full" means.
 func slackBridgeReady(s *cloud.Service[state]) {
 	bridgeReady()
 	slackBridgeOnce.Do(func() {
-		codingLim = newOrgLimiter(codingConcurrency(), codingOrgConcurrency())
 		slackUsedStates = newSeenSet(time.Duration(slackLinkTTLSec) * time.Second)
 	})
 }
@@ -164,9 +167,9 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 			s.Log.Warn("slack: dedupe gc", "err", gerr)
 		}
 		route := d
-		// CODING is a DISTINCT flow (its own pool + detached run); everything else is a
-		// chat turn on the shared bridge. Either way the pool slot is held only for the
-		// short synchronous hand-off (the coding run detaches under codingLim).
+		// CODING is a DISTINCT flow — it is handed to the coding engine rather than
+		// answered by the chat brain — but the hand-off is short and synchronous, so
+		// it rides the same bounded spawn every other Slack turn does.
 		if codingText, isCoding := codingIntent(route.Text); isCoding {
 			bridgeSpawn(s, org, func() { slackCodingEvent(s, org, route, codingText) })
 			return c.NoContent(http.StatusOK)
@@ -267,8 +270,9 @@ func slackReplier(s *cloud.Service[state], org, channel, threadTS, user string) 
 
 // slackCodingEvent runs the @mention/DM CODING path for a PRE-RESOLVED org: it
 // fetches THIS org's bot token (the reply sink) and hands off to slack_coding.go,
-// which owns the parse, the link check, its own bounded pool (codingLim), and the
-// detached run. Coding is deliberately NOT folded into the chat bridge.
+// which owns the parse, the link check, and the dispatch to the engine. Coding is
+// deliberately NOT folded into the chat brain: it is a different act with a
+// different budget, and it answers with a run handle rather than a sentence.
 func slackCodingEvent(s *cloud.Service[state], org string, d slackRoute, codingText string) {
 	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
 	defer cancel()
@@ -479,28 +483,57 @@ func slackEventKey(raw []byte) string {
 // map[string]any so a caller can pass a Block Kit `blocks` array alongside the
 // string channel/text — the ONE chat.* HTTP path for every Slack post in cloud.
 func slackChatPost(ctx context.Context, botToken, method string, fields map[string]any) error {
+	_, err := slackChatPostTS(ctx, botToken, method, fields)
+	return err
+}
+
+// slackChatPostTS is that same one path, returning the message timestamp Slack
+// answers with. Every chat.* call already gets a `ts` back; it was simply being
+// dropped, which is what made a posted message unaddressable and an edit
+// impossible. Callers that do not need it use slackChatPost above.
+func slackChatPostTS(ctx context.Context, botToken, method string, fields map[string]any) (string, error) {
 	payload, _ := json.Marshal(fields)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackWebAPIBase+method, strings.NewReader(string(payload)))
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+botToken)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	resp, err := slackHTTP.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, slackMaxBody))
 	var data struct {
 		OK    bool   `json:"ok"`
 		Error string `json:"error"`
+		TS    string `json:"ts"`
 	}
 	_ = json.Unmarshal(body, &data)
 	if !data.OK {
-		return fmt.Errorf("slack %s failed: %s", strings.TrimPrefix(method, "/"), nonEmpty(data.Error, "unknown"))
+		return "", fmt.Errorf("slack %s failed: %s", strings.TrimPrefix(method, "/"), nonEmpty(data.Error, "unknown"))
 	}
-	return nil
+	return data.TS, nil
+}
+
+// slackPostThreadTS posts and reports the new message's id, so a long run can
+// come back and rewrite it.
+func slackPostThreadTS(ctx context.Context, botToken, channel, threadTS, text string) (string, error) {
+	fields := map[string]any{"channel": channel, "text": text}
+	if threadTS != "" {
+		fields["thread_ts"] = threadTS
+	}
+	return slackChatPostTS(ctx, botToken, "/chat.postMessage", fields)
+}
+
+// slackChatUpdate rewrites an already-posted message in place — Slack's own
+// answer to "there is no stream": one message in the thread, edited as the run
+// moves, instead of a dozen.
+func slackChatUpdate(ctx context.Context, botToken, channel, ts, text string) (string, error) {
+	return slackChatPostTS(ctx, botToken, "/chat.update", map[string]any{
+		"channel": channel, "ts": ts, "text": text,
+	})
 }
 
 // slackPostThread posts to a channel, threaded under threadTS when non-empty.

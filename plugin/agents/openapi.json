@@ -13,6 +13,9 @@
   "tags": [
     {
       "name": "agents"
+    },
+    {
+      "name": "coding"
     }
   ],
   "paths": {
@@ -1090,10 +1093,96 @@
           }
         }
       }
+    },
+    "/v1/coding": {
+      "post": {
+        "operationId": "post_v1_coding",
+        "summary": "Start one autonomous coding run against a repo in the caller's org",
+        "tags": [
+          "coding"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodingStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodingStarted"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "CodingStartIn": {
+        "properties": {
+          "agentRef": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "replyChannel": {
+            "type": "string"
+          },
+          "replyThread": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "timeoutSeconds": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CodingStarted": {
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "routed": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "GPU": {
         "properties": {
           "memory": {

@@ -22,8 +22,23 @@ package coding
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 )
+
+// RepoRE is the repo-name rule every door validates against, mirroring the git
+// subsystem's own name check. It is here and exported because a door that
+// invented its own rule would eventually accept a token carrying a path
+// separator, and a repo name that can carry a path can address another org's
+// namespace.
+var RepoRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// BranchFor is the ONE branch a run is permitted to write, derived from the
+// session that owns it. It is a pure function of the session id — not a name the
+// caller supplies and not a name the model chooses — which is what lets the
+// forge's ref policy state the rule structurally: a coding run writes
+// refs/heads/agent/<something>, and nothing else, ever.
+func BranchFor(sessionID string) string { return "agent/" + shortID(sessionID) }
 
 // Event kinds mirrored into the agent session. These are the agents session
 // vocabulary (a stable wire contract): a phase is a tool-call, a free line is a
@@ -129,6 +144,12 @@ type Req struct {
 	CredToken      string
 	TimeoutSeconds int
 	TargetID       string // when set, route to this registered machine instead of the sandbox
+	// SessionID adopts an ALREADY-OPEN session instead of opening one. The door
+	// (Start) opens it so it can answer with a real handle the moment the run is
+	// admitted, rather than an empty promise the caller cannot watch. Empty keeps
+	// the original behaviour — Run opens its own — which is what the unit tests
+	// exercise and what a direct Dispatcher caller still gets.
+	SessionID string
 }
 
 // RoutedRun is the NON-SECRET spec coding hands the Route seam to enqueue on the
@@ -204,6 +225,20 @@ type Dispatcher struct {
 	// target (agents.TargetDispatchable): the target exists in this org, is
 	// online, and has a live runner. Nil disables routing.
 	TargetGate func(ctx context.Context, org, targetID string) error
+	// Watch observes every event the run mirrors into its session — the SAME
+	// events, at the same moment, from the one place a run narrates itself.
+	//
+	// It exists because a run is watched from more than one place and must not
+	// grow a second narration to serve each. The session stream is the primary
+	// feed; a chat thread is a second reader of the same story. Adding a hook
+	// here rather than a Slack call inside the orchestration is what keeps
+	// coding.go ignorant of chat: it emits events, and who listens is a
+	// composition decision made where the run is started.
+	//
+	// Nil is the ordinary case and costs nothing. It is best-effort by
+	// construction — it runs beside a mirror that is itself best-effort, and a
+	// watcher that fails must never fail the run whose work already happened.
+	Watch func(ctx context.Context, kind string, payload []byte)
 }
 
 // Run executes one coding job end to end and returns its Result. It never
@@ -256,14 +291,19 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	}
 	actor := strings.TrimSpace(req.UserID)
 
-	// 1. Register the live session (the durable record + live stream root).
-	sessionID, err := d.Sessions.Open(ctx, org, actor, agentRef, codingTitle(repo, prompt))
-	if err != nil {
-		res.Error = "could not start a session: " + err.Error()
-		return res
+	// 1. Register the live session (the durable record + live stream root), or
+	// adopt the one the door already opened to answer its caller with.
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		var err error
+		sessionID, err = d.Sessions.Open(ctx, org, actor, agentRef, codingTitle(repo, prompt))
+		if err != nil {
+			res.Error = "could not start a session: " + err.Error()
+			return res
+		}
 	}
 	res.SessionID = sessionID
-	branch := "agent/" + shortID(sessionID)
+	branch := BranchFor(sessionID)
 	res.Branch = branch
 
 	// Terminal bookkeeping (final status mirror, session close, PR row) runs on a
@@ -474,13 +514,17 @@ func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt strin
 	}
 	actor := strings.TrimSpace(req.UserID)
 
-	sessionID, err := d.Sessions.OpenOn(ctx, org, actor, agentRef, codingTitle(repo, prompt), target)
-	if err != nil {
-		res.Error = "could not start a session: " + err.Error()
-		return res
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		var err error
+		sessionID, err = d.Sessions.OpenOn(ctx, org, actor, agentRef, codingTitle(repo, prompt), target)
+		if err != nil {
+			res.Error = "could not start a session: " + err.Error()
+			return res
+		}
 	}
 	res.SessionID = sessionID
-	branch := "agent/" + shortID(sessionID)
+	branch := BranchFor(sessionID)
 	res.Branch = branch
 
 	d.mirror(ctx, org, sessionID, actor, kindStatus, map[string]any{
@@ -529,6 +573,9 @@ func (d Dispatcher) mirror(ctx context.Context, org, sessionID, actor, kind stri
 	}
 	if err := d.Sessions.Log(ctx, org, sessionID, kind, actor, b); err != nil {
 		d.logf("coding: session event mirror failed", "org", org, "session", sessionID, "err", err)
+	}
+	if d.Watch != nil {
+		d.Watch(ctx, kind, b)
 	}
 }
 

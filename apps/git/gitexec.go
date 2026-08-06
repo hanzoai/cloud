@@ -383,6 +383,27 @@ func branchTips(ctx context.Context, bareDir string) map[string]string {
 	return tips
 }
 
+// defaultBranchOf reads the repo's symbolic HEAD as a short branch name. It is
+// the ref-policy's one input beyond the push itself, kept beside branchTips
+// because it is the same thing: a small read off our own bare storage.
+//
+// An unreadable HEAD answers "" rather than an error, and the policy treats ""
+// as "no branch is the default". That is the safe direction: it withholds one
+// protection rather than refusing every push to a repo whose HEAD we could not
+// read.
+func defaultBranchOf(ctx context.Context, bareDir string) string {
+	cmd, err := gitCmd(ctx, nil, "--git-dir="+bareDir, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return ""
+	}
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out.String())
+}
+
 // cappedBuffer captures at most cap bytes of a subprocess's stderr — bounded so a
 // chatty or hostile child can never balloon memory, while still surfacing the
 // head of the error for logs. Write always reports a full write so git never
