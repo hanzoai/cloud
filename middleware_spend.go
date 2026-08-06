@@ -49,19 +49,18 @@ type PlanChecker interface {
 
 // SpendGate returns the balance-and-subscription gate serve.go mounts app-wide.
 //
-// DEFAULT OFF, AND THAT IS A SEQUENCING DECISION, NOT TIMIDITY. A brand-new signup's
-// wallet is $0 and there is NO automatic path that funds it: credit is an admin
-// decision, granted deliberately through the admin surface, and the automatic starter
-// grant that used to run as middleware here has been deleted outright rather than
-// left switched off (an automatic path that mints money is a liability even when
-// disabled, because disabled is one flag away from enabled).
+// DEFAULT OFF, AND THAT IS A SEQUENCING DECISION, NOT TIMIDITY. Enforcing costs
+// nothing a legitimate new customer cannot pay only because the FUNDING RUNG exists
+// below it (step 7, starter.go): a brand-new org's wallet is $0, and without a path
+// that funds it, flipping this switch would 402 every new account from its first
+// request. That rung is what makes the flip a pricing decision rather than a signup
+// that dead-ends; the flip itself stays an owner's deliberate act.
 //
-// So flipping this gate on 402s every new account from its first request. That is a
-// real product decision — an honest paywall — and NOT one this flag should make
-// silently as a side effect of the grant's removal. Until the paywall's add-credit
-// state is the one a new user actually lands in, enforcing here trades a revenue leak
-// for a signup that dead-ends. The gate therefore stays behind the kill switch,
-// proven by tests, and is flipped as its own deliberate change.
+// THE RUNG HAS NO SWITCH OF ITS OWN, and that is the point. It is reached from ONE
+// place — inside this ladder, past the enforcement check — so the credit and the
+// refusal it cures are the same flag. There is no state where money is being created
+// and the paywall is not enforcing, which is the whole objection to an automatic
+// grant that sits behind a flag of its own (see starter.go).
 //
 // Enforcement is read PER REQUEST from the platform switch an owner flips at
 // admin.hanzo.ai, so it turns on and off within one flag-cache TTL — no redeploy, no
@@ -81,9 +80,11 @@ type PlanChecker interface {
 //     masquerade, is strictly tighter than any purchasable tier and never 402s.
 //  5. subscribed OR funded ................... admit.
 //  6. UNRESOLVABLE standing .................. posture (paywall_strict), logged WARN.
-//  7. proven unpaid .......................... 402 with the actionable refusal.
+//  7. new, and the screen allows ............. admit, on the plan's included credit,
+//     granted once (starter.go). Asked only here, where the answer is otherwise 402.
+//  8. proven unpaid .......................... 402 with the actionable refusal.
 //
-// FAIL POSTURE — argued, not inherited. The refusal in (7) requires PROOF: both
+// FAIL POSTURE — argued, not inherited. The refusal in (8) requires PROOF: both
 // authorities answered and both said no. An authority we could not reach yields
 // Unknown, and by default an Unknown ADMITS. That is not "unpaid users get everything
 // free whenever commerce hiccups" — it is "we never call a customer delinquent on
@@ -149,6 +150,19 @@ func standing(c *zip.Ctx, method, path string, plans PlanChecker) string {
 	case s == Unknown:
 		return unresolved(c, "billing authority unreadable", path)
 	default:
+		// BEFORE REFUSING, FUND. This is the last point at which an account that has
+		// simply never been funded can still be told apart from one that will not pay,
+		// and the only point at which the difference matters — so the plan's included
+		// credit is provisioned HERE (starter.go) rather than on some earlier pass that
+		// would have to guess whether it was needed.
+		//
+		// It is asked after Unpaid is PROVEN, which is what lets it be cheap and what
+		// lets it be safe: both authorities have answered, so the rung inherits "no
+		// subscription and no credit" as a finding instead of re-reading it, and it can
+		// never fire for a caller who already has either.
+		if fund(c, w) {
+			return "" // funded on this request; the wallet the debit writes now holds money.
+		}
 		c.Log().Info("spend: no subscription and no credit", "org", w.Ledger, "account", w.Account, "path", path)
 		return ReasonUnpaid
 	}

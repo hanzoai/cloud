@@ -77,30 +77,58 @@ noschema = [t["name"] for t in tools if t.get("inputSchema") is None]
 if noschema:
     print("FAIL: tools listed with NO inputSchema at all:", ", ".join(noschema[:10])); sys.exit(1)
 print("every listed tool carries prose and a schema")
+
+# ONE TOOL PER SUBSYSTEM, the operation in an argument (fleet/grouped.go). The
+# flat surface was 1,189 tools in 977 KB and clients keep 128, so the count is a
+# correctness property here and not a nicety.
+stray = [t["name"] for t in tools if not t["name"].startswith("hanzo_")]
+if stray:
+    print("FAIL: the door published a flat operation:", ", ".join(stray[:10])); sys.exit(1)
+ops = [op for t in tools for op in t["inputSchema"].get("properties", {}).get("op", {}).get("enum", [])]
+print("%d tools carrying %d operations (a client keeps 128)" % (len(tools), len(ops)))
+if len(tools) >= 128:
+    print("FAIL: %d tools is back over the cap" % len(tools)); sys.exit(1)
+if not ops:
+    print("FAIL: the door published no operations at all"); sys.exit(1)
 PY
 
 echo
-echo "== one tool, with the doc comment its handler carries =="
+echo "== one operation, with the doc comment its handler carries =="
 # A READ by default: the point is to show the owner answering, not to mutate.
+# hanzo_describe is how a schema is fetched now — the enums carry names only.
 TOOL="${TOOL:-$(python3 -c '
 import json,sys
 tools=json.load(open(sys.argv[1]))["result"]["tools"]
-reads=[t["name"] for t in tools if t["name"].startswith("get_")]
-print((reads or [t["name"] for t in tools])[0])' "$CLOUD_DATA_DIR/list.json")}"
-python3 - "$CLOUD_DATA_DIR/list.json" "$TOOL" <<'PY'
-import json, sys
+ops=[op for t in tools for op in t["inputSchema"].get("properties",{}).get("op",{}).get("enum",[])]
+reads=[o for o in ops if o.startswith("get_")]
+print((reads or ops)[0])' "$CLOUD_DATA_DIR/list.json")}"
+GROUP="$(python3 -c '
+import json,sys
 for t in json.load(open(sys.argv[1]))["result"]["tools"]:
-    if t["name"] == sys.argv[2]:
-        print(json.dumps(t, indent=2)[:1600]); break
+    if sys.argv[2] in t["inputSchema"].get("properties",{}).get("op",{}).get("enum",[]):
+        print(t["name"]); break
 else:
-    print("FAIL: %s is not on the door" % sys.argv[2]); sys.exit(1)
+    sys.exit("FAIL: %s is in no subsystem enum" % sys.argv[2])' "$CLOUD_DATA_DIR/list.json" "$TOOL")"
+echo "$TOOL is served through $GROUP"
+rpc "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"hanzo_describe\",\"arguments\":{\"op\":\"$TOOL\"}}}" \
+  > "$CLOUD_DATA_DIR/describe.json"
+python3 - "$CLOUD_DATA_DIR/describe.json" "$TOOL" <<'PY'
+import json, sys
+res = json.load(open(sys.argv[1])).get("result") or {}
+text = "".join(c.get("text", "") for c in res.get("content", []))
+if not text:
+    print("FAIL: hanzo_describe returned nothing for %s: %s" % (sys.argv[2], json.dumps(res)[:400])); sys.exit(1)
+d = json.loads(text)
+if d.get("name") != sys.argv[2] or d.get("inputSchema") is None:
+    print("FAIL: hanzo_describe answered %s" % text[:400]); sys.exit(1)
+print(json.dumps(d, indent=2)[:1600])
 PY
 
 echo
-echo "== tools/call =="
+echo "== tools/call, through the subsystem tool =="
 BEFORE=$(children)
 ARGS="${ARGS:-{\}}"
-rpc "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"$TOOL\",\"arguments\":$ARGS}}" | tee "$CLOUD_DATA_DIR/call.json"; echo
+rpc "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"$GROUP\",\"arguments\":{\"op\":\"$TOOL\",\"input\":$ARGS}}}" | tee "$CLOUD_DATA_DIR/call.json"; echo
 AFTER=$(children)
 echo "children before=$BEFORE after=$AFTER  (a cold owner wakes exactly one)"
 [ $((AFTER-BEFORE)) -le 1 ] || { echo "FAIL: tools/call woke $((AFTER-BEFORE)) children; it must wake at most ONE"; exit 1; }
