@@ -36,11 +36,11 @@ package cloud
 // ONE OPERATION, ONE ANSWER. The edge gates stay, because an UNTYPED handler is not
 // an operation: it has no registry entry, so it is invisible to MCP, to the plane
 // and to the CLI, and HTTP is the only way to reach it. Untyped routes are the
-// edge's, typed ops are this seam's, and the two sets are disjoint by construction.
-// The seam between them is not a third rule to keep true — Toll reads PriceOf on
-// the REQUEST's own path, and a path that names a declared surface is precisely one
-// the edge has already answered for. An envelope names no surface, so the edge
-// stood down and this seam answers. Nothing marks the request; nothing has to.
+// edge's, typed ops are this seam's, and the only request both can see is a typed op
+// reached over REST. That one is settled by BillingGate SAYING it took the request
+// (middleware_billing.go's answer/answered) rather than by this seam guessing that
+// it must have — a guess reads true and stays true right up until somebody unmounts
+// the edge gate, at which point both seams stand down and nothing charges anything.
 //
 // WHAT IS AVAILABLE ON EVERY PATH, AND WHAT IS NOT. The OPERATION is: zip.Op is
 // the same value four times. The PAYER is not, and pretending otherwise would be
@@ -95,13 +95,15 @@ func Toll(m *metering.Client, commerce CommerceClient) zip.Authorizer {
 	plans, _ := commerce.(PlanChecker)
 	charging := billingEnabled(m)
 	return func(ctx context.Context, op zip.Op, _ any) error {
-		c, live := Request(ctx)
-		if live && PriceOf(c.Path()).Declared() {
-			// The request's own path names a declared surface, so the edge gates
-			// asked these two questions about these two values before routing.
-			// One operation, one answer.
+		if answered(ctx) {
+			// BillingGate said it owns this request's money — it is upstream of
+			// here, it read the same rule off the same two values, and over plain
+			// REST those values ARE this operation. One operation, one answer. It
+			// claims nothing for a request it waved through, and nothing at all for
+			// an envelope, which is how those reach the lines below.
 			return nil
 		}
+		c, live := Request(ctx)
 
 		// ── standing ────────────────────────────────────────────────────────────
 		// The whole SpendGate ladder, from the one function that holds it. Dark by
