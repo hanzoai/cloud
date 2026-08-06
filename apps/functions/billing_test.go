@@ -3,8 +3,8 @@ package functions
 // Integration tests proving the per-org credit-drawdown gate is wired into the
 // REAL invoke path via the ONE shared cloud.ResourceMeter: an unfunded org is
 // refused 402 before any sandbox compute runs, a funded org runs and its OWN org
-// ledger is debited (product "functions", unit "invoke"), a sandbox transport
-// unreachable sandbox bills nothing (no billable compute), a free fee is un-gated, and an
+// ledger is debited (product "functions", unit "invoke"), an unreachable sandbox
+// bills nothing (no billable compute), a free fee is un-gated, and an
 // unconfigured commerce is a no-op. The metering client's DEFAULT org is "hanzo",
 // so every "billed acme" assertion also proves the debit targets the CALLER org,
 // never the default — multitenancy end-to-end through the handler.
@@ -13,49 +13,33 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strconv"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
-	planeops "github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/internal/planetest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// billServer is a minimal commerce double. The BALANCE read is still HTTP — that is
-// what the gate makes — and the usage DEBIT arrives on the internal plane, which is
-// where metering moved it ("the peer is a socket away; ask it").
+// billServer is a minimal commerce double: it returns a fixed balance and records
+// the X-Org-Id header + body of any usage debit (commerce reads X-Org-Id only).
 type billServer struct {
 	available int64
 
-	mu       sync.Mutex
-	usageOrg string
-	usageIn  *planeops.RecordIn
-	usages   int32
-}
-
-// record is the DEBIT as it actually arrives now: a typed plane op, not an HTTP
-// POST. The org is the caller's plane identity, which is the fact these tests care
-// about most — that the CALLER's org is debited and never the client's default.
-func (b *billServer) record(org string, in *planeops.RecordIn) {
-	atomic.AddInt32(&b.usages, 1)
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.usageOrg, b.usageIn = org, in
+	// The usage DEBIT crosses the internal plane, not HTTP — metering.Usage.Ref is
+	// `json:"-"` and could not survive a JSON body. The balance READ above is still
+	// HTTP. See internal/planetest.
+	peer *planetest.Commerce
 }
 
 func (b *billServer) start(t *testing.T) string {
 	t.Helper()
+	b.peer = planetest.Serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"available": b.available})
@@ -65,113 +49,20 @@ func (b *billServer) start(t *testing.T) string {
 	return srv.URL
 }
 
-func (b *billServer) debits() int32 { return atomic.LoadInt32(&b.usages) }
-func (b *billServer) lastDebit() (string, *planeops.RecordIn) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.usageOrg, b.usageIn
-}
+func (b *billServer) debits() int32               { return b.peer.Count() }
+func (b *billServer) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.Body() }
 
-// sandbox is a sandboxes PEER double, on the real plane: it answers the five ops
-// apps/sandbox publishes, so an invoke reaches it exactly the way it reaches the
-// real one — cloud.Ask resolves the app, zip dispatches the op.
+// sandbox is the shared sandboxes PEER (internal/planetest): the five ops
+// apps/sandbox publishes, on a real socket, with a map where the pod would be. An
+// invoke reaches it exactly the way it reaches the real one.
 //
-// It counts the RUNS, not the calls, which is the fact every test below turns on:
-// "did compute happen". A lease that is never run in is not compute, and the gate
-// tests are about compute never happening.
-type sandbox struct {
-	mu    sync.Mutex
-	calls int32
-	pods  map[string]bool
-	bill  *billServer
-}
-
-func (s *sandbox) serve(t *testing.T, bill *billServer) {
-	t.Helper()
-	s.bill = bill
-	dir, err := os.MkdirTemp("", "fnpeer")
-	if err != nil {
-		t.Fatalf("run dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", dir)
-	planeops.Unbind()
-	t.Cleanup(planeops.Unbind)
-	cloud.ResetPlane()
-	t.Cleanup(cloud.ResetPlane)
-	s.pods = map[string]bool{}
-
-	p := cloud.Plane()
-	zip.Post[planeops.LeaseIn, planeops.Leased](p, "/sandbox/lease",
-		func(ctx context.Context, in *planeops.LeaseIn) (*planeops.Leased, error) {
-			if cloud.Who(ctx).Org == "" {
-				return nil, zip.ErrForbidden("org required")
-			}
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			id := in.ID
-			if id == "" || !s.pods[id] {
-				id = fmt.Sprintf("m_%d", len(s.pods))
-				s.pods[id] = true
-			}
-			return &planeops.Leased{ID: id, Class: "exec", Status: "running", Workdir: "/mnt/data"}, nil
-		}, zip.WithOperationID(planeops.SandboxLease))
-	zip.Post[planeops.RunIn, planeops.Ran](p, "/sandbox/run",
-		func(ctx context.Context, in *planeops.RunIn) (*planeops.Ran, error) {
-			// Only the PROGRAM line is compute; the artifact sweep that follows it is
-			// bookkeeping and counting it would double every assertion below.
-			if len(in.Argv) >= 3 && strings.HasPrefix(in.Argv[2], ": > ") {
-				atomic.AddInt32(&s.calls, 1)
-				return &planeops.Ran{Stdout: "ok"}, nil
-			}
-			return &planeops.Ran{}, nil
-		}, zip.WithOperationID(planeops.SandboxRun))
-	zip.Post[planeops.WriteIn, planeops.Wrote](p, "/sandbox/write",
-		func(ctx context.Context, in *planeops.WriteIn) (*planeops.Wrote, error) {
-			return &planeops.Wrote{Path: "/mnt/data/" + in.Path, Bytes: len(in.Data)}, nil
-		}, zip.WithOperationID(planeops.SandboxWrite))
-	zip.Post[planeops.PathIn, planeops.Blob](p, "/sandbox/read",
-		func(ctx context.Context, in *planeops.PathIn) (*planeops.Blob, error) {
-			return &planeops.Blob{Path: "/mnt/data", Dir: true}, nil
-		}, zip.WithOperationID(planeops.SandboxRead))
-	zip.Post[planeops.EndIn, struct{}](p, "/sandbox/end",
-		func(ctx context.Context, in *planeops.EndIn) (*struct{}, error) {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			delete(s.pods, in.ID)
-			return &struct{}{}, nil
-		}, zip.WithOperationID(planeops.SandboxEnd))
-
-	// The DEBIT crosses the plane too. metering stopped POSTing to commerce's
-	// /v1/billing/usage — "the peer is a socket away; ask it" (apps/metering) — so an
-	// HTTP double alone can no longer observe a debit, and the billing assertions
-	// below were failing against one before this peer existed. The op answers here
-	// and reports to the same billServer, so `debits()` still counts what was written.
-	zip.Post[planeops.RecordIn, planeops.Recorded](p, "/finance/record",
-		func(ctx context.Context, in *planeops.RecordIn) (*planeops.Recorded, error) {
-			s.bill.record(cloud.Who(ctx).Org, in)
-			return &planeops.Recorded{}, nil
-		}, zip.WithOperationID(planeops.FinanceRecord))
-
-	for _, name := range []string{"sandboxes", "commerce"} {
-		stop, serr := cloud.ServePlane(name, luxlog.NewNoOpLogger())
-		if serr != nil {
-			t.Fatalf("serve %s plane: %v", name, serr)
-		}
-		t.Cleanup(func() { _ = stop() })
-	}
-}
-
-func (s *sandbox) ran() int32 { return atomic.LoadInt32(&s.calls) }
-
-// live reports the sandboxes this peer still holds. A function invoke must leave
-// NONE: its lease ends with the call, unlike a chat session's.
-func (s *sandbox) live() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.pods)
-}
+// It replaces an HTTP double that answered /v1/exec, which was correct while
+// apps/functions POSTed to CODE_EXEC_UPSTREAM. There is no such upstream — the
+// code-exec Service had zero endpoints for 33 days — so a function invoke now leases
+// a sandbox through apps/exec, and this is what it leases from.
+//
+// Ran() counts PROGRAMS, not calls, which is the fact every test below turns on:
+// "did compute happen". A lease nothing ran in is not compute.
 
 // newBilledService builds a functions service with a store, the sandbox-backed exec
 // client, and a metering client pointed at commerceURL (default org "hanzo"; empty ⇒
@@ -227,9 +118,8 @@ func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.R
 
 // Unfunded org → 402 insufficient_balance, sandbox NEVER called, nothing debited.
 func TestInvoke_RefusesUnfundedOrg(t *testing.T) {
-	sb := &sandbox{}
 	bs := &billServer{available: 0}
-	sb.serve(t, bs)
+	sb := planetest.ServeSandboxes(t)
 	s := newBilledService(t, bs.start(t))
 	seedFn(t, s, "acme", "resize")
 
@@ -238,8 +128,8 @@ func TestInvoke_RefusesUnfundedOrg(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 402", resp.StatusCode, body)
 	}
-	if sb.ran() != 0 {
-		t.Fatalf("sandbox ran %d times for an unfunded org, want 0 (gate must precede compute)", sb.ran())
+	if sb.Ran() != 0 {
+		t.Fatalf("sandbox ran %d times for an unfunded org, want 0 (gate must precede compute)", sb.Ran())
 	}
 	if bs.debits() != 0 {
 		t.Fatalf("debits = %d for a refused invoke, want 0", bs.debits())
@@ -249,9 +139,9 @@ func TestInvoke_RefusesUnfundedOrg(t *testing.T) {
 // Funded org → 200, sandbox runs, and the CALLER org (acme, not the client
 // default hanzo) is debited once with product "functions" / unit "invoke".
 func TestInvoke_AllowsAndDebitsCallerOrg(t *testing.T) {
-	sb := &sandbox{}
 	bs := &billServer{available: 100000}
-	sb.serve(t, bs)
+	sb := planetest.ServeSandboxes(t)
+	sb.Run = func(string, []string) (string, string, int, map[string][]byte) { return "ok", "", 0, nil }
 	s := newBilledService(t, bs.start(t))
 	seedFn(t, s, "acme", "resize")
 
@@ -260,41 +150,44 @@ func TestInvoke_AllowsAndDebitsCallerOrg(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 200", resp.StatusCode, body)
 	}
-	if sb.ran() != 1 {
-		t.Fatalf("sandbox ran %d times, want 1", sb.ran())
+	if sb.Ran() != 1 {
+		t.Fatalf("sandbox ran %d times, want 1", sb.Ran())
+	}
+	// The lease ENDS with the call. A chat session's sandbox outlives its run because
+	// the reply hands back an id the caller addresses next; a function invoke is over
+	// the moment it answers, so a pod left behind is fifteen idle minutes of a node.
+	if !waitFor(func() bool { return sb.Live() == 0 }) {
+		t.Fatalf("%d sandbox lease(s) survived a finished invoke, want 0", sb.Live())
 	}
 	if !waitFor(func() bool { return bs.debits() == 1 }) {
 		t.Fatalf("debits = %d, want 1 (a successful invoke must bill)", bs.debits())
 	}
-	org, in := bs.lastDebit()
+	org, body := bs.lastDebit()
 	if org != "acme" {
 		t.Fatalf("debited org %q, want caller %q (never the default 'hanzo')", org, "acme")
 	}
-	if in == nil {
-		t.Fatal("a debit was counted but nothing was recorded")
+	var u struct {
+		User     string `json:"user"`
+		Amount   int64  `json:"amount"`
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
 	}
-	if in.Subject != "acme" {
-		t.Fatalf("debit subject = %q, want caller org %q", in.Subject, "acme")
+	_ = json.Unmarshal(body, &u)
+	if u.User != "acme" {
+		t.Fatalf("debit user = %q, want caller org %q", u.User, "acme")
 	}
-	amt, err := in.Amount.Parse()
-	if err != nil {
-		t.Fatalf("debit amount %+v: %v", in.Amount, err)
+	if u.Amount != cloud.DefaultResourceFeeCents {
+		t.Fatalf("debit amount = %d, want default fee %d", u.Amount, cloud.DefaultResourceFeeCents)
 	}
-	// The plane carries the EXACT decimal, so the fee is read back in minor units
-	// rather than compared as a folded cent count.
-	if got := amt.MinorString(); got != strconv.FormatInt(cloud.DefaultResourceFeeCents, 10) {
-		t.Fatalf("debit amount = %s minor units, want default fee %d",
-			got, cloud.DefaultResourceFeeCents)
+	if u.Provider != "functions" {
+		t.Fatalf("debit provider = %q, want %q", u.Provider, "functions")
 	}
-	if in.Usage.Provider != "functions" {
-		t.Fatalf("debit provider = %q, want %q", in.Usage.Provider, "functions")
-	}
-	if in.Usage.Model != "invoke" {
-		t.Fatalf("debit model = %q, want %q", in.Usage.Model, "invoke")
+	if u.Model != "invoke" {
+		t.Fatalf("debit model = %q, want %q", u.Model, "invoke")
 	}
 }
 
-// A sandbox that cannot be reached is authorized but runs NO billable compute →
+// A sandbox that cannot be REACHED is authorized but runs NO billable compute →
 // nothing is debited (no free usage, and no charge for work that never happened).
 func TestInvoke_UnreachableSandboxNotBilled(t *testing.T) {
 	bs := &billServer{available: 100000}
@@ -318,9 +211,8 @@ func TestInvoke_UnreachableSandboxNotBilled(t *testing.T) {
 // debited.
 func TestInvoke_FreeFeeUngated(t *testing.T) {
 	t.Setenv("CLOUD_FUNCTION_FEE_CENTS", "0")
-	sb := &sandbox{}
 	bs := &billServer{available: 0}
-	sb.serve(t, bs)
+	sb := planetest.ServeSandboxes(t)
 	s := newBilledService(t, bs.start(t))
 	seedFn(t, s, "acme", "resize")
 
@@ -329,8 +221,8 @@ func TestInvoke_FreeFeeUngated(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 200 (free fee is un-gated)", resp.StatusCode, body)
 	}
-	if sb.ran() != 1 {
-		t.Fatalf("sandbox ran %d times, want 1", sb.ran())
+	if sb.Ran() != 1 {
+		t.Fatalf("sandbox ran %d times, want 1", sb.Ran())
 	}
 	time.Sleep(50 * time.Millisecond)
 	if bs.debits() != 0 {
@@ -346,8 +238,7 @@ func TestInvoke_FreeFeeUngated(t *testing.T) {
 // runs. See TestResourceMeter_UnconfiguredIsNoop, which pins the same rule at
 // the gate itself.
 func TestInvoke_UnreachableBillerRefusesAndRunsNothing(t *testing.T) {
-	sb := &sandbox{}
-	sb.serve(t, &billServer{})
+	sb := planetest.ServeSandboxes(t)
 	s := newBilledService(t, "") // empty commerce URL ⇒ !Enabled()
 	seedFn(t, s, "acme", "resize")
 
@@ -355,8 +246,8 @@ func TestInvoke_UnreachableBillerRefusesAndRunsNothing(t *testing.T) {
 	if resp.StatusCode == http.StatusOK {
 		t.Fatal("a priced invoke ran with no reachable biller — that is free work")
 	}
-	if sb.ran() != 0 {
-		t.Fatalf("sandbox ran %d times with no biller reachable, want 0", sb.ran())
+	if sb.Ran() != 0 {
+		t.Fatalf("sandbox ran %d times with no biller reachable, want 0", sb.Ran())
 	}
 }
 

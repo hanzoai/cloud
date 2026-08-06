@@ -694,7 +694,7 @@ require (
 	github.com/hanzoai/base v1.5.15
 	github.com/hanzoai/licensing v0.1.10
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.58
+	github.com/hanzoai/o11y v1.5.61
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.11
