@@ -138,25 +138,30 @@ func settling(t *testing.T) screen {
 	return stating(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"})
 }
 
-// payerWallet is the address the SPEND GATE will debit for the fixtures' caller —
+// wallet is the address the SPEND GATE will debit for an org and the fixtures' user —
 // principal.WalletOf's answer for those headers, spelled through the one rule
 // (account.Payer) rather than through a literal, so a change to the payer rule moves
-// this test with it instead of leaving it green against a stale key.
-func payerWallet() (org, subject string) {
-	return gateOrg, account.Payer(account.Credential{Owner: gateOrg, Name: gateUser}).Subject()
+// these tests with it instead of leaving them green against a stale key.
+func wallet(org string) string {
+	return account.Payer(account.Credential{Owner: org, Name: gateUser}).Subject()
 }
 
-// spendable reads the balance the AI gate reads: build.go's balanceReader is
-// fin.Balance(ctx, org, subject, currency, false) and apps/metering's fetchAvailable
-// is the same call, so this IS the gate's read and not a paraphrase of it.
-func spendable(t *testing.T, fin finance.Client, test bool) int64 {
+// held reads the balance the AI gate reads, for ONE org's own wallet: build.go's
+// balanceReader is fin.Balance(ctx, org, subject, currency, test) and apps/metering's
+// fetchAvailable is the same call, so this IS the gate's read and not a paraphrase of it.
+func held(t *testing.T, fin finance.Client, org string, test bool) int64 {
 	t.Helper()
-	org, subject := payerWallet()
-	bal, err := fin.Balance(context.Background(), org, subject, "usd", test)
+	bal, err := fin.Balance(context.Background(), org, wallet(org), "usd", test)
 	if err != nil {
-		t.Fatalf("read the spendable balance: %v", err)
+		t.Fatalf("read the wallet %s/%s: %v", org, wallet(org), err)
 	}
 	return bal.Cents()
+}
+
+// spendable is [held] for the org every door fixture in this file pays from.
+func spendable(t *testing.T, fin finance.Client, test bool) int64 {
+	t.Helper()
+	return held(t, fin, gateOrg, test)
 }
 
 // TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads is THE BUG, in one test.
@@ -194,7 +199,7 @@ func TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads(t *testing.T) {
 	// AND IT IS REALLY SPENDABLE: the edge meter's debit, at the same address, takes it
 	// back to zero. A balance that reads but cannot be spent is a different bug wearing
 	// this one's answer.
-	org, subject := payerWallet()
+	org, subject := gateOrg, wallet(gateOrg)
 	if err := fin.RecordUsage(context.Background(), types.UsageInput{
 		Org: org, Subject: subject, Amount: money.FromCents(gateCents),
 		Currency: "usd", Model: "zen", RequestID: "spend-1",
@@ -402,6 +407,47 @@ func TestSettle_ASandboxChargeCreditsTheSandboxBooks(t *testing.T) {
 // its X-Org-Id is whichever org it is acting in.
 const adminOrg = "admin"
 
+// callers are the three identities a credit door can see, and the TWO organisations each
+// one names. Two tests range over this one table because they are two halves of a single
+// property — where the receipt is READ and where the credit may be MINTED — and a caller
+// list that drifted between them would leave one half asserted on a population the other
+// half never sees.
+//
+// `charged` and `ledger` are the same string for the first two and different for the
+// third, which is the whole point: a masquerading SuperAdmin is the ONLY caller that
+// separates them, so it is the only row either property can be wrong on.
+var callers = []struct {
+	name string
+	hdr  map[string]string
+	// charged is the namespace the money core WROTE the receipt in, and therefore the one
+	// the read must be keyed on.
+	charged string
+	// ledger is the org whose spendable balance the credit belongs to.
+	ledger string
+}{
+	{
+		"an ordinary member charges and is credited in the one org it has",
+		map[string]string{"X-Org-Id": gateOrg, "X-User-Id": gateUser},
+		gateOrg, gateOrg,
+	},
+	{
+		"a SuperAdmin at home is that same one org",
+		map[string]string{
+			"X-Org-Id": adminOrg, "X-User-Id": gateUser,
+			"X-User-Owner": adminOrg, "X-User-IsAdmin": "true",
+		},
+		adminOrg, adminOrg,
+	},
+	{
+		"a SuperAdmin masquerading charges where it is ACTING and pays from where it lives",
+		map[string]string{
+			"X-Org-Id": gateOrg, "X-User-Id": gateUser,
+			"X-User-Owner": adminOrg, "X-User-IsAdmin": "true",
+		},
+		gateOrg, adminOrg,
+	},
+}
+
 // TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn — TWO ORGS, and the caller
 // that separates them.
 //
@@ -418,60 +464,32 @@ const adminOrg = "admin"
 // permanently: the retry replays the same receipt into the same absent namespace, while a
 // fresh idempotency key charges the card again.
 //
-// It asserts the ARGUMENTS of the receipt read, because the amount alone cannot see this:
-// [stating] answers a settlement whatever it is asked, so a door reading the right figure
-// out of the wrong namespace looks identical to a correct one. It also asserts the money,
-// because the address is the half that must NOT move.
+// It asserts the ARGUMENTS of the receipt read and nothing else, because the amount alone
+// cannot see this: [stating] answers a settlement whatever it is asked, so a door reading
+// the right figure out of the wrong namespace looks identical to a correct one. Where the
+// money may then GO is the sibling property, and
+// [TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer] holds it.
+//
+// The masquerade row is asserted even though its credit is REFUSED, and that is the whole
+// reason the guard sits after this read rather than before it: the two names are one
+// string for every other caller, so a refusal taken earlier would leave nothing in the
+// suite able to tell p.org from p.ledger, and the read this commit fixed could quietly
+// go back to the payer's namespace under a green bar.
 //
 // Mutation proof: read the receipt from p.ledger (the shipped defect) and the masquerade
 // row fails on the captured org — "admin", where the charge was never written — while
-// both other rows still pass. Deposit to p.org instead of p.ledger and the masquerade row
-// fails on the balance: the credit lands in the customer's books, which is a SuperAdmin
-// funding the org it is inspecting.
+// both other rows still pass.
 func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		hdr  map[string]string
-		// charged is the namespace the money core WROTE the receipt in, and therefore the
-		// one the read must be keyed on.
-		charged string
-		// ledger is the org whose spendable balance the credit must land in.
-		ledger string
-	}{
-		{
-			"an ordinary member charges and is credited in the one org it has",
-			map[string]string{"X-Org-Id": gateOrg, "X-User-Id": gateUser},
-			gateOrg, gateOrg,
-		},
-		{
-			"a SuperAdmin at home is that same one org",
-			map[string]string{
-				"X-Org-Id": adminOrg, "X-User-Id": gateUser,
-				"X-User-Owner": adminOrg, "X-User-IsAdmin": "true",
-			},
-			adminOrg, adminOrg,
-		},
-		{
-			"a SuperAdmin masquerading charges where it is ACTING and is credited where it PAYS",
-			map[string]string{
-				"X-Org-Id": gateOrg, "X-User-Id": gateUser,
-				"X-User-Owner": adminOrg, "X-User-IsAdmin": "true",
-			},
-			gateOrg, adminOrg,
-		},
-	} {
+	for _, tc := range callers {
 		t.Run(tc.name, func(t *testing.T) {
-			fin := funded(t)
+			funded(t)
 			var seen asked
 			app := creditDoorBody(t,
 				capturing(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}, &seen),
 				`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
 
-			if code, body := topupAs(t, app, tc.hdr); code != http.StatusOK {
-				t.Fatalf("the top-up answered %d %s, want 200", code, body)
-			}
+			topupAs(t, app, tc.hdr)
 
-			// THE ADDRESS THE RECEIPT WAS READ AT.
 			if seen.org != tc.charged {
 				t.Errorf("the settled receipt was looked up in %q, want %q — the read is keyed on the "+
 					"wrong organisation, so in production commerce answers not-found for a row it "+
@@ -480,29 +498,73 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 			if seen.id != settledReceipt {
 				t.Errorf("the receipt read named %q, want the settlement's own receipt %q", seen.id, settledReceipt)
 			}
+		})
+	}
+}
 
-			// AND THE ADDRESS THE MONEY LANDED AT, which is the other org and must not move.
-			subject := account.Payer(account.Credential{Owner: tc.ledger, Name: gateUser}).Subject()
-			paid, err := fin.Balance(context.Background(), tc.ledger, subject, "usd", false)
-			if err != nil {
-				t.Fatalf("read the payer's wallet: %v", err)
-			}
-			if paid.Cents() != gateCents {
-				t.Fatalf("the wallet %s/%s holds %d cents, want %d — the credit did not land at the "+
-					"address the spend gate reads", tc.ledger, subject, paid.Cents(), gateCents)
-			}
-			if tc.charged == tc.ledger {
+// TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer — the money half, and
+// the regression the split introduced.
+//
+// Naming the two organisations separately is right for every READ and wrong for the MINT.
+// A card top-up is charged on the EFFECTIVE org's merchant account and its receipt is
+// written in that org's books, while the credit is addressed to principal.WalletOf — and
+// for a masquerading SuperAdmin those are two different organisations. The deposit went to
+// the second of them: the customer's card cleared, spendable credit appeared in the
+// platform admin's own wallet, and the door answered 200. That is money moved between two
+// customers' books on nothing but a masqueraded session.
+//
+// NEITHER ADDRESS IS RIGHT, so the mint refuses rather than choosing. Crediting the ledger
+// is the bug above; crediting the charged org has an admin's card top up the customer it is
+// only inspecting, which is a different surprise and equally unasked-for. The refusal is
+// LOUD — the door's own 500 and a RECONCILE line naming both organisations — because the
+// alternative to a loud refusal here is a silent wrong credit, and a SuperAdmin who means
+// to fund a customer has the admin grant, a door whose whole subject is whose money it is.
+//
+// The two org == ledger callers must be untouched by it, and they are asserted here rather
+// than assumed: the guard can only fire where the names differ, so a mistake in it shows up
+// as an ordinary customer's top-up refused.
+//
+// Mutation proof: delete the p.org != p.ledger guard from [screen.settle] and the
+// masquerade row answers 200 with $42 of a customer's money in the admin's wallet — the
+// shipped regression, exactly, and ONLY that row moves, which is the no-regression half.
+// Delete the guard AND point the deposit at p.org and the row still fails, now on acme's
+// balance: the other address is not a fix either.
+func TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer(t *testing.T) {
+	for _, tc := range callers {
+		t.Run(tc.name, func(t *testing.T) {
+			fin := funded(t)
+			app := creditDoorBody(t,
+				stating(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}),
+				`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
+
+			code, body := topupAs(t, app, tc.hdr)
+
+			if tc.charged != tc.ledger {
+				if code != http.StatusInternalServerError {
+					t.Fatalf("a top-up charged in %q against a wallet in %q answered %d %s, want 500 — "+
+						"a mint whose charge and credit are on different books cannot be silent",
+						tc.charged, tc.ledger, code, body)
+				}
+				// AND NO WALLET MOVED, in EITHER organisation. A refusal that still credited
+				// somebody would be the defect wearing a 500.
+				if got := held(t, fin, tc.ledger, false); got != 0 {
+					t.Errorf("the SuperAdmin's own wallet holds %d cents, want 0 — a customer's card "+
+						"funded a platform admin's balance", got)
+				}
+				if got := held(t, fin, tc.charged, false); got != 0 {
+					t.Errorf("the org being acted in holds %d cents, want 0 — a masqueraded session "+
+						"topped up the customer it was inspecting", got)
+				}
 				return
 			}
-			// A SuperAdmin funds ITS OWN books, never the books of the org it is inspecting.
-			other := account.Payer(account.Credential{Owner: tc.charged, Name: gateUser}).Subject()
-			stray, err := fin.Balance(context.Background(), tc.charged, other, "usd", false)
-			if err != nil {
-				t.Fatalf("read the acted-in org's wallet: %v", err)
+
+			// org == ledger: the ordinary path, and it must be exactly as it was.
+			if code != http.StatusOK {
+				t.Fatalf("a top-up whose charge and credit are the one org answered %d %s, want 200 — "+
+					"the mint guard is refusing a caller that pays for itself", code, body)
 			}
-			if stray.Cents() != 0 {
-				t.Errorf("the org being acted in holds %d cents, want 0 — a SuperAdmin's card just "+
-					"funded the customer it was inspecting", stray.Cents())
+			if got := held(t, fin, tc.ledger, false); got != gateCents {
+				t.Fatalf("the wallet the spend gate reads holds %d cents, want %d", got, gateCents)
 			}
 		})
 	}
@@ -752,7 +814,7 @@ func reportedBalance(t *testing.T, app *zip.App) int64 {
 	}
 	// The account the reader RESOLVED must be the wallet the credit landed in, or the
 	// two agree on a number by luck.
-	if _, subject := payerWallet(); out.Account != subject {
+	if subject := wallet(gateOrg); out.Account != subject {
 		t.Errorf("/v1/billing/balance reports the account %q, want %q — the customer's page and the "+
 			"credit are naming different wallets", out.Account, subject)
 	}
