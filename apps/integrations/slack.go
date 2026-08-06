@@ -69,6 +69,16 @@ var slackDefaultScopes = []string{
 	"app_mentions:read", "chat:write",
 	"channels:history", "groups:history",
 	"im:history", "im:read", "im:write", "users:read",
+	// assistant:write is what makes @hanzo a NATIVE agent rather than a plain bot.
+	// Slack's "Add Agents" picker lists only apps that declare the Agents & AI Apps
+	// surface, and that declaration is three parts, all required: this scope, the
+	// assistant_thread_* event subscriptions (slack_events.go), and the Agents & AI
+	// Apps toggle in the app config at api.slack.com. Without all three the app
+	// still answers @mentions and DMs perfectly well -- it is simply never OFFERED
+	// as an agent.
+	//
+	// Adding a scope means the workspace must RE-INSTALL: Slack does not grant new
+	// scopes to an existing token.
 	"assistant:write",
 }
 
@@ -261,3 +271,4 @@ func nonEmpty(s, fallback string) string {
 	}
 	return s
 }
+

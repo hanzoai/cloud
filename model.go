@@ -28,11 +28,30 @@ import "strings"
 // default names the tier it actually wants. A caller who needs more pins
 // enso-pro or enso-ultra; a caller who wants the router's judgement pins `enso`.
 //
-// This constant is the only literal. The deployment knob (CLOUD_AI_DEFAULT_MODEL,
-// read into Config.AIDefaultModel) defaults to it, every subsystem reads that,
-// and nothing hardcodes a model name of its own. Changing the tier is this line
-// plus the same value in the deployment's env — never a third place.
+// This constant is THE literal, and now the only one. There used to be a
+// deployment knob beside it (CLOUD_AI_DEFAULT_MODEL → Config.AIDefaultModel →
+// Deps.AIDefaultModel), which meant changing the tier was "this line plus the
+// deployment's env" — two places holding one decision, and the only thing a
+// second place can add is disagreement. It added exactly that twice: once
+// shipping an UPSTREAM name to customers through GET /v1/agents (84a7f7b9), and
+// once masking a wrong constant for an unknown period, because production set
+// the variable to the right value while the constant said something else
+// (3fdb4b88). The knob's entire production history is a deployment setting it to
+// the byte-identical value of this line. Changing the tier is now this line.
 const DefaultModel = "enso-flash"
+
+// FallbackModel is the model the autonomous agent runner fails over to when an
+// agent's own model stays throttled (429/overloaded) after bounded retries. It
+// keeps a bot's reply landing when the flash tier is saturated; the interactive
+// chat path never uses it.
+//
+// It is a constant rather than config because it is not ours to configure: the
+// value names `best`, a SKU in the gateway's own catalog (hanzoai/ai
+// conf/models.yaml) that carries its own route and a four-deep fallback chain
+// server-side. Cloud neither resolves nor validates it — the string is forwarded
+// verbatim. A knob here could only ever disagree with the catalog that actually
+// decides, and no deployment ever set the one that existed.
+const FallbackModel = "best"
 
 // upstreamModels are the model families Hanzo serves under its own name. Naming
 // one on a customer-visible surface discloses which base sits behind an enso or

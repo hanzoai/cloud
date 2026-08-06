@@ -612,6 +612,27 @@ const linkFlow = "\n\nThis is one leg of a three-leg flow, and the legs are not 
 // flows seal what they obtain into the org's KMS namespace, and the callback seals
 // before it writes anything at all.
 func init() {
+	// ── install entry point ──────────────────────────────────────────────────
+	openapi.Describe("/v1/integrations/slack/install", http.MethodGet,
+		"Install the Hanzo app into a Slack workspace",
+		"The address behind Slack's \"Add to Slack\" and Marketplace Install buttons. It answers a "+
+			"302 to Slack's own consent screen and does nothing else — it is a redirector by "+
+			"design.\n\n"+
+			"It exists because Slack refuses a slack.com URL in that field and requires one of ours "+
+			"that redirects there, which makes the field an ATTRIBUTION hook: routing the click "+
+			"through our own address is what lets an install be counted, and always answering the "+
+			"redirect is what keeps the counter from becoming a detour that never reaches consent. "+
+			"The destination is the same consent URL every time, built from the same scopes the "+
+			"console's Connect button asks for, so a workspace is asked to grant one thing however "+
+			"the install began.\n\n"+
+			"It is PUBLIC and carries no principal, because whoever clicks Install in Slack's "+
+			"directory has no Hanzo session yet. It binds no org either, and that is deliberate "+
+			"rather than missing: the org is resolved at the shared provider callback, from the "+
+			"signed state a console connect minted or from the workspace's existing connection. "+
+			"Minting an org for an anonymous click is the one thing that would break tenant "+
+			"isolation, so an install begun here finishes under exactly the rules every other "+
+			"install obeys.")
+
 	// ── inbound platform webhooks ────────────────────────────────────────────
 	openapi.Describe("/v1/integrations/slack/events", http.MethodPost,
 		"Slack Events API webhook",
@@ -685,6 +706,24 @@ func init() {
 			"native ref.\n\n"+
 			"The payload is verified by HMAC against the webhook secret before it is parsed."+
 			vendorCall)
+
+	openapi.Describe("/v1/integrations/slack/install", http.MethodGet,
+		"Begin installing the Hanzo Slack app",
+		"The address behind \"Add to Slack\" and the Direct install URL in Slack's app "+
+			"directory. It redirects to Slack's consent screen and does nothing else — the "+
+			"consent URL is built by the same code the console's Connect button uses, so a "+
+			"workspace is asked for the same scopes however the install began.\n\n"+
+			"It is deliberately anonymous: it carries no state and binds no org, because the "+
+			"person clicking Install in the directory has no Hanzo session yet, and inventing "+
+			"an org for an anonymous click is exactly what the tenant rules forbid. The org is "+
+			"resolved where every other install resolves it — the provider callback, from the "+
+			"signed state a console connect minted or from the workspace already being "+
+			"connected — so an install that starts here finishes under the same rules.\n\n"+
+			"It exists as our own address rather than a bare slack.com link because Slack "+
+			"refuses a slack.com URL in that field, and routing the click through us is what "+
+			"lets the install be attributed. Where the app is not configured it answers 503, "+
+			"rather than a consent URL with an empty client_id that Slack would render as its "+
+			"own dead-end error page.")
 
 	// ── account-link flows (three legs each) ─────────────────────────────────
 	openapi.Describe("/v1/integrations/slack/link", http.MethodGet,
@@ -818,6 +857,11 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// which an op handed the decoded In could not re-verify. The three link legs
 	// drive a browser — a 302 to the Slack / hanzo.id sign-in, then a short HTML
 	// confirmation page — and never answer JSON.
+	// The Marketplace / "Add to Slack" entry point. A literal, so it is matched
+	// before the /:provider wildcards below, and Terminal like its siblings: it
+	// carries no principal by design and must not be gated into a 403, because the
+	// person clicking Install in Slack's directory has no Hanzo session yet.
+	app.Get("/v1/integrations/slack/install", cloud.Terminal(cloud.Handle(s, slackInstall)))
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))
 	app.Post("/v1/integrations/slack/commands", cloud.Terminal(cloud.Handle(s, slackCommands)))
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
@@ -1477,8 +1521,40 @@ func kmsPut(s *cloud.Service[state], path, name string, value []byte) error {
 	return s.State.kms.PutSecret(context.Background(), kmsRef(path, name), value)
 }
 
+// kmsGet reads one sealed secret, and RESTORES kms.ErrSecretNotFound when the
+// store answered "not found" across a boundary that flattened the sentinel.
+//
+// A plugin is a PROCESS. An error crossing that wire is re-created from its
+// STRING, so errors.Is(err, kms.ErrSecretNotFound) is false on the far side even
+// though the store said exactly that. Every caller that distinguishes "absent"
+// from "broken" therefore silently took the broken branch.
+//
+// Measured in production: @hanzo answered every Slack DM with "Sorry — I
+// couldn't reach your Hanzo account just now" because getUserLink read an
+// unlinked user's secret, got `kms kms_get: kms.get: store: secret not found`
+// as an opaque error, and returned it as a FAILURE instead of the "not linked
+// yet" it is. The link prompt that teaches a user how to connect was
+// unreachable, so the feature could never be used at all.
+//
+// Repaired HERE rather than at each call site: this is the one door onto the
+// store, so the sentinel is whole for everyone above it and no future caller has
+// to know the wire eats error identity.
 func kmsGet(s *cloud.Service[state], path, name string) ([]byte, error) {
-	return s.State.kms.GetSecret(context.Background(), kmsRef(path, name))
+	raw, err := s.State.kms.GetSecret(context.Background(), kmsRef(path, name))
+	if err != nil && !errors.Is(err, kms.ErrSecretNotFound) && isNotFoundText(err) {
+		return nil, fmt.Errorf("%s: %w", err.Error(), kms.ErrSecretNotFound)
+	}
+	return raw, err
+}
+
+// isNotFoundText recognises a store's not-found answer that arrived as prose.
+//
+// Matching on text is what the flattened wire leaves available, so it is kept
+// deliberately narrow — the store's own phrase — rather than any message
+// containing "not found", which would swallow a genuine failure that merely
+// mentions a missing thing and turn a broken store into a silent "unlinked".
+func isNotFoundText(err error) bool {
+	return strings.Contains(err.Error(), "secret not found")
 }
 
 func kmsDelete(s *cloud.Service[state], path, name string) error {

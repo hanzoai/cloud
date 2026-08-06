@@ -178,6 +178,13 @@ func init() {
 			"projectsUpdate.visibility":    "Visibility flips an existing project between \"public\" and \"private\". Same\nONE rule as at create: public is free, private needs a paid plan.",
 		},
 	})
+	zip.Describe("POST /projects/ownership", zip.Doc{
+		Description: "Answers whether the CALLER's org owns the named project and\nwhether some other org does.\n\nThe org is the caller's plane identity and never the argument — plane.OwnerIn\nhas no org field, deliberately, because the org is precisely what the answer is\nrelative to: a caller able to state it could ask the question about somebody\nelse and act on the answer. An anonymous caller is refused rather than defaulted.\n\nBoth false is a REAL answer: nobody has registered this identifier, so it is a\nfree-form within-org label and the boundary keeps it. That third outcome is why\nthe reply carries two booleans instead of one verdict — collapsing \"nobody owns\nit\" into either \"mine\" or \"another's\" would respectively open the guard or break\nevery subsystem that uses a free-form project label.",
+		Fields: map[string]string{
+			"Ownership.mine":  "Mine is true when the caller's own org owns a project with this id/slug.",
+			"Ownership.other": "Other is true when some org OTHER than the caller's owns one.",
+		},
+	})
 	zip.Describe("POST /projects/resolve-key", zip.Doc{
 		Description: "Answers which (org, project) a key names. Not-found is\n`Found:false`, never an error: the door turns that into an honest refusal, and\nan error into a 5xx. Collapsing them would refuse every live site's beacons\nduring a transient failure of this app.",
 	})

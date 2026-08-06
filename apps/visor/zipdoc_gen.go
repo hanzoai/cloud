@@ -184,7 +184,7 @@ func init() {
 	zip.Describe("GET /v1/machines/agents", zip.Doc{
 		Description: "Returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
 		Fields: map[string]string{
-			"bindingList.agentBindings": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit so vm stays the single source of truth for the binding shape.",
+			"bindingList.agentBindings": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit.",
 		},
 		Response: json.RawMessage(`{"agentBindings":[{"machineId":"drop-a","agentName":"bot-a","status":"running","publicIp":"1.2.3.4"}]}`),
 	})

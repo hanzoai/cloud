@@ -7,84 +7,57 @@
 # fleet together, which is the whole point of this layout. cmd/cloud IS the one
 # real binary; the fused monolith it replaced is gone.
 #
-# The console UI is compiled into the host via //go:embed (the light webui package,
-# which cmd/cloud imports directly), so cmd/cloud — the front door — owns "/" and
-# serves the white-labelled SPA for every path no app prefix claims. cmd/cloud also
-# threads the deployment's brand/domain/data-dir/iam-issuer flags to the per-app
-# children (it re-publishes them as CLOUD_* env the children read), and scopes
-# credentials: it scrubs the KMS root key from its own environment and hands it to
-# the kms broker child alone — see cmd/cloud.
+# cmd/cloud — the front door — owns "/" and serves the white-labelled SPA for every
+# path no app prefix claims. It does NOT carry the console: the bytes are a
+# published site release, read at boot and re-read on a poll (webui/release), so
+# this image ships no console at all. cmd/cloud also threads the deployment's
+# brand/domain/data-dir/iam-issuer flags to the per-app children (it re-publishes
+# them as CLOUD_* env the children read), and scopes credentials: it scrubs the KMS
+# root key from its own environment and hands it to the kms broker child alone —
+# see cmd/cloud.
 #
 # ── prebuilt decomplection artifacts (cloud compiles ONLY Go) ────────────────
-# The console SPA and the agent-skills catalog are each built by THEIR OWN CI as
-# a versioned immutable image and PULLED here, instead of rebuilding node +
-# python from scratch every cloud release.
-# The heavy one (console: a cold `npm install` + full Next.js static export,
-# force-cache-busted every build) used to dominate the ~20-min build; it is now
-# a registry pull.
-#   console-embed (hanzoai/console Dockerfile.embed)  → /dist    → webui/dist               (go:embed)
+# The agent-skills catalog is built by ITS OWN CI as a versioned immutable image
+# and PULLED here, instead of rebuilding python from scratch every cloud release.
 #   agent-skills  (hanzoai/openapi Dockerfile.skills) → /catalog → apps/skills/catalog (go:embed)
 # Pinned to ghcr.io so BOTH buildx lanes (release.yml + platform arcbuild) pull
 # it directly; the SAME tags are mirrored to registry.hanzo.ai (S3-backed) for
-# GET-flow consumers (docker/kaniko/crane). Override any pin with
-# --build-arg <NAME>_IMAGE=… .
+# GET-flow consumers (docker/kaniko/crane). Override the pin with
+# --build-arg SKILLS_IMAGE=… .
 #
-# IMMUTABLE per-commit tags, never `:latest`. These defaults are LOAD-BEARING:
-# the builder that actually runs our releases is the native one (POST /v1/runner
-# → launchDirectBuild → BuildKit), and it passes no --build-arg, so whatever is
-# written here is what gets baked. `release.yml`, which the previous comment said
+# IMMUTABLE per-commit tags, never `:latest`. This default is LOAD-BEARING: the
+# builder that actually runs our releases is the native one (POST /v1/runner →
+# launchDirectBuild → BuildKit), and it passes no --build-arg, so whatever is
+# written here is what gets baked. `release.yml`, which an older comment said
 # would resolve a fresh digest, is a stub and resolves nothing.
 #
-# With `:latest` the embedded console was therefore decided by WHEN the build ran,
-# not by what we shipped — and it bit: cloud v1.801.215 was built ~12 minutes
-# before console CI finished publishing the console-embed carrying v8.5.26, so a
-# release whose whole purpose was that console change silently baked the previous
-# one and shipped green. Same image, two contents, no diff to show for it.
+# THE CONSOLE IS NO LONGER HERE, and that is the change this file is carrying.
 #
-# BUMP: when a console/skills change must reach production, move its pin here in
-# the same commit that claims it. That is what makes a cloud release
-# reproducible and makes "what console is in v1.801.N" answerable from git.
+# There was a CONSOLE_IMAGE pin (`ghcr.io/hanzoai/console-embed:8.5.58`) and a
+# stage that copied its /dist into webui/dist for //go:embed to bake. It made a
+# console release a CLOUD release: the pin had to move, an image had to be cut
+# (~22 min), and the rollout is `strategy: Recreate` on a single replica, so
+# shipping a CSS fix took api.hanzo.ai down for a measured 2m15s. It also had a
+# whole discipline attached to keep it honest — never `:latest` (cloud v1.801.215
+# built ~12 min before console CI published v8.5.26 and silently shipped the
+# previous console, green), never re-point a cut tag — and that discipline
+# existed only because the console's identity was welded to this image's.
 #
-# CONSOLE IS PINNED BY SEMVER, not by sha. `sha-<sha7>-amd64` is what the builder
-# publishes on every main push; `v<X.Y.Z>` is what it publishes on a cut v* tag,
-# and that is the one to name here — the pin then says which RELEASE of the
-# console a cloud image carries, which a sha cannot.
+# The console is a PUBLISHED SITE now (webui/release): the ACTIVE release of the
+# `hanzo-console` site, read from S3 at boot and re-read on a poll. Publishing is
+# under a second, rollback is faster, and neither builds nor restarts anything.
+# "Which console is live" is answered by the site's active release — by the
+# system that serves it — instead of by a line in a Dockerfile.
 #
-# The tradeoff is real and the discipline changes to match: a sha tag cannot be
-# re-pushed to different bytes, whereas a semver tag CAN be moved (`:v8.4.118`
-# was, in this fleet). So the rule that keeps this reproducible is now a rule
-# about tags, not about tag SHAPE: a cut tag is never re-pointed. Cut the next
-# patch instead — that is cheap, and it keeps "which console is in v1.801.N"
-# answerable from git alone.
-# 8.5.62 adds the agent quickstart — describe an agent or take a template, then
-# configure, run and integrate, with a real endpoint behind every one of those
-# four steps — wires the builder's tool field to the live `/v1/tools` plane, and
-# stops the rail drilling: a product's sub-pages now expand beneath its own row
-# instead of swapping the whole sidebar for one product. Creating an agent has ONE
-# door now: the board's New-Agent button goes to the quickstart, and the side-pane
-# form that was the second entrance to the same builder is deleted.
+# What did NOT change: console.hanzo.ai IS THIS BINARY. The host still routes to
+# `service: cloud` (universe hanzo-domains.yaml), the console still calls /v1 on
+# its own origin, and its session cookie is still first-party. Only the source of
+# the bytes moved.
 #
-# It carries the LAUNCH console forward: the sidebar shows only chat, the builder,
-# models, keys, usage, billing and settings, and every other product — the agent
-# surface included — stays behind the beta flag; the playground offers only models
-# the gateway actually routes and holds frontier prices behind a plan; an org can
-# wear its own logo; search reaches the whole catalog, not just the favourites.
-#
-# console.hanzo.ai IS THIS BINARY, and that is the fact this pin exists to make
-# operational. The host routes to `service: cloud` (universe hanzo-domains.yaml)
-# and NO host routes to the standalone `console` Deployment — so a console
-# release reaches users only when this line moves and a cloud image is cut.
-# Learned the expensive way: console:v8.5.59 was built, pinned and rolled to
-# Ready, and served no one.
-#
-# PIN THE SHA TAG, NEVER THE SEMVER. `console-embed:8.5.62` was re-published from a
-# DIFFERENT commit while this pin named it, so a cloud build that asked for 8.5.62
-# got a console two commits stale and every signal still read green — the image
-# built, rolled and served, just not the bytes anyone had reviewed. More than one
-# lineage pushes that repo (its own `hanzo.yml` says so and pins the sha for exactly
-# this reason), and a mutable name is not an identity. `sha-<sha7>-amd64` is one
-# commit's output forever.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-c709b1f-amd64
+# Still true, and still a trap: NO host routes to the standalone `console`
+# Deployment. Learned the expensive way — console:v8.5.59 was built, pinned and
+# rolled to Ready, and served no one. Rolling that Deployment reaches nobody;
+# publishing a `hanzo-console` site release is what reaches users.
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
@@ -97,9 +70,6 @@ ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 # ghcr.io/hanzoai/mirror/<name>:<tag> and repoint the digest below. Canonical
 # long-term home is registry.hanzo.ai/hanzoai/mirror/* — repoint once the runners
 # carry its IAM pull credentials (follow-up).
-
-# ── console SPA static export (prebuilt → /dist) ─────────────────────────────
-FROM ${CONSOLE_IMAGE} AS console
 
 # ── agent-skills catalog (prebuilt → /catalog) ──────────────────────────────
 FROM ${SKILLS_IMAGE} AS skills
@@ -190,9 +160,8 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
     fi && \
     go mod download
 COPY . .
-# Drop the console static bundle into the embed path BEFORE `go build`, so
-# //go:embed all:webui/dist bakes it into the binary (same-origin console).
-COPY --from=console /dist/ /src/webui/dist/
+# NO console overlay. The console is not in this binary — it is the active release
+# of a published site, fetched at boot (webui/release). See the header.
 # Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
 # bakes the complete set (all services × brands), not the committed `ai` fallback.
 #
@@ -204,21 +173,25 @@ COPY --from=console /dist/ /src/webui/dist/
 # instead: one skill (ai_models) per brand, served as the whole of
 # /.well-known/agent-skills/index.json. The RUN below is the gate that was missing.
 COPY --from=skills /catalog/ /src/apps/skills/catalog/
-# RED gate — the overlays landed WHERE THE EMBED READS. Both COPYs above write
-# into a tracked fallback that exists precisely so a bare `go build` works, and
-# `COPY` creates a missing destination rather than failing — so a stale path is
-# not an error, it is a silently smaller binary. That is the whole failure above,
-# and it survived because the only evidence was a number in a served document.
-# Assert it here, where the destination is named, in the terms each fallback is
-# defined by rather than a file count that drifts: the skills fallback is ONE
-# skill per brand, and the console fallback is a hand-written index.html with no
-# script at all — a static SPA export carrying zero JavaScript is not a build.
+# RED gate — the overlay landed WHERE THE EMBED READS. The COPY above writes into
+# a tracked fallback that exists precisely so a bare `go build` works, and `COPY`
+# creates a missing destination rather than failing — so a stale path is not an
+# error, it is a silently smaller binary. That is the whole failure above, and it
+# survived because the only evidence was a number in a served document. Asserted
+# here, where the destination is named, in the terms the fallback is defined by
+# rather than a file count that drifts: the fallback is ONE skill per brand.
+#
+# The CONSOLE half of this gate is gone with the thing it guarded. It asserted
+# that webui/dist carried JavaScript, because an overlay that missed its embed
+# path shipped a scriptless shell that looked like a console. There is no overlay
+# and no embed now — the binary carries no console — so there is nothing here that
+# could silently be the wrong bytes. The equivalent question ("is a real console
+# live?") moved to where it can actually be answered: the site's ACTIVE RELEASE,
+# which the binary refuses to boot without (cmd/cloud) and re-checks on a poll.
 RUN set -eu; \
     n="$(sed -n 's/.*"skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/skills/catalog/hanzo/index.json)"; \
     [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/skills/catalog holds the ${n:-0}-skill fallback — the overlay missed the //go:embed path"; exit 1; }; \
-    j="$(find /src/webui/dist -type f -name '*.js' | wc -l)"; \
-    [ "$j" -gt 0 ] || { echo "CONSOLE-GATE FAIL: webui/dist carries no JavaScript — the overlay missed the //go:embed path and the image would ship the fallback shell"; exit 1; }; \
-    echo ">> overlays landed: $n skills/brand, $j console scripts"
+    echo ">> overlay landed: $n skills/brand"
 # RED gate — modernc double-registration guard: 0 modernc under CGO=1 ACROSS EVERY
 # per-app binary, else the "sqlite" driver is registered twice (mattn + modernc) →
 # panic at init. The fused monolith that this once checked is gone; the union of

@@ -2824,6 +2824,21 @@ semantic is identical — fail closed once armed, allow before.
   of those owns its own wire stub (`bots/wire.go`, `coding/task.go`) and speaks
   through the seam. That isolation is what makes the HIP-0106/HIP-0120 ZAP swap a
   seam swap instead of a rewrite.
+- **vm speaks TWO wires, and a call site says which — `cl.call` or `cl.op`.**
+  Visor (`hanzoai/visor`) is converting its routes to typed zip ops noun by noun,
+  and a typed op has no envelope: the answer IS the value, the status IS the
+  outcome. Everything not yet converted still answers casibase's
+  `{status,msg,data}` inside an HTTP 200, where a logical failure is a 200.
+  `apps/visor/client.go` reads both, and the choice is per call site because the
+  two CANNOT be told apart by looking — feeding a typed answer to `cl.call` reads
+  an `AgentBinding`'s own `status:"Pending"` as an envelope status, decides the
+  upstream failed, and answers 502. Converted so far: a machine's AGENT
+  (`GET /v1/machines/agents`, `PUT|GET|DELETE /v1/machines/:id/agent` — one
+  address, the method carrying the verb, the SAME address cloud publishes, so
+  there is no translation left to keep in step). `call` shrinks to zero as the
+  migration finishes and goes with the last noun. Converting a visor route is a
+  WIRE BREAK and lands with its cloud caller in the same change; visor's `LLM.md`
+  ("Typed ops") is the other half of this note.
 - **Cloud owns policy; the runtime owns the run. Do not copy state you do not
   own.** `apps/bots` holds NO store. The sandbox lives in the bot runtime,
   keyed in the runtime's own tenant store, which is the only thing that knows
@@ -3010,6 +3025,30 @@ and the logs.
 
 The machines/GPU fold (`managedMachines`) has the same shape and is **not** covered
 yet — it feeds three surfaces through a different type.
+
+### `/v1/k8s/nodes` is Visor's first TYPED op, and the wire moved with it
+
+Upstream it is now `zip.Get[controllers.Scope, controllers.Nodes]`
+(`visor/routers/router.go`), so it is in the registry the OpenAPI document, the MCP
+tool list, the CLI and every SDK are generated from — where the rest of Visor's `/v1`
+surface still is not. A typed op answers its **Out directly**: `{"nodes":[…]}`, no
+`{status,msg,data}` around it.
+
+Cloud therefore reads it with `cl.op` rather than `cl.call` (`apps/visor/client.go`).
+Both go through the same `do` — one request path, two readings — because Visor really
+does serve two shapes right now. `call` and `envelope` shrink as routes are typed and
+are deleted with the last one.
+
+**The trap this closes.** Decoding an envelope into `visorNodes` does not fail: the
+keys are simply unknown, `Nodes` stays nil, and an operator running eight clusters is
+told *with a 200* that they have no workers. So the op always writes the key, and a
+nil list means "this Visor does not serve this op" — `listK8sNodes` answers 502 and
+`managedMachines` drops that one source and logs why. `TestK8sNodesRefusesTheOldEnvelope`
+and `TestMachinesDropDOKSNodesOnSkew` pin both halves.
+
+**Deploy order.** Visor first, then cloud — but the window is not dangerous either
+way, because both directions of the skew now report instead of under-reporting, and
+the route 404s in production today regardless (see the release note above).
 
 ## Two CR kinds, and the documented endpoint had the empty one
 
@@ -3442,8 +3481,8 @@ they were two files with the SAME TRIGGER. Actions cannot express `needs:` acros
 workflow files, so deploy built, smoked, tagged and pinned while the gate was
 still running — or after it had gone red. That is measured, not hypothetical: the
 drift gate was RED on main while 87 commits and 6 releases shipped in 24 hours,
-and what went out was one binary serving `/v1/billing/gpu/eligibility` and
-publishing `/v1/billing/gpu-eligibility`. `deploy.yml` is deleted; its jobs are
+and what went out was one binary serving a renamed billing route under its new
+name while still publishing the old one. `deploy.yml` is deleted; its jobs are
 here, behind `needs:`.
 
 **The coupler is the document, passed BY VALUE at a pinned sha.** Every car
@@ -4006,7 +4045,7 @@ reader that posts test rows into real revenue restates the company's income.
 STILL ON THE TRANSPORT, and why: `apps/metering` (`/v1/billing/tier`,
 `/v1/billing/alerts/authorize`), `apps/admin/commerce` (`/v1/billing/subscriptions`,
 `/v1/costs`), `apps/content/storefront` (`/v1/store/current`, `/v1/product/{handle}`),
-`apps/billing` (the `gpu/eligibility` and `portal/methods` proxies). Each of these
+`apps/billing` (the `portal/methods` proxy). Each of these
 answers from commerce's OWN datastore through a handler in the `hanzoai/commerce`
 module whose logic lives in unexported helpers — so a plane op for them means the
 payments.go pattern (export a value-taking core from the module, declare the op on

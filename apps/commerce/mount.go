@@ -37,16 +37,16 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	commercemod "github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
-	"github.com/hanzoai/commerce/billing/paywall"
-	"github.com/hanzoai/commerce/util/permission"
 	catalogapi "github.com/hanzoai/commerce/api/catalog"
-	commerceresources "github.com/hanzoai/commerce/api/resources"
 	planapi "github.com/hanzoai/commerce/api/plan"
+	commerceresources "github.com/hanzoai/commerce/api/resources"
 	commercestore "github.com/hanzoai/commerce/api/store"
+	"github.com/hanzoai/commerce/billing/paywall"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
 	commercemid "github.com/hanzoai/commerce/middleware"
 	"github.com/hanzoai/commerce/middleware/iammiddleware"
 	commercensctx "github.com/hanzoai/commerce/util/nscontext"
+	"github.com/hanzoai/commerce/util/permission"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	log "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -390,10 +390,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// It calls the resources LEAF rather than commerce's api.Route. Route also
 	// binds an index route, a permissive CORS policy and a wildcard OPTIONS onto
 	// whatever router it is handed — right for a process that owns its tree,
-	// wrong in this shared one, where byte-identical patterns merge silently and
-	// two equal-specificity params with different names panic at registration.
-	// Importing that package would also drag checkout, subscriptions and
-	// thirdparty/netlify, which this binary deliberately does not carry.
+	// wrong in this shared one. Importing that package would also drag checkout,
+	// subscriptions and thirdparty/netlify, which this binary deliberately does
+	// not carry.
+	//
+	// A DUPLICATE DECLARATION IS A BOOT PANIC, not a silent merge. This comment
+	// used to say byte-identical patterns "merge silently, first wins"; measured
+	// against the zip this tree pins, they do not — the composer refuses the
+	// program outright and names every conflicting pair with file:line:
+	//
+	//	zip: this program does not compose, so it has no projection:
+	//	zip: GET /v1/collection: declared by "/collection" at rest/rest.go:133
+	//	  (via root → /v1 → /collection) and by "/collection" at rest/rest.go:133
+	//
+	// WHERE it lands differs by zip version, and both are before a request is
+	// served: this tree resolves v1.25.1, which accepts the second Route() call
+	// and refuses when the program is COMPOSED; commerce standalone pins v1.24.2,
+	// which refuses inside Route(). So a check that only registers reads "fine"
+	// here and is measuring nothing — ask for the composition.
+	//
+	// That matters for anything ADDED here later: a kind may be registered in
+	// exactly ONE place. Putting a kind on this leaf while commerce's api.Route
+	// still registers it takes the STANDALONE down at boot, and the failure is
+	// in the other binary from the one that changed.
 	//
 	// productEvents is nil: the storefront publish loop belongs to the
 	// standalone's event bus, and the CRUD does not depend on it.
@@ -562,9 +581,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// error anywhere the customer or we would see. The tier has to RESOLVE, not
 	// merely stop crashing. It is not typed yet — module work, per the
 	// module-handler note.
+	// PinBillingSubject IS REQUIRED HERE, and its absence was a live leak.
+	//
+	// TokenRequired authenticates and does not pin, which is the whole hazard the
+	// comment on /v1/billing/methods already spells out: any authenticated browser
+	// could name another subject. GetTier reads ?user= verbatim and answers with
+	// that subject's wallet — prepaidAvailable, creditsRemaining, effectiveAvailable
+	// — so one signed-in customer could read every other customer's balance.
+	//
+	// It is CROSS-CUSTOMER, not merely cross-subject, because every self-serve
+	// signup lands in the SAME org (account.SignupOrg = "hanzo") with a per-person
+	// subject. The org namespace is closed; the subject was not. Measured live
+	// before this line: one caller, four wallets — hanzo/z 10966, hanzo 6375,
+	// hanzo/admin 10000, hanzo/dev 0.
+	//
+	// The pin does not break the S2S reader this route exists for: PinBillingSubject
+	// admits a verified service-token caller that names its own org and leaves its
+	// query untouched (apps/account/billing_coresident.go), which is exactly the
+	// shape ai's rate limiter and apps/metering send. TokenRequired stays after it
+	// so that caller still resolves an org.
 	app.Get("/v1/billing/tier",
 		commercemid.RequestContext(),
 		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
 		commercemid.TokenRequired(),
 		commercebilling.GetTier,
 	)
@@ -812,6 +851,27 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		iammiddleware.IAMTokenRequired(),
 		accountclient.PinBillingSubject(),
 		screen.route(commercebilling.TopupWithToken),
+	)
+
+	// POST /v1/billing/topup — the SAVED-card top-up: charge a card the subject
+	// already has on file (paymentMethodId) and credit the same canonical balance.
+	// It is topup/token's card-on-file twin and the ONE saved-card top-up door
+	// (the auto-recharge cron shares its chargeAndCredit core). Until now it had
+	// NO co-resident route, so the four vaulted cards a customer could SEE were
+	// cards nothing could CHARGE — saving a card worked, spending it did not.
+	//
+	// Chain is topup/token's byte-for-byte, the risk screen included: both
+	// credit the SPENDABLE wallet, so both are screened before the charge.
+	// PinBillingSubject pins the body's userId to the caller's own subject; the
+	// handler itself refuses a paymentMethodId owned by any OTHER subject (404,
+	// no oracle) — paymentMethodId is not a subject key, so the pin cannot
+	// cover it.
+	app.Post("/v1/billing/topup",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		screen.route(commercebilling.Topup),
 	)
 
 	// POST /v1/billing/subscribe/card — the card-on-file MONTHLY subscription: vault a

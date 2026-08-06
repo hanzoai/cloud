@@ -68,6 +68,14 @@ const (
 	// the key lives in the project store.
 	ProjectsResolveKey = "projects_resolve_key"
 
+	// ProjectsOwnership answers "does this org own the project this request
+	// claims?" for the identity trust boundary. The boundary is cloud edge
+	// middleware in EVERY process; the registry is the projects app's alone. With
+	// no resolver the guard returned "not foreign" — so the cross-org project
+	// impersonation check was off wherever projects was not co-resident, which is
+	// everywhere. Absence of an ANSWER may never read as permission.
+	ProjectsOwnership = "projects_ownership"
+
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
@@ -157,6 +165,40 @@ const (
 	GitInbound = "git_inbound"
 	GitPublish = "git_publish"
 
+	// GitStatus reads the per-repo import/sync status the console repo list
+	// renders. Same boundary as GitImport: the app that lists the repos is
+	// integrations, the app that knows whether one is imported is git.
+	GitStatus = "git_status"
+
+	// GitMirror declares (or removes) a native repo's OUTBOUND mirror target. The
+	// sync engine decides a mirror should exist; the git app owns the repos and
+	// the reactor that pushes them. Two processes, so declaring it was a nil call
+	// that reported "git mirror controller not registered" while git was healthy
+	// next door.
+	GitMirror = "git_mirror"
+
+	// SyncRun dispatches one reconcile to the universal sync engine. The TRIGGERS
+	// are webhooks arriving at integrations and pushes landing at git; the ENGINE
+	// is the sync app. Three processes, one of which has the engine.
+	SyncRun = "sync_run"
+
+	// TrackerUpsert mirrors one external work item into the native tracker. The
+	// feeder is integrations (it holds the GitHub App); the store is the tracker
+	// app's.
+	TrackerUpsert = "tracker_upsert"
+
+	// PlatformPush turns a landed push into a build. The push lands on git's
+	// embedded server and the builder belongs to platform — the single most
+	// consequential split in this list, because the seam it replaces returned a
+	// NIL ERROR: every push in the split fleet triggered no build and said so to
+	// nobody.
+	PlatformPush = "platform_push"
+
+	// PlatformRelease patches a proven image onto its operator Service CR. Same
+	// shape as PlatformPush and the same former silence: a nil error meant "rolled
+	// out" to a caller whose CR was never touched.
+	PlatformRelease = "platform_release"
+
 	PlatformFleet   = "platform_fleet"
 	TreasuryReserve = "treasury_reserve"
 
@@ -220,6 +262,26 @@ const (
 	// applied in the query by the app that owns the store — public visibility,
 	// live status, not hidden. There is no tenant here for a caller to widen into.
 	SitesLive = "sites_live"
+
+	// The login-manager teardown, across the process boundary. A credential
+	// revoke lives in link and the sessions that ran under it live in agents,
+	// and the two ship as separate binaries — so the in-process call link made
+	// found an unmounted package every time and answered (0, nil). The revoke
+	// returned 200 {"sessionsStopped":0} while the sessions kept running under
+	// the revoked account, and nothing anywhere said otherwise.
+	//
+	// The org is the CALLER's plane identity and never an argument, for the
+	// sharpest version of the usual reason: this op tears sessions down, so a
+	// caller able to name the org could tear down a co-tenant's. The actor is
+	// derived from the caller's org and the revoking subject on the ANSWERING
+	// side, which is what keeps a revoke bounded to its own user's sessions.
+	AgentsSessionsStop  = "agents_sessions_stop"
+	AgentsSessionsCount = "agents_sessions_count"
+	// AgentsRunOnBehalf is the chat bridges' door onto a run. A plugin is a
+	// PROCESS, so agents.RunOnBehalf — which gates on that package's `mounted`
+	// global — can only ever answer when agents happens to be co-resident. It was
+	// not, and every @hanzo turn in Slack died on ErrNoPeer.
+	AgentsRunOnBehalf = "agents_run_on_behalf"
 
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
@@ -1442,3 +1504,267 @@ type LiveSite struct {
 	Upstream   string `json:"upstream,omitempty"`
 	License    string `json:"license,omitempty"`
 }
+
+// ---- agents: the login-manager session teardown -----------------------------
+
+// SessionMatchIn selects the live sessions a credential revoke tears down.
+//
+// It carries NO org: the tenant is the caller's plane identity, resolved on the
+// answering side. Subject travels instead of a fully-formed actor because the
+// actor is org-qualified (org/user) and the org is exactly what the caller may
+// not state — so the one place that can build the actor is the one place that
+// knows the org is real.
+//
+// An empty Subject yields an empty actor, which the agents guard reads as "stop
+// nothing". That is fail-closed by construction: a match that lost its caller
+// identity sweeps nothing rather than sweeping the org.
+type SessionMatchIn struct {
+	// Subject is the revoking user, unqualified. The answering side qualifies it.
+	Subject string `json:"subject"`
+	// Host/Provider/Account narrow WITHIN the actor's own sessions; empty is any.
+	Host     string `json:"host,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Account  string `json:"account,omitempty"`
+}
+
+// SessionCount is how many sessions the op stopped, or found live.
+//
+// A count is the whole answer here, and the reason it can be is that failure is
+// an error: "0" now means zero sessions matched and never "the store could not
+// be reached", which is the distinction whose absence let a revoke report
+// success having revoked nothing.
+type SessionCount struct {
+	Count int `json:"count"`
+}
+
+// ---- git: status + mirror --------------------------------------------------
+
+// StatusIn asks git which of these repos are imported, for the caller's org.
+// Names travel as a slice because a map cannot cross this wire at all.
+type StatusIn struct {
+	// Project is the sub-scope; empty means the org's default store.
+	Project string `json:"project,omitempty"`
+	// Names are the repo names to report on.
+	Names []string `json:"names"`
+}
+
+// RepoStatus is one repo's import + sync state. Name is IN the row rather than a
+// map key: the reply is a slice, so the row has to carry its own identity.
+type RepoStatus struct {
+	Name string `json:"name"`
+	// Imported is true when a native repo exists for this name.
+	Imported bool `json:"imported"`
+	// Conflict is true when a branch diverged on a prior inbound sync and native
+	// was preserved.
+	Conflict bool `json:"conflict"`
+	// LastSyncedAt is unix seconds of the last import/sync; 0 means never.
+	LastSyncedAt int64 `json:"lastSyncedAt"`
+}
+
+// Statuses is the per-repo report. A name git knows nothing about is simply
+// absent from Rows — that is a real answer, and the caller reads it as
+// not-imported rather than as a failure.
+type Statuses struct {
+	Rows []RepoStatus `json:"rows"`
+}
+
+// MirrorIn declares or removes a native repo's outbound mirror target. Enabled
+// false REMOVES it; the call is idempotent either way.
+type MirrorIn struct {
+	Project string `json:"project,omitempty"`
+	Repo    string `json:"repo"`
+	// URL is the outbound target to push to.
+	URL string `json:"url"`
+	// Enabled registers the target when true and removes it when false.
+	Enabled bool `json:"enabled"`
+}
+
+// Mirrored acknowledges a mirror declaration. A failure is an error, never this.
+type Mirrored struct {
+	Repo string `json:"repo"`
+}
+
+// ---- sync ------------------------------------------------------------------
+
+// SyncIn is one provider-agnostic reconcile trigger. It carries no Org: the
+// tenant is the caller's, and a trigger that could name the org could reconcile
+// another tenant's repositories.
+type SyncIn struct {
+	// Kind is the sync kind, e.g. "git".
+	Kind string `json:"kind"`
+	// Provider is the endpoint the event came from: github | gitlab | hanzo-git.
+	Provider string `json:"provider"`
+	// Locator is the source repo locator — a clone URL, or "<owner>/<repo>".
+	Locator string `json:"locator,omitempty"`
+	// Repo is the short repo name.
+	Repo string `json:"repo,omitempty"`
+	// Ref is the FULL ref that moved.
+	Ref    string `json:"ref,omitempty"`
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
+	// Actor is who made the upstream push; the engine's loop guard compares it to
+	// the sync's own actor.
+	Actor string `json:"actor,omitempty"`
+	// Token is an OPTIONAL short-lived credential the trigger already minted. It
+	// rides the internal socket only and is never logged.
+	Token string `json:"token,omitempty"`
+	// Manual marks a /run or an initial reconcile rather than a specific push.
+	Manual bool `json:"manual,omitempty"`
+	// Hop is the chained-propagation depth, bounded by the engine's hop limit.
+	Hop int `json:"hop,omitempty"`
+}
+
+// SyncRan reports what the dispatch did across the resolved syncs.
+type SyncRan struct {
+	// Ran is the number of syncs that reconciled a change.
+	Ran int `json:"ran"`
+	// Skipped is the number resolved but skipped — loop guard, idempotent, or
+	// direction off.
+	Skipped int `json:"skipped"`
+}
+
+// ---- tracker ---------------------------------------------------------------
+
+// IssueIn is one external work item to mirror into the native tracker, keyed
+// idempotently by ExtRef so a webhook redelivery updates the same row. No Org:
+// the tenant is the caller's, resolved from the signed installation at the edge.
+type IssueIn struct {
+	// Project is the IAM project scope; empty means the org's default store.
+	Project string `json:"project,omitempty"`
+	// Key is the tracker team the item files under, e.g. "GH"; ensured on first use.
+	Key string `json:"key,omitempty"`
+	// TeamName is the display name used when that team is first created.
+	TeamName string `json:"teamName,omitempty"`
+	// Repo is the git repo the item belongs to — the per-repo filter discriminator.
+	Repo string `json:"repo,omitempty"`
+	// ExtRef is the external anchor AND the idempotency key, e.g.
+	// "github:owner/repo#123".
+	ExtRef string `json:"extRef"`
+	// Kind is what it is — "issue" | "pr".
+	Kind string `json:"kind,omitempty"`
+	// Source is which surface opened it, e.g. "git".
+	Source      string `json:"source,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	// State is the upstream open/closed state; the tracker maps it to a column.
+	State    string   `json:"state,omitempty"`
+	Assignee string   `json:"assignee,omitempty"`
+	Labels   []string `json:"labels,omitempty"`
+}
+
+// IssueUpserted reports what the upsert did, so a feeder can count precisely.
+type IssueUpserted struct {
+	// Created distinguishes a new row from an update.
+	Created bool `json:"created"`
+	// Number is the tracker's own item number.
+	Number int `json:"number"`
+	// Identifier is KEY-<number>.
+	Identifier string `json:"identifier,omitempty"`
+}
+
+// ---- platform: push→build and image→CR -------------------------------------
+
+// PushIn is a push that landed on the native git server, offered to the builder.
+// No Org: the tenant is the caller's, and a push event that could name the org
+// could build in another tenant's project.
+type PushIn struct {
+	Project string `json:"project,omitempty"`
+	Repo    string `json:"repo"`
+	// Ref is the FULL ref that moved — refs/heads/<b> or refs/tags/<t>. Tags reach
+	// the builder too: releases are cut by tag.
+	Ref string `json:"ref"`
+	// Commit is the new tip.
+	Commit string `json:"commit,omitempty"`
+	// CloneURL is the canonical clone URL of the repo, which is the exact value an
+	// Application's RepoURL carries, so the builder can resolve which app tracks it.
+	CloneURL string `json:"cloneUrl,omitempty"`
+}
+
+// Built acknowledges that the builder ACCEPTED the push. A failure is an error,
+// never this shape — the same contract as Imported and Mirrored.
+//
+// It deliberately does NOT report how many applications the push matched. Most
+// pushes track no app, so that count would be interesting, but nothing consumes
+// it today and the builder does not return it; adding the field would mean
+// widening buildFromPush's signature to produce a value no caller reads. Fields
+// append at the END of a ZAP type, so the day something needs the count it can
+// be added without disturbing any peer.
+type Built struct {
+	Repo string `json:"repo"`
+}
+
+// ReleaseIn is a proven, clean-semver image ready to roll onto its Service CR.
+type ReleaseIn struct {
+	// Service is the target CR metadata.name.
+	Service string `json:"service"`
+	// Image is the full registry ref; the tag MUST be clean semver (vX.Y.Z) and
+	// the releaser refuses every mutable/sha/suffixed form.
+	Image string `json:"image"`
+	// SHA is the source commit, for provenance. Logged, never gated on.
+	SHA string `json:"sha,omitempty"`
+}
+
+// Released acknowledges a rollout. Patched=false means the releaser ran and
+// matched no CR — again a real answer, distinct from not being asked at all.
+type Released struct {
+	Patched bool `json:"patched"`
+}
+
+// ---- projects: the org-scope ownership answer ------------------------------
+
+// OwnerIn names a project identifier — a slug or an opaque id — to be judged
+// against the CALLER's org. It carries no org for the usual reason, and here the
+// reason is sharper than usual: the org is exactly what the answer is relative
+// to, so a caller that could state it could ask the question about somebody else
+// and act on the answer.
+type OwnerIn struct {
+	IDOrSlug string `json:"idOrSlug"`
+}
+
+// Ownership is the registry's verdict on one project identifier.
+//
+// Mine and Other are SEPARATE booleans rather than one enum because three
+// distinct facts have to survive the trip: the caller's org owns it (keep), some
+// OTHER org owns it (refuse), or NOBODY has registered it — a free-form
+// within-org label, which is neither and must be kept. Collapsing the third into
+// either of the first two breaks a working surface or opens the guard.
+type Ownership struct {
+	// Mine is true when the caller's own org owns a project with this id/slug.
+	Mine bool `json:"mine"`
+	// Other is true when some org OTHER than the caller's owns one.
+	Other bool `json:"other"`
+}
+
+// RunOnBehalfIn asks agents to run one turn AS a linked user.
+//
+// The bridges (Slack, Discord, Teams, Telegram) are their own plugin, so this
+// crosses a process boundary and must be a typed plane op rather than a Go call:
+// a package global cannot be reached from another process, and the in-process
+// shortcut answered ErrNoPeer for every deployment that did not happen to place
+// agents and integrations in one binary.
+//
+// No field here is a map — the encoder refuses one at the plane boundary.
+type RunOnBehalfIn struct {
+	// Org is the isolation gate, the tenant, and the balance the run bills.
+	Org string `json:"org"`
+	// Subject is the caller's LINKED Hanzo identity, unqualified. Attribution and
+	// authorization both hang off it, so a turn can never run as nobody: the
+	// answering side refuses an empty subject rather than falling back to the org.
+	Subject string `json:"subject"`
+	// Ref names the agent to run.
+	Ref string `json:"ref"`
+	// Input is the user's message, already stripped of the leading @mention.
+	Input string `json:"input"`
+}
+
+// RunOnBehalfOut is one finished turn.
+//
+// Status is carried EXPLICITLY rather than inferred from a non-empty Output,
+// because "the agent ran and had nothing to say" and "the agent failed" are
+// different answers and a bridge must not post the second as the first.
+type RunOnBehalfOut struct {
+	Status string `json:"status"`
+	Output string `json:"output"`
+	RunID  string `json:"runId,omitempty"`
+}
+

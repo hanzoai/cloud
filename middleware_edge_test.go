@@ -66,8 +66,17 @@ func corsApp(t *testing.T, origins []string) *zip.App {
 	return app
 }
 
-func TestEdgeCORS_DisabledByDefault(t *testing.T) {
-	app := corsApp(t, nil) // empty allowlist ⇒ no-op (ingress owns CORS)
+// TestEdgeCORS_DeclaresNothingAdmitsNothing: with an empty allowlist and no proven
+// site host, no origin is admitted.
+//
+// This used to be named "disabled by default" and asserted that an empty allowlist
+// made the middleware a pure no-op, on the reasoning that the ingress owned CORS.
+// It is no longer a no-op — an empty DECLARED list still admits a host whose
+// site_hosts row is verified, because a customer's own domain must not depend on an
+// operator having typed it into a list. What survives is the property that actually
+// mattered: nothing is admitted that nothing vouches for.
+func TestEdgeCORS_DeclaresNothingAdmitsNothing(t *testing.T) {
+	app := corsApp(t, nil)
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Set("Origin", "https://hanzo.ai")
 	res, err := app.Test(req)

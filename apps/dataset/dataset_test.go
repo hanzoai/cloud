@@ -181,8 +181,22 @@ func declared(name string) riskDatasetSpec {
 	}
 }
 
-// settled waits for a materialisation to reach a terminal state, then returns the
-// version as `describe` reports it.
+// settled waits for a materialisation to reach a terminal state AND for the job
+// holding the tenant's scan slot to let go, then returns the version as
+// `describe` reports it.
+//
+// Both halves are load-bearing, because they are not the same instant. The job
+// publishes the version (plane.record) and only then returns, and the slot is
+// given back by a DEFERRED plane.release — so between the status going terminal
+// and the slot clearing there is a window where describe answers
+// `status: ready, running: true`. Waiting on the status alone returns inside that
+// window, and anything the caller does next that refuses a running job — dispose
+// is the one that does — fails as a 409 that reads like a real conflict. It is
+// timing, so it passes on an idle laptop and fails on a loaded CI runner, which
+// is the worst way for a gate to be wrong.
+//
+// `running` is on the wire for exactly this (typed.go view), so this waits on the
+// state the refusal is actually made from rather than a proxy for it.
 func settled(t *testing.T, app *zip.App, org, name string) riskDataset {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -200,10 +214,13 @@ func settled(t *testing.T, app *zip.App, org, name string) riskDataset {
 		}
 		switch v.Items[0].Status {
 		case statusReady, statusRefused:
-			return v.Items[0]
+			if !v.Items[0].Running {
+				return v.Items[0]
+			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("materialisation of %s never settled (status %q)", name, v.Items[0].Status)
+			t.Fatalf("materialisation of %s never settled (status %q, running %t)",
+				name, v.Items[0].Status, v.Items[0].Running)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
