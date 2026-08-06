@@ -1,4 +1,4 @@
-// runtime.go — the Kubernetes half: what a machine IS in the cluster, and the
+// runtime.go — the Kubernetes half: what a sandbox IS in the cluster, and the
 // one channel into it.
 //
 // A sandbox is a Pod, and its isolation boundary is the RUNTIME that pod names
@@ -41,20 +41,20 @@ import (
 	utilexec "k8s.io/client-go/util/exec"
 )
 
-// workdir is where a machine's project lives and where every command runs. One
+// workdir is where a sandbox's project lives and where every command runs. One
 // path, named once, because both the pod spec and the path confinement have to
 // mean the same directory.
 const workdir = "/work"
 
-// container is the one container in a machine's pod. Named so the exec
+// container is the one container in a sandbox's pod. Named so the exec
 // subresource addresses it explicitly — defaulting to "the first container" is
 // how a sidecar someone adds later silently starts receiving the commands.
-const container = "machine"
+const container = "sandbox"
 
-// Labels a machine's objects carry, so an operator can find a tenant's machine
+// Labels a sandbox's objects carry, so an operator can find a tenant's sandbox
 // with kubectl and without reading a database.
 const (
-	labMachine = "hanzo.ai/sandbox"
+	labSandbox = "hanzo.ai/sandbox"
 	labOrg     = "hanzo.ai/sandbox-org"
 	labClass   = "hanzo.ai/sandbox-class"
 )
@@ -63,7 +63,7 @@ const (
 // not an option for a pod running submitted code on our nodes.
 var defaultTTL = map[string]int{"exec": 900, "dev": 14400, "desktop": 14400}
 
-// maxTTL caps what a caller may ask for. A longer-lived machine is a Deployment
+// maxTTL caps what a caller may ask for. A longer-lived sandbox is a Deployment
 // an operator declares, not a lease a request can extend to forever.
 const maxTTL = 86400
 
@@ -98,7 +98,7 @@ func newRuntime() *runtime {
 	r := &runtime{
 		// Machines do NOT live in `hanzo`. This is the namespace whose policy
 		// denies them the cluster — ingress from nothing, egress a whitelist —
-		// and a machine must not sit beside the datastores it is forbidden to
+		// and a sandbox must not sit beside the datastores it is forbidden to
 		// reach. One namespace, one policy, everything that runs submitted code.
 		ns:           envOr("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
 		image:        envOr("SANDBOX_IMAGE_REPO", "registry.hanzo.ai/hanzoai/sandbox"),
@@ -118,7 +118,7 @@ func newRuntime() *runtime {
 			return r
 		}
 	}
-	cfg.UserAgent = "hanzo-cloud/machines"
+	cfg.UserAgent = "hanzo-cloud/sandbox"
 	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		r.initErr = fmt.Sprintf("dynamic client: %v", err)
@@ -156,10 +156,10 @@ func (r *runtime) pods() dynamic.ResourceInterface {
 	return r.dyn.Resource(k8s.Pods).Namespace(r.ns)
 }
 
-// start creates the machine's volume (if it has one) and its pod, and waits for
-// the pod to be running. A create that returns before the machine can answer is
+// start creates the sandbox's volume (if it has one) and its pod, and waits for
+// the pod to be running. A create that returns before the sandbox can answer is
 // a create that hands the caller a 502 on its very next call.
-func (r *runtime) start(ctx context.Context, m Machine) error {
+func (r *runtime) start(ctx context.Context, m Sandbox) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
@@ -177,10 +177,10 @@ func (r *runtime) start(ctx context.Context, m Machine) error {
 }
 
 // ensureVolume creates the project disk if it is not already there. A volume
-// OUTLIVES the machine that mounts it — it holds the checkout and the dependency
+// OUTLIVES the sandbox that mounts it — it holds the checkout and the dependency
 // caches, which is the whole reason a second session is cheap — so this creates
 // and never deletes. Only an explicit purge does that.
-func (r *runtime) ensureVolume(ctx context.Context, m Machine) error {
+func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 	vols := r.dyn.Resource(k8s.Volumes).Namespace(r.ns)
 	if _, err := vols.Get(ctx, m.Volume, metav1.GetOptions{}); err == nil {
 		return nil
@@ -209,8 +209,8 @@ func (r *runtime) ensureVolume(ctx context.Context, m Machine) error {
 	return nil
 }
 
-// podSpec is the machine, stated once.
-func (r *runtime) podSpec(m Machine) *unstructured.Unstructured {
+// podSpec is the sandbox, stated once.
+func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 	c := map[string]any{
 		"name":  container,
 		"image": m.Image,
@@ -224,7 +224,7 @@ func (r *runtime) podSpec(m Machine) *unstructured.Unstructured {
 		// line for node-pressure eviction, and node-pressure eviction ignores
 		// PodDisruptionBudgets. An npm install writes ~30,000 files into the
 		// container rootfs, which on our nodes shares one disk with every image
-		// layer and every build; a handful of unbounded machines take the node
+		// layer and every build; a handful of unbounded sandbox take the node
 		// into DiskPressure and evict their own neighbours. Measured, not feared.
 		"resources": map[string]any{
 			"requests": map[string]any{
@@ -244,7 +244,7 @@ func (r *runtime) podSpec(m Machine) *unstructured.Unstructured {
 		},
 	}
 	spec := map[string]any{
-		// No token, ever. A machine runs somebody else's code; a projected
+		// No token, ever. A sandbox runs somebody else's code; a projected
 		// service-account token in its filesystem is an API credential handed to
 		// that code. This is also why nothing else needs to strip credentials on
 		// the way in — there are none to strip.
@@ -253,9 +253,9 @@ func (r *runtime) podSpec(m Machine) *unstructured.Unstructured {
 		// of every Service in the namespace as env vars by default, which is a
 		// free map of the neighbourhood for anything running inside.
 		"enableServiceLinks": false,
-		// A machine that dies is finished, not restarted. Its lease belongs to a
+		// A sandbox that dies is finished, not restarted. Its lease belongs to a
 		// caller who is waiting on an answer, and a silent restart would hand that
-		// caller a fresh empty machine wearing the same id.
+		// caller a fresh empty sandbox wearing the same id.
 		"restartPolicy": "Never",
 		"containers":    []any{c},
 	}
@@ -296,7 +296,7 @@ func (r *runtime) podSpec(m Machine) *unstructured.Unstructured {
 			"name":      m.Pod,
 			"namespace": r.ns,
 			"labels": map[string]any{
-				labMachine: m.ID,
+				labSandbox: m.ID,
 				labOrg:     slug(m.Org),
 				labClass:   m.Class,
 			},
@@ -308,7 +308,7 @@ func (r *runtime) podSpec(m Machine) *unstructured.Unstructured {
 // waitRunning polls until the pod is running or the deadline passes. Polling and
 // not a Watch: this is one object for a bounded wait, and a watch would be a
 // long-lived connection per in-flight create for no better answer.
-func (r *runtime) waitRunning(ctx context.Context, m Machine) error {
+func (r *runtime) waitRunning(ctx context.Context, m Sandbox) error {
 	deadline := time.Now().Add(r.startTimeout)
 	for {
 		obj, err := r.pods().Get(ctx, m.Pod, metav1.GetOptions{})
@@ -367,7 +367,7 @@ func podMessage(obj *unstructured.Unstructured) string {
 // stop ends the lease. The pod is DELETED, never returned to anything: a pod
 // that ran submitted code is not handed to the next tenant, and there is no pool
 // for it to be handed back to.
-func (r *runtime) stop(ctx context.Context, m Machine) error {
+func (r *runtime) stop(ctx context.Context, m Sandbox) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
@@ -380,7 +380,7 @@ func (r *runtime) stop(ctx context.Context, m Machine) error {
 
 // purge deletes the project VOLUME. Separate from stop, and opt-in, because the
 // volume holds the only copy of the checkout and the caches.
-func (r *runtime) purge(ctx context.Context, m Machine) error {
+func (r *runtime) purge(ctx context.Context, m Sandbox) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
@@ -394,19 +394,19 @@ func (r *runtime) purge(ctx context.Context, m Machine) error {
 	return err
 }
 
-// exec runs argv in the machine and collects what it produced.
+// exec runs argv in the sandbox and collects what it produced.
 //
-// The machine is addressed by POD NAME through the apiserver. There is no
+// The sandbox is addressed by POD NAME through the apiserver. There is no
 // address to go stale, no shared key to present and no way for this call to
-// arrive at a pod belonging to somebody else — a name is minted once per machine
+// arrive at a pod belonging to somebody else — a name is minted once per sandbox
 // and never reused, so the recycled-address break the predecessor defended
 // against with a header cannot be spelled here.
-func (r *runtime) exec(ctx context.Context, m Machine, argv []string, stdin io.Reader, timeoutSec int) (ExecResult, error) {
+func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.Reader, timeoutSec int) (ExecResult, error) {
 	if err := r.ready(); err != nil {
 		return ExecResult{}, err
 	}
 	if m.Status != "running" || m.Pod == "" {
-		return ExecResult{}, fmt.Errorf("machine is %s", firstNonEmpty(m.Status, "unknown"))
+		return ExecResult{}, fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
 	}
 	d := r.execTimeout
 	if timeoutSec > 0 && time.Duration(timeoutSec)*time.Second < d {
@@ -447,7 +447,7 @@ func asCodeExit(err error, out *utilexec.CodeExitError) bool {
 	return false
 }
 
-// capped is an output buffer with a ceiling. A machine's whole job is running
+// capped is an output buffer with a ceiling. A sandbox's whole job is running
 // something that might print forever, and an unbounded buffer on the cloud side
 // turns that into our memory problem.
 type capped struct {
