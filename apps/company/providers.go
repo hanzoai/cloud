@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 )
 
 // providers.go declares the provider SEAMS the formation machine drives, plus the
@@ -169,8 +170,14 @@ func (rc resourceCharger) Charge(ctx context.Context, org string, amountCents in
 		return "", err
 	}
 	// Record the debit on the org's own ledger (fire-and-forget; the formation
-	// already advanced, mirroring every ResourceMeter caller).
-	rc.bill.Meter(org, "", "company-formation", amountCents, ref, "")
+	// already advanced, mirroring every ResourceMeter caller). ref names the ACT — it
+	// is minted here and handed back to the caller, so the formation and its debit are
+	// the same thing under the same name.
+	rc.bill.MeterUsage(org, "company-formation", metering.Usage{
+		Model:       "company-formation",
+		AmountCents: amountCents,
+		Ref:         ref,
+	})
 	return ref, nil
 }
 

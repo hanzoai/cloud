@@ -244,7 +244,7 @@ type DepositInput struct {
 	// Ref, when non-empty, is the deposit's idempotency key: two deposits carrying the SAME
 	// Ref credit the wallet AT MOST ONCE (the replay is a no-op returning the first entry's
 	// id), so a fixed Ref makes a backfill/settlement exactly-once. Empty keeps the additive
-	// default — each grant takes a fresh ref and stacks. Mirrors UsageInput.RequestID.
+	// default — each grant takes a fresh ref and stacks. Mirrors UsageInput.Ref.
 	Ref  string
 	Test bool // write to the sandbox (test-mode) ledger
 }
@@ -252,16 +252,28 @@ type DepositInput struct {
 // UsageInput is a native usage (withdraw/debit) write to a subject's prepaid
 // ledger — the typed twin of the /v1/billing/usage body, no HTTP.
 type UsageInput struct {
-	Org       string
-	Subject   string       // billing subject / SourceId
-	Amount    money.Amount // amount to debit, exact 18-decimal USD (> 0)
-	Currency  string
-	Model     string
-	Provider  string
-	Project   string
-	Service   string
-	RequestID string
-	Test      bool
+	Org      string
+	Subject  string       // billing subject / SourceId
+	Amount   money.Amount // amount to debit, exact 18-decimal USD (> 0)
+	Currency string
+	Model    string
+	Provider string
+	Project  string
+	Service  string
+	// Ref names the metered ACT this debit records, and it is the debit's idempotency
+	// key WITHIN the subject's wallet: two debits carrying the same Ref for the same
+	// subject and amount move the money AT MOST ONCE. Empty keeps the additive default —
+	// the ledger mints the entry's own ref and the debit stands alone.
+	//
+	// IT IS THE SERVER'S WORD FOR THE ACT, never a value the payer chose. It used to be
+	// the request's X-Request-Id, which the edge propagates verbatim from the client and
+	// CORS-allows from a browser: a caller who pinned that header was billed once for
+	// every call it made afterwards. Set it from an identity the server assigns — a
+	// message row's id, a settlement id, a registration ref — or leave it empty and let
+	// the ledger mint one. The correlation id belongs on the log line and on the
+	// attribution wire (metering.Usage.RequestID), never here. Mirrors DepositInput.Ref.
+	Ref  string
+	Test bool
 }
 
 // CommerceClient is the inter-subsystem interface to Commerce (entitlements +
@@ -297,10 +309,10 @@ type FinanceClient interface {
 	// meter share.
 	Balance(ctx context.Context, org, subject, currency string, test bool) (money.Amount, error)
 	// Deposit posts a credit (funding→wallet) to subject's ledger wallet and returns
-	// the ledger entry id. Idempotent on in.RequestID when set.
+	// the ledger entry id. Idempotent on in.Ref when set.
 	Deposit(ctx context.Context, in DepositInput) (entryID string, err error)
 	// RecordUsage posts a usage debit (wallet→revenue) from subject's ledger wallet.
-	// Idempotent on in.RequestID.
+	// Idempotent on in.Ref WITHIN subject's wallet.
 	RecordUsage(ctx context.Context, in UsageInput) error
 	// SumUsageSince returns org's total metered usage in CENTS at/after the unix
 	// cutoff `since` (deposits excluded; test selects the sandbox books). The rolling

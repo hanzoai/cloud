@@ -34,6 +34,7 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -144,12 +145,23 @@ func gpuCharge(s *cloud.Service[state], c *zip.Ctx) error {
 	// The debit, keyed on the caller's requestId. A replay finds the original entry
 	// inside the ledger's own transaction, moves no money, and answers the SAME
 	// transaction id — so a retrying client can never conclude it bought two GPUs.
+	//
+	// The key is scoped to THIS wallet and names ONE charge: a caller reusing its key
+	// for a charge of a different size is refused (409) rather than handed the first
+	// one's entry, so a pinned key buys a repeat of the charge it named and nothing else.
 	tag := gpuTag(req.Tag)
 	entryID, _, err := recorder.RecordUsageOnce(c.Context(), types.UsageInput{
 		Org: org, Subject: subject, Amount: amount, Currency: currency,
 		Model: firstNonEmpty(strings.TrimSpace(req.Notes), tag), Provider: "gpu",
-		Service: tag, RequestID: req.RequestID,
+		Service: tag, Ref: req.RequestID,
 	})
+	if errors.Is(err, finance.ErrRefReused) {
+		// The caller's own key, already spent on a charge of another size. That is the
+		// caller's to fix and it will not clear by waiting, so it is a conflict — never
+		// the outage shape below, which invites a retry that can only fail again.
+		return zip.Errorf(http.StatusConflict,
+			"requestId %q already names a charge of a different amount", req.RequestID)
+	}
 	if err != nil {
 		s.Log.Error("gpu-charge: ledger debit failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")

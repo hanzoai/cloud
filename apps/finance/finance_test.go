@@ -50,13 +50,13 @@ func TestPrepaidWalletLedger(t *testing.T) {
 	mustBalance(t, f, "acme", "acme", 1000)
 
 	// Debit 300 of usage → 700.
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Amount: money.FromCents(300), RequestID: "r1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Amount: money.FromCents(300), Ref: "r1"}); err != nil {
 		t.Fatalf("usage: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 700)
 
-	// Replay the same RequestID → idempotent, still 700 (debited at most once).
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Amount: money.FromCents(300), RequestID: "r1"}); err != nil {
+	// Replay the same Ref → idempotent, still 700 (debited at most once).
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Amount: money.FromCents(300), Ref: "r1"}); err != nil {
 		t.Fatalf("usage replay: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 700)

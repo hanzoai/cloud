@@ -24,10 +24,10 @@ func TestSumUsageSince_OrgTotal(t *testing.T) {
 		t.Fatalf("deposit: %v", err)
 	}
 	// $1.50 + $0.75 of usage = 225 cents.
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(150), Model: "m", RequestID: "u1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(150), Model: "m", Ref: "u1"}); err != nil {
 		t.Fatalf("usage u1: %v", err)
 	}
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(75), Model: "m", RequestID: "u2"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(75), Model: "m", Ref: "u2"}); err != nil {
 		t.Fatalf("usage u2: %v", err)
 	}
 
@@ -45,7 +45,7 @@ func TestSumUsageSince_OrgTotal(t *testing.T) {
 		t.Fatalf("SumUsageSince(unknown org) = %d,%v, want 0,nil", got, err)
 	}
 	// Test-mode books are separate: the live sum sees the live org only.
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(999), Model: "m", Test: true, RequestID: "t1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(999), Model: "m", Test: true, Ref: "t1"}); err != nil {
 		t.Fatalf("test usage: %v", err)
 	}
 	if got, _ := f.SumUsageSince(ctx, org, false, 0); got != 225 {
@@ -77,7 +77,7 @@ func TestUsageHook_FiresAfterDebit(t *testing.T) {
 	})
 	defer SetUsageHook(nil)
 
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: "hook-org", Subject: "hook-org", Amount: money.FromCents(100), Test: true, RequestID: "h1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: "hook-org", Subject: "hook-org", Amount: money.FromCents(100), Test: true, Ref: "h1"}); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
 	}
 	select {
@@ -109,7 +109,7 @@ func TestListUsage_CarriesTheExactDebit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: sub, Model: "zen-1", RequestID: "x1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: sub, Model: "zen-1", Ref: "x1"}); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
 	}
 
