@@ -66,22 +66,8 @@ concurrency:
   # them between v1.801.335 and v1.801.350. Pull requests are a different ref, so
   # they neither queue behind a release nor hold one up, and a new push to a PR
   # cancels its own stale run.
-  #
-  # cancel-in-progress is a LITERAL false, not the expression
-  # `${{ github.event_name == 'pull_request' }}` that used to stand here. The
-  # forge does not evaluate that expression to a boolean: on a push it rendered
-  # the string "false" and then cancelled anyway, so the setting meant to protect
-  # releases was doing the exact thing the paragraph above forbids. Measured on
-  # main over one morning: runs 883 through 890 were cancelled, every one of them
-  # by the next push landing seconds later, and 27 consecutive runs produced no
-  # release at all. A repo pushed more often than its gate takes to run can never
-  # finish one — the queue was not slow, it was never allowed to finish.
-  #
-  # The cost is that a stale PR run is no longer cancelled by its own next push.
-  # That is the lesser evil by the same argument as above: a queued run wastes a
-  # runner slot, a cancelled one wastes a PUBLISHED IMAGE with no tag or pin.
   group: cicd-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
