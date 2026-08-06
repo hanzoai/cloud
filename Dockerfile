@@ -272,19 +272,24 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /smoke ./plugin/smoke
-# THE BOX DAEMON (cmd/boxd) — the agent-facing half of apps/sandbox, and the only
-# binary here that does not run in THIS image. The box image (hanzo/bot's
-# Dockerfile.box) does `COPY --from=ghcr.io/hanzoai/cloud:<pin> /boxd`, so this
-# line is what puts it there; without it that COPY fails and no box image can be
-# built at all, which is exactly where the executor sat.
+# THERE IS NO BOX DAEMON. cmd/boxd was deleted with the design that needed it:
+# a sandbox is a POD, and commands reach it over the Kubernetes exec subresource
+# (SPDY to the apiserver), so there is nothing inside the pod to talk to and
+# nothing to ship into it. The stage that built it outlived the source by exactly
+# one commit, and `go build ./cmd/boxd` on a directory that does not exist is not
+# a warning — it fails the build:
 #
-# It is built HERE rather than in hanzo/bot because boxd's types ARE
-# apps/sandbox/wire's types — the scheduler and the daemon agree because they
-# compile against one declaration, not because two repos were kept in sync by
-# hand. A boxd built anywhere else is a second copy of the contract.
-RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /boxd ./cmd/boxd
+#   #28 ERROR: process "/bin/sh -c CGO_ENABLED=0 go build ... -o /boxd ./cmd/boxd"
+#   did not complete successfully: exit code: 1
+#
+# So EVERY image from main failed here, after a green gate, which is why a
+# proven-and-merged executor was never deployed: the lane could test the commit
+# and could not build it.
+#
+# The consumer this fed — hanzo/bot's Dockerfile.box, `COPY --from=cloud:<pin>
+# /boxd` — has to move to a pod it does not have to install anything into. Leaving
+# a stage here that cannot compile does not keep that consumer working; it only
+# stops anything else from shipping.
 # EVERY subsystem, each as its OWN binary in /plugins beside the host. The host
 # fork/execs a sibling <dir>/<name> (manifest.App.Plugin) on the first request that
 # reaches its prefix, so the binary must be in the image or the mount aborts:
@@ -398,10 +403,8 @@ COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
-# boxd rides along without ever being executed here. The box image copies it out
-# of this one, and a binary that is only in the build stage is not in the
-# published image — `COPY --from=<cloud pin> /boxd` reads the FINAL layer.
-COPY --from=build /boxd /boxd
+# No /boxd: see the build stage. Nothing is carried for a daemon that no longer
+# exists, and a COPY of a path the build stage never wrote is its own hard failure.
 # The per-app plugin binaries, landing beside /cloud because that is where the host
 # looks: manifest.App.Plugin resolves dir(os.Executable())+"/<name>". Copying the
 # DIRECTORY's contents keeps this generic — a new app needs no line here, same as
