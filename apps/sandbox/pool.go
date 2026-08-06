@@ -55,9 +55,12 @@ type pool struct {
 
 func newPool() *pool {
 	p := &pool{
-		// Boxes do NOT live in `hanzo`. code-exec.yaml's policy admits ingress
-		// from namespace hanzo, and a box must not sit beside the datastores it
-		// is forbidden to reach.
+		// Boxes do NOT live in `hanzo`. This is the namespace universe's
+		// box-isolation policy governs — ingress from `hanzo` on the box port
+		// only, egress a whitelist of DNS plus public 80/443 — and a box must
+		// not sit beside the datastores it is forbidden to reach. The shared
+		// exec pool moved here for the same reason; one namespace, one policy,
+		// everything that runs submitted code.
 		ns:    envOr("BOX_NAMESPACE", "hanzo-boxes"),
 		image: envOr("BOX_IMAGE_REPO", "registry.hanzo.ai/hanzoai/box"),
 		tag:   envOr("BOX_IMAGE_TAG", ""),
