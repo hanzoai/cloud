@@ -106,18 +106,12 @@ type campaignRef struct {
 	ID string `json:"id"`
 }
 
-// campaignRecord is a campaign as the API publishes it. It is a DEFINED type over
-// Campaign, not a second shape: the fields and their json tags are the same value,
-// so the wire is byte-identical. It exists because the fleet's schema namespace is
-// FLAT — openapi.Weave refuses one name meaning two things — and apps/marketing
-// already publishes an email "Campaign". One name, one shape, so this one says which
-// plane it belongs to.
-type campaignRecord Campaign
-
-// campaignResults is a campaign's metrics as the API publishes it — a DEFINED type
-// over Metrics for the same reason campaignRecord is one: apps/agents already
-// publishes a "Metrics".
-type campaignResults Metrics
+// campaignRecord (store.go) and campaignResults (metrics.go) are what this surface
+// publishes. Each is declared under its published name — with Campaign and Metrics
+// as domain aliases of the same type — because the fleet's schema namespace is FLAT
+// (openapi.Weave refuses one name meaning two things, and apps/marketing already
+// publishes an email "Campaign", apps/agents a "Metrics"), and because a field's
+// doc comment only reaches the document under the name its struct literal carries.
 
 // campaignFilter narrows the org's campaign list. Both fields are query
 // parameters and both are optional; an unparseable limit reads as the default,
@@ -262,9 +256,7 @@ func (o ops) list(ctx context.Context, in *campaignFilter) (*campaignPage, error
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	page := make([]campaignRecord, 0, len(rows))
-	for _, r := range rows {
-		page = append(page, campaignRecord(r))
-	}
+	page = append(page, rows...)
 	return &campaignPage{Data: page}, nil
 }
 
@@ -323,10 +315,10 @@ func (o ops) create(ctx context.Context, in *campaignWrite) (*campaignRecord, er
 	return record(saved), nil
 }
 
-// record publishes a stored campaign under the API's own schema name. The
-// conversion is free — campaignRecord IS Campaign — and keeps every call site one
-// line rather than a temporary per return.
-func record(c Campaign) *campaignRecord { r := campaignRecord(c); return &r }
+// record answers a stored campaign by pointer. campaignRecord IS Campaign — one
+// type, two spellings — so this only exists to keep every call site one line
+// rather than a temporary per return.
+func record(c campaignRecord) *campaignRecord { return &c }
 
 // GetCampaign returns one campaign of the caller's org — its name, audience,
 // creatives, channels with their per-channel launch state, schedule, budget and
@@ -446,7 +438,7 @@ func (o ops) metrics(ctx context.Context, in *metricsQuery) (*campaignResults, e
 	// Spend — each live channel's connector-reported spend, fanned in fail-soft.
 	spendCents, chMetrics := channelSpend(ctx, org, camp)
 
-	m := Metrics{
+	m := campaignResults{
 		CampaignID:  camp.ID,
 		Name:        camp.Name,
 		Status:      camp.Status,
@@ -470,8 +462,7 @@ func (o ops) metrics(ctx context.Context, in *metricsQuery) (*campaignResults, e
 	// A/B lens: the experiments primitive's pull-model analysis (nil when the
 	// campaign runs a single creative or no experiment is wired).
 	m.ABTest = analyzeExperiment(ctx, org, camp, start, end)
-	out := campaignResults(m)
-	return &out, nil
+	return &m, nil
 }
 
 // AddCampaignChannel adds a channel to a campaign, or REPLACES the one it already

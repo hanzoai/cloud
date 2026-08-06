@@ -73,6 +73,18 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/exec describe` and by the Dockerfile before every build.
+//
+// Without this directive the package builds, tests pass, and the ONE typed op here
+// publishes a summary with no description: openapi.Complete accepts either, so the
+// gap is invisible to every gate and visible in every SDK. POST /v1/exec shipped
+// exactly that way.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Path is where the code interpreter answers. It lives HERE, in the app that serves
 // it, because three consumers once disagreed about it in production and nothing
 // could see the disagreement.
@@ -119,14 +131,30 @@ var langs = map[string]struct{ file, run string }{
 // sends: lang/code/args from the model's tool call, files/session_id/user_id from
 // the host's injection, runtime_session_hint from the stateful-session path.
 type CodeRun struct {
+	// Lang selects the toolchain, and with it the filename the code is written to
+	// and the line that runs it: py, js, ts, bash, r, php, go, rs, c, cpp, java, d,
+	// f90. Anything else is refused rather than guessed at — a run in the wrong
+	// language fails somewhere deep in a compiler, which reads as an outage.
 	Lang string `json:"lang" validate:"required"`
+	// Code is the WHOLE program, not a fragment: it is written to a single file and
+	// that file is what runs, so a compiled language needs its entry point and an
+	// interpreted one runs top to bottom.
 	Code string `json:"code" validate:"required"`
+	// Args become the PROGRAM's argv, never the compiler's. For the compiled
+	// languages the toolchain builds first and these are passed to the binary it
+	// produced.
 	Args []string `json:"args,omitempty"`
 	// Files are inputs the host already put in some session. Each names the session
 	// its bytes live in, which is usually — and ideally — the session this run wants.
-	Files     []CodeFile `json:"files,omitempty"`
-	SessionID string    `json:"session_id,omitempty"`
-	UserID    string    `json:"user_id,omitempty"`
+	Files []CodeFile `json:"files,omitempty"`
+	// SessionID continues an EXISTING sandbox, which is what makes runs stateful:
+	// the same filesystem, so one run's output file is the next run's input. Empty
+	// leases a fresh sandbox and the id it got comes back on the result.
+	SessionID string `json:"session_id,omitempty"`
+	// UserID attributes the run inside the caller's org. It is a label, never a
+	// tenant: the org is resolved from the validated principal and a value here
+	// cannot widen what the run may reach.
+	UserID string `json:"user_id,omitempty"`
 	// RuntimeSessionHint is the stateful-session hint. It is carried so a client
 	// that sends it is not silently misread, and it selects nothing here: every
 	// session in this implementation is already a warm sandbox, so there is no
@@ -146,10 +174,18 @@ type CodeRun struct {
 // skipped by the "not available" note as well — so the CSV was invisible and nothing
 // said so. Answering with `storage_session_id` keeps the reply on the agents shape.
 type CodeFile struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
+	// ID is the file's path RELATIVE to its session's artifact directory, which is
+	// also how it is fetched: GET /v1/download/{session}/{id}.
+	ID string `json:"id"`
+	// Name is the display name. On an ANSWER it carries the `{session}/{id}`
+	// identifier whole, because the client matches on that prefix.
+	Name string `json:"name"`
+	// StorageSessionID names the session holding the bytes, and is the spelling the
+	// answer always uses.
 	StorageSessionID string `json:"storage_session_id,omitempty"`
-	SessionID        string `json:"session_id,omitempty"`
+	// SessionID is the other accepted spelling of the same fact on the way IN. Both
+	// are read; whichever is set wins.
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // Session is the session a file's bytes live in, whichever name the caller used.
@@ -160,10 +196,19 @@ func (f CodeFile) Session() string { return firstNonEmpty(f.StorageSessionID, f.
 // "the code threw" and "the interpreter is down" are different facts and the caller
 // renders them differently.
 type CodeResult struct {
-	SessionID string    `json:"session_id"`
-	Stdout    string    `json:"stdout"`
-	Stderr    string    `json:"stderr"`
-	Files     []CodeFile `json:"files,omitempty"`
+	// SessionID is the sandbox this run used — the one that was passed in, or the
+	// fresh one that was leased. Pass it to the next run to keep the filesystem.
+	SessionID string `json:"session_id"`
+	// Stdout is what the program wrote to standard output.
+	Stdout string `json:"stdout"`
+	// Stderr is what the program wrote to standard error, INCLUDING a compiler's
+	// diagnostics and the trace of a program that exited non-zero. Its presence is
+	// not a failed call.
+	Stderr string `json:"stderr"`
+	// Files are what this run CREATED OR CHANGED, decided by mtime against a marker
+	// taken before the program started — so it is the run's output, not a listing of
+	// the directory. Fetch each from GET /v1/download/{session}/{id}.
+	Files []CodeFile `json:"files,omitempty"`
 }
 
 // listing is one row of GET /v1/files/{sid}. The client matches on `name` having
@@ -189,13 +234,35 @@ type uploadedFile struct {
 
 // ---- the composition -------------------------------------------------------
 
-// run is the typed op: resolve the tenant, then the interpreter.
+// run executes a program in a throwaway sandbox and answers with what it printed
+// and what it left behind.
 //
-// The resolution is what makes THIS door safe. A typed op is also an MCP tool and
-// an op-plane op; MCP's tools/call invokes it directly, with no route and therefore
-// no middleware, so nothing there could have checked a credential. tenantOf refuses
-// a context that carries neither a validated principal nor exec's own admission
-// marker, so those doors fail closed without a second gate to keep in step.
+// `lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,
+// php, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a
+// fragment: a compiled language is compiled and then run, an interpreted one is
+// interpreted, and `args` becomes the program's own argv either way. Nothing is
+// installed for you; the image is the environment.
+//
+// A PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the
+// diagnostics on `stderr`, because "the code threw" and "the interpreter is down"
+// are different facts a caller renders differently. Only the second is an error
+// status.
+//
+// Runs are stateful through `session_id`. Omit it and the run gets a fresh sandbox
+// whose id comes back on the answer; pass that id again and the next run sees the
+// same filesystem, so a program can write a file one call and read it the next.
+// `files` names bytes already uploaded to a session (POST /v1/upload), copied in
+// before the program starts. `files` on the ANSWER is what the program created or
+// changed, by comparison against a marker taken at start — so it is the run's real
+// output, not a listing of the directory — and each is fetched from
+// GET /v1/download/{session}/{name}.
+//
+// The tenant is the caller's, never the body's, at every door. A typed op is also
+// an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
+// route and therefore no middleware, so nothing there could have checked a
+// credential. tenantOf refuses a context carrying neither a validated principal nor
+// exec's own admission marker, so those doors fail closed without a second gate to
+// keep in step.
 func run(ctx context.Context, in *CodeRun) (*CodeResult, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
@@ -662,7 +729,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return c.Continue()
 	}))
 
-	zip.Post[CodeRun, CodeResult](app, Path, run,
+	// Registered on the *zip.App rather than on the cloud.Router, and that is what
+	// makes the prose reach the document. zipdoc resolves a typed op's path
+	// STATICALLY, and a `cloud.Router` parameter is an interface it cannot follow to
+	// a prefix — so it refuses to lift, the op publishes a summary and no
+	// description, and openapi.Complete accepts that because either one satisfies
+	// it. The subsystem scope adds no prefix here (every path below is absolute), so
+	// this is the same registration, spelled where the generator can read it.
+	//
+	// It is only the ROUTES that move: the credential middleware above stays on the
+	// scoped router, where the prefix guard applies to it.
+	reg := cloud.ZipApp(app)
+	if reg == nil {
+		return fmt.Errorf("exec.Mount: router carries no typed-op registry")
+	}
+	zip.Post[CodeRun, CodeResult](reg, Path, run,
 		zip.WithSummary("Run a code snippet in a sandboxed interpreter"))
 	app.Post(Path+"/programmatic", programmatic)
 	app.Post("/v1/upload", upload)
