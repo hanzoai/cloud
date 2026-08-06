@@ -1,6 +1,11 @@
 # hanzoai/cloud — developer ergonomics for the unified Hanzo Cloud binary (HIP-0106).
 # Targets are intentionally minimal; deploy artifacts (compose, helm) live in deploy/ and helm/.
 
+# Bare `make` shows help. Stated explicitly because make otherwise takes the FIRST
+# target it parses, and `include mk/fleet.mk` below inserts three targets ahead of
+# help — so without this line, typing `make` would silently run the openapi compose.
+.DEFAULT_GOAL := help
+
 GO              ?= go
 
 # cloud is a STANDALONE Go module — a self-contained deploy unit (its own go.mod,
@@ -77,6 +82,13 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # The binary each app builds to. Named targets (not a loop) so make can schedule
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
+
+# ONE DOOR. mk/fleet.mk defines weave, subsets and check, and
+# without this include they were reachable only as `make -f mk/fleet.mk <target>` —
+# a path nobody would guess and nothing in `make help` mentioned. Its own header
+# always said it was meant to be included here; it just never was, so the drift
+# gate (check) sat behind a door with no handle.
+include mk/fleet.mk
 
 .PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke zipdoc-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
@@ -269,22 +281,17 @@ TEST_TAGS := sqlite_fts5
 # most. The pathspec scopes it to the generator's own files, so an unrelated
 # dirty tree neither hides a stale lift nor invents one.
 zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
-	@$(GO) generate -run zipdoc ./...
-	@stale=$$(git status --porcelain -- '*zipdoc_gen.go'); \
-	if [ -n "$$stale" ]; then \
-	  echo "$$stale"; \
-	  echo ""; \
-	  echo "STALE: a doc comment moved without its lift being regenerated. The files above"; \
-	  echo "are the only path from source prose to the published document, so a stale one"; \
-	  echo "ships an operation that describes itself with words its source no longer says."; \
-	  echo ""; \
-	  echo "They have ALREADY been regenerated in your tree by this target — commit them."; \
-	  echo "From a clean checkout the same fix is:"; \
-	  echo ""; \
-	  echo "  go generate -run zipdoc ./..."; \
-	  echo ""; \
-	  exit 1; \
-	fi
+	# Per PACKAGE, not ./...: the checker must load exactly the way `go generate`
+	# does, one package at a time — whole-module loading extracts differently
+	# (zap-proto/zip zipdoc: single-vs-module load divergence) and a gate must
+	# never disagree with the generator it polices.
+	# A dot-directory is not this module's source. An agent worktree at
+	# .claude/worktrees/<id>/ is a whole second checkout of this repository, and
+	# the walk read it: 203 packages where there are 104, and it went red on a
+	# copy's o11y while nothing here had changed.
+	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
+	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
+	done
 
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
 	$(MAKE) zipdoc-check
@@ -292,7 +299,7 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 	# The drift gate: regenerate the document FROM SOURCE and fail on any diff.
 	# The weave above proves the subsets compose; this proves they are still the
 	# routes. Only the second one catches a route added without regenerating.
-	$(MAKE) -f mk/fleet.mk surface-check
+	$(MAKE) -f mk/fleet.mk check
 
 # The inner loop. Everything `test` runs EXCEPT the drift gate, which rebuilds one
 # binary per app and dominates the wall clock.
@@ -304,7 +311,7 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only — CI runs `test`.
 	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
 	@echo ">>            a route added without regenerating will pass here and fail CI."
-	@echo ">>            the real gate:  make -f mk/fleet.mk surface-check"
+	@echo ">>            the real gate:  make -f mk/fleet.mk check"
 	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
@@ -326,7 +333,7 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 # openapi.yaml is a golden file: written here, and verified two different ways —
 # and the difference between them is the whole lesson.
 #
-# The WEAVE (openapi-weave, run by `make test`) proves the subsets COMPOSE: no two
+# The WEAVE (weave, run by `make test`) proves the subsets COMPOSE: no two
 # apps claiming one path, no two claiming one schema name. It compares the subsets
 # to the golden they weave into. Both are derived artifacts, and nothing in that
 # comparison forces either back to the routes — so they agree with each other
@@ -336,16 +343,10 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 # same stale subset, `make test` stayed green, and the entire ingress API was
 # missing from the spec every SDK is generated from.
 #
-# The DRIFT GATE (surface-check) is the one that catches that: it REGENERATES
+# The DRIFT GATE (check) is the one that catches that: it REGENERATES
 # from source and fails on any diff. It is the expensive half — one binary per
 # app — and it is in `make test` anyway, because the cheap half is exactly the
 # check that passed while the published document was missing an entire API.
-describe: ## Regenerate every app's projections, then weave them into openapi.yaml.
-	$(GO) generate -run zipdoc ./...
-	$(MAKE) -f mk/fleet.mk describe-apps
-	$(MAKE) -f mk/fleet.mk openapi-weave OUT=openapi.yaml
-	@echo ">> openapi.yaml — $$(grep -c '^  /' openapi.yaml) paths. The MCP tool list is NOT an artifact: POST /v1/mcp asks every subsystem."
-
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
 	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "sqlite_purego $(TEST_TAGS)" ./...
 

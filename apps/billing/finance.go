@@ -25,14 +25,21 @@ package billing
 // admin reserve mutations); this lane adds the six commerce-projected reads.
 //
 // TENANT ISOLATION. Identical to the /v1/billing/* reads: the org is the VALIDATED IAM
-// owner (principal.Org), the commerce billing subject is PINNED server-side to it on
-// every subject key, and NO client-supplied subject/org is forwarded — so a caller
-// reads ONLY its OWN org's wallet and can never widen scope.
+// owner (principal.OrgFrom, parked by the composer's cloud.Bridge), the commerce
+// billing subject is PINNED server-side to it on every subject key, and NO
+// client-supplied subject/org is forwarded — so a caller reads ONLY its OWN org's
+// wallet and can never widen scope.
 //
 // SHAPE. Unlike the /v1/billing/* passthrough, these RESHAPE commerce's raw wire into
 // the typed finance contract (USD cents, optional-safe), because the finance UI's shape
 // differs from commerce's (e.g. commerce `holds` → pendingCents; a withdraw → a signed
-// ledger posting). The reshape is the whole value this lane adds over the raw ledger.
+// ledger posting). The reshape is the whole value this lane adds over the raw ledger —
+// and it is why the six are TYPED ops where /v1/billing/* stays raw: an op that owns
+// its shape can declare it, and every projection (the document, the MCP tool, the CLI
+// command, the SDK method) follows from that one declaration. The one fact a reader of
+// BOTH prefixes needs: /v1/billing/* serves commerce's own bytes (body and status),
+// while /v1/finance/* reshapes that same wallet — two shapes of one ledger,
+// not two ledgers.
 //
 // HONEST GAPS. There is no per-org customer-invoice ledger in commerce today (it is a
 // prepaid wallet: deposits + withdraws, not issued invoices), so /v1/finance/invoices
@@ -53,142 +60,34 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
-// mountFinance registers the six commerce-projected /v1/finance/* reads on app. Called
-// from Mount, so the finance surface ships with the billing surface (same commerceProxy).
-func mountFinance(s *cloud.Service[state], app cloud.Router) {
-	app.Get("/v1/finance/balance", cloud.Handle(s, financeBalance))                // prepaid available + holds + due
-	app.Get("/v1/finance/credits", cloud.Handle(s, financeCredits))                // credit grants (deposits)
-	app.Get("/v1/finance/usage", cloud.Handle(s, financeUsage))                    // metered spend over ?range=
-	app.Get("/v1/finance/invoices", cloud.Handle(s, financeInvoices))              // issued invoices (honest empty today)
-	app.Get("/v1/finance/payment-methods", cloud.Handle(s, financePaymentMethods)) // masked saved cards (brand+last4)
-	app.Get("/v1/finance/ledger", cloud.Handle(s, financeLedger))                  // per-org double-entry postings over ?range=
-}
-
-// The PROSE for the six, beside the route table that keeps them untyped. Each is a raw
-// *zip.Ctx handler, so zipdoc has no doc comment to lift; without a Describe the
-// document publishes an operationId and nothing else, and every generated SDK offers a
-// MONEY call that cannot say whose books it reads or what the amounts mean.
-//
-// The one fact a reader of BOTH prefixes needs, stated once here and pointed at from the
-// ops it changes: /v1/billing/* forwards the raw commerce wire (body and status verbatim,
-// one row per billed call), while /v1/finance/* RESHAPES that same wallet into the typed
-// finance contract the UI renders. They are two shapes of one ledger, not two ledgers —
-// except payment-methods, which read one store under two different KEYS.
-func init() {
-	openapi.Describe("/v1/finance/balance", http.MethodGet,
-		"Spendable prepaid for the caller's org, in the finance shape",
-		"Answers the org's spendable prepaid balance typed for the finance surfaces: "+
-			"`availableCents`, `pendingCents`, `dueCents` and the `asOf` instant it was read.\n\n"+
-			"It is the SAME wallet read /v1/billing/balance answers — one function, called by "+
-			"both, so the two surfaces cannot drift into disagreeing about a customer's money. "+
-			"Reshaped, never re-metered. Co-resident the number comes straight out of the org's "+
-			"own double-entry ledger file.\n\n"+
-			"`dueCents` is a structural 0: this is a PREPAID wallet with no open-invoice debt, so "+
-			"nothing is ever owed and a non-zero value here would be an invention. `pendingCents` "+
-			"is 0 on the co-resident ledger, where authorization holds are never posted; only a "+
-			"split-deploy upstream reports holds, and there spendable is the balance NET of them, "+
-			"floored at 0 — a fully-held wallet reports 0 rather than money the gate would "+
-			"refuse.\n\n"+
-			"Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own "+
-			"org from the validated IAM owner claim; 401 without a validated principal, and a "+
-			"balance that cannot be read is 502 — never 0, because unknown is not broke.")
-
-	openapi.Describe("/v1/finance/credits", http.MethodGet,
-		"Credit grants and top-ups on the caller's org wallet",
-		"Answers the money PUT IN to the org's wallet — each staff grant, promo and settled "+
-			"top-up as a positive row with its id, label, cents and grant time.\n\n"+
-			"Spend is not a credit. A posting counts here only when it moved money IN; debits "+
-			"belong to /v1/finance/usage (aggregated) and /v1/finance/ledger (signed). All three "+
-			"project ONE read of the same ledger through ONE vocabulary for what a posting means, "+
-			"so they cannot disagree about a row — nor silently drop one, which is what an empty "+
-			"credits page against a funded wallet was.\n\n"+
-			"`label` falls back through the posting's notes, then its tags, then a bare Credit — "+
-			"it is a description, never an identifier. `remainingCents` is OMITTED: the wallet is "+
-			"one running balance, not per-grant buckets, so no grant has a remainder to report and "+
-			"spend cannot be attributed to the credit that funded it.\n\n"+
-			"Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own "+
-			"org; 401 without a validated principal. An org with no grants gets an empty array — "+
-			"honest, never a fabricated figure.")
-
-	openapi.Describe("/v1/finance/usage", http.MethodGet,
-		"What the caller's org spent over a window, as a series and by tag",
-		"Answers metered spend inside `range=`: the window total, a time series to plot, and one "+
-			"line per usage TAG. Aggregated from the same charged ledger the balance comes off — "+
-			"projected, never re-metered.\n\n"+
-			"Only DEBIT postings count; deposits are credits and are excluded. `range` is 24h, "+
-			"7d, 30d or 90d, and anything else — including absent — is 30d, so a typo silently "+
-			"widens the window to a month rather than failing. Buckets are hourly at 24h and daily "+
-			"otherwise, in UTC; a posting whose timestamp will not parse is dropped rather than "+
-			"mis-bucketed.\n\n"+
-			"Lines group by the posting's tag (`Usage` where it carries none) and `units` counts "+
-			"POSTINGS, not tokens. The dimensions here are time and tag. For per-request rows and "+
-			"a per-PRODUCT breakdown, read /v1/billing/usage instead — the same money, cut a "+
-			"different way.\n\n"+
-			"Cents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of "+
-			"sub-cent token calls totals LOW here. Scoped to the caller's own org; 401 without a "+
-			"validated principal.")
-
-	openapi.Describe("/v1/finance/invoices", http.MethodGet,
-		"Issued invoices — none exist, and that is the honest answer",
-		"Answers an empty typed array, always. The fleet bills a PREPAID wallet — money in, "+
-			"metered debits out — and issues no customer invoices, so there is no invoice ledger "+
-			"to project. Nothing here is a fabricated figure and nothing is hidden behind a "+
-			"filter.\n\n"+
-			"The shape is fixed, so the finance UI renders this lane today and the day an invoice "+
-			"ledger exists it fills with ZERO client change. Spend that actually happened is "+
-			"/v1/finance/usage; money in and out is /v1/finance/ledger; what is left to spend is "+
-			"/v1/finance/balance.\n\n"+
-			"The gate is real even though the body is empty: 401 without a validated principal. It "+
-			"is the only finance read that touches no store, so it is also the only one that "+
-			"cannot 502.")
-
-	openapi.Describe("/v1/finance/payment-methods", http.MethodGet,
-		"Saved cards for the wallet the caller pays from",
-		"Answers the masked card descriptors for the caller's resolved WALLET — id, brand, last "+
-			"four, expiry, default flag — reshaped into the finance contract.\n\n"+
-			"It re-masks defensively: whatever the upstream sends, at most the trailing four "+
-			"DIGITS survive into `last4`. No card number, no security code and no processor token "+
-			"exists in this shape at all, so an over-returning upstream still cannot leak one "+
-			"through this lane.\n\n"+
-			"Read the sibling difference before trusting a mismatch. This keys the store on the "+
-			"resolved wallet; /v1/billing/methods keys it on the org SLUG, which is also "+
-			"the key a card is SAVED under — identical for an org paying from its shared pool, "+
-			"different wherever the payer is a person. When the two lists disagree, the billing "+
-			"one is what was saved.\n\n"+
-			"401 without a validated principal. An upstream that answers non-2xx or cannot be "+
-			"reached is 502 — never an empty list, because no cards and could not ask must not "+
-			"look alike.")
-
-	openapi.Describe("/v1/finance/ledger", http.MethodGet,
-		"Money in and out of the caller's org wallet, signed",
-		"Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT "+
-			"CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS "+
-			"it (negative, account `usage:<org>`), described by its notes or its tags. The sign is "+
-			"the posting's own meaning, read through ONE vocabulary shared with the ledger that "+
-			"wrote it — a reader with its own spelling for `deposit` rendered a customer's grant "+
-			"as a charge.\n\n"+
-			"This is the closest projection of the truth. The org's double-entry postings are the "+
-			"source of record — balanced, only ever appended, one file per org — and this lane is "+
-			"that list, widest of the three: /v1/finance/credits is its deposit half and "+
-			"/v1/finance/usage is its withdrawal half rolled up. All three come from ONE read, "+
-			"which is why they cannot contradict each other, and all three answer 501 where no "+
-			"commerce link is configured rather than reporting an empty wallet.\n\n"+
-			"`range` is 24h, 7d, 30d or 90d, defaulting to 30d. A row whose timestamp will not "+
-			"parse is KEPT rather than dropped — a malformed date must show up in a money list, "+
-			"not vanish from it. `balanceCents` is omitted: these are MOVEMENTS, and the standing "+
-			"balance is /v1/finance/balance.\n\n"+
-			"Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own "+
-			"org, where the org's ledger file is the tenant boundary; 401 without a validated "+
-			"principal.")
+// mountFinance registers the six commerce-projected /v1/finance/* reads as typed
+// ops. Called from routes, so the finance surface ships with the billing surface
+// (same commerceProxy).
+func mountFinance(app cloud.Router, o ops) {
+	r := cloud.ZipApp(app)
+	h := zip.WithResponseHeader("Cache-Control")
+	zip.Get(r, "/v1/finance/balance", o.financeBalance, h)         // prepaid available + holds + due
+	zip.Get(r, "/v1/finance/credits", o.financeCredits, h)         // credit grants (deposits)
+	zip.Get(r, "/v1/finance/usage", o.financeUsage, h)             // metered spend over ?range=
+	zip.Get(r, "/v1/finance/invoices", o.financeInvoices, h)       // issued invoices (honest empty today)
+	zip.Get(r, "/v1/finance/payment-methods", o.financeMethods, h) // masked saved cards (brand+last4)
+	zip.Get(r, "/v1/finance/ledger", o.financeLedger, h)           // per-org double-entry postings over ?range=
 }
 
 // ── the finance contract (typed, USD cents, matching @hanzo/finance-ui types.ts) ──
+
+// noStore is the Cache-Control every per-tenant money answer declares: the
+// number is a live wallet read, so neither the browser nor an intermediary may
+// replay it. Each finance Out states it via zip.HeaderCoder and each
+// registration declares it via zip.WithResponseHeader, so the directive is part
+// of the published contract — visible to the document, the SDKs and the tool
+// schema — rather than a slot some handler writes on the way out.
+func noStore() map[string]string { return map[string]string{"Cache-Control": "no-store"} }
 
 // financeBalanceView is the GET /v1/finance/balance response.
 type financeBalanceView struct {
@@ -198,6 +97,8 @@ type financeBalanceView struct {
 	DueCents       int64  `json:"dueCents"`
 	AsOf           string `json:"asOf"`
 }
+
+func (financeBalanceView) ResponseHeaders() map[string]string { return noStore() }
 
 // financeCredit is one row of GET /v1/finance/credits — a credit grant on the org's
 // wallet. cents is positive (a grant); a renamed/absent field degrades to a safe zero.
@@ -210,7 +111,16 @@ type financeCredit struct {
 	RemainingCents *int64 `json:"remainingCents,omitempty"`
 }
 
-type usagePoint struct {
+// credits is the GET /v1/finance/credits answer — a bare array on the body,
+// exactly as the raw route rendered, named so it can state its cache directive.
+type credits []financeCredit
+
+func (credits) ResponseHeaders() map[string]string { return noStore() }
+
+// sample is one bucket of the usage series. The name is fleet-unique on
+// purpose: the weave refuses one schema name with two shapes, and admin
+// already publishes a differently-shaped usagePoint.
+type sample struct {
 	Date  string `json:"date"`
 	Cents int64  `json:"cents"`
 }
@@ -224,13 +134,15 @@ type usageLine struct {
 
 // financeUsageView is the GET /v1/finance/usage?range= response.
 type financeUsageView struct {
-	TotalCents int64        `json:"totalCents"`
-	Currency   string       `json:"currency"`
-	Start      string       `json:"start,omitempty"`
-	End        string       `json:"end,omitempty"`
-	Series     []usagePoint `json:"series"`
-	Lines      []usageLine  `json:"lines"`
+	TotalCents int64       `json:"totalCents"`
+	Currency   string      `json:"currency"`
+	Start      string      `json:"start,omitempty"`
+	End        string      `json:"end,omitempty"`
+	Series     []sample    `json:"series"`
+	Lines      []usageLine `json:"lines"`
 }
+
+func (financeUsageView) ResponseHeaders() map[string]string { return noStore() }
 
 // financeInvoice is one row of GET /v1/finance/invoices.
 type financeInvoice struct {
@@ -244,6 +156,11 @@ type financeInvoice struct {
 	URL      string `json:"url,omitempty"`
 }
 
+// invoices is the GET /v1/finance/invoices answer — a bare array on the body.
+type invoices []financeInvoice
+
+func (invoices) ResponseHeaders() map[string]string { return noStore() }
+
 // financePaymentMethod is one row of GET /v1/finance/payment-methods — the MASKED
 // descriptor only. A PAN/CVV/gateway token is never present in this shape.
 type financePaymentMethod struct {
@@ -256,6 +173,11 @@ type financePaymentMethod struct {
 	IsDefault bool   `json:"isDefault,omitempty"`
 }
 
+// cards is the GET /v1/finance/payment-methods answer — a bare array on the body.
+type cards []financePaymentMethod
+
+func (cards) ResponseHeaders() map[string]string { return noStore() }
+
 // financeLedgerEntry is one posting of GET /v1/finance/ledger?range= — a signed move
 // on the org's wallet (deposit positive, withdraw negative).
 type financeLedgerEntry struct {
@@ -266,6 +188,19 @@ type financeLedgerEntry struct {
 	Cents        int64  `json:"cents"`
 	Currency     string `json:"currency"`
 	BalanceCents *int64 `json:"balanceCents,omitempty"`
+}
+
+// postings is the GET /v1/finance/ledger answer — a bare array on the body.
+type postings []financeLedgerEntry
+
+func (postings) ResponseHeaders() map[string]string { return noStore() }
+
+// window narrows a finance read to its span.
+type window struct {
+	// Range is the window: 24h, 7d, 30d or 90d. Anything else — including
+	// absent — is 30d, so a typo silently widens the window to a month rather
+	// than failing.
+	Range string `json:"range"`
 }
 
 // ── commerce wire shapes (only the fields we project) ──
@@ -361,47 +296,62 @@ type commercePaymentMethod struct {
 	} `json:"card"`
 }
 
-// ── handlers ──
+// ── the ops ──
 
-// financeBalance projects commerce's wallet balance into the finance Balance shape:
-// prepaid `available` → availableCents, authorized `holds` → pendingCents. dueCents is
-// an honest 0 — commerce is prepaid (no open-invoice debt), so nothing is owed. The
-// aggregate the finance UI shows is the org's spendable wallet; per-org treasury
-// balances (currently empty) fold in here the day the ledger projection posts them.
-func financeBalance(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := financeCaller(s, c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view finance")
+// financeBalance answers the org's spendable prepaid balance typed for the
+// finance surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf`
+// instant it was read.
+//
+// It is the SAME wallet read /v1/billing/balance answers — one function, called
+// by both, so the two surfaces cannot drift into disagreeing about a customer's
+// money. Reshaped, never re-metered. Co-resident the number comes straight out
+// of the org's own double-entry ledger file.
+//
+// `dueCents` is a structural 0: this is a PREPAID wallet with no open-invoice
+// debt, so nothing is ever owed and a non-zero value here would be an invention.
+// `pendingCents` is 0 on the co-resident ledger, where authorization holds are
+// never posted; only a split-deploy upstream reports holds, and there spendable
+// is the balance NET of them, floored at 0 — a fully-held wallet reports 0
+// rather than money the gate would refuse.
+//
+// Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
+// caller's own org from the validated IAM owner claim; 401 without a validated
+// principal, and a balance that cannot be read is 502 — never 0, because unknown
+// is not broke.
+func (o ops) financeBalance(ctx context.Context, _ *noInput) (*financeBalanceView, error) {
+	org, subject, err := payer(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// The ONE balance read (balance.go) — the same wallet /v1/billing/balance answers, so
 	// the two surfaces can never disagree. Co-resident this is the finance ledger; only a
 	// split deploy falls through to the commerce S2S read below.
-	if cents, coResident, err := availableCents(c.Context(), org, subjectFor(c, org)); err != nil {
-		s.Log.Warn("finance balance read failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	if cents, coResident, err := availableCents(ctx, org, subject); err != nil {
+		o.s.Log.Warn("finance balance read failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	} else if coResident {
-		return financeJSON(s, c, financeBalanceView{
+		return &financeBalanceView{
 			Currency:       "usd",
 			AvailableCents: cents,
 			PendingCents:   0,
 			DueCents:       0,
 			AsOf:           time.Now().UTC().Format(time.RFC3339),
-		})
+		}, nil
 	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	if !o.s.State.commerce.configured() {
+		return nil, zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 	var b commerceBalance
-	if err := financeGet(s, c, "/v1/billing/balance", org, url.Values{"currency": {"usd"}}, &b); err != nil {
-		return err
+	if err := financeGet(o.s, ctx, "/v1/billing/balance", org, subject, url.Values{"currency": {"usd"}}, &b); err != nil {
+		return nil, err
 	}
-	return financeJSON(s, c, financeBalanceView{
+	return &financeBalanceView{
 		Currency:       "usd",
 		AvailableCents: spendableCents(b),
 		PendingCents:   b.Holds,
 		DueCents:       0,
 		AsOf:           time.Now().UTC().Format(time.RFC3339),
-	})
+	}, nil
 }
 
 // spendableCents is what the finance UI shows as spendable from a commerce balance:
@@ -422,57 +372,86 @@ func spendableCents(b commerceBalance) int64 {
 	return avail
 }
 
-// financeCredits projects the DEPOSIT rows of the commerce ledger — each staff/promo
-// grant or top-up is a positive credit. Consumption (withdraws) is usage, not a credit,
-// so it is excluded here (it appears in usage + ledger). Honest empty when the org has
-// no grants yet.
-func financeCredits(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := financeCaller(s, c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view finance")
-	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
-	}
-	txns, err := financeTxns(s, c, org)
+// financeCredits answers the money PUT IN to the org's wallet — each staff
+// grant, promo and settled top-up as a positive row with its id, label, cents
+// and grant time.
+//
+// Spend is not a credit. A posting counts here only when it moved money IN;
+// debits belong to /v1/finance/usage (aggregated) and /v1/finance/ledger
+// (signed). All three project ONE read of the same ledger through ONE vocabulary
+// for what a posting means, so they cannot disagree about a row — nor silently
+// drop one, which is what an empty credits page against a funded wallet was.
+//
+// `label` falls back through the posting's notes, then its tags, then a bare
+// Credit — it is a description, never an identifier. `remainingCents` is
+// OMITTED: the wallet is one running balance, not per-grant buckets, so no grant
+// has a remainder to report and spend cannot be attributed to the credit that
+// funded it.
+//
+// Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
+// caller's own org; 401 without a validated principal. An org with no grants
+// gets an empty array — honest, never a fabricated figure.
+func (o ops) financeCredits(ctx context.Context, _ *noInput) (*credits, error) {
+	org, subject, err := payer(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	credits := make([]financeCredit, 0, len(txns))
+	if !o.s.State.commerce.configured() {
+		return nil, zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	}
+	txns, err := financeTxns(o.s, ctx, org, subject)
+	if err != nil {
+		return nil, err
+	}
+	rows := make(credits, 0, len(txns))
 	for _, t := range txns {
 		if t.Kind != finance.KindDeposit {
 			continue
 		}
-		credits = append(credits, financeCredit{
+		rows = append(rows, financeCredit{
 			ID:        firstNonEmpty(t.ID, "credit"),
 			Label:     firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), "Credit"),
 			Cents:     abs64(t.Amount),
 			GrantedAt: t.CreatedAt,
 		})
 	}
-	return financeJSON(s, c, credits)
+	return &rows, nil
 }
 
-// financeUsage projects the WITHDRAW rows within the ?range= window into a metered-spend
-// view: a time series (hourly for 24h, daily otherwise), a per-tag line breakdown, and
-// the window total. This is the SAME priced-usage ledger the o11y/analytics folds read —
-// projected, never re-metered.
-func financeUsage(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := financeCaller(s, c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view finance")
-	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
-	}
-	txns, err := financeTxns(s, c, org)
+// financeUsage answers metered spend inside `range=`: the window total, a time
+// series to plot, and one line per usage TAG. Aggregated from the same charged
+// ledger the balance comes off — projected, never re-metered.
+//
+// Only DEBIT postings count; deposits are credits and are excluded. Buckets are
+// hourly at 24h and daily otherwise, in UTC; a posting whose timestamp will not
+// parse is dropped rather than mis-bucketed.
+//
+// Lines group by the posting's tag (`Usage` where it carries none) and `units`
+// counts POSTINGS, not tokens. The dimensions here are time and tag. For
+// per-request rows and a per-PRODUCT breakdown, read /v1/billing/usage instead —
+// the same money, cut a different way.
+//
+// Cents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of
+// sub-cent token calls totals LOW here. Scoped to the caller's own org; 401
+// without a validated principal.
+//
+// Example: {"range": "24h"}
+func (o ops) financeUsage(ctx context.Context, in *window) (*financeUsageView, error) {
+	org, subject, err := payer(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if !o.s.State.commerce.configured() {
+		return nil, zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	}
+	txns, err := financeTxns(o.s, ctx, org, subject)
+	if err != nil {
+		return nil, err
 	}
 	now := time.Now().UTC()
-	window := rangeWindow(c.Query("range"))
-	cutoff := now.Add(-window)
-	hourly := window <= 24*time.Hour
+	span := rangeWindow(in.Range)
+	cutoff := now.Add(-span)
+	hourly := span <= 24*time.Hour
 
 	buckets := map[time.Time]int64{}
 	lineCents := map[string]int64{}
@@ -498,9 +477,9 @@ func financeUsage(s *cloud.Service[state], c *zip.Ctx) error {
 		lineUnits[label]++
 	}
 
-	series := make([]usagePoint, 0, len(buckets))
+	series := make([]sample, 0, len(buckets))
 	for b, cents := range buckets {
-		series = append(series, usagePoint{Date: b.Format(time.RFC3339), Cents: cents})
+		series = append(series, sample{Date: b.Format(time.RFC3339), Cents: cents})
 	}
 	sort.Slice(series, func(i, j int) bool { return series[i].Date < series[j].Date })
 
@@ -509,49 +488,74 @@ func financeUsage(s *cloud.Service[state], c *zip.Ctx) error {
 		lines = append(lines, usageLine{Label: label, Units: lineUnits[label], Cents: lineCents[label]})
 	}
 
-	return financeJSON(s, c, financeUsageView{
+	return &financeUsageView{
 		TotalCents: total,
 		Currency:   "usd",
 		Start:      cutoff.Format(time.RFC3339),
 		End:        now.Format(time.RFC3339),
 		Series:     series,
 		Lines:      lines,
-	})
+	}, nil
 }
 
-// financeInvoices is an HONEST empty typed array: commerce is a prepaid wallet
-// (deposits + withdraws), it issues no customer invoices, so there is no per-org
-// invoice ledger to project today. The shape is stable, so the day an invoice ledger
-// exists this becomes real with ZERO UI change.
-func financeInvoices(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := financeCaller(s, c); !ok {
-		return zip.ErrUnauthorized("sign in to view finance")
+// financeInvoices answers an empty typed array, always. The fleet bills a
+// PREPAID wallet — money in, metered debits out — and issues no customer
+// invoices, so there is no invoice ledger to project. Nothing here is a
+// fabricated figure and nothing is hidden behind a filter.
+//
+// The shape is fixed, so the finance UI renders this lane today and the day an
+// invoice ledger exists it fills with ZERO client change. Spend that actually
+// happened is /v1/finance/usage; money in and out is /v1/finance/ledger; what is
+// left to spend is /v1/finance/balance.
+//
+// The gate is real even though the body is empty: 401 without a validated
+// principal. It is the only finance read that touches no store, so it is also
+// the only one that cannot 502.
+func (o ops) financeInvoices(ctx context.Context, _ *noInput) (*invoices, error) {
+	if _, _, err := payer(ctx); err != nil {
+		return nil, err
 	}
-	return financeJSON(s, c, []financeInvoice{})
+	rows := invoices{}
+	return &rows, nil
 }
 
-// financePaymentMethods projects the commerce portal's masked card descriptors. It
-// re-masks defensively (keeps at most the trailing four digits, whatever the wire sent),
-// so a PAN can never leak even if commerce were to over-return.
-func financePaymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := financeCaller(s, c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view finance")
+// financeMethods answers the masked card descriptors for the caller's resolved
+// WALLET — id, brand, last four, expiry, default flag — reshaped into the
+// finance contract.
+//
+// It re-masks defensively: whatever the upstream sends, at most the trailing
+// four DIGITS survive into `last4`. No card number, no security code and no
+// processor token exists in this shape at all, so an over-returning upstream
+// still cannot leak one through this lane.
+//
+// Read the sibling difference before trusting a mismatch. This keys the store on
+// the resolved wallet; /v1/billing/methods keys it on the org SLUG, which is
+// also the key a card is SAVED under — identical for an org paying from its
+// shared pool, different wherever the payer is a person. When the two lists
+// disagree, the billing one is what was saved.
+//
+// 401 without a validated principal. An upstream that answers non-2xx or cannot
+// be reached is 502 — never an empty list, because no cards and could not ask
+// must not look alike.
+func (o ops) financeMethods(ctx context.Context, _ *noInput) (*cards, error) {
+	org, subject, err := payer(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	if !o.s.State.commerce.configured() {
+		return nil, zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 	// Portal read filters on customerId; the subject is pinned to the caller's own org.
-	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/methods", org, financeSubject(subjectFor(c, org), nil))
+	body, status, err := o.s.State.commerce.get(ctx, "/v1/billing/portal/methods", org, financeSubject(subject, nil))
 	if err != nil {
-		s.Log.Warn("commerce payment-methods read failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+		o.s.Log.Warn("commerce payment-methods read failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	if status < 200 || status >= 300 {
-		return zip.Errorf(http.StatusBadGateway, "billing upstream status %d", status)
+		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream status %d", status)
 	}
 	raw := arrayFrom(body, "paymentMethods", "payment_methods", "methods", "data", "rows")
-	methods := make([]financePaymentMethod, 0, len(raw))
+	rows := make(cards, 0, len(raw))
 	for _, rm := range raw {
 		var pm commercePaymentMethod
 		if err := json.Unmarshal(rm, &pm); err != nil {
@@ -562,7 +566,7 @@ func financePaymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
 		if typ == "" && last4 != "" {
 			typ = "card"
 		}
-		methods = append(methods, financePaymentMethod{
+		rows = append(rows, financePaymentMethod{
 			ID:        firstNonEmpty(pm.ID, pm.PaymentMethodID, "pm"),
 			Type:      typ,
 			Brand:     firstNonEmpty(pm.Brand, pm.Card.Brand, pm.Card.Network),
@@ -572,26 +576,47 @@ func financePaymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
 			IsDefault: pm.IsDefault || pm.Default,
 		})
 	}
-	return financeJSON(s, c, methods)
+	return &rows, nil
 }
 
-// financeLedger projects the commerce ledger within ?range= into signed double-entry
-// postings: a deposit credits the org's wallet (+), a withdraw debits it (−). This is
-// the org's OWN money movement — the honest per-org ledger the finance UI renders.
-func financeLedger(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := financeCaller(s, c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view finance")
-	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
-	}
-	txns, err := financeTxns(s, c, org)
+// financeLedger answers the org's own postings inside `range=`, each as a signed
+// entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and
+// every other posting DEBITS it (negative, account `usage:<org>`), described by
+// its notes or its tags. The sign is the posting's own meaning, read through ONE
+// vocabulary shared with the ledger that wrote it — a reader with its own
+// spelling for `deposit` rendered a customer's grant as a charge.
+//
+// This is the closest projection of the truth. The org's double-entry postings
+// are the source of record — balanced, only ever appended, one file per org —
+// and this lane is that list, widest of the three: /v1/finance/credits is its
+// deposit half and /v1/finance/usage is its withdrawal half rolled up. All three
+// come from ONE read, which is why they cannot contradict each other, and all
+// three answer 501 where no commerce link is configured rather than reporting an
+// empty wallet.
+//
+// A row whose timestamp will not parse is KEPT rather than dropped — a malformed
+// date must show up in a money list, not vanish from it. `balanceCents` is
+// omitted: these are MOVEMENTS, and the standing balance is /v1/finance/balance.
+//
+// Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
+// caller's own org, where the org's ledger file is the tenant boundary; 401
+// without a validated principal.
+//
+// Example: {"range": "30d"}
+func (o ops) financeLedger(ctx context.Context, in *window) (*postings, error) {
+	org, subject, err := payer(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cutoff := time.Now().UTC().Add(-rangeWindow(c.Query("range")))
-	entries := make([]financeLedgerEntry, 0, len(txns))
+	if !o.s.State.commerce.configured() {
+		return nil, zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	}
+	txns, err := financeTxns(o.s, ctx, org, subject)
+	if err != nil {
+		return nil, err
+	}
+	cutoff := time.Now().UTC().Add(-rangeWindow(in.Range))
+	rows := make(postings, 0, len(txns))
 	for _, t := range txns {
 		if ts, perr := parseFinanceTime(t.CreatedAt); perr == nil && ts.Before(cutoff) {
 			continue
@@ -604,7 +629,7 @@ func financeLedger(s *cloud.Service[state], c *zip.Ctx) error {
 		} else {
 			cents = -cents
 		}
-		entries = append(entries, financeLedgerEntry{
+		rows = append(rows, financeLedgerEntry{
 			ID:          firstNonEmpty(t.ID, "entry"),
 			Date:        t.CreatedAt,
 			Account:     account,
@@ -613,16 +638,10 @@ func financeLedger(s *cloud.Service[state], c *zip.Ctx) error {
 			Currency:    firstNonEmpty(strings.ToLower(t.Currency), "usd"),
 		})
 	}
-	return financeJSON(s, c, entries)
+	return &rows, nil
 }
 
 // ── finance helpers ──
-
-// financeCaller resolves the caller's OWN org from the validated principal — the ONE
-// tenant gate every finance read shares.
-func financeCaller(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
-	return principal.Org(c)
-}
 
 // financeSubject builds the commerce query with every billing-subject key PINNED to
 // subject (the client can never widen scope), plus any extra passthrough params.
@@ -641,8 +660,8 @@ func financeSubject(subject string, extra url.Values) url.Values {
 
 // financeGet does one org-scoped commerce GET and decodes the 2xx body into out. A
 // non-2xx or unreachable upstream is surfaced honestly (never masked as empty data).
-func financeGet(s *cloud.Service[state], c *zip.Ctx, path, org string, extra url.Values, out any) error {
-	body, status, err := s.State.commerce.get(c.Context(), path, org, financeSubject(subjectFor(c, org), extra))
+func financeGet(s *cloud.Service[state], ctx context.Context, path, org, subject string, extra url.Values, out any) error {
+	body, status, err := s.State.commerce.get(ctx, path, org, financeSubject(subject, extra))
 	if err != nil {
 		s.Log.Warn("commerce finance read failed", "org", org, "path", path, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -659,11 +678,11 @@ func financeGet(s *cloud.Service[state], c *zip.Ctx, path, org string, extra url
 // financeTxns reads the org's commerce ledger ONCE (the single transactions read the
 // credits/usage/ledger projections share). Tolerates the wrapped {transactions:[…]}
 // shape and a bare array.
-func financeTxns(s *cloud.Service[state], c *zip.Ctx, org string) ([]commerceTxn, error) {
+func financeTxns(s *cloud.Service[state], ctx context.Context, org, subject string) ([]commerceTxn, error) {
 	// The ledger's own entries, from the process that holds them. Credits, usage and
 	// the ledger page are three projections of this one list, and all three answered
 	// 501 from a process without the ledger — which is every process but commerce.
-	peer, served, err := peerTxns(c.Context(), org)
+	peer, served, err := peerTxns(ctx, org)
 	if err != nil {
 		s.Log.Warn("finance transactions read failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -671,7 +690,7 @@ func financeTxns(s *cloud.Service[state], c *zip.Ctx, org string) ([]commerceTxn
 	if served {
 		return peer, nil
 	}
-	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/transactions", org, financeSubject(subjectFor(c, org), url.Values{"limit": {"2000"}}))
+	body, status, err := s.State.commerce.get(ctx, "/v1/billing/transactions", org, financeSubject(subject, url.Values{"limit": {"2000"}}))
 	if err != nil {
 		s.Log.Warn("commerce transactions read failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -700,13 +719,6 @@ func classify(rows []commerceTxn) []commerceTxn {
 		rows[i].Kind = commerceKind(rows[i].Type)
 	}
 	return rows
-}
-
-// financeJSON writes a finance payload as bare JSON with no-store (per-org money must
-// never be cached by the browser or an intermediary).
-func financeJSON(s *cloud.Service[state], c *zip.Ctx, v any) error {
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, v)
 }
 
 // rangeWindow maps a finance range token to a duration; an absent/unknown range
@@ -820,8 +832,10 @@ func abs64(v int64) int64 {
 func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, txnsPeerTimeout)
 	defer cancel()
-	reply, err := cloud.Ask[struct{}, plane.Txns](cloud.For(ctx, org), "commerce",
-		plane.FinanceTxns, &struct{}{})
+	// The generated peer client, not three loose strings: it is this call with the
+	// app name, the op name and the In/Out pair already fixed to each other, so
+	// the compiler checks what only a running fleet could check here.
+	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			return nil, false, nil

@@ -87,6 +87,47 @@ func TestSubsetsRefuseAnAppThatPublishedNothing(t *testing.T) {
 	}
 }
 
+// TestSubsetsRefusesAnAppWhoseOwnIDsCollide: A SUBSET IS GENERATED OR IT IS
+// WRONG, and the refusal says which app.
+//
+// [openapi.From] will not emit a document whose operationIds collide, so a
+// GENERATED subset cannot arrive broken — which made "the parts are injective" an
+// assumption rather than a check. It was wrong about a committed file, because a
+// file can be edited: /v1/billing/methods was written into commerce's subset by
+// copying the /v1/billing/portal/methods block, operationId and prose together,
+// and two paths then claimed get_v1_billing_portal_methods. Nothing could be
+// regenerated until it was fixed — the weave is the sole writer of openapi.yaml,
+// so the CLI, the SDKs, MCP and the docs were all frozen behind it.
+//
+// Weave DID refuse it. But a collision inside ONE part reaches Weave with no app
+// attached, so the report could name the two addresses and nothing else, and
+// which of 123 subsets shipped them was a search. Subsets is holding the name
+// when it decodes the bytes, so this is where the question gets answered.
+func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
+	// The real shape of the defect: a second path carrying the first one's id.
+	collide, err := json.Marshal(openapi.Document{OpenAPI: "3.1.0", Paths: map[string]openapi.PathItem{
+		"/v1/billing/methods":        {"get": {OperationID: "get_v1_billing_portal_methods"}},
+		"/v1/billing/portal/methods": {"get": {OperationID: "get_v1_billing_portal_methods"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = openapi.Subsets([]string{"commerce"}, func(string) []byte { return collide })
+	if err == nil {
+		t.Fatal("Subsets accepted one operationId at two addresses — every generator downstream " +
+			"mis-consumes that document, and the weave that catches it later cannot say whose it is")
+	}
+	if !strings.Contains(err.Error(), "commerce") {
+		t.Errorf("refusal = %q, want it to name the app — naming only the paths is what cost a "+
+			"search of every subset in plugin/", err)
+	}
+
+	// An injective subset still decodes. The check must cost a green run nothing.
+	if _, err := openapi.Subsets([]string{"ads"}, func(a string) []byte { return subset(t, "/v1/"+a) }); err != nil {
+		t.Errorf("injective subset: %v", err)
+	}
+}
+
 // TestMountFleetReportsAFailedCompositionRatherThanAnEmptyDocument: the endpoint
 // must never answer 200 with less API than the fleet has. That is the production
 // defect this whole path exists to close, so the failure mode is a 5xx a probe

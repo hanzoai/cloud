@@ -3,14 +3,14 @@
 // client.go is the in-process inter-subsystem commerce client — the REAL
 // implementation of cloud's types.CommerceClient, absorbed here from the retired
 // in-process stub that used to fail closed on entitlement. It answers cloud's licensing/entitlements tier
-// with DIRECT Go calls into the embedded commerce datastore (subscriptions) plus
-// the @hanzo/plans vocabulary (plan → license features) — no HTTP hop, no network.
+// with DIRECT Go calls into the embedded commerce datastore — the org's
+// subscriptions, and the plan authority row each one names — no HTTP hop, no network.
 //
 // MONEY-SAFETY. CheckEntitlement NEVER fabricates a grant. It returns Active:true
 // ONLY when a real active, unexpired subscription in the org's own datastore
-// namespace holds a plan tier whose @hanzo/plans license-features actually name the
-// product. Any machinery it cannot resolve (commerce not co-resident, org not
-// resolvable, subscription query error, plans vocabulary unavailable) returns an
+// namespace holds a plan tier whose OWN authority row licenses the product. Any
+// machinery it cannot resolve (commerce not co-resident, org not
+// resolvable, subscription query error, plan authority unreadable) returns an
 // ERROR — the entitlements gate treats an erroring client as "cannot verify ⇒ 503",
 // the specified secure default, so an unverifiable product is never enabled. A
 // clean "resolved, but no plan licenses this product" is a real Active:false answer
@@ -29,6 +29,7 @@ import (
 	"github.com/hanzoai/cloud/types"
 	commercemod "github.com/hanzoai/commerce"
 	"github.com/hanzoai/commerce/datastore"
+	commerceplan "github.com/hanzoai/commerce/models/plan"
 	"github.com/hanzoai/commerce/models/subscription"
 	commerceorg "github.com/hanzoai/commerce/pkg/org"
 )
@@ -116,11 +117,21 @@ func (c *inProcessClient) CheckEntitlement(ctx context.Context, orgID, productID
 		return nil, fmt.Errorf("commerce.CheckEntitlement: query subscriptions for org %q: %w", orgID, err)
 	}
 
-	// 3. For each active, unexpired subscription resolve its plan tier's flat license
-	//    features from @hanzo/plans (the single source of truth) and check whether it
-	//    licenses productID. Product scoping is the presence of the
-	//    "licensing.product:<id>" token toLicenseFeatures derives from a plan's
-	//    licensing.product_ids, so only a plan that actually names the product grants it.
+	// 3. For each active, unexpired subscription resolve what its plan tier LICENSES
+	//    from the tier's OWN authority row, and check whether that names productID.
+	//    Product scoping is the presence of the "licensing.product:<id>" token, so
+	//    only a plan that actually names the product grants it.
+	//
+	//    The row, not the catalog. The catalog lists what is ON SALE TODAY: ask it
+	//    about a tier that has since been retired and it answers "licenses nothing",
+	//    definitively, so the answer reads as a refusal rather than as the missing
+	//    record it is — and the subscriber, who is still being charged, loses every
+	//    product they bought. Commerce keeps the row resolvable precisely so that
+	//    cannot happen ("retiring a tier stops new sales; it never strands a
+	//    subscriber"), and the row now carries its licensing block for the same
+	//    reason it carries Category and Price. This is the licensing half of the cut
+	//    Paid already makes for the paywall: classify on what you bought, not on
+	//    what is for sale.
 	now := time.Now()
 	want := "licensing.product:" + productID
 	var bestPlan string
@@ -135,20 +146,28 @@ func (c *inProcessClient) CheckEntitlement(ctx context.Context, orgID, productID
 		if slug == "" {
 			continue // no resolvable plan tier on this sub — cannot grant from it
 		}
-		_, features, found, ferr := plan.LicenseEntitlement(ctx, slug)
-		if ferr != nil {
-			// MACHINERY failure (plans vocabulary unavailable): cannot resolve features
-			// ⇒ cannot verify ⇒ fail closed. Never deny-by-guess on an outage.
-			return nil, fmt.Errorf("commerce.CheckEntitlement: resolve plan %q features: %w", slug, ferr)
+		row, found, rerr := tier(ctx, slug)
+		if rerr != nil {
+			// MACHINERY failure (the plan authority is unreadable): cannot resolve the
+			// tier ⇒ cannot verify ⇒ fail closed. Never deny-by-guess on an outage.
+			return nil, fmt.Errorf("commerce.CheckEntitlement: resolve plan %q: %w", slug, rerr)
 		}
 		if !found {
-			// Unknown plan tier — not in the catalog, so it licenses nothing. Skip
-			// (conservative: never grants) and keep scanning the org's other subs.
+			// No authority row for this tier at all — nothing to read a licence from.
+			// Skip (conservative: never grants) and keep scanning the org's other subs.
 			continue
 		}
 		if bestPlan == "" {
 			bestPlan = slug
 		}
+		if row.Licensing == nil {
+			continue // a tier that licenses nothing licenses nothing.
+		}
+		features := plan.Tokens(plan.Licence{
+			Products: row.Licensing.Products,
+			Apps:     row.Licensing.Apps,
+			Features: row.Licensing.Features,
+		})
 		if containsFeature(features, want) {
 			return &types.LicenseEntitlement{
 				ProductID:   productID,
@@ -164,6 +183,19 @@ func (c *inProcessClient) CheckEntitlement(ctx context.Context, orgID, productID
 	// real "not entitled" answer (Active:false), NOT a machinery failure. The
 	// entitlements gate turns it into a 402 upgrade prompt, never a grant.
 	return &types.LicenseEntitlement{ProductID: productID, Active: false, Plan: bestPlan}, nil
+}
+
+// tier resolves the plan authority row for slug. The authority is platform-global
+// (commerce models/plan, the "system" namespace) — the SAME rows the boot seed
+// reconciles, admin.hanzo.ai edits and the charge path prices from — so there is one
+// answer to "what is this tier", and it keeps answering after the tier is retired.
+func tier(ctx context.Context, slug string) (*commerceplan.Plan, bool, error) {
+	p := commerceplan.New(commerceplan.AuthorityDB(ctx))
+	ok, err := p.Query().Filter("Slug=", slug).Get()
+	if err != nil {
+		return nil, false, err
+	}
+	return p, ok, nil
 }
 
 func containsFeature(features []string, want string) bool {

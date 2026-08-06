@@ -38,7 +38,7 @@ const usageTestTimeout = 60 * time.Second
 
 // mountBare mounts the usage subsystem with NO commerce configured — the account
 // plane never touches commerce, and the summary degrades to honest zeros.
-func mountBare(t *testing.T) *zip.App { return mountApp(t, "", "") }
+func mountBare(t *testing.T) *zip.App { return mountApp(t) }
 
 // drive runs one in-process request with a principal: X-Org-Id (the tenant) +
 // X-User-Id (the validated subject the gateway sets ONLY from a verified credential).

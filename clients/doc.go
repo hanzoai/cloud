@@ -1,34 +1,33 @@
-// Package clients holds the canonical ZAP-typed inter-subsystem
-// clients used by cloud.Deps.
+// Package clients holds the typed inter-subsystem clients used by cloud.Deps.
 //
-// Per HIP-0106 "Inter-subsystem contract": ZAP (the Hanzo native binary
-// protocol). Every subsystem ships its public interface as a .zap
-// schema; zapc generates Go bindings; cloud wires the in-process
-// ZAP-typed Go interfaces when subsystems are co-resident, falls
-// back to ZAP RPC over the wire when split.
+// A dependency resolves to exactly one of two things, and BuildDeps decides
+// which from cfg.Enabled(name) alone:
 //
-// This package provides three factories per subsystem:
+//   - the CO-RESIDENT implementation, when the subsystem is mounted in this
+//     process. Direct Go method calls; no marshalling, no network. The
+//     subsystem's own Mount installs it.
 //
-//   - <Subsystem>InProcess(impl): wraps a co-resident implementation
-//     as a ZAP-typed client. Direct Go method calls. No marshalling,
-//     no network.
+//   - Disabled<Subsystem>(): a typed client that fails closed with a clear
+//     message. It lets mount code detect "the dep isn't here" without a nil
+//     deref, and — the part that matters — it is HONEST about being absent.
 //
-//   - <Subsystem>RPC(addr): builds a ZAP-RPC client targeting a
-//     remote endpoint (used in split deployments).
+// # There is no third factory, and there used to be
 //
-//   - Disabled<Subsystem>(): returns a typed nil that fails closed
-//     with a clear error message when called. Lets subsystem mount
-//     code defensively detect "the dep isn't wired" without nil
-//     dereferences.
+// This package also shipped <Subsystem>RPCAt(addr): a "ZAP RPC" client selected
+// by CLOUD_<X>_ZAP_ADDR whose every method returned
 //
-// cloud.BuildDeps picks the right one for each subsystem based on
-// cfg.Enabled(name) and the configured RPC endpoint.
+//	cloud: ZAP RPC client for iam@iam.hanzo.svc:9653 not yet wired (zapc-gen pending)
 //
-// Note (zapc): the ZAP RPC wire format is exercised by hanzoai/zap
-// (Rust impl) and hanzoai/zap-go (Go bindings). The current Go
-// scaffolding here ships stubs sufficient to enforce the contract;
-// the actual RPC dispatch sits behind a transport layer that
-// subsystems will swap in as each subsystem ships its .zap schema +
-// zapc-generated client. TODO(zapc-gen) markers identify the
-// expansion points.
+// It was scaffolding for a code generator that never landed, and it made the
+// fleet's transport story unfalsifiable. Setting the address logged
+// "deps.IAM → ZAP RPC" at boot and then failed every call, so the one signal an
+// operator had said the wire was up while nothing crossed it. A client that
+// cannot carry a byte is worse than no client, because a missing one is
+// diagnosed in seconds and a lying one is diagnosed in an incident.
+//
+// The transport for a peer that is NOT in this process is the peer plane:
+// plane.Ask over the peer's own socket, addressed by NAME (see plane/ask.go, and
+// the generated per-app clients under plane/<app>). It needs no endpoint
+// configuration, which is why removing the address knobs removed nothing real.
+// A subsystem with a plane op is reached; one without is disabled and says so.
 package clients

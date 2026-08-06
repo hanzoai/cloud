@@ -22,6 +22,7 @@ func mountPublic(t *testing.T, publicOrg string) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_HELP_PUBLIC_ORG", publicOrg)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
 	if err := framework.Mount(app, deps); err != nil {
 		t.Fatalf("mount framework: %v", err)

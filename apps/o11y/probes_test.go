@@ -1,16 +1,19 @@
 package o11y
 
 import (
-	"errors"
-
+	"bytes"
 	"context"
-	"github.com/luxfi/metric"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/hanzoai/o11y/pkg/prober"
+	"github.com/luxfi/metric"
 )
 
 // Every entry has to be a name plus an absolute http address. prober.New rejects
@@ -495,4 +498,66 @@ func (verdictTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, errors.New("connect: connection refused")
 	}
 	return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+}
+
+// What the framework exports is the registry's text encoding, so the proof that
+// availability rides the native road is the series appearing THERE after a real
+// probe cycle — not in a Gather a test happens to run. The prober probes every
+// target once at Start; each verdict lands in the registry through the
+// reporter; and if the series is absent from this encoding, the exporter ships
+// nothing, whatever the meter pipeline recorded.
+func TestProbeCycleLandsTheGaugeInTheRegistryEncoding(t *testing.T) {
+	reg := metric.NewRegistry()
+	client := &http.Client{Transport: &reporter{
+		next: verdictTransport{},
+		name: map[string]string{
+			"http://up.hanzo.svc:80/healthz":   "up",
+			"http://down.hanzo.svc:80/healthz": "down",
+		},
+		log:  &recorder{},
+		up:   upgauge(reg),
+		last: map[string]string{},
+	}}
+	p, err := prober.New(prober.Config{
+		Targets: []prober.Target{
+			{Name: "up", URL: "http://up.hanzo.svc:80/healthz"},
+			{Name: "down", URL: "http://down.hanzo.svc:80/healthz"},
+		},
+		// The immediate probe at Start IS the cycle under test; the ticker
+		// never fires inside a test's lifetime.
+		Interval: time.Hour,
+		Client:   client,
+	})
+	if err != nil {
+		t.Fatalf("prober.New: %v", err)
+	}
+	p.Start(context.Background())
+	defer p.Stop()
+
+	// Each target probes on its own goroutine, so wait for both verdicts to
+	// land rather than assuming an ordering.
+	want := []string{
+		`hanzo_service_up{service="up"} 1`,
+		`hanzo_service_up{service="down"} 0`,
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		fams, err := reg.Gather()
+		if err != nil {
+			t.Fatalf("Gather: %v", err)
+		}
+		var buf bytes.Buffer
+		if err := metric.EncodeText(&buf, fams); err != nil {
+			t.Fatalf("EncodeText: %v", err)
+		}
+		out := buf.String()
+		if strings.Contains(out, want[0]) && strings.Contains(out, want[1]) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after a probe cycle, the registry encoding is missing the availability series.\nwant both:\n  %s\n  %s\ngot:\n%s",
+				want[0], want[1], out)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

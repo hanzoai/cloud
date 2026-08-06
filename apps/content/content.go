@@ -14,7 +14,6 @@ import (
 	"github.com/hanzoai/cloud/apps/framework"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -109,61 +108,26 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/lifecycle", o.getLifecycle)
 	zip.Get(g, "/board", o.getBoard)
 	zip.Get(g, "/channels", o.getChannels)
-	// UNTYPED, deliberately: a studio-render billing denial answers the platform
-	// resource-deny envelope (cloud.DenyResource — {"error":{"code","message"}} at
-	// 402/503, resource_billing.go:224), and a typed op can answer only its Out
-	// schema or zip's own {status,code,error} error envelope. Typing it would
-	// rewrite that body for every client that reads error.code, so it stays a raw
-	// handler until zip can declare a second response shape. See LLM.md.
-	g.Post("/generate", cloud.Handle(s, postGenerate))
+	// DenyEnvelope renders a gate refusal as the money wire's own bytes — the
+	// nested {"error":{"code","message"}} at 402/503 that every Hanzo resource
+	// create emits — from the cloud.Denied error a typed op returns. Installed
+	// BEFORE the leaves, because middleware runs in registration order.
+	//
+	// generate used to stay a RAW handler for exactly this envelope, on the belief
+	// that a typed op can answer only its Out schema or zip's flat
+	// {status,code,error}. cloud.Denied + this middleware is the seam that closed
+	// that gap (the same pairing apps/projects, apps/dataset and apps/risk use), so
+	// the route is typed now and the body is unchanged — pinned both ways, by
+	// TestGenerateIsATypedOp and TestGenerate402IsTheMoneyWireBody.
+	g.Use(cloud.DenyEnvelope())
+	// 402 is DECLARED so a generated client knows the refusal is a shape it can
+	// read. It is never the status this op RETURNS — statusFor takes Statuses[0]
+	// when the Out states none, so a success is 201; the 402 reaches the wire from
+	// DenyEnvelope above.
+	zip.Post(g, "/generate", o.postGenerate,
+		zip.WithStatus(http.StatusCreated, http.StatusPaymentRequired))
 	zip.Post(g, "/publish", o.postPublish)
 	zip.Post(g, "/:doctype/:name/transition", o.postTransition)
-}
-
-// The generate op's prose, declared beside the wire fact that keeps it raw.
-//
-// Every other op on this surface is typed, so zipdoc lifts its prose off the
-// handler's doc comment. This one cannot be typed (the resource-deny envelope, in
-// the comment above), and zipdoc can lift nothing from a raw handler — so without
-// this declaration the ONE agentic call in the content loop publishes an
-// operationId and nothing else: an SDK method that cannot say what it drafts or
-// what it costs, and a CLI command with no help. Keyed by the fiber pattern
-// verbatim, so the prose renders only while the router serves the route.
-func init() {
-	openapi.Describe("/v1/content/generate", http.MethodPost,
-		"Draft a piece of marketing content and file it in the CMS as a draft.",
-		"Answers 201 with the created draft's identity — {doctype, name, status} — and the "+
-			"document itself lands in the CMS through the SAME validate and lifecycle-hook "+
-			"pipeline an ordinary create runs. This is a WRITE, not a preview: there is no "+
-			"dry-run, and every call that succeeds leaves a document behind.\n\n"+
-
-			"`doctype` picks which of two generation planes runs, and they are the only two. "+
-			"Campaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by "+
-			"default, overridable per request with `model` or per deployment); Asset is a studio "+
-			"image render the AI plane never sees. Everything else about the call is identical.\n\n"+
-
-			"MONEY, metered in exactly one place per mode and never both. Copy rides the "+
-			"platform's own inference meter — the org's balance is authorised before the model "+
-			"call and debited at the exact token cost after — so content never re-bills it. A "+
-			"studio render is invisible to that meter, so content is the sole meter for it: the "+
-			"org is gated BEFORE the GPU compute and refused 402 when out of funds or over its "+
-			"spend cap, and the debit is recorded only once the render actually returns, because "+
-			"the billable event is the consumed compute and not the CMS row. `project` rides the "+
-			"BODY rather than a server-minted identity claim, so it attributes spend but a "+
-			"project-scoped cap stays soft on it — the org is the value that is enforced.\n\n"+
-
-			"The org is the caller's own, resolved once from the validated principal and never "+
-			"read from the body; a caller without one is refused 403. Status is not the "+
-			"generator's to choose: a generated item is ALWAYS a draft, and the storage-boundary "+
-			"hook enforces that a second time.\n\n"+
-
-			"It fails closed rather than inventing anything. An unknown content type is 404 and a "+
-			"deployment whose marketing module is not installed is 409 naming the install call. "+
-			"An AI plane or studio that is unconfigured or unreachable, a graph the studio "+
-			"rejects, and a render that does not return in time all degrade to 503 — never "+
-			"fabricated copy, never a fake render. A `source_media` that fails the SSRF and "+
-			"traversal validator is 400 raised before the billing gate and before the studio is "+
-			"contacted, so a hostile source never costs the caller anything.")
 }
 
 // Shutdown releases the mounted singleton. Idempotent; content owns no store, so this
@@ -180,6 +144,7 @@ var (
 	errIllegalTransition  = errors.New("content: illegal transition")
 	errModuleNotInstalled = errors.New("content: marketing module not installed for org")
 	errInvalidSource      = errors.New("content: invalid source_media")
+	errPublishBusy        = errors.New("content: another publisher holds this item")
 )
 
 // ---- typed ops ----
@@ -391,29 +356,65 @@ func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*Tran
 
 // ---- handlers (free functions bound with cloud.Handle) ----
 
-func postGenerate(_ *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// Draft a piece of marketing content and file it in the CMS as a draft.
+//
+// Answers 201 with the created draft's identity — {doctype, name, status} — and the
+// document itself lands in the CMS through the SAME validate and lifecycle-hook
+// pipeline an ordinary create runs. This is a WRITE, not a preview: there is no
+// dry-run, and every call that succeeds leaves a document behind.
+//
+// `doctype` picks which of two generation planes runs, and they are the only two.
+// Campaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by
+// default, overridable per request with `model` or per deployment); Asset is a studio
+// image render the AI plane never sees. Everything else about the call is identical.
+//
+// MONEY, metered in exactly one place per mode and never both. Copy rides the
+// platform's own inference meter — the org's balance is authorised before the model
+// call and debited at the exact token cost after — so content never re-bills it. A
+// studio render is invisible to that meter, so content is the sole meter for it: the
+// org is gated BEFORE the GPU compute and refused 402 when out of funds or over its
+// spend cap, and the debit is recorded only once the render actually returns, because
+// the billable event is the consumed compute and not the CMS row. `project` rides the
+// BODY rather than a server-minted identity claim, so it attributes spend but a
+// project-scoped cap stays soft on it — the org is the value that is enforced.
+//
+// The org is the caller's own, resolved once from the validated principal and never
+// read from the body; a caller without one is refused 403. Status is not the
+// generator's to choose: a generated item is ALWAYS a draft, and the storage-boundary
+// hook enforces that a second time.
+//
+// It fails closed rather than inventing anything. An unknown content type is 404 and a
+// deployment whose marketing module is not installed is 409 naming the install call.
+// An AI plane or studio that is unconfigured or unreachable, a graph the studio
+// rejects, and a render that does not return in time all degrade to 503 — never
+// fabricated copy, never a fake render. A `source_media` that fails the SSRF and
+// traversal validator is 400 raised before the billing gate and before the studio is
+// contacted, so a hostile source never costs the caller anything.
+func (o contentOps) postGenerate(ctx context.Context, in *GenerateInput) (*GenerateResult, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("valid principal required")
+		return nil, zip.ErrForbidden("valid principal required")
 	}
-	var in GenerateInput
-	if err := c.Bind(&in); err != nil {
-		return err
+	body := *in
+	body.DocType = strings.TrimSpace(body.DocType)
+	if body.DocType == "" {
+		return nil, zip.ErrBadRequest("doctype is required")
 	}
-	in.DocType = strings.TrimSpace(in.DocType)
-	if in.DocType == "" {
-		return zip.ErrBadRequest("doctype is required")
-	}
-	res, err := Generate(c.Context(), org, in)
+	res, err := Generate(ctx, org, body)
 	if err != nil {
-		// A studio-render billing denial is a funds/cap outcome, not a server fault:
-		// render it as the SAME 402/503 contract every Hanzo resource create emits.
+		// A studio-render billing denial is a funds/cap outcome, not a server fault.
+		// cloud.Denied carries the money wire's own status and body as an ERROR —
+		// the one refusal channel a typed op has — and cloud.DenyEnvelope (installed
+		// on the group) writes those bytes back verbatim, so this answers the SAME
+		// nested {"error":{"code","message"}} every Hanzo resource create emits
+		// rather than reshaping it into zip's flat {status,code,error}. Off the HTTP
+		// path (MCP, CLI) deniedErr.Unwrap keeps the status and the sentence.
 		if errors.Is(err, metering.ErrInsufficientBalance) || errors.Is(err, metering.ErrSpendCapExceeded) {
-			return cloud.DenyResource(c, err)
+			return nil, cloud.Denied(err)
 		}
-		return opErr(err)
+		return nil, opErr(err)
 	}
-	return c.JSON(http.StatusCreated, res)
+	return &res, nil
 }
 
 // ---- exported ops (the ONE implementation; handlers + connector both call these) ----
@@ -449,6 +450,40 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 		return TransitionResult{}, fmt.Errorf("%w: %q", errUnknownStatus, to)
 	}
 
+	// On the ONE edge that distributes, the item's publish lease covers this WHOLE
+	// function — read, edge-check, status write and fan-out — not just the fan-out.
+	//
+	// The status write below carries the entire document, external_ids included, and
+	// it cannot carry less: UpdateData replaces the document, so a field left out of
+	// the map is deleted rather than preserved. The snapshot it writes is read at the
+	// top of this function, BEFORE any fan-out. Two concurrent transitions to
+	// published therefore interleave as: both read an empty skip-set, A publishes and
+	// records its external_ids, B's stale snapshot writes that skip-set back to empty,
+	// and B's fan-out — itself correctly leased, correctly re-reading — finds nothing
+	// to skip and posts the item a second time. The lease inside Publish cannot see
+	// this, because the erasure happens outside it. Measured at ~7% of runs before
+	// this widened, which is a gate that reddens at random rather than a bug anyone
+	// could reproduce on demand.
+	//
+	// Holding it here makes the loser's read happen after the winner's record: it sees
+	// status=published (a legal no-op edge, CanTransition returns true for from==to),
+	// re-stamps the same status, and its fan-out skips every channel already on record.
+	// One post, both callers succeed.
+	if entersDistribution(to) {
+		lease, ok, err := framework.AcquireLease(ctx, org, publishLeaseKey(doctype, name), publishLeaseTTL, publishLeaseWait)
+		if err != nil {
+			return TransitionResult{}, err
+		}
+		if !ok {
+			// A live publisher held the item for the whole wait window. Refusing is the
+			// honest answer and the safe one: this call cannot write the document without
+			// erasing ids that publisher is still recording, so it writes nothing and says
+			// so. 409, retryable — the caller re-transitions and takes the no-op path.
+			return TransitionResult{}, errPublishBusy
+		}
+		defer func() { _ = lease.Release(ctx) }()
+	}
+
 	doc, err := framework.Get(ctx, org, doctype, name)
 	if err != nil {
 		return TransitionResult{}, err
@@ -474,7 +509,9 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 
 	res := TransitionResult{DocType: doctype, Name: name, From: from, To: to}
 	if entersDistribution(to) {
-		pr, perr := Publish(ctx, org, PublishInput{DocType: doctype, Name: name, ScheduleAt: scheduleAt})
+		// publishHeld, not Publish: this call already holds the item's publish lease
+		// (above), and the lease is not reentrant.
+		pr, perr := publishHeld(ctx, org, PublishInput{DocType: doctype, Name: name, ScheduleAt: scheduleAt})
 		if perr != nil {
 			// Never fatal — the status IS updated; distribution can be retried.
 			s.Log.Warn("distribution on transition failed (status updated)",
@@ -609,6 +646,11 @@ func opErr(err error) error {
 		// bad request — an honest 400 that never reaches the studio, never bills.
 		return zip.ErrBadRequest(err.Error())
 	case errors.Is(err, errIllegalTransition):
+		return zip.Errorf(http.StatusConflict, "%v", err)
+	case errors.Is(err, errPublishBusy):
+		// Same 409 the illegal edge answers with, for the same reason: the request
+		// conflicts with the item's current state. Nothing was written and nothing was
+		// posted, so retrying is safe and is the expected response.
 		return zip.Errorf(http.StatusConflict, "%v", err)
 	case errors.Is(err, framework.ErrNotFound):
 		return zip.ErrNotFound("content item not found")

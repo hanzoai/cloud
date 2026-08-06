@@ -261,6 +261,7 @@ func mountPromoRoutes(t *testing.T, plans cloud.PlanChecker) (*zip.App, *cloud.S
 		State: state{store: testStore(t), plans: plans},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
+	compose(app)
 	routes(app, cloud.ZipApp(app), s)
 	return app, s
 }

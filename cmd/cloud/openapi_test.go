@@ -178,7 +178,7 @@ func template(path string) string {
 // keeps the fix from becoming a second source of truth.
 //
 // The host does not serve A document about the fleet — it serves THE document,
-// the same bytes mk/fleet.mk surface-check regenerates from source and refuses to
+// the same bytes mk/fleet.mk check regenerates from source and refuses to
 // let drift. Both sides are produced by openapi.Fleet over the same committed
 // subsets, so this is byte equality, not a resemblance check: render what the
 // host served through the same JSONToYAML that writes the golden and the two

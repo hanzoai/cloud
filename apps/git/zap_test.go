@@ -17,7 +17,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/zapface"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -50,17 +49,28 @@ func mountZapApp(t *testing.T) (base string, stop func()) {
 	// onto the REQUEST headers so the downstream handler's principal.Org (which
 	// reads X-Org-Id/X-User-Id off the request) sees a validated principal. The
 	// zapface bridge replays the WS-upgrade Authorization header on every /v1
-	// dispatch, so this runs for ZAP calls exactly as for REST. Registered on the
-	// raw fiber app to reach the raw request headers (zip.Ctx only exposes
-	// response-header writes), before Mount so it precedes the git routes.
-	app.Fiber().Use(func(c fiber.Ctx) error {
-		if h := c.Get("Authorization"); strings.HasPrefix(h, "Bearer test-") {
+	// dispatch, so this runs for ZAP calls exactly as for REST.
+	//
+	// Registered as a zip COMPONENT, before Mount so it precedes the git routes.
+	// It used to be installed through app.Fiber().Use, which stopped working at
+	// zip v1.26: Fiber() materialises a DRAFT router, and every later registration
+	// — Mount's routes, /zap — invalidates that draft, so the next Fiber() call
+	// builds a brand-new *fiber.App and the shim was written onto a throwaway.
+	// The handlers then saw no X-Org-Id, principal.Org failed, and zapCreate
+	// answered 403, which zapface rewrites to a bare UNAUTHORIZED that names
+	// none of this. Reaching through to fiber is the bug; a component is
+	// installed by the same compose the server runs (f6c9605b, same class).
+	// c.Fiber() still gets at the raw REQUEST headers, which is the one thing
+	// zip.Ctx does not expose directly.
+	app.Use(zip.H(func(c *zip.Ctx) error {
+		fc := c.Fiber()
+		if h := fc.Get("Authorization"); strings.HasPrefix(h, "Bearer test-") {
 			org := strings.TrimPrefix(h, "Bearer test-")
-			c.Request().Header.Set("X-Org-Id", org)
-			c.Request().Header.Set("X-User-Id", "u_"+org)
+			fc.Request().Header.Set("X-Org-Id", org)
+			fc.Request().Header.Set("X-User-Id", "u_"+org)
 		}
-		return c.Next()
-	})
+		return c.Continue()
+	}))
 
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)

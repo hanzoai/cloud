@@ -56,24 +56,6 @@
           }
         ]
       },
-      "options": {
-        "operationId": "options_v1_bot_by_wildcard1",
-        "summary": "Relay one of the bot runtime's own operational paths",
-        "description": "Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.\n\nThis is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bots.\n\nA validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.\n\nOne registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.",
-        "tags": [
-          "bot"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
       "patch": {
         "operationId": "patch_v1_bot_by_wildcard1",
         "summary": "Relay one of the bot runtime's own operational paths",
@@ -127,24 +109,6 @@
             }
           }
         ]
-      },
-      "trace": {
-        "operationId": "trace_v1_bot_by_wildcard1",
-        "summary": "Relay one of the bot runtime's own operational paths",
-        "description": "Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.\n\nThis is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bots.\n\nA validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.\n\nOne registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.",
-        "tags": [
-          "bot"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
       }
     },
     "/v1/bots": {
@@ -181,7 +145,7 @@
     },
     "/v1/bots/{runId}/stop": {
       "post": {
-        "operationId": "post_v1_bots_runId_stop",
+        "operationId": "post_v1_bots_by_runid_stop",
         "summary": "Stop terminates one of the caller org's own bot runs and reports its terminal state.",
         "description": "Stop terminates one of the caller org's own bot runs and reports its terminal state.\n\nThe own-key guard is the org: it is the caller's validated org, never theirs to\nchoose, and the runtime resolves the run id UNDER it. A run belonging to another\ntenant is not among this org's runs, so it answers absent — the same 404 a\nnonexistent id gets, which is what keeps this from being an oracle.\n\nAbsence is honoured ONLY when the runtime answers it. A runtime that does not\nserve stop reports nothing about the run, and reporting \"stopped\" on that basis\nwould be a stop that cannot fail — so it is a 502.",
         "tags": [

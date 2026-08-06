@@ -100,11 +100,26 @@ func (s Scope) Admits(a Authority) bool {
 func Guard(s Scope, h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !s.Admits(AuthorityOf(c)) {
-			return zip.ErrForbidden(s.refusal())
+			return s.Refusal()
 		}
 		return h(c)
 	}
 }
+
+// Refusal is the 403 this scope answers an inadmissible caller with, and Guard's
+// own answer. It exists because a TYPED op cannot be guarded by wrapping:
+// zip.Get[In, Out] takes a handler that receives a context and its decoded In, so
+// there is no zip.Handler for Guard to compose around and the gate becomes the
+// first line INSIDE the op (apps/platform/ops.go). The rule is still Admits and
+// the sentence is still refusal, so the two forms of the one gate cannot answer
+// differently.
+//
+// It is a METHOD on the scope rather than a function taking one, because the
+// sentence is derived from the scope — a caller is told what it lacks in the
+// vocabulary of the door it failed — and because Refuse is already the name of the
+// 402 every SPEND gate renders (middleware_spend.go). Two refusals that mean
+// different things do not share a name.
+func (s Scope) Refusal() error { return zip.ErrForbidden(s.refusal()) }
 
 // refusal says what the caller lacks, in the vocabulary of the scope it failed.
 func (s Scope) refusal() string {

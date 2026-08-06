@@ -21,7 +21,7 @@ package manifest
 // The other side is each app's own subset (plugin/<app>/openapi.json), projected
 // by that app's binary from that app's router. It is derived — but it is forced
 // back to source on every `make test`, which regenerates it and fails on any diff
-// (mk/fleet.mk surface-check). Nothing here is forced back to anything by being
+// (mk/fleet.mk check). Nothing here is forced back to anything by being
 // committed.
 
 import (
@@ -205,7 +205,7 @@ func served(t *testing.T, app string) []string {
 	path := filepath.Join("..", "plugin", app, "openapi.json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%s: %v\n\nEvery app publishes its own subset. Run `make -f mk/fleet.mk describe-apps`.", path, err)
+		t.Fatalf("%s: %v\n\nEvery app publishes its own subset. Run `make -f mk/fleet.mk subsets`.", path, err)
 	}
 	var doc struct {
 		Paths map[string]json.RawMessage `json:"paths"`

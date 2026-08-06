@@ -23,10 +23,20 @@ var catalogJSON []byte
 
 // CatalogEntry is one starter prompt as the console browse UI consumes it.
 type CatalogEntry struct {
-	Name   string   `json:"name"`
-	Type   string   `json:"type"`
-	Prompt string   `json:"prompt"`
-	Tags   []string `json:"tags"`
+	// Name is the starter's suggested handle. It is NOT taken in your org: the
+	// catalog is shared reference content, so this name is free until you import it,
+	// and posting it under a name you already use appends a version to yours.
+	Name string `json:"name"`
+	// Type labels the template's kind, defaulted to "text" for entries that declare
+	// none.
+	Type string `json:"type"`
+	// Prompt is the starter's full template body, ready to POST as-is. Entries too
+	// large to create (over 64 KiB) are dropped from this list rather than offered.
+	Prompt string `json:"prompt"`
+	// Tags is the starter's suggested taxonomy, carried through unchanged if you
+	// import it.
+	Tags []string `json:"tags"`
+	// Labels is the starter's second suggested taxonomy, same treatment as Tags.
 	Labels []string `json:"labels"`
 }
 

@@ -37,57 +37,106 @@ const (
 )
 
 // runReq is the CLI contract for POST /v1/run. The org is NEVER read from here —
-// it is resolved from the validated identity by s.tenant.
+// it is resolved from the validated identity.
+//
+// Every field carries `url:"-"`: zip's binder fills an In field from the query
+// string as well as the body, and this route has never taken a run's fields there,
+// so without the opt-out `?image=other` would silently run something the body did
+// not ask for.
 type runReq struct {
-	Name     string       `json:"name"`
-	Image    string       `json:"image"`
-	Runtime  string       `json:"runtime"` // accepted for the client contract; the image is the runtime unit.
-	Port     int          `json:"port"`
-	Shape    string       `json:"shape"` // compute size label, echoed back; sizing is the operator's default.
-	MinScale int          `json:"minScale"`
-	MaxScale int          `json:"maxScale"`
-	GPU      int          `json:"gpu"`
-	Env      []EnvVarJSON `json:"env"`
+	// Name is the run's name, and the slug is derived from it. Required, and it
+	// must resolve to `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`. Re-running the same
+	// name updates that run in place.
+	Name string `json:"name" url:"-"`
+	// Image is the container image to run. Required.
+	Image string `json:"image" url:"-"`
+	// Runtime is accepted for the client contract and echoed nowhere: the image
+	// IS the runtime unit.
+	Runtime string `json:"runtime" url:"-"`
+	// Port is the container port the run listens on.
+	Port int `json:"port" url:"-"`
+	// Shape is a compute size label, echoed back; sizing is the operator's
+	// default. Defaults to "auto".
+	Shape string `json:"shape" url:"-"`
+	// MinScale is the replica floor, clamped to the deployment's limit.
+	MinScale int `json:"minScale" url:"-"`
+	// MaxScale above the floor declares an autoscaling ceiling; 0 means no
+	// autoscaler at all — a fixed run at the floor.
+	MaxScale int `json:"maxScale" url:"-"`
+	// GPU is how many GPUs the run asks for; a negative value is 400.
+	GPU int `json:"gpu" url:"-"`
+	// Env is the run's environment. Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`;
+	// a variable marked `secret: true` is sealed into KMS.
+	Env []EnvVarJSON `json:"env" url:"-"`
 }
 
 // runView is the CLI response: the run's identity, live URL and status.
 type runView struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	URL    string `json:"url"`
+	// ID is the application id the run created or converged.
+	ID string `json:"id"`
+	// Name is the run's name, as stored.
+	Name string `json:"name"`
+	// URL is the run's live HTTPS address.
+	URL string `json:"url"`
+	// Status is the application's state — `deploying` on a fresh accept.
 	Status string `json:"status"`
-	Shape  string `json:"shape"`
+	// Shape is the compute size label the request asked for, or "auto".
+	Shape string `json:"shape"`
 }
 
-func run(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body runReq
-	if err := c.Bind(&body); err != nil {
-		return err
+// run runs a container image and gives back a URL.
+//
+// The one-call shortcut over project → app → deploy: give it a `name` and an
+// `image` and it creates or updates an image-source application in your org's
+// DEFAULT project, deploys it through the same operator Service-CR writer
+// everything else uses, and answers its id, name, live URL, status and shape.
+// Re-running the same name UPDATES it in place, so the call is idempotent by name.
+//
+// What it produces is a first-class application, not a special object: it is
+// listable, stoppable and redeployable through the /v1/platform routes like any
+// other app.
+//
+// `minScale` is the replica floor. `maxScale` above it declares an autoscaling
+// ceiling; `maxScale: 0` means no autoscaler at all — a fixed run at the floor.
+// Both are clamped to the deployment's limits. `runtime` and `shape` are accepted
+// for the client contract and echoed back: the image is the runtime unit and sizing
+// is the operator's default.
+//
+// It is BILLING-GATED before it touches the cluster: a flat per-run fee is
+// authorized against the org's own prepaid balance first, so an org that cannot pay
+// is refused without anything being created. An unreachable cluster is 503 — a run
+// never reports a URL it did not create. Secret env is sealed into KMS and fails
+// closed without it.
+//
+// Requires a validated principal; 403 without one. The org is resolved from that
+// validated identity and is what both pays and owns the namespace — it is never
+// read from the body.
+func (o ops) run(ctx context.Context, body *runReq) (*runView, error) {
+	s := o.s
+	c, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	slug := normalizeSlug("", name)
 	if !slugRE.MatchString(slug) {
-		return zip.ErrBadRequest("name must resolve to a slug matching ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+		return nil, zip.ErrBadRequest("name must resolve to a slug matching ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
 	image := strings.TrimSpace(body.Image)
 	if image == "" {
-		return zip.ErrBadRequest("image is required")
+		return nil, zip.ErrBadRequest("image is required")
 	}
 	if body.GPU < 0 {
-		return zip.ErrBadRequest("gpu must be >= 0")
+		return nil, zip.ErrBadRequest("gpu must be >= 0")
 	}
 	// Validate env keys at the boundary (same rule as createApp) before anything is
 	// sealed or persisted.
 	for _, e := range body.Env {
 		if !envKeyRE.MatchString(e.Key) {
-			return zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
+			return nil, zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
 		}
 	}
 	// Scale bounds: minScale is the replica floor (clamped to [1,maxReplicas]).
@@ -106,22 +155,22 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	// resolved above is sent as both the commerce user and X-Org-Id), never a
 	// default — the anti-cross-tenant billing property (resource_billing.go).
 	fee := cloud.ResourceFeeCents(runFeeEnvPrefix, runKind)
-	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, runKind, fee); err != nil {
-		return cloud.DenyResource(c, err)
+	gateProject, projectValidated := principal.ValidatedProject(c)
+	if err := s.Bill.Gate(ctx, principal.Ledger(c), gateProject, projectValidated, runKind, fee); err != nil {
+		return nil, cloud.DenyResource(c, err)
 	}
 
 	// Fail closed if the cluster is unreachable — a run that cannot write its CR must
 	// never report a fabricated URL/status.
 	if err := s.State.k8s.ready(); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "cluster unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "cluster unavailable: %v", err)
 	}
 
 	// Seal secret env into KMS so plaintext is never persisted (same choke point as
 	// createApp); fails closed if a secret is present without KMS.
-	sealedEnv, err := sealSecretEnv(s, c.Context(), org, slug, body.Env)
+	sealedEnv, err := sealSecretEnv(s, ctx, org, slug, body.Env)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%v", err)
 	}
 	envJSON, _ := json.Marshal(sealedEnv)
 
@@ -133,17 +182,17 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	repo, tag := splitImageRef(image)
 	now := time.Now().Unix()
 
-	project, herr := ensureRunProject(s, c.Context(), org)
-	if herr != nil {
-		return herr
+	project, err := ensureRunProject(s, ctx, org)
+	if err != nil {
+		return nil, err
 	}
 
-	a, err := s.State.store.GetApplication(c.Context(), org, project, slug)
+	a, err := s.State.store.GetApplication(ctx, org, project, slug)
 	switch {
 	case errors.Is(err, errNotFound):
 		id, gerr := genID("app")
 		if gerr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
 		}
 		a = Application{
 			ID: id, Org: org, ProjectID: project, Slug: slug, Name: name,
@@ -153,11 +202,11 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 			DomainsJSON: string(domainsJSON), Status: "deploying", Namespace: tenantNamespace(org),
 			CreatedAt: now, UpdatedAt: now,
 		}
-		if err := s.State.store.CreateApplication(c.Context(), a); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		if err := s.State.store.CreateApplication(ctx, a); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 		}
 	case err != nil:
-		return zip.Errorf(http.StatusInternalServerError, "get app: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get app: %v", err)
 	default:
 		// Re-run: converge the existing app to the requested spec, preserving identity.
 		a.Name, a.Source, a.BuildType = name, "image", "image"
@@ -165,17 +214,17 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 		a.Replicas, a.MinScale, a.MaxScale = minScale, minScale, maxScale
 		a.EnvJSON, a.DomainsJSON = string(envJSON), string(domainsJSON)
 		a.Status, a.Namespace, a.UpdatedAt = "deploying", tenantNamespace(org), now
-		if err := s.State.store.UpdateApplication(c.Context(), a); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		if err := s.State.store.UpdateApplication(ctx, a); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 		}
 	}
 
 	// The ONE Service-CR writer (image + autoscaling min/max + port + ingress). The
 	// operator reconciles the rollout; secret-env sync is declared best-effort.
-	if err := s.State.k8s.applyService(c.Context(), org, project, a, image); err != nil {
-		return zip.Errorf(deployErrStatus(err), "apply Service CR: %v", err)
+	if err := s.State.k8s.applyService(ctx, org, project, a, image); err != nil {
+		return nil, zip.Errorf(deployErrStatus(err), "apply Service CR: %v", err)
 	}
-	ensureSecretSync(s, c.Context(), org, a)
+	ensureSecretSync(s, ctx, org, a)
 
 	// Record the paid unit on the run's OWN org ledger (fire-and-forget).
 	s.Bill.Meter(principal.Ledger(c), principal.Project(c), runKind, fee, c.RequestID(), cloud.ClientIP(c))
@@ -183,13 +232,13 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	s.Log.Info("run (container-serverless)", "org", org, "app", slug, "ns", tenantNamespace(org),
 		"image", image, "min", minScale, "max", maxScale, "actor", c.User(), "requestID", c.RequestID())
 
-	return c.JSON(http.StatusAccepted, runView{
+	return &runView{
 		ID:     a.ID,
 		Name:   a.Name,
 		URL:    "https://" + defaultHost(s, org, slug),
 		Status: a.Status,
 		Shape:  firstNonEmpty(strings.TrimSpace(body.Shape), "auto"),
-	})
+	}, nil
 }
 
 // ensureRunProject resolves the project a run lands in. The DEFAULT project is

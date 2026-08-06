@@ -77,7 +77,7 @@
     },
     "/v1/pubsub/jetstream/streams/{stream}": {
       "delete": {
-        "operationId": "delete_v1_pubsub_jetstream_streams_stream",
+        "operationId": "delete_v1_pubsub_jetstream_streams_by_stream",
         "summary": "Removes one stream of the caller's org — its retained messages and its consumers with it — and answers 204 with no body.",
         "description": "Removes one stream of the caller's org — its retained messages\nand its consumers with it — and answers 204 with no body. 404 when the org\nhas no stream of that name.",
         "tags": [
@@ -101,7 +101,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_pubsub_jetstream_streams_stream",
+        "operationId": "get_v1_pubsub_jetstream_streams_by_stream",
         "summary": "Returns one stream of the caller's org — its configuration and its live state (messages, bytes, sequence range, consumer count).",
         "description": "Returns one stream of the caller's org — its configuration and its\nlive state (messages, bytes, sequence range, consumer count). 404 when the\norg has no stream of that name.",
         "tags": [
@@ -132,7 +132,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_pubsub_jetstream_streams_stream",
+        "operationId": "put_v1_pubsub_jetstream_streams_by_stream",
         "summary": "Rewrites a stream's configuration — subjects, limits, discard — and returns the updated stream.",
         "description": "Rewrites a stream's configuration — subjects, limits, discard —\nand returns the updated stream. It is a PUT: the spec sent replaces the spec\nheld, with one reading for the enums a caller omits — an empty storage,\nretention or discard keeps the stream's current one, because JetStream holds\nstorage and retention immutable and refuses a change with a 400 rather than\nthis door pretending it took.",
         "tags": [
@@ -182,7 +182,7 @@
     },
     "/v1/pubsub/jetstream/streams/{stream}/consumers": {
       "get": {
-        "operationId": "get_v1_pubsub_jetstream_streams_stream_consumers",
+        "operationId": "get_v1_pubsub_jetstream_streams_by_stream_consumers",
         "summary": "Returns one stream's consumers, sorted by name.",
         "description": "Returns one stream's consumers, sorted by name. 404 when the\norg has no stream of that name.",
         "tags": [
@@ -213,7 +213,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_pubsub_jetstream_streams_stream_consumers",
+        "operationId": "post_v1_pubsub_jetstream_streams_by_stream_consumers",
         "summary": "Creates a durable consumer on one stream and returns it.",
         "description": "Creates a durable consumer on one stream and returns it. A\nconsumer is a named cursor: it tracks what has been delivered and what is\nacknowledged, so many workers can share it and none sees a message twice\noutside redelivery. 409 when the stream already has a consumer of that name\nwith a different configuration.",
         "tags": [
@@ -261,7 +261,7 @@
     },
     "/v1/pubsub/jetstream/streams/{stream}/consumers/{name}": {
       "delete": {
-        "operationId": "delete_v1_pubsub_jetstream_streams_stream_consumers_name",
+        "operationId": "delete_v1_pubsub_jetstream_streams_by_stream_consumers_by_name",
         "summary": "Removes one consumer — its cursor, not the stream's messages — and answers 204 with no body.",
         "description": "Removes one consumer — its cursor, not the stream's messages —\nand answers 204 with no body. 404 when the stream or the consumer does not\nexist.",
         "tags": [
@@ -294,7 +294,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_pubsub_jetstream_streams_stream_consumers_name",
+        "operationId": "get_v1_pubsub_jetstream_streams_by_stream_consumers_by_name",
         "summary": "Returns one consumer of one org stream — its configuration and its cursor: delivered and acknowledged sequences, pending and redelivered counts.",
         "description": "Returns one consumer of one org stream — its configuration and\nits cursor: delivered and acknowledged sequences, pending and redelivered\ncounts. 404 when the stream or the consumer does not exist.",
         "tags": [
@@ -336,7 +336,7 @@
     },
     "/v1/pubsub/jetstream/streams/{stream}/consumers/{name}/next": {
       "post": {
-        "operationId": "post_v1_pubsub_jetstream_streams_stream_consumers_name_next",
+        "operationId": "post_v1_pubsub_jetstream_streams_by_stream_consumers_by_name_next",
         "summary": "Fetch pulls the next batch from a consumer and acknowledges it — the request/response way to consume a stream.",
         "description": "Fetch pulls the next batch from a consumer and acknowledges it — the\nrequest/response way to consume a stream. The hand-off is at-most-once: a\nmessage returned here is acked here, so a caller that loses the response does\nnot see it again. Workers needing at-least-once delivery consume the same\nconsumer over the NATS port, where acks are theirs to send. An empty batch\nafter the wait is an empty page, not an error.",
         "tags": [
@@ -392,7 +392,7 @@
     },
     "/v1/pubsub/kv/{bucket}": {
       "delete": {
-        "operationId": "delete_v1_pubsub_kv_bucket",
+        "operationId": "delete_v1_pubsub_kv_by_bucket",
         "summary": "Removes one bucket of the caller's org — every key and every revision with it — and answers 204 with no body.",
         "description": "Removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
         "tags": [
@@ -416,7 +416,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_pubsub_kv_bucket",
+        "operationId": "post_v1_pubsub_kv_by_bucket",
         "summary": "Creates a KV bucket and returns it.",
         "description": "Creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
         "tags": [
@@ -463,7 +463,7 @@
     },
     "/v1/pubsub/kv/{bucket}/{key}": {
       "delete": {
-        "operationId": "delete_v1_pubsub_kv_bucket_key",
+        "operationId": "delete_v1_pubsub_kv_by_bucket_by_key",
         "summary": "Delete removes one key — a delete marker in the key's history, so watchers see it and Get answers 404 — and answers 204 with no body.",
         "description": "Delete removes one key — a delete marker in the key's history, so watchers\nsee it and Get answers 404 — and answers 204 with no body. 404 when the\nbucket does not exist.",
         "tags": [
@@ -496,7 +496,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_pubsub_kv_bucket_key",
+        "operationId": "get_v1_pubsub_kv_by_bucket_by_key",
         "summary": "Get returns one key's current value and revision.",
         "description": "Get returns one key's current value and revision. 404 when the bucket does\nnot exist, the key was never written, or its latest revision is a delete.",
         "tags": [
@@ -536,7 +536,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_pubsub_kv_bucket_key",
+        "operationId": "put_v1_pubsub_kv_by_bucket_by_key",
         "summary": "Put sets one key to one value and returns the revision the write created.",
         "description": "Put sets one key to one value and returns the revision the write created.\nWrites are versioned: each put is a new revision and the bucket retains up to\nits History of them per key.",
         "tags": [
@@ -591,7 +591,7 @@
     },
     "/v1/pubsub/kv/{bucket}/{key}/history": {
       "get": {
-        "operationId": "get_v1_pubsub_kv_bucket_key_history",
+        "operationId": "get_v1_pubsub_kv_by_bucket_by_key_history",
         "summary": "History returns one key's retained revisions, oldest first — every put and every delete marker up to the bucket's History depth.",
         "description": "History returns one key's retained revisions, oldest first — every put and\nevery delete marker up to the bucket's History depth. 404 when the bucket\ndoes not exist or the key was never written.",
         "tags": [

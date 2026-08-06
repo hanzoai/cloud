@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/finance"
 )
 
 // llmTable is the ONE per-org LLM usage ledger (the same warehouse table analytics
@@ -186,24 +188,31 @@ type usageSummary struct {
 // "withdraw" (usage/consumption); Amount is USD cents (positive). Tags carries the
 // category. CreatedAt is the RFC3339 event time we bucket + window on.
 type ledgerTxn struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Amount    int64  `json:"amount"`
-	Currency  string `json:"currency"`
-	Tags      string `json:"tags,omitempty"`
-	Notes     string `json:"notes,omitempty"`
-	CreatedAt string `json:"createdAt"`
+	ID string `json:"id"`
+	// Kind is the LEDGER'S own classification, parsed once at the boundary with
+	// finance.ParseKind and never compared to a string literal here.
+	Kind      finance.Kind `json:"kind"`
+	Amount    int64        `json:"amount"`
+	Currency  string       `json:"currency"`
+	Tags      string       `json:"tags,omitempty"`
+	Notes     string       `json:"notes,omitempty"`
+	CreatedAt string       `json:"createdAt"`
 }
 
-// rollupWire mirrors commerce GET /v1/billing/usage/rollup (the authoritative
-// month-to-date consumed + wallet balance).
-type rollupWire struct {
-	ConsumedCents int64 `json:"consumedCents"`
-	OverageCents  int64 `json:"overageCents"`
-	Balance       struct {
-		BalanceCents   int64 `json:"balanceCents"`
-		AvailableCents int64 `json:"availableCents"`
-	} `json:"balance"`
+// rollup is the ledger's month-to-date total and the wallet behind it.
+//
+// It carries ONE balance because the ledger has one number: what it calls
+// available IS the settled balance — a hold is a caller's own in-pod
+// reservation, never a ledger row. It carried two, and two names for one value
+// is how a reader comes to subtract one from the other.
+//
+// It carries no overage, because overage needs a plan ALLOWANCE and no allowance
+// exists here: this is a PREPAID wallet, and there is nothing to exceed. The
+// field it replaces was read straight out of a JSON body that, in this binary,
+// never arrived.
+type rollup struct {
+	ConsumedCents int64
+	BalanceCents  int64
 }
 
 // ── Pure assemblers ─────────────────────────────────────────────────────────
@@ -259,14 +268,14 @@ func titleWord(s string) string {
 // "withdraw" is usage; anything else (deposit/grant/refund) is NOT spend. Guard on
 // Amount > 0 so a mis-signed row can never subtract from the total.
 func isSpend(t ledgerTxn) bool {
-	return strings.EqualFold(strings.TrimSpace(t.Type), "withdraw") && t.Amount > 0
+	return t.Kind == finance.KindUsage && t.Amount > 0
 }
 
 // buildSpend rolls the commerce rollup + ledger rows into the cost roll-up over the
 // [start,end) window. Only withdrawals in the window count toward TotalCents,
 // ByCategory, and Series; the rollup supplies the authoritative MTD + wallet
 // figures. available=false yields honest zeros with empty (non-nil) slices.
-func buildSpend(available bool, r rollupWire, txns []ledgerTxn, start, end time.Time, interval string) Spend {
+func buildSpend(available bool, r rollup, txns []ledgerTxn, start, end time.Time, interval string) Spend {
 	// When commerce did not answer, every figure is an honest zero (never the
 	// rollup values) with non-nil empty slices so JSON emits [] not null.
 	sp := Spend{
@@ -279,9 +288,13 @@ func buildSpend(available bool, r rollupWire, txns []ledgerTxn, start, end time.
 		return sp
 	}
 	sp.MTDCents = r.ConsumedCents
-	sp.OverageCents = r.OverageCents
-	sp.BalanceCents = r.Balance.BalanceCents
-	sp.AvailableCents = r.Balance.AvailableCents
+	// A prepaid wallet has no allowance, so nothing can be beyond one. This used
+	// to be whatever a JSON body said, and in this binary that body never came.
+	sp.OverageCents = 0
+	// One ledger number, reported under both names it has always been published
+	// under, rather than a second figure invented to fill the second field.
+	sp.BalanceCents = r.BalanceCents
+	sp.AvailableCents = r.BalanceCents
 
 	step := stepOf(interval)
 	byCat := map[string]*CategorySpend{}

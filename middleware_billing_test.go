@@ -58,7 +58,7 @@ func (f *fakeCommerce) usages() int32 { return f.debits.count() }
 func newGateApp(t *testing.T, m *metering.Client, handlerRan *atomic.Bool) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{})
-	app.Use(BillingGate(m, func(c *zip.Ctx) int64 { return 5 }))
+	app.Use(BillingGate(m, func(method, path string) int64 { return 5 }))
 	app.Post("/v1/agent/run", func(c *zip.Ctx) error {
 		handlerRan.Store(true)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
@@ -258,28 +258,44 @@ func TestDefaultPrice(t *testing.T) {
 			t.Errorf("DefaultPrice(%q) = %d, want %d (%s)", tc.path, got, tc.want, tc.why)
 		}
 	}
+
+	// A READ of the very same priced path costs nothing. This is the rule that made a
+	// positive declaration possible at all: DefaultPrice priced by PATH alone, so a
+	// surface declared at 7¢ charged 7¢ to list its own contents, and the only safe
+	// declaration was Free — which is what all 95 surfaces chose. It is asserted
+	// against the SAME path the row above charges for, so the two can never be
+	// reconciled by weakening one of them.
+	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
+		if got := priceForMethod(t, m, "/v1/probe/thing"); got != 0 {
+			t.Errorf("DefaultPrice(%s /v1/probe/thing) = %d, want 0 — a read spends nothing, "+
+				"so it costs nothing (Consumes)", m, got)
+		}
+	}
+	// And the write still does, measured through the same helper — otherwise the
+	// three zeros above are satisfied by a price that is broken for every method.
+	if got := priceForMethod(t, http.MethodPost, "/v1/probe/thing"); got != 7 {
+		t.Errorf("DefaultPrice(POST /v1/probe/thing) = %d, want 7", got)
+	}
 }
 
-// priceForPath routes a real request at path p through a one-shot handler that
-// evaluates DefaultPrice against the genuine zip.Ctx and captures the result.
-// The price is read INSIDE the handler (never after Test returns) because Fiber
-// recycles its context once the handler completes.
+// priceForPath is priceForMethod on a WRITE. The table above asks what a surface
+// COSTS, and only a consuming request costs anything (Consumes, price.go) — so a
+// read would answer 0 for every row and make the whole table unfalsifiable.
 func priceForPath(t *testing.T, p string) int64 {
 	t.Helper()
-	var got int64
-	done := make(chan struct{})
-	app := zip.New(zip.Config{})
-	app.Use(zip.H(func(c *zip.Ctx) error {
-		got = DefaultPrice(c)
-		close(done)
-		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
-	}))
-	req := httptest.NewRequest(http.MethodGet, p, nil)
-	if _, err := app.Test(req); err != nil {
-		t.Fatalf("Test(%q): %v", p, err)
-	}
-	<-done
-	return got
+	return priceForMethod(t, http.MethodPost, p)
+}
+
+// priceForMethod asks DefaultPrice what one call to method p costs.
+//
+// It used to route a real request through a one-shot handler and read the price
+// inside it, because DefaultPrice took a *zip.Ctx and fiber recycles that context
+// the moment the handler returns. A price is a fact about an operation, not about
+// a request, so the whole apparatus — the app, the handler, the httptest request,
+// the done channel guarding the recycle — is gone with the argument that needed it.
+func priceForMethod(t *testing.T, method, p string) int64 {
+	t.Helper()
+	return DefaultPrice(method, p)
 }
 
 func waitFor(cond func() bool, d time.Duration) bool {
@@ -294,7 +310,7 @@ func waitFor(cond func() bool, d time.Duration) bool {
 }
 
 // billingProbe drives a request with the given identity headers through a handler
-// that captures BOTH the billing identity (identityFromCtx — who PAYS) and the
+// that captures BOTH the billing identity (identity — who PAYS) and the
 // data-scope org (principal.Org — whose DATA), so a test can assert the home/
 // effective SPLIT in one shot. Read inside the handler (Fiber recycles the ctx).
 func billingProbe(t *testing.T, headers map[string]string) (billingOrg, billingUser, dataOrg string) {
@@ -302,7 +318,7 @@ func billingProbe(t *testing.T, headers map[string]string) (billingOrg, billingU
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
 	app.Use(zip.H(func(c *zip.Ctx) error {
-		in := identityFromCtx(c)
+		in := identity(c, c.Path())
 		billingOrg, billingUser = in.Org, in.User
 		dataOrg, _ = principal.Org(c)
 		close(done)

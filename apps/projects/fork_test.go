@@ -126,7 +126,15 @@ func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	// The seeded remote is the REPOSITORY the template lives in. It used to be
 	// the template's gallery page, which is an HTML 404 — a build can do nothing
 	// with that, and the provider came out "git" because the host was not a forge.
-	if p.Repo.URL != "https://github.com/hanzo-templates/synapse" {
+	//
+	// The repository is hanzo-apps/template-<slug>, not hanzo-templates/<slug>:
+	// only 21 of the gallery's templates (expo-*, flutter*, swiftui*, desktop-*)
+	// ever moved to the hanzo-templates layout this line was first written
+	// against, and hanzo-templates/synapse 404s authenticated or not. The static
+	// sites live in hanzo-apps under the org's `template-` prefix, which is where
+	// 4203c7f2 repointed them after verifying every source 200 against the GitHub
+	// API. Pin the repo that exists, so a fork clones something.
+	if p.Repo.URL != "https://github.com/hanzo-apps/template-synapse" {
 		t.Fatalf("fork repo url want the template repository, got %q", p.Repo.URL)
 	}
 	if p.Repo.Provider != "github" {

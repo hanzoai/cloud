@@ -31,17 +31,31 @@ import (
 
 // ── preview (per-branch deployment) ─────────────────────────────────────────────
 
+// previewReq is a branch preview to deploy. Branch and Image carry `url:"-"`
+// because the URL addresses the PARENT app and this route has never taken the
+// branch or the artifact off the query string.
 type previewReq struct {
-	Branch string `json:"branch"`
-	Image  string `json:"image"` // already-built image ref to deploy to the branch preview
+	// Project is the project the parent application lives under, from the path.
+	Project string `json:"project"`
+	// App is the parent application's slug, from the path.
+	App string `json:"app"`
+	// Branch is the branch to preview; defaults to the parent app's branch.
+	Branch string `json:"branch" url:"-"`
+	// Image is the already-built image ref to deploy. Required — a preview never
+	// builds.
+	Image string `json:"image" url:"-"`
 }
 
 // previewView is the preview response: the branch's live URL, the branch it maps,
 // the preview app slug, and the recorded deployment.
 type previewView struct {
-	URL        string         `json:"url"`
-	Branch     string         `json:"branch"`
-	App        string         `json:"app"` // preview application slug
+	// URL is the preview's live HTTPS address.
+	URL string `json:"url"`
+	// Branch is the branch this preview maps.
+	Branch string `json:"branch"`
+	// App is the preview application's own slug, `<app>-<branch>`.
+	App string `json:"app"`
+	// Deployment is the deployment the preview recorded.
 	Deployment deploymentView `json:"deployment"`
 }
 
@@ -60,60 +74,66 @@ func previewSlug(app, branch string) string {
 	return slug
 }
 
-// preview deploys an already-built image to a per-branch preview target. The
-// target is a first-class image-source Application (slug "<app>-<branch>") in the
-// SAME project + tenant namespace as prod, with its own default host — so the
-// preview is fully isolated (distinct CR name + ingress host) yet reuses every
-// deploy/CR/tenant helper. Re-previewing the same branch converges it in place.
-func preview(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// preview puts a branch on its own URL.
+//
+// It deploys an already-built `image` to a per-branch preview and answers its URL,
+// the branch, the preview's slug and the deployment. The preview is a FIRST-CLASS
+// application named `<app>-<branch>` in the same project and tenant namespace, with
+// its own default host — so it is completely isolated from production while reusing
+// the same deploy mechanic. Re-previewing a branch converges that same target in
+// place rather than stacking another one.
+//
+// It carries NO environment variables, deliberately: a preview never inherits
+// production's secrets. It also does not build — `image` is required and must
+// already exist, and `branch` defaults to the parent app's. A branch that does not
+// resolve to a valid slug distinct from the parent's is 400. Requires a validated
+// principal; 403 without one.
+func (o ops) preview(ctx context.Context, body *previewReq) (*previewView, error) {
+	s := o.s
+	c, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	proj, parent, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	var body previewReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	proj, parent, err := loadApp(s, ctx, org, body.Project, body.App)
+	if err != nil {
+		return nil, err
 	}
 	branch := firstNonEmpty(strings.TrimSpace(body.Branch), strings.TrimSpace(parent.RepoBranch))
 	if branch == "" {
-		return zip.ErrBadRequest("branch is required")
+		return nil, zip.ErrBadRequest("branch is required")
 	}
 	image := strings.TrimSpace(body.Image)
 	if image == "" {
-		return zip.ErrBadRequest("image is required (preview deploys an already-built image)")
+		return nil, zip.ErrBadRequest("image is required (preview deploys an already-built image)")
 	}
 	slug := previewSlug(parent.Slug, branch)
 	if !slugRE.MatchString(slug) || slug == parent.Slug {
-		return zip.ErrBadRequest("branch does not resolve to a valid, distinct preview slug; use a shorter branch or app name")
+		return nil, zip.ErrBadRequest("branch does not resolve to a valid, distinct preview slug; use a shorter branch or app name")
 	}
 	repo, tag := splitImageRef(image)
 	now := time.Now().Unix()
 
-	a, herr := ensurePreviewApp(s, c.Context(), org, proj, parent, slug, branch, repo, tag, now)
-	if herr != nil {
-		return herr
+	a, err := ensurePreviewApp(s, ctx, org, proj, parent, slug, branch, repo, tag, now)
+	if err != nil {
+		return nil, err
 	}
 
-	depID, version, err := nextDeployment(s, c.Context(), a.ID)
+	depID, version, err := nextDeployment(s, ctx, a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
 	}
-	d, status, derr := deployTagCore(s, c.Context(), org, proj, a, depID, version, now, image, tag, "image", "", s.State.k8s.ready())
+	d, status, derr := deployTagCore(s, ctx, org, proj, a, depID, version, now, image, tag, "image", "", s.State.k8s.ready())
 	if derr != nil {
-		return zip.Errorf(status, "%s", derr.Error())
+		return nil, zip.Errorf(status, "%s", derr.Error())
 	}
 	s.Log.Info("preview deployed", "org", org, "app", parent.Slug, "branch", branch, "preview", slug,
 		"ns", tenantNamespace(org), "image", image, "actor", c.User(), "requestID", c.RequestID())
-	return c.JSON(status, previewView{
+	return &previewView{
 		URL:        "https://" + defaultHost(s, org, slug),
 		Branch:     branch,
 		App:        slug,
 		Deployment: toDeploymentView(d),
-	})
+	}, nil
 }
 
 // ensurePreviewApp get-or-creates the branch-preview Application (image-source) in
@@ -167,32 +187,47 @@ func ensurePreviewApp(s *cloud.Service[state], ctx context.Context, org, project
 
 // ── promote (make an already-built artifact the prod release) ────────────────────
 
+// promoteReq names the already-built artifact to make the app's production
+// release. Both selectors carry `url:"-"`: the URL addresses the app, and the
+// artifact has never been a query parameter.
 type promoteReq struct {
-	DeploymentID string `json:"deploymentId"`
-	Tag          string `json:"tag"`
+	// Project is the project the application lives under, from the path.
+	Project string `json:"project"`
+	// App is the application's slug, from the path.
+	App string `json:"app"`
+	// DeploymentID promotes that deployment's exact built image. One of this and
+	// Tag is required.
+	DeploymentID string `json:"deploymentId" url:"-"`
+	// Tag promotes an image tag, resolved the same way a deploy resolves one.
+	Tag string `json:"tag" url:"-"`
 }
 
-// promote sets the PROD app's image to an already-built target — a prior
-// deployment's exact image (deploymentId) or a tag resolved the SAME way a normal
-// deploy resolves one — and redeploys through the shared core. Reuses deploy.
-func promote(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// promote promotes an already-built release to the app.
+//
+// It redeploys an image that already exists — named either by `deploymentId`, which
+// promotes that deployment's exact built image, or by `tag`, resolved the same way
+// a deploy resolves one. One of the two is required; neither is 400.
+//
+// Promotion never builds. A deployment that carries no built image cannot be
+// promoted and is 400, and a deployment id outside this app is 404. It runs through
+// the same deploy core as everything else, so it takes a NEW version number and is
+// subject to the same per-org concurrency cap. Requires a validated principal; 403
+// without one.
+func (o ops) promote(ctx context.Context, body *promoteReq) (*deploymentView, error) {
+	s := o.s
+	c, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	proj, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
+	proj, a, err := loadApp(s, ctx, org, body.Project, body.App)
+	if err != nil {
+		return nil, err
 	}
-	var body promoteReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	image, tag, source, commit, err := resolvePromotionTarget(s, ctx, org, a, body.DeploymentID, body.Tag)
+	if err != nil {
+		return nil, err
 	}
-	image, tag, source, commit, herr := resolvePromotionTarget(s, c.Context(), org, a, body.DeploymentID, body.Tag)
-	if herr != nil {
-		return herr
-	}
-	return redeploy(s, c, org, proj, a, image, tag, source, commit, "promoted", "image", image)
+	return redeploy(s, ctx, c, org, proj, a, image, tag, source, commit, "promoted", "image", image)
 }
 
 // resolvePromotionTarget resolves (image, tag, source, commit) for a promote from
@@ -236,40 +271,50 @@ func imageForTag(s *cloud.Service[state], org string, a Application, tag string)
 
 // ── rollback (redeploy a prior image) ───────────────────────────────────────────
 
+// rollbackReq names the release to return to, or nothing at all — an empty body
+// rolls back to the previous release.
 type rollbackReq struct {
-	DeploymentID string `json:"deploymentId"`
+	// Project is the project the application lives under, from the path.
+	Project string `json:"project"`
+	// App is the application's slug, from the path.
+	App string `json:"app"`
+	// DeploymentID is the deployment to redeploy. Omit it to return to the
+	// previous release.
+	DeploymentID string `json:"deploymentId" url:"-"`
 }
 
-// rollback redeploys a prior deployment's image: the one named by deploymentId, or
-// — when none is given — the previous release resolved from the deployments store
-// (the newest prior deployment carrying a real, already-built image). Rollback is
-// just a deploy of the previous image, so it reuses the shared core.
-func rollback(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// rollback goes back to the previous release.
+//
+// It redeploys a prior image: the one named by `deploymentId`, or — with no body —
+// the newest earlier deployment that carries a real built image and did not error,
+// skipping the release currently live. An app with nothing earlier to return to is
+// 400.
+//
+// A rollback is a deploy of an old image, not a rewind: it takes a NEW version
+// number and appends to the history rather than erasing what came after. Both
+// lookups are scoped to this app and org, so another tenant's image can never be
+// rolled in. Requires a validated principal; 403 without one.
+func (o ops) rollback(ctx context.Context, body *rollbackReq) (*deploymentView, error) {
+	s := o.s
+	c, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	proj, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	var body rollbackReq
-	if len(c.Body()) > 0 {
-		if err := c.Bind(&body); err != nil {
-			return err
-		}
+	proj, a, err := loadApp(s, ctx, org, body.Project, body.App)
+	if err != nil {
+		return nil, err
 	}
 
-	target, herr := resolveRollbackTarget(s, c.Context(), org, a, strings.TrimSpace(body.DeploymentID))
-	if herr != nil {
-		return herr
+	target, err := resolveRollbackTarget(s, ctx, org, a, strings.TrimSpace(body.DeploymentID))
+	if err != nil {
+		return nil, err
 	}
 	image := strings.TrimSpace(target.Image)
 	if image == "" {
-		return zip.ErrBadRequest("target deployment has no image to roll back to")
+		return nil, zip.ErrBadRequest("target deployment has no image to roll back to")
 	}
 	_, tag := splitImageRef(image)
-	return redeploy(s, c, org, proj, a, image, tag, firstNonEmpty(target.Source, a.Source), target.Commit,
+	return redeploy(s, ctx, c, org, proj, a, image, tag, firstNonEmpty(target.Source, a.Source), target.Commit,
 		"rolled back", "toVersion", target.Version, "image", image)
 }
 
@@ -322,17 +367,18 @@ func previousDeployment(s *cloud.Service[state], ctx context.Context, org string
 // redeploy is the shared tail of promote + rollback: allocate a new deployment and
 // deploy the resolved image through the ONE core, then map the result onto the
 // deployment-view response. logMsg + logKV describe the action for the audit log.
-func redeploy(s *cloud.Service[state], c *zip.Ctx, org, project string, a Application, image, tag, source, commit, logMsg string, logKV ...any) error {
+func redeploy(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, org, project string, a Application, image, tag, source, commit, logMsg string, logKV ...any) (*deploymentView, error) {
 	now := time.Now().Unix()
-	depID, version, err := nextDeployment(s, c.Context(), a.ID)
+	depID, version, err := nextDeployment(s, ctx, a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
 	}
-	d, status, derr := deployTagCore(s, c.Context(), org, project, a, depID, version, now, image, tag, source, commit, s.State.k8s.ready())
+	d, status, derr := deployTagCore(s, ctx, org, project, a, depID, version, now, image, tag, source, commit, s.State.k8s.ready())
 	if derr != nil {
-		return zip.Errorf(status, "%s", derr.Error())
+		return nil, zip.Errorf(status, "%s", derr.Error())
 	}
 	s.Log.Info(logMsg, append([]any{"org", org, "app", a.Slug, "ns", tenantNamespace(org),
 		"actor", c.User(), "requestID", c.RequestID()}, logKV...)...)
-	return c.JSON(status, toDeploymentView(d))
+	v := toDeploymentView(d)
+	return &v, nil
 }

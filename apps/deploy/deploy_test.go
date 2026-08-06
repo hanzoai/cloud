@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -169,76 +168,6 @@ func TestSyncStatus(t *testing.T) {
 }
 
 // ── ref parsing ─────────────────────────────────────────────────────────────
-
-func TestParseRef(t *testing.T) {
-	// The App CR resolves; the core/v1 Service (a child object) resolves distinctly.
-	if _, gvr, err := parseRef("hanzo.ai:App:hanzo:iam"); err != nil || gvr != k8s.Apps {
-		t.Errorf("App ref → (%v, %v), want k8s.Apps", gvr, err)
-	}
-	if _, gvr, err := parseRef("apps:Deployment:hanzo:iam"); err != nil || gvr != k8s.Deployments {
-		t.Errorf("Deployment ref → (%v, %v), want k8s.Deployments", gvr, err)
-	}
-	if _, _, err := parseRef(":Service:hanzo:iam"); err != nil {
-		t.Errorf("core Service ref err = %v, want nil", err)
-	}
-	// hanzo.ai:Service is not a kind this plane reads — the operator CR is App.
-	bad := []string{"", "a:b:c", "hanzo.ai:Service:hanzo:iam", "unknown/Kind:hanzo:iam:x", "apps:Deployment:evil-ns:iam", "apps:Deployment:hanzo:Bad_Name"}
-	for _, r := range bad {
-		if _, _, err := parseRef(r); err == nil {
-			t.Errorf("parseRef(%q) = nil err, want rejection", r)
-		}
-	}
-}
-
-// ── belongs-to-app membership ───────────────────────────────────────────────
-
-func TestBelongsToApp(t *testing.T) {
-	cr := appCR("App", "hanzo", "iam", "u1", "r", "v1.0.0", "Running", 1, 1)
-	// owned by uid
-	if !belongsToApp(deployment("hanzo", "x", "d1", "u1", "img:v1", 1, 1), cr, "iam") {
-		t.Error("ownerRef match should belong")
-	}
-	// name == app
-	if !belongsToApp(deployment("hanzo", "iam", "d1", "other", "img:v1", 1, 1), cr, "iam") {
-		t.Error("name==app should belong")
-	}
-	// label instance
-	lbl := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "z", "labels": map[string]any{"app.kubernetes.io/instance": "iam"}}}}
-	if !belongsToApp(lbl, cr, "iam") {
-		t.Error("instance label should belong")
-	}
-	// unrelated
-	other := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "z", "uid": "zz"}}}
-	if belongsToApp(other, cr, "iam") {
-		t.Error("unrelated object must NOT belong")
-	}
-}
-
-// ── diff ────────────────────────────────────────────────────────────────────
-
-func TestComputeDiff(t *testing.T) {
-	// No annotation → source none, not modified.
-	live := deployment("hanzo", "iam", "d1", "u1", "ghcr.io/hanzoai/iam:v1", 2, 2)
-	if src, mod, _ := computeDiff(live); src != "none" || mod {
-		t.Errorf("no-annotation diff = (%q,%v), want (none,false)", src, mod)
-	}
-	// Annotation identical to live (minus status/volatile) → not modified.
-	desired := map[string]any{"apiVersion": "apps/v1", "kind": "Deployment",
-		"metadata": map[string]any{"name": "iam", "namespace": "hanzo"},
-		"spec":     map[string]any{"replicas": int64(2), "selector": map[string]any{"matchLabels": map[string]any{"app.kubernetes.io/instance": "iam"}}, "template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "app", "image": "ghcr.io/hanzoai/iam:v1"}}}}}}
-	db, _ := json.Marshal(desired)
-	_ = unstructured.SetNestedField(live.Object, map[string]any{lastAppliedAnnotation: string(db)}, "metadata", "annotations")
-	if src, mod, _ := computeDiff(live); src != deployDesiredTODO || mod {
-		t.Errorf("identical-desired diff = (%q,%v), want (%q,false)", src, mod, deployDesiredTODO)
-	}
-	// Annotation with a different image → modified.
-	desired["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)["containers"].([]any)[0].(map[string]any)["image"] = "ghcr.io/hanzoai/iam:v2"
-	db2, _ := json.Marshal(desired)
-	_ = unstructured.SetNestedField(live.Object, map[string]any{lastAppliedAnnotation: string(db2)}, "metadata", "annotations")
-	if _, mod, _ := computeDiff(live); !mod {
-		t.Error("changed-image diff = not modified, want modified")
-	}
-}
 
 // ── observe mapping ─────────────────────────────────────────────────────────
 

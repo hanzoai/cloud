@@ -18,10 +18,12 @@ import (
 )
 
 // mountApp mounts the templates surface on a fresh in-memory app with a temp
-// store, exactly as the unified binary does.
+// store, exactly as the unified binary does: the composer's enrichment at the
+// root, then this subsystem's leaves.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

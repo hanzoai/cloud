@@ -215,6 +215,10 @@ func mountPlaneIngest(deps cloud.Deps) error {
 	}
 
 	embeddedPlaneSink = ps
+	// Project /v1/event gen_ai spans onto event.span — fail-soft (spansink.go). It
+	// writes through insertSpans above, so it is installed only once the sink is set,
+	// exactly as the Sentry error lens is installed once the runtime is (errorsink.go).
+	installSpanSink(log)
 	log.Info("plane ingest running", "spans", planeSpanListen, "logs", planeLogListen,
 		"sink", planeSpanTable+" + "+planeLogTable)
 	return nil

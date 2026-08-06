@@ -37,7 +37,7 @@ var externalAssign = regexp.MustCompile(`(?m)^EXTERNAL\s*[:?]?=\s*(.+)$`)
 // mk/fleet.mk builds its app set from `wildcard apps/*/Makefile` plus EXTERNAL,
 // and mk/fleet.mk's own comment claims that glob "reads the same single source of
 // truth the mains do — no second list to fall out of step". It IS a second list,
-// and it had already fallen out of step: apps/zen had no Makefile, so surface-check
+// and it had already fallen out of step: apps/zen had no Makefile, so check
 // — which regenerates every subset from source and fails on any diff — never saw
 // zen at all. Not "saw it and skipped it": the glob simply did not return it, and
 // a set that never contains a name cannot report the name missing.

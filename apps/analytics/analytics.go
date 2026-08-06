@@ -176,6 +176,10 @@ func stopSink() {
 func Shutdown(context.Context) error {
 	stopSink()
 	closeBus()
+	// The replay door's Kafka client (replay.go) is the subsystem's OTHER outbound
+	// connection, and it is released here for the same reason the bus is: Mount does
+	// not return a handle, so what the package opened the package has to close.
+	closeProducer()
 	return nil
 }
 
@@ -186,8 +190,8 @@ func Shutdown(context.Context) error {
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// routes registers the analytics surface: six TYPED read ops, and the writes plus
-// the health probe as untyped handlers because their wire cannot be declared.
+// routes registers the analytics surface: the TYPED read ops and the health
+// probe, and the writes as untyped handlers because their shape cannot be declared.
 //
 // Health owns /v1/analytics/health explicitly (not JWT-gated: liveness must be
 // probe-able); every read lens is org-gated on the validated principal.
@@ -216,14 +220,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/timeseries", o.timeseries)
 	zip.Get(g, "/top", o.top)
 
-	// UNTYPED, and it has to be: this probe answers 503 CARRYING the degraded
-	// REPORT as its body, and no typed op can say that. zip stamps a non-nil Out
-	// with cmp.Or(op.Status, 200) (zip typed.go), WithStatus refuses a non-2xx, and
-	// an error is rendered as the flat {status,code,error} HTTPError — so typing it
-	// would either turn the 503 into a 200 or drop the report. Writing the body
-	// from inside the op and returning nil does not escape it either: a nil Out is
-	// stamped cmp.Or(op.Status, 204).
-	app.Get("/v1/analytics/health", cloud.Handle(s, health))
+	// TYPED, declaring BOTH statuses this probe answers with: the report's own
+	// StatusCode picks 200 or 503, so the degraded answer CARRIES the degraded
+	// report as its body — the pair that kept this route raw before zip could
+	// declare a non-2xx with a typed body.
+	zip.Get(g, "/health", o.health,
+		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
 	// Capture (WRITE) side — the ingest that fills the event plane. Every ingest door
 	// is registered HERE and only here, from doors (event.go): one Post per declared
@@ -287,6 +289,19 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	}))
 	app.Post("/v1/event/:project/envelope", obsError)
 	app.Post("/v1/event/:project/store", obsError)
+
+	// The session-replay snapshot door (replay.go). Registered HERE, by hand, for
+	// the same reason the Sentry wire above is: it is not an entry in `doors`, and
+	// it cannot be. A door in that table is a wire that decodes to []CaptureEvent
+	// and flows through the ONE write core onto the event plane; a snapshot batch is
+	// an opaque rrweb recording bound for a different consumer on a different
+	// transport, and it lands no row in the warehouse at all.
+	//
+	// What it DOES share is the thing worth sharing: admission. replayIngest
+	// resolves its credential through eventTenant and refuses through the same
+	// cannotAttribute/cannotWrite vocabulary as every door, so there is no second
+	// resolver on this surface.
+	app.Post(replayPath, cloud.Handle(s, replayIngest))
 
 	// /v1/errors is the type:'error' read lens over the same rows — a validated
 	// principal, since a read never accepts the write-only publishable key. MINTING is
@@ -695,12 +710,9 @@ func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
 
 // ── /v1/analytics/health ────────────────────────────────────────────────────
 
-// healthReport is the probe's answer, and it is the SAME object at 200 and at 503 —
-// which is precisely why this route cannot be a typed op: the STATUS is the signal
-// and the report is the detail, and zip can declare only one of the two. Stating it
-// as a struct rather than building a map is what lets openapi.Register (event.go)
-// derive the shape from the code that produces it, instead of a hand-written schema
-// beside it that drifts.
+// healthReport is the probe's answer, and it is the SAME object at 200 and at 503:
+// the STATUS is the signal and the report is the detail, and the op declares both
+// statuses so its own StatusCode says which this answer carries.
 type healthReport struct {
 	// Service names the subsystem answering, so a probe aggregating several health
 	// endpoints can attribute a degraded one.
@@ -774,22 +786,58 @@ type healthLens struct {
 	Available bool `json:"available"`
 }
 
-// health is a REAL probe of BOTH directions: the warehouse this subsystem reads and
-// the event plane it writes. Either one down is a 503, because either one down is a
-// subsystem that cannot do its job — and reporting only the read half is what let a
-// total ingest outage sit behind a green probe.
+// StatusCode is how the answer states which of the op's two declared statuses it
+// carries: ok is the 200, degraded is the 503.
+func (r *healthReport) StatusCode() int {
+	if r.Status == "ok" {
+		return http.StatusOK
+	}
+	return http.StatusServiceUnavailable
+}
+
+// Health reports whether the event plane can take a write and the warehouse can
+// answer a read.
 //
-// The two are probed INDEPENDENTLY and reported side by side, so the answer says
-// WHICH half broke rather than collapsing both into one bit. Not JWT-gated (liveness
-// must be probe-able) and it NEVER reads tenant data — only table existence and
-// stream presence. 200 even if the events lens is not yet provisioned (that is
-// honest-empty, not a failure).
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	ctx, cancel := context.WithTimeout(c.Context(), probeTimeout)
+// It reports the analytics subsystem's own liveness in BOTH directions: plane is
+// the event plane it WRITES (the bus and the JetStream stream every accepted
+// event is published to, both named in the report), and datastore is the
+// warehouse it READS, with each read lens's table reported as it is provisioned
+// (the LLM usage ledger and the product-event table).
+//
+// EITHER ONE DOWN IS A 503, and the report says WHICH — they are probed
+// independently and never collapse into a single bit. This endpoint used to
+// report the read half only, and answered 200/ok while every POST /v1/event
+// failed on a stream that could not bind: a total ingest outage behind a green
+// probe. A readiness gate here now gates on the write path too.
+//
+// plane.ready IS A REAL PROBE and walks the ingest path itself — the same
+// connection and the same stream a publish uses — so it cannot answer ready while
+// a publish would 503. plane.reason carries the plane's own error text when it is
+// false.
+//
+// datastore IS NOT PROBED WITH A QUERY. It is the state of the process's own
+// shared client — established, and not since closed — so a warehouse accepting
+// connections and failing reads still reports true. Degraded CARRIES the report
+// (status, the failing half, reason) as its body rather than an error envelope,
+// so a gate reads the cause off the same object it got at 200.
+//
+// A MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens
+// reported available:false answers honest-empty rather than erroring, so a fresh
+// deployment whose collector has not emitted yet is legitimately 200 with the
+// product-event lens unavailable. The lens block is reported whenever the
+// warehouse is REACHABLE — including on a report degraded by the plane, where the
+// tables genuinely were probed — and is absent only when the warehouse is not,
+// having nothing to say about tables it could not reach.
+//
+// Unauthenticated on purpose — liveness has to be probe-able — and it reads NO
+// tenant data: table existence and stream presence only, never a row and never an
+// event.
+func (o readOps) health(ctx context.Context, _ *noArgs) (*healthReport, error) {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
 	connected := datastore.Ready()
-	res := healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo",
+	res := &healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo",
 		Plane: healthPlane{Bus: busURL(), Stream: EventStream, Ready: true},
 		Lost:  lossReport()}
 	if err := planeReady(ctx); err != nil {
@@ -809,10 +857,8 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 		res.Status, res.Reason = "degraded", "datastore (datastore) not connected"
 	case !res.Plane.Ready:
 		res.Status, res.Reason = "degraded", res.Plane.Reason
-	default:
-		return c.JSON(http.StatusOK, res)
 	}
-	return c.JSON(http.StatusServiceUnavailable, res)
+	return res, nil
 }
 
 // tableExists probes datastore for a table's presence. The name is a package

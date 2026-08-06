@@ -307,6 +307,9 @@ func init() {
 	zip.Describe("POST /git/publish", zip.Doc{
 		Description: "Reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
 	})
+	zip.Describe("POST /git/rev", zip.Doc{
+		Description: "Resolves one of the caller's repos at one ref to the commit it names,\nreturning that commit and the branch or tag label it was reached by. The org is\nthe CALLER's plane identity, never the argument — an anonymous caller is\nrefused. A named handler, not a closure, so zipdoc can lift this prose into the\nregistry.",
+	})
 	zip.Describe("POST /git/revoke", zip.Doc{
 		Description: "Drops a grant the caller's org holds, so a grant's life is the\nRUN's life rather than its TTL. The TTL is the backstop for a run that dies\nwithout saying so; this is the ordinary path.",
 		Fields: map[string]string{

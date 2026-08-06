@@ -55,17 +55,27 @@ func (s *Store) migrateRouted() error {
 // RoutedUsage is one account's summed server-routed usage — a row of the per-account
 // breakdown the dashboard reads.
 type RoutedUsage struct {
-	Provider         string `json:"provider"`
-	Account          string `json:"account,omitempty"`
-	Kind             string `json:"kind"`
-	Billing          string `json:"billing"` // BillingMode(Kind): plan | commerce
-	Requests         int64  `json:"requests"`
-	PromptTokens     int64  `json:"promptTokens"`
-	CompletionTokens int64  `json:"completionTokens"`
-	TotalTokens      int64  `json:"totalTokens"`
-	CostCents        int64  `json:"costCents"`
-	FirstAt          int64  `json:"-"`
-	LastAt           int64  `json:"-"`
+	// Provider is the AI provider the row's account belongs to.
+	Provider string `json:"provider"`
+	// Account is the provider-side account identifier.
+	Account string `json:"account,omitempty"`
+	// Kind is how the account authenticates: subscription or apikey.
+	Kind string `json:"kind"`
+	// Billing is how the routed inference bills: plan or commerce.
+	Billing string `json:"billing"`
+	// Requests is how many requests the gateway routed through this account.
+	Requests int64 `json:"requests"`
+	// PromptTokens is the routed prompt-token count.
+	PromptTokens int64 `json:"promptTokens"`
+	// CompletionTokens is the routed completion-token count.
+	CompletionTokens int64 `json:"completionTokens"`
+	// TotalTokens is the routed total token count.
+	TotalTokens int64 `json:"totalTokens"`
+	// CostCents is the routed cost in cents.
+	CostCents int64 `json:"costCents"`
+
+	FirstAt int64 `json:"-"`
+	LastAt  int64 `json:"-"`
 }
 
 // AddRouted sums one served routed call into the caller's per-account counter. Org
