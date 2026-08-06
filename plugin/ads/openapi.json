@@ -98,7 +98,7 @@
     },
     "/v1/ads/campaigns/{id}": {
       "delete": {
-        "operationId": "delete_v1_ads_campaigns_by_id",
+        "operationId": "delete_v1_ads_campaigns_id",
         "summary": "Removes one of the caller org's campaigns and answers 204 with no body.",
         "description": "Removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
         "tags": [
@@ -122,7 +122,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_ads_campaigns_by_id",
+        "operationId": "get_v1_ads_campaigns_id",
         "summary": "Returns one of the caller org's campaigns.",
         "description": "Returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
         "tags": [
@@ -153,7 +153,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_ads_campaigns_by_id",
+        "operationId": "put_v1_ads_campaigns_id",
         "summary": "Replaces the user-owned fields of one of the caller org's campaigns and answers the stored row.",
         "description": "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
         "tags": [

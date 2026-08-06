@@ -17,6 +17,7 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
 	"github.com/hanzoai/cloud/webui"
+	"github.com/hanzoai/cloud/webui/release"
 	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
 	luxlog "github.com/luxfi/log"
@@ -407,16 +408,35 @@ func Listen(plugins []Plugin, enable []string) error {
 		openapi.Server{URL: "https://" + cfg.Domain},
 	)
 
-	// Unified console UI — the SAME binary serves the @hanzo/gui console (built
-	// from hanzoai/console and embedded via //go:embed) at the web root. Mounted
-	// LAST, after every /v1 route + the /zap plane + the health contract, so
-	// Fiber's in-order matching gives the API precedence: real API routes win,
-	// and only paths that match nothing else fall through to the SPA (index.html
-	// for client-side deep links). The API namespace (/v1, /zap, /healthz…) never
-	// renders as HTML — an unmatched path there is a real 404. Same-origin: the
-	// embedded console calls /v1 on its own host, so the session cookie is
-	// first-party and no second origin / CORS is involved. See the webui package.
-	if err := webui.Mount(app); err != nil {
+	// Unified console UI — the SAME binary serves the @hanzo/gui console at the web
+	// root. Mounted LAST, after every /v1 route + the /zap plane + the health
+	// contract, so Fiber's in-order matching gives the API precedence: real API
+	// routes win, and only paths that match nothing else fall through to the SPA
+	// (index.html for client-side deep links). The API namespace (/v1, /zap,
+	// /healthz…) never renders as HTML — an unmatched path there is a real 404.
+	// Same-origin: the console calls /v1 on its own host, so the session cookie is
+	// first-party and no second origin / CORS is involved.
+	//
+	// The BYTES are a published site release now, not an embed (see webui/release).
+	// Here — and ONLY here — a failure to load them is reported rather than fatal,
+	// and the reason is a cycle rather than a preference: this body is what every
+	// per-app CHILD runs, and a child cannot bootstrap the console. Loading it means
+	// asking `projects` for the active release; `projects` is lazy, so only the host
+	// can start it; and the kms broker — which every child, including projects,
+	// takes its data-plane key from — comes up FIRST. A child that made the console
+	// a precondition of its own boot would be waiting on an app that cannot exist
+	// yet. So the console loads when it can, and when it cannot this process serves
+	// none: the terminal handler still keeps the API namespaces honest and still
+	// answers the agent door, and a console path gets a 503 that says exactly this.
+	// Nothing is faked. In the fleet nothing is lost either — every path a child
+	// receives is under one of its own /v1 prefixes, so a child's catch-all never
+	// serves the console to a browser; the front door (cmd/cloud) owns "/", and
+	// THERE the release is required.
+	consoleSrc, consoleErr := release.Load(context.Background(), release.ConfigFromEnv(), deps.Logger)
+	if consoleErr != nil {
+		deps.Logger.Warn("console: no release mounted — this process serves no console UI", "err", consoleErr)
+	}
+	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
@@ -438,6 +458,13 @@ func Listen(plugins []Plugin, enable []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Keep the console current with what was published: a `hanzo sites publish`
+	// reaches this process on the next poll, with no build and no restart. Nothing
+	// to watch when this process mounted no release (see the mount above).
+	if consoleSrc != nil {
+		go consoleSrc.Watch(ctx)
+	}
 
 	// Durable ingest: embed the ONE tasks engine in-process + inject the per-org dialer
 	// into ai (long github/crawl/s3 ingests run as durable workflows; upload stays

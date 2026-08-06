@@ -258,16 +258,23 @@ func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) er
 	return err
 }
 
-// Capture records the debit for a registration/renewal/transfer. ref names the ACT (the
-// registration's own ref, "domain:renew:<name>", "domain:transfer:<name>") — the ledger's
-// idempotency key, so re-capturing one registration charges once. It rides as
-// [metering.Usage.Ref] and NOT as the request id, which is a correlation header the
-// caller controls and would key the ledger on a value the payer picks.
-func (m *meterBiller) Capture(org string, cents int64, ref string) {
+// Capture records the debit for a registration/renewal/transfer.
+//
+// IT NAMES NO ACT, and the ledger mints the entry's own key. The three purchase sites used
+// to name it after the DOMAIN — "domain:register:<name>", "domain:renew:<name>",
+// "domain:transfer:<name>" — and that string became the idempotency key. But a ref names
+// an ACT and a domain is not one: it is a thing that can be bought again. So the second
+// renewal of a name replayed into the first renewal's entry and moved no money — a free
+// year, every year, invisible to the spend cap because nothing was ever posted.
+//
+// A minted key is safe here because there is nothing to be exactly-once ABOUT: this is
+// fire-and-forget and is never re-driven, and it runs only once the registrar has already
+// confirmed — the two paths that must not charge (a refused Authorize, a registrar error)
+// both return before reaching it.
+func (m *meterBiller) Capture(org string, cents int64) {
 	m.rm.MeterUsage(org, "domain.register", metering.Usage{
 		Model:       "domain.register",
 		AmountCents: cents,
-		Ref:         ref,
 	})
 }
 

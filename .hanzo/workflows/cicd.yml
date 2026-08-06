@@ -311,7 +311,10 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
       spec_sha256: ${{ steps.ver.outputs.spec_sha256 }}
-      resumed: ${{ steps.ver.outputs.resumed }}
+      # THE BYTES, named by what they are rather than by what they are called. A
+      # tag is a name a registry can move; a digest is the content. rollout pins
+      # this and refuses to pin anything else.
+      digest: ${{ steps.img.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -515,18 +518,31 @@ jobs:
 
           # WE OWN THE NAME — so anything already published under it is either
           # our own earlier attempt or a lane that had no right to it, and those
-          # two need opposite handling. `resumed` is therefore derived from the
+          # two need opposite handling. `built` is therefore derived from the
           # IMAGE, not from the tag: since the claim now precedes the build, a
           # tag at our sha no longer implies bytes exist.
-          RESUMED=0
+          #
+          # IT ANSWERS ONE QUESTION AND IT USED TO ANSWER TWO. This flag was
+          # called `resumed`, and the smoke step was skipped on it — so a run that
+          # PUSHED and then FAILED smoke came back, found its own bytes, declared
+          # itself resumed, and skipped both the build and the proof. rollout then
+          # pinned an image nothing had ever booted. The registry is the authority
+          # on whether bytes exist and it is the authority on nothing else: AN
+          # ARTIFACT EXISTING PROVES IT WAS BUILT, NEVER THAT IT WAS TESTED.
+          #
+          # So the second question is asked separately, of a separate authority,
+          # further down — and it is asked about the DIGEST, because a receipt
+          # that named only a version would prove a version was smoked and say
+          # nothing about which bytes are behind that name today.
+          BUILT=0
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
             -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json' \
             "https://ghcr.io/v2/hanzoai/cloud/manifests/v$NEXT")
           if [ "$CODE" = "200" ]; then
             REV=$(bash .hanzo/scripts/image-revision.sh "hanzoai/cloud" "v$NEXT" "$TOKEN" || echo "")
             if [ "$REV" = "${SHA}" ]; then
-              echo "v$NEXT is already published from our sha — skipping the build"
-              RESUMED=1
+              echo "v$NEXT is already published from our sha — skipping the build (whether it was SMOKED is a different question, asked below)"
+              BUILT=1
             else
               echo "::error::v$NEXT is a version this run OWNS (tag at ${SHA}) but the registry already serves bytes built from '${REV:-an unlabelled commit}'. Another lane pushed onto a name it did not hold. Nothing here may overwrite it — publish the intended bytes under a new number and delete the foreign image."
               exit 1
@@ -537,15 +553,15 @@ jobs:
           fi
 
           echo "version=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "resumed=$RESUMED" >> "$GITHUB_OUTPUT"
+          echo "built=$BUILT" >> "$GITHUB_OUTPUT"
           echo "highest seen v$LAST (registry + git tags) -> v$NEXT, claimed at ${SHA} (document sha256:$SPEC_SHA)"
 
       - uses: docker/setup-buildx-action@v3
-        if: steps.ver.outputs.resumed == '0'
+        if: steps.ver.outputs.built == '0'
         with: { driver: docker-container, driver-opts: network=host }
 
       - uses: docker/build-push-action@v6
-        if: steps.ver.outputs.resumed == '0'
+        if: steps.ver.outputs.built == '0'
         with:
           context: .
           file: ./Dockerfile
@@ -588,10 +604,18 @@ jobs:
       # is exactly what an invariant has to survive. Reading the revision label
       # back off the registry — not off our own build output — is the difference
       # between believing the push landed and knowing it did.
-      - name: Verify the pushed image resolves, and is the commit we built
+      #
+      # AND NAME THE BYTES, AND ASK WHETHER THEY HAVE EVER BOOTED. Both questions
+      # are about the same manifest and this is the only moment it is authoritative
+      # — the probe up in the claim ran BEFORE the build, so it can decide whether
+      # to build and nothing else. Everything downstream keys off the digest read
+      # here.
+      - name: Verify the pushed image resolves, is the commit we built, and whether it has ever booted
+        id: img
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
@@ -610,6 +634,50 @@ jobs:
           fi
           echo "$img is built from ${{ github.sha }} — tag, commit and image agree"
 
+          # THE DIGEST. Read from the registry's own Docker-Content-Digest, the
+          # same header universe/charts/app/pin.sh reads, so rollout can compare
+          # what it pinned against what this run smoked without either side
+          # deriving the value a second way.
+          TOKEN=$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
+            "https://ghcr.io/token?scope=repository:hanzoai/cloud:pull&service=ghcr.io" | jq -r .token)
+          DIGEST=$(curl -fsSL -I -H "Authorization: Bearer $TOKEN" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json' \
+            "https://ghcr.io/v2/hanzoai/cloud/manifests/v${{ steps.ver.outputs.version }}" \
+            | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: *//p' | head -1)
+          case "$DIGEST" in
+            sha256:*) : ;;
+            *) echo "::error::${img} resolves but the registry named no Docker-Content-Digest — these bytes have no name, so nothing may attest to them"; exit 1 ;;
+          esac
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "$img is $DIGEST"
+
+          # The receipt's address, derived ONCE. A ref name cannot hold a colon,
+          # and three places needing "the digest with the colon swapped" is three
+          # chances to swap it differently.
+          RECEIPT="smoked/$(printf '%s' "$DIGEST" | tr ':' '-')"
+          echo "receipt=$RECEIPT" >> "$GITHUB_OUTPUT"
+
+          # HAS ANYTHING EVER PROVEN THESE BYTES BOOT.
+          #
+          # Asked of git, not of the registry, and that is the whole point. The
+          # registry is the thing being attested, and ns hanzo-build alone has five
+          # ways to write it; an attestation kept inside the thing it attests can
+          # be written by anyone who can write the thing. Ref creation is also the
+          # ONE operation in this pipeline the server performs as a
+          # compare-and-swap, which is exactly why the version claim above uses it.
+          # One mechanism for recording a fact, used twice.
+          #
+          # Keyed by DIGEST, not by version. `refs/smoked/<digest>` -> the commit,
+          # so the receipt says "these bytes, from this source, booted" and stays
+          # false the moment the bytes change under the name.
+          SMOKED=0
+          if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" \
+            "https://api.github.com/repos/hanzoai/cloud/git/ref/${RECEIPT}" 2>/dev/null; then
+            echo "$DIGEST already has a smoke receipt — these exact bytes have booted"
+            SMOKED=1
+          fi
+          echo "smoked=$SMOKED" >> "$GITHUB_OUTPUT"
+
       # THE SMOKE GATE. Boot the image that was actually pushed and require it to
       # reach "zip listening" without a crash signature, on release.go's boot env
       # — a writable /data, CLOUD_ENV=smoke and a throwaway 32-byte master key so
@@ -618,11 +686,23 @@ jobs:
       # The script is handed over base64 because it contains both single and
       # double quotes (the `"message":"zip listening"` needle), and re-quoting it
       # for `sh -c` is how a gate quietly stops matching what it is looking for.
+      #
+      # IT RUNS ON `smoked`, NEVER ON `built`, AND THE DIFFERENCE IS A RELEASE.
+      # These were one flag: skip the build, skip the proof. A run that pushed and
+      # then failed here came back, saw its own bytes in the registry, and skipped
+      # BOTH — handing rollout an image nothing had ever booted, with every job
+      # green. The two conditions coincide exactly once, on a first pass. On every
+      # resume they differ, and the resume is the only case this branch exists for.
+      #
+      # Pinned to the DIGEST, not the tag. The tag is what we asked the registry
+      # for; the digest is what it answered. Smoking `:v1.801.485` and attesting to
+      # the bytes that name resolved to a step earlier is how you attest to an
+      # image you did not run.
       - name: Smoke the pushed image
-        if: steps.ver.outputs.resumed == '0'
+        if: steps.img.outputs.smoked == '0'
         run: |
           set -euo pipefail
-          img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
+          img="ghcr.io/hanzoai/cloud@${{ steps.img.outputs.digest }}"
 
           SMOKE_B64=$(base64 -w0 <<'SMOKE'
           set -u
@@ -655,6 +735,46 @@ jobs:
             -e CLOUD_ENV=smoke \
             -e CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)" \
             "$img" -c "echo $SMOKE_B64 | base64 -d | sh"
+
+      # THE RECEIPT. It exists because the step above it ran and exited 0, and it
+      # is the only thing that will ever say so. Written here rather than inferred
+      # later: the whole hole was inferring "tested" from an artifact that only
+      # ever proved "built".
+      #
+      # `refs/smoked/sha256-<hex>` at the commit — bytes, source, and the fact that
+      # they booted, in one object. 422 is success: another run already attested to
+      # the same digest, which is the same statement made twice, not a conflict.
+      - name: Record that these bytes booted
+        if: steps.img.outputs.smoked == '0'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          CODE=$(curl -s -o /tmp/receipt.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${GH_PAT}" -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/hanzoai/cloud/git/refs" \
+            -d "$(jq -nc --arg r "refs/${{ steps.img.outputs.receipt }}" --arg s "${{ github.sha }}" '{ref:$r, sha:$s}')")
+          case "$CODE" in
+            201) echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}" ;;
+            422) echo "already recorded by another run — same digest, same statement" ;;
+            *)   echo "::error::could not record the smoke receipt for ${{ steps.img.outputs.digest }} (HTTP $CODE). These bytes booted and nothing can prove it, so a resume would smoke them again at best and skip them at worst — refusing to leave that state."
+                 cat /tmp/receipt.json; exit 1 ;;
+          esac
+
+      # NOTHING LEAVES THIS JOB UNSMOKED, re-asked of the authority rather than
+      # remembered from a step output. Cheap, and it is the assertion `rollout`
+      # would otherwise have to trust: every later car declares `needs: image`, so
+      # this is the last place the question can still be answered before an
+      # unproven image becomes a pin.
+      - name: These bytes have a smoke receipt
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" \
+            "https://api.github.com/repos/hanzoai/cloud/git/ref/${{ steps.img.outputs.receipt }}" \
+            || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
+          echo "${{ steps.img.outputs.digest }} is smoked"
 
   # ══ CAR 2 ══ ROLL OUT, AND PROVE IT IS LIVE.
   #
@@ -726,7 +846,7 @@ jobs:
           # broker has, so it 404'd on every release since the car was written.
           PIN_TOKEN=$(curl -sS \
             "${KMS_ENDPOINT}/v1/kms/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty' || true)
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
           [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
           echo "::add-mask::${PIN_TOKEN}"
 
@@ -740,8 +860,24 @@ jobs:
           for attempt in 1 2 3 4 5; do
             /tmp/universe/charts/app/pin.sh cloud "$VERSION"
 
+            # THE PIN MUST NAME THE BYTES WE SMOKED. charts/app/_helpers.tpl builds
+            # `repo:tag@digest`, and in that form the registry resolves the DIGEST
+            # and the tag is prose a human reads — so a values file whose tag moved
+            # and whose digest did not deploys the old image and reports success.
+            # pin.sh writes both from one lookup and cannot write one alone, but
+            # what it wrote is still a claim about a name, made seconds after this
+            # run proved something about bytes. Compare them: they are the same
+            # image or this release does not ship.
+            PINNED=$(sed -n 's/^[[:space:]]*digest:[[:space:]]*//p' \
+              /tmp/universe/charts/app/values/hanzo/cloud.yaml | head -1)
+            if [ "$PINNED" != "${{ needs.image.outputs.digest }}" ]; then
+              echo "::error::pinned cloud.yaml names ${PINNED:-no digest}, but the bytes this run smoked are ${{ needs.image.outputs.digest }}. v${VERSION} resolved to a different image between the smoke and the pin — refusing to deploy an image nothing proved."
+              exit 1
+            fi
+            echo "pin names ${PINNED} — the digest this run smoked"
+
             if git -C /tmp/universe push --quiet origin HEAD:main 2>/dev/null; then
-              echo "pinned cloud to v${VERSION}"; exit 0
+              echo "pinned cloud to v${VERSION} @ ${PINNED}"; exit 0
             fi
 
             echo "universe moved under us (attempt ${attempt}/5) — re-applying on the new tip"
@@ -898,7 +1034,7 @@ jobs:
           # Same route correction as the pin above: no org in a KMS path.
           TOKEN=$(curl -sS \
             "${KMS_ENDPOINT}/v1/kms/secrets/deploy/FLEET_DISPATCH_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty' || true)
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
           if [ -z "$TOKEN" ]; then
             echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential). Create it with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,java-sdk,cli} hanzo-go/sdk hanzo-rs/sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzo-docs/docs — six owners, so a fine-grained PAT cannot carry it; use a classic PAT with repo scope or a GitHub App installed on all six. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
             exit 1
@@ -1025,6 +1161,10 @@ jobs:
     runs-on: [hanzo-build-linux-amd64]
     timeout-minutes: 15
     steps:
+      # This job used to need no source. It does now: the invariant re-checked at
+      # the end of it lives in .hanzo/scripts/orphans.sh, beside the list of
+      # images already known to breach it.
+      - uses: actions/checkout@v4
       - name: Write release.json onto the tag
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
@@ -1035,12 +1175,13 @@ jobs:
           jq -n \
             --arg tag "$TAG" --arg sha "${{ github.sha }}" \
             --arg spec "${{ needs.image.outputs.spec_sha256 }}" \
+            --arg digest "${{ needs.image.outputs.digest }}" \
             --arg image "${{ needs.image.result }}" \
             --arg rollout "${{ needs.rollout.result }}" \
             --arg reach "${{ needs.reach.result }}" \
             --arg fanout "${{ needs.fanout.result }}" \
             --arg n "${{ needs.fanout.outputs.dispatched }}" \
-            '{version:$tag, sha:$sha, spec_sha256:$spec,
+            '{version:$tag, sha:$sha, spec_sha256:$spec, digest:$digest,
               cars:{image:$image, rollout:$rollout, reach:$reach, fanout:$fanout},
               projections_dispatched:($n|tonumber? // 0)}' > /tmp/release.json
           cat /tmp/release.json
@@ -1073,3 +1214,34 @@ jobs:
             exit 1
           fi
           echo "${TAG} is complete: document, image, production, reachability and all nine projections."
+
+      # THE INVARIANT ITSELF, not this release's part in it.
+      #
+      # Every check above answers a question about the run it is in: did MY image
+      # build, did MY tag survive, did MY pin go live. None of them can see an
+      # image published by a lane that never entered this workflow — and that is
+      # not a hypothetical gap, it is the one that happened. v1.801.478, 479, 480
+      # and 484 were published with no tag in any repo while every cicd.yml run
+      # on either side of them was green, because none of those runs was looking
+      # at the registry as a whole. 480 served production, reporting
+      # {"revision":"unknown"} on its own health endpoint.
+      #
+      # So the last thing a release does is re-ask the question about EVERYTHING
+      # published: does every version in the registry have a receipt. It runs
+      # last because release.json above is this release's receipt and should be
+      # written whatever the wider state is, and it runs HERE rather than in
+      # rollout because a pre-existing orphan must not be able to block a deploy
+      # — a gate that wedges production on someone else's old mess gets switched
+      # off within a day, and a switched-off gate is how this started.
+      #
+      # It is on the main path, not a cron, for the same reason: a scheduled
+      # reconciliation is a thing that can quietly stop running and look
+      # identical to a clean fleet. This cannot stop running without the release
+      # train stopping with it.
+      - name: Every published image has a receipt
+        env:
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+        run: bash .hanzo/scripts/orphans.sh

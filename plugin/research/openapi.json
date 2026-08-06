@@ -82,7 +82,7 @@
                 "run_id": "benchmark:zen-1:mmlu"
               },
               "schema": {
-                "$ref": "#/components/schemas/ResearchArtifact"
+                "$ref": "#/components/schemas/Artifact"
               }
             }
           },
@@ -302,6 +302,51 @@
   },
   "components": {
     "schemas": {
+      "Artifact": {
+        "properties": {
+          "content": {
+            "description": "base64 bytes on write; the server hashes + stores them (never returned)",
+            "type": "string"
+          },
+          "git_branch": {
+            "type": "string"
+          },
+          "git_dirty": {
+            "type": "boolean"
+          },
+          "git_sha": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lib_versions": {},
+          "project": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "server-derived content address (sha256:\u003chash\u003e)",
+            "type": "string"
+          },
+          "retention_class": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SERVER-derived on write; the identity",
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Attempt": {
         "properties": {
           "answer": {
@@ -505,51 +550,6 @@
         },
         "type": "object"
       },
-      "ResearchArtifact": {
-        "properties": {
-          "content": {
-            "description": "base64 bytes on write; the server hashes + stores them (never returned)",
-            "type": "string"
-          },
-          "git_branch": {
-            "type": "string"
-          },
-          "git_dirty": {
-            "type": "boolean"
-          },
-          "git_sha": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "lib_versions": {},
-          "project": {
-            "type": "string"
-          },
-          "ref": {
-            "description": "server-derived content address (sha256:\u003chash\u003e)",
-            "type": "string"
-          },
-          "retention_class": {
-            "type": "string"
-          },
-          "run_id": {
-            "type": "string"
-          },
-          "sha256": {
-            "description": "SERVER-derived on write; the identity",
-            "type": "string"
-          },
-          "ts": {
-            "type": "integer"
-          },
-          "visibility": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "ResearchTotals": {
         "properties": {
           "attempts": {
@@ -616,7 +616,7 @@
           "data": {
             "description": "Data are the artifacts, newest first. Content bytes are never returned here.",
             "items": {
-              "$ref": "#/components/schemas/ResearchArtifact"
+              "$ref": "#/components/schemas/Artifact"
             },
             "type": "array"
           },

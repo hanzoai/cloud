@@ -233,6 +233,21 @@ func Listening(path string) (bool, error) {
 	return false, err
 }
 
+// For states the tenant a BACKGROUND call acts for — a reconcile loop, a grant issued
+// when an org opens, a meter that debits after the response has gone out. Each acts for a
+// tenant with no request to forward, and the callee has to know which one to write to the
+// right books.
+//
+// An inbound request always wins over this (zip prefers the gateway's assertion), so it
+// supplies an identity where there is none and can never launder one.
+//
+// It lives beside Ask, and for the same reason Ask does: a caller that cannot import
+// cloud still has to be able to name the tenant it is calling for, and the meter — which
+// cloud itself imports — is exactly such a caller. [cloud.For] is this function.
+func For(ctx context.Context, org string) context.Context {
+	return zip.WithCaller(ctx, zip.Caller{Org: strings.TrimSpace(org)})
+}
+
 // Ask is the whole client half: dial the app, invoke the op, close.
 //
 // The org a call acts for rides the CALLER — forwarded from the gateway's

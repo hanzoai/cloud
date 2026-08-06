@@ -212,15 +212,9 @@ func awaitSocket(path string, errs <-chan error, within time.Duration) error {
 
 // For states the tenant a BACKGROUND call acts for — a reconcile loop, a grant
 // issued when an org opens, a meter that debits after the response has gone
-// out. Each acts for a tenant with no request to forward, and the callee has to
-// know which one to write to the right books.
-//
-// An inbound request always wins over this (zip prefers the gateway's
-// assertion), so it supplies an identity where there is none and can never
-// launder one.
-func For(ctx context.Context, org string) context.Context {
-	return zip.WithCaller(ctx, zip.Caller{Org: strings.TrimSpace(org)})
-}
+// out. See [plane.For] — this is that function, not a second one, so a caller
+// below the cloud import edge states the tenant exactly the same way.
+func For(ctx context.Context, org string) context.Context { return plane.For(ctx, org) }
 
 // Who reads the principal a plane op is acting for. A handler that needs
 // authority refuses an empty org rather than treating it as permission.
