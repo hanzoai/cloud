@@ -281,6 +281,30 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		// service-account token in its filesystem is an API credential handed to
 		// that code. This is also why nothing else needs to strip credentials on
 		// the way in — there are none to strip.
+		// THE POD RUNS AS uid 1000, and fsGroup is why it can WRITE.
+		//
+		// The image ends `USER sandbox` (uid 1000). A mounted volume — the emptyDir
+		// at the exec class's workdir, or a project PVC — arrives owned by root:root
+		// mode 0755, so uid 1000 gets EPERM on the very first write and the sandbox
+		// is a read-only box that looks healthy. A Dockerfile `chown` cannot fix it:
+		// the mount happens after the image layer and shadows it.
+		//
+		// fsGroup makes the kubelet chown the volume to that GID and adds it as a
+		// supplemental group, which is the only mechanism that reaches a volume.
+		// runAsUser/runAsGroup are stated rather than inherited so the pod does not
+		// depend on the image's USER line staying 1000 — the two must agree, and the
+		// one that is checkable from outside the image should say so.
+		//
+		// This is also what the image's own comments already ASSUMED was here and
+		// was not: "the pod runs runAsNonRoot with runAsUser 1000, so the uid is
+		// fixed by the securityContext". It was not fixed by anything until now, and
+		// the live proof missed it only because a stock node:22 runs as root.
+		"securityContext": map[string]any{
+			"runAsUser":    int64(1000),
+			"runAsGroup":   int64(1000),
+			"fsGroup":      int64(1000),
+			"runAsNonRoot": true,
+		},
 		"automountServiceAccountToken": false,
 		// The account is NAMED, and naming it is the fix for a real outage rather
 		// than tidiness. Unnamed means `default`, and DOKS's registry integration
