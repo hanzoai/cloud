@@ -123,6 +123,12 @@ func (cl caller) authoring() error {
 	return nil
 }
 
+// The refusal names what would satisfy it. A verdict is org-scoped, and this
+// surface reads the tenant from the request alone, so a caller holding only a
+// project key has no way in here — saying "X-Org-Id required" to an SDK that
+// never sends one reads as a bug in the SDK rather than the shape of this door.
+const errNoTenant = "a signed-in principal is required: this surface reads the tenant from the request, and a project key does not carry one"
+
 // callerOf resolves the caller for a TYPED op, which receives a context and its
 // decoded In and nothing else. The three facts here are all REQUEST facts and
 // never In fields: an In field is caller-supplied, so a tenant key read from one
@@ -136,8 +142,8 @@ func callerOf(ctx context.Context) (caller, error) {
 	if org, project, ok := tenant(c); ok {
 		return caller{org: org, project: project, actor: c.UserEmail(), principal: true}, nil
 	}
-	// No principal: a project key names the org for a READ. The empty actor is
-	// what keeps this from authoring anything — see keyOrg.
+	// No principal: a project key names the org for a READ. It carries no actor,
+	// and authoring() refuses on that fact — see keyOrg.
 	if org, ok := keyOrg(ctx, c); ok {
 		return caller{org: org}, nil
 	}

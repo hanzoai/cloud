@@ -30,9 +30,21 @@ func init() {
 // an ERROR and never an empty handle: the caller records a PR-less run as a
 // recorded problem, and an empty identifier that arrived as success would show a
 // Slack card claiming a PR nobody can open.
+//
+// The org is the CALLER's plane identity and never the argument, exactly as
+// planeUpsert resolves it on this same socket (apps/tracker/upsert_plane.go).
+// It used to be in.Org — read off the wire and passed straight into the
+// per-tenant store selector — so a caller on the plane could file a work item
+// onto ANOTHER tenant's board by naming it. Anonymous is refused rather than
+// defaulted: a run arriving with no principal must fail, not land on somebody's
+// board.
 func planeAgentPR(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, error) {
+	who := cloud.Who(ctx)
+	if who.Org == "" {
+		return nil, zip.ErrForbidden("tracker agent-pr: org required")
+	}
 	pr, err := tracker.CreateAgentPR(ctx, tracker.AgentPRInput{
-		Org: in.Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
+		Org: who.Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
 		Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
 	})
 	if err != nil {
