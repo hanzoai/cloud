@@ -3,16 +3,16 @@ package cloud
 import (
 	"flag"
 	"fmt"
+	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/credz"
+	"github.com/hanzoai/cloud/internal/datadir"
+	"github.com/hanzoai/cloud/internal/edge"
+	"github.com/hanzoai/cloud/role"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/hanzoai/cloud/brand"
-	"github.com/hanzoai/cloud/credz"
-	"github.com/hanzoai/cloud/internal/datadir"
-	"github.com/hanzoai/cloud/role"
 )
 
 // Config is the cloud binary's startup configuration. Drives which
@@ -325,8 +325,8 @@ func LoadConfig() *Config {
 		ZAPListenAddr:           getenv("CLOUD_ZAP_LISTEN", ":9653"),
 		HealthListenAddr:        getenv("CLOUD_HEALTH_LISTEN", ":9090"),
 		AdminListenAddr:         getenv("CLOUD_ADMIN_LISTEN", ":8081"),
-		ReadBufferSize:          getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
-		BodyLimit:               getenvInt("GATEWAY_BODY_LIMIT", 16<<20),
+		ReadBufferSize:          edge.ReadBufferSize(),
+		BodyLimit:               edge.BodyLimit(),
 		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
 		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
 		Version:                 resolveVersion(),

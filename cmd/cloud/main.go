@@ -46,6 +46,7 @@ import (
 	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/internal/datadir"
+	"github.com/hanzoai/cloud/internal/edge"
 	"github.com/hanzoai/cloud/internal/writerlease"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
@@ -103,6 +104,26 @@ func forward(kv map[string]string) {
 	}
 }
 
+// doorConfig is the front door's transport posture. The door installs no
+// middleware -- that is the program's job behind it -- but it still TERMINATES
+// public HTTP, so the transport ceilings are its to set. They were not set: this
+// app was built with the framework defaults while cloud.App() configured the
+// program behind it correctly, and the door refuses a body before the program
+// ever sees it. GATEWAY_BODY_LIMIT read 100 MiB in the pod's environment and
+// 4,194,305 bytes still answered 400, because 4 MiB is the fasthttp default and
+// nothing here had ever asked.
+//
+// The numbers come from cloud, not from literals here. A literal is what made
+// the two disagree in the first place.
+func doorConfig() zip.Config {
+	return zip.Config{
+		AppName:        "cloud",
+		MCP:            zip.MCPConfig{Disabled: true},
+		ReadBufferSize: edge.ReadBufferSize(),
+		BodyLimit:      edge.BodyLimit(),
+	}
+}
+
 func run(addr, zapAddr string) error {
 	// THE FLEET'S ONE AGENT DOOR is served BY THIS HOST, at POST /v1/mcp, and
 	// zip's is switched off so that exactly one handler holds the address.
@@ -121,7 +142,7 @@ func run(addr, zapAddr string) error {
 	// the SPA shell, and to send an agent that guessed zip's default to the real
 	// one), and when those two were written down separately the second one was
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
-	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Disabled: true}})
+	app := zip.New(doorConfig())
 
 	// THE POD'S WRITER LEASE, and this is the only process that may take it.
 	//
