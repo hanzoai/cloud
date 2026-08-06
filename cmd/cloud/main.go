@@ -252,7 +252,13 @@ func run(addr, zapAddr string) error {
 	// middleware on a sibling's router (zen on ai's), so it is not a child this
 	// host can start and its ops are already in the sibling's registry — asking
 	// for it by name would report a permanent outage for an app that is serving.
-	fleet.Mount(app, manifest.MCPPath, routed(composed), locate(app))
+	//
+	// The Door is KEPT, because the fleet's own subsystems need it as much as an
+	// external client does — an agent run inside `agents` has to resolve its tool
+	// names against the same aggregated surface. serveWake publishes this same
+	// object on the host's internal socket, so there is one gather, one routing
+	// table and one curation rule for both directions.
+	mcp := fleet.Mount(app, manifest.MCPPath, routed(composed), locate(app))
 
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
 	// manifest.MCPPath (webui/mcp.go) — one rule, in the one place that can tell a
@@ -331,7 +337,7 @@ func run(addr, zapAddr string) error {
 	// is there. Without it every internal call to a lazy app dials a socket that
 	// no request has ever caused to exist (wake.go). It closes with the app, so
 	// there is nothing here to defer and nothing to forget to.
-	serveWake(app)
+	serveWake(app, mcp)
 
 	// SIGTERM must reach the children. zip drains its shutdown hooks LIFO, and
 	// every Load registered one that stops its process, so this is what keeps a
