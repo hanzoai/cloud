@@ -314,9 +314,10 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     [ -n "$names" ] || { echo "FATAL: no apps parsed from manifest/apps.go — the derivation broke, not the app list"; exit 1; }; \
     for p in $names; do \
       [ -d "./plugin/$p" ] || { echo "FATAL: manifest app '$p' has no plugin/$p — run 'make generate' and commit"; exit 1; }; \
-      echo "building plugin $p"; \
-      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$p" "./plugin/$p"; \
-    done
+    done; \
+    echo "building $(echo "$names" | wc -w) plugins, $(nproc) at a time"; \
+    printf '%s\n' $names | xargs -P "$(nproc)" -I{} sh -c \
+      'CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$1" "./plugin/$1" || { echo "FATAL: plugin $1 failed to build" >&2; exit 255; }' _ {}
 # THE STAMP LANDED — asked of the ARTIFACT, not of the flag string.
 #
 # `-X` naming a path or symbol the linker cannot resolve is not an error: it is
