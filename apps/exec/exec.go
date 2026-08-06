@@ -57,10 +57,15 @@ const Path = "/v1/exec"
 // Overridable via CODE_EXEC_UPSTREAM. It must speak the LibreChat
 // code-interpreter contract (/exec, /files/{sid}, /upload, /download/{id}).
 //
-// hanzo-sandboxes, NOT hanzo: everything running submitted code lives in the one
-// namespace whose policy denies it the cluster. A sandbox sitting beside the
-// datastores it is forbidden to reach is one policy edit away from reaching them.
-const defaultUpstream = "http://code-exec.hanzo-sandboxes.svc.cluster.local:8000"
+// It names `hanzo` because that is where the Service IS. It should be
+// hanzo-sandboxes — everything running submitted code belongs in the one
+// namespace whose policy denies it the cluster, rather than beside the
+// datastores it is forbidden to reach — but moving the NAME before moving the
+// SERVICE just points at nothing, which is the failure this subsystem keeps
+// shipping. Today the Service has no endpoints either, so this path 502s; the
+// fix is not a better address, it is /v1/sandboxes, where a caller gets a pod
+// instead of a proxy hop to a workload nobody deployed.
+const defaultUpstream = "http://code-exec.hanzo.svc.cluster.local:8000"
 
 // prefixes are the code-interpreter path surfaces this subsystem owns on /v1.
 // Each is forwarded verbatim to the executor (no path rewrite: the executor
