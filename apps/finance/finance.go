@@ -22,16 +22,19 @@
 // entry, and a file's postings always sum to zero. Both writes are idempotent on their ref
 // (the ledger's (kind,program,ref) idempotency): a usage debit on RequestID and a deposit
 // on DepositInput.Ref, so a retried debit or a fixed-ref backfill posts AT MOST ONCE; a
-// deposit with an empty Ref takes a fresh ref and stays additive (grants stack). Amounts
-// are int64 minor units (USD cents) — no float ever touches a balance. A balance read is
-// the settled ledger balance, clamped at zero; transient holds are the caller's in-pod
-// concern, never persisted here.
+// deposit with an empty Ref takes a fresh ref and stays additive (grants stack). That key
+// carries no subject and no amount, so a deposit reusing a ref for a DIFFERENT payment is
+// refused rather than answered with the first one's entry — same key is not same payment.
+// Amounts are int64 minor units (USD cents) — no float ever touches a balance. A balance
+// read is the settled ledger balance, clamped at zero; transient holds are the caller's
+// in-pod concern, never persisted here.
 package finance
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -181,6 +184,10 @@ func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency stri
 // same transaction as the insert), so a fixed-ref backfill/settlement credits AT MOST
 // ONCE. An empty Ref takes a fresh id, so grants stay additive (they stack).
 //
+// A REPLAY IS THE SAME MONEY TO THE SAME WALLET, and a ref hit that is not that is
+// [errRefTaken] rather than a credit or a borrowed entry id — the idempotency key carries
+// neither subject nor amount, so being the same key is not being the same payment.
+//
 // AND A DEPOSIT THAT FAILS ON MONEY ALREADY IN THE BOOKS ANSWERS WITH IT. The
 // in-transaction dedup covers the replay it can see; it cannot cover a transaction that
 // never reached its own read — the write it lost to a concurrent poster of the same Ref,
@@ -207,15 +214,13 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	}
 	entryID := id
 	if err := store.Tx(ctx, func(tx ledger.Tx) error {
-		if in.Ref != "" {
-			existing, ok, ferr := tx.EntryByRef(string(KindDeposit), "", in.Ref)
-			if ferr != nil {
-				return ferr
-			}
-			if ok {
-				entryID = existing.ID
-				return nil // idempotent replay — already credited once
-			}
+		posted, ferr := depositByRef(tx, in)
+		if ferr != nil {
+			return ferr
+		}
+		if posted != "" {
+			entryID = posted
+			return nil // idempotent replay — already credited once
 		}
 		e := ledger.JournalEntry{
 			ID:        id,
@@ -231,7 +236,19 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 		}
 		return tx.Insert(e, postings)
 	}); err != nil {
-		if posted, ok := creditedUnder(ctx, store, in.Ref); ok {
+		// A REF THAT IS SOMEBODY ELSE'S IS NOT A FAILURE A RE-READ CAN CLEAR.
+		if errors.Is(err, errRefTaken) {
+			return "", err
+		}
+		posted, taken := creditedUnder(ctx, store, in)
+		if taken != nil {
+			// The transaction died for its own reason AND the ref turns out to be another
+			// payment's. That is the answer worth giving: retrying this deposit under this
+			// ref can never succeed, and "context canceled" would send the caller round the
+			// loop that cannot end.
+			return "", taken
+		}
+		if posted != "" {
 			return posted, nil
 		}
 		return "", fmt.Errorf("finance: deposit: %w", err)
@@ -239,38 +256,98 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	return entryID, nil
 }
 
+// errRefTaken is what a deposit gets when its Ref is ALREADY posted for a different
+// (subject, amount): the ref names a payment that is not this one.
+//
+// It is an error and not an entry, and that is the whole finding. The idempotency key is
+// (kind, program, ref) — no subject, no amount — so any two deposits sharing a ref in one
+// org's books collide, and the replay branch answered the SECOND of them with the FIRST
+// one's entry id. The caller was told SUCCESS for money that was never credited: alice's
+// $1 posted, bob's $500 returned alice's entry, bob's wallet stayed at zero and nothing
+// anywhere said so. Today the settlement ref is a Square payment id and no two payments
+// share one, which is the only reason this has never fired; a webhook replay, a backfill
+// or the credit RPC choosing a ref of its own is all it takes.
+//
+// A conflict cannot be resolved here. Crediting anyway would break the exactly-once the
+// ref exists to give, and answering with the other payment's entry is the swallow itself.
+// So it is refused, loudly, and the caller picks a ref that is its own.
+var errRefTaken = errors.New("already used for a different (subject,amount)")
+
+// depositByRef is the ONE reading of what a deposit's Ref already holds: the original
+// entry id when the SAME (subject, amount) is posted under it — a genuine replay, which
+// answers with the first credit and posts nothing — the empty string when the ref is free,
+// and [errRefTaken] when the ref is posted for a different payment.
+//
+// Both callers ask the same question and must not answer it two ways: the in-transaction
+// branch asks it against the insert's own tx (so two concurrent replays cannot both post),
+// and [creditedUnder] asks it on a detached one after a failure. Only the transaction
+// differs, so only the transaction is theirs.
+func depositByRef(tx ledger.Tx, in types.DepositInput) (string, error) {
+	if in.Ref == "" {
+		return "", nil // no key → a fresh ref; an empty-Ref grant stacks and never replays
+	}
+	e, ok, err := tx.EntryByRef(string(KindDeposit), "", in.Ref)
+	if err != nil || !ok {
+		return "", err
+	}
+	// THE WHOLE POSTING, not the key. A replay is the same money to the same wallet; a ref
+	// hit that differs in either is another payment, however identical the key.
+	if credited(e) != walletAcct(in.Subject) || e.Amount.Cmp(in.Amount) != 0 {
+		return "", fmt.Errorf("finance: deposit ref %q %w", in.Ref, errRefTaken)
+	}
+	return e.ID, nil
+}
+
+// credited is the wallet a posted deposit funded: its POSITIVE leg. A deposit is exactly
+// two legs (funding:platform → wallet), so the credited account is the one the money moved
+// to. An entry with no positive leg is not a deposit this file wrote and matches nothing.
+func credited(e ledger.JournalEntry) string {
+	for _, p := range e.Postings {
+		if p.Amount.Sign() > 0 {
+			return p.Account
+		}
+	}
+	return ""
+}
+
 // creditReadBudget bounds the one read a failed deposit is allowed to make. It is short
 // because the caller is already past its own deadline in the case this exists for.
 const creditReadBudget = 5 * time.Second
 
-// creditedUnder answers whether ref is ALREADY a posted deposit in store, and under
-// which entry. An empty ref is never idempotent — an empty-Ref deposit takes a fresh one
-// and stacks — so it is never "already credited".
+// creditedUnder is [depositByRef] asked again, on a transaction of its own, after the
+// deposit's own transaction failed. It answers the entry THIS deposit is already posted
+// under, [errRefTaken] when the ref turns out to be a different payment's, and ("", nil)
+// when the ref is free or the question could not be asked at all.
+//
+// A read failure is simply "no" rather than an error of its own: a deposit that cannot
+// prove the money landed still reports the error it already had. An empty ref is never
+// idempotent — an empty-Ref deposit takes a fresh one and stacks — so it is never
+// "already credited".
 //
 // It reads on a context DETACHED from the caller's, bounded on its own, and that is the
 // whole point rather than a detail: the caller's context is exactly what may have just
 // died, and a question that can only be asked while the asker is still waiting cannot
-// answer the case it was written for. Nothing is written here, the read is a single
-// indexed lookup, and its failure is simply "no" — a deposit that cannot prove the money
-// landed still reports the error it had.
-func creditedUnder(ctx context.Context, store *sqlstore.Store, ref string) (string, bool) {
-	if ref == "" {
-		return "", false
+// answer the case it was written for. Nothing is written here and the read is a single
+// indexed lookup.
+func creditedUnder(ctx context.Context, store *sqlstore.Store, in types.DepositInput) (string, error) {
+	if in.Ref == "" {
+		return "", nil
 	}
 	ask, cancel := context.WithTimeout(context.WithoutCancel(ctx), creditReadBudget)
 	defer cancel()
 	var id string
-	if err := store.Tx(ask, func(tx ledger.Tx) error {
-		e, ok, err := tx.EntryByRef(string(KindDeposit), "", ref)
-		if err != nil || !ok {
-			return err
-		}
-		id = e.ID
-		return nil
-	}); err != nil {
-		return "", false
+	err := store.Tx(ask, func(tx ledger.Tx) error {
+		posted, ferr := depositByRef(tx, in)
+		id = posted
+		return ferr
+	})
+	if errors.Is(err, errRefTaken) {
+		return "", err
 	}
-	return id, id != ""
+	if err != nil {
+		return "", nil
+	}
+	return id, nil
 }
 
 // usageHook, when set, is called (async, best-effort) after a successful usage debit.
