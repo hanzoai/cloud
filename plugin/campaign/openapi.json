@@ -127,7 +127,7 @@
     },
     "/v1/campaign/{id}": {
       "delete": {
-        "operationId": "delete_v1_campaign_by_id",
+        "operationId": "delete_v1_campaign_id",
         "summary": "Removes one campaign of the caller's org and answers 204 with no body.",
         "description": "Removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them.",
         "tags": [
@@ -151,7 +151,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_campaign_by_id",
+        "operationId": "get_v1_campaign_id",
         "summary": "Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status.",
         "description": "Returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
         "tags": [
@@ -182,7 +182,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_campaign_by_id",
+        "operationId": "put_v1_campaign_id",
         "summary": "Rewrites a campaign's core fields — name, audience, creatives, schedule and budget — and returns the updated campaign.",
         "description": "Rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",
         "tags": [
@@ -229,7 +229,7 @@
     },
     "/v1/campaign/{id}/channels": {
       "post": {
-        "operationId": "post_v1_campaign_by_id_channels",
+        "operationId": "post_v1_campaign_id_channels",
         "summary": "Adds a channel to a campaign, or REPLACES the one it already has of that kind, and returns the updated campaign.",
         "description": "Adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it.",
         "tags": [
@@ -279,7 +279,7 @@
     },
     "/v1/campaign/{id}/channels/{kind}": {
       "delete": {
-        "operationId": "delete_v1_campaign_by_id_channels_by_kind",
+        "operationId": "delete_v1_campaign_id_channels_kind",
         "summary": "Drops one channel from a campaign and returns the updated campaign.",
         "description": "Drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards.",
         "tags": [
@@ -341,7 +341,7 @@
     },
     "/v1/campaign/{id}/metrics": {
       "get": {
-        "operationId": "get_v1_campaign_by_id_metrics",
+        "operationId": "get_v1_campaign_id_metrics",
         "summary": "Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS.",
         "description": "Returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
         "tags": [

@@ -88,7 +88,7 @@
     },
     "/v1/legal/documents/{id}": {
       "get": {
-        "operationId": "get_v1_legal_documents_by_id",
+        "operationId": "get_v1_legal_documents_id",
         "summary": "Returns one of the org's documents WITH its rendered body.",
         "description": "Returns one of the org's documents WITH its rendered body. 404\nwhen the org has no document with that id — a document is never readable across\norgs.\n\nThe response is marked no-store: the body is contract text, sealed at rest and\nreturned only to the owning org, and must not sit in a shared cache.",
         "tags": [
@@ -121,7 +121,7 @@
     },
     "/v1/legal/documents/{id}/sign": {
       "post": {
-        "operationId": "post_v1_legal_documents_by_id_sign",
+        "operationId": "post_v1_legal_documents_id_sign",
         "summary": "Opens an e-signature request over one document and moves it to out_for_signature, returning the provider's reference for the request.",
         "description": "Opens an e-signature request over one document and moves it\nto out_for_signature, returning the provider's reference for the request.\n\nThe provider is whatever this deployment has wired. The honest default is\n\"manual\": the request is recorded and the org fulfils it out of band — nothing\nhere fabricates a signature, and the stub never reports itself complete.",
         "tags": [
@@ -307,7 +307,7 @@
     },
     "/v1/legal/templates/{id}": {
       "get": {
-        "operationId": "get_v1_legal_templates_by_id",
+        "operationId": "get_v1_legal_templates_id",
         "summary": "Returns one template resolved for the caller's org — the org's own override if it has saved one, else the built-in — with its full text/template body and its declared merge fields.",
         "description": "Returns one template resolved for the caller's org — the org's\nown override if it has saved one, else the built-in — with its full text/template\nbody and its declared merge fields. 404 when neither exists.",
         "tags": [
@@ -338,7 +338,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_legal_templates_by_id",
+        "operationId": "put_v1_legal_templates_id",
         "summary": "Saves the org's own version of a template — a custom NDA, a house MSA — and returns it with its new version number.",
         "description": "Saves the org's own version of a template — a custom\nNDA, a house MSA — and returns it with its new version number. It takes effect\nfor that org only; other orgs keep the built-in.\n\nTwo boundaries cannot be crossed here. Overriding a built-in INHERITS its\ncategory and its counsel-review posture, which can be raised but never dropped;\nand a formation or equity template is counsel-review whatever the caller sends,\nso no org can generate a securities-class document without the notice.\n\nThe body is validated on save, not at generation: a template that references an\nUNDECLARED merge field is refused with 400 rather than stored and rendered blank\ninto a contract months later.",
         "tags": [

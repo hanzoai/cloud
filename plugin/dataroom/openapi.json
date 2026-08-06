@@ -18,7 +18,7 @@
   "paths": {
     "/v1/dataroom/analytics/dataroom/{dataroomId}": {
       "get": {
-        "operationId": "get_v1_dataroom_analytics_dataroom_by_dataroomid",
+        "operationId": "get_v1_dataroom_analytics_dataroom_dataroomId",
         "summary": "Rolls up every share link pointing at one data room: session and page-view totals for the room, plus the per-page breakdown for each link beneath it.",
         "description": "Rolls up every share link pointing at one data room:\nsession and page-view totals for the room, plus the per-page breakdown for each\nlink beneath it.\n\nA room id outside the caller's own tenant store is not found. Only links that\nNAME the room are counted — a link created over a single document contributes\nnothing here, even when that document also sits in the room.",
         "tags": [
@@ -51,7 +51,7 @@
     },
     "/v1/dataroom/analytics/link/{linkId}": {
       "get": {
-        "operationId": "get_v1_dataroom_analytics_link_by_linkid",
+        "operationId": "get_v1_dataroom_analytics_link_linkId",
         "summary": "Reports how one share link was actually read: total viewing sessions, total page views, and per page the view count, the summed dwell measure and its average.",
         "description": "Reports how one share link was actually read: total viewing\nsessions, total page views, and per page the view count, the summed dwell\nmeasure and its average.\n\nThe link is resolved in the caller's OWN tenant store, so another org's link id\nis not found — knowing a link id is enough to OPEN the room it shares, and\nnever enough to read who has been reading it.",
         "tags": [
@@ -136,7 +136,7 @@
     },
     "/v1/dataroom/datarooms/{id}": {
       "get": {
-        "operationId": "get_v1_dataroom_datarooms_by_id",
+        "operationId": "get_v1_dataroom_datarooms_id",
         "summary": "Reads one of the caller org's data rooms together with every document in it, each carrying its membership id and order index.",
         "description": "Reads one of the caller org's data rooms together with every\ndocument in it, each carrying its membership id and order index.\n\nThe documents are sorted by that index with unordered ones last and creation\ntime breaking ties — the SAME order a link's visitor sees, so this is what the\nroom looks like from the outside. A room id outside the caller's own tenant\nstore is not found.",
         "tags": [
@@ -169,7 +169,7 @@
     },
     "/v1/dataroom/datarooms/{id}/documents": {
       "post": {
-        "operationId": "post_v1_dataroom_datarooms_by_id_documents",
+        "operationId": "post_v1_dataroom_datarooms_id_documents",
         "summary": "Puts an already-uploaded document into one of the caller org's data rooms and answers with the new membership id.",
         "description": "Puts an already-uploaded document into one of the caller\norg's data rooms and answers with the new membership id.\n\nIt ATTACHES, it never uploads: the bytes must already be stored, so the usual\norder is upload the document, then add it to the room. Both the room and the\ndocument must exist in the caller's own store — either missing is not found —\nand a document already in the room is refused as a conflict rather than\nduplicated.",
         "tags": [
@@ -242,7 +242,7 @@
     },
     "/v1/dataroom/documents/{id}": {
       "get": {
-        "operationId": "get_v1_dataroom_documents_by_id",
+        "operationId": "get_v1_dataroom_documents_id",
         "summary": "Reads one of the caller org's documents — its name, opaque storage key, content type, page count, size and timestamps.",
         "description": "Reads one of the caller org's documents — its name, opaque storage\nkey, content type, page count, size and timestamps.\n\nThe lookup runs in the caller's own tenant store, so an id belonging to another\norg is not found exactly like one that never existed. Metadata only: the bytes\nare a separate read.",
         "tags": [

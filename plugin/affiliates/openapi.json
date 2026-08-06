@@ -22,63 +22,28 @@
     "/v1/admin/affiliates": {
       "get": {
         "operationId": "get_v1_admin_affiliates",
-        "summary": "Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents.",
-        "description": "Lists every affiliate across the fleet with its ORG exposed, plus a\nfleet summary of lifetime accrued, still-pending and paid commission in\ninteger cents.\n\nPLATFORM SUDO ONLY, and a non-admin is refused outright. This is the\ncross-tenant view and it names orgs — exactly what the partner-facing\nleaderboard refuses to do. There is deliberately no org-scoped variant of this\nread; a partner sees its own standing through its own dashboard. Bounded per\nrequest.",
+        "summary": "Every affiliate in the fleet, with a summary",
+        "description": "Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents.\n\nPLATFORM SUDO ONLY, and a non-admin is refused outright. This is the cross-tenant view and it names orgs — exactly what the partner-facing leaderboard refuses to do. There is deliberately no org-scoped variant of this read; a partner sees its own standing through its own dashboard. Bounded per request.",
         "tags": [
           "admin"
-        ],
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Limit caps the rows returned. Absent or non-positive means the default of\n500; anything above 1000 is clamped to 1000.",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/directoryOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/admin/affiliates/sweep": {
       "post": {
         "operationId": "post_v1_admin_affiliates_sweep",
-        "summary": "Runs the accrual: for each referred org it reads that org's metered spend for the current period and accrues commission to every affiliate up its referral chain, then answers how many sources were swept and how many NEW accruals landed.",
-        "description": "Runs the accrual: for each referred org it reads that org's metered\nspend for the current period and accrues commission to every affiliate up its\nreferral chain, then answers how many sources were swept and how many NEW\naccruals landed.\n\nThis is the cron path, and it is LATCHED at most once per affiliate, source\norg and period — so re-running it inside the same period accrues nothing\nfurther. Safe to retry, and safe to run by hand beside the schedule.\n\nCommission is a rate of Hanzo's MARGIN on that spend, never of the customer's\ngross bill, so every level's share summed over one source event stays within\nthe margin actually earned and the customer's charge is untouched. Nothing\naccrues past the third upline level, and only an APPROVED affiliate accrues at\nall.\n\nThe same spend read drives the OSS author royalty — one read, both programs —\nso the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded\nper run; a source whose spend cannot be read is skipped and picked up next\ntime, never half-accrued.",
+        "summary": "Accrue this period's commission for every referred org",
+        "description": "Runs the accrual: for each referred org it reads that org's metered spend for the current period and accrues commission to every affiliate up its referral chain, then answers how many sources were swept and how many NEW accruals landed.\n\nThis is the cron path, and it is LATCHED at most once per affiliate, source org and period — so re-running it inside the same period accrues nothing further. Safe to retry, and safe to run by hand beside the schedule.\n\nCommission is a rate of Hanzo's MARGIN on that spend, never of the customer's gross bill, so every level's share summed over one source event stays within the margin actually earned and the customer's charge is untouched. Nothing accrues past the third upline level, and only an APPROVED affiliate accrues at all.\n\nThe same spend read drives the OSS author royalty — one read, both programs — so the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded per run; a source whose spend cannot be read is skipped and picked up next time, never half-accrued.",
         "tags": [
           "admin"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/accrualsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/admin/affiliates/{id}/approve": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_approve",
-        "summary": "Approves an affiliate and MINTS its referral code — the moment the partner has a working share link and starts accruing.",
-        "description": "Approves an affiliate and MINTS its referral code — the moment\nthe partner has a working share link and starts accruing.\n\nThe code is taken from the body if one is given, else the vanity code the\napplicant requested, else a slug derived for them. Codes are ONE global\nnamespace, so a taken code is a 409 and nothing is approved. The minted code\nis also mirrored as a link row so click tracking is uniform across every code\nthe affiliate holds; that mirror is best-effort and its failure never fails\nthe approval.\n\nApproval is what makes an affiliate eligible: before it, attribution against\nits code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY.\nAudited.",
+        "summary": "Approve an affiliate and mint its code",
+        "description": "Approves an affiliate and MINTS its referral code — the moment the partner has a working share link and starts accruing.\n\nThe code is taken from the body if one is given, else the vanity code the applicant requested, else a slug derived for them. Codes are ONE global namespace, so a taken code is a 409 and nothing is approved. The minted code is also mirrored as a link row so click tracking is uniform across every code the affiliate holds; that mirror is best-effort and its failure never fails the approval.\n\nApproval is what makes an affiliate eligible: before it, attribution against its code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY. Audited.",
         "tags": [
           "admin"
         ],
@@ -87,41 +52,18 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the affiliate to approve, from the path.",
             "schema": {
               "type": "string"
             }
           }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/approval"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/admin/affiliates/{id}/payout": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_payout",
-        "summary": "Pays out accrued commission and answers the payout row with the affiliate's updated balances.",
-        "description": "Pays out accrued commission and answers the payout row with the\naffiliate's updated balances.\n\nThe amount is reserved atomically against the affiliate's PENDING commission —\naccrued minus paid — so a payout can never exceed what is owed. The METHOD\ndecides whether money actually moves: `credits` issues a commerce grant into\nthe affiliate ORG's own wallet, tagged so the ledger can tell an affiliate\npayout apart from an admin or referral grant; every other method — wire,\npaypal and the rest — is RECORD-ONLY: the payout row and the balances move,\nthe cash is disbursed out of band.\n\nThe amount is integer cents and must be positive. PLATFORM SUDO ONLY.\nAudited.",
+        "summary": "Pay out an affiliate's accrued commission",
+        "description": "Pays out accrued commission and answers the payout row with the affiliate's updated balances.\n\nTWO reservations guard it, both taken before any money moves. First the amount is reserved atomically against the affiliate's PENDING commission — accrued minus paid — so a payout can never exceed what is owed. Then it must be BACKED by the platform treasury reserve; if it is not, the pending reservation is voided and the call is refused with the available reserve quoted, so an unbacked payout leaves neither a row nor a phantom liability.\n\nThe METHOD decides whether money actually moves. `credits` issues a commerce grant into the affiliate ORG's own wallet, tagged so the ledger can tell an affiliate payout apart from an admin or referral grant. Every other method — wire, paypal and the rest — is RECORD-ONLY: the payout row and the balances move, the cash is disbursed out of band.\n\nThe amount is integer cents and must be positive. A grant that fails after both reservations is logged loudly and never silently retried; the payout row and the audit entry are what an operator reconciles from. PLATFORM SUDO ONLY.",
         "tags": [
           "admin"
         ],
@@ -130,46 +72,18 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the affiliate to pay, from the path.",
             "schema": {
               "type": "string"
             }
           }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "amountCents": 1200,
-                "method": "credits",
-                "reference": "ledger-1"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/disbursal"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/payoutOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/admin/affiliates/{id}/rate": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_rate",
-        "summary": "Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's margin.",
-        "description": "Sets one affiliate's DIRECT commission rate, in basis points of\nHanzo's margin.\n\nThe rate is CAPPED so that the direct rate plus the platform-wide second- and\nthird-level rates can never exceed the whole margin — the structural guarantee\nthat everything paid on one source event stays inside the margin actually\nearned. The cap is resolved from the rates in force at the moment of the call\nand quoted in the refusal, because those switches move; a hardcoded bound\nwould start lying the moment somebody edits the schedule.\n\nOnly the direct level is per-affiliate. The second and third levels are\nplatform switches and are not settable here. The change applies to FUTURE\naccruals — commission already latched for a period is not recomputed. PLATFORM\nSUDO ONLY. Audited.",
+        "summary": "Set an affiliate's direct commission rate",
+        "description": "Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's margin.\n\nThe rate is CAPPED so that the direct rate plus the platform-wide second- and third-level rates can never exceed the whole margin — the structural guarantee that everything paid on one source event stays inside the margin actually earned. The cap is resolved from the rates in force at the moment of the call and quoted in the refusal, because those switches move; a hardcoded bound would start lying the moment somebody edits the schedule.\n\nOnly the direct level is per-affiliate. The second and third levels are platform switches and are not settable here. The change applies to FUTURE accruals — commission already latched for a period is not recomputed. PLATFORM SUDO ONLY. Audited.",
         "tags": [
           "admin"
         ],
@@ -178,44 +92,18 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the affiliate whose direct rate moves, from the path.",
             "schema": {
               "type": "string"
             }
           }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "rateBps": 2500
-              },
-              "schema": {
-                "$ref": "#/components/schemas/rateSet"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/admin/affiliates/{id}/suspend": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_suspend",
-        "summary": "Suspends an affiliate: it stops accruing on the next sweep, and its code stops resolving for new attributions.",
-        "description": "Suspends an affiliate: it stops accruing on the next sweep, and\nits code stops resolving for new attributions.\n\nIt CLAWS NOTHING BACK. Commission already accrued stays accrued and stays\npayable, and existing attribution edges are left standing — suspension ends\nearning, it does not unwind history. PLATFORM SUDO ONLY. Audited.",
+        "summary": "Suspend an affiliate",
+        "description": "Suspends an affiliate: it stops accruing on the next sweep, and its code stops resolving for new attributions.\n\nIt CLAWS NOTHING BACK. Commission already accrued stays accrued and stays payable, and existing attribution edges are left standing — suspension ends earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.",
         "tags": [
           "admin"
         ],
@@ -224,1112 +112,119 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the affiliate's server-minted handle, \"aff_\"-prefixed.",
             "schema": {
               "type": "string"
             }
           }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/admin/referrals": {
       "get": {
         "operationId": "get_v1_admin_referrals",
-        "summary": "Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.",
-        "description": "Answers the referral board: the top referrers by lifetime\ncommission, the funnel conversion rate (referred orgs that have actually\nproduced commission, over all referred orgs), and the accrual LIABILITY the\nplatform owes, broken out by upline level.\n\nRead the liability figure carefully — it is commission accrued and NOT yet\npaid, so it is money owed, not money spent, and the per-level split says how\nmuch of it comes from direct referrals versus the second and third levels.\n\nPLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single\nattribution spine the accrual itself walks, so the board and the ledger cannot\ndisagree. Amounts are integer cents.",
+        "summary": "Referral analytics: top referrers, conversion, and liability",
+        "description": "The referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.\n\nRead the liability figure carefully — it is commission accrued and NOT yet paid, so it is money owed, not money spent, and the per-level split says how much of it comes from direct referrals versus the second and third levels.\n\nPLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single attribution spine the accrual itself walks, so the board and the ledger cannot disagree. Amounts are integer cents.",
         "tags": [
           "admin"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/referralsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates": {
       "get": {
         "operationId": "get_v1_affiliates",
-        "summary": "Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history.",
-        "description": "Answers the caller org's OWN affiliate standing: status, referral\ncode and share link, commission rate, how many orgs it has referred, and its\nlifetime accrued, still-pending and already-paid commission in integer cents,\nwith its payout history.\n\nAn org that never applied gets an honest `isAffiliate:false` and the default\nrate rather than a 404 — the console renders the apply form off that answer.\n\nThe affiliate is resolved from the VALIDATED org, never from a field, so this\ncan only ever read the caller's own row; without a principal it is refused. It\nis a PURE READ: nothing accrues until the sweep runs. Commission is earned on\nHanzo's MARGIN, never on the referred customer's bill, so nothing here changes\nwhat that customer pays.",
+        "summary": "Your org's affiliate standing and commission dashboard",
+        "description": "Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history.\n\nAn org that never applied gets an honest `isAffiliate:false` and the default rate rather than a 404 — the console renders the apply form off that answer.\n\nThe affiliate is resolved from the VALIDATED org, never from a field, so this can only ever read the caller's own row; without a principal it is refused. For an approved affiliate the read first runs the accrual sweep over its own downline, so the dashboard is self-updating — bounded and best-effort, so a commerce hiccup shows slightly stale numbers instead of failing the page. Commission is earned on Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes what that customer pays.",
         "tags": [
           "affiliates"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateStanding"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/apply": {
       "post": {
         "operationId": "post_v1_affiliates_apply",
-        "summary": "Enrolls the caller's OWN org as an affiliate at status `applied`, optionally requesting a vanity code, and answers the record — 201 on the first apply, 200 with `created:false` afterwards.",
-        "description": "Enrolls the caller's OWN org as an affiliate at status `applied`,\noptionally requesting a vanity code, and answers the record — 201 on the first\napply, 200 with `created:false` afterwards.\n\nIDEMPOTENT, first apply wins: one affiliate per org, so re-applying never\ncreates a second row and never resets an existing approval. Applying is not\njoining — no code is minted and nothing accrues until staff approve, which is\nwhere both the code and the commission rate come from.\n\nThe org is the validated caller's, never a field. A malformed vanity code is\nrefused up front; the code is only REQUESTED here, and approval may mint a\ndifferent one if the requested code is taken.",
+        "summary": "Enroll your org in the partner program",
+        "description": "Enrolls the caller's OWN org as an affiliate at status `applied`, optionally requesting a vanity code, and answers the record — 201 on the first apply, 200 with `created:false` afterwards.\n\nIDEMPOTENT, first apply wins: one affiliate per org, so re-applying never creates a second row and never resets an existing approval. Applying is not joining — no code is minted and nothing accrues until staff approve, which is where both the code and the commission rate come from.\n\nThe org is the validated caller's, never a field. A malformed vanity code is refused up front; the code is only REQUESTED here, and approval may mint a different one if the requested code is taken.",
         "tags": [
           "affiliates"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "requestedCode": "acme"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/applyRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/application"
-                }
-              }
-            },
-            "description": "ok"
-          },
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/application"
-                }
-              }
-            },
-            "description": "created"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/attribute": {
       "post": {
         "operationId": "post_v1_affiliates_attribute",
-        "summary": "Records the first-touch edge every later commission is computed from: the caller's org was referred by the affiliate that owns this code.",
-        "description": "Records the first-touch edge every later commission is computed\nfrom: the caller's org was referred by the affiliate that owns this code.\n\nThe REFERRED org is the validated caller, never a field. A caller that could\nname the referred org could attach itself to somebody else's revenue. The\naffiliate is resolved from the code, and only an APPROVED affiliate's code\nresolves.\n\nFIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post\nanswers the existing edge with `created:false` rather than moving the\nattribution. Self-attribution is refused, and so is a code that would make a\ncycle in the upline chain. An unknown code is a 404, deliberately: an\naffiliate code IS a public shareable link, so whether one is real is public by\ndesign, and the caller legitimately needs to know its link resolved.\n\nA user-level mirror of the edge is written best-effort; a conflict there never\nfails the org attribution, which is the money-bearing one.",
+        "summary": "Record that your org arrived through an affiliate's code",
+        "description": "Records the first-touch edge every later commission is computed from: the caller's org was referred by the affiliate that owns this code.\n\nThe REFERRED org is the validated caller, never a field. A caller that could name the referred org could attach itself to somebody else's revenue. The affiliate is resolved from the code, and only an APPROVED affiliate's code resolves.\n\nFIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post answers the existing edge with `created:false` rather than moving the attribution. Self-attribution is refused, and so is a code that would make a cycle in the upline chain. An unknown code is a 404, deliberately: an affiliate code IS a public shareable link, so whether one is real is public by design, and the caller legitimately needs to know its link resolved.\n\nA user-level mirror of the edge is written best-effort; a conflict there never fails the org attribution, which is the money-bearing one.",
         "tags": [
           "affiliates"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "code": "acme"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/attributeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/attribution"
-                }
-              }
-            },
-            "description": "ok"
-          },
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/attribution"
-                }
-              }
-            },
-            "description": "created"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/click": {
       "post": {
         "operationId": "post_v1_affiliates_click",
-        "summary": "Counts a click on a share link.",
-        "description": "Counts a click on a share link. PUBLIC — it takes no principal, because\na visitor clicking a shareable link has no session yet.\n\nThe ping folds into an in-memory buffer and NEVER writes the money database\nsynchronously, so a click flood cannot contend with the accrual and payout\nwrite path; tallies are flushed in one batch on the next authenticated links\nread and at shutdown. Clicks are a vanity metric: no accrual and no payout\never reads them — those key on real metered spend — so click inflation cannot\nmove money.\n\nAny well-formed code is accepted WITHOUT checking that it exists,\ndeliberately: this is not a code-existence oracle. `counted` reports that the\nbuffer took the ping, not that the code is real; an unknown code simply no-ops\nat flush time.",
+        "summary": "Count a click on a share link",
+        "description": "Counts a click on a share link. PUBLIC — it takes no principal, because a visitor clicking a shareable link has no session yet.\n\nThe ping folds into an in-memory buffer and NEVER writes the money database synchronously, so a click flood cannot contend with the accrual and payout write path; tallies are flushed in one batch on the next authenticated links read and at shutdown. Clicks are a vanity metric: no accrual and no payout ever reads them — those key on real metered spend — so click inflation cannot move money.\n\nAny well-formed code is accepted WITHOUT checking that it exists, deliberately: this is not a code-existence oracle. `counted` reports that the buffer took the ping, not that the code is real; an unknown code simply no-ops at flush time.",
         "tags": [
           "affiliates"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "code": "acme"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/clickRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/clickCount"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/leaderboard": {
       "get": {
         "operationId": "get_v1_affiliates_leaderboard",
-        "summary": "Answers the top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.",
-        "description": "Answers the top affiliates by lifetime accrued commission, shown by\nOPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.\n\nIt never discloses an org identity and never a referred org's usage. An\naffiliate that has set no handle still OCCUPIES its rank but is not listed —\nso opting out hides the name, not the position, and the visible board must not\nbe read as a complete roster.\n\nThe caller's own row carries its exact GLOBAL rank, computed over the whole\napproved set rather than over the page, so it is right well outside the top of\nthe board. Only an approved affiliate has a rank. Requires a validated\nprincipal; a signed-in non-affiliate may read the board but gets no personal\nrow.",
+        "summary": "The partner leaderboard, plus your own rank",
+        "description": "The top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.\n\nIt never discloses an org identity and never a referred org's usage. An affiliate that has set no handle still OCCUPIES its rank but is not listed — so opting out hides the name, not the position, and the visible board must not be read as a complete roster.\n\nThe caller's own row carries its exact GLOBAL rank, computed over the whole approved set rather than over the page, so it is right well outside the top of the board. Only an approved affiliate has a rank. Requires a validated principal; a signed-in non-affiliate may read the board but gets no personal row.",
         "tags": [
           "affiliates"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateBoard"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/me": {
       "get": {
         "operationId": "get_v1_affiliates_me",
-        "summary": "Answers the richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there.",
-        "description": "Answers the richer self-view: the same lifetime accrued, pending and paid\ncommission and payout history, plus the caller's downline broken out by upline\nLEVEL — direct, second, third — each with the rate paid at that level and how\nmany orgs sit there.\n\nCommission is MULTI-LEVEL: a referred org's spend pays up its referral chain,\nthree levels deep and no further. The direct level is the affiliate's own\nnegotiated rate; the second and third are platform-wide switches, read live,\nso the schedule shown is the one actually in force rather than one compiled\nin. A caller that has not applied still gets that schedule alongside\n`isAffiliate:false`, so the console can show what it would earn.\n\nScoped to the validated org and nothing else, and refused without a\nprincipal. A PURE READ — it reports the downline but accrues nothing.",
+        "summary": "Your affiliate self-view, with the downline broken out by level",
+        "description": "The richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there.\n\nCommission is MULTI-LEVEL: a referred org's spend pays up its referral chain, three levels deep and no further. The direct level is the affiliate's own negotiated rate; the second and third are platform-wide switches, read live, so the schedule shown is the one actually in force rather than one compiled in. A caller that has not applied still gets that schedule alongside `isAffiliate:false`, so the console can show what it would earn.\n\nScoped to the validated org and nothing else, and refused without a principal. An approved affiliate's figures are refreshed by a bounded, best-effort sweep before the read.",
         "tags": [
           "affiliates"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateSelf"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/me/earnings": {
       "get": {
         "operationId": "get_v1_affiliates_me_earnings",
-        "summary": "Answers the caller's own commission ledger: per period, the margin it earned against and the commission taken from that margin; and per referred org, that referral's aggregate contribution.",
-        "description": "Answers the caller's own commission ledger: per period, the margin it\nearned against and the commission taken from that margin; and per referred\norg, that referral's aggregate contribution. Integer cents throughout.\n\nThe per-org view deliberately carries the affiliate's OWN earned share and NOT\nthe referred org's spend or margin. An affiliate is entitled to what it\nearned, not to a restatement of its customer's usage — the period view is\nwhere the margin base appears, aggregated across every referral.\n\nScoped server-side to the validated caller's affiliate; a caller that is not\none gets `isAffiliate:false`.",
+        "summary": "Your commission ledger, by period and by referred org",
+        "description": "The caller's own commission ledger: per period, the margin it earned against and the commission taken from that margin; and per referred org, that referral's aggregate contribution. Integer cents throughout.\n\nThe per-org view deliberately carries the affiliate's OWN earned share and NOT the referred org's spend or margin. An affiliate is entitled to what it earned, not to a restatement of its customer's usage — the period view is where the margin base appears, aggregated across every referral.\n\nScoped server-side to the validated caller's affiliate; a caller that is not one gets `isAffiliate:false`. An approved affiliate's ledger is refreshed by a bounded, best-effort sweep first, so the figures are current.",
         "tags": [
           "affiliates"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateEarnings"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/me/handle": {
       "post": {
         "operationId": "post_v1_affiliates_me_handle",
-        "summary": "Sets the caller's public leaderboard display name, or clears it.",
-        "description": "Sets the caller's public leaderboard display name, or clears it.\n\nThe handle IS the opt-in. An empty handle opts out: the affiliate keeps its\nrank and can still see its own row, it simply stops being listed to anyone\nelse. That is the whole privacy control — there is no separate visibility\nflag, and no way to be listed without choosing a name.\n\nRequires a validated principal and an existing affiliate record; apply first.\nThe handle is bounded and restricted to letters, digits, space, hyphen,\nunderscore and dot.",
+        "summary": "Set or clear your public leaderboard name",
+        "description": "Sets the caller's public leaderboard display name, or clears it.\n\nThe handle IS the opt-in. An empty handle opts out: the affiliate keeps its rank and can still see its own row, it simply stops being listed to anyone else. That is the whole privacy control — there is no separate visibility flag, and no way to be listed without choosing a name.\n\nRequires a validated principal and an existing affiliate record; apply first. The handle is bounded and restricted to letters, digits, space, hyphen, underscore and dot.",
         "tags": [
           "affiliates"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "handle": "acme partners"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/handleRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/handleSet"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/affiliates/me/links": {
       "get": {
         "operationId": "get_v1_affiliates_me_links",
-        "summary": "Answers the caller's share links, each with its URL and its funnel: clicks tracked, signups — orgs attributed with that code — and conversions, meaning how many of those signups have actually produced commission.",
-        "description": "Answers the caller's share links, each with its URL and its funnel:\nclicks tracked, signups — orgs attributed with that code — and conversions,\nmeaning how many of those signups have actually produced commission.\n\nSignups and conversions are DERIVED from the commission ledger and never\nstored, so they cannot drift from the money. Clicks are the one stored counter\nand the one that is pure vanity.\n\nAny pending public click pings are folded into the store before the read, in\none batch — which is how the counters stay current without a database write\nper click. Scoped to the validated caller's own affiliate; a non-affiliate\ngets `isAffiliate:false` and the link cap.",
+        "summary": "Your share links and their funnel",
+        "description": "The caller's share links, each with its URL and its funnel: clicks tracked, signups — orgs attributed with that code — and conversions, meaning how many of those signups have actually produced commission.\n\nSignups and conversions are DERIVED from the commission ledger and never stored, so they cannot drift from the money. Clicks are the one stored counter and the one that is pure vanity.\n\nAny pending public click pings are folded into the store before the read, in one batch — which is how the counters stay current without a database write per click. Scoped to the validated caller's own affiliate; a non-affiliate gets `isAffiliate:false` and the link cap.",
         "tags": [
           "affiliates"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/affiliateLinks"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       },
       "post": {
         "operationId": "post_v1_affiliates_me_links",
-        "summary": "Mints a new share link for the caller's own affiliate and answers it with its full URL, 201.",
-        "description": "Mints a new share link for the caller's own affiliate and answers it\nwith its full URL, 201.\n\nAPPROVAL IS REQUIRED: an org that has applied but is not approved is refused,\nbecause a link that cannot accrue is a link that quietly loses the referral. A\nrequested vanity code must be valid and free across the WHOLE directory —\ncodes are one global namespace, so a taken code is a 409 rather than a silent\nalias. Omit the code and a random one is minted.\n\nBounded per affiliate. The label is cosmetic: it is trimmed, stripped of\ncontrol characters and capped, and it is never part of a code.",
+        "summary": "Mint a new share link",
+        "description": "Mints a new share link for the caller's own affiliate and answers it with its full URL, 201.\n\nAPPROVAL IS REQUIRED: an org that has applied but is not approved is refused, because a link that cannot accrue is a link that quietly loses the referral. A requested vanity code must be valid and free across the WHOLE directory — codes are one global namespace, so a taken code is a 409 rather than a silent alias. Omit the code and a random one is minted.\n\nBounded per affiliate. The label is cosmetic: it is trimmed, stripped of control characters and capped, and it is never part of a code.",
         "tags": [
           "affiliates"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "label": "twitter"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/createLinkRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/linkMint"
-                }
-              }
-            },
-            "description": "created"
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "accruals": {
-        "properties": {
-          "accrued": {
-            "type": "integer"
-          },
-          "royaltiesAccrued": {
-            "type": "integer"
-          },
-          "royaltyFailures": {
-            "description": "RoyaltyFailures is reported, not swallowed: a sweep that could not reach\nthe royalty store must not read as one that found nothing owed. The count\nwas already computed and then dropped on the floor, which is the same\nsilence the typed leg was added to end.",
-            "type": "integer"
-          },
-          "swept": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "accrualsOut": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/accruals"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "adminAffiliateView": {
-        "properties": {
-          "accruedCents": {
-            "type": "integer"
-          },
-          "approvedAt": {
-            "type": "integer"
-          },
-          "code": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "integer"
-          },
-          "id": {
-            "type": "string"
-          },
-          "org": {
-            "type": "string"
-          },
-          "paidCents": {
-            "type": "integer"
-          },
-          "pendingCents": {
-            "type": "integer"
-          },
-          "rateBps": {
-            "type": "integer"
-          },
-          "referredCount": {
-            "type": "integer"
-          },
-          "requestedCode": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "suspendedAt": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "affiliateBoard": {
-        "properties": {
-          "leaders": {
-            "description": "Leaders are the top opt-in affiliates, by handle and aggregate figures only.",
-            "items": {
-              "$ref": "#/components/schemas/leaderboardRow"
-            },
-            "type": "array"
-          },
-          "total": {
-            "description": "Total is the approved population where it is known; omitted where the top\npage truncated and the caller has no rank to derive it from.",
-            "type": "integer"
-          },
-          "you": {
-            "$ref": "#/components/schemas/leaderboardRow",
-            "description": "You is the caller's own row with its exact global rank; only an approved\naffiliate has one."
-          }
-        },
-        "type": "object"
-      },
-      "affiliateData": {
-        "properties": {
-          "affiliate": {
-            "$ref": "#/components/schemas/adminAffiliateView"
-          }
-        },
-        "type": "object"
-      },
-      "affiliateEarnings": {
-        "properties": {
-          "accruedCents": {
-            "description": "AccruedCents is lifetime commission accrued, in cents.",
-            "type": "integer"
-          },
-          "byPeriod": {
-            "description": "ByPeriod is the per-period ledger: the margin earned against and the\ncommission taken from it.",
-            "items": {
-              "$ref": "#/components/schemas/periodEarningView"
-            },
-            "type": "array"
-          },
-          "byReferredOrg": {
-            "description": "ByReferredOrg is each referral's aggregate contribution — the affiliate's\nOWN share, never the referred org's spend.",
-            "items": {
-              "$ref": "#/components/schemas/orgEarningView"
-            },
-            "type": "array"
-          },
-          "isAffiliate": {
-            "type": "boolean"
-          },
-          "marginBps": {
-            "description": "MarginBps is the platform gross-margin fraction commission is a rate OF.",
-            "type": "integer"
-          },
-          "paidCents": {
-            "description": "PaidCents is lifetime commission already paid out, in cents.",
-            "type": "integer"
-          },
-          "pendingCents": {
-            "description": "PendingCents is accrued minus paid — what the platform still owes.",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "affiliateLinks": {
-        "properties": {
-          "isAffiliate": {
-            "type": "boolean"
-          },
-          "links": {
-            "description": "Links is the caller's share links, each with its URL and funnel.",
-            "items": {
-              "$ref": "#/components/schemas/codeView"
-            },
-            "type": "array"
-          },
-          "maxLinks": {
-            "description": "MaxLinks is how many share links one affiliate may hold.",
-            "type": "integer"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "affiliateOut": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/affiliateData"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "affiliateSelf": {
-        "properties": {
-          "accruedCents": {
-            "type": "integer"
-          },
-          "code": {
-            "type": "string"
-          },
-          "defaultRateBps": {
-            "type": "integer"
-          },
-          "downlineTotal": {
-            "description": "DownlineTotal counts every org in the caller's downline across the levels.",
-            "type": "integer"
-          },
-          "handle": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "isAffiliate": {
-            "type": "boolean"
-          },
-          "levels": {
-            "description": "Levels is the caller's downline per upline level, with the rate paid there.",
-            "items": {
-              "$ref": "#/components/schemas/levelView"
-            },
-            "type": "array"
-          },
-          "link": {
-            "type": "string"
-          },
-          "marginBps": {
-            "type": "integer"
-          },
-          "paidCents": {
-            "type": "integer"
-          },
-          "payouts": {
-            "items": {
-              "$ref": "#/components/schemas/remittance"
-            },
-            "type": "array"
-          },
-          "pendingCents": {
-            "type": "integer"
-          },
-          "rateBps": {
-            "type": "integer"
-          },
-          "schedule": {
-            "description": "Schedule is the rate schedule quoted to a caller that has not applied.",
-            "items": {
-              "$ref": "#/components/schemas/levelView"
-            },
-            "type": "array"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "affiliateStanding": {
-        "properties": {
-          "accruedCents": {
-            "description": "AccruedCents is lifetime commission accrued, in cents.",
-            "type": "integer"
-          },
-          "code": {
-            "description": "Code is the minted referral code; empty until staff approve.",
-            "type": "string"
-          },
-          "defaultRateBps": {
-            "description": "DefaultRateBps is the direct rate a new affiliate would get, answered only\nto a caller that has not applied.",
-            "type": "integer"
-          },
-          "handle": {
-            "description": "Handle is the opt-in public leaderboard name; empty means opted out.",
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "isAffiliate": {
-            "type": "boolean"
-          },
-          "link": {
-            "description": "Link is the shareable ?aff URL; empty until a code is minted.",
-            "type": "string"
-          },
-          "marginBps": {
-            "description": "MarginBps is the platform gross-margin fraction commission is a rate OF.",
-            "type": "integer"
-          },
-          "paidCents": {
-            "description": "PaidCents is lifetime commission already paid out, in cents.",
-            "type": "integer"
-          },
-          "payouts": {
-            "description": "Payouts is the payout history, newest rows bounded.",
-            "items": {
-              "$ref": "#/components/schemas/remittance"
-            },
-            "type": "array"
-          },
-          "pendingCents": {
-            "description": "PendingCents is accrued minus paid — what the platform still owes.",
-            "type": "integer"
-          },
-          "rateBps": {
-            "description": "RateBps is the affiliate's own direct commission rate, in basis points.",
-            "type": "integer"
-          },
-          "referredCount": {
-            "description": "ReferredCount is how many orgs this affiliate has referred.",
-            "type": "integer"
-          },
-          "requestedCode": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "application": {
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "created": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "rateBps": {
-            "type": "integer"
-          },
-          "requestedCode": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "applyRequest": {
-        "properties": {
-          "requestedCode": {
-            "description": "RequestedCode is the vanity code the applicant asks for; approval may mint\na different one if it is taken. Body-only: the URL cannot supply it.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "approval": {
-        "properties": {
-          "code": {
-            "description": "Code overrides the minted code; else the requested vanity code, else a\nderived slug.",
-            "type": "string"
-          },
-          "id": {
-            "description": "ID is the affiliate to approve, from the path.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "attributeRequest": {
-        "properties": {
-          "code": {
-            "description": "Code is the affiliate code the referred org arrived with. Body-only: the\nURL cannot supply it.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "attribution": {
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "created": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "integer"
-          },
-          "id": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "clickCount": {
-        "properties": {
-          "counted": {
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "clickRequest": {
-        "properties": {
-          "code": {
-            "description": "Code is the share-link code that was clicked. Body-only: the URL cannot\nsupply it.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "codeView": {
-        "properties": {
-          "clicks": {
-            "type": "integer"
-          },
-          "code": {
-            "type": "string"
-          },
-          "conversions": {
-            "type": "integer"
-          },
-          "createdAt": {
-            "type": "integer"
-          },
-          "label": {
-            "type": "string"
-          },
-          "signups": {
-            "type": "integer"
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "createLinkRequest": {
-        "properties": {
-          "code": {
-            "description": "Code is an optional vanity code; it must be free across the whole\ndirectory, and omitting it mints a random one. Body-only.",
-            "type": "string"
-          },
-          "label": {
-            "description": "Label is cosmetic — trimmed, stripped of control characters, capped — and\nnever part of a code. Body-only: the URL cannot supply it.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "directoryData": {
-        "properties": {
-          "affiliates": {
-            "items": {
-              "$ref": "#/components/schemas/adminAffiliateView"
-            },
-            "type": "array"
-          },
-          "summary": {
-            "$ref": "#/components/schemas/totals"
-          }
-        },
-        "type": "object"
-      },
-      "directoryOut": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/directoryData"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "disbursal": {
-        "properties": {
-          "amountCents": {
-            "description": "AmountCents is the payout, integer cents; it must be positive and can\nnever exceed the affiliate's pending commission. Body-only (`url:\"-\"`,\nlike every money field here): a payout must never ride the URL into\naccess logs, and the raw handler read only the body.",
-            "type": "integer"
-          },
-          "id": {
-            "description": "ID is the affiliate to pay, from the path.",
-            "type": "string"
-          },
-          "method": {
-            "description": "Method decides whether money moves: `credits` issues a commerce grant,\nevery other method (wire, paypal, …) is record-only.",
-            "type": "string"
-          },
-          "reference": {
-            "description": "Reference is the operator's settlement note (a bank id, a ledger ref).",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "funnel": {
-        "properties": {
-          "convertedOrgs": {
-            "type": "integer"
-          },
-          "ratePct": {
-            "type": "number"
-          },
-          "referredOrgs": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "handleRequest": {
-        "properties": {
-          "handle": {
-            "description": "Handle is the public leaderboard display name; empty opts out. Body-only:\nthe URL cannot supply it.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "handleSet": {
-        "properties": {
-          "handle": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "leaderboardRow": {
-        "properties": {
-          "accruedCents": {
-            "type": "integer"
-          },
-          "handle": {
-            "type": "string"
-          },
-          "isYou": {
-            "type": "boolean"
-          },
-          "rank": {
-            "type": "integer"
-          },
-          "referredCount": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "levelSplit": {
-        "properties": {
-          "l1Cents": {
-            "type": "integer"
-          },
-          "l2Cents": {
-            "type": "integer"
-          },
-          "l3Cents": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "levelView": {
-        "properties": {
-          "downlineCount": {
-            "type": "integer"
-          },
-          "level": {
-            "type": "integer"
-          },
-          "rateBps": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "linkMint": {
-        "properties": {
-          "link": {
-            "$ref": "#/components/schemas/codeView"
-          }
-        },
-        "type": "object"
-      },
-      "orgEarningView": {
-        "properties": {
-          "commissionCents": {
-            "type": "integer"
-          },
-          "referredOrg": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "payoutOut": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/settlement"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "periodEarningView": {
-        "properties": {
-          "commissionCents": {
-            "type": "integer"
-          },
-          "marginCents": {
-            "type": "integer"
-          },
-          "period": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "rateSet": {
-        "properties": {
-          "id": {
-            "description": "ID is the affiliate whose direct rate moves, from the path.",
-            "type": "string"
-          },
-          "rateBps": {
-            "description": "RateBps is the direct commission rate, in basis points of Hanzo's margin;\ncapped so the whole L1+L2+L3 schedule never exceeds the margin. Body-only\n(`url:\"-\"`): a money parameter must never ride the URL into access logs.",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "referralBoard": {
-        "properties": {
-          "accrualByLevel": {
-            "$ref": "#/components/schemas/levelSplit"
-          },
-          "conversion": {
-            "$ref": "#/components/schemas/funnel"
-          },
-          "summary": {
-            "$ref": "#/components/schemas/tally"
-          },
-          "topReferrers": {
-            "items": {
-              "$ref": "#/components/schemas/referrerRow"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "referralsOut": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/referralBoard"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "referrerRow": {
-        "properties": {
-          "accruedCents": {
-            "type": "integer"
-          },
-          "code": {
-            "type": "string"
-          },
-          "org": {
-            "type": "string"
-          },
-          "pendingCents": {
-            "type": "integer"
-          },
-          "referredCount": {
-            "type": "integer"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "remittance": {
-        "properties": {
-          "amountCents": {
-            "type": "integer"
-          },
-          "createdAt": {
-            "type": "integer"
-          },
-          "id": {
-            "type": "string"
-          },
-          "method": {
-            "type": "string"
-          },
-          "reference": {
-            "type": "string"
-          },
-          "txn": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "settlement": {
-        "properties": {
-          "affiliate": {
-            "$ref": "#/components/schemas/adminAffiliateView"
-          },
-          "payout": {
-            "$ref": "#/components/schemas/remittance"
-          }
-        },
-        "type": "object"
-      },
-      "tally": {
-        "properties": {
-          "accruedLifetimeCents": {
-            "type": "integer"
-          },
-          "affiliates": {
-            "type": "integer"
-          },
-          "approved": {
-            "type": "integer"
-          },
-          "paidLifetimeCents": {
-            "type": "integer"
-          },
-          "pendingLiabilityCents": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "totals": {
-        "properties": {
-          "accruedCents": {
-            "type": "integer"
-          },
-          "applied": {
-            "type": "integer"
-          },
-          "approved": {
-            "type": "integer"
-          },
-          "paidCents": {
-            "type": "integer"
-          },
-          "pendingCents": {
-            "type": "integer"
-          },
-          "suspended": {
-            "type": "integer"
-          },
-          "total": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
+        ]
       }
     }
   }
