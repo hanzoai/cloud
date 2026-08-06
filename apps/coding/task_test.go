@@ -140,11 +140,65 @@ func TestTask_RefusesCleartextByDefault(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL) // http://
 	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "")
+	// The repo is what makes this POST credential-bearing: with no CloneURL the
+	// credential never reaches the wire, so there would be no secret for the
+	// cleartext guard to protect and nothing for this test to prove.
 	_, err := runner{}.Run(context.Background(), "acme", "u", RunRequest{
+		CloneURL: "https://git.hanzo.ai/v1/git/acme/api.git", Branch: "agent/abc123",
 		CredUser: "x", CredToken: "sk-SECRET",
 	}, nil)
 	if err == nil {
 		t.Fatal("cleartext coding POST must fail closed by default")
+	}
+	if strings.Contains(err.Error(), "sk-SECRET") {
+		t.Fatalf("error must not leak the credential: %v", err)
+	}
+}
+
+// A run with NO repo carries no credential, so it is not a "secret" call and the
+// cleartext guard must not refuse it — otherwise every research and bare-exec run
+// is blocked by a rule written to protect a git token that is not there.
+func TestTask_NoRepoRunIsNotSecret(t *testing.T) {
+	var raw []byte
+	srv := ndjsonServer(t, []string{`{"type":"result","ok":true}`}, nil, &raw)
+	defer srv.Close()
+	t.Setenv("BOT_GATEWAY_URL", srv.URL) // http://
+	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "")
+	res, err := runner{}.Run(context.Background(), "acme", "u", RunRequest{
+		Prompt: "read the docs and summarise", Tool: "python", Desktop: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("a repo-less run must not be refused as cleartext-secret: %v", err)
+	}
+	if !res.OK {
+		t.Fatal("expected the terminal result to carry through")
+	}
+	// The wire says what the run is, and says nothing about git.
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("body was not JSON: %v", err)
+	}
+	if got["tool"] != "python" || got["desktop"] != true {
+		t.Fatalf("tool/desktop did not reach the runtime: %#v", got)
+	}
+	for _, k := range []string{"credential", "cloneUrl", "branch", "baseBranch"} {
+		if _, ok := got[k]; ok {
+			t.Fatalf("a repo-less run must not put %q on the wire: %#v", k, got)
+		}
+	}
+}
+
+// A credential with no repo is a caller bug, and it is refused at the door rather
+// than trimmed in silence.
+func TestTask_RefusesCredentialWithoutRepo(t *testing.T) {
+	srv := ndjsonServer(t, []string{`{"type":"result","ok":true}`}, nil, nil)
+	defer srv.Close()
+	t.Setenv("BOT_GATEWAY_URL", strings.Replace(srv.URL, "http://", "https://", 1))
+	_, err := runner{}.Run(context.Background(), "acme", "u", RunRequest{
+		Prompt: "x", CredUser: "x", CredToken: "sk-SECRET",
+	}, nil)
+	if err == nil {
+		t.Fatal("a credential with no repo must be refused")
 	}
 	if strings.Contains(err.Error(), "sk-SECRET") {
 		t.Fatalf("error must not leak the credential: %v", err)
