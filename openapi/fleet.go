@@ -41,7 +41,7 @@ import (
 // subsystem and 116 app binaries that each project their OWN router when they are
 // BUILT. What the host serves is the weave of those projections ([MountFleet]),
 // so nothing in production reads a live router, and the artifact is only as fresh
-// as the last `make -f mk/fleet.mk describe-apps`. It shipped stale — one binary
+// as the last `make -f mk/fleet.mk subsets`. It shipped stale — one binary
 // answered /v1/billing/gpu/eligibility while publishing /v1/billing/gpu-eligibility,
 // because the rename commit did not regenerate the subset.
 //
@@ -87,7 +87,7 @@ func FleetSpec(app *zip.App) (*Document, error) {
 // caller's, because there are two callers and ONE set of files: the drift gate
 // reads the working tree it is about to compare against (openapi/weave_test.go),
 // and the light host reads what it embedded from that same tree at build time
-// (plugin.Spec). Neither is a second source — surface-check regenerates the files
+// (plugin.Spec). Neither is a second source — check regenerates the files
 // both read, from source, and fails on any diff.
 //
 // A missing subset is refused rather than skipped. Skipping it would publish a
@@ -115,7 +115,7 @@ func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
 	for _, name := range apps {
 		raw := read(name)
 		if len(raw) == 0 {
-			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk describe-apps`", name)
+			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk subsets`", name)
 		}
 		var doc Document
 		if err := json.Unmarshal(raw, &doc); err != nil {
