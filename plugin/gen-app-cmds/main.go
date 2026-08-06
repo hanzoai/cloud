@@ -9,10 +9,21 @@
 // manifest.Apps — not a re-parse of the source text) and:
 //
 //	SCAFFOLDS  a plugin/<name>/main.go for a manifest app that has none, the lean
-//	           one-app form (import apps/<name>, mount <name>.Mount, Free), and
+//	           one-app form (import apps/<name>, mount <name>.Mount, Free),
+//	WRITES     that app's apps/<pkg>/Makefile, the two lines naming which apps the
+//	           package backs and including the one build contract, and
 //	VALIDATES  the two sets are in bijection — every app has a command, and every
 //	           app command is a manifest app — so the light host can never route
 //	           to a binary that is not there, nor a binary go unrouted.
+//
+// The Makefile is written here because it is the SAME manifest row that decides
+// it, and because the alternative was measured: `sandbox` was added with a main
+// and no Makefile, so `make describe` had no rule to run for it, so it published
+// no OpenAPI subset, so `make openapi` failed on an app that was otherwise
+// complete. Every app Makefile already CLAIMED this file generated it. That
+// claim was false for as long as a human had to remember the second file, and a
+// generator's header comment that is false is worse than no comment, because the
+// next person believes it.
 //
 // It does NOT rewrite an existing main: that file is SOURCE, hand-edited the
 // moment an app needs a Shutdown hook, an OwnsHealth, a whole-app App grant, a
@@ -27,9 +38,12 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud/manifest"
@@ -67,21 +81,51 @@ func main() {
 	}
 
 	// Forward: every manifest app has a command; scaffold the ones that do not.
+	// backs collects, per package directory, the app names that package serves —
+	// plural because one package can back several apps (account serves two), and
+	// because the Makefile's APPS variable has always been a list even while every
+	// entry happened to hold a single name.
+	//
+	// The package comes from the app's OWN main, not from pkgOf: pkgOf is
+	// consulted only when scaffolding a main that does not exist yet, so it is
+	// silent about every app already committed. The main states which package it
+	// mounts, for scaffolded and hand-written alike, so that is what is read.
 	want := make(map[string]bool, len(manifest.Apps))
+	backs := make(map[string][]string, len(manifest.Apps))
 	for _, a := range manifest.Apps {
 		want[a.Name] = true
 		mainGo := filepath.Join(root, "plugin", a.Name, "main.go")
-		if _, err := os.Stat(mainGo); err == nil {
-			continue // exists: it is source, leave it.
+		if _, err := os.Stat(mainGo); err != nil {
+			src, err := scaffold(a.Name)
+			if err != nil {
+				die(fmt.Errorf("%s: %w", a.Name, err))
+			}
+			if err := os.MkdirAll(filepath.Dir(mainGo), 0o755); err != nil {
+				die(err)
+			}
+			if err := writeIfChanged(mainGo, src); err != nil {
+				die(err)
+			}
 		}
-		src, err := scaffold(a.Name)
+		// An existing main is SOURCE and is left alone — but it is still read,
+		// because it is the thing that says which package this app mounts.
+		pkg, err := pkgFromMain(root, a.Name, mainGo)
 		if err != nil {
 			die(fmt.Errorf("%s: %w", a.Name, err))
 		}
-		if err := os.MkdirAll(filepath.Dir(mainGo), 0o755); err != nil {
-			die(err)
+		if pkg != "" {
+			backs[pkg] = append(backs[pkg], a.Name)
 		}
-		if err := writeIfChanged(mainGo, src); err != nil {
+	}
+
+	// The third leg: the package's Makefile, naming the apps it backs and
+	// including the one build contract. Without it `make describe` has no rule to
+	// run for that app, so it publishes no OpenAPI subset, so the fleet weave
+	// fails on an app that is otherwise complete.
+	for pkg, apps := range backs {
+		sort.Strings(apps)
+		mk := filepath.Join(root, "apps", pkg, "Makefile")
+		if err := writeIfChanged(mk, []byte(fmt.Sprintf(makefile, strings.Join(apps, " ")))); err != nil {
 			die(err)
 		}
 	}
@@ -108,6 +152,58 @@ func main() {
 			strings.Join(orphans, ",")))
 	}
 }
+
+// pkgFromMain reads which apps/<pkg> directory a plugin main's app lives in.
+//
+// It parses the file rather than matching text: an import can be aliased, can
+// sit in any group, and a string that looks like the path can appear in a
+// comment. go/parser in ImportsOnly mode answers the question the file actually
+// answers, and costs nothing at this scale.
+//
+// An app with NEITHER an apps/ import nor an apps/<name> directory is external:
+// its code lives in its own module (hanzoai/authz, hanzoai/licensing,
+// hanzoai/metrics), wired into the fleet but built and described over there. It
+// returns "" and the caller writes no Makefile — there is no directory of ours
+// for one to sit in.
+//
+// That is derived rather than listed on purpose. mk/fleet.mk names those three
+// in EXTERNAL, and a second copy of the list here would be one more place to
+// forget on the day a fourth arrives. "Has no package directory in this repo" is
+// the same fact, and it maintains itself.
+func pkgFromMain(root, name, path string) (string, error) {
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+	if err != nil {
+		return "", err
+	}
+	const want = modPath + "/apps/"
+	for _, im := range f.Imports {
+		p, err := strconv.Unquote(im.Path.Value)
+		if err != nil || !strings.HasPrefix(p, want) {
+			continue
+		}
+		// The app package itself, never a subpackage of it (apps/x/wire).
+		if rest := p[len(want):]; rest != "" && !strings.Contains(rest, "/") {
+			return rest, nil
+		}
+	}
+	if fi, err := os.Stat(filepath.Join(root, "apps", name)); err == nil && fi.IsDir() {
+		return name, nil
+	}
+	return "", nil // external module — built and described in its own repo
+}
+
+// makefile is the whole build contract for an app package: which apps it backs,
+// and the one file that says what build/test/vet/describe mean. Every app has
+// the same two lines because there is one way to build an app.
+const makefile = `# Generated by plugin/gen-app-cmds. DO NOT EDIT.
+#
+# The build contract is mk/plugin.mk — one file carrying every target an app
+# needs: build, test, vet, openapi, clean. This names the app(s) this package
+# backs and includes it. Written from the same manifest.Apps rows that write
+# plugin/<app>/main.go, so an app cannot have a main and no Makefile.
+APPS := %s
+include ../../mk/plugin.mk
+`
 
 // scaffold renders the lean one-app main for a new subsystem.
 func scaffold(name string) ([]byte, error) {

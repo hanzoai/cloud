@@ -41896,12 +41896,6 @@ paths:
       operationId: get_meet
       summary: The call client
       x-app: meet
-    options:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: options_meet
-      summary: Not served by the call client
-      x-app: meet
     patch:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -41918,12 +41912,6 @@ paths:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: put_meet
-      summary: Not served by the call client
-      x-app: meet
-    trace:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: trace_meet
       summary: Not served by the call client
       x-app: meet
   /meet/{wildcard1}:
@@ -41956,18 +41944,6 @@ paths:
         schema:
           type: string
       summary: The call client's assets and client-side routes
-      x-app: meet
-    options:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: options_meet_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the call client
       x-app: meet
     patch:
       description: 'Published because this address accepts every method, but a static
@@ -42005,18 +41981,6 @@ paths:
           type: string
       summary: Not served by the call client
       x-app: meet
-    trace:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: trace_meet_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the call client
-      x-app: meet
   /tasks:
     delete:
       description: 'Published because this address accepts every method, but a static
@@ -42031,12 +41995,6 @@ paths:
         This is the tasks console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.
       operationId: get_tasks
       summary: The tasks console
-      x-app: tasks
-    options:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: options_tasks
-      summary: Not served by the tasks console
       x-app: tasks
     patch:
       description: 'Published because this address accepts every method, but a static
@@ -42054,12 +42012,6 @@ paths:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: put_tasks
-      summary: Not served by the tasks console
-      x-app: tasks
-    trace:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: trace_tasks
       summary: Not served by the tasks console
       x-app: tasks
   /tasks/{wildcard1}:
@@ -42092,18 +42044,6 @@ paths:
         schema:
           type: string
       summary: The tasks console's assets and client-side routes
-      x-app: tasks
-    options:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: options_tasks_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the tasks console
       x-app: tasks
     patch:
       description: 'Published because this address accepts every method, but a static
@@ -42141,18 +42081,6 @@ paths:
           type: string
       summary: Not served by the tasks console
       x-app: tasks
-    trace:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: trace_tasks_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the tasks console
-      x-app: tasks
   /tracker:
     delete:
       description: 'Published because this address accepts every method, but a static
@@ -42167,12 +42095,6 @@ paths:
         This is the tracker board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.
       operationId: get_tracker
       summary: The tracker board
-      x-app: tracker
-    options:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: options_tracker
-      summary: Not served by the tracker board
       x-app: tracker
     patch:
       description: 'Published because this address accepts every method, but a static
@@ -42190,12 +42112,6 @@ paths:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: put_tracker
-      summary: Not served by the tracker board
-      x-app: tracker
-    trace:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: trace_tracker
       summary: Not served by the tracker board
       x-app: tracker
   /tracker/{wildcard1}:
@@ -42229,18 +42145,6 @@ paths:
           type: string
       summary: The tracker board's assets and client-side routes
       x-app: tracker
-    options:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: options_tracker_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the tracker board
-      x-app: tracker
     patch:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -42269,18 +42173,6 @@ paths:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: put_tracker_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the tracker board
-      x-app: tracker
-    trace:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: trace_tracker_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -53356,26 +53248,6 @@ paths:
       tags:
       - bot
       x-app: bots
-    options:
-      description: |-
-        Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
-
-        This is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bots.
-
-        A validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.
-
-        One registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.
-      operationId: options_v1_bot_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Relay one of the bot runtime's own operational paths
-      tags:
-      - bot
-      x-app: bots
     patch:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
@@ -53426,26 +53298,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.
       operationId: put_v1_bot_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Relay one of the bot runtime's own operational paths
-      tags:
-      - bot
-      x-app: bots
-    trace:
-      description: |-
-        Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it as /health.
-
-        This is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bots.
-
-        A validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.
-
-        One registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.
-      operationId: trace_v1_bot_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -56855,22 +56707,6 @@ paths:
       tags:
       - collections
       x-app: base
-    options:
-      description: |-
-        Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.
-
-        The path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.
-
-        AUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.
-
-        This is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.
-
-        One registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.
-      operationId: options_v1_collections
-      summary: The org's Base content types
-      tags:
-      - collections
-      x-app: base
     patch:
       description: |-
         Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.
@@ -56919,22 +56755,6 @@ paths:
       tags:
       - collections
       x-app: base
-    trace:
-      description: |-
-        Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.
-
-        The path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.
-
-        AUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.
-
-        This is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.
-
-        One registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.
-      operationId: trace_v1_collections
-      summary: The org's Base content types
-      tags:
-      - collections
-      x-app: base
   /v1/collections/{wildcard1}:
     delete:
       description: |-
@@ -56974,30 +56794,6 @@ paths:
 
         One registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.
       operationId: get_v1_collections_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: One Base content type, and its records
-      tags:
-      - collections
-      x-app: base
-    options:
-      description: |-
-        Reads and writes below the collections root: `meta/scaffolds` is the field-template palette a new content type is built from, `<name>` is one content type (view, update, delete), `<name>/records` is that type's rows (list, create) and `<name>/records/<id>` is one row (get, update, delete). This is the data plane behind the console's Records browser.
-
-        Any other shape below /v1/collections is refused with 404 before it is forwarded, so the wildcard admits exactly those five addresses and nothing more.
-
-        The path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.
-
-        AUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.
-
-        This is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.
-
-        One registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.
-      operationId: options_v1_collections_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -57070,30 +56866,6 @@ paths:
 
         One registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.
       operationId: put_v1_collections_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: One Base content type, and its records
-      tags:
-      - collections
-      x-app: base
-    trace:
-      description: |-
-        Reads and writes below the collections root: `meta/scaffolds` is the field-template palette a new content type is built from, `<name>` is one content type (view, update, delete), `<name>/records` is that type's rows (list, create) and `<name>/records/<id>` is one row (get, update, delete). This is the data plane behind the console's Records browser.
-
-        Any other shape below /v1/collections is refused with 404 before it is forwarded, so the wildcard admits exactly those five addresses and nothing more.
-
-        The path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.
-
-        AUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.
-
-        This is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.
-
-        One registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.
-      operationId: trace_v1_collections_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -62782,24 +62554,6 @@ paths:
       tags:
       - dns
       x-app: dns
-    options:
-      description: |-
-        Published because this address accepts every method, but the DNS surface routes nothing here: no zone or record is read or changed. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
-
-        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
-
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
-      operationId: options_v1_dns_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the DNS surface
-      tags:
-      - dns
-      x-app: dns
     patch:
       description: |-
         Amends a DNS zone or record on the Hanzo DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
@@ -62851,24 +62605,6 @@ paths:
         schema:
           type: string
       summary: Replace a DNS zone or record
-      tags:
-      - dns
-      x-app: dns
-    trace:
-      description: |-
-        Published because this address accepts every method, but the DNS surface routes nothing here: no zone or record is read or changed. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
-
-        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
-
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
-      operationId: trace_v1_dns_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the DNS surface
       tags:
       - dns
       x-app: dns
@@ -63129,20 +62865,6 @@ paths:
       tags:
       - download
       x-app: exec
-    options:
-      description: |-
-        The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_download
-      summary: The artifact download surface
-      tags:
-      - download
-      x-app: exec
     patch:
       description: |-
         The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.
@@ -63185,20 +62907,6 @@ paths:
       tags:
       - download
       x-app: exec
-    trace:
-      description: |-
-        The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_download
-      summary: The artifact download surface
-      tags:
-      - download
-      x-app: exec
   /v1/download/{wildcard1}:
     delete:
       description: |-
@@ -63230,26 +62938,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: get_v1_download_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Download a file a run produced
-      tags:
-      - download
-      x-app: exec
-    options:
-      description: |-
-        Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_download_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -63310,26 +62998,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: put_v1_download_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Download a file a run produced
-      tags:
-      - download
-      x-app: exec
-    trace:
-      description: |-
-        Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_download_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -64217,20 +63885,6 @@ paths:
       tags:
       - exec
       x-app: exec
-    options:
-      description: |-
-        The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_exec
-      summary: Run a code snippet in a sandboxed interpreter
-      tags:
-      - exec
-      x-app: exec
     patch:
       description: |-
         The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.
@@ -64273,20 +63927,6 @@ paths:
       tags:
       - exec
       x-app: exec
-    trace:
-      description: |-
-        The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_exec
-      summary: Run a code snippet in a sandboxed interpreter
-      tags:
-      - exec
-      x-app: exec
   /v1/exec/{wildcard1}:
     delete:
       description: |-
@@ -64318,26 +63958,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: get_v1_exec_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The interpreter's own execution subpaths
-      tags:
-      - exec
-      x-app: exec
-    options:
-      description: |-
-        Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_exec_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -64398,26 +64018,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: put_v1_exec_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The interpreter's own execution subpaths
-      tags:
-      - exec
-      x-app: exec
-    trace:
-      description: |-
-        Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_exec_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -64593,20 +64193,6 @@ paths:
       tags:
       - files
       x-app: exec
-    options:
-      description: |-
-        The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_files
-      summary: The session file surface
-      tags:
-      - files
-      x-app: exec
     patch:
       description: |-
         The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.
@@ -64649,20 +64235,6 @@ paths:
       tags:
       - files
       x-app: exec
-    trace:
-      description: |-
-        The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_files
-      summary: The session file surface
-      tags:
-      - files
-      x-app: exec
   /v1/files/{wildcard1}:
     delete:
       description: |-
@@ -64694,26 +64266,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: get_v1_files_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: List the files in an execution session
-      tags:
-      - files
-      x-app: exec
-    options:
-      description: |-
-        Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_files_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -64774,26 +64326,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: put_v1_files_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: List the files in an execution session
-      tags:
-      - files
-      x-app: exec
-    trace:
-      description: |-
-        Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_files_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -90192,37 +89724,6 @@ paths:
       tags:
       - org
       x-app: github.com/hanzoai/ai
-    options:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: options_v1_org_settings
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - org
-      x-app: github.com/hanzoai/ai
     patch:
       description: |-
         The HTTP transport binding for the RESTful router-config
@@ -90316,37 +89817,6 @@ paths:
       tags:
       - org
       x-app: github.com/hanzoai/ai
-    trace:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: trace_v1_org_settings
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - org
-      x-app: github.com/hanzoai/ai
   /v1/org/settings/list:
     delete:
       description: |-
@@ -90405,37 +89875,6 @@ paths:
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
       operationId: get_v1_org_settings_list
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - org
-      x-app: github.com/hanzoai/ai
-    options:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: options_v1_org_settings_list
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -90529,37 +89968,6 @@ paths:
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
       operationId: put_v1_org_settings_list
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - org
-      x-app: github.com/hanzoai/ai
-    trace:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: trace_v1_org_settings_list
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -96653,37 +96061,6 @@ paths:
       tags:
       - router
       x-app: github.com/hanzoai/ai
-    options:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: options_v1_router_artifact-meta
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
     patch:
       description: |-
         The HTTP transport binding for the RESTful router-config
@@ -96777,37 +96154,6 @@ paths:
       tags:
       - router
       x-app: github.com/hanzoai/ai
-    trace:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: trace_v1_router_artifact-meta
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
   /v1/router/data:
     delete:
       operationId: delete_v1_router_data
@@ -96879,37 +96225,6 @@ paths:
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
       operationId: get_v1_router_defaults
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
-    options:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: options_v1_router_defaults
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -97003,37 +96318,6 @@ paths:
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
       operationId: put_v1_router_defaults
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
-    trace:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: trace_v1_router_defaults
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -97139,37 +96423,6 @@ paths:
       tags:
       - router
       x-app: github.com/hanzoai/ai
-    options:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: options_v1_router_ledger
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
     patch:
       description: |-
         The HTTP transport binding for the RESTful router-config
@@ -97263,37 +96516,6 @@ paths:
       tags:
       - router
       x-app: github.com/hanzoai/ai
-    trace:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: trace_v1_router_ledger
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
   /v1/router/policy:
     delete:
       description: |-
@@ -97352,37 +96574,6 @@ paths:
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
       operationId: get_v1_router_policy
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
-    options:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: options_v1_router_policy
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -97481,37 +96672,6 @@ paths:
       tags:
       - router
       x-app: github.com/hanzoai/ai
-    trace:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: trace_v1_router_policy
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
   /v1/router/rewards:
     delete:
       description: |-
@@ -97570,37 +96730,6 @@ paths:
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
       operationId: get_v1_router_rewards
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
-    options:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: options_v1_router_rewards
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -97694,37 +96823,6 @@ paths:
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
       operationId: put_v1_router_rewards
-      summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
-        and /v1/org/settings[/list]).
-      tags:
-      - router
-      x-app: github.com/hanzoai/ai
-    trace:
-      description: |-
-        The HTTP transport binding for the RESTful router-config
-        nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and
-        /v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —
-        the SAME canonical ZAP gateway registry (zap_registry.go) that
-        handleGatewayHTTPRequest serves over the gateway transport. The native ZAP
-        handler is the ONE and ONLY implementation of these routes; this is purely the
-        api.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the
-        split-brain the router refactor removed stays removed.
-
-        Why a bridge and not a twin controller method: every other migrated route
-        (get-records, get-connections, …) carries BOTH a beego controller method and a
-        ZAP handler — the exact dual-impl drift that silently NULLed customer router
-        settings (the update-router-policy data-wipe). Routing these nouns through the
-        ZAP handler over one adapter keeps a single source of truth.
-
-        Identity is the request's own Bearer credential (Authorization header), which
-        the native handlers resolve exactly as the gateway does — every caller
-        (console, chat, app) already sends it. The dispatched handler returns a ZAP
-        message whose status is field 0 and body is field 4 (BuildCloudResponse /
-        BuildGatewayResponse layout); both are relayed verbatim. The route is mapped
-        "*" (any verb) because the native handler is method-aware: /v1/router/policy
-        splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
-        405 for a verb it does not own.
-      operationId: trace_v1_router_rewards
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -98153,6 +97251,481 @@ paths:
       tags:
       - s3
       x-app: storage
+  /v1/sandbox/boxes:
+    get:
+      description: Lists this org's boxes with their class, status, project, image
+        and volume. Filterable by project and status. Scoped to the caller's org by
+        the validated identity, never by a value in the request.
+      operationId: get_v1_sandbox_boxes
+      summary: Every box the caller's org holds
+      tags:
+      - sandbox
+      x-app: sandbox
+    post:
+      description: |-
+        Claims an isolated execution box for the caller's org and returns it. A box is one pod running the box daemon with the project's volume attached: `exec` is a short-lived interpreter with no volume and no network, `dev` adds the project checkout and a toolchain, `desktop` adds a virtual display for computer use.
+
+        A claim comes from a WARM POOL where one is available, so the usual cost is a label patch and a volume attach rather than an image pull.
+
+        One live box per project: the project volume is single-attach, so a second concurrent claim is REFUSED with the id of the box already holding it rather than silently given an empty volume that reinstalls everything.
+      operationId: post_v1_sandbox_boxes
+      summary: Claim a sandbox box
+      tags:
+      - sandbox
+      x-app: sandbox
+  /v1/sandbox/boxes/{id}:
+    delete:
+      description: Releases the pod. The project VOLUME is kept — it holds the checkout
+        and the dependency caches, which is what makes the next claim fast. Pass purge=1
+        to drop the volume too; that is irreversible and deletes uncommitted work.
+      operationId: delete_v1_sandbox_boxes_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Release a box
+      tags:
+      - sandbox
+      x-app: sandbox
+    get:
+      description: The box's current state, or 404 if this org does not hold it.
+      operationId: get_v1_sandbox_boxes_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: One box
+      tags:
+      - sandbox
+      x-app: sandbox
+  /v1/sandbox/boxes/{id}/fs:
+    delete:
+      description: The root of the box's project volume — list what is there, or write
+        into it without naming a subpath. Same forwarding and same path confinement
+        as the entries below it; this is the route for the directory itself, which
+        a wildcard cannot address because there is no remainder to match.
+      operationId: delete_v1_sandbox_boxes_by_id_fs
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: The box's project directory
+      tags:
+      - sandbox
+      x-app: sandbox
+    get:
+      description: The root of the box's project volume — list what is there, or write
+        into it without naming a subpath. Same forwarding and same path confinement
+        as the entries below it; this is the route for the directory itself, which
+        a wildcard cannot address because there is no remainder to match.
+      operationId: get_v1_sandbox_boxes_by_id_fs
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: The box's project directory
+      tags:
+      - sandbox
+      x-app: sandbox
+    patch:
+      description: The root of the box's project volume — list what is there, or write
+        into it without naming a subpath. Same forwarding and same path confinement
+        as the entries below it; this is the route for the directory itself, which
+        a wildcard cannot address because there is no remainder to match.
+      operationId: patch_v1_sandbox_boxes_by_id_fs
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: The box's project directory
+      tags:
+      - sandbox
+      x-app: sandbox
+    post:
+      description: The root of the box's project volume — list what is there, or write
+        into it without naming a subpath. Same forwarding and same path confinement
+        as the entries below it; this is the route for the directory itself, which
+        a wildcard cannot address because there is no remainder to match.
+      operationId: post_v1_sandbox_boxes_by_id_fs
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: The box's project directory
+      tags:
+      - sandbox
+      x-app: sandbox
+    put:
+      description: The root of the box's project volume — list what is there, or write
+        into it without naming a subpath. Same forwarding and same path confinement
+        as the entries below it; this is the route for the directory itself, which
+        a wildcard cannot address because there is no remainder to match.
+      operationId: put_v1_sandbox_boxes_by_id_fs
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: The box's project directory
+      tags:
+      - sandbox
+      x-app: sandbox
+  /v1/sandbox/boxes/{id}/fs/{wildcard1}:
+    delete:
+      description: |-
+        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
+
+        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
+      operationId: delete_v1_sandbox_boxes_by_id_fs_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: The box's filesystem
+      tags:
+      - sandbox
+      x-app: sandbox
+    get:
+      description: |-
+        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
+
+        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
+      operationId: get_v1_sandbox_boxes_by_id_fs_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: The box's filesystem
+      tags:
+      - sandbox
+      x-app: sandbox
+    patch:
+      description: |-
+        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
+
+        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
+      operationId: patch_v1_sandbox_boxes_by_id_fs_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: The box's filesystem
+      tags:
+      - sandbox
+      x-app: sandbox
+    post:
+      description: |-
+        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
+
+        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
+      operationId: post_v1_sandbox_boxes_by_id_fs_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: The box's filesystem
+      tags:
+      - sandbox
+      x-app: sandbox
+    put:
+      description: |-
+        Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.
+
+        NOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.
+      operationId: put_v1_sandbox_boxes_by_id_fs_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: The box's filesystem
+      tags:
+      - sandbox
+      x-app: sandbox
+  /v1/sandbox/boxes/{id}/git/{wildcard1}:
+    delete:
+      description: Clones a repository into the box's project volume, or commits and
+        pushes the branch the agent worked on. Git credentials travel in the request
+        BODY only — never a URL, never a command line, never a log.
+      operationId: delete_v1_sandbox_boxes_by_id_git_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Clone into the box, or push what it changed
+      tags:
+      - sandbox
+      x-app: sandbox
+    get:
+      description: Clones a repository into the box's project volume, or commits and
+        pushes the branch the agent worked on. Git credentials travel in the request
+        BODY only — never a URL, never a command line, never a log.
+      operationId: get_v1_sandbox_boxes_by_id_git_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Clone into the box, or push what it changed
+      tags:
+      - sandbox
+      x-app: sandbox
+    patch:
+      description: Clones a repository into the box's project volume, or commits and
+        pushes the branch the agent worked on. Git credentials travel in the request
+        BODY only — never a URL, never a command line, never a log.
+      operationId: patch_v1_sandbox_boxes_by_id_git_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Clone into the box, or push what it changed
+      tags:
+      - sandbox
+      x-app: sandbox
+    post:
+      description: Clones a repository into the box's project volume, or commits and
+        pushes the branch the agent worked on. Git credentials travel in the request
+        BODY only — never a URL, never a command line, never a log.
+      operationId: post_v1_sandbox_boxes_by_id_git_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Clone into the box, or push what it changed
+      tags:
+      - sandbox
+      x-app: sandbox
+    put:
+      description: Clones a repository into the box's project volume, or commits and
+        pushes the branch the agent worked on. Git credentials travel in the request
+        BODY only — never a URL, never a command line, never a log.
+      operationId: put_v1_sandbox_boxes_by_id_git_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Clone into the box, or push what it changed
+      tags:
+      - sandbox
+      x-app: sandbox
+  /v1/sandbox/boxes/{id}/proc/{wildcard1}:
+    delete:
+      description: Runs a command in the box's project directory and returns its exit
+        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
+        program — the HTTP status stays 200, because 'the tests failed' and 'the box
+        is broken' are different facts.
+      operationId: delete_v1_sandbox_boxes_by_id_proc_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Run a command in the box
+      tags:
+      - sandbox
+      x-app: sandbox
+    get:
+      description: Runs a command in the box's project directory and returns its exit
+        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
+        program — the HTTP status stays 200, because 'the tests failed' and 'the box
+        is broken' are different facts.
+      operationId: get_v1_sandbox_boxes_by_id_proc_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Run a command in the box
+      tags:
+      - sandbox
+      x-app: sandbox
+    patch:
+      description: Runs a command in the box's project directory and returns its exit
+        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
+        program — the HTTP status stays 200, because 'the tests failed' and 'the box
+        is broken' are different facts.
+      operationId: patch_v1_sandbox_boxes_by_id_proc_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Run a command in the box
+      tags:
+      - sandbox
+      x-app: sandbox
+    post:
+      description: Runs a command in the box's project directory and returns its exit
+        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
+        program — the HTTP status stays 200, because 'the tests failed' and 'the box
+        is broken' are different facts.
+      operationId: post_v1_sandbox_boxes_by_id_proc_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Run a command in the box
+      tags:
+      - sandbox
+      x-app: sandbox
+    put:
+      description: Runs a command in the box's project directory and returns its exit
+        code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed
+        program — the HTTP status stays 200, because 'the tests failed' and 'the box
+        is broken' are different facts.
+      operationId: put_v1_sandbox_boxes_by_id_proc_by_wildcard1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Run a command in the box
+      tags:
+      - sandbox
+      x-app: sandbox
+  /v1/sandbox/boxes/{id}/resume:
+    post:
+      description: Claims a pod and reattaches the project volume, optionally moving
+        to a different git ref. The checkout and the caches are already on the disk.
+      operationId: post_v1_sandbox_boxes_by_id_resume
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Resume a suspended box
+      tags:
+      - sandbox
+      x-app: sandbox
+  /v1/sandbox/boxes/{id}/suspend:
+    post:
+      description: Releases the pod and keeps the volume, so a later resume is a fetch
+        and a checkout rather than a clone and a cold install.
+      operationId: post_v1_sandbox_boxes_by_id_suspend
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Suspend a box, keeping its disk
+      tags:
+      - sandbox
+      x-app: sandbox
   /v1/sbom:
     post:
       description: |-
@@ -98571,21 +98144,6 @@ paths:
       tags:
       - sentry
       x-app: o11y
-    options:
-      description: 'Published because this address accepts every method, but the Sentry
-        face routes nothing here: the request reaches the runtime as an unrouted path
-        and no issue, event or trace is touched.'
-      operationId: options_v1_sentry_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the Sentry face
-      tags:
-      - sentry
-      x-app: o11y
     patch:
       description: |-
         The Sentry face carries NO route for a partial update. The wildcard admits every method, so this operation exists as an address, but nothing behind it answers and a request lands on the runtime as an unrouted path.
@@ -98635,21 +98193,6 @@ paths:
         schema:
           type: string
       summary: Move an error issue through its lifecycle
-      tags:
-      - sentry
-      x-app: o11y
-    trace:
-      description: 'Published because this address accepts every method, but the Sentry
-        face routes nothing here: the request reaches the runtime as an unrouted path
-        and no issue, event or trace is touched.'
-      operationId: trace_v1_sentry_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the Sentry face
       tags:
       - sentry
       x-app: o11y
@@ -100943,15 +100486,6 @@ paths:
       tags:
       - tasks
       x-app: tasks
-    options:
-      description: 'Published because this address accepts every method, but the engine
-        routes nothing here: the request arrives as an unrouted path and no workflow
-        is read or started.'
-      operationId: options_v1_tasks
-      summary: Not routed by the durable engine
-      tags:
-      - tasks
-      x-app: tasks
     patch:
       description: |-
         Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.
@@ -100979,15 +100513,6 @@ paths:
         A 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.
       operationId: put_v1_tasks
       summary: Redirect to the tasks API root
-      tags:
-      - tasks
-      x-app: tasks
-    trace:
-      description: 'Published because this address accepts every method, but the engine
-        routes nothing here: the request arrives as an unrouted path and no workflow
-        is read or started.'
-      operationId: trace_v1_tasks
-      summary: Not routed by the durable engine
       tags:
       - tasks
       x-app: tasks
@@ -101031,21 +100556,6 @@ paths:
         schema:
           type: string
       summary: Read workflow state from the durable engine
-      tags:
-      - tasks
-      x-app: tasks
-    options:
-      description: 'Published because this address accepts every method, but the engine
-        routes nothing here: the request arrives as an unrouted path and no workflow
-        is read or started.'
-      operationId: options_v1_tasks_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not routed by the durable engine
       tags:
       - tasks
       x-app: tasks
@@ -101112,21 +100622,6 @@ paths:
         schema:
           type: string
       summary: Not served by the engine
-      tags:
-      - tasks
-      x-app: tasks
-    trace:
-      description: 'Published because this address accepts every method, but the engine
-        routes nothing here: the request arrives as an unrouted path and no workflow
-        is read or started.'
-      operationId: trace_v1_tasks_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not routed by the durable engine
       tags:
       - tasks
       x-app: tasks
@@ -102508,20 +102003,6 @@ paths:
       tags:
       - upload
       x-app: exec
-    options:
-      description: |-
-        Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_upload
-      summary: Upload a file into an execution session
-      tags:
-      - upload
-      x-app: exec
     patch:
       description: |-
         Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.
@@ -102564,20 +102045,6 @@ paths:
       tags:
       - upload
       x-app: exec
-    trace:
-      description: |-
-        Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_upload
-      summary: Upload a file into an execution session
-      tags:
-      - upload
-      x-app: exec
   /v1/upload/{wildcard1}:
     delete:
       description: |-
@@ -102609,26 +102076,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: get_v1_upload_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The upload surface's own subpaths
-      tags:
-      - upload
-      x-app: exec
-    options:
-      description: |-
-        Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: options_v1_upload_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -102689,26 +102136,6 @@ paths:
 
         One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
       operationId: put_v1_upload_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The upload surface's own subpaths
-      tags:
-      - upload
-      x-app: exec
-    trace:
-      description: |-
-        Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.
-
-        NOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.
-
-        AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.
-
-        One registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.
-      operationId: trace_v1_upload_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -104196,22 +103623,6 @@ paths:
       tags:
       - websearch
       x-app: websearch
-    options:
-      description: |-
-        Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.
-
-        Served in-process by a Go meta-search over keyless public engines, never a third-party search API and never a search key. The enabled engines run concurrently and their hits are merged, deduplicated by normalised URL (host and path, trailing slash and fragment dropped, query kept — distinct queries are distinct results) and capped at 20. Ranking is deterministic rather than scored: the first configured engine's hits lead.
-
-        TWO WAYS IN, one-way equivalent, and no third: a validated principal — the same gate the whole data plane uses — passes straight through, and a caller without one must present the shared service key as X-API-Key, compared in constant time. A deployment with no key configured answers 503 rather than opening the surface to everyone, and a missing or wrong key is 401. It is never an open proxy. There is no tenant scoping beyond that gate, and there is nothing to scope: the results are public web pages, identical for every caller.
-
-        It fails SOFT on the engines and closed only on the gate. An engine that errors or is served a bot-challenge page contributes zero results and never fails the request, so an empty `results` is a real answer — nothing was found — and not an outage. The array is always present, never null.
-
-        The one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.
-      operationId: options_v1_websearch_search
-      summary: Keyless web meta-search, in the SearXNG JSON envelope.
-      tags:
-      - websearch
-      x-app: websearch
     patch:
       description: |-
         Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.
@@ -104256,22 +103667,6 @@ paths:
 
         The one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.
       operationId: put_v1_websearch_search
-      summary: Keyless web meta-search, in the SearXNG JSON envelope.
-      tags:
-      - websearch
-      x-app: websearch
-    trace:
-      description: |-
-        Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.
-
-        Served in-process by a Go meta-search over keyless public engines, never a third-party search API and never a search key. The enabled engines run concurrently and their hits are merged, deduplicated by normalised URL (host and path, trailing slash and fragment dropped, query kept — distinct queries are distinct results) and capped at 20. Ranking is deterministic rather than scored: the first configured engine's hits lead.
-
-        TWO WAYS IN, one-way equivalent, and no third: a validated principal — the same gate the whole data plane uses — passes straight through, and a caller without one must present the shared service key as X-API-Key, compared in constant time. A deployment with no key configured answers 503 rather than opening the surface to everyone, and a missing or wrong key is 401. It is never an open proxy. There is no tenant scoping beyond that gate, and there is nothing to scope: the results are public web pages, identical for every caller.
-
-        It fails SOFT on the engines and closed only on the gate. An engine that errors or is served a bot-challenge page contributes zero results and never fails the request, so an empty `results` is a real answer — nothing was found — and not an outage. The array is always present, never null.
-
-        The one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.
-      operationId: trace_v1_websearch_search
       summary: Keyless web meta-search, in the SearXNG JSON envelope.
       tags:
       - websearch
@@ -104992,6 +104387,9 @@ tags:
 - description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
     document, vector, search or object store, wired straight into your app.'
   name: s3
+- description: 'Package sandbox is the box scheduler: the control plane for the executor
+    every other subsystem in this binary was already pointing at.'
+  name: sandbox
 - description: 'Package sbom is what is inside a container image: every component,
     resolvable by digest or image ref.'
   name: sbom

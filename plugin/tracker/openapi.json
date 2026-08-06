@@ -27,11 +27,6 @@
         "summary": "The tracker board",
         "description": "Serves the application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tracker/.\n\nThis is the tracker board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request."
       },
-      "options": {
-        "operationId": "options_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      },
       "patch": {
         "operationId": "patch_tracker",
         "summary": "Not served by the tracker board",
@@ -44,11 +39,6 @@
       },
       "put": {
         "operationId": "put_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      },
-      "trace": {
-        "operationId": "trace_tracker",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       }
@@ -73,21 +63,6 @@
         "operationId": "get_tracker_by_wildcard1",
         "summary": "The tracker board's assets and client-side routes",
         "description": "Serves the static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link is a shell load, not a 404.\n\nThe one exception is /tracker/assets/, which holds only content-addressed build output: a name that is not there is a purged chunk, never a route, and answers 404. Everywhere else a path that looks like a missing file answers 200 with the shell, so read the content type rather than the status when a resource seems to be missing.\n\nA bundle that was never built answers 503 under its own name on every path, which is a failed deploy rather than a missing page.\n\nThis is the tracker board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "options": {
-        "operationId": "options_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -131,21 +106,6 @@
       },
       "put": {
         "operationId": "put_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "trace": {
-        "operationId": "trace_tracker_by_wildcard1",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
