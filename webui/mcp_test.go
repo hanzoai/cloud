@@ -258,6 +258,15 @@ func TestDoorlessPluginAnswersItsOwnDoor(t *testing.T) {
 	if res := mcpResult(t, init, manifest.FrameworkMCPPath); res["protocolVersion"] == nil {
 		t.Errorf("initialize: no protocolVersion — %.200s", init.body)
 	}
+
+	// ONE door: an agent must not be able to tell whether zip's route or the
+	// terminal handler carried the answer. A media type that differed would be the
+	// second door reappearing as a header.
+	mounted := call(t, pluginApp(t), http.MethodPost, manifest.FrameworkMCPPath, toolsList)
+	if got.ctype != mounted.ctype {
+		t.Errorf("content-type %q via the terminal handler vs %q via zip's route — one door, one answer",
+			got.ctype, mounted.ctype)
+	}
 }
 
 // Registration order was the suspect and it is innocent — pinned here so the next
