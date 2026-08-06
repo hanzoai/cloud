@@ -255,6 +255,19 @@ func Listening(path string) (bool, error) {
 // because an op declared outside the apps tree still has to be reachable.
 func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error) {
 	Bind()
+	// THE PEER IS SOMETIMES THIS PROCESS. A fused binary mounts many apps, and
+	// the ops of every one of them are registered on the same plane app; commerce
+	// asking commerce for a balance is then a function call wearing an address.
+	// Dialing our own socket for it would encode a value we hold, hand it to the
+	// kernel, and parse it back into a copy — and there is nothing to wake, so
+	// Reach has no work either.
+	//
+	// This is the ONE place that decision is made. A caller says the op's name
+	// and the same op runs; where it runs is not the caller's to know, which is
+	// what keeps "co-resident" from becoming a second spelling of every call.
+	if a := zip.Serving(app); a != nil {
+		return zip.Here[In, Out](ctx, a, op, in)
+	}
 	if err := Reach(ctx, app); err != nil {
 		return nil, err
 	}

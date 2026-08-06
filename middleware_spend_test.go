@@ -142,10 +142,7 @@ var member = map[string]string{
 // these two ever agree again, the leak is back.
 func TestBillableIsNotPrice(t *testing.T) {
 	for _, path := range []string{"/v1/chat/completions", "/v1/messages", "/v1/ai/chat", "/v1/ml/train"} {
-		app := zip.New(zip.Config{})
-		var priced int64
-		app.Post(path, func(c *zip.Ctx) error { priced = DefaultPrice(c); return c.JSON(200, "") })
-		if _, _ = call(t, app, http.MethodPost, path, nil); priced != 0 {
+		if priced := DefaultPrice(http.MethodPost, path); priced != 0 {
 			t.Fatalf("%s: DefaultPrice = %d, want 0 (the subsystem self-meters)", path, priced)
 		}
 		if !Billable(http.MethodPost, path) {

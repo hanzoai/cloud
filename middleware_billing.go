@@ -49,7 +49,15 @@ const meteringProvider = "cloud"
 // When m is nil or not configured (no commerce URL) the gate is a no-op: it
 // returns c.Next() directly so an unconfigured deployment is never blocked.
 // price must not be nil; pass DefaultPrice.
-func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
+//
+// IT COVERS THE ROUTES THAT ARE NOT OPERATIONS, and only those. A typed op is
+// reachable over four transports and this seam sees one of them, so the op seam
+// (Toll) owns it; an UNTYPED handler is reachable over HTTP and nowhere else, so
+// this seam owns that. The two sets are disjoint by construction and the split is
+// not a rule either of them keeps — Toll reads PriceOf on the REQUEST's own path
+// and stands down when it names a declared surface, which is exactly when this
+// gate has already answered.
+func BillingGate(m *metering.Client, price func(method, path string) int64) zip.Handler {
 	if !billingEnabled(m) || price == nil {
 		// No-op passthrough — keeps the middleware chain uniform whether or
 		// not billing is wired, so callers always Use() it unconditionally.
@@ -57,7 +65,7 @@ func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
 	}
 
 	return func(c *zip.Ctx) error {
-		cents := price(c)
+		cents := price(c.Method(), c.Path())
 
 		// A request that is both free (price 0) and on a path we never gate
 		// short-circuits. We still gate priced paths AND any path the operator
@@ -67,7 +75,7 @@ func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
 			return c.Next()
 		}
 
-		in := identityFromCtx(c)
+		in := identity(c, c.Path())
 		// Gate on the actual request price, so the balance check is
 		// available>=price (not merely >0) AND the per-scope spend cap is
 		// measured against this request's cost — the anti-overshoot property the
@@ -216,10 +224,21 @@ func canonicalService(path string) string {
 	return seg
 }
 
-// identityFromCtx builds the commerce billing identity from the gateway-minted
-// headers zip exposes. It agrees with metering.IdentityFromGatewayHeaders because
-// both call the SAME rule (hanzoai/account.Payer), not because two copies are kept
-// in step — so cloud and every other product key the SAME ledger entry:
+// identity builds the commerce billing identity from the gateway-minted headers
+// zip exposes, for the operation served at path.
+//
+// PATH IS AN ARGUMENT because the request's path and the OPERATION's path are the
+// same string only over plain REST. Over MCP the request is POST /mcp and over the
+// ZAP plane it is POST /.well-known/zip/op/<name>, while the operation inside is
+// /v1/<surface>/<verb> — so a service label derived from the request would file a
+// tools/call under no scope at all, and a per-scope spend cap would never bind to
+// it. The MONEY (who pays) comes off the request, because that is where identity
+// is; the SCOPE (what was done) comes off the operation. One builder, so the edge
+// and the op seam can never key two different ledger entries for one call.
+//
+// It agrees with metering.IdentityFromGatewayHeaders because both call the SAME
+// rule (hanzoai/account.Payer), not because two copies are kept in step — so cloud
+// and every other product key the SAME ledger entry:
 //
 //   - User is the ACCOUNT that pays and Org the HOME org whose ledger holds it.
 //     Together they are the money's ADDRESS, resolved ONCE by principal.WalletOf:
@@ -236,7 +255,7 @@ func canonicalService(path string) string {
 // The full "{org}/{sub}" actor identity belongs on the usage audit trail, not
 // the gate — but metering v0.1.0's AuthInput/Usage carry no Actor field, so it
 // is omitted here until the metering module ships the User/Actor split.
-func identityFromCtx(c *zip.Ctx) metering.AuthInput {
+func identity(c *zip.Ctx, path string) metering.AuthInput {
 	w, ok := principal.WalletOf(c)
 	if !ok {
 		return metering.AuthInput{}
@@ -252,7 +271,7 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 		Org:              w.Ledger, // balance check + debit → the HOME org's ledger (who pays)
 		Project:          project,
 		ProjectValidated: projectValidated,
-		Service:          canonicalService(c.Path()),
+		Service:          canonicalService(path),
 	}
 }
 
@@ -265,44 +284,7 @@ func clientIP(c *zip.Ctx) string { return ClientIP(c) }
 // is nil or has no commerce URL (Enabled()==false), making the gate a no-op.
 func billingEnabled(m *metering.Client) bool { return m != nil && m.Enabled() }
 
-// DefaultPrice is cloud's per-request price (in cents) for the edge gate. It holds
-// NO table: it reads the price the surface DECLARED at the composition root
-// (App.Price → PriceOf, see price.go), so the number the gate charges and the
-// number a reviewer approved are the same number, in one place.
-//
-// It used to be the table, and its last line was `return 0` for anything unlisted —
-// which made a new route free forever, silently, because free never errors. That
-// default is gone: an unpriced surface now fails TestPriceDeclared before it can
-// ship. Undeclared still charges nothing HERE (Price.Cents), because a missing
-// declaration must break the build, never a customer's card.
-//
-// Two things it does on its own:
-//
-//   - Health probes are Free regardless of the surface they sit under. A liveness
-//     probe that 402s hides whether the process is up, and /v1/<svc>/health is a
-//     route of the same surface as everything else under /v1/<svc> — so the moment
-//     any surface carries a positive price, its probe has to be exempted here or the
-//     exemption has to be written 111 times.
-//   - A surface declared Metered charges 0, because its meter is downstream: an edge
-//     charge on top of it bills the same work twice. That is Price.Cents's job, not a
-//     prefix list's.
-func DefaultPrice(c *zip.Ctx) int64 {
-	path := c.Path()
-
-	// Liveness/health probes are never billed.
-	if path == "/health" || path == "/healthz" || strings.HasSuffix(path, "/health") {
-		return 0
-	}
-
-	// A read spends nothing, so a read costs nothing — the SAME rule the standing
-	// gate applies (Consumes, price.go). Without it a declared surface price bills
-	// its own listings and its own error pages, which is why every surface in the
-	// fleet was Free: the declaration had no way to say "charge the work, not the
-	// index". Checked before the price so an unpriced read costs nothing either way
-	// and the two paths cannot diverge.
-	if !Consumes(c.Method()) {
-		return 0
-	}
-
-	return PriceOf(path).Cents()
-}
+// DefaultPrice moved to price.go when it stopped taking a request. price.go is
+// where a surface's cost is COMPUTED and this file is where it is APPLIED — the
+// same split spend.go and middleware_spend.go already keep — and the function
+// belonged on the computing side the moment its arguments became two strings.
