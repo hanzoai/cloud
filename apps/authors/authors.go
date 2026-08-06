@@ -68,7 +68,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
@@ -166,7 +165,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "authors")
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:         store,
-		commerce:      newCommerceClient(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		commerce:      newCommerceClient(),
 		forge:         newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
 		badgeBase:     badgeBase(deps),
 		maintainerOrg: maintainerOrgFor(deps),
@@ -177,7 +176,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	routes(app, zapp, s)
 
 	b.Log.Info("authors mounted", "brand", deps.Brand, "badgeBase", s.State.badgeBase,
-		"maintainerOrg", s.State.maintainerOrg, "commerce", s.State.commerce.configured())
+		"maintainerOrg", s.State.maintainerOrg)
 	return nil
 }
 
@@ -338,7 +337,7 @@ func sweepAuthor(s *cloud.Service[state], ctx context.Context, a Author) (checke
 	now := time.Now().Unix()
 	for _, dorg := range orgs {
 		checked++
-		spend, serr := s.State.commerce.spendCents(ctx, dorg, orgSubject(dorg))
+		spend, serr := s.State.commerce.spendCents(ctx, dorg)
 		if serr != nil {
 			s.Log.Warn("authors: spend read failed", "author", a.ID, "deployingOrg", dorg, "err", serr)
 			continue

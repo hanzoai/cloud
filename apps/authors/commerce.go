@@ -18,25 +18,24 @@ import (
 // hole that was shut, so the SHAPE of this interface is load-bearing and
 // TestCommerceSeamIsReadOnly fails if it ever grows one.
 type commerce interface {
-	configured() bool
-	spendCents(ctx context.Context, org, user string) (int64, error)
+	spendCents(ctx context.Context, org string) (int64, error)
 }
 
 // errUnconfigured is the shared sentinel a read against an unwired commerce returns,
 // so accrual stays honestly pending rather than silently earning.
-var errUnconfigured = payout.ErrUnconfigured
+var errNoLedger = payout.ErrNoLedger
 
 // commerceSeam adapts the shared payout.Client onto this program's lowercase seam
 // (Go package-scoped interface methods cannot cross packages). Zero logic — pure
 // delegation, and it delegates exactly one read.
 type commerceSeam struct{ c *payout.Client }
 
-func (s commerceSeam) configured() bool { return s.c.Configured() }
-func (s commerceSeam) spendCents(ctx context.Context, org, user string) (int64, error) {
-	return s.c.SpendCents(ctx, org, user)
+func (s commerceSeam) spendCents(ctx context.Context, org string) (int64, error) {
+	return s.c.SpendCents(ctx, org)
 }
 
-// newCommerceClient builds the production binding, delegating to clients/payout.
-func newCommerceClient(base, token string) commerce {
-	return commerceSeam{payout.NewClient(base, token)}
+// newCommerceClient builds the production binding, delegating to apps/payout. It
+// takes no address: a peer is reached by NAME.
+func newCommerceClient() commerce {
+	return commerceSeam{payout.NewClient()}
 }
