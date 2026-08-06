@@ -14,6 +14,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/o11y/pkg/community"
+	"github.com/hanzoai/o11y/pkg/modules/sentry/implsentry"
 	o11yrt "github.com/hanzoai/o11y/pkg/o11y"
 	o11yapp "github.com/hanzoai/o11y/pkg/query-service/app"
 )
@@ -110,6 +111,17 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 
 	embeddedRuntime = runtime
 	embeddedServer = server
+
+	// Keyed error ingest (pk- → org) for the embedded sentry runtime goes through the
+	// ONE binary-wide key resolver — the same seam /v1/event's out-of-band resolution
+	// uses — so a publishable key attributes errors to the SAME org it attributes
+	// events to. This is what lights sentry.hanzo.ai up with the key that already
+	// feeds analytics + insights: one key, one endpoint, no per-project DSN secret.
+	implsentry.SetIngestKeyResolver(func(ctx context.Context, key string) (string, bool) {
+		org := cloud.ResolvePublishableKeyOrg(ctx, key)
+		return org, org != ""
+	})
+
 	return server.PublicHandler(), nil
 }
 
