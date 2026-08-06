@@ -116,7 +116,12 @@ func Engine(log func(msg string, kv ...any)) Dispatcher {
 // it is why the session is opened HERE rather than inside Run.
 func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
 	org = strings.TrimSpace(org)
-	if org == "" {
+	if !OrgRE.MatchString(org) {
+		// Shape-checked, not merely non-empty. The org becomes a KMS PATH SEGMENT
+		// (credRef) and a git namespace, so an org carrying a separator or a dot
+		// segment would address another tenant's secret. It arrives from the
+		// gateway or the plane already validated; this is the second lock, on the
+		// side that would actually be harmed if the first ever failed.
 		return Accepted{}, fmt.Errorf("coding: a run needs a tenant")
 	}
 	subject := strings.TrimSpace(in.Subject)
@@ -260,7 +265,8 @@ func agentCredential(ctx context.Context, org string) (user, token string, err e
 	return user, token, nil
 }
 
-// credRef addresses the org's sealed agent credential. It mirrors the
+// credRef addresses the org's sealed agent credential. org is shape-checked by
+// Start before it ever reaches here, which is what makes this concatenation safe. It mirrors the
 // integrations KMS layout, which is where an operator seals it today, so this
 // reads the credential that already exists rather than minting a second path
 // for the same secret.

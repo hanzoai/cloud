@@ -33,6 +33,12 @@ import (
 // namespace.
 var RepoRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
+// OrgRE is the tenant-name rule, mirroring the git subsystem's own (git.go
+// orgRE). A run's org is interpolated into a KMS path and a git namespace, so it
+// is shape-checked rather than merely required: a tenant name that can carry a
+// separator or a `..` can address another tenant's secret.
+var OrgRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
 // BranchFor is the ONE branch a run is permitted to write, derived from the
 // session that owns it. It is a pure function of the session id — not a name the
 // caller supplies and not a name the model chooses — which is what lets the
