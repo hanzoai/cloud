@@ -91,6 +91,34 @@ func aiProse() map[string]openapi.Said {
 	return out
 }
 
+// installWebSearch closes the web-search seam over a meta-search function.
+//
+// It takes the searcher as a PARAMETER rather than calling websearch.Search
+// directly so the adapter — the part with the truncation and the field mapping —
+// can be exercised without a network round trip. The production call site passes
+// the real one; a test passes its own and asserts on what the tool actually
+// receives.
+//
+// The mapping is the whole of it: websearch.Result carries Content, the tool
+// contract calls that field Snippet, and a rename that goes unnoticed hands every
+// agent results with empty snippets — which reads as "the web had nothing to say
+// about this" rather than as a bug.
+func installWebSearch(search func(ctx context.Context, query, lang string) []websearch.Result) {
+	webtools.SetSearch(func(ctx context.Context, query string, limit int) ([]webtools.SearchResult, error) {
+		hits := search(ctx, query, "")
+		// Truncate to what the caller asked for. The tool clamps its own limit to a
+		// sane maximum before it ever reaches here; this only honours it.
+		if limit > 0 && len(hits) > limit {
+			hits = hits[:limit]
+		}
+		out := make([]webtools.SearchResult, 0, len(hits))
+		for _, h := range hits {
+			out = append(out, webtools.SearchResult{Title: h.Title, URL: h.URL, Snippet: h.Content})
+		}
+		return out, nil
+	})
+}
+
 // Mount installs the money, ingest and telemetry wiring, then mounts ai. A nil
 // callback is left alone — cloud leaves one nil exactly when that subsystem
 // isn't co-resident, and the module's own fallback applies.
@@ -159,17 +187,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// honest answer, and specifically NOT an empty result: an agent told "no
 	// results" concludes the web holds nothing on the subject and answers from
 	// memory in a confident voice.
-	webtools.SetSearch(func(ctx context.Context, query string, limit int) ([]webtools.SearchResult, error) {
-		hits := websearch.Search(ctx, query, "")
-		if limit > 0 && len(hits) > limit {
-			hits = hits[:limit]
-		}
-		out := make([]webtools.SearchResult, 0, len(hits))
-		for _, h := range hits {
-			out = append(out, webtools.SearchResult{Title: h.Title, URL: h.URL, Snippet: h.Content})
-		}
-		return out, nil
-	})
+	installWebSearch(websearch.Search)
 
 	// THE PREPAID GATE'S COMPLETION CEILING, PER MODEL, FROM THE CATALOG.
 	//
