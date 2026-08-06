@@ -1,214 +1,368 @@
 package exec
 
+// exec_test.go — the code-interpreter contract, measured end to end.
+//
+// Every assertion here is a fact the CALLERS depend on, taken from what they
+// actually do: @hanzochat/agents CodeExecutor for POST /exec, and hanzo.chat's
+// api/server/services/Files/Code for upload, download and the session listing. The
+// wire is theirs, so the tests are about their shapes and not about ours.
+
 import (
+	"bytes"
+	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	fiber "github.com/zap-proto/fiber/v3"
+
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
-// Mount() must register the overlapping static + wildcard routes (/v1/exec and
-// /v1/exec/*) on a real Fiber router WITHOUT panicking, and a request routed
-// through the whole app must reach the guarded proxy. This catches
-// route-registration errors the direct-handler tests can't.
-func TestMountRoutesThroughRouter(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"session_id":"s","stdout":"ok\n","stderr":"","files":[]}`)
-	}))
-	defer up.Close()
-	t.Setenv("CODE_EXEC_UPSTREAM", up.URL)
+func mount(t *testing.T) *zip.App {
+	t.Helper()
 	t.Setenv("CODE_EXEC_API_KEY", "k")
-
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	fa := app.Fiber()
+	return app
+}
 
-	// Exact prefix, a wildcard subpath, and a file path all route to the proxy.
-	for _, tc := range []struct{ method, path string }{
-		{http.MethodPost, "/v1/exec"},
-		{http.MethodPost, "/v1/exec/programmatic"},
-		{http.MethodGet, "/v1/files/sess-1"},
-	} {
-		req := httptest.NewRequest(tc.method, "http://api.hanzo.ai"+tc.path,
-			strings.NewReader(`{"lang":"py","code":"x=1"}`))
-		req.Header.Set("X-API-Key", "k")
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := fa.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
-		if err != nil {
-			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
+func call(t *testing.T, app *zip.App, method, path, ctype string, body io.Reader) *http.Response {
+	t.Helper()
+	rq := httptest.NewRequest(method, "http://api.hanzo.ai"+path, body)
+	rq.Header.Set("X-API-Key", "k")
+	if ctype != "" {
+		rq.Header.Set("Content-Type", ctype)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
+func post(t *testing.T, app *zip.App, path string, v any) *http.Response {
+	t.Helper()
+	b, _ := json.Marshal(v)
+	return call(t, app, http.MethodPost, path, "application/json", bytes.NewReader(b))
+}
+
+func decode[T any](t *testing.T, resp *http.Response) T {
+	t.Helper()
+	var out T
+	b, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("decode %q: %v", b, err)
+	}
+	return out
+}
+
+// TestExecRunsInASandboxAndAnswersTheContract is the whole subsystem in one call:
+// a snippet goes in, the program runs in a leased sandbox, and what comes back is
+// the four fields the CodeExecutor tool reads — session_id, stdout, stderr, files.
+func TestExecRunsInASandboxAndAnswersTheContract(t *testing.T) {
+	p := servePeer(t)
+	p.program = func(id string, argv []string) (string, string, int, map[string][]byte) {
+		return "hello\n", "", 0, map[string][]byte{"plot.png": []byte("\x89PNG")}
+	}
+	app := mount(t)
+
+	res := decode[CodeResult](t, post(t, app, Path, CodeRun{Lang: "py", Code: "print('hello')"}))
+	if res.SessionID == "" {
+		t.Fatal("no session_id — the client keys every later upload, download and listing on it")
+	}
+	if res.Stdout != "hello\n" || res.Stderr != "" {
+		t.Errorf("stdout/stderr = %q/%q, want the program's own output", res.Stdout, res.Stderr)
+	}
+	if len(res.Files) != 1 || res.Files[0].ID != "plot.png" || res.Files[0].Name != "plot.png" {
+		t.Fatalf("files = %+v, want the one artifact the run wrote", res.Files)
+	}
+
+	// The program was written into the session before it ran, under the name the
+	// language table gives it — the sandbox is where the code IS, not just where it
+	// executes.
+	if pod := p.get(res.SessionID); pod == nil {
+		t.Fatal("no sandbox was leased")
+	} else if string(pod.files["main.py"]) != "print('hello')" {
+		t.Errorf("main.py = %q, want the submitted code", pod.files["main.py"])
+	}
+}
+
+// TestTheSourceFileIsNotReportedAsAnArtifact is the reason the marker is stamped
+// INSIDE the run command rather than before it. Write the program, stamp, run: the
+// program is older than the mark, so the sweep does not report the code back to the
+// caller as a file its own run produced.
+func TestTheSourceFileIsNotReportedAsAnArtifact(t *testing.T) {
+	p := servePeer(t)
+	p.program = func(string, []string) (string, string, int, map[string][]byte) {
+		return "", "", 0, nil
+	}
+	app := mount(t)
+	res := decode[CodeResult](t, post(t, app, Path, CodeRun{Lang: "py", Code: "pass"}))
+	for _, f := range res.Files {
+		if f.ID == "main.py" {
+			t.Fatalf("the source file came back as an artifact: %+v", res.Files)
 		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("%s %s: status %d, want 200 (routed to proxy)", tc.method, tc.path, resp.StatusCode)
+	}
+	if len(res.Files) != 0 {
+		t.Errorf("files = %+v, want none — this run wrote nothing", res.Files)
+	}
+	// And the ordering that makes it true is visible: the marker line is the run,
+	// and the sweep comes after it.
+	lines := p.ranLines()
+	if len(lines) < 2 || !strings.HasPrefix(lines[0], ": > "+marker) ||
+		!strings.Contains(lines[1], "-newer "+marker) {
+		t.Errorf("ran %v, want the marker+program line then the -newer sweep", lines)
+	}
+}
+
+// TestSessionIsResumed: the session_id the client sends back names the SAME sandbox,
+// which is what makes a conversation's files still be there on the next turn.
+func TestSessionIsResumed(t *testing.T) {
+	p := servePeer(t)
+	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "1", "", 0, nil }
+	app := mount(t)
+
+	first := decode[CodeResult](t, post(t, app, Path, CodeRun{Lang: "py", Code: "x=1"}))
+	second := decode[CodeResult](t, post(t, app, Path,
+		CodeRun{Lang: "py", Code: "x=2", SessionID: first.SessionID}))
+	if second.SessionID != first.SessionID {
+		t.Fatalf("session %q became %q — a resumed session must be the same sandbox",
+			first.SessionID, second.SessionID)
+	}
+}
+
+// TestArgsReachTheProgramAndNotTheCompiler pins the one thing the language table
+// would get wrong if it appended `"$@"` instead of placing it: for a compiled
+// language the arguments belong to the produced binary, not to the compiler.
+func TestArgsReachTheProgramAndNotTheCompiler(t *testing.T) {
+	p := servePeer(t)
+	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "", "", 0, nil }
+	app := mount(t)
+
+	post(t, app, Path, CodeRun{Lang: "c", Code: "int main(){}", Args: []string{"alpha", "beta"}})
+	if got := p.lastArgs(); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
+		t.Fatalf("args reached the shell as %v, want [alpha beta]", got)
+	}
+	line := p.ranLines()[0]
+	if !strings.Contains(line, `./main "$@"`) {
+		t.Errorf("c runs %q — the arguments must be applied to ./main, never to cc", line)
+	}
+}
+
+// TestUnsupportedLanguageIsRefused: the tool schema advertises a closed set, so a
+// lang outside it is a 400 that names the set — not a shell line that fails later
+// with a message about a missing binary.
+func TestUnsupportedLanguageIsRefused(t *testing.T) {
+	servePeer(t)
+	app := mount(t)
+	resp := post(t, app, Path, CodeRun{Lang: "brainfuck", Code: "+"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if b, _ := io.ReadAll(resp.Body); !strings.Contains(string(b), "py") {
+		t.Errorf("body %q does not name the supported set", b)
+	}
+}
+
+// TestNonZeroExitIsA200: "the code threw" and "the interpreter is down" are
+// different facts. The tool renders stderr; it never sees a 5xx for a program that
+// merely failed.
+func TestNonZeroExitIsA200(t *testing.T) {
+	p := servePeer(t)
+	p.program = func(string, []string) (string, string, int, map[string][]byte) {
+		return "", "Traceback...\nZeroDivisionError\n", 1, nil
+	}
+	app := mount(t)
+	resp := post(t, app, Path, CodeRun{Lang: "py", Code: "1/0"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — a failed program is a successful call", resp.StatusCode)
+	}
+	if res := decode[CodeResult](t, resp); !strings.Contains(res.Stderr, "ZeroDivisionError") {
+		t.Errorf("stderr = %q, want the program's traceback", res.Stderr)
+	}
+}
+
+// ---- the file surface ------------------------------------------------------
+
+func uploadFile(t *testing.T, app *zip.App, session, name, content string) *http.Response {
+	t.Helper()
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	if session != "" {
+		_ = w.WriteField("session_id", session)
+	}
+	fw, err := w.CreateFormFile("file", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = fw.Write([]byte(content))
+	_ = w.Close()
+	return call(t, app, http.MethodPost, "/v1/upload", w.FormDataContentType(), &body)
+}
+
+// TestUploadAnswersTheShapeTheClientChecks. crud.js reads `message` FIRST and
+// throws unless it is the literal "success", then builds `${session_id}/${fileId}`.
+// Both facts are load-bearing and neither is inferable from the other.
+func TestUploadAnswersTheShapeTheClientChecks(t *testing.T) {
+	servePeer(t)
+	app := mount(t)
+	res := decode[uploaded](t, uploadFile(t, app, "", "data.csv", "id,v\n1,2\n"))
+	if res.Message != "success" {
+		t.Errorf("message = %q, want the literal \"success\" — the client throws on anything else", res.Message)
+	}
+	if res.SessionID == "" || len(res.Files) != 1 || res.Files[0].FileID == "" ||
+		res.Files[0].Filename != "data.csv" {
+		t.Fatalf("upload answered %+v, want a session and one {fileId, filename}", res)
+	}
+}
+
+// TestUploadThenExecSeesTheFile is the whole reason a session is a sandbox: the
+// bytes are already where the next run will look for them, with nothing copied.
+func TestUploadThenExecSeesTheFile(t *testing.T) {
+	p := servePeer(t)
+	app := mount(t)
+	up := decode[uploaded](t, uploadFile(t, app, "", "data.csv", "id,v\n1,2\n"))
+
+	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "read\n", "", 0, nil }
+	res := decode[CodeResult](t, post(t, app, Path,
+		CodeRun{Lang: "py", Code: "open('data.csv')", SessionID: up.SessionID}))
+	if res.SessionID != up.SessionID {
+		t.Fatalf("exec ran in %q, not the uploaded session %q", res.SessionID, up.SessionID)
+	}
+	if got := string(p.get(res.SessionID).files["data.csv"]); got != "id,v\n1,2\n" {
+		t.Errorf("data.csv in the run's sandbox = %q, want the uploaded bytes", got)
+	}
+}
+
+// TestDownloadIsTwoSegmentsAndAnswersBytes. The path is {session_id}/{fileId}
+// (crud.js getCodeOutputDownloadStream, process.js), and the body is the artifact
+// itself — not JSON, and not a base64 field.
+func TestDownloadIsTwoSegmentsAndAnswersBytes(t *testing.T) {
+	p := servePeer(t)
+	p.program = func(string, []string) (string, string, int, map[string][]byte) {
+		return "", "", 0, map[string][]byte{"plot.png": []byte("\x89PNG\r\n\x1a\n")}
+	}
+	app := mount(t)
+	res := decode[CodeResult](t, post(t, app, Path, CodeRun{Lang: "py", Code: "savefig"}))
+
+	resp := call(t, app, http.MethodGet, "/v1/download/"+res.SessionID+"/"+res.Files[0].ID, "", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if b, _ := io.ReadAll(resp.Body); string(b) != "\x89PNG\r\n\x1a\n" {
+		t.Errorf("body = %q, want the artifact's bytes verbatim", b)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/png") {
+		t.Errorf("Content-Type = %q, want it derived from the name", ct)
+	}
+	// A one-segment path is not this contract and must not be guessed at.
+	if r := call(t, app, http.MethodGet, "/v1/download/"+res.Files[0].ID, "", nil); r.StatusCode != http.StatusBadRequest {
+		t.Errorf("one-segment download = %d, want 400", r.StatusCode)
+	}
+}
+
+// TestFilesAnswersABareArrayKeyedByTheDownloadIdentifier. getSessionInfo does
+// `response.data.find((f) => f.name.startsWith(path))` where `path` is
+// "{session}/{fileId}" — so the body is an ARRAY and `name` is that whole
+// identifier, not the bare filename. An object wrapper or a short name breaks it
+// silently: `.find` returns undefined and the caller reads it as "no such file".
+func TestFilesAnswersABareArrayKeyedByTheDownloadIdentifier(t *testing.T) {
+	servePeer(t)
+	app := mount(t)
+	up := decode[uploaded](t, uploadFile(t, app, "", "data.csv", "x"))
+
+	resp := call(t, app, http.MethodGet, "/v1/files/"+up.SessionID, "", nil)
+	raw, _ := io.ReadAll(resp.Body)
+	if !strings.HasPrefix(strings.TrimSpace(string(raw)), "[") {
+		t.Fatalf("body = %s, want a BARE JSON array", raw)
+	}
+	var rows []listing
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatalf("decode %s: %v", raw, err)
+	}
+	want := up.SessionID + "/data.csv"
+	for _, r := range rows {
+		if r.Name == want {
+			return
+		}
+	}
+	t.Fatalf("listing %+v has no row named %q — the client matches on that prefix", rows, want)
+}
+
+// ---- auth ------------------------------------------------------------------
+
+// TestUnsetKeyFailsClosed: a deployment with no credential configured is 503 on
+// every path, never open.
+func TestUnsetKeyFailsClosed(t *testing.T) {
+	servePeer(t)
+	app := mount(t)
+	t.Setenv("CODE_EXEC_API_KEY", "")
+	for _, p := range []string{Path, "/v1/upload", "/v1/download/s/f", "/v1/files/s"} {
+		resp := call(t, app, http.MethodGet, p, "", nil)
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("%s with no key = %d, want 503", p, resp.StatusCode)
+		}
+	}
+}
+
+// TestWrongKeyIsRejectedOnEveryPath, including the TYPED op — which is the reason
+// the credential check is middleware and not a handler wrapper: a typed
+// registration takes no handler chain, so a per-route wrap could not have covered
+// POST /v1/exec at all.
+func TestWrongKeyIsRejectedOnEveryPath(t *testing.T) {
+	p := servePeer(t)
+	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "ran", "", 0, nil }
+	app := mount(t)
+	for _, path := range []string{Path, "/v1/upload", "/v1/download/s/f", "/v1/files/s"} {
+		rq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+path,
+			strings.NewReader(`{"lang":"py","code":"x=1"}`))
+		rq.Header.Set("X-API-Key", "wrong")
+		rq.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second})
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s with a wrong key = %d, want 401", path, resp.StatusCode)
 		}
 		_ = resp.Body.Close()
 	}
-
-	// And the guard still fires through the router: wrong key ⇒ 401.
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/exec", nil)
-	req.Header.Set("X-API-Key", "wrong")
-	resp, err := fa.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
-	if err != nil {
-		t.Fatalf("guarded route: %v", err)
+	if len(p.ranLines()) != 0 {
+		t.Errorf("a rejected request still ran %v in a sandbox", p.ranLines())
 	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("wrong-key through router: status %d, want 401", resp.StatusCode)
-	}
-	_ = resp.Body.Close()
 }
 
-// Mount validates its inputs.
+// TestMountRejectsBadInputs.
 func TestMountRejectsBadInputs(t *testing.T) {
 	if err := Mount(nil, cloud.Deps{Logger: luxlog.New("test")}); err == nil {
 		t.Fatal("Mount(nil app) should error")
 	}
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{}); err == nil {
+	if err := Mount(zip.New(zip.Config{Logger: luxlog.New("test")}), cloud.Deps{}); err == nil {
 		t.Fatal("Mount(nil logger) should error")
 	}
 }
 
-// The proxy must forward the request path + body verbatim to the sandboxed
-// executor and return its response unchanged — the behavior that makes cloud a
-// transparent edge in front of the sandbox, with no contract drift.
-func TestProxyForwardsVerbatim(t *testing.T) {
-	var gotPath, gotHost, gotBody, gotKey string
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotHost = r.Host
-		gotKey = r.Header.Get("X-API-Key")
-		b, _ := io.ReadAll(r.Body)
-		gotBody = string(b)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"session_id":"s1","stdout":"hi\n","stderr":"","files":[]}`)
-	}))
-	defer up.Close()
-
-	proxy, err := newProxy(up.URL)
-	if err != nil {
-		t.Fatalf("newProxy: %v", err)
+// TestProgrammaticRefusesInTheOpen. /exec/programmatic is a different protocol —
+// a run suspended on each tool call and resumed from a continuation token — so it
+// answers 501 rather than being routed into the plain interpreter, which would hand
+// the caller a body its parser cannot read.
+func TestProgrammaticRefusesInTheOpen(t *testing.T) {
+	servePeer(t)
+	app := mount(t)
+	resp := post(t, app, Path+"/programmatic", map[string]any{"code": "x=1"})
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501", resp.StatusCode)
 	}
-	t.Setenv("CODE_EXEC_API_KEY", "secret-key")
-	h := guard(proxy)
-
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/exec",
-		strings.NewReader(`{"lang":"py","code":"print('hi')"}`))
-	req.Header.Set("X-API-Key", "secret-key")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s, want 200", rec.Code, rec.Body.String())
-	}
-	if gotPath != "/v1/exec" {
-		t.Fatalf("upstream path = %q, want /v1/exec (verbatim, no rewrite)", gotPath)
-	}
-	if gotBody != `{"lang":"py","code":"print('hi')"}` {
-		t.Fatalf("upstream body = %q, want the request body verbatim", gotBody)
-	}
-	if gotKey != "secret-key" {
-		t.Fatalf("upstream X-API-Key = %q, want it forwarded", gotKey)
-	}
-	if gotHost == "api.hanzo.ai" {
-		t.Fatalf("upstream Host = %q, want the executor vhost (not the edge host)", gotHost)
-	}
-	if !strings.Contains(rec.Body.String(), `"stdout":"hi\n"`) {
-		t.Fatalf("response not passed through: %s", rec.Body.String())
-	}
-}
-
-// A programmatic-tool-calling subpath (/v1/exec/programmatic) and file paths
-// must also be forwarded verbatim.
-func TestProxyForwardsSubpaths(t *testing.T) {
-	var gotPath string
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		_, _ = io.WriteString(w, `[]`)
-	}))
-	defer up.Close()
-	proxy, err := newProxy(up.URL)
-	if err != nil {
-		t.Fatalf("newProxy: %v", err)
-	}
-	t.Setenv("CODE_EXEC_API_KEY", "k")
-	h := guard(proxy)
-
-	for _, p := range []string{"/v1/exec/programmatic", "/v1/files/sess-123", "/v1/download/abc"} {
-		req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai"+p, nil)
-		req.Header.Set("X-API-Key", "k")
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("%s: status = %d, want 200", p, rec.Code)
-		}
-		if gotPath != p {
-			t.Fatalf("%s: upstream path = %q, want verbatim", p, gotPath)
-		}
-	}
-}
-
-// Fail closed: with no configured key the surface returns 503, never proxies.
-func TestGuardUnsetKeyFailsClosed(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("upstream must NOT be reached when key is unset")
-	}))
-	defer up.Close()
-	proxy, _ := newProxy(up.URL)
-	t.Setenv("CODE_EXEC_API_KEY", "")
-	h := guard(proxy)
-
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/exec", nil)
-	req.Header.Set("X-API-Key", "anything")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503 (fail closed on unset key)", rec.Code)
-	}
-}
-
-// Wrong key ⇒ 401, upstream never reached.
-func TestGuardWrongKeyRejected(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("upstream must NOT be reached with a wrong key")
-	}))
-	defer up.Close()
-	proxy, _ := newProxy(up.URL)
-	t.Setenv("CODE_EXEC_API_KEY", "right")
-	h := guard(proxy)
-
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/exec", nil)
-	req.Header.Set("X-API-Key", "wrong")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401 (wrong key)", rec.Code)
-	}
-}
-
-func TestNewProxyRejectsBadURL(t *testing.T) {
-	if _, err := newProxy("://nope"); err == nil {
-		t.Fatal("expected error for malformed upstream URL")
-	}
-	if _, err := newProxy("/relative/only"); err == nil {
-		t.Fatal("expected error for non-absolute upstream URL")
-	}
-}
-
-func TestUpstreamDefaultAndOverride(t *testing.T) {
-	t.Setenv("CODE_EXEC_UPSTREAM", "")
-	if got := upstream(); got != defaultUpstream {
-		t.Fatalf("upstream() = %q, want default %q", got, defaultUpstream)
-	}
-	t.Setenv("CODE_EXEC_UPSTREAM", "http://sandbox:8000")
-	if got := upstream(); got != "http://sandbox:8000" {
-		t.Fatalf("upstream() = %q, want override", got)
+	if b, _ := io.ReadAll(resp.Body); !strings.Contains(string(b), "continuation token") {
+		t.Errorf("body %q does not say what would be needed to serve it", b)
 	}
 }
