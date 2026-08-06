@@ -116,9 +116,13 @@ func (c *Client) Middleware(cfg MiddlewareConfig) func(http.Handler) http.Handle
 				Currency:    in.Currency,
 				AmountCents: cents,
 				Provider:    cfg.Provider,
-				RequestID:   r.Header.Get("X-Request-Id"),
-				Status:      statusLabel(sw.status),
-				ClientIP:    clientIP(r),
+				// The caller's own correlation header, carried for attribution. It is
+				// NOT the debit's idempotency key — Record mints that per act — because
+				// a header the caller chooses is a caller who can choose to be billed
+				// once for everything it sends.
+				RequestID: r.Header.Get("X-Request-Id"),
+				Status:    statusLabel(sw.status),
+				ClientIP:  clientIP(r),
 			}
 			c.recordAsync(r, u, cfg.OnRecordError)
 		})

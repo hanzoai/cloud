@@ -730,7 +730,9 @@ func debitPayer(s *cloud.Service[state], ctx context.Context, st *Settlement, am
 		_, err := m.Record(ctx, metering.Usage{
 			User: st.PayerOrg, Org: st.PayerOrg, Amount: amount, Currency: "usd",
 			Provider: providerLabel, Service: providerLabel, Model: st.Resource,
-			RequestID: st.ID, Status: "success",
+			// The SETTLEMENT is the act, and its id is the server's name for it — so a
+			// reconcile that re-debits a settlement moves the money once.
+			Ref: st.ID, Status: "success",
 		})
 		return err
 	}

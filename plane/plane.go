@@ -416,10 +416,19 @@ type Verdict struct {
 
 // Usage is the attribution a debit carries beyond its amount.
 type Usage struct {
-	Model     string `json:"model,omitempty"`
-	Project   string `json:"project,omitempty"`
-	Provider  string `json:"provider,omitempty"`
-	Service   string `json:"service,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Project  string `json:"project,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Service  string `json:"service,omitempty"`
+	// Ref is the SERVER-assigned name of the metered act, and the debit's idempotency
+	// key within the subject's wallet: a peer re-sending the same act debits once. It
+	// carries an identity the sending process already holds (a message row's id, a
+	// settlement id), never a header a client chose — the ledger dedups on it, so the
+	// payer must not be the one who picks it. Empty lets the ledger mint the entry's
+	// own and the debit stands alone.
+	Ref string `json:"ref,omitempty"`
+	// RequestID is the call's CORRELATION id, for tracing a debit back to the request
+	// that made it. Attribution only: it is NOT the idempotency key (see Ref).
 	RequestID string `json:"requestId,omitempty"`
 	ClientIP  string `json:"clientIp,omitempty"`
 }
