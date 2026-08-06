@@ -3277,7 +3277,7 @@
     },
     "/v1/iam/scim/v2/ResourceTypes": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_ResourceTypes",
+        "operationId": "get_v1_iam_scim_v2_resourcetypes",
         "summary": "Returns the kinds of record this directory provisions and the address of each, so your identity provider discovers them rather than having them configured by hand.",
         "description": "Returns the kinds of record this directory provisions and\nthe address of each, so your identity provider discovers them rather than\nhaving them configured by hand.",
         "tags": [
@@ -3299,7 +3299,7 @@
     },
     "/v1/iam/scim/v2/ResourceTypes/{name}": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_ResourceTypes_name",
+        "operationId": "get_v1_iam_scim_v2_resourcetypes_by_name",
         "summary": "Returns one provisionable record kind in full.",
         "description": "Returns one provisionable record kind in full.",
         "tags": [
@@ -3337,7 +3337,7 @@
     },
     "/v1/iam/scim/v2/Schemas": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_Schemas",
+        "operationId": "get_v1_iam_scim_v2_schemas",
         "summary": "Returns the attribute definitions this directory understands, so your identity provider knows which fields it may send and what they mean before it sends any.",
         "description": "Returns the attribute definitions this directory understands, so\nyour identity provider knows which fields it may send and what they mean\nbefore it sends any.",
         "tags": [
@@ -3359,7 +3359,7 @@
     },
     "/v1/iam/scim/v2/Schemas/{id}": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_Schemas_id",
+        "operationId": "get_v1_iam_scim_v2_schemas_by_id",
         "summary": "Returns one attribute definition in full.",
         "description": "Returns one attribute definition in full.",
         "tags": [
@@ -3397,7 +3397,7 @@
     },
     "/v1/iam/scim/v2/ServiceProviderConfig": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_ServiceProviderConfig",
+        "operationId": "get_v1_iam_scim_v2_serviceproviderconfig",
         "summary": "Tells your identity provider which parts of SCIM this directory supports, so it configures itself instead of you filling in a form.",
         "description": "Tells your identity provider which parts of SCIM this\ndirectory supports, so it configures itself instead of you filling in a form.\n\nFiltering and partial updates are supported. Bulk operations, sorting and\nentity tags are not — an IdP that reads this will not attempt them.",
         "tags": [

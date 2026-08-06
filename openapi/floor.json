@@ -1,6 +1,6 @@
 {
-  "paths": 1710,
-  "operations": 2388,
+  "paths": 1753,
+  "operations": 2511,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -38,7 +38,7 @@
     "code": 7,
     "collections": 14,
     "commands": 1,
-    "commerce": 4,
+    "commerce": 123,
     "company": 22,
     "completions": 1,
     "compliance": 17,
@@ -103,7 +103,7 @@
     "kms": 7,
     "kv": 4,
     "legal": 11,
-    "licensing": 7,
+    "licensing": 11,
     "links": 11,
     "logs": 3,
     "machines": 8,

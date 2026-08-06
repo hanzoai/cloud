@@ -12,14 +12,14 @@ func init() {
 	zip.Describe("GET /v1/research/artifacts", zip.Doc{
 		Description: "Returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
 		Fields: map[string]string{
-			"Artifact.content":    "base64 bytes on write; the server hashes + stores them (never returned)",
-			"Artifact.ref":        "server-derived content address (sha256:<hash>)",
-			"Artifact.sha256":     "SERVER-derived on write; the identity",
-			"artifactsIn.project": "Project narrows to one project. Empty takes the caller's project scope.",
-			"artifactsIn.run":     "Run narrows to one run's artifacts by its stable id.",
-			"artifactsIn.since":   "Since bounds the feed to artifacts recorded at or after this unix second.",
-			"artifactsOut.data":   "Data are the artifacts, newest first. Content bytes are never returned here.",
-			"artifactsOut.total":  "Total is len(data).",
+			"ResearchArtifact.content": "base64 bytes on write; the server hashes + stores them (never returned)",
+			"ResearchArtifact.ref":     "server-derived content address (sha256:<hash>)",
+			"ResearchArtifact.sha256":  "SERVER-derived on write; the identity",
+			"artifactsIn.project":      "Project narrows to one project. Empty takes the caller's project scope.",
+			"artifactsIn.run":          "Run narrows to one run's artifacts by its stable id.",
+			"artifactsIn.since":        "Since bounds the feed to artifacts recorded at or after this unix second.",
+			"artifactsOut.data":        "Data are the artifacts, newest first. Content bytes are never returned here.",
+			"artifactsOut.total":       "Total is len(data).",
 		},
 	})
 	zip.Describe("GET /v1/research/artifacts/:sha256", zip.Doc{
@@ -56,13 +56,13 @@ func init() {
 	zip.Describe("POST /v1/research/artifacts", zip.Doc{
 		Description: "Records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
 		Fields: map[string]string{
-			"Artifact.content":      "base64 bytes on write; the server hashes + stores them (never returned)",
-			"Artifact.ref":          "server-derived content address (sha256:<hash>)",
-			"Artifact.sha256":       "SERVER-derived on write; the identity",
-			"artifactOut.created":   "Created is false when these exact bytes were already recorded — the write is a no-op.",
-			"artifactOut.ref":       "Ref is the content address, \"sha256:<hash>\".",
-			"artifactOut.rolled_up": "RolledUp is false when the OLAP roll-up was skipped; the SQLite write still stands.",
-			"artifactOut.sha256":    "SHA256 is the SERVER's hash of the bytes — the artifact's identity.",
+			"ResearchArtifact.content": "base64 bytes on write; the server hashes + stores them (never returned)",
+			"ResearchArtifact.ref":     "server-derived content address (sha256:<hash>)",
+			"ResearchArtifact.sha256":  "SERVER-derived on write; the identity",
+			"artifactOut.created":      "Created is false when these exact bytes were already recorded — the write is a no-op.",
+			"artifactOut.ref":          "Ref is the content address, \"sha256:<hash>\".",
+			"artifactOut.rolled_up":    "RolledUp is false when the OLAP roll-up was skipped; the SQLite write still stands.",
+			"artifactOut.sha256":       "SHA256 is the SERVER's hash of the bytes — the artifact's identity.",
 		},
 		Example: json.RawMessage(`{"kind":"snapshot","content":"iVBORw0KGgo=","run_id":"benchmark:zen-1:mmlu"}`),
 	})
