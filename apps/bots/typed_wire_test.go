@@ -43,15 +43,18 @@ var untypedByDesign = map[string]string{
 		"never send, and mints an MCP tool and CLI command for an operation that cannot succeed; it is also " +
 		"body-tolerant, which op.invoke's unconditional 400 on an unparseable body cannot express.",
 
-	// The relay face. All seven ARE one registration — app.All("/v1/bot/*",
+	// The relay face. All five ARE one registration — app.All("/v1/bot/*",
 	// s.proxy) in relay.go — so they share one reason.
-	"DELETE /v1/bot/{wildcard1}":  reasonProxy,
-	"GET /v1/bot/{wildcard1}":     reasonProxy,
-	"OPTIONS /v1/bot/{wildcard1}": reasonProxy,
-	"PATCH /v1/bot/{wildcard1}":   reasonProxy,
-	"POST /v1/bot/{wildcard1}":    reasonProxy,
-	"PUT /v1/bot/{wildcard1}":     reasonProxy,
-	"TRACE /v1/bot/{wildcard1}":   reasonProxy,
+	//
+	// FIVE, not seven: the document publishes what was DECLARED, and OPTIONS and
+	// TRACE were never declared — they were methods the router happened to bind
+	// under All(). They left the document in ceff43ac, which is the change that
+	// drew that line, so they leave the ledger with it.
+	"DELETE /v1/bot/{wildcard1}": reasonProxy,
+	"GET /v1/bot/{wildcard1}":    reasonProxy,
+	"PATCH /v1/bot/{wildcard1}":  reasonProxy,
+	"POST /v1/bot/{wildcard1}":   reasonProxy,
+	"PUT /v1/bot/{wildcard1}":    reasonProxy,
 }
 
 // reasonProxy is the one reason the seven relay operations share. Three wire facts
@@ -66,7 +69,7 @@ var untypedByDesign = map[string]string{
 //     executor's own Content-Type, which is frequently not JSON at all. A typed op
 //     can only answer c.JSON(out) under the status it DECLARED, so both move.
 //
-// The seven publish no MCP tool and no CLI command. They DO carry prose:
+// The five publish no MCP tool and no CLI command. They DO carry prose:
 // openapi.Describe declares it beside the wire fact in relay.go, which is the seam
 // for exactly an operation the wire refuses to type.
 const reasonProxy = "proxy. One All() registration for every method, over a greedy wildcard the proxy " +
@@ -138,11 +141,12 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			len(typed), len(untypedByDesign), got, want)
 	}
 	// The MEASURED partition, so the prose cannot drift from the binary.
-	// 10 since zip v1.26.0: the document now carries every method of the
-	// relay's one All() registration — the eight ledger entries above plus
-	// the two typed ops. Before, the wildcard collapsed and served read 3.
-	if len(served) != 10 || len(typed) != 2 {
-		t.Errorf("served = %d (want 10), typed = %d (want 2)", len(served), len(typed))
+	// 8 since ceff43ac: the document carries every DECLARED method of the
+	// relay's one All() registration — the six ledger entries above plus the
+	// two typed ops. It read 10 while OPTIONS and TRACE were published too,
+	// and 3 before that, when the wildcard collapsed.
+	if len(served) != 8 || len(typed) != 2 {
+		t.Errorf("served = %d (want 8), typed = %d (want 2)", len(served), len(typed))
 	}
 }
 
