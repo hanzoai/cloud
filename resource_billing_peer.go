@@ -91,6 +91,15 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted fu
 		Usage: plane.Usage{
 			Project: u.Project,
 			Service: firstNonEmpty(u.Service, rm.provider),
+			// THE ACT'S NAME CROSSES WITH IT. The receiver keys the debit on this ref
+			// and mints a fresh one when it is absent (apps/finance RecordUsage), so a
+			// crossing that drops it turns every re-drive of ONE act into a SECOND
+			// debit. A surface that already holds the act's server-assigned name sets
+			// it precisely so that cannot happen — apps/company mints the formation ref
+			// and hands the same value to the debit — and that promise held only while
+			// the ledger was in this process. It is the same field the metering client
+			// carries over the same crossing; the two paths now name an act alike.
+			Ref: u.Ref,
 		},
 	}
 	log := rm.log
