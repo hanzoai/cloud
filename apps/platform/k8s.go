@@ -224,12 +224,43 @@ func (k *k8sClient) ready() error {
 // so the namespace is not attacker-controlled. The slug is produced by the ONE
 // hardened, INJECTIVE org normalizer (namespace.Sanitize — identity on a
 // clean DNS label, else fold + a SHA-256 suffix of the raw owner), so two
-// distinct owners can NEVER collapse onto the same namespace (CRIT-2). Reusing
-// that single function keeps cloud's whole tenant→namespace/bucket/DB boundary
-// consistent, rather than forking a third, lossy slug rule.
+// distinct owners can NEVER collapse onto the same namespace (CRIT-2).
+//
+// ★ org MUST ALREADY BE THAT SLUG, and this only prepends the prefix.
+//
+// It used to sanitize again, and Sanitize is NOT idempotent — it is the identity
+// only on a clean label, and re-folding its own <fold>-<hash> output appends a
+// SECOND hash (looksSuffixed denies the fast path deliberately, so no name can
+// squat on the rendered form of another). Every handler receives an
+// already-sanitized slug from tenant(s, c), so for every org whose name is not
+// already clean this wrote App CRs into tenant-<double> while apps/deploy
+// (scope.go tenantNS) and apps/provisioning (dedicated.go) both scanned
+// tenant-<single>. It fails closed — nothing crosses a tenant boundary — but the
+// org's board is silently EMPTY and its CRs are orphaned in a namespace nothing
+// lists. This was the outlier of three copies of one rule; the other two already
+// took the slug, and provisioning's even documents why.
+//
+// Same class as the confinement asymmetry: Sanitize applied an unequal number of
+// times on two sides of one comparison. TestTenantNamespaceIsDerivedExactlyOnce
+// holds the three together.
+//
+// ⚠ MIGRATION: any dirty-org namespace created before this fix is already
+// double-suffixed on the cluster and is NOT what this now derives. Those are
+// orphans either way — nothing has ever read them — but they must be reaped
+// deliberately, not left to look like a live tenant.
 func tenantNamespace(org string) string {
-	org = namespace.Sanitize(org)
-	if org == "" {
+	// FAIL CLOSED ON A CONTRACT VIOLATION. The input must already be a slug, and
+	// "already sanitized" is NOT detectable by re-sanitizing — that is the very
+	// non-idempotence this fix is about. What IS checkable is the property a
+	// namespace must have anyway: a DNS-1123 label. Every namespace.Sanitize
+	// output is one; a raw or hostile owner claim ("acme/../hanzo", "  spaced  ",
+	// "org:with:colons") is not, and such a caller has skipped tenant(s, c).
+	//
+	// It resolves to the inert "unknown" rather than a malformed namespace, so a
+	// missed sanitize can never render a path-bearing or space-bearing namespace
+	// into a manifest — and, being inert, never lands in a real tenant's either.
+	// TestSanitizeIsInjective holds this: the output is always a clean label.
+	if org == "" || !appNameRE.MatchString(org) {
 		org = "unknown"
 	}
 	// NAMING(gated): rename tenant-<org> → org-<org> requires migrating live
