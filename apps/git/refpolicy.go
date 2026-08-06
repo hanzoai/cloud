@@ -12,25 +12,49 @@ package git
 //
 // Not a rule in the sandbox: the sandbox is the thing that is compromised. Not a
 // rule in the orchestrator: a stolen credential does not go back through the
-// orchestrator. The only place a rule cannot be stepped around is the point where
-// refs are actually written — here, in the receiving forge — because every path
-// that changes a ref passes through it and no client can decline to.
+// orchestrator. It has to be in the receiving forge, at the point refs are
+// actually written.
 //
-// So the policy is stated once, over the ref commands themselves, and it is
-// PURE: a function of what the push is asking to do, with no state, no lookup
-// and no identity to spoof.
+// # The claim this file used to make, and why it was false
 //
-//	refs/heads/agent/* is CREATE-ONLY.
+// It said receive-pack was "the point every path that changes a ref passes
+// through and no client can decline to". That was wrong, and the error was not a
+// detail — it was the whole argument. This function guarded ONE of eight ref
+// writers into the same bare repository. The other seven took a credential the
+// run already held: POST /repos/:name/push writes a branch from a JSON body,
+// /repos/:name/mirror force-overwrites every ref and deletes any the source
+// lacks, SSH receive-pack ran the same git binary with no policy in front of it,
+// and the import path fast-forwards a named ref from an upstream. A run refused
+// at the front door walked in through any of them.
 //
-// That single sentence carries the weight. The `agent/` namespace is the only
-// place a run may write (coding.BranchFor derives the name from the session id,
-// so the run does not choose it, and the model never sees the choice). Making it
-// create-only means:
+// The bait-and-switch that motivated this file was therefore still live, and in
+// a nastier form than a force-push: a FAST-FORWARD CHILD posted onto the branch
+// a human had just approved, which trips no "the branch was rewritten" signal
+// anywhere because it is append-only.
 //
-//   - A run cannot rewrite a branch that already exists. The bait-and-switch —
-//     open a clean PR, let a human read it, force-push the payload before the
-//     merge — is the signature attack on agentic PR review, and it is refused
-//     here rather than mitigated by asking reviewers to be vigilant.
+// Two things fixed it, and they are different fixes to different problems:
+//
+//  1. The credential stopped being an identity (grant.go). A run now holds a
+//     grant — a bounded permission to create ONE ref in ONE repository, which
+//     resolves to no principal at all — so seven of those eight doors are shut
+//     to it by the ordinary authorization it already had, not by a new check.
+//  2. This policy moved to ALL of the writers, not one (see refwriters.go for
+//     the enumeration and where each states its intent).
+//
+// # The policy
+//
+// Stated once, over the ref commands themselves, and PURE: a function of what is
+// being asked, with no state, no lookup and no identity to spoof.
+//
+//	refs/heads/agent/* is CREATE-ONLY, and a grant may write only its own ref.
+//
+// The `agent/` namespace is the only place a run may write (coding.BranchFor
+// derives the name from the session id, so the run does not choose it and the
+// model never sees the choice). Making it create-only means:
+//
+//   - A run cannot rewrite a branch that already exists — nor fast-forward it,
+//     which is the same capability wearing a friendlier hat: changing what a
+//     name already points at.
 //   - A run cannot delete anything. Not its own branch, not anyone else's.
 //   - Two runs cannot collide: the name is the session, and a second push to a
 //     taken name is refused rather than silently winning.
@@ -39,25 +63,53 @@ package git
 // nothing that is a normal day's work needs it and it is unrecoverable from the
 // pusher's side.
 //
-// # What this deliberately does NOT claim
-//
-// It does not confine the credential to the `agent/` namespace. A push carrying
-// the org's agent credential can still address refs/heads/main, because the
-// signal that would distinguish an agent push from a human one does not reach
-// this handler today (the gateway consumes the Authorization header and what
-// arrives is an org and a subject). Confinement by identity is the next control
-// and it belongs exactly here, one condition wider than what is written below.
-// Until it lands, the honest statement of the guarantee is: a coding run is
-// confined to create-only agent refs BY CONSTRUCTION OF THE RUN, and the forge
-// independently guarantees that whatever pushes there cannot rewrite or delete.
+// grantedRef is the second sentence, and it is about the BEARER rather than the
+// namespace: a caller holding a grant may write the one ref that grant names and
+// nothing else, so a run cannot reach another run's branch even though both live
+// in a create-only namespace. A caller with a real principal passes "" and is
+// bound by the namespace rules alone — a human fixing their own repository is
+// not the threat this file is about.
 
 import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
+
+// # Every writer, and where each states its intent
+//
+// The rule is only as good as the count of doors it stands in. There are eight
+// ways a ref in one of our bare repositories can change, and they are:
+//
+//  1. HTTP receive-pack      smart_http.go receivePack — parses the commands off
+//     the wire and calls checkRefPolicy.
+//  2. SSH receive-pack       pack.go sshReceivePack — reads the same command
+//     section off the channel (gitexec.go runPackSSHScreened) and calls the same
+//     function. Was unguarded.
+//  3. Client-less push       push.go corePush — states its one command as a
+//     refCommand and calls the same function. Was unguarded.
+//  4. Mirror-in fetch        mirror.go mirrorInto — cannot be judged
+//     command-by-command (the commands are whatever the remote advertises), so
+//     it is refused STRUCTURALLY: mirrorExcludeAgent removes the machine
+//     namespace from the refmap, and therefore from --prune. Was unguarded.
+//  5. Mirror-in HEAD         mirror.go mirrorInto's symbolic-ref — checkHeadRef.
+//     Was unguarded.
+//  6. Import tags            github_import.go fetchTags — refs/tags/*:refs/tags/*
+//     is non-forcing and cannot name refs/heads at all, so it can neither reach
+//     the machine namespace nor delete anything. Structurally safe already;
+//     stated here so the next reader does not have to re-derive it.
+//  7. Inbound fast-forward   github_import.go inboundFastForward — states its one
+//     command and calls the same function. A fast-forward is not a safe
+//     exception: appending to a branch a reviewer approved is the attack. Was
+//     unguarded.
+//  8. Import HEAD            github_import.go setHeadIfPresent — checkHeadRef.
+//     Was unguarded.
+//
+// A ninth door is a change to this list, not just a new function.
 
 // agentRefPrefix is the machine namespace. It matches the branch coding derives
 // from a session id (coding.BranchFor), spelled here rather than imported
@@ -69,6 +121,18 @@ const agentRefPrefix = "refs/heads/agent/"
 // zeroOID is git's "this side does not exist": as the OLD id it means create, as
 // the NEW id it means delete.
 const zeroOID = "0000000000000000000000000000000000000000"
+
+// The four sections of a `git push --signed` command stream. A push certificate
+// nests ref commands inside a header and a signature, and each part ends on a
+// different token, so the state is named rather than inferred from a flag — a
+// blank line means "the header is over" in one of them and nothing at all in
+// another.
+const (
+	certNone = iota // an ordinary push
+	certHead        // certificate version / pusher / pushee / nonce
+	certCmds        // the ref commands themselves
+	certSig         // the signature block
+)
 
 // refCommand is one ref update a push is asking for.
 type refCommand struct {
@@ -97,12 +161,20 @@ func isZero(oid string) bool {
 // defaultBranch is the repo's own HEAD branch (short name, e.g. "main"); an
 // empty value simply means no branch gets the delete protection, which is a
 // weaker answer but never a wrong one.
-func checkRefPolicy(cmds []refCommand, defaultBranch string) error {
+//
+// grantedRef is the ref a GRANT confines its bearer to, or "" for a caller
+// authenticated as a principal. It is checked first because it is the tighter
+// statement: a bearer outside its grant is refused whatever the namespace rules
+// would have said.
+func checkRefPolicy(cmds []refCommand, defaultBranch, grantedRef string) error {
 	def := ""
 	if b := strings.TrimSpace(defaultBranch); b != "" {
 		def = "refs/heads/" + b
 	}
 	for _, c := range cmds {
+		if grantedRef != "" && c.Ref != grantedRef {
+			return fmt.Errorf("this push may only write %s, not %s", grantedRef, c.Ref)
+		}
 		switch {
 		case strings.HasPrefix(c.Ref, agentRefPrefix):
 			// CREATE-ONLY. An update and a delete are the same refusal because
@@ -113,6 +185,20 @@ func checkRefPolicy(cmds []refCommand, defaultBranch string) error {
 		case def != "" && c.Ref == def && c.Deletes():
 			return fmt.Errorf("%s is the default branch and cannot be deleted by a push", c.Ref)
 		}
+	}
+	return nil
+}
+
+// checkHeadRef refuses to make a machine branch the repository's default.
+//
+// HEAD is not under refs/, so no refspec and no ref command constrains it — the
+// two importers set it with `symbolic-ref` from whatever the SOURCE advertises.
+// Pointing it at an agent branch would publish a run's unreviewed work as the
+// repository's default: what a fresh clone checks out, what the console shows,
+// and what every "base" defaults to. Nothing legitimate needs it.
+func checkHeadRef(ref string) error {
+	if strings.HasPrefix(ref, agentRefPrefix) {
+		return fmt.Errorf("%s is an agent branch and cannot become the default", ref)
 	}
 	return nil
 }
@@ -136,20 +222,52 @@ func parseRefCommands(body []byte) (cmds []refCommand, n int, err error) {
 }
 
 // parseRefCommandsCaps is the same read, also reporting the capability list the
-// client sent on its first command. The refusal below has to know whether the
+// client sent on its first line. The refusal below has to know whether the
 // client negotiated side-band-64k, because a report written in the wrong framing
 // is a report the client never sees.
+//
+// Three shapes of command section exist on the wire, and a parser that knew only
+// the first refused two kinds of ordinary push with "unreadable push":
+//
+//   - PLAIN — the commands, capabilities on the first one after a NUL.
+//   - SHALLOW — a client pushing from a `--depth` clone declares its cut points
+//     as `shallow <oid>` lines BEFORE the commands. They are state, not a ref
+//     update: git's own receive-pack reads them and so must anything standing in
+//     front of it. Skipping them is not a concession; the pack that follows is
+//     still verified by git, which is what decides whether a shallow push is
+//     acceptable at all.
+//   - SIGNED — `git push --signed` wraps the commands in a push certificate. The
+//     capabilities ride the `push-cert` line instead of a command, the commands
+//     sit between the certificate header and its signature, and `push-cert-end`
+//     closes it. The commands inside are the SAME commands, so the policy reads
+//     them the same way.
+//
+// It stays STRICT about what it cannot account for: a body it cannot fully parse
+// is refused rather than waved through, because a policy applied to commands you
+// could not read is not a policy. n reports how many bytes of body the command
+// section occupied, which the caller needs because the remainder is the pack and
+// must still reach git verbatim.
 func parseRefCommandsCaps(body []byte) (cmds []refCommand, n int, caps string, err error) {
-	const maxCommands = 1000 // a push updating more refs than this is not a coding run
+	const (
+		maxCommands = 1000    // a push updating more refs than this is not a coding run
+		maxSection  = 1 << 20 // the command section is small; the PACK is the big part
+	)
+	cert := certNone
 	for {
 		if n+4 > len(body) {
 			return nil, 0, "", fmt.Errorf("truncated pkt-line header")
+		}
+		if n > maxSection {
+			return nil, 0, "", fmt.Errorf("ref command section is too large")
 		}
 		var size int
 		if size, err = pktLen(body[n : n+4]); err != nil {
 			return nil, 0, "", err
 		}
 		if size == 0 { // flush-pkt: the commands end here and the pack begins
+			if cert != certNone {
+				return nil, 0, "", fmt.Errorf("push certificate was never closed")
+			}
 			return cmds, n + 4, caps, nil
 		}
 		if size < 4 || n+size > len(body) {
@@ -157,18 +275,95 @@ func parseRefCommandsCaps(body []byte) (cmds []refCommand, n int, caps string, e
 		}
 		line := body[n+4 : n+size]
 		n += size
-		if len(cmds) >= maxCommands {
-			return nil, 0, "", fmt.Errorf("too many ref updates in one push")
-		}
-		if i := bytes.IndexByte(line, 0); i >= 0 { // capabilities ride the first command
+
+		// Capabilities ride the first line that carries a NUL — the first command
+		// on a plain push, the `push-cert` line on a signed one.
+		if i := bytes.IndexByte(line, 0); i >= 0 {
 			caps = string(bytes.TrimRight(line[i+1:], "\n"))
 			line = line[:i]
 		}
-		c, perr := parseRefCommand(string(bytes.TrimRight(line, "\n")))
+		text := string(bytes.TrimRight(line, "\n"))
+
+		switch {
+		case text == "push-cert":
+			if cert != certNone {
+				return nil, 0, "", fmt.Errorf("nested push certificate")
+			}
+			cert = certHead
+			continue
+		case text == "push-cert-end":
+			if cert == certNone {
+				return nil, 0, "", fmt.Errorf("push certificate closed but never opened")
+			}
+			cert = certNone
+			continue
+		case cert == certHead:
+			// certificate version / pusher / pushee / nonce, ended by a blank
+			// line. None of it is a ref update and none of it is trusted here:
+			// verifying the certificate is git's business, not the policy's.
+			if text == "" {
+				cert = certCmds
+			}
+			continue
+		case cert == certSig:
+			// Opaque to us; only push-cert-end above leaves this state, so a blank
+			// line inside a signature block cannot be mistaken for anything.
+			continue
+		case cert == certCmds && strings.HasPrefix(text, "-----BEGIN"):
+			cert = certSig
+			continue
+		case strings.HasPrefix(text, "shallow "):
+			continue
+		}
+
+		if len(cmds) >= maxCommands {
+			return nil, 0, "", fmt.Errorf("too many ref updates in one push")
+		}
+		c, perr := parseRefCommand(text)
 		if perr != nil {
 			return nil, 0, "", perr
 		}
 		cmds = append(cmds, c)
+	}
+}
+
+// readCommandSection reads the pkt-lines a pushing client sends, up to and
+// including the flush that ends them, and returns those bytes VERBATIM.
+//
+// It exists for the transports that get a STREAM rather than a body — the SSH
+// channel, where the pack that follows may be gigabytes and must never be
+// buffered. It knows only framing; what the bytes MEAN is read out of them by
+// the one parser above, so there is a single implementation of the command
+// grammar and the stream transport cannot come to a different conclusion from
+// the buffered one.
+//
+// It is bounded: a client that never sends a flush hits maxSection and is
+// refused rather than read forever.
+func readCommandSection(r io.Reader) ([]byte, error) {
+	const maxSection = 1 << 20
+	var out bytes.Buffer
+	var hdr [4]byte
+	for {
+		if out.Len() > maxSection {
+			return nil, fmt.Errorf("ref command section is too large")
+		}
+		if _, err := io.ReadFull(r, hdr[:]); err != nil {
+			return nil, fmt.Errorf("truncated pkt-line header")
+		}
+		size, err := pktLen(hdr[:])
+		if err != nil {
+			return nil, err
+		}
+		out.Write(hdr[:])
+		if size == 0 { // flush: the commands end here and the pack begins
+			return out.Bytes(), nil
+		}
+		if size < 4 {
+			return nil, fmt.Errorf("pkt-line length %d is not a frame", size)
+		}
+		if _, err := io.CopyN(&out, r, int64(size-4)); err != nil {
+			return nil, fmt.Errorf("truncated pkt-line payload")
+		}
 	}
 }
 
@@ -191,21 +386,53 @@ func parseRefCommandsCaps(body []byte) (cmds []refCommand, n int, caps string, e
 // side-band-64k reads the report off band 1 and hangs waiting for it otherwise,
 // which is exactly the "unexpected disconnect while reading sideband packet"
 // a plain body produces.
+//
+// A pkt-line cannot exceed 65520 bytes INCLUDING its own 4-byte length, and the
+// length is 4 hex digits — so a longer payload does not merely truncate, it
+// renders a 5-digit number that the client reads as a different, tiny frame and
+// then desynchronizes on. Wrapping a whole multi-ref report in one band-1 packet
+// hit that at around 200 refs and produced the exact "RPC failed / unexpected
+// disconnect" this function exists to avoid. So the report is CHUNKED across as
+// many band-1 packets as it needs, which is what side-band-64k means, and each
+// ng line is bounded independently so one absurd ref name cannot overflow a
+// frame on its own.
 func refusalReport(cmds []refCommand, caps, reason string) []byte {
 	var report bytes.Buffer
 	report.Write(packetWrite("unpack ok\n"))
 	for _, c := range cmds {
-		report.Write(packetWrite("ng " + c.Ref + " " + reason + "\n"))
+		report.Write(packetWrite(clip("ng "+c.Ref+" "+reason, maxPktPayload-1) + "\n"))
 	}
 	report.WriteString("0000")
 
 	if !hasCap(caps, "side-band-64k") {
 		return report.Bytes()
 	}
+	// Band 1 is the report stream. The band byte is part of the payload, so each
+	// chunk carries one fewer byte than a bare pkt-line could.
 	var out bytes.Buffer
-	out.Write(packetWrite("\x01" + report.String())) // band 1: the report stream
+	for rest := report.Bytes(); len(rest) > 0; {
+		n := min(len(rest), maxPktPayload-1)
+		out.Write(packetWrite("\x01" + string(rest[:n])))
+		rest = rest[n:]
+	}
 	out.WriteString("0000")
 	return out.Bytes()
+}
+
+// maxPktPayload is the most a single pkt-line may carry: git's 65520-byte frame
+// less its own 4-byte hex length.
+const maxPktPayload = 65520 - 4
+
+// clip bounds one report line so it always fits a frame, cutting on a rune
+// boundary so a truncated line stays valid UTF-8 for whatever prints it.
+func clip(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	for max > 0 && !utf8.RuneStart(s[max]) {
+		max--
+	}
+	return s[:max]
 }
 
 // hasCap reports whether the client offered a capability. Exact token match on

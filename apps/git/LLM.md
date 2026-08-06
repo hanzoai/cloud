@@ -72,6 +72,61 @@ gives, is prose, an MCP tool and a CLI command.
    /v1 ops frame-for-frame (see zap.go's header comment); retiring these is a
    client migration, not a typing task.
 
+## The ref policy stands in EIGHT doors, not one
+
+`refpolicy.go` used to say receive-pack was "the point every path that changes a
+ref passes through and no client can decline to". That was false, and it was the
+whole argument. It guarded **one** of eight ref writers into the same bare repo;
+a run refused at the front door walked in through any of the other seven with
+the same credential — most cheaply through `POST /repos/:name/push`, which lands
+a **fast-forward child** on the branch a reviewer just approved and so trips no
+"the branch was rewritten" signal anywhere.
+
+The writers, and how each states its intent, are enumerated in `refpolicy.go`'s
+own doc comment (writers 1–8) so the list lives beside the rule. Two of them
+cannot be judged command-by-command and are refused **structurally** instead:
+the mirror's `+refs/*:refs/*` takes a negative refspec (`^refs/heads/agent/*`,
+git ≥ 2.29) so the machine namespace is outside its refmap and therefore outside
+`--prune`; and `HEAD` is not under `refs/`, so the two importers and the
+client-less push run it past `checkHeadRef`.
+
+**A ninth door is a change to that list, not just a new function.** The proof
+that each is closed is `refwriters_wire_test.go` — real git CLI, real SSH
+listener, real server, one test per door.
+
+## A coding run holds a GRANT, not a credential
+
+`grant.go`. A run used to carry the org's sealed `agent` git token — an ordinary
+IAM `sk-` key. IAM resolves that to a user, cloud mints a full org principal from
+it, and `cloud.Member` "admits any validated principal": the one process running
+untrusted model output held something that opened `/v1/kms/secrets` (every other
+secret the org has, including whatever posts to its Slack) and every other
+org-scoped API. The push was confined; the credential was not.
+
+A grant is a bounded permission to drive the pack protocol against ONE
+repository, creating ONE ref, until it expires. It **authenticates nobody** — it
+is not a JWT and carries none of `APIKeyPrefixes`, so `validatedPrincipal`
+returns nil, no `X-User-Id` is minted, `principal.Validated` is false, and every
+`cloud.Guard` and every `tenantOf` refuses it **by default**. Nothing had to be
+told to say no.
+
+The one exception is `resolvePackRepo` (smart_http.go), so the set of doors a
+grant opens is the set of callers of that function: the three pack handlers, and
+nothing else in the binary. A principal always wins — the grant is consulted only
+where there is none, so it can never widen an authenticated caller.
+
+It lives in the process that judges it and dies with it: no key to manage, no
+signature to verify, nothing at rest to leak, and a restart fails an outstanding
+push **closed**. That makes it process-local, which is right for a forge serving
+bare repos off one RWO volume; a replicated forge would simply not know a grant
+minted elsewhere, which degrades to a refusal and never to an admission.
+
+Minting is `POST /git/grant` on the plane (org from `cloud.Who`, never an
+argument) and withdrawal is `POST /git/revoke` by handle, so a grant's life is
+the RUN's life and the TTL is only the backstop. **There is no per-org agent git
+secret any more** — the constants naming one were deleted rather than left
+unused, because a constant naming a secret is an instruction to seal one.
+
 ## Internal plane ops
 
 `POST /git/files` (files.go) and `POST /git/publish` (community.go) are typed

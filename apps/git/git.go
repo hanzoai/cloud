@@ -259,6 +259,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the reactor that pushes them. Registered above for the co-resident case, and
 	// published here for the split one (mirror_control.go).
 	exposeMirror()
+	// Delegate ONE ref write to a process running untrusted work, so it does not
+	// have to hold a credential that opens the rest of the tenant (grant.go).
+	exposeGrant()
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
