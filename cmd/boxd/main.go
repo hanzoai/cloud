@@ -22,12 +22,16 @@
 // read-only root, no service-account token) and the tainted node pool
 // underneath it. boxd must NEVER be reachable from outside the cluster.
 //
-// This header used to also claim "a NetworkPolicy that in exec class permits
-// nothing but DNS". There is no such policy in force: the only box netpol
-// selects `app: code-exec` in namespace `hanzo`, and apps/sandbox schedules
-// boxes into `hanzo-boxes` labelled `hanzo.ai/box-class`. It matches nothing.
-// Claiming containment that is not deployed is worse than claiming none, so
-// the claim is removed until the policy selects a real pod.
+// NETWORK containment is real but is NOT boxd's: universe declares one policy
+// over `hanzo.ai/box-class` in namespace hanzo-boxes, so it governs every box
+// whether the pool scheduled it or a Deployment holds it. Egress is a whitelist
+// — DNS, then 80/443 to public address space only — so box→box on this port,
+// box→datastore and box→apiserver are denied by omission. That is what makes
+// the shared key useless from inside a box; boxd's uid separation is what keeps
+// it from being read in the first place. Two controls, deliberately, because
+// this one previously selected `app: code-exec` in namespace `hanzo` and
+// therefore matched no pod at all — containment that is declared and not in
+// force is worse than none, since nothing looks wrong.
 //
 // AUTH is one shared service key on X-API-Key, compared in constant time —
 // the same KMS-sourced CODE_EXEC_API_KEY the rest of this path already carries,
