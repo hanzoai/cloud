@@ -161,6 +161,11 @@ func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.Cha
 		PromptTokens:     resp.PromptTokens,
 		CompletionTokens: resp.CompletionTokens,
 		TotalTokens:      total,
+		// The run that caused this charge, when a run did. It is the correlation
+		// id, never the idempotency key: a tool loop settles once per ROUND, and
+		// every round of one run carries the same value here on purpose — that is
+		// what makes the run's total cost a SUM rather than a guess.
+		RequestID: req.RunID,
 	}, total, h)
 }
 

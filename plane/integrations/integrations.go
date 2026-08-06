@@ -36,6 +36,6 @@ var Ops = []string{
 // IntegrationsSlackSend post to an org's Slack channel via the org's KMS-custodied bot token.
 //
 // Calls plane.IntegrationsSlackSend on integrations over the peer plane.
-func IntegrationsSlackSend(ctx context.Context, in *plane.SlackSendIn) (*struct{}, error) {
-	return plane.Ask[plane.SlackSendIn, struct{}](ctx, App, plane.IntegrationsSlackSend, in)
+func IntegrationsSlackSend(ctx context.Context, in *plane.SlackSendIn) (*plane.SlackSent, error) {
+	return plane.Ask[plane.SlackSendIn, plane.SlackSent](ctx, App, plane.IntegrationsSlackSend, in)
 }

@@ -3,15 +3,11 @@ package integrations
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/coding"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -51,49 +47,30 @@ const (
 	// SLACK_CODING_CONCURRENCY / SLACK_CODING_ORG_CONCURRENCY.
 	codingDefaultConcurrency    = 8
 	codingDefaultOrgConcurrency = 2
-	// agentCredProvider / agentCredToken / agentCredUser name the per-org agent git
-	// credential in the integrations KMS namespace (/orgs/{org}/integrations/agent).
-	// An operator/automation seals the org's agent sk- key there; the coding path
-	// reads it fail-closed and never logs it.
-	agentCredProvider = "agent"
-	agentCredToken    = "git-token"
-	agentCredUser     = "git-user"
-	defaultAgentUser  = "x-access-token"
+	// codingDispatchTimeout bounds the ADMISSION call, not the run. Handing a run
+	// to the engine is a validate + credential read + session open; anything
+	// slower than this is a wedged peer, and the user gets an honest ack instead
+	// of a webhook that hangs.
+	codingDispatchTimeout = 30 * time.Second
 )
+
+// There is no per-org agent git credential any more, and the constants that
+// named one are gone rather than left unused.
+//
+// They pointed at /orgs/{org}/integrations/agent/git-token, where an operator
+// sealed the org's `sk-` key. IAM resolves such a key to a user, so cloud minted
+// a full org principal from it and the process running untrusted model output
+// held something that opened /v1/kms/secrets and every other org-scoped API. A
+// run now gets a push GRANT from the forge instead (apps/git/grant.go), which
+// authenticates nobody and opens one ref in one repository.
+//
+// Deleted, not deprecated: a constant naming a secret is an instruction to seal
+// one, and the whole point is that there is nothing left to seal.
 
 // codingRepoRE mirrors the git repo name rule (clients/git nameRE): a safe
 // identifier, so a hostile "repo" token can never smuggle a path or a second org.
 var codingRepoRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// codingLim bounds detached coding runs (global + per-org), separate from the
-// shared chat-turn pool (bridgeLim) because a coding run is long-lived. Initialized
-// once in slackBridgeReady.
-var codingLim *orgLimiter
-
-// codingDispatcher is the assembled coding orchestrator.
-//
-// It used to be INJECTED by the composition root, because coding could not
-// import git for the clone-url/verify-ref seams without a cycle. Those seams are
-// peer calls now — coding asks git over the plane — so the reason is gone and so
-// is the injection: the surface that triggers a coding run builds the thing that
-// runs it, once, here. One way to do it, and no window in which a deployment is
-// mounted but the dispatcher is still nil.
-var (
-	codingOnce       sync.Once
-	codingDispatcher coding.Dispatcher
-)
-
-// codingRunner returns the process's one Dispatcher, built on first use. The
-// logger seam carries coding's best-effort mirror failures into this
-// subsystem's log rather than dropping them.
-func codingRunner(s *cloud.Service[state]) coding.Dispatcher {
-	codingOnce.Do(func() {
-		codingDispatcher = coding.NewDispatcher(func(msg string, kv ...any) { s.Log.Warn(msg, kv...) })
-	})
-	return codingDispatcher
-}
-
-// codingIntent reports whether a prompt is a coding request and returns the text
 // after the `code:` trigger. Pure.
 func codingIntent(text string) (rest string, ok bool) {
 	t := strings.TrimSpace(text)
@@ -176,7 +153,7 @@ func handleSlackCoding(s *cloud.Service[state], ctx context.Context, org, botTok
 		_ = slackPostThread(ctx, botToken, channel, threadTS, terr.Error())
 		return
 	}
-	ack, started := startCodingJob(s, org, link.Subject, botToken, channel, threadTS, repo, task, targetID)
+	ack, started := startCodingJob(s, org, link.Subject, channel, threadTS, repo, task, targetID)
 	_ = slackPostThread(ctx, botToken, channel, threadTS, ack)
 	_ = started
 }
@@ -193,11 +170,20 @@ func handleSlackCoding(s *cloud.Service[state], ctx context.Context, org, botTok
 // every routed run died at the parse step — the same failure the chat turn had
 // until it moved onto the plane. The org still comes from THIS side, resolved
 // from the Slack-verified team_id, and is never a field the human can set.
-func resolveCodingTarget(ctx context.Context, org, ref string) (string, error) {
+func resolveCodingTarget(_ context.Context, org, ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return "", nil // no `on <machine>` — the ordinary cloud-sandbox run
 	}
+	// A DETACHED, TENANT-STATED context, and the inbound ctx is deliberately
+	// ignored. This lookup used to ride the webhook's request context, where
+	// cloud.For is a silent no-op (zip reads a stated caller only where there is
+	// no request) — so the call left with no org and agents refused it, which
+	// read back to the user as "no linked machine named X" for machines that
+	// existed. The parameter is kept and unused so the signature still matches
+	// every caller; naming it _ is what makes passing a request ctx harmless.
+	ctx, cancel := codingCallContext(org)
+	defer cancel()
 	t, err := plane.Ask[plane.TargetRefIn, plane.TargetRef](ctx, "agents", plane.AgentsResolveTarget,
 		&plane.TargetRefIn{Org: org, Ref: ref})
 	if err != nil || t == nil || strings.TrimSpace(t.ID) == "" {
@@ -234,187 +220,87 @@ func handleSlackSlashCoding(s *cloud.Service[state], ctx context.Context, org, t
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", rerr.Error())
 		return
 	}
-	tok, terr := TokenFor(ctx, org, "slack", slackBotTokenSecret)
-	if terr != nil {
-		s.Log.Warn("slack coding: bot token fetch", "team", teamID, "err", terr)
-		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", "Sorry — I couldn't post back to this channel. Please try again shortly.")
-		return
-	}
-	ack, _ := startCodingJob(s, org, link.Subject, strings.TrimSpace(string(tok)), channel, "", repo, task, targetID)
+	// The slash path posts its result to the channel, not the (short-lived)
+	// response_url, and it no longer needs to fetch the bot token to do it: the
+	// engine reports through the org's own send door, which owns the token.
+	ack, _ := startCodingJob(s, org, link.Subject, channel, "", repo, task, targetID)
 	_ = slackPostResponseURL(ctx, responseURL, "in_channel", ack)
 }
 
-// startCodingJob resolves the org's agent credential (fail-closed), acquires a
-// coding slot, and spawns the DETACHED run (own long timeout + panic recovery).
-// It returns the ack to post and whether a run actually started. A missing
-// dispatcher, a missing credential, or a full pool each returns a specific ack
-// and started=false — never a silent drop.
+// startCodingJob hands one run to the ENGINE and returns the ack to post.
 //
-// A ROUTED run (targetID != "") needs NO org credential: the machine authenticates
-// git with its own already-held credential, so the KMS agent-credential fetch is
-// skipped and a workspace without one can still route to a linked machine.
-func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, threadTS, repo, task, targetID string) (ack string, started bool) {
-	dispatch := codingRunner(s)
-	var user, token string
-	if strings.TrimSpace(targetID) == "" {
-		var err error
-		user, token, err = agentGitCredential(s, context.Background(), org)
-		if err != nil {
-			s.Log.Warn("slack coding: agent credential", "org", org, "err", err) // never logs the token
-			return "This workspace has no coding-agent git credential provisioned yet. Ask an admin to seal one in KMS.", false
-		}
-	}
-	if codingLim == nil || !codingLim.acquire(org) {
-		return "I'm at capacity on coding tasks right now — please try again in a few minutes.", false
-	}
-	// Clone the fiber-buffer-derived strings before the detached goroutine outlives
-	// the request (they are subslices of reused request buffers).
+// It no longer runs the job. It used to assemble a Dispatcher in THIS process
+// and drive the whole 25-minute orchestration from the chat surface, which made
+// the chat process a second coding engine — its own pool, its own in-flight set,
+// its own copy of the rules — and left a run started from Slack with no address
+// the app could name. Now the engine lives in one process (agents, which holds
+// the session store, the durable engine and the routed mailbox) and this is what
+// an adapter should be: parse, authorize, dispatch, reply.
+//
+// THE CREDENTIAL NO LONGER PASSES THROUGH HERE. The engine reads it from KMS at
+// the moment it dispatches a sandbox. A token with write access to every repo in
+// the org used to be fetched by this function and carried down through three
+// packages that had no use for it; deleting that is the single largest reduction
+// in the secret's custody in this change.
+func startCodingJob(s *cloud.Service[state], org, userSub, channel, threadTS, repo, task, targetID string) (ack string, started bool) {
+	// Clone the fiber-buffer-derived strings: they are subslices of a reused
+	// request buffer and the plane call outlives the handler that produced them.
 	org, userSub = strings.Clone(org), strings.Clone(userSub)
-	botToken, channel, threadTS = strings.Clone(botToken), strings.Clone(channel), strings.Clone(threadTS)
+	channel, threadTS = strings.Clone(channel), strings.Clone(threadTS)
 	repo, task, targetID = strings.Clone(repo), strings.Clone(task), strings.Clone(targetID)
-	req := coding.Req{
-		Org: org, UserID: userSub, AgentRef: slackAgentRef(), Repo: repo,
-		Prompt: task, CredUser: user, CredToken: token,
-		TimeoutSeconds: int(codingTaskTimeout().Seconds()),
-		TargetID:       targetID,
-	}
-	go func() {
-		defer codingLim.release(org)
-		defer func() {
-			if r := recover(); r != nil {
-				s.Log.Error("slack coding: run panic (recovered)", "org", org, "repo", repo, "err", r)
-			}
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), codingTaskTimeout())
-		defer cancel()
-		res := dispatch.Run(ctx, req)
-		summary, blocks := codingResultCard(s.Brand, org, repo, res)
-		if perr := PostSlackBlocksThread(ctx, botToken, channel, threadTS, summary, blocks); perr != nil {
-			s.Log.Warn("slack coding: result post", "org", org, "repo", repo, "err", perr)
-		}
-	}()
-	if targetID != "" {
-		return "🛰️ On it — routing `" + repo + "` to your machine `" + slackEscape(targetID) + "`. Follow it live in mission-control.", true
-	}
-	return "🛠️ On it — working `" + repo + "`. I'll post the branch + PR here when the run finishes.", true
-}
 
-// agentGitCredential reads the org's agent git credential from KMS, fail-closed:
-// unmounted, KMS-down, or an absent/empty token each return an error and NEVER a
-// value. The username is a fixed basic-auth label (git ignores it; the token is
-// the sk- secret) unless an operator sealed a specific one.
-func agentGitCredential(s *cloud.Service[state], ctx context.Context, org string) (user, token string, err error) {
-	if !validOrg(org) {
-		return "", "", fmt.Errorf("integrations: invalid org")
-	}
-	if !kmsReady(s) {
-		return "", "", fmt.Errorf("integrations: kms not ready")
-	}
-	tok, err := kmsGet(s, kmsPath(org, agentCredProvider), agentCredToken)
-	if err != nil {
-		return "", "", err
-	}
-	token = strings.TrimSpace(string(tok))
-	if token == "" {
-		return "", "", fmt.Errorf("integrations: empty agent credential")
-	}
-	user = defaultAgentUser
-	if u, uerr := kmsGet(s, kmsPath(org, agentCredProvider), agentCredUser); uerr == nil {
-		if v := strings.TrimSpace(string(u)); v != "" {
-			user = v
-		}
-	}
-	return user, token, nil
-}
+	// STATE THE TENANT, ON A CONTEXT WITH NO REQUEST BEHIND IT. Both halves are
+	// load-bearing and this is the exact pairing whose absence made every coding
+	// run fail: the engine's balance gate, session store, git reads and tracker
+	// write all authorize on the CALLER's org, and a stated caller is only
+	// readable off a detached context.
+	ctx, cancel := codingCallContext(org)
+	defer cancel()
 
-// codingResultCard renders a coding run's Result as (fallback summary, Block Kit
-// blocks): repo, branch, tracker PR key, session link, and pass/fail. Every
-// user/agent-derived value is slackEscape'd (reusing the git-notify escaper) so a
-// diffstat, branch, or error can never inject Slack mrkdwn. Pure.
-func codingResultCard(brand, org, repo string, res coding.Result) (string, []any) {
-	repoLabel := slackEscape(org + "/" + repo)
-	// A ROUTED run is ACCEPTED here, not finished: the machine drives it to terminal
-	// and streams into the session, so the card reports "queued on <machine>, follow
-	// it live" rather than a premature pass/fail. A routed run that failed to enqueue
-	// (Routed && !OK) still falls through to the failure card below.
-	if res.Routed && res.OK {
-		machine := slackEscape(res.TargetID)
-		summary := "Routed " + repoLabel + " to " + machine
-		blocks := []any{
-			mrkdwnSection(":satellite: *Routed to a machine* — " + repoLabel),
-			map[string]any{"type": "section", "fields": []any{
-				mrkdwnField("*Repository*\n" + repoLabel),
-				mrkdwnField("*Machine*\n`" + machine + "`"),
-			}},
-		}
-		if res.SessionID != "" {
-			blocks = append(blocks, map[string]any{
-				"type":     "context",
-				"elements": []any{map[string]any{"type": "mrkdwn", "text": "Follow it live · session `" + slackEscape(res.SessionID) + "` · " + brandLabel(brand) + " coding"}},
-			})
-		}
-		return summary, blocks
-	}
-	var emoji, title, summary string
-	switch {
-	case !res.OK:
-		emoji, title = ":x:", "Coding task failed"
-		summary = "Coding task failed: " + repoLabel
-	case !res.Changed:
-		emoji, title = ":white_check_mark:", "No changes needed"
-		summary = "No changes needed: " + repoLabel
-	default:
-		emoji, title = ":sparkles:", "Branch pushed"
-		summary = "Branch pushed to " + repoLabel + " (" + slackEscape(res.Branch) + ")"
-	}
-
-	header := mrkdwnSection(emoji + " *" + title + "* — " + repoLabel)
-	fields := []any{
-		mrkdwnField("*Repository*\n" + repoLabel),
-		mrkdwnField("*Branch*\n" + codeOrDash(res.Branch)),
-	}
-	if res.OK && res.Changed {
-		pr := "—"
-		if res.PR.Identifier != "" {
-			pr = "`" + slackEscape(res.PR.Identifier) + "`"
-		}
-		commit := codeOrDash(shortSHA(res.CommitSha))
-		fields = append(fields,
-			mrkdwnField("*PR*\n"+pr),
-			mrkdwnField("*Commit*\n"+commit),
-		)
-	}
-	if !res.OK && res.Error != "" {
-		fields = append(fields, mrkdwnField("*Error*\n"+slackEscape(truncate(res.Error, 300))))
-	}
-	blocks := []any{header, map[string]any{"type": "section", "fields": fields}}
-
-	if strings.TrimSpace(res.Diffstat) != "" && res.OK && res.Changed {
-		blocks = append(blocks, mrkdwnSection("*Diff*\n```"+slackEscape(truncate(res.Diffstat, 1200))+"```"))
-	}
-	if res.SessionID != "" {
-		blocks = append(blocks, map[string]any{
-			"type":     "context",
-			"elements": []any{map[string]any{"type": "mrkdwn", "text": "Session `" + slackEscape(res.SessionID) + "` · " + brandLabel(brand) + " coding"}},
+	out, err := plane.Ask[plane.CodingStartIn, plane.CodingStarted](ctx, "agents", plane.CodingStart,
+		&plane.CodingStartIn{
+			Subject: userSub, Repo: repo, Prompt: task, AgentRef: slackAgentRef(),
+			TargetID: targetID, ReplyChannel: channel, ReplyThread: threadTS,
 		})
+	if err != nil {
+		// Never logs the task or a token; the org and repo are enough to find the run.
+		s.Log.Warn("slack coding: dispatch", "org", org, "repo", repo, "err", err)
+		return codingDispatchAck(err), false
 	}
-	return summary, blocks
+	if out == nil {
+		return "Sorry \u2014 I couldn't start that coding task. Please try again shortly.", false
+	}
+	if out.Routed {
+		return "\U0001f6f0\ufe0f On it \u2014 routing `" + slackEscape(repo) + "` to your machine `" + slackEscape(out.TargetID) + "`. I'll report in this thread.", true
+	}
+	return "\U0001f6e0\ufe0f On it \u2014 working `" + slackEscape(repo) + "` on `" + slackEscape(out.Branch) + "`. I'll report in this thread.", true
 }
 
-func codeOrDash(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return "—"
+// codingDispatchAck turns the engine's refusal into the one sentence the user
+// should read. Capacity is separated because it is the only one worth retrying,
+// and an unprovisioned credential is separated because it is the one an admin
+// can actually fix.
+func codingDispatchAck(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "at capacity"):
+		return "I'm at capacity on coding tasks right now \u2014 please try again in a few minutes."
+	case strings.Contains(msg, "agent git credential"):
+		return "This workspace has no coding-agent git credential provisioned yet. Ask an admin to seal one in KMS."
 	}
-	return "`" + slackEscape(s) + "`"
+	return "Sorry \u2014 I couldn't start that coding task. Please try again shortly."
 }
 
-func brandLabel(brand string) string {
-	brand = strings.TrimSpace(brand)
-	if brand == "" {
-		return "Hanzo"
-	}
-	return strings.ToUpper(brand[:1]) + brand[1:]
+// codingCallContext is the context a coding DISPATCH travels on: detached from
+// the webhook request, carrying the tenant, bounded by a short budget because
+// dispatch is an admission and not the run.
+//
+// It takes an org and nothing else, for the same reason bridgeRunContext does: a
+// ctx parameter is an invitation to pass the webhook's, and on the webhook's ctx
+// the statement is silently discarded and the call leaves with no tenant at all.
+// The signature is the guard.
+func codingCallContext(org string) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(cloud.For(context.Background(), org), codingDispatchTimeout)
 }
 
 func truncate(s string, n int) string {
@@ -446,33 +332,3 @@ func mrkdwnField(text string) map[string]any {
 }
 
 // shortSHA abbreviates a commit hash to git's 7-char convention.
-func shortSHA(sha string) string {
-	sha = strings.TrimSpace(sha)
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
-}
-
-// ── config (env, read at call time — operator-injected from KMS) ──────────────
-
-func codingTaskTimeout() time.Duration {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("SLACK_CODING_TIMEOUT_SEC"))); err == nil && v > 0 {
-		return time.Duration(v) * time.Second
-	}
-	return codingTaskDefaultTimeout
-}
-
-func codingConcurrency() int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("SLACK_CODING_CONCURRENCY"))); err == nil && v > 0 {
-		return v
-	}
-	return codingDefaultConcurrency
-}
-
-func codingOrgConcurrency() int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("SLACK_CODING_ORG_CONCURRENCY"))); err == nil && v > 0 {
-		return v
-	}
-	return codingDefaultOrgConcurrency
-}
