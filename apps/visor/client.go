@@ -12,16 +12,28 @@
 // principal's org, never a client field) plus the forwarded identity headers, so
 // Visor scopes to exactly the caller's tenant on both paths.
 //
-// ENVELOPE: Visor (casibase) returns HTTP 200 with {status:"ok"|"error", msg,
-// data}. A logical failure is status:"error" at HTTP 200, NOT a 4xx/5xx — so a
-// bare status-code check would read an error as success. call() inspects the
-// status field and surfaces msg as an honest error; it never fabricates data.
+// TWO WIRES, and a call site says which, because they cannot be told apart by
+// looking:
+//
+//	cl.call  LEGACY. Visor (casibase) returns HTTP 200 with {status:"ok"|"error",
+//	         msg, data}; a logical failure is status:"error" at HTTP 200, NOT a
+//	         4xx/5xx, so a bare status-code check would read an error as success.
+//	cl.op    TYPED (zip.Get/Put/Delete[In,Out]). The answer IS the value, the
+//	         status IS the outcome: 204 for a void result, 404 for a miss, and
+//	         no envelope at all.
+//
+// Converted so far: a machine's AGENT (bots.go) and the DOKS node list (k8s.go).
+// Visor is converting noun by noun and drops the envelope as each lands (its
+// LLM.md, "Typed ops"), so `call` shrinks toward zero and goes with the last
+// noun. Converting a visor route is a WIRE BREAK and lands with its caller here
+// in the same change.
 
 package visor
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -168,18 +180,35 @@ func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any
 // returns no error at all, so a version skew reads as an empty answer rather than
 // a broken one. A caller therefore checks that the field it asked for ARRIVED —
 // see listK8sNodes — instead of trusting a decode that cannot fail.
+//
+// It is not always that quiet, and the loud form is worth knowing: an
+// AgentBinding carries its OWN `status` field, so reading one with call above
+// takes "Pending" for an envelope status, decides the upstream failed, and
+// answers 502. A real answer becomes an outage.
 func (cl *client) op(c *zip.Ctx, method, path, query string, body any, out any) error {
 	raw, err := cl.do(c, method, path, query, body)
 	if err != nil {
 		return err
 	}
-	if out == nil {
+	// A VOID op answers 204 with no body, which is not a decode failure — it is
+	// the whole answer. Only a caller that asked for nothing can be given
+	// nothing, so this is checked with out rather than instead of it.
+	if out == nil || len(bytes.TrimSpace(raw)) == 0 {
 		return nil
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "visor: decode %s: %v", path, err)
 	}
 	return nil
+}
+
+// notFound reports whether err is an upstream 404. For the agent ops that is a
+// FACT about the machine — it runs no bot — and not a fault, so a caller that
+// has something honest to say about "no binding" says it rather than passing a
+// 404 through with visor's prose attached.
+func notFound(err error) bool {
+	var he *zip.HTTPError
+	return errors.As(err, &he) && he.Status == http.StatusNotFound
 }
 
 // authorize attaches the Visor identity to req per the one-rule model: the
