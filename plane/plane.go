@@ -277,6 +277,11 @@ const (
 	// side, which is what keeps a revoke bounded to its own user's sessions.
 	AgentsSessionsStop  = "agents_sessions_stop"
 	AgentsSessionsCount = "agents_sessions_count"
+	// AgentsRunOnBehalf is the chat bridges' door onto a run. A plugin is a
+	// PROCESS, so agents.RunOnBehalf — which gates on that package's `mounted`
+	// global — can only ever answer when agents happens to be co-resident. It was
+	// not, and every @hanzo turn in Slack died on ErrNoPeer.
+	AgentsRunOnBehalf = "agents_run_on_behalf"
 
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
@@ -1729,3 +1734,37 @@ type Ownership struct {
 	// Other is true when some org OTHER than the caller's owns one.
 	Other bool `json:"other"`
 }
+
+// RunOnBehalfIn asks agents to run one turn AS a linked user.
+//
+// The bridges (Slack, Discord, Teams, Telegram) are their own plugin, so this
+// crosses a process boundary and must be a typed plane op rather than a Go call:
+// a package global cannot be reached from another process, and the in-process
+// shortcut answered ErrNoPeer for every deployment that did not happen to place
+// agents and integrations in one binary.
+//
+// No field here is a map — the encoder refuses one at the plane boundary.
+type RunOnBehalfIn struct {
+	// Org is the isolation gate, the tenant, and the balance the run bills.
+	Org string `json:"org"`
+	// Subject is the caller's LINKED Hanzo identity, unqualified. Attribution and
+	// authorization both hang off it, so a turn can never run as nobody: the
+	// answering side refuses an empty subject rather than falling back to the org.
+	Subject string `json:"subject"`
+	// Ref names the agent to run.
+	Ref string `json:"ref"`
+	// Input is the user's message, already stripped of the leading @mention.
+	Input string `json:"input"`
+}
+
+// RunOnBehalfOut is one finished turn.
+//
+// Status is carried EXPLICITLY rather than inferred from a non-empty Output,
+// because "the agent ran and had nothing to say" and "the agent failed" are
+// different answers and a bridge must not post the second as the first.
+type RunOnBehalfOut struct {
+	Status string `json:"status"`
+	Output string `json:"output"`
+	RunID  string `json:"runId,omitempty"`
+}
+

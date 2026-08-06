@@ -135,8 +135,16 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	//     public client IP; in-cluster direct callers (no X-Forwarded-For) are
 	//     exempt, matching the standalone gateway's public-only scope. See
 	//     middleware_edge.go.
-	app.Use(EdgeCORS(deps.GatewayPolicy))
+	//
+	// RATE LIMIT FIRST. EdgeCORS now resolves an unknown origin against the site-host
+	// store, which in production is a plane hop, and the Origin header is chosen by
+	// the caller — so an attacker rotating a fresh hostname per request would defeat
+	// the answer cache and turn each inbound request into an internal one. The
+	// per-IP counter is a map increment and bounds that structurally, with no second
+	// mechanism to tune. The cost is that a flood of PREFLIGHTS is capped too, which
+	// is the correct answer to a flood of preflights.
 	app.Use(EdgeRateLimit(deps.GatewayPolicy))
+	app.Use(EdgeCORS(deps.GatewayPolicy))
 
 	Identify(app, cfg)
 	return app

@@ -229,7 +229,7 @@
     },
     "/v1/git/keys/{id}": {
       "delete": {
-        "operationId": "delete_v1_git_keys_by_id",
+        "operationId": "delete_v1_git_keys_id",
         "summary": "Removes a registered SSH key, scoped to the caller's org: an org can only delete its own, and a key id it does not own is not found.",
         "description": "Removes a registered SSH key, scoped to the caller's org: an org can\nonly delete its own, and a key id it does not own is not found. Answers 204\nwith no body. Once removed the key no longer authenticates any SSH git access.",
         "tags": [
@@ -327,7 +327,7 @@
     },
     "/v1/git/repos/{name}": {
       "delete": {
-        "operationId": "delete_v1_git_repos_by_name",
+        "operationId": "delete_v1_git_repos_name",
         "summary": "Removes a repo's metadata and purges its storage.",
         "description": "Removes a repo's metadata and purges its storage. Answers 204 with\nno body. The metadata row is the source of truth for existence, so a storage\npurge that fails is logged and the delete still succeeds — and a second call\nis a 404, not a second delete.",
         "tags": [
@@ -352,7 +352,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_git_repos_by_name",
+        "operationId": "get_v1_git_repos_name",
         "summary": "Returns one repo with its live ref state: every branch name and the resolved HEAD commit.",
         "description": "Returns one repo with its live ref state: every branch name and the\nresolved HEAD commit. Both are read from the object store on each call, so an\nempty repo reports no branches and an empty head rather than failing. A repo\noutside the caller's scope is not found.",
         "tags": [
@@ -384,7 +384,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_git_repos_by_name",
+        "operationId": "patch_v1_git_repos_name",
         "summary": "Flips a repo's public bit, the one mutable repo setting today.",
         "description": "Flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed. Returns the updated repo.",
         "tags": [
@@ -432,7 +432,7 @@
     },
     "/v1/git/repos/{name}/blob": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_blob",
+        "operationId": "get_v1_git_repos_name_blob",
         "summary": "Returns one file's bytes at one revision.",
         "description": "Returns one file's bytes at one revision. Text comes back verbatim,\nbinary comes back base64, and a file past the 1 MiB view cap comes back marked\ntruncated with NO content — the client is expected to clone instead.",
         "tags": [
@@ -494,7 +494,7 @@
     },
     "/v1/git/repos/{name}/commits": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_commits",
+        "operationId": "get_v1_git_repos_name_commits",
         "summary": "Walks a ref's history newest first, or one path's history when a path is given.",
         "description": "Walks a ref's history newest first, or one path's history when a\npath is given. There is no cursor: the page is the newest `limit` commits.",
         "tags": [
@@ -569,7 +569,7 @@
     },
     "/v1/git/repos/{name}/files": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_files",
+        "operationId": "get_v1_git_repos_name_files",
         "summary": "Returns every file a glob selects at one revision, WITH its bytes and the revision they came from.",
         "description": "Returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from. It is the read a delivery generator makes:\none call answers \"what is the inventory at this commit, and what does it say\",\nwhere listing and then fetching would be a request per file.\n\nReturning the resolved revision matters as much as the bytes. A generator that\nlists at `main` and then reads at `main` can straddle a push and assemble half\nits inventory from one commit and half from the next; resolving once makes the\nwhole read consistent by construction.\n\nA file past the read cap comes back Truncated with no content rather than\nbeing dropped. A caller building a desired set has to know the difference\nbetween \"this file is empty\" and \"this file was not read\" — silently omitting\nit is how a pruning reconcile deletes what the missing file declared.",
         "tags": [
@@ -623,7 +623,7 @@
     },
     "/v1/git/repos/{name}/gc": {
       "post": {
-        "operationId": "post_v1_git_repos_by_name_gc",
+        "operationId": "post_v1_git_repos_name_gc",
         "summary": "Repacks a repo into one bitmapped pack and rewrites its commit-graph, so the next clone reuses the bitmap instead of walking the whole object graph.",
         "description": "Repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically. It\nruns under one pack slot with the same memory bounds as a clone, so it can\nblock behind heavy pack traffic rather than compete with it. Storage usage is\nre-measured afterwards, since a repack reclaims space.",
         "tags": [
@@ -662,7 +662,7 @@
     },
     "/v1/git/repos/{name}/mirror": {
       "post": {
-        "operationId": "post_v1_git_repos_by_name_mirror",
+        "operationId": "post_v1_git_repos_name_mirror",
         "summary": "Imports an external git repository into the caller's repo, provisioning it on first use.",
         "description": "Imports an external git repository into the caller's repo, provisioning\nit on first use. Fetch is FORCED and covers every ref, so a first call clones\nthe source and a repeat call re-syncs it — the endpoint is idempotent by mirror\nsemantics. Mirrored bytes are metered exactly like a push, and a push.landed\nevent is emitted for the default branch so the code index picks the repo up.",
         "tags": [
@@ -710,7 +710,7 @@
     },
     "/v1/git/repos/{name}/mirrors": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_mirrors",
+        "operationId": "get_v1_git_repos_name_mirrors",
         "summary": "Returns a repo's outbound mirror targets — the downstream remotes the mirror reactor pushes to whenever a push lands here.",
         "description": "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
         "tags": [
@@ -753,7 +753,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos_by_name_mirrors",
+        "operationId": "post_v1_git_repos_name_mirrors",
         "summary": "Registers a downstream remote the repo's advanced refs are pushed to whenever a push lands here.",
         "description": "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
         "tags": [
@@ -801,7 +801,7 @@
     },
     "/v1/git/repos/{name}/mirrors/{id}": {
       "delete": {
-        "operationId": "delete_v1_git_repos_by_name_mirrors_by_id",
+        "operationId": "delete_v1_git_repos_name_mirrors_id",
         "summary": "Removes one outbound mirror target; later pushes stop being forwarded to it.",
         "description": "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
         "tags": [
@@ -838,7 +838,7 @@
     },
     "/v1/git/repos/{name}/push": {
       "post": {
-        "operationId": "post_v1_git_repos_by_name_push",
+        "operationId": "post_v1_git_repos_name_push",
         "summary": "Lands a set of files as one commit without a git client — the hanzo.app builder's push.",
         "description": "Lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
         "tags": [
@@ -899,7 +899,7 @@
     },
     "/v1/git/repos/{name}/readme": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_readme",
+        "operationId": "get_v1_git_repos_name_readme",
         "summary": "Returns the README at the tree root as plain text — unrendered, so the caller decides how to present it.",
         "description": "Returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
         "tags": [
@@ -948,7 +948,7 @@
     },
     "/v1/git/repos/{name}/refs": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_refs",
+        "operationId": "get_v1_git_repos_name_refs",
         "summary": "Lists a repo's branches, tags and default branch — what a branch picker needs in one call.",
         "description": "Lists a repo's branches, tags and default branch — what a branch\npicker needs in one call. Unlike the other read ops it tolerates a repo with no\ncommits: the ref sets come back empty and the default branch is still named.",
         "tags": [
@@ -992,7 +992,7 @@
     },
     "/v1/git/repos/{name}/subscriptions": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_subscriptions",
+        "operationId": "get_v1_git_repos_name_subscriptions",
         "summary": "Returns a repo's Slack subscriptions — which channels the lifecycle notifier posts this repo's push and deploy events to.",
         "description": "Returns a repo's Slack subscriptions — which channels the\nlifecycle notifier posts this repo's push and deploy events to.",
         "tags": [
@@ -1037,7 +1037,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos_by_name_subscriptions",
+        "operationId": "post_v1_git_repos_name_subscriptions",
         "summary": "Binds a Slack channel to a repo, so the lifecycle notifier posts that repo's push and deploy events there.",
         "description": "Binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is.",
         "tags": [
@@ -1088,7 +1088,7 @@
     },
     "/v1/git/repos/{name}/subscriptions/{id}": {
       "delete": {
-        "operationId": "delete_v1_git_repos_by_name_subscriptions_by_id",
+        "operationId": "delete_v1_git_repos_name_subscriptions_id",
         "summary": "Removes one Slack subscription from a repo; the notifier stops posting that repo's events to that channel.",
         "description": "Removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found.",
         "tags": [
@@ -1125,7 +1125,7 @@
     },
     "/v1/git/repos/{name}/tree": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_tree",
+        "operationId": "get_v1_git_repos_name_tree",
         "summary": "Lists the immediate children of one directory at one revision, directories before files.",
         "description": "Lists the immediate children of one directory at one revision,\ndirectories before files. It does not recurse — walk down a level at a time.",
         "tags": [

@@ -16,150 +16,6 @@
     }
   ],
   "paths": {
-    "/tracker": {
-      "delete": {
-        "operationId": "delete_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      },
-      "get": {
-        "operationId": "get_tracker",
-        "summary": "The tracker board",
-        "description": "Serves the application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tracker/.\n\nThis is the tracker board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request."
-      },
-      "options": {
-        "operationId": "options_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      },
-      "patch": {
-        "operationId": "patch_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      },
-      "post": {
-        "operationId": "post_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      },
-      "put": {
-        "operationId": "put_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      },
-      "trace": {
-        "operationId": "trace_tracker",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
-      }
-    },
-    "/tracker/{wildcard1}": {
-      "delete": {
-        "operationId": "delete_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "get": {
-        "operationId": "get_tracker_by_wildcard1",
-        "summary": "The tracker board's assets and client-side routes",
-        "description": "Serves the static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link is a shell load, not a 404.\n\nThe one exception is /tracker/assets/, which holds only content-addressed build output: a name that is not there is a purged chunk, never a route, and answers 404. Everywhere else a path that looks like a missing file answers 200 with the shell, so read the content type rather than the status when a resource seems to be missing.\n\nA bundle that was never built answers 503 under its own name on every path, which is a failed deploy rather than a missing page.\n\nThis is the tracker board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "options": {
-        "operationId": "options_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "patch": {
-        "operationId": "patch_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "post": {
-        "operationId": "post_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "put": {
-        "operationId": "put_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "trace": {
-        "operationId": "trace_tracker_by_wildcard1",
-        "summary": "Not served by the tracker board",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
     "/v1/tracker/projects": {
       "get": {
         "operationId": "get_v1_tracker_projects",
@@ -195,7 +51,7 @@
     },
     "/v1/tracker/projects/{key}": {
       "delete": {
-        "operationId": "delete_v1_tracker_projects_by_key",
+        "operationId": "delete_v1_tracker_projects_key",
         "summary": "Removes one tracker project of the caller's org AND every issue filed under it, and answers 204 with no body.",
         "description": "Removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
         "tags": [
@@ -219,7 +75,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key",
+        "operationId": "get_v1_tracker_projects_key",
         "summary": "Returns one tracker project of the caller's org by its key — its name, description and timestamps.",
         "description": "Returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
         "tags": [
@@ -250,7 +106,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_tracker_projects_by_key",
+        "operationId": "patch_v1_tracker_projects_key",
         "summary": "Renames a tracker project or rewrites its description, and returns the updated project.",
         "description": "Renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
         "tags": [
@@ -296,9 +152,9 @@
     },
     "/v1/tracker/projects/{key}/issues": {
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key_issues",
-        "summary": "Returns the issues of one tracker project, optionally filtered by status, kind, repo, source and whether they are scheduled.",
-        "description": "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo, source and whether they are scheduled.\n\nThis is the ONE place a surface takes its slice of the shared issue table: the\nboard passes no filter or a status, the timeline passes scheduled=true, a git\nrepository's Issues tab passes kind=issue\u0026repo=\u003cr\u003e and its Pull Requests tab\nkind=pr\u0026repo=\u003cr\u003e. A filter value outside its closed set is refused with 400\nrather than silently returning an empty board.",
+        "operationId": "get_v1_tracker_projects_key_issues",
+        "summary": "Returns the issues of one tracker project, optionally filtered by status, kind, repo and source.",
+        "description": "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo and source.\n\nThis is the ONE place a surface takes its slice of the shared issue table:\nhanzo.team passes no filter or a status, a git repository's Issues tab passes\nkind=issue\u0026repo=\u003cr\u003e and its Pull Requests tab kind=pr\u0026repo=\u003cr\u003e. A filter value\noutside its closed set is refused with 400 rather than silently returning an\nempty board.",
         "tags": [
           "tracker"
         ],
@@ -350,15 +206,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "scheduled",
-            "in": "query",
-            "required": false,
-            "description": "Scheduled keeps only issues that carry a date — a start, a due date or\nboth. This is the timeline's slice of the board: pass scheduled=true to\nget exactly the rows a gantt has somewhere to draw, instead of fetching\nevery issue and discarding the undated ones client-side.",
-            "schema": {
-              "type": "boolean"
-            }
           }
         ],
         "responses": {
@@ -380,7 +227,7 @@
       "post": {
         "operationId": "post_v1_tracker_projects_by_key_issues",
         "summary": "File an issue on a tracker board",
-        "description": "Files a work item on one board and returns it, carrying the `identifier` — KEY-\u003cnumber\u003e — it will be known by everywhere else.\n\nTHE NUMBER IS THE SERVER'S TO ASSIGN and is not accepted from the caller: it is the board's highest plus one, taken inside the insert's own transaction, and it counts PER BOARD — ENG-1 and OPS-1 are different issues.\n\n`title` is required; everything else is optional and defaults. `kind` (issue, pr, epic) says what the item IS, `source` (team, git, crm, helpdesk, cms, agent) says which surface OPENED it, and the two are orthogonal — an issue escalated from support is kind=issue\u0026source=helpdesk. `status` defaults to backlog, `priority` to none. A value outside one of these closed sets is 400, never silently defaulted. `labels` may not contain a comma, the storage separator.\n\n`startAt` and `dueAt` place the item on the TIMELINE, in unix seconds, and both default to unset. A due date on its own is a milestone — an interval of zero length — and the two together are a bar; a start with no due date is work under way with no deadline. There is no separate milestone resource: a milestone is this row, dated. A negative bound, or a due date before its start, is 400 rather than a silently reordered interval.\n\n`repo` and `extRef` RECORD an external binding; they do not create one. Filing here writes to your tracker and reaches no external system — nothing is pushed to GitHub. The GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n404 when the caller's org has no board under that key. The org is the validated bearer's own and the board is resolved within the caller's selected IAM project; 403 without a validated org. Free by default, on the same balance gate as the board create — an epic, a pull request and an issue are priced identically, since the fee is per work item rather than per kind.",
+        "description": "Files a work item on one board and returns it, carrying the `identifier` — KEY-\u003cnumber\u003e — it will be known by everywhere else.\n\nTHE NUMBER IS THE SERVER'S TO ASSIGN and is not accepted from the caller: it is the board's highest plus one, taken inside the insert's own transaction, and it counts PER BOARD — ENG-1 and OPS-1 are different issues.\n\n`title` is required; everything else is optional and defaults. `kind` (issue, pr, epic) says what the item IS, `source` (team, git, crm, helpdesk, cms, agent) says which surface OPENED it, and the two are orthogonal — an issue escalated from support is kind=issue\u0026source=helpdesk. `status` defaults to backlog, `priority` to none. A value outside one of these closed sets is 400, never silently defaulted. `labels` may not contain a comma, the storage separator.\n\n`repo` and `extRef` RECORD an external binding; they do not create one. Filing here writes to your tracker and reaches no external system — nothing is pushed to GitHub. The GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n404 when the caller's org has no board under that key. The org is the validated bearer's own and the board is resolved within the caller's selected IAM project; 403 without a validated org. Free by default, on the same balance gate as the board create — an epic, a pull request and an issue are priced identically, since the fee is per work item rather than per kind.",
         "tags": [
           "tracker"
         ],
@@ -398,7 +245,7 @@
     },
     "/v1/tracker/projects/{key}/issues/{num}": {
       "delete": {
-        "operationId": "delete_v1_tracker_projects_by_key_issues_by_num",
+        "operationId": "delete_v1_tracker_projects_key_issues_num",
         "summary": "Removes one issue from a tracker project and answers 204 with no body.",
         "description": "Removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
         "tags": [
@@ -431,7 +278,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key_issues_by_num",
+        "operationId": "get_v1_tracker_projects_key_issues_num",
         "summary": "Returns one issue of one tracker project by its per-project number — title, description, status, priority, assignee, labels, kind, source and its git bindings.",
         "description": "Returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
         "tags": [
@@ -471,9 +318,9 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_tracker_projects_by_key_issues_by_num",
-        "summary": "Edits one issue in place and returns it — retitle it, rewrite its body, move it between board columns, reprioritize, reassign, reschedule, or replace its labels.",
-        "description": "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, reschedule, or\nreplace its labels. Every field is optional: one the caller omits keeps its\nstored value, and `labels` REPLACES the set rather than adding to it.\n\n`startAt` and `dueAt` are the issue's place on the timeline, in unix seconds;\n0 clears one. They are validated as the interval they RESULT in, so moving\nonly the due date is still checked against the stored start — a due date\nbefore its start is 400, never a bar drawn backwards.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
+        "operationId": "patch_v1_tracker_projects_key_issues_num",
+        "summary": "Edits one issue in place and returns it — retitle it, rewrite its body, move it between board columns, reprioritize, reassign, or replace its labels.",
+        "description": "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, or replace its\nlabels. Every field is optional: one the caller omits keeps its stored value,\nand `labels` REPLACES the set rather than adding to it.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
         "tags": [
           "tracker"
         ],
@@ -542,10 +389,6 @@
             "description": "Description is the issue body, at most 32768 characters.",
             "type": "string"
           },
-          "dueAt": {
-            "description": "DueAt is when the work is due, in unix seconds — the right edge of its\nbar, or the milestone marker when there is no start. 0 clears it. It may\nnot fall before startAt.",
-            "type": "integer"
-          },
           "key": {
             "description": "Key is the issue's project, from the path.",
             "type": "string"
@@ -564,10 +407,6 @@
           "priority": {
             "description": "Priority is none, urgent, high, medium or low. Empty resets it to none.",
             "type": "string"
-          },
-          "startAt": {
-            "description": "StartAt is when the work starts, in unix seconds — the left edge of its\nbar on the timeline. 0 clears it.",
-            "type": "integer"
           },
           "status": {
             "description": "Status moves the issue between board columns: backlog, todo, in_progress,\ndone or canceled. Empty resets it to backlog.",
@@ -590,10 +429,6 @@
           },
           "description": {
             "type": "string"
-          },
-          "dueAt": {
-            "description": "unix seconds; absent = no due date",
-            "type": "integer"
           },
           "extRef": {
             "description": "external anchor",
@@ -632,10 +467,6 @@
           "source": {
             "description": "team | git | crm | helpdesk | cms | agent",
             "type": "string"
-          },
-          "startAt": {
-            "description": "unix seconds; absent = unscheduled",
-            "type": "integer"
           },
           "status": {
             "type": "string"
