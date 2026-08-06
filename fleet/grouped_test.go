@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
 
@@ -128,7 +129,7 @@ func serve(t *testing.T, dir, name string, ops []string) *child {
 // ---------------------------------------------------------------------------
 
 // TestTheDoorPublishesOneToolPerSubsystem is the shape of the answer: a tool per
-// app that has something to offer, plus hanzo_describe. Nothing else.
+// app that has something to offer, plus describe. Nothing else.
 func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 	h := serving(t, map[string][]string{
 		"ai":    {"post_v1_chat_completions", "get_v1_models"},
@@ -139,7 +140,7 @@ func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 
 	got := names(res)
-	want := []string{fleet.Describe, "hanzo_ai", "hanzo_git"}
+	want := []string{fleet.Describe, "ai", "git"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("the door publishes %v, want %v", got, want)
 	}
@@ -159,6 +160,23 @@ func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 	for _, tl := range published(res) {
 		if b, _ := json.Marshal(tl); strings.Contains(string(b), `"which"`) {
 			t.Errorf("a published tool carries an operation's own schema: %s", b)
+		}
+	}
+}
+
+// TestNoSubsystemIsCalledDescribe is the one thing dropping the `hanzo_` prefix
+// put at risk, checked where it is decidable: the door's tools are the app names
+// plus [fleet.Describe], so an app called `describe` would publish a SECOND tool
+// under that name and the door would answer it as its own — the subsystem
+// silently unreachable, with nothing in either file to say why.
+//
+// It reads the manifest, which is the fleet's source of truth for app names, so
+// the collision is caught when the row is added rather than when a model calls it.
+func TestNoSubsystemIsCalledDescribe(t *testing.T) {
+	for _, a := range manifest.Apps {
+		if a.Name == fleet.Describe {
+			t.Fatalf("manifest declares an app named %q, which is also the door's own tool; "+
+				"rename the app or rename the tool — they cannot share one name", a.Name)
 		}
 	}
 }
@@ -198,7 +216,7 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 			continue
 		}
 		subsystems++
-		app := strings.TrimPrefix(name, "hanzo_")
+		app := name
 		if owns[app] == nil {
 			t.Fatalf("the door published %q and no such subsystem is in the corpus", name)
 		}
@@ -238,6 +256,11 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	}
 
 	t.Logf("MEASURED — the fleet's own corpus (plugin/*/openapi.json), one child per subsystem:")
+	// The names themselves, because they are the surface a model reads and a bare
+	// list is the only way to SEE that they carry no prefix. The loop above already
+	// fails if one does — `app := name` is the whole mapping now — but a reader of
+	// this output should not have to take that on faith.
+	t.Logf("  the head of the surface  %s …", strings.Join(tools[:min(12, len(tools))], " "))
 	t.Logf("  operations declared      %5d across %d subsystems", declared, len(by))
 	t.Logf("  operations offered       %5d (%d withheld by refuse())", len(ops), declared-len(ops))
 	t.Logf("  BEFORE  flat tools/list  %5d tools  %8d bytes  %6.0f B/op   [api.hanzo.ai, 2026-08-06]",
@@ -264,12 +287,12 @@ func TestASubsystemToolDispatchesExactlyAsTheFlatCallDid(t *testing.T) {
 	flat := rpc(t, h, `{"jsonrpc":"2.0","id":7,"method":"tools/call",`+
 		`"params":{"name":"beta_opb","arguments":{"which":"x"}}}`)
 	grouped := rpc(t, h, `{"jsonrpc":"2.0","id":7,"method":"tools/call",`+
-		`"params":{"name":"hanzo_beta","arguments":{"op":"beta_opb","input":{"which":"x"}}}}`)
+		`"params":{"name":"beta","arguments":{"op":"beta_opb","input":{"which":"x"}}}}`)
 
 	want, _ := json.Marshal(flat)
 	got, _ := json.Marshal(grouped)
 	if string(got) != string(want) {
-		t.Fatalf("hanzo_beta{op:beta_opb} answered\n  %s\nand the direct call answered\n  %s", got, want)
+		t.Fatalf("beta{op:beta_opb} answered\n  %s\nand the direct call answered\n  %s", got, want)
 	}
 	if text := textOf(t, grouped); !strings.Contains(text, `"app":"beta"`) || !strings.Contains(text, `"which":"x"`) {
 		t.Fatalf("neither call reached beta's own handler with its arguments: %q", text)
@@ -296,7 +319,7 @@ func textOf(t *testing.T, res map[string]any) string {
 // and forgot the operation gets told, and nothing is dispatched.
 func TestASubsystemToolWithNoOpSaysWhatItNeeds(t *testing.T) {
 	h := host(t, []string{"alpha"}, map[string]*child{"alpha": start(t, "alpha", 1)})
-	res := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"hanzo_alpha","arguments":{}}}`)
+	res := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"alpha","arguments":{}}}`)
 	e, ok := res["error"].(map[string]any)
 	if !ok {
 		t.Fatalf("an envelope with no op must be refused, got %v", res)
@@ -314,9 +337,9 @@ func TestASubsystemToolWithNoOpSaysWhatItNeeds(t *testing.T) {
 func TestAnUnservedOpInAnEnvelopeIsRefusedNotForwarded(t *testing.T) {
 	h := host(t, []string{"alpha"}, map[string]*child{"alpha": start(t, "alpha", 1)})
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":3,"method":"tools/call",`+
-		`"params":{"name":"hanzo_alpha","arguments":{"op":"ghost_op","input":{}}}}`)
+		`"params":{"name":"alpha","arguments":{"op":"ghost_op","input":{}}}}`)
 	if _, refused := res["error"].(map[string]any); !refused {
-		t.Fatalf("hanzo_alpha forwarded an operation nobody serves: %v", res)
+		t.Fatalf("alpha forwarded an operation nobody serves: %v", res)
 	}
 }
 
@@ -387,8 +410,8 @@ func TestDescribeOfANameNobodyServesIsRefused(t *testing.T) {
 // door's refusal at every path that now exists:
 //
 //	tools/list        the name is in no subsystem's `op` enum
-//	tools/call        hanzo_console{op:CreateServiceAccountKey} does not run it
-//	hanzo_describe    its schema cannot be read either
+//	tools/call        console{op:CreateServiceAccountKey} does not run it
+//	describe          its schema cannot be read either
 //
 // All three are the same gate: [fleet.Door.gather] refuses before it writes the
 // routing table, and list, call and describe all read that one gathered set.
@@ -423,11 +446,11 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	}
 
 	// 2. not callable through the subsystem tool.
-	call := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"hanzo_console",`+
+	call := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"console",`+
 		`"arguments":{"op":"CreateServiceAccountKey","input":{"which":"mint"}}}}`)
 	e, refused := call["error"].(map[string]any)
 	if !refused {
-		t.Fatalf("hanzo_console DISPATCHED CreateServiceAccountKey: %v", call)
+		t.Fatalf("console DISPATCHED CreateServiceAccountKey: %v", call)
 	}
 	if code, _ := e["code"].(float64); int(code) != -32602 {
 		t.Errorf("code = %v, want -32602", e["code"])
@@ -455,11 +478,11 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 
 	// And the sibling still runs through the same envelope, so none of the above
 	// passes because the door is broken.
-	ok := rpc(t, h, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"hanzo_console",`+
+	ok := rpc(t, h, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"console",`+
 		`"arguments":{"op":"post_v1_chat_completions","input":{"which":"hello"}}}}`)
 	content, _ := ok["content"].([]any)
 	if len(content) == 0 {
-		t.Fatalf("the product op did not run through hanzo_console: %v", ok)
+		t.Fatalf("the product op did not run through console: %v", ok)
 	}
 	first, _ := content[0].(map[string]any)
 	if text, _ := first["text"].(string); !strings.Contains(text, `"which":"hello"`) {
