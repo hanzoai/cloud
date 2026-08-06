@@ -21,8 +21,16 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/zap-proto/zip"
 )
+
+// servePeer is the shared sandboxes peer (internal/planetest): the five ops
+// apps/sandbox publishes, on a real socket, with a map where the pod would be. Every
+// assertion below therefore goes through the actual composition — cloud.Ask resolves
+// the app, zip dispatches the op, the reply decodes into the declared type — so an
+// op renamed or a field moved fails here rather than in production.
+func servePeer(t *testing.T) *planetest.Sandboxes { return planetest.ServeSandboxes(t) }
 
 func mount(t *testing.T) *zip.App {
 	t.Helper()
@@ -70,7 +78,7 @@ func decode[T any](t *testing.T, resp *http.Response) T {
 // the four fields the CodeExecutor tool reads — session_id, stdout, stderr, files.
 func TestExecRunsInASandboxAndAnswersTheContract(t *testing.T) {
 	p := servePeer(t)
-	p.program = func(id string, argv []string) (string, string, int, map[string][]byte) {
+	p.Run = func(id string, argv []string) (string, string, int, map[string][]byte) {
 		return "hello\n", "", 0, map[string][]byte{"plot.png": []byte("\x89PNG")}
 	}
 	app := mount(t)
@@ -89,10 +97,10 @@ func TestExecRunsInASandboxAndAnswersTheContract(t *testing.T) {
 	// The program was written into the session before it ran, under the name the
 	// language table gives it — the sandbox is where the code IS, not just where it
 	// executes.
-	if pod := p.get(res.SessionID); pod == nil {
+	if pod := p.Pod(res.SessionID); pod == nil {
 		t.Fatal("no sandbox was leased")
-	} else if string(pod.files["main.py"]) != "print('hello')" {
-		t.Errorf("main.py = %q, want the submitted code", pod.files["main.py"])
+	} else if string(pod.Files["main.py"]) != "print('hello')" {
+		t.Errorf("main.py = %q, want the submitted code", pod.Files["main.py"])
 	}
 }
 
@@ -102,7 +110,7 @@ func TestExecRunsInASandboxAndAnswersTheContract(t *testing.T) {
 // caller as a file its own run produced.
 func TestTheSourceFileIsNotReportedAsAnArtifact(t *testing.T) {
 	p := servePeer(t)
-	p.program = func(string, []string) (string, string, int, map[string][]byte) {
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) {
 		return "", "", 0, nil
 	}
 	app := mount(t)
@@ -117,7 +125,7 @@ func TestTheSourceFileIsNotReportedAsAnArtifact(t *testing.T) {
 	}
 	// And the ordering that makes it true is visible: the marker line is the run,
 	// and the sweep comes after it.
-	lines := p.ranLines()
+	lines := p.Lines()
 	if len(lines) < 2 || !strings.HasPrefix(lines[0], ": > "+marker) ||
 		!strings.Contains(lines[1], "-newer "+marker) {
 		t.Errorf("ran %v, want the marker+program line then the -newer sweep", lines)
@@ -128,7 +136,7 @@ func TestTheSourceFileIsNotReportedAsAnArtifact(t *testing.T) {
 // which is what makes a conversation's files still be there on the next turn.
 func TestSessionIsResumed(t *testing.T) {
 	p := servePeer(t)
-	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "1", "", 0, nil }
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "1", "", 0, nil }
 	app := mount(t)
 
 	first := decode[CodeResult](t, post(t, app, Path, CodeRun{Lang: "py", Code: "x=1"}))
@@ -145,14 +153,14 @@ func TestSessionIsResumed(t *testing.T) {
 // language the arguments belong to the produced binary, not to the compiler.
 func TestArgsReachTheProgramAndNotTheCompiler(t *testing.T) {
 	p := servePeer(t)
-	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "", "", 0, nil }
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "", "", 0, nil }
 	app := mount(t)
 
 	post(t, app, Path, CodeRun{Lang: "c", Code: "int main(){}", Args: []string{"alpha", "beta"}})
-	if got := p.lastArgs(); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
+	if got := p.Args(); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
 		t.Fatalf("args reached the shell as %v, want [alpha beta]", got)
 	}
-	line := p.ranLines()[0]
+	line := p.Lines()[0]
 	if !strings.Contains(line, `./main "$@"`) {
 		t.Errorf("c runs %q — the arguments must be applied to ./main, never to cc", line)
 	}
@@ -178,7 +186,7 @@ func TestUnsupportedLanguageIsRefused(t *testing.T) {
 // merely failed.
 func TestNonZeroExitIsA200(t *testing.T) {
 	p := servePeer(t)
-	p.program = func(string, []string) (string, string, int, map[string][]byte) {
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) {
 		return "", "Traceback...\nZeroDivisionError\n", 1, nil
 	}
 	app := mount(t)
@@ -232,13 +240,13 @@ func TestUploadThenExecSeesTheFile(t *testing.T) {
 	app := mount(t)
 	up := decode[uploaded](t, uploadFile(t, app, "", "data.csv", "id,v\n1,2\n"))
 
-	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "read\n", "", 0, nil }
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "read\n", "", 0, nil }
 	res := decode[CodeResult](t, post(t, app, Path,
 		CodeRun{Lang: "py", Code: "open('data.csv')", SessionID: up.SessionID}))
 	if res.SessionID != up.SessionID {
 		t.Fatalf("exec ran in %q, not the uploaded session %q", res.SessionID, up.SessionID)
 	}
-	if got := string(p.get(res.SessionID).files["data.csv"]); got != "id,v\n1,2\n" {
+	if got := string(p.Pod(res.SessionID).Files["data.csv"]); got != "id,v\n1,2\n" {
 		t.Errorf("data.csv in the run's sandbox = %q, want the uploaded bytes", got)
 	}
 }
@@ -248,7 +256,7 @@ func TestUploadThenExecSeesTheFile(t *testing.T) {
 // itself — not JSON, and not a base64 field.
 func TestDownloadIsTwoSegmentsAndAnswersBytes(t *testing.T) {
 	p := servePeer(t)
-	p.program = func(string, []string) (string, string, int, map[string][]byte) {
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) {
 		return "", "", 0, map[string][]byte{"plot.png": []byte("\x89PNG\r\n\x1a\n")}
 	}
 	app := mount(t)
@@ -320,7 +328,7 @@ func TestUnsetKeyFailsClosed(t *testing.T) {
 // POST /v1/exec at all.
 func TestWrongKeyIsRejectedOnEveryPath(t *testing.T) {
 	p := servePeer(t)
-	p.program = func(string, []string) (string, string, int, map[string][]byte) { return "ran", "", 0, nil }
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "ran", "", 0, nil }
 	app := mount(t)
 	for _, path := range []string{Path, "/v1/upload", "/v1/download/s/f", "/v1/files/s"} {
 		rq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+path,
@@ -336,8 +344,8 @@ func TestWrongKeyIsRejectedOnEveryPath(t *testing.T) {
 		}
 		_ = resp.Body.Close()
 	}
-	if len(p.ranLines()) != 0 {
-		t.Errorf("a rejected request still ran %v in a sandbox", p.ranLines())
+	if len(p.Lines()) != 0 {
+		t.Errorf("a rejected request still ran %v in a sandbox", p.Lines())
 	}
 }
 

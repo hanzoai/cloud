@@ -4,16 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -22,59 +21,44 @@ import (
 // errTest is the model-failure the "failed run is not billed" case injects.
 var errTest = errors.New("model unavailable")
 
-// billServer is a minimal commerce double: it returns a fixed balance and
-// records the X-Org-Id header (the tenant the debit lands on) + the usage body
-// of every debit. X-Org-Id is the header commerce's service-token auth reads
-// (metering >= v0.1.2), so a wrong tenant here would prove a cross-tenant leak.
+// billServer is a minimal commerce double. The balance READ is still HTTP and is
+// answered here; the usage DEBIT crosses the internal plane and is recorded by the
+// shared money peer (internal/planetest), because metering.Usage.Ref is `json:"-"`
+// and could not survive a JSON body — see that package's doc comment.
+//
+// It counted HTTP hits on /v1/billing/usage until the debit moved off HTTP, at
+// which point it counted an endpoint nothing calls and every assertion below read
+// zero.
 type billServer struct {
 	available int64
 
-	mu        sync.Mutex
-	usageOrg  string
-	usageBody []byte
-	usages    int32
-	balances  int32
+	peer     *planetest.Commerce
+	balances int32
 }
 
 func (b *billServer) start(t *testing.T) string {
 	t.Helper()
+	b.peer = planetest.Serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&b.balances, 1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"available": b.available})
-	})
-	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&b.usages, 1)
-		body, _ := io.ReadAll(r.Body)
-		b.mu.Lock()
-		b.usageOrg, b.usageBody = r.Header.Get("X-Org-Id"), body
-		b.mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, `{"transactionId":"tx_1","type":"usage"}`)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
 }
 
-func (b *billServer) debits() int32 { return atomic.LoadInt32(&b.usages) }
-func (b *billServer) lastDebit() (string, []byte) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.usageOrg, b.usageBody
-}
+func (b *billServer) debits() int32 { return b.peer.Count() }
+
+// lastDebit is (billed org, the debit as commerce would row it). The org is the
+// CALLER's, so a wrong value here is still exactly the cross-tenant leak the old
+// X-Org-Id assertion was watching for.
+func (b *billServer) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.Body() }
 
 // waitForDebit polls a condition briefly — debits are recorded on a detached
 // goroutine, so the assertion must wait for the async write.
-func waitForDebit(cond func() bool) bool {
-	for i := 0; i < 200; i++ {
-		if cond() {
-			return true
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return cond()
-}
+func waitForDebit(cond func() bool) bool { return planetest.Wait(cond) }
 
 // mountBilled mounts the agents surface with a REAL metering client pointed at
 // the fake commerce (default org "hanzo", so every "acme is billed" assertion
