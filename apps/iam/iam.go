@@ -156,6 +156,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The identity store lives here, so every read of it is published here.
 	exposeRoster()
 	exposeProjects()
+	exposeApproval()
 
 	log := deps.Logger.New("subsystem", "iam")
 
