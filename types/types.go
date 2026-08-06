@@ -146,6 +146,21 @@ type ChatRequest struct {
 	// still gets: no tools field reaches the gateway at all, so the completion is
 	// the one it produced before.
 	Tools []ToolDef
+
+	// RunID names the agent run this completion belongs to, when one does. It is
+	// ATTRIBUTION and nothing else: it never reaches the gateway, and it is not
+	// the ledger's idempotency key (that is metering.Usage.Ref, which the server
+	// mints per debit — pinning one value across a tool loop's rounds would dedup
+	// eight real charges into one).
+	//
+	// It exists because a run's cost is the SUM of its rounds. The flat run fee is
+	// one debit that apps/agents makes itself, but the per-token charges are made
+	// by the metering decorator one round at a time, and without a correlation id
+	// carried down to them there is no key that joins those rows back to the run
+	// that caused them — so "what did this run cost" had no answer, only "what did
+	// this org spend". The metered client copies it to metering.Usage.RequestID,
+	// which is the field whose stated job is exactly this.
+	RunID string
 }
 
 // Chat roles — the OpenAI-compatible vocabulary the gateway speaks.
