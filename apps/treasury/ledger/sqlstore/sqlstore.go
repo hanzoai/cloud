@@ -42,6 +42,14 @@ import (
 // engine's balance-guard read-then-write is atomic under load.
 type Store struct {
 	db *sql.DB
+
+	// usageKind is the entry kind whose refs are scoped BY PROGRAM (the wallet the
+	// money left), and so the kind whose pre-scope rows [Store.backfillUsageProgram]
+	// re-keys at open. It is a PARAMETER because the value is the writer's, not this
+	// layer's: this is a generic journal, and which of its kinds are wallet-scoped is
+	// a fact only the app that writes them knows. Empty means no kind is — the house
+	// book's own kinds are all book-scoped — and the repair does not run.
+	usageKind string
 }
 
 // Open opens (creating + migrating) the ledger database subsystem names for ns,
@@ -51,13 +59,19 @@ type Store struct {
 // ledger belongs to that org, the house book belongs to the deployment. It is also
 // what keys the file, so an opener cannot name one entity's ledger and unlock it
 // with another's key — that pairing is made once, inside cek, from this one value.
-func Open(ns namespace.Namespace, subsystem, dir string) (*Store, error) {
+//
+// usageKind names the one kind whose refs are unique per WALLET rather than per book,
+// which is what [Store.backfillUsageProgram] repairs on rows written before that scope
+// existed. The opener states it (finance passes its own KindUsage) so this package
+// holds no constant belonging to the app whose money it stores; "" opens a store with
+// no such kind and no repair.
+func Open(ns namespace.Namespace, subsystem, dir, usageKind string) (*Store, error) {
 	db, err := cek.Open(ns, subsystem, dir)
 	if err != nil {
 		return nil, fmt.Errorf("open %s ledger for %s: %w", subsystem, ns, err)
 	}
 	sqlpool.Single(db)
-	s := &Store{db: db}
+	s := &Store{db: db, usageKind: usageKind}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -109,13 +123,18 @@ CREATE TABLE IF NOT EXISTS treasury_policy (
 	if err := s.migrateCentsToUnits(); err != nil {
 		return err
 	}
-	if err := s.backfillUsageProgram(); err != nil {
-		return err
-	}
 	// Re-apply the DDL so any table REBUILT by the legacy migration regains its indexes
 	// (every statement is IF NOT EXISTS, so this is a no-op for already-present objects).
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("treasury reindex: %w", err)
+	}
+	// AFTER the indexes are back, because the repair below reads the postings of each
+	// candidate entry TWICE as correlated subqueries. The legacy migration rebuilds
+	// treasury_postings without its indexes, so running the repair before this line
+	// scans the whole postings table once per usage row — the one open where the file
+	// is largest and the customer is waiting on it.
+	if err := s.backfillUsageProgram(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -145,16 +164,31 @@ CREATE TABLE IF NOT EXISTS treasury_policy (
 // rather than given a NULL program: the column is NOT NULL, so writing one would abort
 // the migration and leave the org's wallet unopenable. One malformed row must not be able
 // to close a customer's books.
+//
+// NEITHER MUST A ROW THAT IS ALREADY NAMED. The same act can hold BOTH keys at once —
+// one row under the empty program and one under the wallet — whenever its ref was
+// nameable by the client across the change: an org that renewed the same domain once
+// before and once after writes `domain:renew:foo.com` into both namespaces. Re-keying
+// the legacy row then collides with the wallet row on UNIQUE(kind, program, ref), and a
+// plain UPDATE makes that ABORT: migrate fails, Open fails, the org's prepaid gate has
+// no ledger to read and fail-closes, and EVERY paid request for that tenant is refused
+// until someone edits the file by hand. OR IGNORE skips the colliding row instead — the
+// honest outcome, because the wallet row IS that act's entry, so the probe already finds
+// it and the legacy row's empty program debits nobody a second time. It also makes this
+// repair CURATIVE: a store that already aborted opens on the next try.
 func (s *Store) backfillUsageProgram() error {
+	if s.usageKind == "" {
+		return nil // no wallet-scoped kind in this book; nothing is mis-keyed.
+	}
 	const backfill = `
-UPDATE treasury_entries
+UPDATE OR IGNORE treasury_entries
    SET program = (SELECT p.account FROM treasury_postings p
                    WHERE p.entry_id = treasury_entries.id AND p.amount LIKE '-%')
- WHERE kind = 'finance.usage'
+ WHERE kind = ?
    AND program = ''
    AND EXISTS (SELECT 1 FROM treasury_postings p
                 WHERE p.entry_id = treasury_entries.id AND p.amount LIKE '-%')`
-	if _, err := s.db.Exec(backfill); err != nil {
+	if _, err := s.db.Exec(backfill, s.usageKind); err != nil {
 		return fmt.Errorf("treasury backfill usage program: %w", err)
 	}
 	return nil
