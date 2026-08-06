@@ -40,6 +40,42 @@ import "strings"
 // the byte-identical value of this line. Changing the tier is now this line.
 const DefaultModel = "enso-flash"
 
+// ChatModel is the tier the INTERACTIVE assistant answers on — the @hanzo turn in
+// Slack and the other chat bridges. It is deliberately not DefaultModel, and the
+// difference is measured rather than assumed.
+//
+// DefaultModel serves one-shot text: a narration, a translation, a summary. The
+// chat assistant is a TOOL-DRIVING agent — it is offered the fleet's whole door,
+// picks an op, reads the result and answers from it. Those are different jobs, and
+// the tiers do not rank the same on them.
+//
+// Measured against the live enso service, paired and interleaved so upstream load
+// drift cannot flatter either side (n=42 full turns, the real assistant
+// instructions and the real describe-then-call protocol):
+//
+//	enso        p50 3489 ms   p90  8000 ms   1.71 model round-trips per turn
+//	enso-flash  p50 3905 ms   p90 17269 ms   1.71 model round-trips per turn
+//	paired diff 1512 ms median in enso's favour, t=-3.29 — significant.
+//
+// The reason is generation rate, not round count, which is identical. On a
+// tool-shaped turn enso-flash emits at 11.7 tok/s against enso's 19.1 for the same
+// ~75-token answer, so "flash" is the faster tier only on answers short enough for
+// its terseness to beat its rate — a greeting, not a question about the fleet. On
+// the questions people actually ask @hanzo it loses badly: "what did we deploy
+// today?" ran 5,386 ms on enso and 15,122 ms on enso-flash.
+//
+// What this constant is NOT is the claim the old code made. The built-in agent
+// named `enso` as "the auto-routing SKU that selects per query in the gateway's own
+// catalog", and enso does no such thing: it is one fixed route entry
+// (deepseek-v4-pro, 1M ctx, reasoning: medium) in hanzoai/zen-svc catalog-enso.yaml
+// and the live enso-catalog ConfigMap. It never routed and never escalated. The
+// tier is right; the reason given for it was invented, which is how it survived
+// unexamined behind a BRIDGE_AGENT_MODEL knob no deployment ever set.
+//
+// A person who wants a different tier pins one in the Slack App Home menu, and that
+// pin wins over this.
+const ChatModel = "enso"
+
 // FallbackModel is the model the autonomous agent runner fails over to when an
 // agent's own model stays throttled (429/overloaded) after bounded retries. It
 // keeps a bot's reply landing when the flash tier is saturated; the interactive
