@@ -173,10 +173,13 @@ func TestRouteSlackEvent(t *testing.T) {
 	if d.Kind != slackRouteAgent || d.TeamID != "T1" || d.User != "U1" || d.Text != "hello there" || d.ThreadTS != "111.1" {
 		t.Fatalf("app_mention route: %+v", d)
 	}
-	// DM (channel_type=im) → agent.
+	// DM (channel_type=im) → agent, and answered INLINE, not threaded. A channel
+	// reply threads because it shares the room; a DM is already a private
+	// two-party room, so threading buries a one-line answer behind a "1 reply"
+	// click. Slack's own assistants answer inline here.
 	d = routeSlackEvent([]byte(`{"type":"event_callback","team_id":"T1","event_id":"E2","event":{"type":"message","channel_type":"im","user":"U1","text":"hi","channel":"D1","ts":"222.2"}}`))
-	if d.Kind != slackRouteAgent || d.ThreadTS != "222.2" {
-		t.Fatalf("dm route: %+v", d)
+	if d.Kind != slackRouteAgent || d.ThreadTS != "" {
+		t.Fatalf("dm route must be inline: %+v", d)
 	}
 	// Bot's own message → ack (echo-loop guard).
 	if d := routeSlackEvent([]byte(`{"type":"event_callback","team_id":"T1","event_id":"E3","event":{"type":"message","channel_type":"im","bot_id":"B1","text":"echo","channel":"D1","ts":"3.3"}}`)); d.Kind != slackRouteAck {

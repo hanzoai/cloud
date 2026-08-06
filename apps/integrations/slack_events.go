@@ -409,9 +409,18 @@ func routeSlackEvent(raw []byte) slackRoute {
 		if ev.BotID != "" || ev.Subtype != "" || ev.User == "" || ev.Text == "" || ev.ChannelType != "im" {
 			return slackRoute{Kind: slackRouteAck}
 		}
+		// A DM does NOT thread. A channel needs threading because the reply shares
+		// the room with everyone else's conversation; a DM is already a private
+		// two-party room, so threading every answer under its own question buries
+		// each one behind a "1 reply" a person has to click. Slack's own assistants
+		// answer inline here, and an agent that makes you open a thread to read one
+		// sentence reads as broken even when it worked.
+		//
+		// A DM the user DELIBERATELY threaded (ev.ThreadTS set) is honoured — that
+		// is them asking for a side conversation, not the default.
 		return slackRoute{
 			Kind: slackRouteAgent, TeamID: env.TeamID, Channel: ev.Channel, User: ev.User,
-			Text: stripLeadingMention(ev.Text), ThreadTS: threadOr(ev.ThreadTS, ev.TS),
+			Text: stripLeadingMention(ev.Text), ThreadTS: ev.ThreadTS,
 		}
 	default:
 		return slackRoute{Kind: slackRouteAck}
