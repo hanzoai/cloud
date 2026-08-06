@@ -3,36 +3,27 @@
 package tracker
 
 import (
-	"encoding/json"
-
 	"github.com/zap-proto/zip"
 )
 
 func init() {
 	zip.Describe("DELETE /v1/tracker/projects/:key", zip.Doc{
-		Description: "Removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
-		Fields: map[string]string{
-			"projectRef.key": "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
-		},
+		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
-	zip.Describe("DELETE /v1/tracker/projects/:key/issues/:num", zip.Doc{
-		Description: "Removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
-		Fields: map[string]string{
-			"issueRef.key": "Key is the issue's project, from the path.",
-			"issueRef.num": "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
-		},
+	zip.Describe("GET /v1/tracker/milestones", zip.Doc{
+		Description: "Returns every milestone across your org's repositories, each\nstamped with the repository it belongs to.\n\nThe forge scopes milestones to a repository and publishes no org-level list,\nso this is a server-side fan-out over the repositories you can see. It runs\nhere rather than in the browser because a client-side fan-out would need the\nforge reachable from the page and a credential held there.",
 	})
 	zip.Describe("GET /v1/tracker/projects", zip.Doc{
-		Description: "Returns every tracker project in the caller's org, newest first.\n\nA project is the board: it owns a KEY (the uppercase handle that prefixes every\nissue identifier, \"ENG-14\") and the issues filed under it. The listing is\norg-scoped server-side — the org is the validated bearer claim, never a\nclient-supplied header — so one org can never see another's boards.",
+		Description: "Returns the boards of your org — one per repository on the\ndeployment's forge that you can see. The key is the repository name, and it is\nwhat addresses the board's issues.\n\nArchived repositories are omitted: they are not live work. The set is the\nFORGE's answer for your own account, so two people in one org can legitimately\nsee different boards.",
 	})
 	zip.Describe("GET /v1/tracker/projects/:key", zip.Doc{
-		Description: "Returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
+		Description: "Returns one board of your org by its key — the repository name.\n404 when your org has no repository under that key, or when your own forge\naccount cannot see it.",
 		Fields: map[string]string{
 			"projectRef.key": "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
 		},
 	})
 	zip.Describe("GET /v1/tracker/projects/:key/issues", zip.Doc{
-		Description: "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo, source and whether they are scheduled.\n\nThis is the ONE place a surface takes its slice of the shared issue table: the\nboard passes no filter or a status, the timeline passes scheduled=true, a git\nrepository's Issues tab passes kind=issue&repo=<r> and its Pull Requests tab\nkind=pr&repo=<r>. A filter value outside its closed set is refused with 400\nrather than silently returning an empty board.",
+		Description: "Returns one board's issues — the work items of that repository on\nthe forge, with their column, priority, assignee and labels.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
 		Fields: map[string]string{
 			"issueQuery.key":       "Key is the project whose issues to list, from the path.",
 			"issueQuery.kind":      "Kind keeps only work items of that shape: issue, pr or epic. An unknown\nvalue is refused with 400.",
@@ -48,53 +39,27 @@ func init() {
 			"issueView.source":     "team | git | crm | helpdesk | cms | agent",
 			"issueView.startAt":    "unix seconds; absent = unscheduled",
 		},
-		Example: json.RawMessage(`{"key":"ENG","kind":"pr","repo":"hanzoai/cloud"}`),
-	})
-	zip.Describe("GET /v1/tracker/projects/:key/issues/:num", zip.Doc{
-		Description: "Returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
-		Fields: map[string]string{
-			"issueRef.key":         "Key is the issue's project, from the path.",
-			"issueRef.num":         "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
-			"issueView.dueAt":      "unix seconds; absent = no due date",
-			"issueView.extRef":     "external anchor",
-			"issueView.identifier": "KEY-<number>, the human handle",
-			"issueView.kind":       "issue | pr | epic",
-			"issueView.repo":       "git repo binding",
-			"issueView.source":     "team | git | crm | helpdesk | cms | agent",
-			"issueView.startAt":    "unix seconds; absent = unscheduled",
-		},
 	})
 	zip.Describe("PATCH /v1/tracker/projects/:key", zip.Doc{
-		Description: "Renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
-		Fields: map[string]string{
-			"projectPatch.description": "Description is the board's free-form blurb, at most 32768 characters.",
-			"projectPatch.key":         "Key is the project to update, from the path.",
-			"projectPatch.name":        "Name is the project's display name. Non-empty, at most 256 characters.",
-		},
-		Example: json.RawMessage(`{"name":"Platform Engineering"}`),
+		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
 	zip.Describe("PATCH /v1/tracker/projects/:key/issues/:num", zip.Doc{
-		Description: "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, reschedule, or\nreplace its labels. Every field is optional: one the caller omits keeps its\nstored value, and `labels` REPLACES the set rather than adding to it.\n\n`startAt` and `dueAt` are the issue's place on the timeline, in unix seconds;\n0 clears one. They are validated as the interval they RESULT in, so moving\nonly the due date is still checked against the stored start — a due date\nbefore its start is 400, never a bar drawn backwards.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
+		Description: "Edits a work item — rename it, rewrite it, move it to another\ncolumn, or re-prioritise it. Absent fields are left alone.\n\nMOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the\nmove replaces that set rather than writing a status column here that a\nforge-side change could contradict. Moving to `done` also CLOSES the issue on\nthe forge, because a done card and an open issue are a contradiction.",
 		Fields: map[string]string{
-			"issuePatch.assignee":    "Assignee is who owns the issue, at most 256 characters. Empty unassigns it.",
-			"issuePatch.description": "Description is the issue body, at most 32768 characters.",
-			"issuePatch.dueAt":       "DueAt is when the work is due, in unix seconds — the right edge of its\nbar, or the milestone marker when there is no start. 0 clears it. It may\nnot fall before startAt.",
-			"issuePatch.key":         "Key is the issue's project, from the path.",
-			"issuePatch.labels":      "Labels REPLACES the issue's labels with exactly this set. Each label is at\nmost 48 characters and may not contain a comma (the storage separator);\nempty entries are dropped.",
-			"issuePatch.num":         "Num is the issue's number within that project, from the path.",
-			"issuePatch.priority":    "Priority is none, urgent, high, medium or low. Empty resets it to none.",
-			"issuePatch.startAt":     "StartAt is when the work starts, in unix seconds — the left edge of its\nbar on the timeline. 0 clears it.",
-			"issuePatch.status":      "Status moves the issue between board columns: backlog, todo, in_progress,\ndone or canceled. Empty resets it to backlog.",
-			"issuePatch.title":       "Title is the issue's one-line summary. Non-empty, at most 512 characters.",
-			"issueView.dueAt":        "unix seconds; absent = no due date",
-			"issueView.extRef":       "external anchor",
-			"issueView.identifier":   "KEY-<number>, the human handle",
-			"issueView.kind":         "issue | pr | epic",
-			"issueView.repo":         "git repo binding",
-			"issueView.source":       "team | git | crm | helpdesk | cms | agent",
-			"issueView.startAt":      "unix seconds; absent = unscheduled",
+			"issueEdit.description": "Description rewrites the body.",
+			"issueEdit.key":         "Key is the board — the repository name, from the path.",
+			"issueEdit.num":         "Num is the issue number on that repository, from the path.",
+			"issueEdit.priority":    "Priority re-prioritises it.",
+			"issueEdit.status":      "Status moves the card to another column.",
+			"issueEdit.title":       "Title renames the work item.",
+			"issueView.dueAt":       "unix seconds; absent = no due date",
+			"issueView.extRef":      "external anchor",
+			"issueView.identifier":  "KEY-<number>, the human handle",
+			"issueView.kind":        "issue | pr | epic",
+			"issueView.repo":        "git repo binding",
+			"issueView.source":      "team | git | crm | helpdesk | cms | agent",
+			"issueView.startAt":     "unix seconds; absent = unscheduled",
 		},
-		Example: json.RawMessage(`{"key":"ENG","num":14,"status":"in_progress","assignee":"z"}`),
 	})
 	zip.Describe("POST /tracker/upsert", zip.Doc{
 		Description: "Mirrors one external work item into the CALLER's org — creating the\nrow, or updating the one already carrying that ExtRef — and reports which it did\nplus the tracker identity the item is now known by.\n\nThe org is the caller's plane identity and never the argument — plane.IssueIn has\nno org field, deliberately, because a feeder able to state the org could file\ninto another tenant's tracker. Anonymous is refused rather than defaulted: an\nitem arriving with no principal must fail, not land on somebody's board.\n\nIt calls upsertIssue, never cloud.UpsertIssue. cloud.UpsertIssue now falls\nthrough to THIS op when the local sink is nil, so a process serving it that went\nback through it would dial its own socket and ask itself, forever.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
@@ -113,9 +78,23 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/tracker/projects", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
 	zip.Describe("POST /v1/tracker/projects/:key/issues", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Opens a work item on the board — an issue on that repository on\nthe deployment's forge, filed as YOU.\n\nThe column and priority are written as LABELS, which is what makes the card\nand the forge issue the same object: someone relabelling in the forge web UI\nhas moved your card.",
+		Fields: map[string]string{
+			"issueView.dueAt":      "unix seconds; absent = no due date",
+			"issueView.extRef":     "external anchor",
+			"issueView.identifier": "KEY-<number>, the human handle",
+			"issueView.kind":       "issue | pr | epic",
+			"issueView.repo":       "git repo binding",
+			"issueView.source":     "team | git | crm | helpdesk | cms | agent",
+			"issueView.startAt":    "unix seconds; absent = unscheduled",
+			"newIssue.description": "Description becomes the issue body.",
+			"newIssue.key":         "Key is the board — the repository name, from the path.",
+			"newIssue.priority":    "Priority is one of none, urgent, high, medium or low.",
+			"newIssue.status":      "Status is the board column to open into: backlog, todo, in_progress, done\nor canceled. Empty opens into backlog.",
+			"newIssue.title":       "Title is required.",
+		},
 	})
 }

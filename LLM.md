@@ -3076,6 +3076,26 @@ semantic is identical — fail closed once armed, allow before.
   because a silently-short list and a stale file are the same defect. A `tools/call`
   goes to the app that listed the name, verbatim; a name nobody has listed costs one
   discovery, then `-32602`.
+  **The door publishes ONE TOOL PER SUBSYSTEM, not one per operation** (`fleet/grouped.go`).
+  Measured on the deployed door: the flat projection was **1,189 tools in 977,636
+  bytes** — ~244k tokens to merely enumerate what can be called — and MCP clients
+  truncate (Slack keeps 128), so 1,061 operations were unreachable no matter how
+  they were ordered. Ordering (`rank`) fixes which tools a truncating client keeps;
+  it cannot fix a hard cap. So the surface is `hanzo_<app>` carrying
+  `{"op":"<operation>","input":{…}}`, whose `op` enum holds NAMES ONLY, plus
+  `hanzo_describe` — which returns one operation's own descriptor, so a model
+  searches the enum and fetches the schema for the one it picked. The whole
+  corpus is **116 tools in 106,847 bytes** (`fleet.TestTheWholeFleetFitsInAModelsHead`,
+  which builds it from `plugin/*/openapi.json`) — 17× less per operation, for 1.9×
+  MORE operations than the baseline carried. `hanzo_describe` is FIRST because it is
+  what makes every other tool usable, so truncation must never take it. The envelope
+  is a DECODING and not a second route: it yields the (name, message) a direct call
+  carries, and `refuse()` in `gather` remains the only gate, so a refused name is in
+  no enum, dispatchable through no envelope, and describable by nothing.
+  **Headroom: 12 subsystems.** 116 of the 128 a client keeps. The manifest is 119
+  apps and growing, so the next dozen subsystems put the door back over the cap; the
+  move then is to group by product surface (`productStems`, 17 buckets), not to add
+  a second projection.
   It used to read a BUILD-TIME catalogue — `plugin/<app>/mcp.json`, embedded by
   `plugin/embed.go` and handed to zip as `Plugin.Tools` — and `tools/list` was a
   memcpy. **Those 116 files are deleted (49,865 lines).** They were a second source
