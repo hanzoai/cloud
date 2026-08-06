@@ -161,8 +161,19 @@ type declareSpec struct {
 	// SecretKeys are the env names whose values are SEALED IN KMS and referenced
 	// from the file, never carried in it. Sorted, so the render is byte-stable.
 	SecretKeys []string
-	Port       int
-	Replicas   int
+	// Public is the set of names the CALLER explicitly declared public, recorded
+	// independently of Env.
+	//
+	// It is not derived from Env, and that is the point. An audit that asks "is
+	// this key in Env?" of a document rendered FROM Env answers yes by
+	// construction — a tautology wearing the shape of a check, which is how the
+	// previous byte guard came to share its single point of failure with the
+	// split it was meant to backstop. This is the caller's assertion, carried
+	// alongside, so a value that reaches the render by any path the caller did
+	// not authorise is caught.
+	Public   []string
+	Port     int
+	Replicas int
 	// Automated is written as cd.automated. A branch declaration carries it
 	// truthfully — the file is what will be merged — but nothing acts on it until
 	// the merge lands on main.
@@ -178,11 +189,23 @@ type declareSpec struct {
 type declareEnv struct {
 	Name  string `json:"name" yaml:"name"`
 	Value string `json:"value" yaml:"value"`
-	// Secret marks a value the caller knows is a credential. It is a HINT that
-	// may only ADD secrecy: the server seals anything shaped like a credential
-	// whether or not this is set (secretshape.go), because a values file is
-	// committed to git and git history is forever.
-	Secret bool `json:"secret,omitempty" yaml:"-"`
+	// Public marks a value that may be WRITTEN INTO GIT. Absent, it is false,
+	// and the value is sealed into KMS and referenced.
+	//
+	// ★ THE DEFAULT IS SECRET, AND THE POLARITY IS THE WHOLE DESIGN. This lane's
+	// output is a commit in a repository replicated to every clone, so a
+	// misclassification is not a bug to fix later — it is a credential published
+	// forever. A heuristic classifier fails in both directions; what decides is
+	// which direction it fails IN. Seal-by-default makes the failure mode "an
+	// operator cannot read back a config value", which is a support ticket.
+	// Classify-by-shape made it "a password is in git history", which is an
+	// incident with no rollback.
+	//
+	// It is also the only rule that needs no list. PGPASSWORD, *_PW, a
+	// symbol-rich password, a KUBECONFIG, a base32 MFA seed — every one of them
+	// slipped a shape classifier, and each miss was a different reason. There is
+	// no reason left when the default is to seal.
+	Public bool `json:"public,omitempty" yaml:"-"`
 }
 
 // platformProject is the fence the PLATFORM's own directories sync under. It
@@ -366,6 +389,15 @@ func declareBranch(org, name, tag string) string {
 // ignored, it fails the Helm render and the Application never syncs. The output
 // is deliberately the shape of the files a human already maintains (papers.yaml),
 // because the next edit to this file will be a human's.
+// publicSet is the caller's own assertion of what may be written in the clear.
+func (d declareSpec) publicSet() map[string]bool {
+	out := make(map[string]bool, len(d.Public))
+	for _, n := range d.Public {
+		out[n] = true
+	}
+	return out
+}
+
 func (d declareSpec) render() []byte {
 	var b strings.Builder
 	w := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
@@ -387,6 +419,25 @@ func (d declareSpec) render() []byte {
 	if d.Replicas > 0 {
 		w("replicas: %d\n", d.Replicas)
 	}
+	// ⚠ THE REFERENCE IS NOT PROVEN AGAINST A LIVE kms-operator, and a
+	// secretKeyRef to a Secret that never arrives is a self-inflicted CrashLoop
+	// with no rollback. What IS established:
+	//
+	//   - The leading slash is right. Eleven live values files in universe
+	//     (iam, cloud, aml, chat, pkg, mirror, dataroom, studio, …) all use
+	//     `secretsPath: /<path>`, and they are deployed and healthy. The chart
+	//     schema requires it too. The operator lane's no-slash form
+	//     (kmsSecretsPath) is the OUTLIER — flagged, not changed, because it is
+	//     live and changing it blind would break working syncs.
+	//   - Every live example is PLATFORM-tier, so a customer org's projectSlug
+	//     resolving is the part still unverified.
+	//
+	// CONTAINMENT, which is why this ships: nothing from this lane can reach a
+	// running pod yet. A declaration lands on a BRANCH, which the generator does
+	// not read, and modeCommit is refused outright by checkFence until universe
+	// carries the companion fence rule. Both gates must be opened deliberately by
+	// a human, and the first merge is where this resolves or does not.
+	//
 	// SECRETS ARE REFERENCES, NEVER VALUES — the chart's own rule
 	// (charts/app/templates/kmssecret.yaml), and the reason a values file is safe
 	// to commit, publish and fork. A sealed key is named here and its material
@@ -576,6 +627,56 @@ func checkFence(root, org string) error {
 	return nil
 }
 
+// checkPatch refuses a templatePatch whose RENDERED output touches the project.
+//
+// The real fleet patch renders `{}` or a syncPolicy block and touches no fence,
+// so this admits it; anything that resolves to a project — however the
+// expression is spelled — is a fence this cannot predict and is refused.
+func checkPatch(patch, org string) error {
+	out, err := renderTemplate(patch, org)
+	if err != nil {
+		return fmt.Errorf("its templatePatch does not render, so what it would merge over the fence is unknown: %w", err)
+	}
+	var patched struct {
+		Spec struct {
+			Project string `yaml:"project"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Unmarshal([]byte(out), &patched); err != nil {
+		return fmt.Errorf("its templatePatch does not render to YAML, so what it would merge over the fence is unknown: %w", err)
+	}
+	if strings.TrimSpace(patched.Spec.Project) != "" {
+		return fmt.Errorf("its templatePatch renders spec.project = %q, which is merged OVER the template and overrides the fence", patched.Spec.Project)
+	}
+	return nil
+}
+
+// renderTemplate executes one ApplicationSet expression the way the generator
+// does — sprig, missingkey=error, and the path as the only input.
+//
+// `env` and `expandenv` are REMOVED. They read the PROCESS environment, so the
+// same expression renders from cloud's environment here and the controller's
+// there: one expression, two answers, and the deciding one is not ours.
+func renderTemplate(expr, org string) (string, error) {
+	funcs := sprig.TxtFuncMap()
+	delete(funcs, "env")
+	delete(funcs, "expandenv")
+	t, err := template.New("set").Funcs(funcs).Option("missingkey=error").Parse(expr)
+	if err != nil {
+		return "", err
+	}
+	var out strings.Builder
+	if err := t.Execute(&out, map[string]any{"path": map[string]any{
+		"basename": org,
+		"filename": "app.yaml",
+		"path":     declarePrefix + "/" + org,
+		"segments": strings.Split(declarePrefix+"/"+org, "/"),
+	}}); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
 // fenceOf evaluates the ApplicationSet's own project template for one directory
 // and returns the AppProject it yields.
 //
@@ -605,43 +706,28 @@ func fenceOf(root, org string) (string, error) {
 	}
 	// templatePatch is rendered as TEXT and merged OVER the typed template, so a
 	// patch that sets spec.project overrides the fence invisibly to a check that
-	// reads only the template. Reading the template alone would confirm a fence
-	// the controller then replaces. Evaluating the merge faithfully means
-	// reimplementing the generator, so this refuses instead: a patch that so much
-	// as mentions the project is a fence this cannot predict.
-	if strings.Contains(set.Spec.TemplatePatch, "project") {
-		return "", fmt.Errorf("its templatePatch mentions `project`, which is merged OVER the template and would override the fence unseen")
+	// reads only the template.
+	//
+	// It is RENDERED and then read as YAML, never scanned. A substring test for
+	// "project" is defeated by the very engine that runs it — `{{ "pro" }}ject:`
+	// and "\x70roject:" both evade a scan and both set the key — so the only
+	// sound question is what the patch PRODUCES. Rendering it here with the same
+	// funcs and data the generator uses answers that; a patch that will not
+	// render, will not parse, or yields a project is refused.
+	if patch := strings.TrimSpace(set.Spec.TemplatePatch); patch != "" {
+		if err := checkPatch(patch, org); err != nil {
+			return "", err
+		}
 	}
 	expr := strings.TrimSpace(set.Spec.Template.Spec.Project)
 	if expr == "" {
 		return "", fmt.Errorf("declares no spec.template.spec.project, so it fences nothing this API can predict")
 	}
-	// The generator's function map, minus the two the controller REMOVES. `env`
-	// and `expandenv` read the PROCESS environment, so leaving them in would
-	// render this check against cloud's environment and the controller against
-	// its own — the same expression, two answers, and the one that decides the
-	// fence is not this one. Removed rather than tolerated, so such a template
-	// fails to parse here and is refused.
-	funcs := sprig.TxtFuncMap()
-	delete(funcs, "env")
-	delete(funcs, "expandenv")
-	t, err := template.New("project").Funcs(funcs).Option("missingkey=error").Parse(expr)
+	rendered, err := renderTemplate(expr, org)
 	if err != nil {
-		return "", fmt.Errorf("its project template does not parse: %w", err)
-	}
-	// The path a declaration for this org occupies. Nothing else is offered: the
-	// fence is derived from the path and from nothing else, by design.
-	data := map[string]any{"path": map[string]any{
-		"basename": org,
-		"filename": "app.yaml",
-		"path":     declarePrefix + "/" + org,
-		"segments": strings.Split(declarePrefix+"/"+org, "/"),
-	}}
-	var out strings.Builder
-	if err := t.Execute(&out, data); err != nil {
 		return "", fmt.Errorf("its project template does not render from the path alone: %w", err)
 	}
-	got := strings.TrimSpace(out.String())
+	got := strings.TrimSpace(rendered)
 	if got == "" {
 		return "", fmt.Errorf("its project template renders empty for %q", org)
 	}
@@ -886,25 +972,17 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 				return fmt.Errorf("stat %s: %w", rel, statErr)
 			}
 
-			// LAST LINE. Everything above splits secrets out before rendering, so
-			// this should never fire — which is exactly why it is here. A commit
-			// to universe is irreversible: git history is replicated to every
-			// clone and cannot be unpublished, so the cost of one missed path is
-			// unbounded and the cost of this check is a scan of one small file.
-			// It reads the BYTES about to be written, not the inputs, so it holds
-			// however they were produced.
-			if leaked := leakedSecret(spec); leaked != "" {
-				return fmt.Errorf("refusing to commit %s: the rendered declaration carries credential material in %s — a values file is git history and cannot be unpublished",
-					declarePath(spec.Org, spec.Name), leaked)
-			}
-
 			changed := true
 			switch {
 			case created:
+				body := spec.render()
+				if err := auditRender(body, spec.publicSet()); err != nil {
+					return fmt.Errorf("refusing to write %s: %w", rel, err)
+				}
 				if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 					return fmt.Errorf("create %s: %w", filepath.Dir(rel), err)
 				}
-				if err := os.WriteFile(abs, spec.render(), 0o644); err != nil {
+				if err := os.WriteFile(abs, body, 0o644); err != nil {
 					return fmt.Errorf("write %s: %w", rel, err)
 				}
 			default:
@@ -994,21 +1072,42 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 	return res, nil
 }
 
-// leakedSecret reports the env name whose rendered VALUE looks like a
-// credential, or "" when the render is safe to commit.
+// auditRender proves, from the BYTES about to be committed, that every value
+// written in the clear was one the caller explicitly declared public.
 //
-// It re-asks the same question the split asked, of the OUTPUT rather than the
-// input. Two independent checks of one property is not duplication here: the
-// first decides what to seal, this one proves the decision held all the way to
-// the bytes, and they can only disagree if something between them is wrong —
-// which is the case worth catching.
-func leakedSecret(spec declareSpec) string {
-	for _, e := range spec.Env {
-		if mustSeal(e.Name, e.Value) {
-			return e.Name
+// IT SHARES NO CODE WITH THE DECISION IT CHECKS. The previous guard called the
+// same mustSeal the split called, so the two were one gate wearing two names: a
+// shape the classifier missed passed the split, passed the guard, and reached
+// git. Red proved it with PGPASSWORD. This asks a different question, of a
+// different artifact, with a different failure mode — not "does this look like a
+// secret" (a judgement) but "is this key in the set the caller marked public"
+// (a fact) — so it catches a rendering path that writes a value the split never
+// approved, whatever the reason.
+//
+// It parses the rendered YAML rather than scanning for substrings, because a
+// substring test over a document is exactly the kind of check V6 was.
+func auditRender(body []byte, public map[string]bool) error {
+	var doc struct {
+		Env []struct {
+			Name      string `yaml:"name"`
+			Value     *string
+			ValueFrom map[string]any `yaml:"valueFrom"`
+		} `yaml:"env"`
+	}
+	if err := yaml.Unmarshal(body, &doc); err != nil {
+		return fmt.Errorf("the rendered declaration does not parse, so it cannot be audited: %w", err)
+	}
+	for _, e := range doc.Env {
+		switch {
+		case e.Value != nil && !public[e.Name]:
+			return fmt.Errorf("env %s is written in the clear but was never marked public — refusing to commit; a values file is git history and cannot be unpublished", e.Name)
+		case e.Value != nil && e.ValueFrom != nil:
+			return fmt.Errorf("env %s carries both a value and a reference, which is ambiguous", e.Name)
+		case e.Value == nil && e.ValueFrom == nil:
+			return fmt.Errorf("env %s carries neither a value nor a reference, so the container would not receive it", e.Name)
 		}
 	}
-	return ""
+	return nil
 }
 
 // checkDeclared refuses an UPDATE that would need to change more than the tag.

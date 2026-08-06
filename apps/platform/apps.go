@@ -233,6 +233,15 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// The caller's OWN assertion of what may be written in the clear, recorded
+	// straight from the request and never re-derived from what the split
+	// produced — see declareSpec.Public.
+	var public []string
+	for _, e := range req.Env {
+		if e.Public {
+			public = append(public, e.Name)
+		}
+	}
 
 	spec := declareSpec{
 		Name:       name,
@@ -242,6 +251,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 		Hosts:      []string{host},
 		Env:        plain,
 		SecretKeys: secretKeys,
+		Public:     public,
 		Port:       port,
 		Replicas:   replicas,
 		// A declaration this API writes is CD-automated: it carries no operator
@@ -449,27 +459,43 @@ func listCI(s *cloud.Service[state], c *zip.Ctx) error {
 			"and answering an empty run list would be indistinguishable from a forge with no runs")
 }
 
-// splitSecretEnv seals every credential into KMS and returns the entries that
-// may safely be written to git, plus the names of the ones that may not.
+// splitSecretEnv seals every value into KMS EXCEPT the ones the caller declared
+// public, and returns the public entries plus the sealed names.
 //
-// The rule is the operator lane's (secretshape.go), applied one step earlier:
-// the client's `secret` flag may only ADD secrecy, and the server seals anything
-// SHAPED like a credential regardless. What differs is the consequence of
-// missing one. In the operator lane a missed secret lands in a database column;
-// here it lands in a git commit that is replicated to every clone and cannot be
-// unpublished. So this fails closed harder: no KMS, no deploy.
+// ★ SEAL BY DEFAULT. The operator lane classifies by shape because its output is
+// a database column it can rewrite. This lane's output is a commit, and a commit
+// cannot be unpublished — so the question is not "how good is the classifier"
+// but "which way does it fail". Every shape rule fails both ways; seal-by-default
+// chooses the direction. A miss here means an operator cannot read back a config
+// value. A miss the other way means a password is in git history forever.
+//
+// It also ends the arms race. PGPASSWORD (libpq”'s own variable, one token to any
+// splitter), *_PW, a symbol-rich password (stronger passwords were MORE likely to
+// be published), a KUBECONFIG with base64 key material and no PEM armour, a
+// base32 MFA seed — each slipped the classifier for a different reason, and each
+// fix would have been a new special case. There is no case to miss when the
+// default is to seal.
 func splitSecretEnv(s *cloud.Service[state], c *zip.Ctx, org, app string, env []declareEnv) ([]declareEnv, []string, error) {
 	var plain []declareEnv
 	var keys []string
 	for _, e := range env {
-		if !e.Secret && !mustSeal(e.Name, e.Value) {
+		if e.Public {
+			// Explicitly public — but a caller may not publish a credential by
+			// asserting it is not one. The shape check survives HERE and only
+			// here, where it can refuse and never permit: as a backstop on the
+			// one path that writes cleartext to git, not as the thing that
+			// decides what a secret is.
+			if mustSeal(e.Name, e.Value) {
+				return nil, nil, zip.ErrBadRequest("env " + e.Name +
+					" is marked public but its value looks like a credential — refusing to write it to git; unmark it and it will be sealed")
+			}
 			plain = append(plain, e)
 			continue
 		}
 		if strings.TrimSpace(e.Value) == "" {
 			// Nothing to seal and nothing to leak. A named-but-empty secret would
 			// otherwise mint a reference to a KMS record that does not exist.
-			return nil, nil, zip.ErrBadRequest("env " + e.Name + " is marked secret but carries no value")
+			return nil, nil, zip.ErrBadRequest("env " + e.Name + " carries no value; mark it public if it is empty configuration")
 		}
 		if s.KMS == nil {
 			return nil, nil, zip.Errorf(http.StatusServiceUnavailable,
