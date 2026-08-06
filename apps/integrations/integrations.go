@@ -1471,8 +1471,40 @@ func kmsPut(s *cloud.Service[state], path, name string, value []byte) error {
 	return s.State.kms.PutSecret(context.Background(), kmsRef(path, name), value)
 }
 
+// kmsGet reads one sealed secret, and RESTORES kms.ErrSecretNotFound when the
+// store answered "not found" across a boundary that flattened the sentinel.
+//
+// A plugin is a PROCESS. An error crossing that wire is re-created from its
+// STRING, so errors.Is(err, kms.ErrSecretNotFound) is false on the far side even
+// though the store said exactly that. Every caller that distinguishes "absent"
+// from "broken" therefore silently took the broken branch.
+//
+// Measured in production: @hanzo answered every Slack DM with "Sorry — I
+// couldn't reach your Hanzo account just now" because getUserLink read an
+// unlinked user's secret, got `kms kms_get: kms.get: store: secret not found`
+// as an opaque error, and returned it as a FAILURE instead of the "not linked
+// yet" it is. The link prompt that teaches a user how to connect was
+// unreachable, so the feature could never be used at all.
+//
+// Repaired HERE rather than at each call site: this is the one door onto the
+// store, so the sentinel is whole for everyone above it and no future caller has
+// to know the wire eats error identity.
 func kmsGet(s *cloud.Service[state], path, name string) ([]byte, error) {
-	return s.State.kms.GetSecret(context.Background(), kmsRef(path, name))
+	raw, err := s.State.kms.GetSecret(context.Background(), kmsRef(path, name))
+	if err != nil && !errors.Is(err, kms.ErrSecretNotFound) && isNotFoundText(err) {
+		return nil, fmt.Errorf("%s: %w", err.Error(), kms.ErrSecretNotFound)
+	}
+	return raw, err
+}
+
+// isNotFoundText recognises a store's not-found answer that arrived as prose.
+//
+// Matching on text is what the flattened wire leaves available, so it is kept
+// deliberately narrow — the store's own phrase — rather than any message
+// containing "not found", which would swallow a genuine failure that merely
+// mentions a missing thing and turn a broken store into a silent "unlinked".
+func isNotFoundText(err error) bool {
+	return strings.Contains(err.Error(), "secret not found")
 }
 
 func kmsDelete(s *cloud.Service[state], path, name string) error {
