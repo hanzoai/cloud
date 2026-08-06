@@ -4,6 +4,7 @@ package fleet
 
 import (
 	"encoding/json"
+	"net/http"
 	"sort"
 	"sync"
 
@@ -72,10 +73,42 @@ type Door struct {
 // apps is the deployment's COMPOSED set (cmd/cloud's `composed`), never the whole
 // manifest: a deployment that does not run a subsystem must not offer its tools,
 // for the same reason it must not publish its routes.
+// It also signposts the address the door LEFT, and that belongs here rather than
+// in the console's terminal handler, which is where it used to live. The console
+// answered an unclaimed [manifest.FrameworkMCPPath] with "the door moved" on the
+// reasoning that a plugin serving its own door there would match a real route and
+// never reach it. Untrue: zip mounts that route only when the app has something
+// to expose (installMCP), so a plugin whose typed ops live on the internal plane
+// — kms, whose four secret ops are on cloud.Plane() precisely so no route runs
+// from the edge to a secret — has NO route at its own door, fell through to the
+// console, and was told its door was at an address only a host serves. Measured:
+// POST /mcp -> 308, then POST /v1/mcp -> 404, and the fleet reads that non-2xx as
+// an outage for a child that is serving fine.
+//
+// A signpost is only true where the door actually moved, and this is the one
+// place that knows it did — the same call that registers the target names it.
 func Mount(host *zip.App, path string, apps []string, at At) *Door {
 	d := &Door{host: host, at: at, apps: apps, owner: map[string]string{}}
 	host.Post(path, d.serve)
+	if path != manifest.FrameworkMCPPath {
+		host.All(manifest.FrameworkMCPPath, signpost(path))
+	}
 	return d
+}
+
+// signpost answers the framework default on a host that moved its door.
+//
+// 308 preserves method AND body, so a POSTed initialize or tools/list arrives at
+// the real door instead of being retried as a GET or answered with the console
+// shell. The body is JSON for the same reason the hop exists at all: a caller who
+// reads bytes rather than following it must never get HTML here. It carries no
+// tool list — a signpost is not a second door.
+func signpost(door string) zip.Handler {
+	body := map[string]string{"error": "the MCP door moved", "door": door}
+	return func(c *zip.Ctx) error {
+		c.SetHeader("Location", door)
+		return c.JSON(http.StatusPermanentRedirect, body)
+	}
 }
 
 // message is one JSON-RPC 2.0 envelope, in the shape this door reads it.
