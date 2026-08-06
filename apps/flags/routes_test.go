@@ -12,6 +12,7 @@ package flags
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -268,5 +269,42 @@ func TestEvaluateRelaysTheEvaluatorVerbatim(t *testing.T) {
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/flags", "", []byte(`{"distinct_id":"u1"}`)); code != http.StatusForbidden {
 		t.Fatalf("unvalidated evaluate: want 403, got %d", code)
+	}
+}
+
+// A project key names a tenant for a READ and can never author. Both halves are
+// asserted here because the second is the whole reason the first is safe.
+func TestProjectKeyEvaluatesButCannotAuthor(t *testing.T) {
+	app := mountHTTP(t)
+	prev := resolveKeyOrg
+	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
+		if key == "pk_acme" {
+			return "acme", true
+		}
+		return "", false
+	}
+	t.Cleanup(func() { resolveKeyOrg = prev })
+
+	// Seeded by a principal, read back by a key: the key sees its own org's flags.
+	if code, body := do(t, app, http.MethodPut, "/v1/flags/defs/new-editor", "acme",
+		[]byte(`{"active":true,"filters":{"groups":[{"rollout_percentage":100}]}}`)); code != http.StatusOK {
+		t.Fatalf("seed: want 200, got %d (%s)", code, body)
+	}
+	if code, body := do(t, app, http.MethodPost, "/v1/flags?api_key=pk_acme", "",
+		[]byte(`{"distinct_id":"u1"}`)); code != http.StatusOK {
+		t.Fatalf("evaluate by key: want 200, got %d (%s)", code, body)
+	}
+
+	// The same key cannot change what everyone else reads.
+	code, body := do(t, app, http.MethodPut, "/v1/flags/defs/new-editor?api_key=pk_acme", "",
+		[]byte(`{"active":false}`))
+	if code != http.StatusForbidden {
+		t.Fatalf("author by key: want 403, got %d (%s)", code, body)
+	}
+
+	// An unresolvable key fails CLOSED rather than falling back to a host or a default.
+	if code, body := do(t, app, http.MethodPost, "/v1/flags?api_key=pk_nobody", "",
+		[]byte(`{"distinct_id":"u1"}`)); code != http.StatusForbidden {
+		t.Fatalf("unknown key: want 403, got %d (%s)", code, body)
 	}
 }
