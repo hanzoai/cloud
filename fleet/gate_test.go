@@ -44,20 +44,12 @@ func startNamed(t *testing.T, name string, ops ...string) *child {
 	return &child{name: name, addr: sock, app: app}
 }
 
-// order is the tool names the door reports, IN THE ORDER IT REPORTS THEM —
-// unlike listed(), which sorts. The order is the mechanism under test in
+// order is the operations the door offers, IN THE ORDER IT OFFERS THEM — unlike
+// listed(), which sorts. The order is the mechanism under test in
 // TestTheProductSurfaceLeadsTheList, so sorting it away would test nothing.
 func order(t *testing.T, h *zip.App) []string {
 	t.Helper()
-	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
-	tools, _ := res["tools"].([]any)
-	out := make([]string, 0, len(tools))
-	for _, tl := range tools {
-		m, _ := tl.(map[string]any)
-		n, _ := m["name"].(string)
-		out = append(out, n)
-	}
-	return out
+	return offered(rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 }
 
 // dangerous and useful are the two halves, as one child each would serve them.
@@ -275,19 +267,12 @@ func TestTheGateIsNotAHeaderTrick(t *testing.T) {
 		raw, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		var env struct {
-			Result struct {
-				Tools []struct {
-					Name string `json:"name"`
-				} `json:"tools"`
-			} `json:"result"`
+			Result map[string]any `json:"result"`
 		}
 		if err := json.Unmarshal(raw, &env); err != nil {
 			t.Fatalf("%s: %v", hdr[0], err)
 		}
-		var got []string
-		for _, tl := range env.Result.Tools {
-			got = append(got, tl.Name)
-		}
+		got := offered(env.Result)
 		if strings.Join(got, ",") != strings.Join(base, ",") {
 			t.Errorf("%s: %v changed the projection to %v", hdr[0], hdr[1], got)
 		}
