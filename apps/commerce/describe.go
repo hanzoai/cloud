@@ -441,116 +441,19 @@ func describeBilling() {
 			"window, replays the first result, and if that guard store is unreachable the call is "+
 			"refused with 503 rather than risking a second real charge.")
 
-	openapi.Describe("/v1/billing/wire", http.MethodGet,
-		"The bank details and payment reference for topping up by wire",
-		"Answers the receiving bank's name and address, the account name, the account and routing "+
-			"numbers, SWIFT and IBAN, and the reference to put on the transfer. The bank is the "+
-			"SERVING BRAND's, resolved from the request host rather than from the caller's org, and "+
-			"hydrated from that brand's own KMS wire secrets — a deployment holding neither an "+
-			"account number nor an IBAN answers 503 rather than a half-filled form a customer would "+
-			"wire real money against. The reference is derived from the CALLER's own billing key "+
-			"(hanzo/z renders as TOPUP-HANZO-Z), and it is what attributes an incoming wire to an "+
-			"account; memo carries the same value because banks name that field differently. It is an "+
-			"identifier, not a secret — anyone knowing an org slug can derive it, which is safe "+
-			"precisely because reading it moves nothing. NOTHING MINTS HERE: a wire is credited by "+
-			"the admin credit verb when the bank receipt lands, so a caller who has read these "+
-			"instructions has not funded anything yet.")
-
-	openapi.Describe("/v1/billing/crypto/options", http.MethodGet,
-		"The chains and tokens the crypto custody rail will accept",
-		"Answers the chains and the tokens a crypto deposit may be opened against — the list a "+
-			"payment page renders its asset picker from. Both come from the MPC custody processor "+
-			"this deployment is wired to, and the call is gated on that processor answering a health "+
-			"probe within about three seconds: an unreachable or unconfigured custody service is 503 "+
-			"with no cached fallback, because offering a chain that cannot then mint an address is "+
-			"how a payer's funds get stranded. That 503 does not distinguish never-configured from "+
-			"momentarily-unreachable, so treat it as retry-then-choose-another-rail rather than as a "+
-			"permanent answer. The chain list is the processor's and is wider than the deposit "+
-			"intent's own vocabulary, so a chain named here may still be recorded as an unrecognized "+
-			"value carrying default confirmation requirements.")
-
-	openapi.Describe("/v1/billing/crypto/deposit", http.MethodPost,
-		"Open a crypto deposit and get the address to send funds to",
-		"Mints a per-payer custody deposit address on the MPC signer fleet and answers the intent id, "+
-			"its status, the chain and token, the deposit address and when it expires — 200 on both "+
-			"the freshly-minted and the reused path, never 201. The body is optional and defaults to "+
-			"ethereum and usdc. The credited payer is the CALLER's own billing subject and there is "+
-			"deliberately no subject field, so a deposit cannot be opened on anyone else's behalf. A "+
-			"refresh does not spray keygens: an unexpired pending intent for the same payer, chain "+
-			"and token is returned as it stands — with its ORIGINAL expiry, not a refreshed one. The "+
-			"amount is a caller-supplied hint stored verbatim; it binds nothing and is not what "+
-			"credits. NOTHING MINTS HERE — the chain watcher credits the balance on real "+
-			"confirmations, so an opened deposit is worth nothing until the chain says otherwise. An "+
-			"unsupported chain is 400, and a custody service that will not issue an address answers "+
-			"503 rather than 502 on purpose, so the refusal reaches the caller as JSON instead of as "+
-			"an edge's HTML interstitial.")
-
-	openapi.Describe("/v1/billing/crypto/deposit/:id", http.MethodGet,
-		"Poll one crypto deposit until it settles",
-		"Returns the addressed deposit intent — status, chain, token, address and expiry — which is "+
-			"what a checkout page polls after showing the payer an address. The status is one of "+
-			"pending, confirming, succeeded, expired, failed or refunded. The intent is resolved "+
-			"inside the caller org's own namespace AND checked against the caller's own payer key, so "+
-			"another payer's id answers 404 exactly as a missing one does and no 403 exists to tell "+
-			"the two apart. Two things a poller gets wrong: the status does NOT expire itself, so an "+
-			"intent past its expiry still reads pending until something else marks it, and "+
-			"confirmation progress is not projected here — the response carries the state, not the "+
-			"confirmation count or the transaction hash.")
-
-	openapi.Describe("/v1/billing/methods", http.MethodGet,
-		"List the payment methods saved on your account, masked",
-		"Answers the caller's saved payment methods newest first, each masked to what is safe to "+
-			"show: brand, last four, expiry and the processor's reusable reference. No card number "+
-			"and no security code exist on the model to return — they are unrepresentable here rather "+
-			"than filtered out, because the PAN lives at the processor and never enters this system. "+
-			"This is the CUSTOMER face of the rows the service-token portal list serves, at its own "+
-			"address because the app publishing this one cannot forward to the other without "+
-			"re-entering its own handler. The subject filter is pinned to the VALIDATED caller before "+
-			"the handler runs, so a customerId in the query is silently ignored for an ordinary "+
-			"caller rather than refused — you always read your own. A caller with no resolvable "+
-			"subject gets an empty array, never another tenant's cards.")
-
-	openapi.Describe("/v1/billing/methods", http.MethodPost,
-		"Save a card on your account for later charges",
-		"Vaults a tokenized card as a reusable card-on-file at the processor and stores its masked "+
-			"descriptor locally, answering the saved method at 201 — this is the card a monthly "+
-			"renewal or an auto-recharge charges later. The PAN never reaches this service: the "+
-			"browser tokenizes the card and only the single-use nonce arrives. A body typed as a card "+
-			"carrying no token at all is refused 400, because a saved method with nothing chargeable "+
-			"behind it looks saved and cannot be billed. The reference you send is NOT what comes "+
-			"back — on a successful vaulting it is REPLACED by the processor's durable card id, and "+
-			"that is the value later charges use. The billing address is stored exactly as sent and "+
-			"is not verified here. A declined card is 402 carrying a humanized reason. The subject is "+
-			"pinned to the validated caller, so a card can only ever be attached to the caller's own "+
-			"account whatever the body claims — and posting the same card twice creates two rows, "+
-			"because there is no dedupe.")
-
-	openapi.Describe("/v1/billing/methods/:id", http.MethodDelete,
-		"Remove a saved payment method",
-		"Detaches the addressed method: the local row is soft-deleted and, when that row carries the "+
-			"processor's customer and card ids, the card is withdrawn from the processor's vault too. "+
-			"Answers a deleted flag with the id. Read that flag precisely — it is a claim about the "+
-			"LOCAL row. The upstream removal is best-effort, and a method saved by the older "+
-			"pre-authorization path carries no vault ids at all, so nothing is withdrawn upstream "+
-			"while the response still says deleted. The id is resolved inside the caller's own "+
-			"namespace and against the caller's own subject, so another tenant's or another subject's "+
-			"id is 404 and never 403 — the id space cannot be probed. Removing the card an "+
-			"auto-recharge or a running subscription bills leaves that arrangement with nothing to "+
-			"charge; that is the customer's call to make.")
-
-	openapi.Describe("/v1/billing/portal/methods", http.MethodPost,
-		"Save a card against a subject's account — the portal attach",
-		"Vaults a tokenized card and stores its masked descriptor: the service-token twin of the "+
-			"customer's POST /v1/billing/methods, and the same handler behind both. It exists at its "+
-			"own address for the reason the portal list does — the app publishing the customer "+
-			"address proxies here rather than into its own route. Every rule of the customer path "+
-			"holds: the PAN never arrives, only the nonce; a card-typed body with no token is 400; "+
-			"the reference you send is replaced by the processor's durable card id when vaulting "+
-			"succeeds; a decline is 402. What differs is who may name the subject — an ordinary "+
-			"caller is pinned to its own, and only a caller holding the internal service token may "+
-			"act for another subject, within the org the gateway pinned. Cross-org is closed by the "+
-			"namespace for both.")
-
+	// A duplicated block of eight billing Describes was removed here — wire,
+	// crypto/{options,deposit,deposit/:id}, methods (GET+POST), methods/:id and
+	// portal/methods were each already described above (lines ~222-315).
+	//
+	// openapi.Describe PANICS on a duplicate (openapi/register.go) and this package
+	// registers from an init(), so the second set made apps/commerce panic at INIT:
+	// every test in the package failed to RUN rather than fail, which is the worse
+	// failure — including the billing subject-pin guard, whose whole job is to stay
+	// red until a route pins its subject.
+	//
+	// The surviving descriptions are the earlier ones. The removed set was in places
+	// more detailed; if that wording is wanted, replace the earlier text rather than
+	// adding a second registration.
 	openapi.Describe("/v1/billing/webhooks/:provider", http.MethodPost,
 		"Payment-provider webhook intake for settlement and subscription lifecycle events",
 		"Accepts a payment provider's event, verifies it, records it for audit, and applies "+
