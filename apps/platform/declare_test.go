@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
@@ -569,4 +570,68 @@ func keysOf(m map[string]any) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// A retry of the same deploy must SUCCEED. Any client retries, and the first cut
+// of this seam did not: it based every branch write on main, so a second call a
+// second later committed the same tree at a different timestamp — a different
+// sha, a non-fast-forward push, and a raw git hint the caller could not act on.
+//
+// The sleep is load-bearing and is the point of the test. Without it both
+// commits land in the SAME second, git mints the identical sha, the push is
+// "everything up-to-date" and the bug is invisible — which is exactly how it
+// passed the first time it was written.
+func TestRetryingTheSameBranchDeploySucceeds(t *testing.T) {
+	remote, bare := gitRemote(t, pinFixture)
+	defer swapUniverseRemote(remote)()
+	s := serviceWithKMS(kmsWithPinToken(t))
+	spec := testSpec()
+
+	first, err := declare(s, context.Background(), spec, modeBranch)
+	if err != nil {
+		t.Fatalf("first declare: %v", err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+
+	again, err := declare(s, context.Background(), spec, modeBranch)
+	if err != nil {
+		t.Fatalf("a retry of the same deploy failed: %v", err)
+	}
+	if again.Changed {
+		t.Error("a retry of an identical declaration reported a change")
+	}
+	if again.Ref != first.Ref || again.Review == "" {
+		t.Errorf("a retry must report the same branch and review: %+v", again)
+	}
+	if again.Live {
+		t.Error("a retry reported itself live; a branch deploys nothing")
+	}
+	// And the branch still holds exactly one declaration commit.
+	n := strings.Count(mustGit(t, bare, "rev-list", "--count", first.Ref), "")
+	if n == 0 {
+		t.Fatal("the branch vanished")
+	}
+	if got := strings.TrimSpace(mustGit(t, bare, "rev-list", "--count", universeBranch+".."+first.Ref)); got != "1" {
+		t.Errorf("the retry stacked a second commit on the branch: %s commits ahead of main", got)
+	}
+}
+
+// A re-declare that repeats the SAME environment is the same declaration, not a
+// rewrite. Refusing it would make every retry of a create-with-env fail.
+func TestRepeatingTheSameEnvIsNotARewrite(t *testing.T) {
+	root := t.TempDir()
+	spec := testSpec()
+	spec.Env = []declareEnv{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}}
+	writeDecl(t, root, spec.Namespace, spec.Name, string(spec.render()))
+
+	reordered := spec
+	reordered.Env = []declareEnv{{Name: "B", Value: "2"}, {Name: "A", Value: "1"}}
+	if err := checkDeclared(root, reordered); err != nil {
+		t.Errorf("the same environment in another order was treated as a rewrite: %v", err)
+	}
+	changed := spec
+	changed.Env = []declareEnv{{Name: "A", Value: "9"}}
+	if err := checkDeclared(root, changed); err == nil {
+		t.Error("a genuinely different environment was accepted as an update")
+	}
 }
