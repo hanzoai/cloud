@@ -229,9 +229,9 @@ components:
       properties:
         cold:
           description: |-
-            Cold reports that this request paid for a workspace cold start — the
-            checkout, the dependency fetch and the server's first index. It is the
-            billed event, surfaced so a caller can see what it was charged for.
+            Cold reports that this request paid to PREPARE the revision — the tree
+            write, the dependency fetch and the language server's first index. It is
+            the billed event, surfaced so a caller can see what it was charged for.
           type: boolean
         completions:
           items:
@@ -249,7 +249,7 @@ components:
           items:
             $ref: '#/components/schemas/Location'
           type: array
-        method:
+        op:
           type: string
         path:
           type: string
@@ -3821,6 +3821,8 @@ components:
       type: object
     Location:
       properties:
+        external:
+          type: boolean
         path:
           type: string
         range:
@@ -5174,13 +5176,13 @@ components:
         line:
           description: Line is 0-based, per the LSP specification.
           type: integer
-        method:
-          description: |-
-            Method is the question: hover, definition, references, typeDefinition,
-            implementation, documentSymbol, completion or diagnostics.
-          type: string
         path:
-          description: Path is the repo-relative file, e.g. "apps/lsp/server.go".
+          description: Path is the repo-relative file, e.g. "apps/lsp/lsp.go".
+          type: string
+        relation:
+          description: |-
+            Relation refines locate: definition, reference, type or implementation.
+            Empty means definition. Every other op ignores it.
           type: string
         repo:
           description: |-
@@ -5190,9 +5192,9 @@ components:
           type: string
         rev:
           description: |-
-            Rev is a branch, tag or commit sha. Empty means the default branch. A
-            workspace is keyed by revision, so pinning a sha is what makes an answer
-            reproducible.
+            Rev is a branch, tag or commit sha. Empty means the default branch. It is
+            resolved to a commit before anything else happens, so an answer is always
+            about one immutable tree.
           type: string
       type: object
     Question:
@@ -56714,6 +56716,161 @@ paths:
       tags:
       - code
       x-app: code
+  /v1/code/lsp/complete:
+    post:
+      description: |-
+        Offers the candidates a language server has at a position, typed and
+        resolved through the repository's dependencies rather than guessed from text.
+      operationId: post_v1_code_lsp_complete
+      requestBody:
+        content:
+          application/json:
+            example:
+              character: 18
+              line: 120
+              path: apps/lsp/lsp.go
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/Query'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Answer'
+          description: ok
+      summary: Offers the candidates a language server has at a position, typed and
+        resolved through the repository's dependencies rather than guessed from text.
+      tags:
+      - code
+      x-app: lsp
+  /v1/code/lsp/diagnostics:
+    post:
+      description: |-
+        Reports every problem the language server finds in one file —
+        compile errors, type errors and lints, each with its span and its severity (1
+        error, 2 warning, 3 information, 4 hint). The position is ignored.
+      operationId: post_v1_code_lsp_diagnostics
+      requestBody:
+        content:
+          application/json:
+            example:
+              path: apps/lsp/lsp.go
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/Query'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Answer'
+          description: ok
+      summary: Reports every problem the language server finds in one file — compile
+        errors, type errors and lints, each with its span and its severity (1 error,
+        2 warning, 3 information, 4 hint).
+      tags:
+      - code
+      x-app: lsp
+  /v1/code/lsp/hover:
+    post:
+      description: |-
+        Renders the type and documentation of the symbol at a position, as the
+        language server itself renders it.
+
+        Positions are the LSP's: line and character are 0-BASED and character counts
+        UTF-16 code units, so an editor's 1-based line must have 1 subtracted before it
+        is sent. The repository is named by slug and is always one in the caller's own
+        org; rev pins a branch, tag or commit sha, and empty means the default branch.
+      operationId: post_v1_code_lsp_hover
+      requestBody:
+        content:
+          application/json:
+            example:
+              character: 18
+              line: 120
+              path: apps/lsp/lsp.go
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/Query'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Answer'
+          description: ok
+      summary: Renders the type and documentation of the symbol at a position, as
+        the language server itself renders it.
+      tags:
+      - code
+      x-app: lsp
+  /v1/code/lsp/locate:
+    post:
+      description: |-
+        Finds where a symbol lives: its definition, its references, its type or
+        its implementations, chosen by relation (definition, reference, type,
+        implementation — empty means definition).
+
+        It resolves THROUGH dependencies. An answer whose external flag is set left the
+        repository, and its path is then the module coordinate it landed in — which is
+        the question a static index cannot answer and this service exists for.
+      operationId: post_v1_code_lsp_locate
+      requestBody:
+        content:
+          application/json:
+            example:
+              character: 18
+              line: 120
+              path: apps/lsp/lsp.go
+              relation: definition
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/Query'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Answer'
+          description: ok
+      summary: 'Finds where a symbol lives: its definition, its references, its type
+        or its implementations, chosen by relation (definition, reference, type, implementation
+        — empty means definition).'
+      tags:
+      - code
+      x-app: lsp
+  /v1/code/lsp/symbols:
+    post:
+      description: |-
+        Outlines one file: every declaration in it, with its kind and its span.
+        The position is ignored — the answer is the whole file.
+      operationId: post_v1_code_lsp_symbols
+      requestBody:
+        content:
+          application/json:
+            example:
+              path: apps/lsp/lsp.go
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/Query'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Answer'
+          description: ok
+      summary: 'Outlines one file: every declaration in it, with its kind and its
+        span.'
+      tags:
+      - code
+      x-app: lsp
   /v1/code/search:
     get:
       description: |-
@@ -77336,50 +77493,6 @@ paths:
       tags:
       - logs
       x-app: metrics
-  /v1/lsp:
-    post:
-      description: |-
-        Resolves one position in one repository through a live language server:
-        definition, references, type, implementation, hover, document symbols,
-        completion or diagnostics — over the repo AND its resolved dependencies, with
-        no toolchain on the caller's machine.
-
-        Positions are the LSP's: line and character are 0-BASED and character counts
-        UTF-16 code units, so an editor's 1-based line must have 1 subtracted before it
-        is sent. The repository is named by slug and is always one in the caller's own
-        org. rev pins a branch, tag or commit sha; empty means the default branch.
-
-        The first query against a (repo, rev) pays a cold start — checkout, dependency
-        fetch and the server's first index — and is the billed event; later queries
-        against the same revision are served from the warm workspace and are free. The
-        answer says which it was.
-      operationId: post_v1_lsp
-      requestBody:
-        content:
-          application/json:
-            example:
-              character: 18
-              line: 120
-              method: definition
-              path: apps/lsp/server.go
-              repo: cloud
-            schema:
-              $ref: '#/components/schemas/Query'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Answer'
-          description: ok
-      summary: 'Resolves one position in one repository through a live language server:
-        definition, references, type, implementation, hover, document symbols, completion
-        or diagnostics — over the repo AND its resolved dependencies, with no toolchain
-        on the caller''s machine.'
-      tags:
-      - lsp
-      x-app: lsp
   /v1/machines:
     get:
       description: |-
@@ -105192,10 +105305,6 @@ tags:
     account''s latest usage snapshot.'
   name: links
 - name: logs
-- description: Package lsp is live semantic code intelligence — definitions, references,
-    types, hover and diagnostics — over a repository AND its resolved dependencies,
-    served from the cloud with no toolchain on the caller's machine.
-  name: lsp
 - description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
     clusters — launch one, resize it, tear it down.'
   name: machines

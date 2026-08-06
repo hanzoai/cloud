@@ -9,17 +9,69 @@ import (
 )
 
 func init() {
-	zip.Describe("POST /v1/lsp", zip.Doc{
-		Description: "Resolves one position in one repository through a live language server:\ndefinition, references, type, implementation, hover, document symbols,\ncompletion or diagnostics — over the repo AND its resolved dependencies, with\nno toolchain on the caller's machine.\n\nPositions are the LSP's: line and character are 0-BASED and character counts\nUTF-16 code units, so an editor's 1-based line must have 1 subtracted before it\nis sent. The repository is named by slug and is always one in the caller's own\norg. rev pins a branch, tag or commit sha; empty means the default branch.\n\nThe first query against a (repo, rev) pays a cold start — checkout, dependency\nfetch and the server's first index — and is the billed event; later queries\nagainst the same revision are served from the warm workspace and are free. The\nanswer says which it was.",
+	zip.Describe("POST /v1/code/lsp/complete", zip.Doc{
+		Description: "Offers the candidates a language server has at a position, typed and\nresolved through the repository's dependencies rather than guessed from text.",
 		Fields: map[string]string{
-			"Answer.cold":     "Cold reports that this request paid for a workspace cold start — the\ncheckout, the dependency fetch and the server's first index. It is the\nbilled event, surfaced so a caller can see what it was charged for.",
+			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
 			"Query.character": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
 			"Query.line":      "Line is 0-based, per the LSP specification.",
-			"Query.method":    "Method is the question: hover, definition, references, typeDefinition,\nimplementation, documentSymbol, completion or diagnostics.",
-			"Query.path":      "Path is the repo-relative file, e.g. \"apps/lsp/server.go\".",
+			"Query.path":      "Path is the repo-relative file, e.g. \"apps/lsp/lsp.go\".",
+			"Query.relation":  "Relation refines locate: definition, reference, type or implementation.\nEmpty means definition. Every other op ignores it.",
 			"Query.repo":      "Repo is the repository NAME within the caller's own org, e.g. \"cloud\".\nNot a URL and not an owner/name pair: the owner is the validated\nprincipal's org, so this names a repository the caller already owns.",
-			"Query.rev":       "Rev is a branch, tag or commit sha. Empty means the default branch. A\nworkspace is keyed by revision, so pinning a sha is what makes an answer\nreproducible.",
+			"Query.rev":       "Rev is a branch, tag or commit sha. Empty means the default branch. It is\nresolved to a commit before anything else happens, so an answer is always\nabout one immutable tree.",
 		},
-		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/server.go","line":120,"character":18,"method":"definition"}`),
+		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18}`),
+	})
+	zip.Describe("POST /v1/code/lsp/diagnostics", zip.Doc{
+		Description: "Reports every problem the language server finds in one file —\ncompile errors, type errors and lints, each with its span and its severity (1\nerror, 2 warning, 3 information, 4 hint). The position is ignored.",
+		Fields: map[string]string{
+			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
+			"Query.character": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
+			"Query.line":      "Line is 0-based, per the LSP specification.",
+			"Query.path":      "Path is the repo-relative file, e.g. \"apps/lsp/lsp.go\".",
+			"Query.relation":  "Relation refines locate: definition, reference, type or implementation.\nEmpty means definition. Every other op ignores it.",
+			"Query.repo":      "Repo is the repository NAME within the caller's own org, e.g. \"cloud\".\nNot a URL and not an owner/name pair: the owner is the validated\nprincipal's org, so this names a repository the caller already owns.",
+			"Query.rev":       "Rev is a branch, tag or commit sha. Empty means the default branch. It is\nresolved to a commit before anything else happens, so an answer is always\nabout one immutable tree.",
+		},
+		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go"}`),
+	})
+	zip.Describe("POST /v1/code/lsp/hover", zip.Doc{
+		Description: "Renders the type and documentation of the symbol at a position, as the\nlanguage server itself renders it.\n\nPositions are the LSP's: line and character are 0-BASED and character counts\nUTF-16 code units, so an editor's 1-based line must have 1 subtracted before it\nis sent. The repository is named by slug and is always one in the caller's own\norg; rev pins a branch, tag or commit sha, and empty means the default branch.",
+		Fields: map[string]string{
+			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
+			"Query.character": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
+			"Query.line":      "Line is 0-based, per the LSP specification.",
+			"Query.path":      "Path is the repo-relative file, e.g. \"apps/lsp/lsp.go\".",
+			"Query.relation":  "Relation refines locate: definition, reference, type or implementation.\nEmpty means definition. Every other op ignores it.",
+			"Query.repo":      "Repo is the repository NAME within the caller's own org, e.g. \"cloud\".\nNot a URL and not an owner/name pair: the owner is the validated\nprincipal's org, so this names a repository the caller already owns.",
+			"Query.rev":       "Rev is a branch, tag or commit sha. Empty means the default branch. It is\nresolved to a commit before anything else happens, so an answer is always\nabout one immutable tree.",
+		},
+		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18}`),
+	})
+	zip.Describe("POST /v1/code/lsp/locate", zip.Doc{
+		Description: "Finds where a symbol lives: its definition, its references, its type or\nits implementations, chosen by relation (definition, reference, type,\nimplementation — empty means definition).\n\nIt resolves THROUGH dependencies. An answer whose external flag is set left the\nrepository, and its path is then the module coordinate it landed in — which is\nthe question a static index cannot answer and this service exists for.",
+		Fields: map[string]string{
+			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
+			"Query.character": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
+			"Query.line":      "Line is 0-based, per the LSP specification.",
+			"Query.path":      "Path is the repo-relative file, e.g. \"apps/lsp/lsp.go\".",
+			"Query.relation":  "Relation refines locate: definition, reference, type or implementation.\nEmpty means definition. Every other op ignores it.",
+			"Query.repo":      "Repo is the repository NAME within the caller's own org, e.g. \"cloud\".\nNot a URL and not an owner/name pair: the owner is the validated\nprincipal's org, so this names a repository the caller already owns.",
+			"Query.rev":       "Rev is a branch, tag or commit sha. Empty means the default branch. It is\nresolved to a commit before anything else happens, so an answer is always\nabout one immutable tree.",
+		},
+		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18,"relation":"definition"}`),
+	})
+	zip.Describe("POST /v1/code/lsp/symbols", zip.Doc{
+		Description: "Outlines one file: every declaration in it, with its kind and its span.\nThe position is ignored — the answer is the whole file.",
+		Fields: map[string]string{
+			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
+			"Query.character": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
+			"Query.line":      "Line is 0-based, per the LSP specification.",
+			"Query.path":      "Path is the repo-relative file, e.g. \"apps/lsp/lsp.go\".",
+			"Query.relation":  "Relation refines locate: definition, reference, type or implementation.\nEmpty means definition. Every other op ignores it.",
+			"Query.repo":      "Repo is the repository NAME within the caller's own org, e.g. \"cloud\".\nNot a URL and not an owner/name pair: the owner is the validated\nprincipal's org, so this names a repository the caller already owns.",
+			"Query.rev":       "Rev is a branch, tag or commit sha. Empty means the default branch. It is\nresolved to a commit before anything else happens, so an answer is always\nabout one immutable tree.",
+		},
+		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go"}`),
 	})
 }
