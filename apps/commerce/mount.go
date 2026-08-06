@@ -581,9 +581,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// error anywhere the customer or we would see. The tier has to RESOLVE, not
 	// merely stop crashing. It is not typed yet — module work, per the
 	// module-handler note.
+	// PinBillingSubject IS REQUIRED HERE, and its absence was a live leak.
+	//
+	// TokenRequired authenticates and does not pin, which is the whole hazard the
+	// comment on /v1/billing/methods already spells out: any authenticated browser
+	// could name another subject. GetTier reads ?user= verbatim and answers with
+	// that subject's wallet — prepaidAvailable, creditsRemaining, effectiveAvailable
+	// — so one signed-in customer could read every other customer's balance.
+	//
+	// It is CROSS-CUSTOMER, not merely cross-subject, because every self-serve
+	// signup lands in the SAME org (account.SignupOrg = "hanzo") with a per-person
+	// subject. The org namespace is closed; the subject was not. Measured live
+	// before this line: one caller, four wallets — hanzo/z 10966, hanzo 6375,
+	// hanzo/admin 10000, hanzo/dev 0.
+	//
+	// The pin does not break the S2S reader this route exists for: PinBillingSubject
+	// admits a verified service-token caller that names its own org and leaves its
+	// query untouched (apps/account/billing_coresident.go), which is exactly the
+	// shape ai's rate limiter and apps/metering send. TokenRequired stays after it
+	// so that caller still resolves an org.
 	app.Get("/v1/billing/tier",
 		commercemid.RequestContext(),
 		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
 		commercemid.TokenRequired(),
 		commercebilling.GetTier,
 	)
