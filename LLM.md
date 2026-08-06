@@ -2824,6 +2824,21 @@ semantic is identical — fail closed once armed, allow before.
   of those owns its own wire stub (`bots/wire.go`, `coding/task.go`) and speaks
   through the seam. That isolation is what makes the HIP-0106/HIP-0120 ZAP swap a
   seam swap instead of a rewrite.
+- **vm speaks TWO wires, and a call site says which — `cl.call` or `cl.op`.**
+  Visor (`hanzoai/visor`) is converting its routes to typed zip ops noun by noun,
+  and a typed op has no envelope: the answer IS the value, the status IS the
+  outcome. Everything not yet converted still answers casibase's
+  `{status,msg,data}` inside an HTTP 200, where a logical failure is a 200.
+  `apps/visor/client.go` reads both, and the choice is per call site because the
+  two CANNOT be told apart by looking — feeding a typed answer to `cl.call` reads
+  an `AgentBinding`'s own `status:"Pending"` as an envelope status, decides the
+  upstream failed, and answers 502. Converted so far: a machine's AGENT
+  (`GET /v1/machines/agents`, `PUT|GET|DELETE /v1/machines/:id/agent` — one
+  address, the method carrying the verb, the SAME address cloud publishes, so
+  there is no translation left to keep in step). `call` shrinks to zero as the
+  migration finishes and goes with the last noun. Converting a visor route is a
+  WIRE BREAK and lands with its cloud caller in the same change; visor's `LLM.md`
+  ("Typed ops") is the other half of this note.
 - **Cloud owns policy; the runtime owns the run. Do not copy state you do not
   own.** `apps/bots` holds NO store. The sandbox lives in the bot runtime,
   keyed in the runtime's own tenant store, which is the only thing that knows
