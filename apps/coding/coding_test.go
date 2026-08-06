@@ -98,7 +98,7 @@ func dispatcherFor(sess *fakeSessions, tr *fakeTracker, run *fakeRunner, verifyO
 	var cloneCalls []string
 	d := Dispatcher{
 		Sessions: sess, Tracker: tr, Runner: run,
-		CloneURL: func(org, repo string) string {
+		CloneURL: func(_ context.Context, org, repo string) string {
 			cloneCalls = append(cloneCalls, org+"/"+repo)
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
 		},

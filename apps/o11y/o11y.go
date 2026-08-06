@@ -483,6 +483,9 @@ func mountRuntime(deps cloud.Deps) error {
 	} else if h != nil {
 		gh := gate(h)
 		runtimeHandler = gh
+		// The embedded runtime is one router that matches the request's own path,
+		// so every declared address reaches the same door: o11y.Whole, which is
+		// what SetHandler meant before a runtime could resolve per address.
 		o11y.SetRuntime(o11y.Whole(gh))
 		// Runtime (and its ONE datastore connection) is live; start native
 		// metrics ingest — opt-in, fail-soft (metrics.go).
@@ -504,6 +507,8 @@ func mountRuntime(deps cloud.Deps) error {
 	}
 	gh := gate(h)
 	runtimeHandler = gh
+	// A reverse proxy has one door and the far side selects the route, so there
+	// is nothing here to resolve per address.
 	o11y.SetRuntime(o11y.Whole(gh))
 	log.Info("o11y runtime handler installed (reverse proxy fallback)", "upstream", upstream())
 	return nil
