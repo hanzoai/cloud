@@ -322,6 +322,10 @@ func (s *storage) fetchTags(ctx context.Context, org, project, name, srcURL stri
 // that ref exists in native, so a clone resolves the source's default branch.
 func (s *storage) setHeadIfPresent(ctx context.Context, org, project, name, ref string, env []string) {
 	bareDir := s.absRepoPath(org, project, name)
+	// The upstream chooses this ref, so it is checked (writer 8 in refpolicy.go).
+	if checkHeadRef(ref) != nil {
+		return
+	}
 	if s.revParse(ctx, bareDir, ref) == "" {
 		return // native doesn't have that branch (it diverged/absent) — leave HEAD
 	}
@@ -367,6 +371,24 @@ func (s *storage) inboundFastForward(ctx context.Context, org, project, name, re
 	// rejects it and native keeps the tag it already published.
 	localRef := ref
 	before := s.revParse(ctx, bareDir, localRef) // "" when the ref is new to native
+
+	// THE REF POLICY, on the inbound door (writer 7 in refpolicy.go).
+	//
+	// Fast-forward-only is not the same guarantee as the policy's, and the gap is
+	// exactly the attack: appending a commit to a branch a reviewer has already
+	// read IS a fast-forward, and it is what the policy calls "changing what a
+	// name already points at". So the command is stated and judged like any
+	// other. `before` is empty for a ref new to native, which is what Creates()
+	// reads; the new tip is unknown until git runs, and only Deletes() reads it —
+	// a fetch never deletes.
+	oldOID := before
+	if oldOID == "" {
+		oldOID = zeroOID
+	}
+	if verr := checkRefPolicy([]refCommand{{Old: oldOID, New: "", Ref: localRef}},
+		defaultBranchOf(ctx, bareDir), ""); verr != nil {
+		return ffResult{Conflict: true, Before: before, After: before, Detail: verr.Error()}, nil
+	}
 
 	// The DESTINATION refspec has NO leading '+', so git enforces fast-forward on
 	// the ref. protocol.version=2 = cheaper negotiation; credential.

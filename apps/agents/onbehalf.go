@@ -3,10 +3,10 @@ package agents
 import (
 	"context"
 	"errors"
-	"os"
-	"time"
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -127,7 +127,12 @@ func builtinAgent(org, ref, model string) (Agent, bool) {
 		Instructions: builtinAgentInstructions,
 		Description:  "The default Hanzo assistant that answers in chat.",
 		Status:       "ready", ExecutionMode: ModeOneShot,
-		CreatedAt:    now, UpdatedAt: now,
+		// The default assistant is offered the fleet's whole door. Its instructions
+		// tell it the tools exist and how to call them; without this it was handed
+		// an empty offer and correctly reported it could not reach the cloud, while
+		// the door served 88 tools one socket away.
+		Tools:     []string{ToolsAll},
+		CreatedAt: now, UpdatedAt: now,
 	}, true
 }
 
@@ -178,4 +183,3 @@ func knownChatModel(m string) bool {
 	}
 	return false
 }
-
