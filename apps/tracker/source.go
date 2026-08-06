@@ -170,6 +170,31 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 	if !ok {
 		return nil, "", zip.ErrForbidden("X-Org-Id required")
 	}
+	// THE BRAND GATE. One cloud binary serves every brand's API host and its
+	// validator trusts EVERY white-label issuer (auth_identity.go, trustedIssuers
+	// unions BrandIssuers) — so a lux.id- or zoo.ngo-issued token validates here,
+	// on the hanzo deployment, and arrives with a perfectly good org and username.
+	//
+	// But the forge is resolved from the DEPLOYMENT's own domain (brand.Sibling),
+	// not from the principal's. Without this check a token from another brand's
+	// IAM would be Sudo'd against git.hanzo.ai as whoever happens to hold that
+	// login THERE — a different person entirely — and the forge would answer with
+	// that person's private issues. The org and the actor are both attested, and
+	// both attested by the WRONG AUTHORITY for this forge; two sound controls
+	// compose into a cross-brand private-repo read because neither asks who
+	// vouched.
+	//
+	// So the vouching brand must be this deployment's own. ok==false means there
+	// is no second fact to compare — an hk-/sk- key minted by this deployment's
+	// own IAM, which is by construction this brand — and is allowed, exactly as
+	// apps/tenant reads the same pair. Normalised on both sides so a case
+	// difference cannot decide a tenancy question.
+	if vouched, ok := principal.BrandFrom(ctx); ok &&
+		!strings.EqualFold(strings.TrimSpace(vouched), strings.TrimSpace(o.s.Brand)) {
+		o.s.Log.Warn("tracker: refusing a principal vouched by another brand",
+			"vouched", vouched, "deployment", o.s.Brand, "org", org)
+		return nil, "", zip.ErrForbidden("this deployment's forge does not serve that brand's principals")
+	}
 	actor := actorOf(c)
 	if actor == "" {
 		return nil, "", zip.ErrForbidden("no forge identity for this principal")
