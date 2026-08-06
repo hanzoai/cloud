@@ -40,32 +40,36 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/sandbox/wire"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// Path is where the code interpreter answers. It lives HERE, in the app that
+// serves it, because three consumers once disagreed about it in production and
+// nothing could see the disagreement: this proxy asked upstream for /v1/exec
+// while apps/functions built upstream+"/exec", and the executor did not exist
+// so neither was ever wrong out loud. It used to live in a shared wire package
+// alongside the box daemon's types; the daemon is gone and a package that
+// exists to hold one string is not a package.
+const Path = "/v1/exec"
 
 // defaultUpstream is the in-cluster address of the sandboxed code executor.
 // Overridable via CODE_EXEC_UPSTREAM. It must speak the LibreChat
 // code-interpreter contract (/exec, /files/{sid}, /upload, /download/{id}).
 //
-// hanzo-boxes, NOT hanzo. Everything that runs submitted code lives in the one
-// namespace whose policy denies it the cluster, which is the same reasoning
-// apps/sandbox's pool records for the boxes it schedules: a box sitting beside
-// the datastores it is forbidden to reach is one policy edit away from reaching
-// them. The shared exec pool and a per-project box are the same binary running
-// the same submitted code under the same containment; only their lifetime
-// differs, so they do not get two different blast radii.
-const defaultUpstream = "http://code-exec.hanzo-boxes.svc.cluster.local:8000"
+// hanzo-sandboxes, NOT hanzo: everything running submitted code lives in the one
+// namespace whose policy denies it the cluster. A sandbox sitting beside the
+// datastores it is forbidden to reach is one policy edit away from reaching them.
+const defaultUpstream = "http://code-exec.hanzo-sandboxes.svc.cluster.local:8000"
 
 // prefixes are the code-interpreter path surfaces this subsystem owns on /v1.
 // Each is forwarded verbatim to the executor (no path rewrite: the executor
 // serves the same /exec, /upload, … paths the LibreChat client expects).
 var prefixes = []string{
-	wire.LibreChatExec, // covers /v1/exec and /v1/exec/programmatic
-	"/v1/upload",       // multipart file upload into a session
-	"/v1/download",     // /v1/download/{id}
-	"/v1/files",        // /v1/files/{session_id}
+	Path,           // covers /v1/exec and /v1/exec/programmatic
+	"/v1/upload",   // multipart file upload into a session
+	"/v1/download", // /v1/download/{id}
+	"/v1/files",    // /v1/files/{session_id}
 }
 
 func upstream() string {
@@ -105,7 +109,7 @@ const relay = "\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxe
 // below reads. A prefix added to `prefixes` with no entry here panics at init
 // rather than publishing a bare operationId.
 var surfaces = map[string]prose{
-	wire.LibreChatExec: {
+	Path: {
 		summary: "Run a code snippet in a sandboxed interpreter",
 		description: "The code-interpreter entry point: a snippet with its language, plus any " +
 			"files already uploaded to the session, runs in an isolated executor and comes back " +
