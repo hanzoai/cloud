@@ -377,7 +377,19 @@ func scopeNamespaces(all []string, p fleetPrincipal) []string {
 	}
 	out := make([]string, 0, len(all))
 	for _, ns := range all {
-		if nsOrg(ns) == slug {
+		// owner() IS THE PREDICATE THE DELIVERY BOARD ASKS (cd.go owns). This read
+		// used nsOrg, which maps the brand namespaces onto org "hanzo" — so the
+		// ORG ADMIN of the brand org was handed the platform tier here while the
+		// delivery board refused the identical caller. One question answered two
+		// ways is two policies, and this one is the CTO rule that a per-org
+		// isAdmin is NEVER platform-privileged (HIP-0519): observing the tier
+		// every tenant runs on is a platform-operator act, which is exactly what
+		// the deploy route below already says about restarting one.
+		//
+		// A SuperAdmin returned above, so nothing narrows for them; and a legacy
+		// `tenant-<org>` namespace still resolves to its own org, so no tenant
+		// loses its own board.
+		if owner(ns) == slug {
 			out = append(out, ns)
 		}
 	}

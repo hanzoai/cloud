@@ -70,8 +70,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
+	sprig "github.com/Masterminds/sprig/v3"
 	"github.com/hanzoai/cloud"
 	"gopkg.in/yaml.v3"
 )
@@ -229,23 +231,67 @@ var reservedNames = map[string]bool{
 // customer. It is ONE predicate and both the read and the write path ask it —
 // two rules for one fact drift apart, and this one decides a fence.
 //
-// The `<brand>-` and `kube-` families are structural rather than listed: every
-// environment of a brand (hanzo-testnet, hanzo-devnet, hanzo-mainnet, and any
-// added later) and every namespace Kubernetes reserves for itself are the
-// platform's, with no list to extend when one is added.
-func reserved(dir string) bool {
+// The families below are structural rather than listed: every environment of a
+// brand (hanzo-testnet, hanzo-devnet, and any added later) and every namespace
+// Kubernetes reserves for itself is the platform's, with no list to extend when
+// one is added.
+func platformOwned(dir string) bool {
 	if reservedNames[dir] {
 		return true
 	}
-	if strings.HasPrefix(dir, "kube-") {
-		return true
-	}
-	for _, brand := range []string{"hanzo", "lux", "zoo"} {
-		if strings.HasPrefix(dir, brand+"-") {
+	for _, family := range []string{"kube-", "hanzo-", "lux-", "zoo-"} {
+		if strings.HasPrefix(dir, family) {
 			return true
 		}
 	}
 	return false
+}
+
+// reserved reports whether a directory may NOT be claimed by an ordinary org.
+// It is the WRITE question — "may this caller make this directory its own?" —
+// and it is deliberately WIDER than platformOwned by exactly one family.
+//
+// ★ `tenant-` IS THE RENAME'S OWN SHADOW. Dropping the prefix from this API made
+// `tenant-` an ordinary name, but the cluster's live fences are still spelled
+// with it: universe infra/k8s/hanzo-cd/project-tenants.yaml declares AppProjects
+// tenant-hanzo, tenant-lux, tenant-zoo, tenant-zen and tenant-maxpower, each
+// admitting namespace `tenant-<org>`. Unreserved, an IAM org named
+// `tenant-maxpower` is a clean label Sanitize passes through untouched, so it
+// would claim the REAL maxpower tenant's namespace under maxpower's own fence.
+// The prefix that used to BE the fence became a name a customer could claim.
+//
+// Reserved as a FAMILY, not as those five, so the next tenant onboarded under
+// the legacy layout is not claimable in the window before someone extends a
+// list. It stays until those namespaces are migrated onto the bare-org layout —
+// a migration, not a rename, because it moves live workloads.
+//
+// A `tenant-<x>` directory is NOT platform-owned though, and that distinction is
+// the whole reason these are two predicates: it belongs to org <x>, who must
+// still be able to READ it. Conflating "nobody may claim this" with "nobody owns
+// this" would have blanked every legacy tenant's own board — see owner.
+func reserved(dir string) bool {
+	return platformOwned(dir) || strings.HasPrefix(dir, "tenant-")
+}
+
+// owner is the READ question: which org does a namespace BELONG to, or "" when
+// it belongs to the platform and therefore to no customer.
+//
+// It decodes both layouts, because both are live: `<org>` is what this API
+// writes, `tenant-<org>` is what the legacy fences still use. Reading it is one
+// function so the delivery board and the fleet board cannot answer "whose is
+// this?" two ways — which is exactly what they did, and it was a live privilege
+// bug: the fleet board asked nsOrg, which maps the brand namespaces onto org
+// "hanzo", so the ORG ADMIN of the brand org was handed the platform tier every
+// tenant runs on. A per-org isAdmin is never platform-privileged (HIP-0519);
+// platformOwned answering "" is what states that once, for both boards.
+func owner(ns string) string {
+	if platformOwned(ns) {
+		return ""
+	}
+	if t, found := strings.CutPrefix(ns, "tenant-"); found && t != "" {
+		return t
+	}
+	return ns
 }
 
 // declarePath is the ONE place a declaration's path is spelled.
@@ -453,42 +499,93 @@ func flattenHosts(items []any) []string {
 // fence it.
 const fleetSet = "infra/k8s/hanzo-cd/applicationset-fleet.yaml"
 
-// checkFence refuses to put a declaration on main while the ApplicationSet would
-// fence it WIDER than this API reports.
+// checkFence refuses to put a declaration on main unless the ApplicationSet
+// would fence it EXACTLY as this API reports.
 //
 // declareProject is a copy of a rule whose original is a Go template in another
-// repository, and only the original decides anything. The template derived the
-// project by `hasPrefix "tenant-"` — a naming convention doing a policy's job —
-// so with an org's name unadorned every org directory falls to the else branch
-// and syncs under hanzo-platform, the fence that admits destination namespace `*`
-// and cluster-scoped ClusterRole/ClusterRoleBinding. The chart renders no
-// cluster-scoped kind today, so nothing has escaped; a fence that holds only
-// because the thing inside it has not tried is not a fence, which is the
-// ApplicationSet's own words about a different instance of this same mistake.
+// repository, and only the original decides anything. So the original is
+// EVALUATED, for this org, and the answer compared. Asserting the positive is
+// the whole design: the first cut refused one known-bad substring
+// (`hasPrefix "tenant-"`) and therefore passed every OTHER unsafe template —
+// an unconditional `project: hanzo-platform`, a file with no project at all, an
+// empty file, a garbage file. A denylist of one is not a check. Red found six
+// such templates; this asks the only question that matters — "what fence would
+// this actually produce for this org?" — and refuses anything it cannot answer.
 //
 // A CROSS-REPOSITORY INVARIANT IS CHECKED, NOT DOCUMENTED. A comment saying
 // "land the companion change first" is not a control, and neither is a test that
 // fails on a developer's machine and skips in CI. This runs on the write path,
-// against the bytes CD actually reads, and it clears itself the moment universe
-// carries the reservation rule — no flag to set, nothing to remember.
+// against the bytes CD actually reads, out of the clone the write already makes,
+// and it clears itself the moment universe carries a correct rule — no flag,
+// nothing to remember.
 //
 // A BRANCH write is exempt: the generator reads main, so a branch declaration is
-// inert and its pull request is exactly where a human sees the mismatch.
+// inert and its pull request is exactly where a human sees a mismatch.
 func checkFence(root, org string) error {
-	if reserved(org) {
-		return nil // the platform's own directory is fenced the same way either way
-	}
-	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(fleetSet)))
+	want := declareProject(org)
+	got, err := fenceOf(root, org)
 	if err != nil {
-		return fmt.Errorf("read %s: %w — the delivery plane's own rule could not be read, so the fence this declaration would sync under cannot be confirmed", fleetSet, err)
+		return fmt.Errorf("%s: %w — the fence this declaration would sync under cannot be confirmed, so it is not written to main", fleetSet, err)
 	}
-	if strings.Contains(string(b), `hasPrefix "tenant-"`) {
+	if got != want {
 		return fmt.Errorf(
-			"%s still derives the AppProject with hasPrefix \"tenant-\", so %q would sync under %s — the fence that admits every namespace and cluster-scoped RBAC — while this API reports %q. "+
-				"Refusing to write main until that template asks whether a directory is RESERVED instead. A branch declaration is unaffected: nothing is generated from one",
-			fleetSet, org, platformProject, declareProject(org))
+			"%s would sync %q under AppProject %q, but this API reports %q. Refusing to write main: a record that misstates a fence is worse than no record, and %s admits every namespace and cluster-scoped RBAC. A branch declaration is unaffected — nothing is generated from one",
+			fleetSet, org, got, want, platformProject)
 	}
 	return nil
+}
+
+// fenceOf evaluates the ApplicationSet's own project template for one directory
+// and returns the AppProject it yields.
+//
+// It renders with the SAME engine and options the generator uses — text/template
+// with sprig, goTemplate + missingkey=error — over the only input the fence is
+// allowed to depend on: the path. A template that reaches for anything else
+// (the values file's own contents, say — the "thing being fenced chooses its
+// fence" defect the ApplicationSet itself rejects) fails to render here and is
+// refused, which is the correct answer rather than a limitation.
+func fenceOf(root, org string) (string, error) {
+	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(fleetSet)))
+	if err != nil {
+		return "", fmt.Errorf("unreadable: %w", err)
+	}
+	var set struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					Project string `yaml:"project"`
+				} `yaml:"spec"`
+			} `yaml:"template"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Unmarshal(b, &set); err != nil {
+		return "", fmt.Errorf("does not parse as YAML: %w", err)
+	}
+	expr := strings.TrimSpace(set.Spec.Template.Spec.Project)
+	if expr == "" {
+		return "", fmt.Errorf("declares no spec.template.spec.project, so it fences nothing this API can predict")
+	}
+	t, err := template.New("project").Funcs(sprig.TxtFuncMap()).Option("missingkey=error").Parse(expr)
+	if err != nil {
+		return "", fmt.Errorf("its project template does not parse: %w", err)
+	}
+	// The path a declaration for this org occupies. Nothing else is offered: the
+	// fence is derived from the path and from nothing else, by design.
+	data := map[string]any{"path": map[string]any{
+		"basename": org,
+		"filename": "app.yaml",
+		"path":     declarePrefix + "/" + org,
+		"segments": strings.Split(declarePrefix+"/"+org, "/"),
+	}}
+	var out strings.Builder
+	if err := t.Execute(&out, data); err != nil {
+		return "", fmt.Errorf("its project template does not render from the path alone: %w", err)
+	}
+	got := strings.TrimSpace(out.String())
+	if got == "" {
+		return "", fmt.Errorf("its project template renders empty for %q", org)
+	}
+	return got, nil
 }
 
 // ── the git seam ─────────────────────────────────────────────────────────────
