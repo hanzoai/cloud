@@ -167,6 +167,24 @@ func isZero(oid string) bool {
 // statement: a bearer outside its grant is refused whatever the namespace rules
 // would have said.
 func checkRefPolicy(cmds []refCommand, defaultBranch, grantedRef string) error {
+	// A GRANT MUST NAME WHAT IT WRITES. Defence in depth behind the framing
+	// guard in parseRefCommandsCaps, and the second half of the same lesson.
+	//
+	// The loop below is a filter: it refuses commands it dislikes. Over an EMPTY
+	// slice it refuses nothing and returns nil, so "no commands" reads as "policy
+	// satisfied" — which is exactly how a parser desync turned into a bypass. A
+	// caller that parsed nothing and a caller that was sent nothing are
+	// indistinguishable here, and only one of them is harmless.
+	//
+	// For a principal, an empty push is merely a no-op and stays allowed. For a
+	// GRANT it is a contradiction: a grant exists to write one named ref, so a
+	// grant-bearing push that names none did not parse the way we think it did.
+	// Refuse it and let the caller find out, rather than forwarding bytes we could
+	// not read to a program that can.
+	if grantedRef != "" && len(cmds) == 0 {
+		return fmt.Errorf("this push names no ref; a grant may only write %s", grantedRef)
+	}
+
 	def := ""
 	if b := strings.TrimSpace(defaultBranch); b != "" {
 		def = "refs/heads/" + b
@@ -283,6 +301,38 @@ func parseRefCommandsCaps(body []byte) (cmds []refCommand, n int, caps string, e
 			line = line[:i]
 		}
 		text := string(bytes.TrimRight(line, "\n"))
+
+		// ONE PKT-LINE IS ONE LOGICAL LINE, and this is where that becomes true
+		// rather than assumed.
+		//
+		// Everything below reads `text` as a single line: it compares it to
+		// `push-cert`, matches a `-----BEGIN` prefix, and treats a blank one as the
+		// end of a certificate header. Real git does NOT parse a certificate that
+		// way — queue_commands_from_cert concatenates every cert pkt-line payload
+		// into one buffer and takes the commands to be the lines between the first
+		// "\n\n" and the signature offset (builtin/receive-pack.c). So a payload
+		// carrying an EMBEDDED newline means two parsers reading two different
+		// things from identical bytes, and the disagreement is total: we see a
+		// header line and parse ZERO commands, git sees a blank line followed by a
+		// command and applies it.
+		//
+		// That is not a hypothetical. Verified against git 2.43: a 262-byte
+		// certificate whose `pusher` payload contains "\n\n<old> <new>
+		// refs/heads/main\n" makes this parser return no commands at all —
+		// and checkRefPolicy over an empty slice returns nil, because an empty
+		// command list satisfies EVERY policy, including a grant confined to one
+		// agent ref. The raw bytes are then forwarded to git receive-pack, which
+		// writes refs/heads/main and fires the deploy reactor. The confinement
+		// this file exists to enforce is bypassed by the framing, not by the rule.
+		//
+		// Refusing the frame is narrower and safer than teaching this parser git's
+		// concatenation: parity with a second implementation has to be re-proved
+		// every time either side changes, whereas a payload with no embedded
+		// newline can only be read one way BY BOTH. Nothing legitimate is lost —
+		// git's send-pack emits one line per pkt-line.
+		if strings.Contains(text, "\n") {
+			return nil, 0, "", fmt.Errorf("pkt-line payload carries an embedded newline")
+		}
 
 		switch {
 		case text == "push-cert":
