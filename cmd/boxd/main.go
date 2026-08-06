@@ -49,7 +49,6 @@ package main
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -59,10 +58,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/sandbox/wire"
+	"github.com/zap-proto/zip"
 )
 
 // box is the process's whole state: where the project is, what the box is
@@ -74,6 +75,17 @@ type box struct {
 	ref     string
 	boot    int64
 	key     string
+
+	// id is who this box is, learned from cloud at claim time over
+	// [wire.PathBind]. The guard compares it against the caller's X-Box-Id so a
+	// call that arrived at a RECYCLED ADDRESS is refused rather than served — see
+	// guard(). It is not an env var and cannot be: this pod was started by the
+	// warm pool's Deployment before the tenant it will serve existed.
+	//
+	// Guarded by mu because bind runs on a request goroutine and the guard reads
+	// it on every other one.
+	mu sync.RWMutex
+	id string
 
 	// The uid/gid submitted code runs as. Zero means "the same uid as boxd",
 	// which is the configuration in which the child can read boxd's
@@ -120,38 +132,33 @@ func run() error {
 		return fmt.Errorf("workdir %q: share with uid %d: %w", b.workdir, b.execUID, err)
 	}
 
-	mux := http.NewServeMux()
-	b.routes(mux)
+	// zip is the ONE web framework in the org, standalone binaries included.
+	// A box serves the same request tier every other Hanzo service does — one
+	// middleware seam, one error shape, one place a route is declared — so it
+	// gets there the same way rather than assembling its own from net/http.
+	//
+	// BodyLimit is stated rather than defaulted. zip's default is 4 MiB, which is
+	// right for an API taking JSON documents and wrong for a box: this one takes
+	// SOURCE — a file write, an upload, a patch — and the ceiling it has always
+	// had is 32. Leaving it to the default would have cut the limit by 8x while
+	// every test that writes a small file went on passing.
+	app := zip.New(zip.Config{AppName: "boxd", BodyLimit: maxBody})
+	app.Use(zip.H(b.guard))
+	b.routes(app)
 
 	addr := ":" + envOr("BOX_PORT", "8000")
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: b.guard(mux),
-		// A build or a test suite is legitimately slow, so there is no read or
-		// write timeout on the whole request; the per-call timeoutSec bounds the
-		// work instead. The header timeout is what stops a stalled connection
-		// from holding a goroutine forever.
-		ReadHeaderTimeout: 15 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
 		<-ctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(sctx)
+		_ = app.Shutdown()
 	}()
 
 	// exec-uid is in the startup line because "who does submitted code run as"
 	// is the single fact that decides whether this process is a sandbox, and it
 	// should be readable from a pod log without an exec.
 	log.Printf("boxd listening on %s workdir=%s keyed=%t exec-uid=%d", addr, b.workdir, b.key != "", b.execUID)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+	return app.Listen(addr)
 }
 
 // checkExecIsolation refuses the one configuration that hands the pool's
@@ -178,48 +185,106 @@ func (b *box) checkExecIsolation() error {
 			"Set BOX_EXEC_UID/BOX_EXEC_GID to an unprivileged uid that is NOT boxd's")
 }
 
-func (b *box) routes(mux *http.ServeMux) {
+// routes states the whole surface once. The METHOD is declared here rather than
+// checked inside each handler: a mux matched a path and left every handler to
+// re-derive its own verb, which is how PathFsDelete came to share a handler with
+// the fs root and why three of them opened with the same six-line method switch.
+func (b *box) routes(app *zip.App) {
 	// Native surface — what apps/sandbox and hanzo.app's ProjectFs speak.
-	mux.HandleFunc(wire.PathHealth, b.health)
-	mux.HandleFunc(wire.PathExec, b.exec)
-	mux.HandleFunc(wire.PathFsList, b.fsList)
-	mux.HandleFunc(wire.PathFsRead, b.fsRead)
-	mux.HandleFunc(wire.PathFsWrite, b.fsWrite)
-	mux.HandleFunc(wire.PathFsSearch, b.fsSearch)
-	mux.HandleFunc(wire.PathFsDelete, b.fsRoot) // DELETE /v1/box/fs?path=
-	mux.HandleFunc(wire.PathGitClone, b.gitClone)
-	mux.HandleFunc(wire.PathGitPush, b.gitPush)
-	mux.HandleFunc(wire.PathAgentRun, b.agentRun)
+	app.Post(wire.PathBind, b.bind)
+	app.Get(wire.PathHealth, b.health)
+	app.Post(wire.PathExec, b.exec)
+	app.Get(wire.PathFsList, b.fsList)
+	app.Get(wire.PathFsRead, b.fsRead)
+	app.Post(wire.PathFsWrite, b.fsWrite)
+	app.Get(wire.PathFsSearch, b.fsSearch)
+	app.Delete(wire.PathFsDelete, b.fsDelete)
+	app.Post(wire.PathGitClone, b.gitClone)
+	app.Post(wire.PathGitPush, b.gitPush)
+	app.Post(wire.PathAgentRun, b.agentRun)
 
 	// The frozen LibreChat family. Named where it is served, not in wire.go,
 	// because these paths are not ours to rename (librechat.go).
-	b.librechatRoutes(mux)
+	b.librechatRoutes(app)
 }
 
 // guard is the one credential check, in front of everything except nothing —
 // health included, because "is there a box here" is itself information about the
 // cluster and this surface has no anonymous reader.
-func (b *box) guard(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if b.key == "" {
-			writeErr(w, http.StatusServiceUnavailable, "box not configured: CODE_EXEC_API_KEY unset")
-			return
+func (b *box) guard(c *zip.Ctx) error {
+	if b.key == "" {
+		return zip.Errorf(http.StatusServiceUnavailable, "box not configured: CODE_EXEC_API_KEY unset")
+	}
+	got := strings.TrimSpace(c.Header(wire.KeyHeader))
+	if subtle.ConstantTimeCompare([]byte(got), []byte(b.key)) != 1 {
+		return zip.Errorf(http.StatusUnauthorized, "invalid api key")
+	}
+	// AM I THE BOX THE CALLER MEANT? The key cannot answer that — it is one
+	// shared key for the whole pool, so it proves the caller is cloud and
+	// says nothing about which box it wanted. Neither can the address: a pod
+	// that dies on its own never runs release(), so cloud's row keeps a Host
+	// the CNI has since reassigned to a replacement pod belonging to someone
+	// else, and the misdirected call arrives looking perfectly valid.
+	//
+	// Only the destination can catch that, which is why the check is here
+	// and not in the proxy — cloud believing its own row is the thing that
+	// is wrong in that scenario. 409 rather than 401: the credential was
+	// fine, the addressee is not, and cloud can tell those apart and go
+	// reconcile the row.
+	//
+	// An UNBOUND box refuses a named call too. That is the recycled-address
+	// case exactly: the replacement pod is warm and has been bound to nobody,
+	// so serving it would hand a stranger's request to a fresh checkout. The
+	// bind endpoint itself is exempt, because that is the call that answers
+	// the question.
+	if want := strings.TrimSpace(c.Header(wire.BoxHeader)); want != "" && c.Path() != wire.PathBind {
+		b.mu.RLock()
+		have := b.id
+		b.mu.RUnlock()
+		if want != have {
+			return zip.Errorf(http.StatusConflict, "wrong box: this is %s, caller wanted %s", quoted(have), want)
 		}
-		got := strings.TrimSpace(r.Header.Get(wire.KeyHeader))
-		if subtle.ConstantTimeCompare([]byte(got), []byte(b.key)) != 1 {
-			writeErr(w, http.StatusUnauthorized, "invalid api key")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	}
+	return c.Next()
 }
 
-func (b *box) health(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "GET only")
-		return
+// bind tells this box which box it is. Cloud calls it once, immediately after
+// claiming the pod out of the warm pool and before handing the address to
+// anyone, so every later call can be checked against an id the box holds itself.
+//
+// Binding TWICE to the same id is fine and answers 200 — cloud may retry, and a
+// retry that fails would strand a pod that is already correct. Binding to a
+// DIFFERENT id is refused: release() deletes a pod rather than recycling it, so
+// there is no legitimate second tenant, and the request that asks for one is
+// either a stale claim or the confusion this whole check exists to catch.
+func (b *box) bind(c *zip.Ctx) error {
+	var in wire.Bind
+	if err := c.Bind(&in); err != nil {
+		return zip.Errorf(http.StatusBadRequest, "bind: %v", err)
 	}
-	writeJSON(w, http.StatusOK, wire.Health{
+	if in.ID = strings.TrimSpace(in.ID); in.ID == "" {
+		return zip.Errorf(http.StatusBadRequest, "bind: id required")
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.id != "" && b.id != in.ID {
+		return zip.Errorf(http.StatusConflict, "already bound to %s", b.id)
+	}
+	b.id = in.ID
+	return c.JSON(http.StatusOK, wire.Bind{ID: b.id})
+}
+
+// quoted renders an id for an error message, so an UNBOUND box says so instead
+// of reading as though it were bound to the empty string.
+func quoted(id string) string {
+	if id == "" {
+		return "unbound"
+	}
+	return id
+}
+
+func (b *box) health(c *zip.Ctx) error {
+	return c.JSON(http.StatusOK, wire.Health{
 		OK: true, Boot: b.boot, Image: b.image,
 		Project: b.project, Ref: b.ref, Workdir: b.workdir,
 	})
@@ -241,23 +306,10 @@ func envInt(k string, def int) int {
 	return def
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeErr(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]any{"status": status, "error": msg})
-}
-
-// bind reads a JSON body with a hard size ceiling. A box takes source code, so
-// the ceiling is generous; unbounded it is a memory bomb from the one caller
-// whose whole job is running untrusted input.
-func bind(r *http.Request, v any) error {
-	defer func() { _ = r.Body.Close() }()
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBody))
-	return dec.Decode(v)
-}
-
+// maxBody is the ceiling on a request body. A box takes source code, so it is
+// generous; unbounded it is a memory bomb from the one caller whose whole job is
+// running untrusted input. It is handed to zip at construction, which enforces
+// it for every route at once — the three helpers that used to live here
+// (writeJSON, writeErr, and a hand-rolled bind that re-applied this ceiling per
+// call) are all zip's now: c.JSON, zip.Errorf, c.Bind.
 const maxBody = 32 << 20 // 32 MiB

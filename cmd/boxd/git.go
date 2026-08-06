@@ -27,6 +27,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/sandbox/wire"
+
+	"github.com/zap-proto/zip"
 )
 
 // withCredential runs fn with a git credential store holding cred, and removes
@@ -68,19 +70,13 @@ func withCredential(remote string, cred wire.Credential, fn func(cfg []string) e
 	return fn([]string{"-c", "credential.helper=store --file=" + path})
 }
 
-func (b *box) gitClone(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "POST only")
-		return
-	}
+func (b *box) gitClone(c *zip.Ctx) error {
 	var req wire.CloneRequest
-	if err := bind(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "body: "+err.Error())
-		return
+	if err := c.Bind(&req); err != nil {
+		return zip.Errorf(http.StatusBadRequest, "%s", "body: "+err.Error())
 	}
 	if strings.TrimSpace(req.URL) == "" {
-		writeErr(w, http.StatusBadRequest, "url required")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "url required")
 	}
 	dir := req.Dir
 	if dir == "" {
@@ -88,8 +84,7 @@ func (b *box) gitClone(w http.ResponseWriter, r *http.Request) {
 	}
 	abs, ok := b.resolve(dir)
 	if !ok || abs == b.workdir {
-		writeErr(w, http.StatusBadRequest, "dir escapes the project")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "dir escapes the project")
 	}
 
 	// The whole point of the per-project volume is that the checkout survives a
@@ -99,68 +94,59 @@ func (b *box) gitClone(w http.ResponseWriter, r *http.Request) {
 	err := withCredential(req.URL, req.Credential, func(cfg []string) error {
 		ref := firstNonEmpty(req.Ref, req.Branch)
 		if _, serr := os.Stat(filepath.Join(abs, ".git")); serr == nil {
-			if e := b.git(r.Context(), abs, cfg, "fetch", "--all", "--prune"); e != nil {
+			if e := b.git(c.Context(), abs, cfg, "fetch", "--all", "--prune"); e != nil {
 				return e
 			}
 			if ref == "" {
 				return nil
 			}
-			return b.git(r.Context(), abs, cfg, "checkout", "--force", ref)
+			return b.git(c.Context(), abs, cfg, "checkout", "--force", ref)
 		}
 		args := append([]string{"clone"}, "--", req.URL, abs)
 		if req.Depth > 0 {
 			args = append([]string{"clone", fmt.Sprintf("--depth=%d", req.Depth), "--"}, req.URL, abs)
 		}
-		if e := b.git(r.Context(), b.workdir, cfg, args...); e != nil {
+		if e := b.git(c.Context(), b.workdir, cfg, args...); e != nil {
 			return e
 		}
 		if ref == "" {
 			return nil
 		}
-		return b.git(r.Context(), abs, cfg, "checkout", "--force", ref)
+		return b.git(c.Context(), abs, cfg, "checkout", "--force", ref)
 	})
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, err.Error())
-		return
+		return zip.Errorf(http.StatusBadGateway, "%s", err.Error())
 	}
-	head, _ := b.gitOut(r.Context(), abs, nil, "rev-parse", "HEAD")
-	writeJSON(w, http.StatusOK, wire.CloneResult{Head: strings.TrimSpace(head), Dir: b.relOf(abs)})
+	head, _ := b.gitOut(c.Context(), abs, nil, "rev-parse", "HEAD")
+	return c.JSON(http.StatusOK, wire.CloneResult{Head: strings.TrimSpace(head), Dir: b.relOf(abs)})
 }
 
-func (b *box) gitPush(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "POST only")
-		return
-	}
+func (b *box) gitPush(c *zip.Ctx) error {
 	var req wire.PushRequest
-	if err := bind(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "body: "+err.Error())
-		return
+	if err := c.Bind(&req); err != nil {
+		return zip.Errorf(http.StatusBadRequest, "%s", "body: "+err.Error())
 	}
 	if strings.TrimSpace(req.Branch) == "" {
-		writeErr(w, http.StatusBadRequest, "branch required")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "branch required")
 	}
 	repo, ok := b.resolve("/repo")
 	if !ok {
-		writeErr(w, http.StatusInternalServerError, "no repo")
-		return
+		return zip.Errorf(http.StatusInternalServerError, "%s", "no repo")
 	}
 
 	// Nothing changed is a SUCCESSFUL push of nothing, not an error: an agent
 	// that decided the task needed no edit is a legitimate outcome, and
 	// reporting it as a failure sends the caller looking for a broken box.
-	status, _ := b.gitOut(r.Context(), repo, nil, "status", "--porcelain")
+	status, _ := b.gitOut(c.Context(), repo, nil, "status", "--porcelain")
 	if strings.TrimSpace(status) == "" {
-		writeJSON(w, http.StatusOK, wire.PushResult{Changed: false})
-		return
+		return c.JSON(http.StatusOK, wire.PushResult{Changed: false})
 	}
 
 	msg := req.Message
 	if strings.TrimSpace(msg) == "" {
 		msg = "agent: " + req.Branch
 	}
-	remote, _ := b.gitOut(r.Context(), repo, nil, "remote", "get-url", "origin")
+	remote, _ := b.gitOut(c.Context(), repo, nil, "remote", "get-url", "origin")
 	err := withCredential(strings.TrimSpace(remote), req.Credential, func(cfg []string) error {
 		for _, args := range [][]string{
 			{"checkout", "-B", req.Branch},
@@ -168,19 +154,18 @@ func (b *box) gitPush(w http.ResponseWriter, r *http.Request) {
 			{"-c", "user.email=agent@hanzo.ai", "-c", "user.name=Hanzo Agent", "commit", "-m", msg},
 			{"push", "--set-upstream", "origin", req.Branch},
 		} {
-			if e := b.git(r.Context(), repo, cfg, args...); e != nil {
+			if e := b.git(c.Context(), repo, cfg, args...); e != nil {
 				return e
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, err.Error())
-		return
+		return zip.Errorf(http.StatusBadGateway, "%s", err.Error())
 	}
-	sha, _ := b.gitOut(r.Context(), repo, nil, "rev-parse", "HEAD")
-	stat, _ := b.gitOut(r.Context(), repo, nil, "show", "--stat", "--oneline", "HEAD")
-	writeJSON(w, http.StatusOK, wire.PushResult{
+	sha, _ := b.gitOut(c.Context(), repo, nil, "rev-parse", "HEAD")
+	stat, _ := b.gitOut(c.Context(), repo, nil, "show", "--stat", "--oneline", "HEAD")
+	return c.JSON(http.StatusOK, wire.PushResult{
 		CommitSha: strings.TrimSpace(sha), Diffstat: strings.TrimSpace(stat), Changed: true,
 	})
 }
