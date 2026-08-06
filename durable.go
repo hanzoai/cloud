@@ -134,7 +134,7 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 	}
 	validator := tasksauth.NewValidator(tasksauth.JWTConfig{
 		Issuer:  deps.IAMIssuer,
-		JWKSURL: strings.TrimRight(deps.IAMIssuer, "/") + "/v1/iam/.well-known/jwks",
+		JWKSURL: JWKSURLFor(deps.IAMIssuer),
 	})
 	if err := emb.ServeGated(ctx, gatedAddr(), validator); err != nil {
 		deps.Logger.Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "addr", gatedAddr())

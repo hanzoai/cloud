@@ -152,7 +152,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	svc := &cloud.Service[*state]{Base: b, State: &state{
 		registry: NewRegistry(newBooksContributor(app)),
 		ai:       deps.AI,
-		model:    strings.TrimSpace(deps.AIDefaultModel),
+		model:    cloud.DefaultModel,
 	}}
 	app.Post("/v1/ask", cloud.Handle(svc, askHandler))
 	b.Log.Info("ask mounted", "prefix", "/v1/ask", "domains", "books,web", "web_modes", "search,news,research,deep")

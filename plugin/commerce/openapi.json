@@ -588,6 +588,16 @@
         ]
       }
     },
+    "/v1/billing/topup": {
+      "post": {
+        "operationId": "post_v1_billing_topup",
+        "summary": "Add credit to your balance by charging one of your saved cards",
+        "description": "Charges a card the caller already has on file, named by paymentMethodId, and credits the caller's own balance — the SAVED-card twin of topup/token, sharing the one charge-and-credit core the auto-recharge cron runs on. The credit lands on the caller's OWN billing subject: the request body's subject field is pinned to the caller before the handler sees it, so a top-up can never be redirected to another subject or outside the caller's org. It is screened for risk before any money moves, exactly as the token path is, because both credit the SPENDABLE wallet. The rule most callers get wrong is that paymentMethodId is NOT covered by that subject pin — it is a card id, not a subject key — so it is checked separately, and a card belonging to any other subject answers 404 rather than 403: a permission error would confirm the id exists, which is an ownership oracle over other people's cards.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/billing/topup/token": {
       "post": {
         "operationId": "post_v1_billing_topup_token",

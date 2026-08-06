@@ -182,7 +182,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "translate")
 	mounted = &state{
 		stores:  cloud.NewOrgStore[*memory](b, "translate", open),
-		quality: newQuality(deps.AI, deps.AIDefaultModel),
+		quality: newQuality(deps.AI, cloud.DefaultModel),
 		bulk:    newBulk(),
 	}
 	s := &cloud.Service[*state]{Base: b, State: mounted}
