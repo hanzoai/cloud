@@ -41,31 +41,91 @@
     "/v1/notify/send": {
       "post": {
         "operationId": "post_v1_notify_send",
-        "summary": "Send one transactional message by email or SMS through your org's own provider credential",
-        "description": "Delivers a message to each address in `to` over the channel the body names — sms or email — using the CALLER ORG'S own provider credential, read from KMS at orgs/\u003corg\u003e/notify/\u003cservice\u003e/\u003ckey\u003e and never from the environment. The org is the validated principal's, never a client-supplied header, so a caller can only ever send as their own tenant; an unauthenticated caller gets 401. Naming no provider picks the one whose credentials are actually configured (Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed when none is. Delivery is synchronous and per recipient: one recipient answers the bare {messageId,status} SendResponse, several answer the {items:[…]} envelope. A terminal provider failure is a 200 whose status is failed with the reason in error, never a transport error. ?sync=true is REQUIRED — an async dispatch answers 503, because the queue plane that would run it is owned elsewhere and is not folded in here. The message body wins verbatim when present; otherwise template_id (or the event name) selects a built-in template rendered against template_vars.",
+        "summary": "Delivers one transactional message by email or SMS through the caller org's own provider credential.",
+        "description": "Delivers one transactional message by email or SMS through the caller\norg's own provider credential.\n\nThe channel comes from the body — sms or email — and the provider credential is\nread from KMS at orgs/\u003corg\u003e/notify/\u003cservice\u003e/\u003ckey\u003e, never from the environment.\nThe org is the validated principal's, never a client-supplied value, so a caller\ncan only ever send as their own tenant; an unauthenticated caller gets 401.\nNaming no provider picks the one whose credentials are actually configured\n(Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed\nwhen none is. Delivery is synchronous and per recipient: one recipient answers\nthe bare {message_id,status} outcome, several answer the {items:[…]} envelope. A\nterminal provider failure is a 200 whose status is failed with the reason in\nerror, never a transport error. sync=true is REQUIRED — an async dispatch\nanswers 503, because the queue plane that would run it is owned elsewhere. The\nmessage body wins verbatim when present; otherwise template_id (or the event\nname) selects a built-in template rendered against template_vars.",
         "tags": [
           "notify"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notifySend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/notify/send/email": {
       "post": {
         "operationId": "post_v1_notify_send_email",
-        "summary": "Send one transactional email through your org's own provider credential",
-        "description": "The channel-pinned form of the generic send: identical in every respect except that the channel is fixed to email, OVERRIDING whatever the body names — so a body that says sms still goes out as mail. The provider is the org's own email credential from KMS (Twilio Email, then SMTP), resolved for the validated principal's org and never from a client-supplied header; an unauthenticated caller gets 401. Subject is carried on the email channel only. Delivery is synchronous and per recipient: one recipient answers the bare {messageId,status} SendResponse, several answer the {items:[…]} envelope. A terminal provider failure is a 200 whose status is failed with the reason in error, never a transport error. ?sync=true is REQUIRED — an async dispatch answers 503, because the queue plane that would run it is owned elsewhere and is not folded in here. The message body wins verbatim when present; otherwise template_id (or the event name) selects a built-in template rendered against template_vars.",
+        "summary": "Delivers one transactional email through the caller org's own provider credential.",
+        "description": "Delivers one transactional email through the caller org's own\nprovider credential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to email, OVERRIDING whatever the body names —\nso a body that says sms still goes out as mail. The provider is the org's own\nemail credential from KMS (Twilio Email, then SMTP), resolved for the validated\nprincipal's org; an unauthenticated caller gets 401. Subject is carried on the\nemail channel only.",
         "tags": [
           "notify"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notifySend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/notify/send/sms": {
       "post": {
         "operationId": "post_v1_notify_send_sms",
-        "summary": "Send one transactional SMS through your org's own provider credential",
-        "description": "The channel-pinned form of the generic send: identical in every respect except that the channel is fixed to sms, OVERRIDING whatever the body names — so a body that says email still goes out as a text message. The provider is the org's own SMS credential from KMS (Twilio, then Plivo), resolved for the validated principal's org and never from a client-supplied header; an unauthenticated caller gets 401. Delivery is synchronous and per recipient: one recipient answers the bare {messageId,status} SendResponse, several answer the {items:[…]} envelope. A terminal provider failure is a 200 whose status is failed with the reason in error, never a transport error. ?sync=true is REQUIRED — an async dispatch answers 503, because the queue plane that would run it is owned elsewhere and is not folded in here. The message body wins verbatim when present; otherwise template_id (or the event name) selects a built-in template rendered against template_vars.",
+        "summary": "Delivers one transactional SMS through the caller org's own provider credential.",
+        "description": "Delivers one transactional SMS through the caller org's own provider\ncredential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to sms, OVERRIDING whatever the body names —\nso a body that says email still goes out as a text message. The provider is the\norg's own SMS credential from KMS (Twilio, then Plivo), resolved for the\nvalidated principal's org; an unauthenticated caller gets 401.",
         "tags": [
           "notify"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notifySend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     }
   },
@@ -80,6 +140,49 @@
           "status": {
             "description": "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "notifySend": {
+        "properties": {
+          "body": {
+            "description": "Body is the message text, sent verbatim when present — the no-template path.",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Channel selects the delivery channel, sms or email. The per-channel routes\n(/send/sms, /send/email) pin it, overriding whatever the body names; on the\ngeneric route it is required.",
+            "type": "string"
+          },
+          "event": {
+            "description": "Event is the event name, which doubles as the template id when TemplateID is\nempty — the IAM OTP path sends event=iam.otp_sent and nothing else.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider pins a provider service name (twilio, plivo, twilio_email, mail).\nEmpty picks the one whose org credentials are actually configured in KMS.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the message subject, carried on the email channel only.",
+            "type": "string"
+          },
+          "sync": {
+            "description": "Sync must be exactly \"true\": delivery here is synchronous, and anything else\nanswers 503 because the queue plane that would run an async dispatch is owned\nelsewhere. Over REST it rides as ?sync=true (the URL binds over the body); a\nby-name call states it in its arguments.",
+            "type": "string"
+          },
+          "template_id": {
+            "description": "TemplateID selects a built-in template when Body is empty.",
+            "type": "string"
+          },
+          "template_vars": {
+            "description": "TemplateVars carries the values the selected template renders against, as\na raw JSON object. Raw on purpose: the by-name call plane computes an\ninput's layout before reading any payload and refuses a map field\noutright, which would make every typed call to these ops fail — and that\ncall is the reason they are typed at all (IAM's OTP sender). deliver\ndecodes it right before the template renders, so REST bodies decode\nbyte-identically to the map this replaced."
+          },
+          "to": {
+            "description": "To is the destination address per recipient — a phone number for sms, an\nemail address for email. Several recipients fan out into one provider call\neach, and the response shape follows the count (see the items field).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"

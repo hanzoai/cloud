@@ -15,6 +15,9 @@
       "name": "billing"
     },
     {
+      "name": "cart"
+    },
+    {
       "name": "catalog"
     },
     {
@@ -34,8 +37,20 @@
     "/_/commerce/healthz": {
       "get": {
         "operationId": "get___commerce_healthz",
-        "summary": "Liveness for the commerce subsystem",
-        "description": "Answers ok whenever the commerce subsystem is mounted. It is registered BEFORE the module embed boots, so it keeps answering even when the embed failed and every business route is serving a fail-closed 503 — which is the point: it reports that the process is reachable, never that the money plane is healthy. Unauthenticated, and under /_ so the ingress does not expose it publicly."
+        "summary": "Answers ok whenever the commerce subsystem is mounted.",
+        "description": "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated, and under /_ so the ingress withholds it\npublicly.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/liveness"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/_/commerce/providers": {
@@ -148,8 +163,8 @@
     "/v1/billing/crypto/deposit": {
       "post": {
         "operationId": "post_v1_billing_crypto_deposit",
-        "summary": "Open a crypto deposit and get the address to send funds to",
-        "description": "Mints a per-payer custody deposit address on the MPC signer fleet and answers the intent id, its status, the chain and token, the deposit address and when it expires — 200 on both the freshly-minted and the reused path, never 201. The body is optional and defaults to ethereum and usdc. The credited payer is the CALLER's own billing subject and there is deliberately no subject field, so a deposit cannot be opened on anyone else's behalf. A refresh does not spray keygens: an unexpired pending intent for the same payer, chain and token is returned as it stands — with its ORIGINAL expiry, not a refreshed one. The amount is a caller-supplied hint stored verbatim; it binds nothing and is not what credits. NOTHING MINTS HERE — the chain watcher credits the balance on real confirmations, so an opened deposit is worth nothing until the chain says otherwise. An unsupported chain is 400, and a custody service that will not issue an address answers 503 rather than 502 on purpose, so the refusal reaches the caller as JSON instead of as an edge's HTML interstitial.",
+        "summary": "Get a deposit address for a crypto top-up",
+        "description": "Mints a deposit address held by the MPC signer fleet — no single party holds the key — on the chain and token you name, and returns it with the intent that tracks it.\n\nThe account credited is the PINNED caller's, never a value in the body, so a deposit cannot be aimed at someone else's balance. A caller who already has an open intent gets that same address back rather than a new one, so reloading the page cannot spray keygens across the signer fleet.\n\nNO BALANCE MOVES HERE. This hands out an address; the chain watcher credits the account when a real transfer confirms, which is also why an address handed out and never funded costs nothing and expires nothing.",
         "tags": [
           "billing"
         ]
@@ -158,8 +173,8 @@
     "/v1/billing/crypto/deposit/{id}": {
       "get": {
         "operationId": "get_v1_billing_crypto_deposit_by_id",
-        "summary": "Poll one crypto deposit until it settles",
-        "description": "Returns the addressed deposit intent — status, chain, token, address and expiry — which is what a checkout page polls after showing the payer an address. The status is one of pending, confirming, succeeded, expired, failed or refunded. The intent is resolved inside the caller org's own namespace AND checked against the caller's own payer key, so another payer's id answers 404 exactly as a missing one does and no 403 exists to tell the two apart. Two things a poller gets wrong: the status does NOT expire itself, so an intent past its expiry still reads pending until something else marks it, and confirmation progress is not projected here — the response carries the state, not the confirmation count or the transaction hash.",
+        "summary": "Follow one crypto deposit to settlement",
+        "description": "Answers the addressed deposit intent's current state — pending until a transfer is seen, confirming while the chain buries it, succeeded once it is credited — so a payment page can poll one deposit rather than the whole balance.\n\nScoped to the caller: an intent belonging to another payer is not found and answers 404, never another account's state. The credit itself is the chain watcher's to make; this read reports it and never performs it.",
         "tags": [
           "billing"
         ],
@@ -178,8 +193,8 @@
     "/v1/billing/crypto/options": {
       "get": {
         "operationId": "get_v1_billing_crypto_options",
-        "summary": "The chains and tokens the crypto custody rail will accept",
-        "description": "Answers the chains and the tokens a crypto deposit may be opened against — the list a payment page renders its asset picker from. Both come from the MPC custody processor this deployment is wired to, and the call is gated on that processor answering a health probe within about three seconds: an unreachable or unconfigured custody service is 503 with no cached fallback, because offering a chain that cannot then mint an address is how a payer's funds get stranded. That 503 does not distinguish never-configured from momentarily-unreachable, so treat it as retry-then-choose-another-rail rather than as a permanent answer. The chain list is the processor's and is wider than the deposit intent's own vocabulary, so a chain named here may still be recorded as an unrecognized value carrying default confirmation requirements.",
+        "summary": "Which chains and tokens a crypto top-up can use",
+        "description": "Answers the custody processor's LIVE capability list — the chains and the tokens on each that this deployment can actually take a deposit on. A payment page renders its asset picker straight from it rather than from a list of its own, so a chain the processor stops supporting disappears from the picker instead of minting an address nothing watches.\n\nIt is a capability read, not an account read: it says what may be paid with, never anything about this caller's balance or deposits.",
         "tags": [
           "billing"
         ]
@@ -380,16 +395,16 @@
     "/v1/billing/methods": {
       "get": {
         "operationId": "get_v1_billing_methods",
-        "summary": "List the payment methods saved on your account, masked",
-        "description": "Answers the caller's saved payment methods newest first, each masked to what is safe to show: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist on the model to return — they are unrepresentable here rather than filtered out, because the PAN lives at the processor and never enters this system. This is the CUSTOMER face of the rows the service-token portal list serves, at its own address because the app publishing this one cannot forward to the other without re-entering its own handler. The subject filter is pinned to the VALIDATED caller before the handler runs, so a customerId in the query is silently ignored for an ordinary caller rather than refused — you always read your own. A caller with no resolvable subject gets an empty array, never another tenant's cards.",
+        "summary": "Your saved cards, masked — the customer read",
+        "description": "Answers the cards saved against your own account as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system. It is what a checkout prefills its payment step from.\n\nThe customer face of the list a service token reads at /v1/billing/portal/methods — same rows, different principal, no hop between them.\n\nThe subject filter is pinned to the VALIDATED caller before the handler runs, so the answer is your own account's cards whatever customerId the request carries, and another org's rows are outside the namespace entirely. A caller who is not signed in is refused before the read.",
         "tags": [
           "billing"
         ]
       },
       "post": {
         "operationId": "post_v1_billing_methods",
-        "summary": "Save a card on your account for later charges",
-        "description": "Vaults a tokenized card as a reusable card-on-file at the processor and stores its masked descriptor locally, answering the saved method at 201 — this is the card a monthly renewal or an auto-recharge charges later. The PAN never reaches this service: the browser tokenizes the card and only the single-use nonce arrives. A body typed as a card carrying no token at all is refused 400, because a saved method with nothing chargeable behind it looks saved and cannot be billed. The reference you send is NOT what comes back — on a successful vaulting it is REPLACED by the processor's durable card id, and that is the value later charges use. The billing address is stored exactly as sent and is not verified here. A declined card is 402 carrying a humanized reason. The subject is pinned to the validated caller, so a card can only ever be attached to the caller's own account whatever the body claims — and posting the same card twice creates two rows, because there is no dedupe.",
+        "summary": "Save a card for later charges",
+        "description": "Vaults the card the processor already holds — you send its one-time reference, never a card number — as a reusable card on file, and stores the billing address with it. That vaulted card is what a subscription renewal or an auto-recharge charges later, which is why saving one is the step that makes a monthly plan billable at all.\n\nIt charges nothing. Saving a card moves no money; the first charge is whatever arrangement you then attach it to.\n\nThe subject is pinned from the validated caller and OVERWRITES the customerId in the body while leaving the card fields untouched, so a card can only ever be attached to the caller's OWN account whatever the body claims. That pin is the whole control on this write, not decoration: this is the one handler in the family that reads its subject from the body.",
         "tags": [
           "billing"
         ]
@@ -398,8 +413,8 @@
     "/v1/billing/methods/{id}": {
       "delete": {
         "operationId": "delete_v1_billing_methods_by_id",
-        "summary": "Remove a saved payment method",
-        "description": "Detaches the addressed method: the local row is soft-deleted and, when that row carries the processor's customer and card ids, the card is withdrawn from the processor's vault too. Answers a deleted flag with the id. Read that flag precisely — it is a claim about the LOCAL row. The upstream removal is best-effort, and a method saved by the older pre-authorization path carries no vault ids at all, so nothing is withdrawn upstream while the response still says deleted. The id is resolved inside the caller's own namespace and against the caller's own subject, so another tenant's or another subject's id is 404 and never 403 — the id space cannot be probed. Removing the card an auto-recharge or a running subscription bills leaves that arrangement with nothing to charge; that is the customer's call to make.",
+        "summary": "Remove one of your saved cards",
+        "description": "Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe customer twin of DELETE /v1/billing/portal/methods/{id}. The id is resolved INSIDE your own org namespace, so a card that is not yours is simply not found there and answers 404 — never 403, which would confirm the id exists.\n\nRemoving the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is yours to decide.",
         "tags": [
           "billing"
         ],
@@ -449,15 +464,15 @@
       "get": {
         "operationId": "get_v1_billing_portal_methods",
         "summary": "Cards saved against the caller's org, masked — the portal read",
-        "description": "Answers the org's saved payment methods as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system.\n\nThis is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods, and it exists as its own address because the host that publishes that one cannot forward to it — the forward would re-enter its own handler. Both answer the same rows.\n\nThe customer filter is pinned to the VALIDATED caller before the handler runs, so a browser sees only its own subject's cards whatever customerId it sends; only a caller holding the internal service token may name the subject, and the org it may name it within is fixed by the gateway. Cross-tenant is closed by the org namespace for both, so an id or a subject from another org resolves to nothing. A caller who is neither is refused before the read.",
+        "description": "Answers the org's saved payment methods as masked descriptors: brand, last four, expiry and the processor's reusable reference. No card number and no security code exist here to return; both live at the processor and never enter this system.\n\nThis is the SERVICE-TOKEN face of the same list a customer reads at /v1/billing/methods. Both are served here, in this process, and answer the same rows; they are two addresses because they admit two different principals, not because either forwards to the other.\n\nThe customer filter is pinned to the VALIDATED caller before the handler runs, so a browser sees only its own subject's cards whatever customerId it sends; only a caller holding the internal service token may name the subject, and the org it may name it within is fixed by the gateway. Cross-tenant is closed by the org namespace for both, so an id or a subject from another org resolves to nothing. A caller who is neither is refused before the read.",
         "tags": [
           "billing"
         ]
       },
       "post": {
         "operationId": "post_v1_billing_portal_methods",
-        "summary": "Save a card against a subject's account — the portal attach",
-        "description": "Vaults a tokenized card and stores its masked descriptor: the service-token twin of the customer's POST /v1/billing/methods, and the same handler behind both. It exists at its own address for the reason the portal list does — the app publishing the customer address proxies here rather than into its own route. Every rule of the customer path holds: the PAN never arrives, only the nonce; a card-typed body with no token is 400; the reference you send is replaced by the processor's durable card id when vaulting succeeds; a decline is 402. What differs is who may name the subject — an ordinary caller is pinned to its own, and only a caller holding the internal service token may act for another subject, within the org the gateway pinned. Cross-org is closed by the namespace for both.",
+        "summary": "Save a card on a subject's behalf — the portal attach",
+        "description": "The service-token twin of POST /v1/billing/methods: it vaults the processor's one-time reference as a reusable card on file for the named subject, with its billing address, and moves no money doing it.\n\nIt exists so an internal caller can complete the family it can already read and detach. The subject it may name is pinned to the org the gateway fixed, so the service token acts WITHIN one tenant and never across tenants; a caller holding no service token is refused before the write.",
         "tags": [
           "billing"
         ]
@@ -467,7 +482,7 @@
       "delete": {
         "operationId": "delete_v1_billing_portal_methods_by_id",
         "summary": "Remove a saved card — the portal detach",
-        "description": "Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is — the host that publishes the customer address proxies here rather than into itself.\n\nThe id is resolved INSIDE the caller's org namespace, so another tenant's card is not found there and answers 404 — never 403, which would confirm the id exists. That bound holds for the service token too: it may act for any subject within the org the gateway pinned, and for no subject outside it.\n\nRemoving the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is the customer's call to make.",
+        "description": "Detaches the addressed card: the stored reference is removed here AND withdrawn from the processor's vault, so nothing is left that a later charge could bill.\n\nThe service-token twin of the customer's DELETE /v1/billing/methods/{id}, at its own address for the same reason the portal list is — a different principal, on the same rows, in this same process.\n\nThe id is resolved INSIDE the caller's org namespace, so another tenant's card is not found there and answers 404 — never 403, which would confirm the id exists. That bound holds for the service token too: it may act for any subject within the org the gateway pinned, and for no subject outside it.\n\nRemoving the card an auto-recharge or a running lease bills leaves that arrangement with nothing to charge; that is the customer's call to make.",
         "tags": [
           "billing"
         ],
@@ -573,6 +588,16 @@
         ]
       }
     },
+    "/v1/billing/topup": {
+      "post": {
+        "operationId": "post_v1_billing_topup",
+        "summary": "Add credit to your balance by charging one of your saved cards",
+        "description": "Charges a card the caller already has on file, named by paymentMethodId, and credits the caller's own balance — the SAVED-card twin of topup/token, sharing the one charge-and-credit core the auto-recharge cron runs on. The credit lands on the caller's OWN billing subject: the request body's subject field is pinned to the caller before the handler sees it, so a top-up can never be redirected to another subject or outside the caller's org. It is screened for risk before any money moves, exactly as the token path is, because both credit the SPENDABLE wallet. The rule most callers get wrong is that paymentMethodId is NOT covered by that subject pin — it is a card id, not a subject key — so it is checked separately, and a card belonging to any other subject answers 404 rather than 403: a permission error would confirm the id exists, which is an ownership oracle over other people's cards.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/billing/topup/token": {
       "post": {
         "operationId": "post_v1_billing_topup_token",
@@ -606,11 +631,152 @@
     "/v1/billing/wire": {
       "get": {
         "operationId": "get_v1_billing_wire",
-        "summary": "The bank details and payment reference for topping up by wire",
-        "description": "Answers the receiving bank's name and address, the account name, the account and routing numbers, SWIFT and IBAN, and the reference to put on the transfer. The bank is the SERVING BRAND's, resolved from the request host rather than from the caller's org, and hydrated from that brand's own KMS wire secrets — a deployment holding neither an account number nor an IBAN answers 503 rather than a half-filled form a customer would wire real money against. The reference is derived from the CALLER's own billing key (hanzo/z renders as TOPUP-HANZO-Z), and it is what attributes an incoming wire to an account; memo carries the same value because banks name that field differently. It is an identifier, not a secret — anyone knowing an org slug can derive it, which is safe precisely because reading it moves nothing. NOTHING MINTS HERE: a wire is credited by the admin credit verb when the bank receipt lands, so a caller who has read these instructions has not funded anything yet.",
+        "summary": "Where to wire funds, and the reference that credits them to you",
+        "description": "Answers the receiving bank details for the brand this deployment serves — the account the funds actually land in, hydrated per brand rather than hard-coded — together with the payment reference to put on the transfer.\n\nTHE REFERENCE IS THE POINT. It carries your own billing key, and it is how an arriving wire is attributed to your account; a transfer sent without it arrives as an unidentified receipt. That is why this read is gated at all: an unpinned caller would be handed an unattributable reference.\n\nReading it credits nothing and reserves nothing. A wire is settled by an operator when the bank shows the funds, so the balance moves on receipt, not on this call.",
         "tags": [
           "billing"
         ]
+      }
+    },
+    "/v1/cart": {
+      "post": {
+        "operationId": "openCart",
+        "summary": "Open a cart for a shopper to fill",
+        "description": "Opens an empty cart for a shopper to fill, and answers it with its new id.\n\nThis is the first step of a sale: hold the id, add items to it with\nsetCartItem, then hand it to checkout. Every field of the request is optional —\nan empty body opens a perfectly good anonymous cart — and the fields exist only\nto pre-fill what is already known about the shopper.\n\nThe STORE defaults to the org's own default storefront, so a merchant selling\nthrough one storefront never has to name it. The CURRENCY defaults to usd; note\nthat checkout overrides it with the store's own currency when the sale is\nauthorized, so a currency set here is a hint rather than a commitment.\n\nThe cart is created in the CALLER'S OWN org namespace, taken from the validated\nprincipal and never from the body, so a cart can never be opened on another\ntenant's books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartOpen"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/cart/{id}": {
+      "get": {
+        "operationId": "getCart",
+        "summary": "Read one cart with its lines and totals",
+        "description": "Reads one cart: its lines, its status and what it comes to.\n\nThis is what a storefront calls to render the basket, and what a support agent\ncalls to see what a shopper is looking at. The totals are the cart's STORED\ntally — shipping and tax stay zero until checkout resolves a shipping option\nand a tax region, so a cart total before checkout is the merchandise total and\nis meant to be.\n\nThe org scopes the read by construction: the store is namespaced to it, so a\ncart id belonging to another tenant is simply not found rather than found and\nthen filtered, and answers 404 rather than 403 so the id space cannot be probed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cart's id, as the open call answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/cart/{id}/discard": {
+      "post": {
+        "operationId": "discardCart",
+        "summary": "Discard a cart the shopper abandoned",
+        "description": "Discards a cart the shopper abandoned, and answers it in its final state.\n\nA discarded cart is CLOSED, not deleted: the row stays, so abandoned-basket\nreporting and any follow-up that keys on it still have something to read. It\nstops being a cart anything will check out, which is the point — it is how a\nstorefront says \"this basket is over\" without destroying the evidence that it\nexisted.\n\nDiscarding is idempotent: a cart already discarded answers its stored state\nrather than failing, so a retry is safe.\n\nThe cart is resolved inside the caller's own org namespace, so another tenant's\nid answers 404.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cart's id, as the open call answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/cart/{id}/item": {
+      "post": {
+        "operationId": "setCartItem",
+        "summary": "Set one item's quantity in a cart; zero removes it",
+        "description": "Sets how many of one item a cart holds, and answers the whole updated cart.\n\nThis is the ONE way a cart's contents change. The quantity is the RESULT, not a\ndelta: sending 3 leaves 3 however many were there before, so a retry is safe and\na double-submit cannot double an order. ZERO REMOVES the line — there is\ndeliberately no separate delete, because removal is the same act at the boundary\nvalue and a second spelling would be a second set of edge cases.\n\nName the item with EITHER product OR variant, never both. Prefer variant for\nanything sold in sizes, colours or tiers: the price and the stock belong to the\nvariant, so a product-level line on a varianted product prices the wrong thing.\nEither may be given as an id or as the human key — a product's URL slug, a\nvariant's SKU — which is what lets a storefront add to cart straight from a\nproduct page URL without a lookup first.\n\nThe item's price and name are CACHED onto the line as it is added, so the cart\nkeeps the price the shopper was shown even if the catalog moves underneath it.\n\nAn item that resolves to nothing in the catalog is refused 400 and the cart is\nleft exactly as it was; nothing is partially applied.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "cart"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cart to amend, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartItemSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/catalog/entries": {
@@ -3483,6 +3649,153 @@
   },
   "components": {
     "schemas": {
+      "Cart": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the cart was opened, RFC3339.",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency is the ISO 4217 code every amount below is denominated in.",
+            "type": "string"
+          },
+          "discountCents": {
+            "description": "DiscountCents is what coupons and promotions took off, in whole cents.",
+            "type": "integer"
+          },
+          "email": {
+            "description": "Email is the shopper's address, when the cart carries one.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the cart's id — what every other cart op addresses it by, and what a\nstorefront persists against the browser session.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items are the cart's lines, in the order they were added.",
+            "items": {
+              "$ref": "#/components/schemas/CartItem"
+            },
+            "type": "array"
+          },
+          "lineTotalCents": {
+            "description": "LineTotalCents is the sum of the lines before any discount, in whole cents.",
+            "type": "integer"
+          },
+          "order": {
+            "description": "Order is the order this cart became, once checkout completed it. Empty\nuntil then, and its presence is what makes a cart final.",
+            "type": "string"
+          },
+          "shippingCents": {
+            "description": "ShippingCents is the shipping charge, in whole cents. It stays zero until a\nshipping option is priced at checkout.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"active\" for a cart still being filled, \"ordered\" once checkout\nturned it into an order, and \"discarded\" when the shopper abandoned it.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Store is the storefront the cart is being filled on.",
+            "type": "string"
+          },
+          "subtotalCents": {
+            "description": "SubtotalCents is LineTotalCents less DiscountCents, in whole cents.",
+            "type": "integer"
+          },
+          "taxCents": {
+            "description": "TaxCents is the sales tax, in whole cents. It stays zero until checkout\nresolves the shopper's tax region.",
+            "type": "integer"
+          },
+          "totalCents": {
+            "description": "TotalCents is what the shopper pays: subtotal plus shipping plus tax, in\nwhole cents.",
+            "type": "integer"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the cart was last amended, RFC3339.",
+            "type": "string"
+          },
+          "user": {
+            "description": "User is the signed-in shopper this cart belongs to, empty for a guest cart.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartItem": {
+        "properties": {
+          "free": {
+            "description": "Free reports a line that costs nothing because a coupon or a promotion made\nit so, rather than because its price is zero.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the line's identity — the variant id when the line is a variant,\notherwise the product id. It is what a subsequent set call addresses.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is \"variant\" when this line is a specific sellable variant and\n\"product\" when it is the product itself.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the item's display name, cached onto the line when it was added so\na cart renders without a second read.",
+            "type": "string"
+          },
+          "priceCents": {
+            "description": "PriceCents is the unit price in whole cents, cached at the moment the line\nwas added. The line's contribution to the cart is this times Quantity.",
+            "type": "integer"
+          },
+          "quantity": {
+            "description": "Quantity is how many units of this item the cart holds.",
+            "type": "integer"
+          },
+          "sku": {
+            "description": "SKU is the line's stock-keeping unit — the variant's when it has one,\notherwise the product's. Empty when neither carries one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartItemSet": {
+        "properties": {
+          "id": {
+            "description": "ID is the cart to amend, from the path.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product names the catalog product to set, by its id or its URL slug. Give\nthis or Variant, never both; a request naming neither is refused.",
+            "type": "string"
+          },
+          "quantity": {
+            "description": "Quantity is how many of that item the cart should hold AFTER this call — it\nis the resulting count, not a delta, so sending 3 twice leaves 3 and not 6.\nZERO REMOVES the line, which is the only way to take an item out.",
+            "type": "integer"
+          },
+          "variant": {
+            "description": "Variant names the specific sellable variant to set, by its id or its SKU.\nPrefer it over Product for anything sold in sizes, colours or tiers — the\nprice and the stock are the variant's, not the product's.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartOpen": {
+        "properties": {
+          "currency": {
+            "description": "Currency is the ISO 4217 code the cart is priced in, lower-cased. Empty\nmeans usd.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email is the shopper's address, for a cart that belongs to someone who has\nnot signed in. It is what a guest checkout and an abandoned-cart follow-up\nkey on. Empty is fine.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Store is the storefront this cart is being filled on. Empty uses the org's\ndefault store, which is what a single-storefront merchant always wants.",
+            "type": "string"
+          },
+          "user": {
+            "description": "User is the id of the signed-in shopper this cart belongs to, when there is\none. Empty means a guest cart identified only by its own id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CollectOut": {
         "properties": {
           "balanceUsedCents": {
@@ -3695,6 +4008,19 @@
           },
           "userId": {
             "description": "UserID identifies the customer being billed, within the caller's own org.\nRequired — an invoice with no addressee is not an invoice.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "liveness": {
+        "properties": {
+          "service": {
+            "description": "Service names the answering subsystem; it is always commerce.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always ok: mounted is the only state that can answer.",
             "type": "string"
           }
         },

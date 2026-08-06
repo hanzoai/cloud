@@ -134,7 +134,7 @@
     },
     "/v1/marketplace/listings/{id}": {
       "delete": {
-        "operationId": "delete_v1_marketplace_listings_id",
+        "operationId": "delete_v1_marketplace_listings_by_id",
         "summary": "Unpublish withdraws one of the caller org's listings from the marketplace and answers 204.",
         "description": "Unpublish withdraws one of the caller org's listings from the marketplace and\nanswers 204. Only the publishing org can remove its own listing; an id that is\nunknown, or belongs to another org, is the same 404, so a probe learns nothing\nabout what exists. Removing a listing removes its price from per-call enforcement;\nit does not uninstall the tool for anyone who already installed it.",
         "tags": [
