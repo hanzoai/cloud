@@ -98,12 +98,23 @@ func (a *fakeAgents) wasCreated(name string) bool {
 	return ok
 }
 
-// botVM is a stand-in for the vm (Visor) resell compute + binding surface. It
-// keeps VM'S spelling (bind-agent, agent-binding) on purpose: it impersonates vm,
-// whose wire did not change. Cloud's own routes are /v1/machines/:id/agent.
-// It speaks the casibase {status,msg,data} envelope, scopes every read by the
-// ?owner query (so a test proves cloud forwards the VALIDATED principal's org),
-// and records the last bind/unbind it saw so a test can assert the composition.
+// botVM is a stand-in for the vm (Visor) resell compute + binding surface, and
+// it speaks BOTH of vm's wires because vm does — the same split fakeVisor makes
+// with envelope200 and op200 (http_test.go):
+//
+//   - the machines + launch routes are still casibase, so those answer HTTP 200
+//     with the {status,msg,data} envelope;
+//   - a machine's AGENT is a typed op, so those answer the value itself, 204 for
+//     the unbind, and 404 for a read of a machine that runs no bot.
+//
+// That second set is not invented here. It is written to match what visor's own
+// controllers/agent_wire_test.go asserts against the real handlers — a fake that
+// agreed only with this client would prove the two agree with each other and
+// nothing about the service. Change one and the other is where to look.
+//
+// Every read is scoped by the ?owner query, so a test proves cloud forwards the
+// VALIDATED principal's org; the last bind/unbind is recorded so a test can
+// assert the composition.
 type botVM struct {
 	bots         map[string]map[string]any // id -> machine (kind=bot)
 	bindings     map[string]agentBinding   // id -> binding
@@ -154,7 +165,21 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 		envelope200(w, map[string]any{"machine": machine, "quote": quote})
 	})
 
-	// /v1/machines/{id}[/bind-agent|/agent-binding] — the machine sub-resources.
+	// GET /v1/machines/agents?owner= — the org's bindings. A TYPED op: the object
+	// itself, keyed agentBindings, no envelope. Registered ahead of the
+	// /v1/machines/ prefix pattern below because net/http prefers the longer
+	// pattern anyway — stating it here keeps the two readable in match order.
+	mux.HandleFunc("/v1/machines/agents", func(w http.ResponseWriter, r *http.Request) {
+		f.lastOwner = r.URL.Query().Get("owner")
+		out := []agentBinding{}
+		for _, b := range f.bindings {
+			out = append(out, b)
+		}
+		op200(w, map[string]any{"agentBindings": out})
+	})
+
+	// /v1/machines/{id}[/agent] — the machine sub-resources. The machine itself is
+	// still casibase; its agent is typed.
 	mux.HandleFunc("/v1/machines/", func(w http.ResponseWriter, r *http.Request) {
 		f.lastOwner = r.URL.Query().Get("owner")
 		rest := strings.TrimPrefix(r.URL.Path, "/v1/machines/")
@@ -170,42 +195,37 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 		case len(parts) == 1 && r.Method == http.MethodDelete: // DeleteComputeMachine
 			delete(f.bots, id)
 			envelope200(w, "deleted")
-		case len(parts) == 2 && parts[1] == "bind-agent" && r.Method == http.MethodPost:
+		case len(parts) == 2 && parts[1] == "agent" && r.Method == http.MethodPut:
 			var b struct {
-				Org, AgentName, BotVersion string
+				AgentName, BotVersion string
 			}
 			_ = json.NewDecoder(r.Body).Decode(&b)
-			f.lastBindOrg, f.lastBindName = b.Org, b.AgentName
+			// vm takes the owning org from the ?owner it resolved, never from the
+			// body — which is why the body no longer carries one.
+			f.lastBindOrg, f.lastBindName = f.lastOwner, b.AgentName
 			binding := agentBinding{
-				Owner: b.Org, Name: id, MachineId: b.Org + "/" + id, Org: b.Org,
+				Owner: f.lastOwner, Name: id, MachineId: f.lastOwner + "/" + id, Org: f.lastOwner,
 				AgentName: b.AgentName, BotVersion: b.BotVersion, Status: "Pending",
 				Message: "machine provisioning; @hanzo/bot runtime not yet confirmed",
 			}
 			f.bindings[id] = binding
-			envelope200(w, binding)
-		case len(parts) == 2 && parts[1] == "agent-binding" && r.Method == http.MethodGet:
-			if b, ok := f.bindings[id]; ok {
-				envelope200(w, b)
+			op200(w, binding)
+		case len(parts) == 2 && parts[1] == "agent" && r.Method == http.MethodGet:
+			b, ok := f.bindings[id]
+			if !ok {
+				// A machine that runs no bot is a 404, not a 200 carrying an empty
+				// object — see visor controllers/agent_wire_test.go.
+				http.Error(w, `{"status":404,"error":"no agent binding for machine"}`, http.StatusNotFound)
 				return
 			}
-			envelope200(w, map[string]any{}) // no binding -> empty
-		case len(parts) == 2 && parts[1] == "agent-binding" && r.Method == http.MethodDelete:
+			op200(w, b)
+		case len(parts) == 2 && parts[1] == "agent" && r.Method == http.MethodDelete:
 			f.lastUnbind = id
 			delete(f.bindings, id)
-			envelope200(w, "Affected")
+			w.WriteHeader(http.StatusNoContent) // idempotent, and nothing to say
 		default:
 			http.Error(w, "unhandled "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 		}
-	})
-
-	// GET /v1/agent-bindings?owner= — the org's bindings.
-	mux.HandleFunc("/v1/agent-bindings", func(w http.ResponseWriter, r *http.Request) {
-		f.lastOwner = r.URL.Query().Get("owner")
-		out := []agentBinding{}
-		for _, b := range f.bindings {
-			out = append(out, b)
-		}
-		envelope200(w, out)
 	})
 
 	srv := httptest.NewServer(mux)
@@ -428,6 +448,24 @@ func TestBotMessageRunsAgent(t *testing.T) {
 	if fa.lastRunAgent != "concierge" || fa.lastRunInput != "ping" {
 		t.Fatalf("message must run the bound agent: agent=%q input=%q", fa.lastRunAgent, fa.lastRunInput)
 	}
+
+	// A machine that runs NO agent is a 400 that says what the caller can do
+	// about it — not the upstream 404 that says only that a lookup missed.
+	//
+	// This is the one place the difference is visible in the STATUS: vm answers
+	// 404 to a read of an unbound machine, and that is a fact about the machine
+	// rather than a fault, so messageBot has to recognise it and answer in its
+	// own terms. Without that recognition the caller is told "not found" about a
+	// bot that exists and is running.
+	f.bots["drop-mute"] = map[string]any{"owner": "acme", "name": "mute", "id": "drop-mute", "state": "running", "tag": "hanzo-kind:bot"}
+	code, body = do(t, app, http.MethodPost, "/v1/compute/bots/drop-mute/message", "acme",
+		map[string]any{"input": "ping"})
+	if code != http.StatusBadRequest {
+		t.Fatalf("message an unbound bot want 400, got %d %s", code, body)
+	}
+	if !strings.Contains(string(body), "no bound agent") {
+		t.Fatalf("message an unbound bot must say so, got %s", body)
+	}
 }
 
 // TestBotLaunchAutoCreateClosesTheGap is the regression for the launch→message
@@ -511,8 +549,19 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	if code, _ := do(t, app, http.MethodGet, "/v1/machines/drop-m/agent", "acme", nil); code != http.StatusOK {
 		t.Fatalf("get binding want 200, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/machines/nope/agent", "acme", nil); code != http.StatusNotFound {
-		t.Fatalf("get missing binding want 404, got %d", code)
+	// A machine with none is 404 — and the 404 is THIS route's, not vm's passed
+	// through. Both paths answer 404, so only the message tells them apart, and
+	// only the message proves the upstream miss was recognised as a fact about
+	// the machine rather than relayed as an upstream fault.
+	code, body = do(t, app, http.MethodGet, "/v1/machines/nope/agent", "acme", nil)
+	if code != http.StatusNotFound {
+		t.Fatalf("get missing binding want 404, got %d %s", code, body)
+	}
+	if !strings.Contains(string(body), "no agent binding for machine") {
+		t.Fatalf("get missing binding must answer in its own words, got %s", body)
+	}
+	if strings.Contains(string(body), "upstream") {
+		t.Fatalf("get missing binding relayed vm's prose: %s", body)
 	}
 
 	// list machine agents → 200 {agentBindings:[...]} with the one we bound.
