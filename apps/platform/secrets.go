@@ -190,6 +190,18 @@ func parseEnv(envJSON string) []EnvVarJSON {
 func sealSecretEnv(s *cloud.Service[state], ctx context.Context, org, appSlug string, env []EnvVarJSON) ([]EnvVarJSON, error) {
 	out := make([]EnvVarJSON, 0, len(env))
 	for _, e := range env {
+		// THE CLIENT'S FLAG MAY ONLY ADD SECRECY. An entry it did not mark is
+		// still sealed when the key names a credential or the VALUE looks like
+		// one (secretshape.go). Before this, an unmarked value was stored verbatim
+		// in the EnvJSON column and inlined into the pod spec, so the whole
+		// confidentiality property rested on a key-NAME regex running in a
+		// browser — a denylist over an unbounded set, on the wrong side of the
+		// trust boundary. STRIPE_SK, SK_LIVE, GH_PAT, PGPASS, SMTP_PASS, HMAC,
+		// TLS_CERT and GCP_SA_JSON all slipped it. The decision is the server's
+		// now; the flag stays as UX.
+		if !e.Secret && e.Value != "" && mustSeal(e.Key, e.Value) {
+			e.Secret = true
+		}
 		if !e.Secret {
 			out = append(out, e)
 			continue
