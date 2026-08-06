@@ -86,6 +86,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	svc := &cloud.Service[*state]{Base: b, State: mounted}
 	routes(app, svc)
+	// The ledger's headline figures, for the peers that live in other processes —
+	// the unified advisor above all (see figures_rpc.go).
+	exposeFigures()
 	// No "commerce configured" bit to report: the ledger is reached BY NAME, so
 	// there is nothing a deployment sets and nothing that can be set wrong.
 	b.Log.Info("books mounted", "prefix", "/v1/books")
