@@ -11,17 +11,42 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// files.go — the delivery inventory read, and its two adapters.
+// files.go — the delivery inventory read, the revision it is pinned to, and
+// their adapters.
 //
-// ONE core (coreFiles) answers "which files does this glob select at this
-// commit, and what do they say". The REST route serves it to browsers and the
-// CLI; the internal plane serves it to delivery. Two thin adapters, one core —
-// so the answer cannot differ by who asked.
+// ONE resolve (coreRev) answers "which commit does this ref name". ONE core over
+// it (coreFiles) answers "which files does this glob select at that commit, and
+// what do they say". The REST route serves the second to browsers and the CLI;
+// the internal plane serves both to its peers. Thin adapters over one core — so
+// the answer cannot differ by who asked.
+//
+// The two are separate ops on the plane because they cost differently. Resolving
+// is a ref lookup; reading is a walk. A caller that pins a revision on every
+// request would otherwise read a whole tree to learn a sha.
 //
 // This is what replaces cloning for delivery. A generator never needs a
 // packfile; it needs the bytes of some files at one revision. Serving that as a
 // tree read is what lets a repository sit on object storage — no pack
 // negotiation, no working copy, nothing on this path that needs POSIX.
+
+// coreRev opens one of the tenant's repos and resolves ref against it, returning
+// the open repository beside the commit so a reader can walk the same handle it
+// resolved through. An empty ref means the repo's own default branch.
+func coreRev(s *cloud.Service[state], ctx context.Context, t tenant, name, ref string) (Repository, Revision, string, error) {
+	r, found := findRepo(s, ctx, t.org, normalizeName(name))
+	if !found {
+		return nil, "", "", errNotFound
+	}
+	repo, err := openRepository(s, r)
+	if err != nil {
+		return nil, "", "", errNotFound
+	}
+	rev, label, err := repo.Resolve(ctx, strings.TrimSpace(ref))
+	if err != nil {
+		return nil, "", "", errNotFound
+	}
+	return repo, rev, label, nil
+}
 
 // coreFiles resolves ref once and reads every path the glob selects.
 //
@@ -33,17 +58,9 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 	if strings.TrimSpace(glob) == "" {
 		return "", nil, errBadInput
 	}
-	r, found := findRepo(s, ctx, t.org, normalizeName(name))
-	if !found {
-		return "", nil, errNotFound
-	}
-	repo, err := openRepository(s, r)
+	repo, res, _, err := coreRev(s, ctx, t, name, ref)
 	if err != nil {
-		return "", nil, errNotFound
-	}
-	res, _, err := repo.Resolve(ctx, strings.TrimSpace(ref))
-	if err != nil {
-		return "", nil, errNotFound
+		return "", nil, err
 	}
 
 	paths, err := MatchPaths(ctx, repo, res, glob)
@@ -69,8 +86,8 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 	return res.String(), out, nil
 }
 
-// exposeFiles publishes the inventory read on the internal plane. Called from
-// Mount, beside the other cross-app seams.
+// exposeFiles publishes the inventory read and the revision resolve on the
+// internal plane. Called from Mount, beside the other cross-app seams.
 //
 // The tenant comes from the CALLER, never the argument: the identity is what the
 // edge minted, so an argument cannot widen the org it is answered for. Anonymous
@@ -80,6 +97,30 @@ func exposeFiles() {
 	zip.Post[plane.FilesIn, plane.Files](cloud.Plane(), "/git/files", planeFiles,
 		zip.WithOperationID(plane.GitFiles),
 		zip.WithSummary("A repo's files at one revision"))
+	zip.Post[plane.RevIn, plane.Rev](cloud.Plane(), "/git/rev", planeRev,
+		zip.WithOperationID(plane.GitRev),
+		zip.WithSummary("The commit a ref resolves to"))
+}
+
+// planeRev resolves one of the caller's repos at one ref to the commit it names,
+// returning that commit and the branch or tag label it was reached by. The org is
+// the CALLER's plane identity, never the argument — an anonymous caller is
+// refused. A named handler, not a closure, so zipdoc can lift this prose into the
+// registry.
+func planeRev(ctx context.Context, in *plane.RevIn) (*plane.Rev, error) {
+	who := cloud.Who(ctx)
+	if who.Org == "" {
+		return nil, zip.ErrForbidden("git rev: org required")
+	}
+	s := mounted.Load()
+	if s == nil {
+		return nil, zip.Errorf(503, "git not mounted")
+	}
+	_, rev, label, err := coreRev(s, ctx, tenant{org: who.Org, project: who.Project}, in.Repo, in.Ref)
+	if err != nil {
+		return nil, zip.ErrNotFound("repo, ref or revision not found")
+	}
+	return &plane.Rev{Rev: rev.String(), Ref: label}, nil
 }
 
 // planeFiles reads the glob-selected files of one of the caller's repos at one

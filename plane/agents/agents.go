@@ -30,8 +30,16 @@ const App = "agents"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.AgentsRunOnBehalf,
 	plane.AgentsSessionsCount,
 	plane.AgentsSessionsStop,
+}
+
+// AgentsRunOnBehalf run one agent turn as a linked user, for a chat bridge in another pr....
+//
+// Calls plane.AgentsRunOnBehalf on agents over the peer plane.
+func AgentsRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunOnBehalfOut, error) {
+	return plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, App, plane.AgentsRunOnBehalf, in)
 }
 
 // AgentsSessionsCount count the live sessions a match selects.
