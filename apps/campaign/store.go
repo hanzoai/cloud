@@ -52,32 +52,93 @@ const (
 // provider-side id + status the orchestrator recorded. It carries NO credential;
 // the executor resolves the org's connector token itself at launch time.
 type ChannelSpec struct {
-	Kind       string `json:"kind"`              // paid | organic | email
-	Platform   string `json:"platform"`          // meta | google | x | instagram | (email provider)
-	Account    string `json:"account,omitempty"` // provider account ref (ad-account/page/list id)
+	// Kind is the channel and the identity a campaign holds at most one of: paid,
+	// organic or email. It picks the executor the launch fans out to.
+	Kind string `json:"kind"`
+	// Platform is the provider within the kind — meta, google, x, instagram, or the
+	// email provider.
+	Platform string `json:"platform"`
+	// Account is the provider account this channel runs under: an ad-account, a page
+	// or a mailing-list id. An executor may replace it at launch with the account it
+	// actually used.
+	Account string `json:"account,omitempty"`
+	// ExternalID is the provider-side id of the running execution, recorded by the
+	// orchestrator at launch and handed back verbatim to read spend or to pause.
+	// Server-owned and absent until this channel has launched; anything a caller
+	// sends for it is dropped.
 	ExternalID string `json:"externalId,omitempty"`
-	Status     string `json:"status"`           // pending | live | paused | failed | unavailable
-	Detail     string `json:"detail,omitempty"` // honest last-outcome detail (never a secret)
+	// Status is this channel's own launch outcome, not the campaign's: pending (added,
+	// never launched), live, paused, failed (Detail says why) or unavailable (no
+	// executor wired on this deployment). Server-owned — a caller can never assert it.
+	Status string `json:"status"`
+	// Detail is the last outcome in one secret-free line — the failure reason, or
+	// what the executor reported. Absent when there is nothing to explain.
+	Detail string `json:"detail,omitempty"`
 }
 
-// Campaign is the top-level GTM object — a VALUE that spans channels. Budget is
-// minor units (cents). Content is the ordered creative set (Content[0] is the
+// campaignRecord is the top-level GTM object — a VALUE that spans channels. Budget
+// is minor units (cents). Content is the ordered creative set (Content[0] is the
 // active creative; the rest are A/B variants when an experiment is composed).
 // Metrics are deliberately NOT a field: they are read at query time from the ONE
 // analytics plane (metrics.go), never stored here.
-type Campaign struct {
-	ID         string        `json:"id"`
-	Org        string        `json:"-"` // tenant key — server-set from the validated owner claim, never client
-	Name       string        `json:"name"`
-	Audience   string        `json:"audience,omitempty"` // segment/audience selector ref
-	Content    []string      `json:"content"`            // creative(s)
-	Channels   []ChannelSpec `json:"channels"`           // fan-out targets
-	ScheduleAt int64         `json:"scheduleAt,omitempty"`
-	Budget     int64         `json:"budget"` // cents
-	Status     string        `json:"status"`
-	CreatedAt  int64         `json:"createdAt"`
-	UpdatedAt  int64         `json:"updatedAt"`
+//
+// It is DECLARED under its published name and spelled Campaign everywhere else,
+// rather than the reverse, because prose only reaches the document keyed by the
+// name the FIELDS are declared under: zipdoc lifts a field's comment from the
+// struct literal it stands in, and the schema builder looks it up under the type
+// reflect names. A defined type over another struct (type campaignRecord Campaign)
+// has no literal of its own, so every field of it published bare.
+type campaignRecord struct {
+	// ID is the campaign's server-minted handle — "cmp_" and 128 random bits — and
+	// the id every other campaign call is addressed by. Never read off the wire: a
+	// create that sends one has it ignored.
+	ID string `json:"id"`
+	// Org is the owning tenant, set from the validated bearer's owner claim. It is
+	// the isolation key on every query and is deliberately NOT published: a caller
+	// only ever sees their own org's campaigns, so the field would say nothing.
+	Org string `json:"-"`
+	// Name is the campaign's display name. Required on write, trimmed, and capped at
+	// 2048 characters.
+	Name string `json:"name"`
+	// Audience is an opaque reference to the segment this campaign targets. It is
+	// stored and echoed but not yet handed to the executors — a channel targets
+	// through the provider account it runs under — so it is documentation for now.
+	// Absent when never set.
+	Audience string `json:"audience,omitempty"`
+	// Content is the ordered creative set, at most 32, empty entries dropped.
+	// Content[0] is the creative that runs; the rest are A/B variants a wired
+	// experiment can assign per launch.
+	Content []string `json:"content"`
+	// Channels are the fan-out targets, at most one per kind and at most 12, each
+	// carrying its own post-launch state. Empty means nothing to launch, which is
+	// what makes a launch of this campaign a 400.
+	Channels []ChannelSpec `json:"channels"`
+	// ScheduleAt is when the campaign should run, in unix seconds. 0 (absent) means
+	// launch immediately. It is passed to each executor; nothing in this service
+	// wakes up to launch it for you.
+	ScheduleAt int64 `json:"scheduleAt,omitempty"`
+	// Budget is the campaign's total budget in CENTS, handed to each executor as the
+	// budget for its channel. 0 means none was set.
+	Budget int64 `json:"budget"`
+	// Status is the lifecycle state, server-owned and never accepted from a caller.
+	// Four values actually occur: draft (inert and fully mutable — nothing is sent
+	// and no budget is committed), live, paused and failed. After a fan-out live
+	// means AT LEAST ONE channel launched — read the channel rows for the rest —
+	// and failed means none did.
+	Status string `json:"status"`
+	// CreatedAt is when the campaign was created, in unix seconds. Server-set.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the last write in unix seconds — an edit, a launch or a pause.
+	// Server-set on every save.
+	UpdatedAt int64 `json:"updatedAt"`
 }
+
+// Campaign is the domain spelling of campaignRecord. An ALIAS, so it is the SAME
+// type and not a second shape to keep in sync: the store, the fan-out and the
+// executors read in domain language while the document keeps the name the fleet's
+// flat schema namespace needs (apps/marketing already publishes an email
+// "Campaign", and openapi.Weave refuses one name meaning two things).
+type Campaign = campaignRecord
 
 // Store is the campaign database. ONE SQLite file — the system namespace's
 // "campaign" — holds every org's records; tenant isolation is the `org` column,

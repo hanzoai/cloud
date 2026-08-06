@@ -60,8 +60,19 @@ const (
 	// an internal address on a private ZAP socket, not an edge address, and
 	// moving it would break the host's forward.
 	//
-	// On the HOST this path is claimed by nobody, which is exactly why the front
-	// door has to name it: an agent that guessed the framework default must be
-	// sent to MCPPath, not handed console HTML.
+	// On the HOST the door is not here, so the host CLAIMS this path anyway and
+	// signposts it — registered by fleet.Mount, the one call that also registers
+	// the target, so a hop can never name an address the process does not serve.
+	//
+	// It used to be signposted from the console's terminal handler instead, on the
+	// reasoning that a plugin serving its own door here matched a real route and
+	// never reached it. That was the defect: zip mounts this route only when the
+	// app has something to expose, so a plugin whose typed ops live on the internal
+	// plane — kms's four secret ops, on cloud.Plane() by design — had no route at
+	// its own door, fell through, and was told its door was at MCPPath, which no
+	// plugin serves. POST /mcp -> 308, POST /v1/mcp -> 404, and the fleet reads
+	// that non-2xx as an outage for a child that is serving fine. A plugin now
+	// answers here with its OWN door (zip.App.MCP) whether or not a route was
+	// mounted over it, and an empty tool list is a 200.
 	FrameworkMCPPath = "/mcp"
 )

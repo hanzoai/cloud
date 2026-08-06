@@ -290,27 +290,33 @@
               },
               "type": "object"
             },
+            "description": "AccessGroups is the org's named sender sets, as group name -\u003e channel -\u003e\nmember entries, held once for the whole org. A DM or Group entry written\n`accessGroup:\u003cname\u003e` admits any sender listed under that name for THIS\nchannel, or under the channel `*`, which is how one set covers all four\ntransports. Replaced wholesale by the PUT.",
             "type": "object"
           },
           "dm": {
+            "description": "DM is the CONFIG-managed DM allow entries — the list PUT\n/v1/channels/allowlist owns and replaces wholesale. An entry matches a sender\neither EXACTLY, as the transport-native id inbox messages carry, or as\n`accessGroup:\u003cname\u003e` resolved through AccessGroups. A bare `*` admits\neveryone, but only while DMPolicy is \"open\": it is gate syntax, not an\nidentity, so under \"allowlist\" it matches nobody.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "dmPolicy": {
+            "description": "DMPolicy decides every inbound DIRECT message, defaulting to \"pairing\" when\nthe org has never set one. \"pairing\": a sender with no entry is sent a\npairing code and the message is DROPPED — it never reaches the inbox — and\nthey are admitted only once an admin approves. \"allowlist\": only DM admits,\nand Paired senders are suspended, since a pairing grant counts under\n\"pairing\" alone. \"open\" is not unconditional either — it still requires `*`\nor a matching entry in DM.",
             "type": "string"
           },
           "group": {
+            "description": "Group is the CONFIG-managed group allow entries, consulted only while\nGroupPolicy is \"allowlist\". Entries match the same two ways as DM, and here a\nbare `*` admits every sender in the room.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "groupPolicy": {
+            "description": "GroupPolicy decides every inbound GROUP or THREAD message — a thread is a\ngroup surface — defaulting to \"open\". \"open\" admits every sender in the room.\n\"allowlist\" admits only what Group lists, so an EMPTY Group blocks the\nchannel's group rooms outright. \"disabled\" drops all of them.",
             "type": "string"
           },
           "paired": {
+            "description": "Paired is the senders admitted by PAIRING — the entries POST\n/v1/channels/pairing/approve minted, DM scope only. READ-ONLY on this\nendpoint: the PUT writes config entries and can never revoke one of these\n(listing a paired sender under DM instead promotes that entry to config,\nwhich the admin then owns). They admit only while DMPolicy is \"pairing\".",
             "items": {
               "type": "string"
             },
@@ -335,18 +341,23 @@
       "capabilities": {
         "properties": {
           "actions": {
+            "description": "Actions is whether the transport renders an INTERACTIVE control natively, and\nit is the flag to read before composing one. The vocabulary is a closed\nkind-tagged union (envelope.go), exactly four kinds, each carrying only its\nown field plus an optional label:\n\n\tcommand  — a bot command to run (`command`), rendered as a button that\n\t           invokes it.\n\turl      — an external link (`url`), rendered as a link button.\n\tselect   — a menu (`options`, each a label and the value choosing it\n\t           returns), rendered as a picker.\n\tapproval — a reference to an approval request (`approval.id`), rendered as\n\t           approve/deny controls bound to that id.\n\nFalse on all four transports this pass, and nothing refuses a send for it:\nactions are accepted, validated per kind, and flattened by renderText to one\nline each after the text — `[label] command`, `[label] url`,\n`[label] opt | opt`, `[label] approval requested: \u003cid\u003e`. So a caller that\nneeds a real control must read this flag and degrade itself; a caller that\nonly needs the choice communicated can send actions and take the text form.",
             "type": "boolean"
           },
           "dm": {
+            "description": "DM is whether the transport carries a DIRECT message at all. True for slack,\nteams and telegram. False for discord, honestly: that ingress is guild-scoped\nslash commands — an interaction without a guild id is refused at the door —\nso nothing ever arrives classified as a DM, no reply route is ever learned\nfor one, and a send addressed at a Discord DM is refused 409.",
             "type": "boolean"
           },
           "group": {
+            "description": "Group is whether the transport carries multi-person rooms — a Discord guild\nchannel, a Slack channel, a Teams channel or group chat, a Telegram group or\nsupergroup. True on all four.",
             "type": "boolean"
           },
           "media": {
+            "description": "Media is whether the transport renders an ATTACHMENT natively. False on all\nfour this pass, and a send is not refused for it: renderText flattens each\nattachment to one `kind: url (mime)` line after the text rather than dropping\nit.",
             "type": "boolean"
           },
           "thread": {
+            "description": "Thread is whether a reply can be threaded UNDER a specific message. True for\nslack alone: it is the only transport whose ingress reports a thread\n(thread_ts, published as the envelope's replyTo) and whose door posts back\ninto it. Discord's replyTo makes an inline reply rather than a thread,\nTelegram's answers one message id, and Teams carries no reply target at all —\na replyTo sent to it is ignored.",
             "type": "boolean"
           }
         },
@@ -355,27 +366,35 @@
       "channelView": {
         "properties": {
           "account": {
+            "description": "Account is the id-shaped fact about that connection: the lowercased external\nid integrations custodies for it — a Discord guild id, a Slack team\n(workspace) id, a Teams AAD tenant id, or the Telegram chat the org bound.\nEmpty when not connected. Informational: the access policy keys on\n(org, channel), so exactly one account is representable per pair.",
             "type": "string"
           },
           "accountLabel": {
+            "description": "AccountLabel is the human label of that same account — the Discord guild\nname, the Slack team name, the Teams tenant name (falling back to the tenant\nid), the Telegram chat title. DISPLAY ONLY: never a key, and never swapped\nwith Account, on any surface.",
             "type": "string"
           },
           "capabilities": {
-            "$ref": "#/components/schemas/capabilities"
+            "$ref": "#/components/schemas/capabilities",
+            "description": "Capabilities is what this transport renders natively — read it before\ncomposing a message that needs threading, media or interactive actions."
           },
           "connected": {
+            "description": "Connected is whether integrations holds a connection for (this org, this\ntransport) — whether someone finished its connect flow. False leaves Account\nand AccountLabel empty, and a send is then refused downstream rather than\nhere: by the transport's own binding check (403 for a Telegram chat this org\nhas not bound, 409 for a Discord or Teams room with no inbound-learned\nroute), or on Slack by the absent per-org bot token, which surfaces as 502.",
             "type": "boolean"
           },
           "dmPolicy": {
+            "description": "DMPolicy is how this org admits direct messages here: \"pairing\", \"allowlist\"\nor \"open\", defaulting to \"pairing\" when the org has never set one.",
             "type": "string"
           },
           "groupPolicy": {
+            "description": "GroupPolicy is how this org admits group and thread rooms here: \"open\",\n\"allowlist\" or \"disabled\", defaulting to \"open\". Both policy fields come\nback EMPTY — rather than the listing failing — when the policy cannot be\nread; GET /v1/channels/allowlist carries the same two with the entries they\nconsult.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the fixed transport identifier — discord, slack, teams or telegram —\nand the value every route on this surface names a channel by, including the\n`:channel` segment of the send path. The listing is always in that order.",
             "type": "string"
           },
           "pendingPairing": {
+            "description": "PendingPairing counts the org's UNEXPIRED pairing requests on this channel:\nexactly the rows GET /v1/channels/pairing returns for it, one per person\nwaiting on an admin. It never exceeds three — the pending cap per\n(org, channel) — and expired requests are not counted.",
             "type": "integer"
           }
         },
@@ -412,33 +431,43 @@
       "inboxView": {
         "properties": {
           "account": {
+            "description": "Account is the lowercased external id of the org's connected account on that\ntransport: the Discord guild id, the Slack team id, the Teams AAD tenant id,\nor the bound Telegram chat id. Informational only — the gate keys on\n(org, channel), never on the account.",
             "type": "string"
           },
           "channel": {
+            "description": "Channel is the transport this message arrived on — discord, slack, teams or\ntelegram — and the `:channel` segment to reply through.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is Unix SECONDS, stamped by the ingest goroutine when the message\nwas accepted — not the transport's own send time. Rows are dropped 30 days\nafter it.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the store's row id, assigned on insert — SERVER-SET, and the cursor:\npass a page's last id back as `since`. It rises with arrival order but is\nnot contiguous, because one sequence is shared by every org in the store and\na caller reads only its own rows.",
             "type": "integer"
           },
           "replyTo": {
+            "description": "ReplyTo is the transport's reply target for this message: Slack's thread_ts,\nor the Telegram message id it arrived as. Send it back as the body's\n`replyTo` to answer in the SAME thread. Empty means the transport reported\nnone — a top-level Slack message, and every Discord and Teams message, since\nneither carries one — and a reply then lands at the top level of the room.",
             "type": "string"
           },
           "roomId": {
+            "description": "RoomID is the conversation on the ORIGINATING transport, and the value to\nsend back as `room.id`: a Discord channel snowflake, a Slack conversation id\n(D… IM, C… public channel, G… private or mpim), a Teams conversation id\n(19:…@thread.… for a channel or group chat, a:… for a personal chat), or a\nTelegram chat id in decimal (negative for a group, positive for a DM). It is\nstable for the life of the room, so every message from one conversation\ncarries the same value.",
             "type": "string"
           },
           "roomKind": {
+            "description": "RoomKind is how ingest classified the room: \"dm\", \"group\" or \"thread\". It\ndecides which policy gated the message — dmPolicy for \"dm\", groupPolicy for\nBOTH \"group\" and \"thread\". Only Slack ever reports \"thread\"; Telegram's\nreply-to id becomes ReplyTo instead, and Discord's ingress is guild-scoped\nso its rooms are always \"group\".",
             "type": "string"
           },
           "sender": {
+            "description": "Sender is the TRANSPORT-NATIVE user id of whoever wrote the message — a\nDiscord member.user.id, a Slack U… user id, a Teams aadObjectId (falling\nback to from.id), a Telegram from.id in decimal. Stable per person per\ntransport, and the identity the gate keys on: an allow entry, an access-group\nmember and a pairing approval all name exactly this value.",
             "type": "string"
           },
           "senderUser": {
+            "description": "SenderUser is the HANZO account subject that chat identity is linked to,\nresolved at ingest through the org's user link. Best-effort and omitted when\nabsent: a person who never linked their chat account — or a link store that\ncould not be read — leaves it empty and is never blocked for it.",
             "type": "string"
           },
           "text": {
+            "description": "Text is the body as the transport delivered it, with the bot mention already\nstripped by the ingress adapter (on Discord it is the /hanzo prompt argument,\nsince that ingress is slash commands only), truncated to 8 KiB on store.\nInbound attachments are not stored — this is the whole of what was said.",
             "type": "string"
           }
         },
@@ -472,18 +501,23 @@
       "pairingView": {
         "properties": {
           "channel": {
+            "description": "Channel is the transport the request arrived on — discord, slack, teams or\ntelegram — and half of what approval names. The cap of three unapproved\nrequests applies per (org, channel); while it is full no further code is\nminted until one is approved or expires.",
             "type": "string"
           },
           "code": {
+            "description": "Code is the CAPABILITY that authorises the approval: eight characters from a\n32-symbol uppercase alphabet (A-Z0-9 minus the confusables 0, O, 1 and I),\nminted with crypto/rand and also sent to the requester in chat. An org admin\npasses it with the channel to POST /v1/channels/pairing/approve, which\nCONSUMES it — the request row is deleted, so a code approves once — and which\ntakes org admin as well as the code. It lives ONE HOUR from CreatedAt;\nexpired requests are not listed here, and approving one is a 404. It is shown\non this admin surface and NEVER logged.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is Unix SECONDS of FIRST contact: when the request was minted and\nthe code sent. Expiry is measured from here and from nowhere else.",
             "type": "integer"
           },
           "lastSeen": {
+            "description": "LastSeen is Unix SECONDS of the MOST RECENT message from this sender while\nthe request has been pending. It moves as they keep writing, which is how an\nadmin tells a live request from an abandoned one — but it does not extend the\nhour and does not re-send the code, since one request sends exactly one chat\nreply.",
             "type": "integer"
           },
           "sender": {
+            "description": "Sender is the transport-native user id waiting for access — the same\nidentity inbox messages carry. Approving mints a DM allow entry for exactly\nthis value and nothing wider: pairing never grants group access.",
             "type": "string"
           }
         },

@@ -64,32 +64,68 @@ var mounted *cloud.Service[state]
 // promptMeta is the list-row shape (console PromptMeta): name + version
 // numbers + taxonomy + last-updated.
 type promptMeta struct {
-	Name          string   `json:"name"`
-	Type          string   `json:"type"`
-	Versions      []int    `json:"versions"`
-	Labels        []string `json:"labels"`
-	Tags          []string `json:"tags"`
-	LastUpdatedAt string   `json:"lastUpdatedAt"`
+	// Name is the prompt's org-unique handle and the URL segment it is fetched by:
+	// GET /v1/prompts/<name>.
+	Name string `json:"name"`
+	// Type labels the template's kind, "text" unless the creator said otherwise. It
+	// is the CURRENT version's type; earlier versions may carry a different one.
+	Type string `json:"type"`
+	// Versions lists every version NUMBER this prompt has, newest first, capped at
+	// the last 100. The highest is the current one. (On a metrics row the same key
+	// is a count, not a list.)
+	Versions []int `json:"versions"`
+	// Labels is the creator's free-form taxonomy, stored as given after trimming and
+	// de-duplication. Always present, `[]` when none — never null.
+	Labels []string `json:"labels"`
+	// Tags is the second free-form taxonomy under the same rules as Labels. Nothing
+	// in this service interprets either; they are yours to organize by.
+	Tags []string `json:"tags"`
+	// LastUpdatedAt is when the newest version was appended, RFC 3339 UTC. Empty
+	// only if the record carries no timestamp at all.
+	LastUpdatedAt string `json:"lastUpdatedAt"`
 }
 
 // promptDetail is the single-prompt shape: current content + full history.
 type promptDetail struct {
-	Name      string        `json:"name"`
-	Type      string        `json:"type"`
-	Prompt    string        `json:"prompt"`
-	Version   int           `json:"version"`
-	Labels    []string      `json:"labels"`
-	Tags      []string      `json:"tags"`
-	Versions  []versionView `json:"versionHistory"`
-	CreatedAt string        `json:"createdAt"`
-	UpdatedAt string        `json:"lastUpdatedAt"`
+	// Name is the prompt's org-unique handle and the URL segment it is addressed by.
+	Name string `json:"name"`
+	// Type labels the current version's kind; "text" unless the creator said
+	// otherwise.
+	Type string `json:"type"`
+	// Prompt is the CURRENT version's template body — the only content this service
+	// returns. Earlier versions are listed in versionHistory by number and date, and
+	// their bodies are not served in bulk.
+	Prompt string `json:"prompt"`
+	// Version is the current version number, starting at 1 and incremented by one on
+	// every create against an existing name.
+	Version int `json:"version"`
+	// Labels is the current version's free-form taxonomy. `[]` when none, never
+	// null.
+	Labels []string `json:"labels"`
+	// Tags is the second free-form taxonomy, same rules as Labels.
+	Tags []string `json:"tags"`
+	// Versions is the history METADATA, newest first, capped at the last 100 — no
+	// bodies, so a long history cannot inflate this response. It always includes the
+	// current version as its first entry.
+	Versions []versionView `json:"versionHistory"`
+	// CreatedAt is when version 1 was written, RFC 3339 UTC. Appending a version
+	// does not move it.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when the current version was appended, RFC 3339 UTC. Equal to
+	// createdAt for a prompt that has only ever had one version.
+	UpdatedAt string `json:"lastUpdatedAt"`
 }
 
 // versionView is history METADATA only — no per-version content (Red MED-1), so
 // the detail response stays small regardless of the append history.
 type versionView struct {
-	Version   int    `json:"version"`
-	Type      string `json:"type"`
+	// Version is this revision's number, 1 for the first. Numbers are dense and
+	// never reused: deleting the prompt drops the whole history with it.
+	Version int `json:"version"`
+	// Type is the kind this revision was written with, which may differ from the
+	// current one.
+	Type string `json:"type"`
+	// CreatedAt is when this revision was appended, RFC 3339 UTC.
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -391,11 +427,23 @@ func (o promptOps) del(ctx context.Context, in *promptRef) (*noContent, error) {
 // metricRow is a real per-prompt statistic (never fabricated): the number of
 // versions, taxonomy, and timestamps for the org's prompts.
 type metricRow struct {
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	Versions      int    `json:"versions"`
-	CurrentVer    int    `json:"currentVersion"`
-	CreatedAt     string `json:"createdAt"`
+	// Name is the prompt this row is about — its org-unique handle.
+	Name string `json:"name"`
+	// Type is the current version's kind.
+	Type string `json:"type"`
+	// Versions is how many revisions the prompt has, COUNTED in the store and
+	// uncapped — so it can exceed the 100 entries a list row or a detail response
+	// carries. Note the type: here `versions` is a number, while on a list row it is
+	// the list of version numbers.
+	Versions int `json:"versions"`
+	// CurrentVer is the version number served as current. It always equals
+	// `versions`: numbering is dense from 1, and deleting a prompt takes its whole
+	// history with it rather than leaving a gap.
+	CurrentVer int `json:"currentVersion"`
+	// CreatedAt is when version 1 was written, RFC 3339 UTC.
+	CreatedAt string `json:"createdAt"`
+	// LastUpdatedAt is when the newest version was appended, RFC 3339 UTC — the age
+	// of the template you would get today.
 	LastUpdatedAt string `json:"lastUpdatedAt"`
 }
 
