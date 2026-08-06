@@ -30,11 +30,19 @@ const App = "projects"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.ProjectsFigures,
 	plane.ProjectsOwnership,
 	plane.ProjectsResolveKey,
 	plane.SitesLive,
 	plane.SitesResolve,
 	plane.SitesResolveOrg,
+}
+
+// ProjectsFigures the caller's headline project figures.
+//
+// Calls plane.ProjectsFigures on projects over the peer plane.
+func ProjectsFigures(ctx context.Context, in *plane.FiguresIn) (*plane.FiguresOut, error) {
+	return plane.Ask[plane.FiguresIn, plane.FiguresOut](ctx, App, plane.ProjectsFigures, in)
 }
 
 // ProjectsOwnership report whether the calling org owns a project, and whether another o....

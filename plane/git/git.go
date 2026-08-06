@@ -30,13 +30,23 @@ const App = "git"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.GitFigures,
 	plane.GitFiles,
+	plane.GitGrant,
 	plane.GitImport,
 	plane.GitInbound,
 	plane.GitMirror,
 	plane.GitPublish,
 	plane.GitRev,
+	plane.GitRevoke,
 	plane.GitStatus,
+}
+
+// GitFigures the caller's headline git figures.
+//
+// Calls plane.GitFigures on git over the peer plane.
+func GitFigures(ctx context.Context, in *plane.FiguresIn) (*plane.FiguresOut, error) {
+	return plane.Ask[plane.FiguresIn, plane.FiguresOut](ctx, App, plane.GitFigures, in)
 }
 
 // GitFiles a repo's files at one revision.
@@ -44,6 +54,13 @@ var Ops = []string{
 // Calls plane.GitFiles on git over the peer plane.
 func GitFiles(ctx context.Context, in *plane.FilesIn) (*plane.Files, error) {
 	return plane.Ask[plane.FilesIn, plane.Files](ctx, App, plane.GitFiles, in)
+}
+
+// GitGrant delegate the right to create ONE ref in ONE repository.
+//
+// Calls plane.GitGrant on git over the peer plane.
+func GitGrant(ctx context.Context, in *plane.GrantIn) (*plane.Granted, error) {
+	return plane.Ask[plane.GrantIn, plane.Granted](ctx, App, plane.GitGrant, in)
 }
 
 // GitImport create a repo and mirror an upstream into it.
@@ -79,6 +96,13 @@ func GitPublish(ctx context.Context, in *plane.Visibility) (*struct{}, error) {
 // Calls plane.GitRev on git over the peer plane.
 func GitRev(ctx context.Context, in *plane.RevIn) (*plane.Rev, error) {
 	return plane.Ask[plane.RevIn, plane.Rev](ctx, App, plane.GitRev, in)
+}
+
+// GitRevoke drop a push grant before it expires.
+//
+// Calls plane.GitRevoke on git over the peer plane.
+func GitRevoke(ctx context.Context, in *plane.RevokeIn) (*plane.Revoked, error) {
+	return plane.Ask[plane.RevokeIn, plane.Revoked](ctx, App, plane.GitRevoke, in)
 }
 
 // GitStatus which of these repos are imported, and which are in conflict.

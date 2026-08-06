@@ -178,6 +178,9 @@ func init() {
 			"projectsUpdate.visibility":    "Visibility flips an existing project between \"public\" and \"private\". Same\nONE rule as at create: public is free, private needs a paid plan.",
 		},
 	})
+	zip.Describe("POST /projects/figures", zip.Doc{
+		Description: "Answers the caller's own project rollup: how many projects\nexist, how many are serving, and which went live most recently.\n\nThe org is the CALLER's plane identity, exactly as projects_ownership takes\nit, and [plane.FiguresIn] carries no field that could name another. It does\nNOT reproduce the HTTP surface's \"admin\" bucket (typed.go): an operator with\nno org of their own has no projects of their own, and inventing a tenant for\nthem here would be this op answering a question nobody asked.\n\nA store this process does not own is an ERROR, never an empty rollup — the\nsame refusal currentScopeResolver makes, for the same reason: \"zero projects\"\nand \"I am not the process that would know\" must not arrive as one answer.",
+	})
 	zip.Describe("POST /projects/ownership", zip.Doc{
 		Description: "Answers whether the CALLER's org owns the named project and\nwhether some other org does.\n\nThe org is the caller's plane identity and never the argument — plane.OwnerIn\nhas no org field, deliberately, because the org is precisely what the answer is\nrelative to: a caller able to state it could ask the question about somebody\nelse and act on the answer. An anonymous caller is refused rather than defaulted.\n\nBoth false is a REAL answer: nobody has registered this identifier, so it is a\nfree-form within-org label and the boundary keeps it. That third outcome is why\nthe reply carries two booleans instead of one verdict — collapsing \"nobody owns\nit\" into either \"mine\" or \"another's\" would respectively open the guard or break\nevery subsystem that uses a free-form project label.",
 		Fields: map[string]string{

@@ -1,17 +1,26 @@
 package ask
 
 // ask_test.go — proofs for the unified grounded advisor. The whole point is GROUNDING: every
-// figure the advisor states is a REAL value read from a domain endpoint in-process; the model
-// only narrates the figures it is handed and can NEVER override one. These tests stand up a fake
-// in-process app whose /v1/books/metrics returns known figures scoped to the org the replay
-// carries, plus a recording fakeAI, and assert:
+// figure the advisor states is a REAL value read from a domain, over the internal plane; the
+// model only narrates the figures it is handed and can NEVER override one.
 //
-//  1. a financial question returns the REAL figure the books read produced, cited in sources;
-//  2. the model is fed the EXACT figure (the prompt contains it) and a hallucinated number in the
-//     model's reply does NOT override the grounded figure the caller receives;
+// The domains here are STAND-IN PEERS, not stand-in transports: each test registers a real op
+// on the real plane under the domain's real app name and operation id, so the advisor reaches
+// them through the same generated client (plane/books, plane/projects, plane/git) it uses in
+// production. What the fakes replace is the STORE behind the op, never the path to it — which
+// is the distinction the previous version of this file got wrong. It faked the transport too,
+// mounting /v1/books/metrics on the advisor's own router, and so it passed for months while
+// production answered every question from the fallback: the advisor ships as its own process
+// and never had that route.
+//
+// They assert:
+//
+//  1. a financial question returns the REAL figure the books peer produced, cited in sources;
+//  2. the model is fed the EXACT figure and a hallucinated number does NOT override it;
 //  3. a non-groundable question returns the honest fallback with ZERO fabricated figures;
-//  4. org isolation — the replay carries the CALLER's org, so a books read can only ever surface
-//     the caller's own org's data, never another's.
+//  4. org isolation — the peer is answered for the CALLER's org, so a domain read can only
+//     ever surface the caller's own org's data, never another's;
+//  5. every wired domain — books, projects, git — actually contributes.
 
 import (
 	"context"
@@ -19,11 +28,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -46,38 +57,87 @@ func (r *recordingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float
 	return nil, nil
 }
 
-// fakeBooks mounts a stand-in GET /v1/books/metrics that returns figures scoped to the org it
-// SEES on the request — the same principal.Org gate the real books read uses. A figure is tagged
-// with the org, so a test can prove the advisor only ever surfaces the caller's own org's data.
-// This is the grounded read the books contributor replays in-process.
-func fakeBooks(app *zip.App, mrrByOrg map[string]string) {
-	app.Get("/v1/books/metrics", func(c *zip.Ctx) error {
-		org, ok := principal.Org(c)
-		if !ok {
-			return zip.ErrUnauthorized("sign in")
-		}
-		mrr, seen := mrrByOrg[org]
-		if !seen {
-			mrr = "$0"
-		}
-		return c.JSON(http.StatusOK, map[string]any{
-			"figures": []Fact{
-				{Label: "MRR", Value: mrr, Period: "2026-07"},
-				{Label: "org-echo", Value: org, Period: "2026-07"},
-			},
-		})
-	})
+// byOrg is a stand-in domain store: the figures each org holds. A peer built over it answers
+// for the org the CALLER was, which is what makes the isolation proof mean something.
+type byOrg map[string][]plane.Figure
+
+// peer declares one stand-in domain on the real plane, under the real app name and the real
+// operation id — so plane.Ask resolves it exactly as it resolves the live app.
+//
+// The handler derives the org the SAME way every real figures op does (cloud.Who(ctx).Org,
+// anonymous refused). Nothing in the test hands it an org: it reads the one zip carried from
+// the advisor's own in-flight request, which is the mechanism under proof.
+//
+// Declaring and SERVING are separate steps because the plane app freezes the first time it
+// listens: every op has to be on it before any socket is bound, which is the same order Serve
+// uses in production (mount everything, then bind).
+func peer(app, path, opID string, data byOrg) {
+	zip.Post[plane.FiguresIn, plane.FiguresOut](cloud.Plane(), path,
+		func(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, error) {
+			org := cloud.Who(ctx).Org
+			if org == "" {
+				return nil, zip.ErrForbidden(app + " figures: org required")
+			}
+			figs := data[org]
+			// An org this store has never heard of holds nothing — an empty slice, never
+			// another org's rows and never an error.
+			return &plane.FiguresOut{Figures: append([]plane.Figure(nil), figs...)}, nil
+		},
+		zip.WithOperationID(opID))
 }
 
-// newAskApp stands up an app with the fake books read + the ask advisor over a recording AI.
-func newAskApp(t *testing.T, ai types.AIClient, mrrByOrg map[string]string) *zip.App {
+// servePeers binds the plane socket for each named domain, after every op is declared.
+func servePeers(t *testing.T, names ...string) {
 	t.Helper()
+	for _, n := range names {
+		stop, err := cloud.ServePlane(n, luxlog.New("test"))
+		if err != nil {
+			t.Fatalf("serve plane %s: %v", n, err)
+		}
+		t.Cleanup(func() { _ = stop() })
+	}
+}
+
+// newAskApp stands up the advisor over a recording AI, with stand-in books/projects/git peers
+// on the plane. Each test gets its own runtime dir and its own plane, so no test is ever
+// answered by a previous test's handler.
+func newAskApp(t *testing.T, ai types.AIClient, books, projects, git byOrg) *zip.App {
+	t.Helper()
+	// A short run dir: a unix socket path is capped near 104 bytes and t.TempDir() spends
+	// most of that on the test's own name.
+	dir, err := os.MkdirTemp("", "askp")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	// ZIP_RUNTIME_DIR and not CLOUD_RUN_DIR: an operator's own runtime dir wins
+	// unconditionally, whereas CLOUD_RUN_DIR is consulted only when nothing has bound
+	// yet — and something always has by the second test, so every test after the first
+	// would keep the first one's sockets and be answered by its handlers.
+	t.Setenv("ZIP_RUNTIME_DIR", dir)
+	plane.Unbind()
+	cloud.ResetPlane()
+	t.Cleanup(func() {
+		cloud.ResetPlane()
+		plane.Unbind()
+		_ = os.RemoveAll(dir)
+	})
+
+	peer("books", "/books/figures", plane.BooksFigures, books)
+	peer("projects", "/projects/figures", plane.ProjectsFigures, projects)
+	peer("git", "/git/figures", plane.GitFigures, git)
+	servePeers(t, "books", "projects", "git")
+
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	fakeBooks(app, mrrByOrg)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: filepath.Join(dir, "data"), AI: ai}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
+}
+
+// money is the one-line stand-in ledger used where the test is about the ADVISOR rather than
+// about a particular domain.
+func money(mrr string) []plane.Figure {
+	return []plane.Figure{{Label: "MRR", Value: mrr, Period: "2026-07"}}
 }
 
 // ask POSTs a question as a VALIDATED principal for org (X-User-Id set, exactly as the gateway
@@ -124,11 +184,11 @@ func hasSource(r askAnswer, src string) bool {
 	return false
 }
 
-// TestGroundedFinancialAnswer: a financial question returns the REAL figure the books read
+// TestGroundedFinancialAnswer: a financial question returns the REAL figure the books peer
 // produced, tagged to the books domain and cited in sources.
 func TestGroundedFinancialAnswer(t *testing.T) {
 	ai := &recordingAI{reply: "Your MRR is $4,200 for July."}
-	app := newAskApp(t, ai, map[string]string{"acme": "$4,200"})
+	app := newAskApp(t, ai, byOrg{"acme": money("$4,200")}, nil, nil)
 
 	code, r := ask(t, app, "acme", "what is my MRR right now?")
 	if code != http.StatusOK {
@@ -140,19 +200,47 @@ func TestGroundedFinancialAnswer(t *testing.T) {
 	if v, ok := figure(r, "MRR"); !ok || v != "$4,200" {
 		t.Fatalf("MRR figure must be the real $4,200 from the books read, got %q (ok=%v)", v, ok)
 	}
-	if !hasSource(r, "books/metrics") {
-		t.Fatalf("answer must cite the books/metrics read, got %v", r.Sources)
+	if !hasSource(r, "books/figures") {
+		t.Fatalf("answer must cite the books/figures read, got %v", r.Sources)
+	}
+}
+
+// TestEveryWiredDomainContributes is the anti-regression for the defect this file was rewritten
+// over: a domain in the registry that cannot actually be REACHED is worse than an absent one,
+// because it degrades to the fallback and looks like "no domain matched". Each wired domain
+// must route, return its own figure, and cite its own source.
+func TestEveryWiredDomainContributes(t *testing.T) {
+	app := newAskApp(t, nil,
+		byOrg{"acme": money("$4,200")},
+		byOrg{"acme": {{Label: "Projects", Value: "7"}, {Label: "Deployed and serving", Value: "3"}}},
+		byOrg{"acme": {{Label: "Repositories", Value: "12"}, {Label: "Code stored", Value: "48.0 MB"}}},
+	)
+	for _, tc := range []struct{ question, domain, source, label, want string }{
+		{"what is my MRR?", "books", "books/figures", "MRR", "$4,200"},
+		{"what have I deployed?", "projects", "projects/figures", "Deployed and serving", "3"},
+		{"how many repositories do I have?", "git", "git/figures", "Repositories", "12"},
+	} {
+		_, r := ask(t, app, "acme", tc.question)
+		if r.Domain != tc.domain {
+			t.Fatalf("%q must route to %q, got %q (answer=%q)", tc.question, tc.domain, r.Domain, r.Answer)
+		}
+		if v, ok := figure(r, tc.label); !ok || v != tc.want {
+			t.Fatalf("%q must state the real %s=%s, got %q (ok=%v)", tc.question, tc.label, tc.want, v, ok)
+		}
+		if !hasSource(r, tc.source) {
+			t.Fatalf("%q must cite %s, got %v", tc.question, tc.source, r.Sources)
+		}
 	}
 }
 
 // TestModelFedExactFigureAndCannotOverride is THE grounding proof: the model is handed the EXACT
 // figure in its prompt, and even when it replies with a HALLUCINATED number the grounded figure
 // the caller receives is unchanged. The prose may carry the model's words; the figures array is
-// the ledger's, never the model's.
+// the domain's, never the model's.
 func TestModelFedExactFigureAndCannotOverride(t *testing.T) {
 	// The model hallucinates $9,999 in its narration — a number that is NOT the real figure.
 	ai := &recordingAI{reply: "Your MRR is a whopping $9,999 this month!"}
-	app := newAskApp(t, ai, map[string]string{"acme": "$4,200"})
+	app := newAskApp(t, ai, byOrg{"acme": money("$4,200")}, nil, nil)
 
 	_, r := ask(t, app, "acme", "how's my recurring revenue?")
 
@@ -173,7 +261,7 @@ func TestModelFedExactFigureAndCannotOverride(t *testing.T) {
 // TestNoModelStillGrounded: with no AI wired the advisor still answers with the REAL figures — the
 // deterministic template states them, so the numbers are identical whether the model is up or down.
 func TestNoModelStillGrounded(t *testing.T) {
-	app := newAskApp(t, nil, map[string]string{"acme": "$4,200"})
+	app := newAskApp(t, nil, byOrg{"acme": money("$4,200")}, nil, nil)
 	_, r := ask(t, app, "acme", "what's my mrr?")
 	if v, _ := figure(r, "MRR"); v != "$4,200" {
 		t.Fatalf("figure must be the real $4,200 with no model, got %q", v)
@@ -187,9 +275,9 @@ func TestNoModelStillGrounded(t *testing.T) {
 // it names what the advisor CAN answer and carries ZERO figures. It must NEVER invent a number.
 func TestHonestFallbackNoFabrication(t *testing.T) {
 	ai := &recordingAI{reply: "42 widgets shipped."} // the model would happily make something up
-	app := newAskApp(t, ai, map[string]string{"acme": "$4,200"})
+	app := newAskApp(t, ai, byOrg{"acme": money("$4,200")}, nil, nil)
 
-	code, r := ask(t, app, "acme", "how many widgets did we ship to Mars?")
+	code, r := ask(t, app, "acme", "how many widgets did we sell on Mars?")
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d", code)
 	}
@@ -202,23 +290,26 @@ func TestHonestFallbackNoFabrication(t *testing.T) {
 	if len(r.Sources) != 0 {
 		t.Fatalf("the fallback must cite no sources, got %v", r.Sources)
 	}
-	if !strings.Contains(strings.ToLower(r.Answer), "finance") {
+	if !strings.Contains(strings.ToLower(r.Answer), "financ") {
 		t.Fatalf("the fallback must name what it CAN answer, got %q", r.Answer)
 	}
 }
 
-// TestOrgIsolation proves the in-process replay carries the CALLER's org: acme sees acme's figure,
-// beta sees beta's, and neither can ever surface the other's data — tenant isolation is inherited
-// from the caller's own creds on the replay, never re-implemented.
+// TestOrgIsolation proves the domain read is answered for the CALLER's org: acme sees acme's
+// figures, beta sees beta's, and neither can ever surface the other's. Nothing in the advisor
+// states a tenant — the identity zip forwards off the caller's own request is the whole of it,
+// which is why there is no argument here a caller could have supplied instead.
 func TestOrgIsolation(t *testing.T) {
-	app := newAskApp(t, nil, map[string]string{"acme": "$4,200", "beta": "$77,000"})
+	app := newAskApp(t, nil,
+		byOrg{"acme": money("$4,200"), "beta": money("$77,000")},
+		byOrg{
+			"acme": {{Label: "Projects", Value: "7"}},
+			"beta": {{Label: "Projects", Value: "999"}},
+		}, nil)
 
 	_, a := ask(t, app, "acme", "what's my mrr?")
 	if v, _ := figure(a, "MRR"); v != "$4,200" {
 		t.Fatalf("acme must see its own $4,200, got %q", v)
-	}
-	if echo, _ := figure(a, "org-echo"); echo != "acme" {
-		t.Fatalf("the books read must have been scoped to acme, got org-echo=%q", echo)
 	}
 
 	_, b := ask(t, app, "beta", "what's my mrr?")
@@ -228,15 +319,35 @@ func TestOrgIsolation(t *testing.T) {
 	if v, _ := figure(b, "MRR"); v == "$4,200" {
 		t.Fatalf("beta must NEVER surface acme's $4,200")
 	}
-	if echo, _ := figure(b, "org-echo"); echo != "beta" {
-		t.Fatalf("the books read must have been scoped to beta, got org-echo=%q", echo)
+
+	// The same rule on a second domain, because tenancy is a property of the SEAM and not of
+	// one contributor that happened to get it right.
+	_, ap := ask(t, app, "acme", "what have I deployed?")
+	if v, _ := figure(ap, "Projects"); v != "7" {
+		t.Fatalf("acme must see its own 7 projects, got %q", v)
+	}
+	_, bp := ask(t, app, "beta", "what have I deployed?")
+	if v, _ := figure(bp, "Projects"); v != "999" {
+		t.Fatalf("beta must see its own 999 projects, got %q", v)
+	}
+}
+
+// TestUnknownOrgGetsNothingNotSomebodyElses: an org the domain has never heard of is answered
+// with no figures — never a default, never the first org in the store.
+func TestUnknownOrgGetsNothingNotSomebodyElses(t *testing.T) {
+	app := newAskApp(t, nil, byOrg{"acme": money("$4,200")}, nil, nil)
+	_, r := ask(t, app, "stranger", "what's my mrr?")
+	for _, f := range r.Figures {
+		if strings.Contains(f.Value, "4,200") {
+			t.Fatalf("an unknown org must never receive acme's figures, got %+v", r.Figures)
+		}
 	}
 }
 
 // TestAnonymousRefused: /v1/ask is a data plane — a request with no validated principal is 401,
 // so an off-gateway forge can neither probe nor read a ledger through the advisor.
 func TestAnonymousRefused(t *testing.T) {
-	app := newAskApp(t, nil, map[string]string{"acme": "$4,200"})
+	app := newAskApp(t, nil, byOrg{"acme": money("$4,200")}, nil, nil)
 	// Forged X-Org-Id with NO X-User-Id (no validated principal) — the anonymous forge.
 	body, _ := json.Marshal(askRequest{Question: "what's my mrr?"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/ask", strings.NewReader(string(body)))
@@ -252,16 +363,30 @@ func TestAnonymousRefused(t *testing.T) {
 	}
 }
 
-// TestClassifierMatchesFinancialVocab locks the books classifier: the founder-vocabulary that
-// grounds against the ledger routes to books, and off-topic questions do not.
-func TestClassifierMatchesFinancialVocab(t *testing.T) {
-	reg := NewRegistry(newBooksContributor(nil))
-	for _, q := range []string{"what's my MRR?", "how long is my runway", "are we profitable?", "how much cash do we have", "what's my gross margin", "show me the P&L", "how much did we make"} {
-		if reg.Match(q) == nil {
-			t.Fatalf("financial question %q must match the books contributor", q)
+// TestClassifierRoutesEachDomainsVocab locks the classifiers: each domain's vocabulary routes to
+// it, and off-topic questions match nothing at all rather than being swept into whichever domain
+// happens to be first.
+func TestClassifierRoutesEachDomainsVocab(t *testing.T) {
+	reg := NewRegistry(domains()...)
+	for _, tc := range []struct {
+		want      string
+		questions []string
+	}{
+		{"books", []string{"what's my MRR?", "how long is my runway", "are we profitable?", "how much cash do we have", "what's my gross margin", "show me the P&L", "how much did we make"}},
+		{"projects", []string{"what have I deployed?", "which projects are live", "what sites have I published", "what is running in production", "what did we ship"}},
+		{"git", []string{"how many repositories do I have?", "what changed recently", "how much code do we have", "list my repos", "which branches are there"}},
+	} {
+		for _, q := range tc.questions {
+			c := reg.Match(q)
+			if c == nil {
+				t.Fatalf("%q must match the %s contributor, matched nothing", q, tc.want)
+			}
+			if c.Name() != tc.want {
+				t.Fatalf("%q must route to %s, routed to %s", q, tc.want, c.Name())
+			}
 		}
 	}
-	for _, q := range []string{"what's the weather", "how many users signed up", "deploy the app"} {
+	for _, q := range []string{"what's the weather", "how many users signed up", "who is the CEO of France"} {
 		if c := reg.Match(q); c != nil {
 			t.Fatalf("off-topic question %q must NOT match any domain, matched %q", q, c.Name())
 		}
