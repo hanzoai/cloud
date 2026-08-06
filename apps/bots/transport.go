@@ -96,6 +96,17 @@ type Call struct {
 	User   string
 	Body   any
 	Secret bool
+
+	// Base overrides the destination for THIS call. Empty means the bot runtime.
+	//
+	// This stays a transport concern and not a meaning one: a caller names WHERE
+	// its bytes go, and this file still does not know a coding run from a channel
+	// relay. It exists because a sandbox is not the bot — deep research, bare
+	// exec and coding all want a SANDBOX, and whatever runs sandboxes may not be
+	// the service that runs channels. Resolving that address inside here would
+	// mean this file learning what a run is, which is exactly the line the header
+	// draws.
+	Base string
 }
 
 // Do invokes c and discards any response payload — the command form. It returns
@@ -173,7 +184,7 @@ func Stream(ctx context.Context, c Call, fn func(msg []byte)) error {
 // off: the runtime then fails the request closed at its own auth gate.
 func send(ctx context.Context, c Call, method, accept string) (*http.Response, error) {
 	if c.Secret {
-		if err := requireSecure(); err != nil {
+		if err := requireSecure(c.Base); err != nil {
 			return nil, err
 		}
 	}
@@ -185,7 +196,7 @@ func send(ctx context.Context, c Call, method, accept string) (*http.Response, e
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, executorURL()+c.Op, body)
+	req, err := http.NewRequestWithContext(ctx, method, executorURL(c.Base)+c.Op, body)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: build call: %w", err)
 	}
@@ -262,8 +273,12 @@ func ErrBody(resp *http.Response) string {
 	return strings.TrimSpace(string(b))
 }
 
-// executorURL resolves the executor base, no trailing slash.
-func executorURL() string {
+// executorURL resolves the base for one call, no trailing slash. A Call's own
+// Base wins; otherwise the bot runtime.
+func executorURL(base string) string {
+	if base != "" {
+		return strings.TrimRight(base, "/")
+	}
 	if v := getenv(urlEnv); v != "" {
 		return strings.TrimRight(v, "/")
 	}
@@ -279,13 +294,15 @@ func executorURL() string {
 // This guard exists because the transport does not authenticate its peer. A ZAP
 // entry point pins X25519MLKEM768 and refuses a classical-only peer structurally,
 // which is what makes this check unnecessary rather than merely satisfied.
-func requireSecure() error {
-	u := executorURL()
+// It checks the base the call will ACTUALLY use: guarding the default while the
+// bytes go somewhere else would be a guard on the wrong hop.
+func requireSecure(base string) error {
+	u := executorURL(base)
 	if strings.HasPrefix(u, "https://") || getenv(plaintextEnv) == "1" {
 		return nil
 	}
-	return fmt.Errorf("runtime: refusing to send a credential over cleartext %q (set %s to https, or %s=1 if the hop is mesh-mTLS secured)",
-		u, urlEnv, plaintextEnv)
+	return fmt.Errorf("runtime: refusing to send a credential over cleartext %q (set the destination to https, or %s=1 if the hop is mesh-mTLS secured)",
+		u, plaintextEnv)
 }
 
 func getenv(key string) string { return strings.TrimSpace(os.Getenv(key)) }
