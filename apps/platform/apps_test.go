@@ -60,24 +60,44 @@ func TestDeliveryRefusesANonAdmin(t *testing.T) {
 	}
 }
 
-// tier=platform writes the directory whose AppProject admits every namespace and
-// cluster-scoped RBAC. An org admin asking for it must be REFUSED, never quietly
-// given its own tenant directory — a silent downgrade would make the escape
-// attempt invisible.
-func TestPlatformTierIsRefusedForAnOrgAdmin(t *testing.T) {
+// An org is its name, so reaching the platform's own directories is reaching
+// another org — and reaching a RESERVED one is reaching the namespace family
+// whose fence admits every namespace and cluster-scoped RBAC. Both must be
+// REFUSED, never quietly downgraded to the caller's own org: a silent
+// substitution makes an escape attempt indistinguishable from a normal request
+// in the logs and in the response.
+func TestReservedAndForeignOrgsAreRefusedForAnOrgAdmin(t *testing.T) {
 	app := mountDelivery(t)
-	code, body := doAdmin(t, app, http.MethodPost, "/v1/platform/apps", "acme", map[string]any{
-		"repo": "https://github.com/acme/web", "tier": "platform",
-	})
-	if code != http.StatusForbidden {
-		t.Fatalf("an org admin reached the platform tier: %d %s", code, body)
+	for _, org := range []string{"hanzo", "hanzo-cd", "kube-system", "admin", "zen", "globex"} {
+		code, body := doAdmin(t, app, http.MethodPost, "/v1/platform/apps", "acme", map[string]any{
+			"repo": "https://github.com/acme/web", "org": org,
+		})
+		if code != http.StatusForbidden {
+			t.Errorf("an org admin reached org %q: %d %s", org, code, body)
+			continue
+		}
+		if !strings.Contains(string(body), "SuperAdmin") {
+			t.Errorf("the refusal for %q must name what is required: %s", org, body)
+		}
+		// The read side too: a board must not read another fence's inventory.
+		if code, _ := doAdmin(t, app, http.MethodGet, "/v1/platform/apps?org="+org, "acme", nil); code != http.StatusForbidden {
+			t.Errorf("an org admin read org %q's inventory: %d", org, code)
+		}
 	}
-	if !strings.Contains(string(body), "SuperAdmin") {
-		t.Errorf("the refusal must name what is required: %s", body)
-	}
-	// The read side too: a board must not read another fence's inventory either.
-	if code, _ := doAdmin(t, app, http.MethodGet, "/v1/platform/apps?tier=platform", "acme", nil); code != http.StatusForbidden {
-		t.Errorf("an org admin read the platform tier's inventory: %d", code)
+}
+
+// A caller whose OWN org is reserved is still refused. An IAM org named
+// `kube-system` does not thereby own Kubernetes — and with the `tenant-` prefix
+// gone, this refusal is the whole of what keeps those two name spaces apart.
+func TestAnOrgAdminWhoseOwnOrgIsReservedIsRefused(t *testing.T) {
+	app := mountDelivery(t)
+	for _, org := range []string{"kube-system", "hanzo", "hanzo-cd", "default", "admin"} {
+		code, body := doAdmin(t, app, http.MethodPost, "/v1/platform/apps", org, map[string]any{
+			"repo": "https://github.com/acme/web",
+		})
+		if code != http.StatusForbidden {
+			t.Errorf("an org admin OF %q declared into it: %d %s", org, code, body)
+		}
 	}
 }
 
@@ -149,10 +169,10 @@ func TestCDIsUnavailableNotEmptyWithNoCluster(t *testing.T) {
 // all, and that must project as empty fields rather than panicking or guessing.
 func TestObserveCDAppIsTotal(t *testing.T) {
 	bare := &unstructured.Unstructured{Object: map[string]any{
-		"metadata": map[string]any{"name": "tenant-acme-web", "namespace": cdNamespace},
+		"metadata": map[string]any{"name": "acme-web", "namespace": cdNamespace},
 	}}
 	got := observeCDApp(bare)
-	if got.Name != "tenant-acme-web" {
+	if got.Name != "acme-web" {
 		t.Fatalf("name = %q", got.Name)
 	}
 	if got.Sync != "" || got.Health != "" || got.Automated || got.SelfHeal {

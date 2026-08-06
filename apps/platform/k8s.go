@@ -1306,14 +1306,26 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 	}}
 }
 
-// launchDirectBuild launches a privileged /v1/runner build. It takes explicit
+// launchDirectBuild launches a privileged build. It takes explicit
 // (repo, ref, image, dockerfile) rather than a tenant Application, validates
 // them at this single choke point (validateBuildInputs), and launches the same
 // moby/buildkit Job with the caller's forced output image. Frontend defaults to
 // hanzoai/pack; a non-empty dockerfile is the escape hatch. buildID is the
 // idempotency key: a retry of the same build collides on the Job name (409)
 // rather than spawning a duplicate.
-func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+//
+// `org` is WHO THE BUILD IS CHARGED TO, and it is a parameter because the
+// concurrency ceiling is per-org: the Job carries hanzo.ai/org=<org> and
+// countActiveBuilds selects on it, so one org's builds can only ever exhaust its
+// own share. It was the constant platformBuildOrg for every caller, which put
+// fabric builds and every tenant's builds in ONE pool of 3 — so a single org
+// looping deploys locked every other org out of building, with no attribution in
+// the Job labels to see it by. /v1/runner still passes platformBuildOrg (its
+// builds ARE the fabric's); a tenant deploy passes the tenant.
+func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+	if strings.TrimSpace(org) == "" {
+		return "", fmt.Errorf("a build must be attributed to an org")
+	}
 	if err := k.ready(); err != nil {
 		return "", err
 	}
@@ -1325,7 +1337,7 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 		return "", fmt.Errorf("invalid build input: %w", err)
 	}
 	image = cleanImage
-	active, err := k.countActiveBuilds(ctx, platformBuildOrg)
+	active, err := k.countActiveBuilds(ctx, org)
 	if err != nil {
 		return "", fmt.Errorf("count active builds: %w", err)
 	}
@@ -1339,7 +1351,7 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 	if err != nil {
 		return "", err
 	}
-	job := k.buildJobSpec(jobName, platformBuildOrg, "runner", pushSecret, command)
+	job := k.buildJobSpec(jobName, org, "runner", pushSecret, command)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}

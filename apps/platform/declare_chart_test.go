@@ -43,7 +43,7 @@ func TestGeneratedDeclarationRendersThroughTheRealChart(t *testing.T) {
 	// The Application renders with releaseName = the file's basename and
 	// namespace = the directory, so the render below is the one CD performs.
 	rv, err := chartutil.ToRenderValues(ch, values, chartutil.ReleaseOptions{
-		Name: spec.Name, Namespace: spec.Namespace, IsInstall: true,
+		Name: spec.Name, Namespace: spec.Org, IsInstall: true,
 	}, nil)
 	if err != nil {
 		// ToRenderValues is where values.schema.json is enforced. A failure here
@@ -113,7 +113,7 @@ func TestTheChartRefusesAKeyItDoesNotDeclare(t *testing.T) {
 	}
 	values["storageGb"] = 10 // a plausible key the chart does not have
 	if _, err := chartutil.ToRenderValues(ch, values, chartutil.ReleaseOptions{
-		Name: "web", Namespace: "tenant-acme", IsInstall: true,
+		Name: "web", Namespace: "acme", IsInstall: true,
 	}, nil); err == nil {
 		t.Fatal("the chart accepted a key it does not declare; values.schema.json is not being enforced")
 	}
@@ -146,4 +146,60 @@ func anyMap(m map[string]string) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// ── the fence lives in another repository, so the write path VERIFIES it ────
+
+// checkFence is a runtime control, not a comment: it reads the live
+// ApplicationSet out of the clone the write already makes and refuses to put a
+// declaration on main while that template would fence it wider than this API
+// reports. These hold it to that, against the REAL universe checkout.
+func TestFenceRefusesMainWhileTheApplicationSetDisagrees(t *testing.T) {
+	root := universeRoot(t)
+
+	// A customer org: reported fence is its own name, template still says
+	// hasPrefix "tenant-" ⇒ it would land in hanzo-platform ⇒ refuse.
+	err := checkFence(root, "acme")
+	body, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(fleetSet)))
+	if readErr != nil {
+		t.Skipf("no ApplicationSet in %s: %v", root, readErr)
+	}
+	stale := strings.Contains(string(body), `hasPrefix "tenant-"`)
+	switch {
+	case stale && err == nil:
+		t.Fatal("the ApplicationSet still fences by hasPrefix \"tenant-\" and checkFence allowed a commit to main")
+	case stale:
+		if !strings.Contains(err.Error(), platformProject) {
+			t.Errorf("the refusal must name the fence that would actually apply: %v", err)
+		}
+		t.Logf("BLOCKED AS DESIGNED: %v", err)
+	case err != nil:
+		t.Fatalf("the ApplicationSet carries a reservation rule but checkFence still refused: %v", err)
+	}
+
+	// A RESERVED directory is fenced identically under either template, so it is
+	// never blocked — the platform must still be able to release itself.
+	if err := checkFence(root, "hanzo"); err != nil {
+		t.Errorf("a reserved directory was blocked: %v", err)
+	}
+}
+
+// An unreadable template is a refusal, never a pass. "The rule could not be
+// read" and "the rule agrees" are opposite facts.
+func TestFenceRefusesWhenTheTemplateCannotBeRead(t *testing.T) {
+	if err := checkFence(t.TempDir(), "acme"); err == nil {
+		t.Fatal("a commit to main was allowed with no ApplicationSet to check against")
+	}
+	// ...and a reserved directory still passes, since its fence does not depend
+	// on the branch of the template that is in question.
+	if err := checkFence(t.TempDir(), "hanzo"); err != nil {
+		t.Errorf("a reserved directory needs no template to be fenced: %v", err)
+	}
+}
+
+// universeRoot is the universe checkout holding both the chart and the
+// ApplicationSet, or a skip.
+func universeRoot(t *testing.T) string {
+	t.Helper()
+	return filepath.Dir(filepath.Dir(realChart(t)))
 }
