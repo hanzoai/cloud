@@ -327,9 +327,20 @@ func managedMachines(s *cloud.Service[state], c *zip.Ctx, org string) []visorMac
 	// not just standalone droplets. A DOKS node whose droplet is ALSO in the live
 	// list dedupes by droplet id below (Machine.Id == DropletID), so it never lists
 	// twice. Independently resilient like the other two.
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/k8s/nodes", q("owner", org), nil, &nodes); err != nil {
+	//
+	// This one is a TYPED op upstream, so it answers its Out directly rather than
+	// the envelope the two above still use — cl.op, not cl.call. A nil list is not
+	// an empty answer here: the op always writes the key, so nil means the Visor on
+	// the other end does not serve it, and this fold is degraded rather than
+	// complete. It is LOGGED for the same reason the other two are — a silently
+	// smaller fleet is the failure this whole source exists to prevent.
+	var res visorNodes
+	if err := s.State.cl.op(c, http.MethodGet, "/v1/k8s/nodes", q("owner", org), nil, &res); err != nil {
 		s.Log.Warn("visor k8s nodes failed; DOKS nodes omitted", "org", org, "err", err)
-		nodes = nil
+	} else if res.Nodes == nil {
+		s.Log.Warn("visor k8s nodes answered without a nodes list; DOKS nodes omitted", "org", org)
+	} else {
+		nodes = res.Nodes
 	}
 
 	out := make([]visorMachine, 0, len(registry)+len(live)+len(nodes))

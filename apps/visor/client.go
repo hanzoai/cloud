@@ -79,15 +79,16 @@ type envelope struct {
 	Data   json.RawMessage `json:"data"`
 }
 
-// call issues one request to Visor and unwraps the envelope into out (a pointer),
-// which may be nil when the caller only needs success/failure. query is appended
-// as-is; body (non-nil) is JSON-encoded. The caller's zip.Ctx supplies the
-// forwarded identity + the request context for cancellation.
+// do issues ONE request to Visor and returns the response body. Every call goes
+// through it: the URL, the forwarded identity, the credential, the body limit and
+// the transport error mapping are decided here and nowhere else.
+//
+// What it deliberately does NOT decide is how to read the answer, because Visor
+// does not have one answer shape — see call and op.
 //
 // Error mapping is honest and customer-appropriate: an unreachable Visor → 502,
-// a non-2xx HTTP status → that status, and a status:"error" envelope → 502 with
-// Visor's msg (a logical upstream failure, never masked as success).
-func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any) error {
+// and a non-2xx HTTP status → that status with a snippet of what came back.
+func (cl *client) do(c *zip.Ctx, method, path, query string, body any) ([]byte, error) {
 	u := cl.target + path
 	if query != "" {
 		u += "?" + query
@@ -97,14 +98,14 @@ func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "visor: encode request: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "visor: encode request: %v", err)
 		}
 		rdr = bytes.NewReader(b)
 	}
 
 	req, err := http.NewRequestWithContext(c.Context(), method, u, rdr)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "visor: build request: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "visor: build request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -117,13 +118,29 @@ func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any
 
 	resp, err := cl.cc.Do(req)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "visor: unreachable: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "visor: unreachable: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return zip.Errorf(resp.StatusCode, "visor: upstream %d: %s", resp.StatusCode, snippet(raw))
+		return nil, zip.Errorf(resp.StatusCode, "visor: upstream %d: %s", resp.StatusCode, snippet(raw))
+	}
+	return raw, nil
+}
+
+// call reads an ENVELOPED answer — Visor's untyped controller routes, which put
+// the payload under {status,msg,data} and report a logical failure as
+// status:"error" inside an HTTP 200. out (a pointer) may be nil when the caller
+// only needs success/failure.
+//
+// This is the OLD half of Visor's surface and it shrinks: a route converted to a
+// typed zip op answers its Out directly and moves to op below. When the last one
+// has moved, this and the envelope type go with it.
+func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any) error {
+	raw, err := cl.do(c, method, path, query, body)
+	if err != nil {
+		return err
 	}
 
 	var env envelope
@@ -137,6 +154,30 @@ func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any
 		if err := json.Unmarshal(env.Data, out); err != nil {
 			return zip.Errorf(http.StatusBadGateway, "visor: decode data: %v", err)
 		}
+	}
+	return nil
+}
+
+// op reads a TYPED op's answer — Visor's zip.Get/Post[In,Out] routes, whose body
+// IS the declared Out with nothing wrapped around it. A logical failure arrives
+// as an HTTP status, so do has already turned it into an error by the time this
+// decodes anything.
+//
+// The two readings cannot be merged, and merging them is the trap: an envelope
+// decoded as an Out (or the reverse) leaves every field at its zero value and
+// returns no error at all, so a version skew reads as an empty answer rather than
+// a broken one. A caller therefore checks that the field it asked for ARRIVED —
+// see listK8sNodes — instead of trusting a decode that cannot fail.
+func (cl *client) op(c *zip.Ctx, method, path, query string, body any, out any) error {
+	raw, err := cl.do(c, method, path, query, body)
+	if err != nil {
+		return err
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return zip.Errorf(http.StatusBadGateway, "visor: decode %s: %v", path, err)
 	}
 	return nil
 }

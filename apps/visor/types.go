@@ -53,6 +53,17 @@ type visorMachine struct {
 	Tag string `json:"tag"`
 }
 
+// visorNodes mirrors visor's controllers.Nodes — the Out of its TYPED
+// GET /v1/k8s/nodes op, which answers {"nodes":[...]} with no envelope.
+//
+// Nodes is a slice rather than a pointer on purpose: nil means the field was NOT
+// in the answer, which is how a caller tells "this org has no worker nodes" from
+// "the Visor on the other end does not serve this op". Visor's op always writes
+// the key, empty list included, so nil is only ever the second thing.
+type visorNodes struct {
+	Nodes []visorMachine `json:"nodes"`
+}
+
 // visorNodePool mirrors visor/object.NodePool (JSON subset relevant to clusters).
 type visorNodePool struct {
 	Name        string `json:"name"`
