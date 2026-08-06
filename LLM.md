@@ -330,19 +330,52 @@ this one map.
 
 ### The release index: `CLOUD_PLUGINS` → `binaries.json` → verified fetch
 
-**The image IS the distribution, and there is no `binaries:` lane.** The
-Dockerfile builds the light host plus one binary per manifest app into `/plugins`
-beside it, and the host resolves each plugin as a file on disk
-(`manifest.App.Plugin`). `hanzo.yml` says so where a lane would otherwise go, and
-gives the reason: 112 per-app entries would blow the artifact lane's 16-binary
-bound, and its `out:`-glob names every file with one recipe name, which the
-per-app/per-arch index in `manifest/release.go` cannot read.
+**The image carries a copy; the index is how a host without one gets the same
+bytes.** The Dockerfile builds the light host plus one binary per manifest app
+into `/plugins` beside it, and the host resolves each plugin as a file on disk
+(`manifest.App.Plugin`). That stays the default, because a pod that pulled one
+image must be able to serve without reaching the network.
 
-`CLOUD_PLUGINS` (manifest/release.go:21) is the OPT-IN runtime path for a
-plugin-less host: point it at a `binaries.json` index and each app resolves to a
-published artifact instead of a sibling file. **Nothing publishes such an index
-today** — it is a supported input with no producer, kept for a host that ships
-without `/plugins`, not a second way the default deployment gets its bits.
+**The build half of a `binaries:` lane now exists; the publish half waits on two
+things outside this repo.** `make -f mk/fleet.mk dist` builds all 121 plugins for
+every platform in `PLATFORMS` (linux/amd64 + linux/arm64) into
+`dist/<app>-<os>-<arch>` — the exact filename a release index keys on, and the
+same `mk/plugin.mk build` recipe an app's own Makefile runs, so a published
+plugin is byte-for-byte what `make -C apps/<app> build` produces. `CGO_ENABLED=0`
+there is load-bearing rather than inherited: a plugin fetched over the network
+runs on a box we did not build, and a cgo binary would demand a matching
+libsqlite3 on it. The image's `/plugins` are built the other way (cgo +
+libsqlite3) because there the host owns the filesystem they land on.
+
+`hanzo.yml` carries the declaration commented, with both blockers named:
+
+1. **hanzoai/ci's `run:`/`out:` lane indexes per RECIPE, not per FILE.** It writes
+   `{name: <the recipe's>, os: any, arch: any}` for every file it collects —
+   right for a wheel, unreadable to `manifest/release.go`, which resolves by
+   name+os+arch. The fix is to derive the triple from the filename when it carries
+   the `<name>-<os>-<arch>` shape ci's OWN Go lane already writes: one naming
+   convention, either lane. (`out: dist/*` also aborts that lane today — it copies
+   each match into `dist/` by basename and `cp x x` is an error, not a no-op.)
+   121 per-app entries is not the alternative: it would blow the platform front
+   door's 16-binary bound (`apps/platform/artifact.go:86`) and restate
+   `manifest/apps.go` in YAML.
+2. **`bucket:` needs `S3_ADMIN_ACCESS_KEY`/`S3_ADMIN_SECRET_KEY` from KMS, and
+   those names are in KMS for no org.** Both lanes fail closed on it, so declaring
+   `bucket:` publishes nothing and reds every tag build — which is what happened
+   to ci's `site:` lane, which refused every caller that ever declared one. The
+   answer being built next door is to stop needing the credential: publish through
+   an authenticated cloud endpoint on the IAM bearer the KMS step already mints,
+   so CI names no bucket and holds no bucket key. If that is the direction, this
+   lane wants the same door.
+
+When both hold, the layout is `https://s3.hanzo.ai/plugins/hanzoai/cloud/<tag>/`
+— artifacts first, `binaries.json` LAST, so the index never names an object that
+is not there — and `plugins` is the bucket `apps/platform/artifact.go:84` already
+defaults to, so both publishers write one layout.
+
+`CLOUD_PLUGINS` (manifest/release.go:21) is the runtime path that reads it: point
+it at that `binaries.json` and each app resolves to a published artifact instead
+of a sibling file.
 
 - **No digest, no trust.** `fetch` drops any index entry missing `url` or
   `sha256` (manifest/release.go:82), and `remote` returns a `zip.Plugin` with
@@ -501,7 +534,69 @@ are not named after their app (`zt`→zero-trust, `eval`→evals, `auditlog`→a
 licensing, metrics) are external modules with a `plugin/<app>` and no source
 directory here; `mk/fleet.mk` runs them through the same recipe by name.
 `mk/go.mk` is the toolchain contract every includer shares (GOWORK=off, TMPDIR on
-disk, `-p=2`, the dev KMS key, the FTS5 tag).
+disk, the dev KMS key, the FTS5 tag, and `NPROC`).
+
+### The fleet is a set of TARGETS, and the numbers that made it one
+
+`mk/fleet.mk` applies that per-app contract to all 121 apps. Every sweep in it was
+a shell `for` loop, which can only do one thing at a time; they are now named
+targets make schedules. Measured on this repo, 20 cores, from an EMPTY build
+cache:
+
+| what | how | cold |
+|---|---|---|
+| one plugin, alone | `make -C apps/auto build` | 57.6s at `-p=2`, 41.4s at `-p=$(nproc)` |
+| all 121, the old shell loop | `for d in apps/*/Makefile; …` | **586s** |
+| all 121, scheduled | `make -f mk/fleet.mk binaries` | **300s** (25s warm) |
+
+The FLOOR is why the fleet is so much cheaper than 121 × one: the root package
+`github.com/hanzoai/cloud` is 587 packages (214 stdlib, 373 external) and EVERY
+app inherits it — `apps/auto` is 588 packages, `o11y` the largest at 2054. So the
+57.6s cold floor is paid ONCE into a shared cache and the marginal app costs
+~1.4s. **That makes cache SHARING, not floor size, the thing that matters**: 121
+apps built in 121 isolated caches would pay that floor 121 times, ~118 minutes of
+identical work. No single import dominates the floor either — the largest
+exclusive contributors are `hanzo-ds/go` (30 packages, for `datastore.Open` in
+audit_mirror.go) and `iam/pkg/model` (23, for the two-string `model.OrgRef` in
+token_validator.go); everything else shares a deep common core (`circl`'s 23 PQ
+packages arrive via `luxfi/zap`'s handshake, protobuf via prometheus).
+
+- **J apps at once, P compilers each, and `J*P ≈ NPROC`.** The link is what costs
+  memory: measured peak RSS is 1.67 GB for the heaviest plugin (o11y), 1.4 GB
+  median, 273 MB for `cmd/cloud`. J is therefore bounded by MEMORY (3 GiB per
+  concurrent app) read from the **cgroup** before `/proc/meminfo`, because the
+  git-runner pod is 26Gi on 6 CPU while `nproc` inside it reports the node's
+  cores. Oversubscribing CPU makes a build slower; oversubscribing memory makes it
+  killed. `J*P` is capped at NPROC because it measurably matters —
+  `J=20,P=2` (40 actions on 20 cores) took **431s**, the same work at `J=10,P=2`
+  took **300s**.
+- **P stays 2 because the runner asks for 2**, not because 2 is fastest. `fan`
+  passes `GOFLAGS` on the make command line, which beats the pod's injected
+  `GOFLAGS=-p=2`; any other P here overrides the operator who sized the cgroup.
+  `J=5,P=4` measured **268s** against 300s — real, but inside the spread the same
+  `J=10,P=2` config showed on this machine (300s and 354s), so nothing here
+  outweighs agreeing with the pod. Re-measure on a quiet box before moving it, and
+  move the pod's setting with it.
+- **Prebuilding the shared floor does NOT help, and was measured twice.** J cold
+  builds each compile the 587-package root, so warming it first is the obvious
+  fix; at J=10,P=2 it went 300s → 339s (`go build <root>`) → 327s
+  (`go build <root>/apps/...`, all 4149 packages). One process on a
+  dependency-shaped graph leaves the box idle longer than the duplication costs.
+  Recorded in `mk/fleet.mk` so it is not re-derived.
+- **A solo build is J=1, so it gets the whole box**: `mk/go.mk` sets
+  `-p=$(NPROC)`. The runner injects `GOFLAGS=-p=2` into every job and `?=`
+  deliberately does not override it — the operator sizing the pod knows what it
+  holds.
+- **`make -k`, not `set -e`.** The old loop stopped at the first failure and the
+  apps behind it never ran, which reports nothing, and nothing is
+  indistinguishable from passing. make continues and names each failed target.
+- **The exemptions are exemptions from DESCRIBING, never from BUILDING.** kafka
+  (needs a live broker) and zen (coresident, no standalone mount) were skipped by
+  the only sweep that touched an app, so nothing ever compiled them — they could
+  stop linking on main with every gate green. `binaries` carries no exemptions;
+  `describe` builds those two and skips only the projection.
+- `binaries` → `bin/<app>` (121). `dist` → `dist/<app>-<os>-<arch>` for every
+  platform, the publishable layout (4.1 GiB per platform).
 
 ## Framework doctrine
 
