@@ -49,6 +49,7 @@
 package sandbox
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -124,9 +125,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		rt:     newRuntime(),
 	}}
 	Routes(app, s)
+	// Start the reaper HERE, not from a route and not from a caller. Nothing
+	// else ends a lease: every field it needs was already written on every
+	// create and every call, and for want of this one line a sandbox once
+	// created ran forever — a proof pod was found still Running 64 minutes
+	// after its test had finished.
+	go reap(context.Background(), s)
 	s.Log.Info("sandbox mounted",
 		"namespace", s.State.rt.ns, "image", s.State.rt.image,
-		"runtimeClass", s.State.rt.runtimeClass, "cluster", s.State.rt.ready() == nil)
+		"runtimeClass", s.State.rt.runtimeClass, "cluster", s.State.rt.ready() == nil,
+		"reapEvery", reapEvery, "idleAfter", idleAfter)
 	return nil
 }
 
@@ -134,7 +142,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //
 // The collection and member routes used to be left out, on the reasoning that
 // they were "shared with the compute surface" — true while this served
-// /v1/sandbox, which visor owns and where a second registration of one
+// /v1/machines, which visor owns and where a second registration of one
 // resource is a conflict. It is /v1/sandboxes now, owned outright, and leaving
 // them out meant Create, List, Get and Delete existed as exported functions
 // that no request could ever reach: a caller could exec in a sandbox it had no
@@ -147,7 +155,7 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, map[string]any{"sandbox": out})
+		return c.JSON(http.StatusOK, map[string]any{"sandboxes": out})
 	}))
 	app.Post("/v1/sandboxes", cloud.Handle(s, Create))
 
