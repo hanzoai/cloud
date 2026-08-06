@@ -301,9 +301,13 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 		if err != nil {
 			return err
 		}
+		// The ai module names the act with the MESSAGE ROW's id — a row the server
+		// wrote, one per completion — so re-recording one message debits once and two
+		// messages debit twice. That identity is the ledger's key; it is not, and must
+		// never be, the caller's X-Request-Id.
 		return fin.RecordUsage(ctx, types.UsageInput{
 			Org: u.Namespace, Subject: u.Subject, Amount: amt,
-			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
+			Currency: u.Currency, Model: u.Model, Provider: u.Provider, Ref: u.Ref,
 		})
 	}
 	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)
@@ -1096,6 +1100,7 @@ func MountMetrics(app Router, deps Deps) error {
 //     ONLY zap-proto/zip + luxfi, deliberately (mount.go's own argument: it
 //     depends on the three things it uses). Importing hanzoai/cloud to describe
 //     itself would give that up to buy prose.
+//
 // hanzoai/licensing USED to be the second case: its Mount registered one untyped
 // wildcard, app.All("/v1/licensing/*"), so its prose had to be declared here. At
 // v0.1.10 it types its own ops instead — app.Group("/v1/licensing") with

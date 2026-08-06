@@ -19,7 +19,11 @@ type UsageEvent struct {
 	Currency  string
 	Model     string
 	Provider  string
-	RequestID string
+	// Ref names the metered ACT — the ai module fills it with the MESSAGE ROW's id, one
+	// row per completion, written by the server. It is the ledger's idempotency key, so
+	// it is deliberately not the request's correlation header: a caller who could pick
+	// this could be billed once for every completion after the first.
+	Ref string
 }
 
 type (
