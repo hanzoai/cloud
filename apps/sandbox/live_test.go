@@ -114,3 +114,60 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	}
 	t.Logf("FAILURE IS DATA: exit=%d stderr=%s", res.ExitCode, strings.TrimSpace(res.Stderr))
 }
+
+// TestLiveSandboxDoesGit answers the half the first test does not: an agent that
+// can edit but cannot commit has done nothing durable. Same skip switch.
+func TestLiveSandboxDoesGit(t *testing.T) {
+	if os.Getenv("SANDBOX_LIVE") != "1" {
+		t.Skip("set SANDBOX_LIVE=1 to run against a real cluster")
+	}
+	r := newRuntime()
+	if err := r.ready(); err != nil {
+		t.Fatalf("no cluster: %v", err)
+	}
+	m := Sandbox{
+		ID: "live-git", Org: "hanzo", Status: "running", Class: "exec",
+		Pod:   fmt.Sprintf("sandbox-live-git-%d", time.Now().Unix()),
+		Image: envOr("SANDBOX_LIVE_IMAGE", "node:22"),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	if err := r.start(ctx, m); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = r.purge(context.Background(), m) }()
+
+	// git present at all — an image without it cannot host a coding agent.
+	res, err := r.exec(ctx, m, []string{"git", "--version"}, nil, 60)
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("git missing from the image: err=%v exit=%d stderr=%q", err, res.ExitCode, res.Stderr)
+	}
+	t.Logf("GIT PRESENT: %s", strings.TrimSpace(res.Stdout))
+
+	// A real commit over a real edit. Identity is set locally rather than
+	// globally: a sandbox is per-tenant, and a global identity would be one more
+	// thing to reset between leases.
+	script := `set -e
+cd ` + workdir + `
+git init -q .
+git config user.email agent@hanzo.ai
+git config user.name "Hanzo Agent"
+printf 'edited\n' > file.txt
+git add file.txt
+git commit -q -m "the agent committed this"
+git log --oneline -1`
+	if res, err = r.exec(ctx, m, []string{"sh", "-c", script}, nil, 120); err != nil {
+		t.Fatalf("git flow: %v", err)
+	}
+	if res.ExitCode != 0 {
+		t.Fatalf("git flow exit=%d stderr=%q", res.ExitCode, res.Stderr)
+	}
+	t.Logf("COMMIT MADE: %s", strings.TrimSpace(res.Stdout))
+
+	// Can it REACH the forge? Not a push — an unauthenticated ls-remote, which
+	// separates "the network allows it" from "we have a credential". Those are
+	// different gaps and conflating them sends someone to fix the wrong one.
+	res, _ = r.exec(ctx, m, []string{"sh", "-c",
+		"git ls-remote https://git.hanzo.ai/hanzo/universe HEAD 2>&1 | head -2"}, nil, 60)
+	t.Logf("FORGE REACHABLE: exit=%d out=%q", res.ExitCode, strings.TrimSpace(res.Stdout+res.Stderr))
+}
