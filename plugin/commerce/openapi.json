@@ -875,6 +875,116 @@
         ]
       }
     },
+    "/v1/commerce/collection/": {
+      "get": {
+        "operationId": "get_v1_commerce_collection",
+        "summary": "List collection records",
+        "description": "Returns this tenant's collection records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_collection",
+        "summary": "Create a collection record",
+        "description": "Creates one collection record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/collection/{collectionid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_collection_by_collectionid",
+        "summary": "Delete a collection record",
+        "description": "Deletes the collection record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "collectionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_collection_by_collectionid",
+        "summary": "Read one collection record",
+        "description": "Returns the collection record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "collectionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_collection_by_collectionid",
+        "summary": "Update part of a collection record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "collectionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_collection_by_collectionid",
+        "summary": "Act on one collection record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "collectionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_collection_by_collectionid",
+        "summary": "Replace a collection record",
+        "description": "Replaces the collection record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "collectionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/commerce/currencies": {
       "get": {
         "operationId": "get_v1_commerce_currencies",
@@ -885,6 +995,1106 @@
         ]
       }
     },
+    "/v1/commerce/disclosure/": {
+      "get": {
+        "operationId": "get_v1_commerce_disclosure",
+        "summary": "List disclosure records",
+        "description": "Returns this tenant's disclosure records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_disclosure",
+        "summary": "Create a disclosure record",
+        "description": "Creates one disclosure record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/disclosure/{disclosureid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_disclosure_by_disclosureid",
+        "summary": "Delete a disclosure record",
+        "description": "Deletes the disclosure record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "disclosureid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_disclosure_by_disclosureid",
+        "summary": "Read one disclosure record",
+        "description": "Returns the disclosure record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "disclosureid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_disclosure_by_disclosureid",
+        "summary": "Update part of a disclosure record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "disclosureid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_disclosure_by_disclosureid",
+        "summary": "Act on one disclosure record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "disclosureid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_disclosure_by_disclosureid",
+        "summary": "Replace a disclosure record",
+        "description": "Replaces the disclosure record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "disclosureid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/discount/": {
+      "get": {
+        "operationId": "get_v1_commerce_discount",
+        "summary": "List discount records",
+        "description": "Returns this tenant's discount records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_discount",
+        "summary": "Create a discount record",
+        "description": "Creates one discount record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/discount/{discountid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_discount_by_discountid",
+        "summary": "Delete a discount record",
+        "description": "Deletes the discount record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "discountid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_discount_by_discountid",
+        "summary": "Read one discount record",
+        "description": "Returns the discount record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "discountid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_discount_by_discountid",
+        "summary": "Update part of a discount record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "discountid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_discount_by_discountid",
+        "summary": "Act on one discount record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "discountid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_discount_by_discountid",
+        "summary": "Replace a discount record",
+        "description": "Replaces the discount record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "discountid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/movie/": {
+      "get": {
+        "operationId": "get_v1_commerce_movie",
+        "summary": "List movie records",
+        "description": "Returns this tenant's movie records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_movie",
+        "summary": "Create a movie record",
+        "description": "Creates one movie record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/movie/{movieid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_movie_by_movieid",
+        "summary": "Delete a movie record",
+        "description": "Deletes the movie record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "movieid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_movie_by_movieid",
+        "summary": "Read one movie record",
+        "description": "Returns the movie record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "movieid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_movie_by_movieid",
+        "summary": "Update part of a movie record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "movieid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_movie_by_movieid",
+        "summary": "Act on one movie record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "movieid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_movie_by_movieid",
+        "summary": "Replace a movie record",
+        "description": "Replaces the movie record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "movieid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/note/": {
+      "get": {
+        "operationId": "get_v1_commerce_note",
+        "summary": "List note records",
+        "description": "Returns this tenant's note records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_note",
+        "summary": "Create a note record",
+        "description": "Creates one note record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/note/{noteid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_note_by_noteid",
+        "summary": "Delete a note record",
+        "description": "Deletes the note record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "noteid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_note_by_noteid",
+        "summary": "Read one note record",
+        "description": "Returns the note record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "noteid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_note_by_noteid",
+        "summary": "Update part of a note record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "noteid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_note_by_noteid",
+        "summary": "Act on one note record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "noteid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_note_by_noteid",
+        "summary": "Replace a note record",
+        "description": "Replaces the note record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "noteid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/product/": {
+      "get": {
+        "operationId": "get_v1_commerce_product",
+        "summary": "List product records",
+        "description": "Returns this tenant's product records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_product",
+        "summary": "Create a product record",
+        "description": "Creates one product record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/product/{productid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_product_by_productid",
+        "summary": "Delete a product record",
+        "description": "Deletes the product record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "productid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_product_by_productid",
+        "summary": "Read one product record",
+        "description": "Returns the product record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "productid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_product_by_productid",
+        "summary": "Update part of a product record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "productid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_product_by_productid",
+        "summary": "Act on one product record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "productid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_product_by_productid",
+        "summary": "Replace a product record",
+        "description": "Replaces the product record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "productid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/return/": {
+      "get": {
+        "operationId": "get_v1_commerce_return",
+        "summary": "List return records",
+        "description": "Returns this tenant's return records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_return",
+        "summary": "Create a return record",
+        "description": "Creates one return record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/return/{returnid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_return_by_returnid",
+        "summary": "Delete a return record",
+        "description": "Deletes the return record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "returnid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_return_by_returnid",
+        "summary": "Read one return record",
+        "description": "Returns the return record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "returnid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_return_by_returnid",
+        "summary": "Update part of a return record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "returnid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_return_by_returnid",
+        "summary": "Act on one return record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "returnid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_return_by_returnid",
+        "summary": "Replace a return record",
+        "description": "Replaces the return record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "returnid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/saleschannel/": {
+      "get": {
+        "operationId": "get_v1_commerce_saleschannel",
+        "summary": "List saleschannel records",
+        "description": "Returns this tenant's saleschannel records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_saleschannel",
+        "summary": "Create a saleschannel record",
+        "description": "Creates one saleschannel record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/saleschannel/{saleschannelid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_saleschannel_by_saleschannelid",
+        "summary": "Delete a saleschannel record",
+        "description": "Deletes the saleschannel record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "saleschannelid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_saleschannel_by_saleschannelid",
+        "summary": "Read one saleschannel record",
+        "description": "Returns the saleschannel record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "saleschannelid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_saleschannel_by_saleschannelid",
+        "summary": "Update part of a saleschannel record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "saleschannelid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_saleschannel_by_saleschannelid",
+        "summary": "Act on one saleschannel record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "saleschannelid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_saleschannel_by_saleschannelid",
+        "summary": "Replace a saleschannel record",
+        "description": "Replaces the saleschannel record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "saleschannelid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/stocklocation/": {
+      "get": {
+        "operationId": "get_v1_commerce_stocklocation",
+        "summary": "List stocklocation records",
+        "description": "Returns this tenant's stocklocation records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_stocklocation",
+        "summary": "Create a stocklocation record",
+        "description": "Creates one stocklocation record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/stocklocation/{stocklocationid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_stocklocation_by_stocklocationid",
+        "summary": "Delete a stocklocation record",
+        "description": "Deletes the stocklocation record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "stocklocationid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_stocklocation_by_stocklocationid",
+        "summary": "Read one stocklocation record",
+        "description": "Returns the stocklocation record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "stocklocationid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_stocklocation_by_stocklocationid",
+        "summary": "Update part of a stocklocation record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "stocklocationid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_stocklocation_by_stocklocationid",
+        "summary": "Act on one stocklocation record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "stocklocationid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_stocklocation_by_stocklocationid",
+        "summary": "Replace a stocklocation record",
+        "description": "Replaces the stocklocation record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "stocklocationid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/submission/": {
+      "get": {
+        "operationId": "get_v1_commerce_submission",
+        "summary": "List submission records",
+        "description": "Returns this tenant's submission records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_submission",
+        "summary": "Create a submission record",
+        "description": "Creates one submission record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/submission/{submissionid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_submission_by_submissionid",
+        "summary": "Delete a submission record",
+        "description": "Deletes the submission record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "submissionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_submission_by_submissionid",
+        "summary": "Read one submission record",
+        "description": "Returns the submission record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "submissionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_submission_by_submissionid",
+        "summary": "Update part of a submission record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "submissionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_submission_by_submissionid",
+        "summary": "Act on one submission record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "submissionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_submission_by_submissionid",
+        "summary": "Replace a submission record",
+        "description": "Replaces the submission record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "submissionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/subscriber/": {
+      "get": {
+        "operationId": "get_v1_commerce_subscriber",
+        "summary": "List subscriber records",
+        "description": "Returns this tenant's subscriber records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_subscriber",
+        "summary": "Create a subscriber record",
+        "description": "Creates one subscriber record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/subscriber/{subscriberid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_subscriber_by_subscriberid",
+        "summary": "Delete a subscriber record",
+        "description": "Deletes the subscriber record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "subscriberid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_subscriber_by_subscriberid",
+        "summary": "Read one subscriber record",
+        "description": "Returns the subscriber record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "subscriberid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_subscriber_by_subscriberid",
+        "summary": "Update part of a subscriber record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "subscriberid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_subscriber_by_subscriberid",
+        "summary": "Act on one subscriber record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "subscriberid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_subscriber_by_subscriberid",
+        "summary": "Replace a subscriber record",
+        "description": "Replaces the subscriber record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "subscriberid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/commerce/tenant": {
       "get": {
         "operationId": "get_v1_commerce_tenant",
@@ -892,6 +2102,666 @@
         "description": "Answers the branding, identity issuer and client id, identity-verification config, enabled payment providers, return-URL allowlist and public payment application config for the tenant the request HOST resolves to. It is genuinely public and unauthenticated — a checkout page calls it before anyone has signed in — and it carries the same public payment config the authenticated config read does, so the card iframe can never initialize against a different application than the one that will be charged. Only ENABLED providers are listed and no credential path is ever projected. An unresolvable host answers a constant 404 that does not echo the host, so the endpoint cannot be used to enumerate tenants; a successful answer is cacheable for a minute.",
         "tags": [
           "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/tokentransaction/": {
+      "get": {
+        "operationId": "get_v1_commerce_tokentransaction",
+        "summary": "List tokentransaction records",
+        "description": "Returns this tenant's tokentransaction records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_tokentransaction",
+        "summary": "Create a tokentransaction record",
+        "description": "Creates one tokentransaction record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/tokentransaction/{tokentransactionid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_tokentransaction_by_tokentransactionid",
+        "summary": "Delete a tokentransaction record",
+        "description": "Deletes the tokentransaction record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "tokentransactionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_tokentransaction_by_tokentransactionid",
+        "summary": "Read one tokentransaction record",
+        "description": "Returns the tokentransaction record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "tokentransactionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_tokentransaction_by_tokentransactionid",
+        "summary": "Update part of a tokentransaction record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "tokentransactionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_tokentransaction_by_tokentransactionid",
+        "summary": "Act on one tokentransaction record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "tokentransactionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_tokentransaction_by_tokentransactionid",
+        "summary": "Replace a tokentransaction record",
+        "description": "Replaces the tokentransaction record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "tokentransactionid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/transfer/": {
+      "get": {
+        "operationId": "get_v1_commerce_transfer",
+        "summary": "List transfer records",
+        "description": "Returns this tenant's transfer records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_transfer",
+        "summary": "Create a transfer record",
+        "description": "Creates one transfer record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/transfer/{transferid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_transfer_by_transferid",
+        "summary": "Delete a transfer record",
+        "description": "Deletes the transfer record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "transferid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_transfer_by_transferid",
+        "summary": "Read one transfer record",
+        "description": "Returns the transfer record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "transferid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_transfer_by_transferid",
+        "summary": "Update part of a transfer record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "transferid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_transfer_by_transferid",
+        "summary": "Act on one transfer record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "transferid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_transfer_by_transferid",
+        "summary": "Replace a transfer record",
+        "description": "Replaces the transfer record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "transferid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/variant/": {
+      "get": {
+        "operationId": "get_v1_commerce_variant",
+        "summary": "List variant records",
+        "description": "Returns this tenant's variant records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_variant",
+        "summary": "Create a variant record",
+        "description": "Creates one variant record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/variant/{variantid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_variant_by_variantid",
+        "summary": "Delete a variant record",
+        "description": "Deletes the variant record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "variantid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_variant_by_variantid",
+        "summary": "Read one variant record",
+        "description": "Returns the variant record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "variantid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_variant_by_variantid",
+        "summary": "Update part of a variant record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "variantid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_variant_by_variantid",
+        "summary": "Act on one variant record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "variantid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_variant_by_variantid",
+        "summary": "Replace a variant record",
+        "description": "Replaces the variant record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "variantid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/wallet/": {
+      "get": {
+        "operationId": "get_v1_commerce_wallet",
+        "summary": "List wallet records",
+        "description": "Returns this tenant's wallet records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_wallet",
+        "summary": "Create a wallet record",
+        "description": "Creates one wallet record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/wallet/{walletid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_wallet_by_walletid",
+        "summary": "Delete a wallet record",
+        "description": "Deletes the wallet record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "walletid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_wallet_by_walletid",
+        "summary": "Read one wallet record",
+        "description": "Returns the wallet record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "walletid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_wallet_by_walletid",
+        "summary": "Update part of a wallet record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "walletid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_wallet_by_walletid",
+        "summary": "Act on one wallet record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "walletid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_wallet_by_walletid",
+        "summary": "Replace a wallet record",
+        "description": "Replaces the wallet record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "walletid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/watchlist/": {
+      "get": {
+        "operationId": "get_v1_commerce_watchlist",
+        "summary": "List watchlist records",
+        "description": "Returns this tenant's watchlist records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_watchlist",
+        "summary": "Create a watchlist record",
+        "description": "Creates one watchlist record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/watchlist/{watchlistid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_watchlist_by_watchlistid",
+        "summary": "Delete a watchlist record",
+        "description": "Deletes the watchlist record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "watchlistid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_watchlist_by_watchlistid",
+        "summary": "Read one watchlist record",
+        "description": "Returns the watchlist record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "watchlistid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_watchlist_by_watchlistid",
+        "summary": "Update part of a watchlist record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "watchlistid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_watchlist_by_watchlistid",
+        "summary": "Act on one watchlist record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "watchlistid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_watchlist_by_watchlistid",
+        "summary": "Replace a watchlist record",
+        "description": "Replaces the watchlist record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "watchlistid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/webhook/": {
+      "get": {
+        "operationId": "get_v1_commerce_webhook",
+        "summary": "List webhook records",
+        "description": "Returns this tenant's webhook records.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_webhook",
+        "summary": "Create a webhook record",
+        "description": "Creates one webhook record and returns it, including the id every other operation on this resource addresses it by.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/webhook/{webhookid}": {
+      "delete": {
+        "operationId": "delete_v1_commerce_webhook_by_webhookid",
+        "summary": "Delete a webhook record",
+        "description": "Deletes the webhook record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "webhookid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_commerce_webhook_by_webhookid",
+        "summary": "Read one webhook record",
+        "description": "Returns the webhook record with this id.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "webhookid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_commerce_webhook_by_webhookid",
+        "summary": "Update part of a webhook record",
+        "description": "Updates only the fields present in the body and leaves the rest as they are.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "webhookid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_commerce_webhook_by_webhookid",
+        "summary": "Act on one webhook record",
+        "description": "Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "webhookid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_commerce_webhook_by_webhookid",
+        "summary": "Replace a webhook record",
+        "description": "Replaces the webhook record with this id: fields absent from the body are reset, which is what makes this different from PATCH.\n\nScoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "webhookid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ]
       }
     },
