@@ -1,0 +1,604 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package sandbox is the box scheduler: the control plane for the executor every other subsystem in this binary was already pointing at.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "sandbox"
+    }
+  ],
+  "paths": {
+    "/v1/sandbox/boxes": {
+      "get": {
+        "operationId": "get_v1_sandbox_boxes",
+        "summary": "Every box the caller's org holds",
+        "description": "Lists this org's boxes with their class, status, project, image and volume. Filterable by project and status. Scoped to the caller's org by the validated identity, never by a value in the request.",
+        "tags": [
+          "sandbox"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sandbox_boxes",
+        "summary": "Claim a sandbox box",
+        "description": "Claims an isolated execution box for the caller's org and returns it. A box is one pod running the box daemon with the project's volume attached: `exec` is a short-lived interpreter with no volume and no network, `dev` adds the project checkout and a toolchain, `desktop` adds a virtual display for computer use.\n\nA claim comes from a WARM POOL where one is available, so the usual cost is a label patch and a volume attach rather than an image pull.\n\nOne live box per project: the project volume is single-attach, so a second concurrent claim is REFUSED with the id of the box already holding it rather than silently given an empty volume that reinstalls everything.",
+        "tags": [
+          "sandbox"
+        ]
+      }
+    },
+    "/v1/sandbox/boxes/{id}": {
+      "delete": {
+        "operationId": "delete_v1_sandbox_boxes_by_id",
+        "summary": "Release a box",
+        "description": "Releases the pod. The project VOLUME is kept — it holds the checkout and the dependency caches, which is what makes the next claim fast. Pass purge=1 to drop the volume too; that is irreversible and deletes uncommitted work.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sandbox_boxes_by_id",
+        "summary": "One box",
+        "description": "The box's current state, or 404 if this org does not hold it.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandbox/boxes/{id}/fs": {
+      "delete": {
+        "operationId": "delete_v1_sandbox_boxes_by_id_fs",
+        "summary": "The box's project directory",
+        "description": "The root of the box's project volume — list what is there, or write into it without naming a subpath. Same forwarding and same path confinement as the entries below it; this is the route for the directory itself, which a wildcard cannot address because there is no remainder to match.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sandbox_boxes_by_id_fs",
+        "summary": "The box's project directory",
+        "description": "The root of the box's project volume — list what is there, or write into it without naming a subpath. Same forwarding and same path confinement as the entries below it; this is the route for the directory itself, which a wildcard cannot address because there is no remainder to match.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_sandbox_boxes_by_id_fs",
+        "summary": "The box's project directory",
+        "description": "The root of the box's project volume — list what is there, or write into it without naming a subpath. Same forwarding and same path confinement as the entries below it; this is the route for the directory itself, which a wildcard cannot address because there is no remainder to match.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sandbox_boxes_by_id_fs",
+        "summary": "The box's project directory",
+        "description": "The root of the box's project volume — list what is there, or write into it without naming a subpath. Same forwarding and same path confinement as the entries below it; this is the route for the directory itself, which a wildcard cannot address because there is no remainder to match.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_sandbox_boxes_by_id_fs",
+        "summary": "The box's project directory",
+        "description": "The root of the box's project volume — list what is there, or write into it without naming a subpath. Same forwarding and same path confinement as the entries below it; this is the route for the directory itself, which a wildcard cannot address because there is no remainder to match.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandbox/boxes/{id}/fs/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_sandbox_boxes_by_id_fs_by_wildcard1",
+        "summary": "The box's filesystem",
+        "description": "Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.\n\nNOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sandbox_boxes_by_id_fs_by_wildcard1",
+        "summary": "The box's filesystem",
+        "description": "Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.\n\nNOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_sandbox_boxes_by_id_fs_by_wildcard1",
+        "summary": "The box's filesystem",
+        "description": "Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.\n\nNOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sandbox_boxes_by_id_fs_by_wildcard1",
+        "summary": "The box's filesystem",
+        "description": "Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.\n\nNOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_sandbox_boxes_by_id_fs_by_wildcard1",
+        "summary": "The box's filesystem",
+        "description": "Read, write, list, search and delete inside the box's project directory. Forwarded to the box daemon unchanged; the box resolves every path under the project root, so a path cannot address anything outside it.\n\nNOTHING RUNS IN cloud. This is a proxy: boxes have no public address, and terminating auth anywhere but the IAM edge would mean a second auth path.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandbox/boxes/{id}/git/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_sandbox_boxes_by_id_git_by_wildcard1",
+        "summary": "Clone into the box, or push what it changed",
+        "description": "Clones a repository into the box's project volume, or commits and pushes the branch the agent worked on. Git credentials travel in the request BODY only — never a URL, never a command line, never a log.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sandbox_boxes_by_id_git_by_wildcard1",
+        "summary": "Clone into the box, or push what it changed",
+        "description": "Clones a repository into the box's project volume, or commits and pushes the branch the agent worked on. Git credentials travel in the request BODY only — never a URL, never a command line, never a log.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_sandbox_boxes_by_id_git_by_wildcard1",
+        "summary": "Clone into the box, or push what it changed",
+        "description": "Clones a repository into the box's project volume, or commits and pushes the branch the agent worked on. Git credentials travel in the request BODY only — never a URL, never a command line, never a log.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sandbox_boxes_by_id_git_by_wildcard1",
+        "summary": "Clone into the box, or push what it changed",
+        "description": "Clones a repository into the box's project volume, or commits and pushes the branch the agent worked on. Git credentials travel in the request BODY only — never a URL, never a command line, never a log.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_sandbox_boxes_by_id_git_by_wildcard1",
+        "summary": "Clone into the box, or push what it changed",
+        "description": "Clones a repository into the box's project volume, or commits and pushes the branch the agent worked on. Git credentials travel in the request BODY only — never a URL, never a command line, never a log.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandbox/boxes/{id}/proc/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_sandbox_boxes_by_id_proc_by_wildcard1",
+        "summary": "Run a command in the box",
+        "description": "Runs a command in the box's project directory and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because 'the tests failed' and 'the box is broken' are different facts.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sandbox_boxes_by_id_proc_by_wildcard1",
+        "summary": "Run a command in the box",
+        "description": "Runs a command in the box's project directory and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because 'the tests failed' and 'the box is broken' are different facts.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_sandbox_boxes_by_id_proc_by_wildcard1",
+        "summary": "Run a command in the box",
+        "description": "Runs a command in the box's project directory and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because 'the tests failed' and 'the box is broken' are different facts.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sandbox_boxes_by_id_proc_by_wildcard1",
+        "summary": "Run a command in the box",
+        "description": "Runs a command in the box's project directory and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because 'the tests failed' and 'the box is broken' are different facts.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_sandbox_boxes_by_id_proc_by_wildcard1",
+        "summary": "Run a command in the box",
+        "description": "Runs a command in the box's project directory and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because 'the tests failed' and 'the box is broken' are different facts.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandbox/boxes/{id}/resume": {
+      "post": {
+        "operationId": "post_v1_sandbox_boxes_by_id_resume",
+        "summary": "Resume a suspended box",
+        "description": "Claims a pod and reattaches the project volume, optionally moving to a different git ref. The checkout and the caches are already on the disk.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandbox/boxes/{id}/suspend": {
+      "post": {
+        "operationId": "post_v1_sandbox_boxes_by_id_suspend",
+        "summary": "Suspend a box, keeping its disk",
+        "description": "Releases the pod and keeps the volume, so a later resume is a fetch and a checkout rather than a clone and a cold install.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

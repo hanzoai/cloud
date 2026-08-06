@@ -4555,15 +4555,6 @@
         ],
         "x-app": "github.com/hanzoai/ai"
       },
-      "options": {
-        "operationId": "options_v1_org_settings",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "org"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
       "patch": {
         "operationId": "patch_v1_org_settings",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
@@ -4584,15 +4575,6 @@
       },
       "put": {
         "operationId": "put_v1_org_settings",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "org"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "trace": {
-        "operationId": "trace_v1_org_settings",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -4620,15 +4602,6 @@
         ],
         "x-app": "github.com/hanzoai/ai"
       },
-      "options": {
-        "operationId": "options_v1_org_settings_list",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "org"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
       "patch": {
         "operationId": "patch_v1_org_settings_list",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
@@ -4649,15 +4622,6 @@
       },
       "put": {
         "operationId": "put_v1_org_settings_list",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "org"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "trace": {
-        "operationId": "trace_v1_org_settings_list",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -4795,15 +4759,6 @@
         ],
         "x-app": "github.com/hanzoai/ai"
       },
-      "options": {
-        "operationId": "options_v1_router_artifact-meta",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
       "patch": {
         "operationId": "patch_v1_router_artifact-meta",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
@@ -4824,15 +4779,6 @@
       },
       "put": {
         "operationId": "put_v1_router_artifact-meta",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "trace": {
-        "operationId": "trace_v1_router_artifact-meta",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -4878,15 +4824,6 @@
         ],
         "x-app": "github.com/hanzoai/ai"
       },
-      "options": {
-        "operationId": "options_v1_router_defaults",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
       "patch": {
         "operationId": "patch_v1_router_defaults",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
@@ -4907,15 +4844,6 @@
       },
       "put": {
         "operationId": "put_v1_router_defaults",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "trace": {
-        "operationId": "trace_v1_router_defaults",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -4965,15 +4893,6 @@
         ],
         "x-app": "github.com/hanzoai/ai"
       },
-      "options": {
-        "operationId": "options_v1_router_ledger",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
       "patch": {
         "operationId": "patch_v1_router_ledger",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
@@ -5000,15 +4919,6 @@
           "router"
         ],
         "x-app": "github.com/hanzoai/ai"
-      },
-      "trace": {
-        "operationId": "trace_v1_router_ledger",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
       }
     },
     "/v1/router/policy": {
@@ -5023,15 +4933,6 @@
       },
       "get": {
         "operationId": "get_v1_router_policy",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "options": {
-        "operationId": "options_v1_router_policy",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -5065,15 +4966,6 @@
           "router"
         ],
         "x-app": "github.com/hanzoai/ai"
-      },
-      "trace": {
-        "operationId": "trace_v1_router_policy",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
       }
     },
     "/v1/router/rewards": {
@@ -5088,15 +4980,6 @@
       },
       "get": {
         "operationId": "get_v1_router_rewards",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "options": {
-        "operationId": "options_v1_router_rewards",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -5124,15 +5007,6 @@
       },
       "put": {
         "operationId": "put_v1_router_rewards",
-        "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
-        "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
-        "tags": [
-          "router"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      },
-      "trace": {
-        "operationId": "trace_v1_router_rewards",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that\nhandleGatewayHTTPRequest serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO beego twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a beego controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [

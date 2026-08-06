@@ -379,6 +379,16 @@ func init() {
 		"Claims a pod and reattaches the project volume, optionally moving to a different "+
 			"git ref. The checkout and the caches are already on the disk.")
 	for _, m := range openapi.Methods() {
+		// Two routes, not one: `/fs` addresses the project directory ITSELF and
+		// `/fs/*` addresses a path inside it. A greedy wildcard does not match the
+		// empty remainder, so listing the root would 404 without this — which is
+		// also why it needs its own sentence rather than sharing the one below.
+		openapi.Describe("/v1/sandbox/boxes/:id/fs", m,
+			"The box's project directory",
+			"The root of the box's project volume — list what is there, or write into it "+
+				"without naming a subpath. Same forwarding and same path confinement as the "+
+				"entries below it; this is the route for the directory itself, which a "+
+				"wildcard cannot address because there is no remainder to match.")
 		openapi.Describe("/v1/sandbox/boxes/:id/fs/*", m,
 			"The box's filesystem",
 			"Read, write, list, search and delete inside the box's project directory. "+
