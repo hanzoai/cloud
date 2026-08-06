@@ -34,11 +34,15 @@
 // cluster pulls: a caller who could name it could point a namespace it is allowed
 // to write at an image it is not allowed to build. Both are derived here from the
 // validated principal and neither is a field of the request.
+//
+// An org is its name, so the org IS the directory, the namespace and the fence
+// — one value. `org` on a request is therefore not a placement field but an
+// ACT-AS: a SuperAdmin may name any org, including a reserved one; everyone else
+// gets their own and naming another is refused, not silently downgraded.
 
 package platform
 
 import (
-	"fmt"
 	"net/http"
 	"path"
 	"strings"
@@ -124,11 +128,12 @@ type declareReq struct {
 	// so — stating it is only for the case that wants the other.
 	Build *bool `json:"build,omitempty"`
 
-	// Tier places the declaration in the PLATFORM's own directory rather than the
-	// caller's tenant directory. SuperAdmin only: that directory's AppProject
-	// admits every namespace and cluster-scoped RBAC. Values: "" (tenant) or
-	// "platform".
-	Tier string `json:"tier,omitempty"`
+	// Org is who this app belongs to, which is also its directory, its namespace
+	// and its fence. It defaults to the caller's own org; naming ANOTHER is an
+	// act-as and is SuperAdmin only. A reserved org — the platform's own
+	// namespace family — is SuperAdmin only for the same reason, on read as well
+	// as on write.
+	Org string `json:"org,omitempty"`
 }
 
 // buildRef is the build this call launched, if it launched one.
@@ -161,7 +166,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	super := principal.IsSuperAdmin(c)
 
-	ns, err := declareNamespace(s, org, req.Tier, super)
+	dir, err := resolveOrg(org, req.Org, super)
 	if err != nil {
 		return err
 	}
@@ -173,7 +178,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	host, err := declareHost(s, org, name, req.Host, super)
+	host, err := declareHost(s, dir, name, req.Host, super)
 	if err != nil {
 		return err
 	}
@@ -220,8 +225,8 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 
 	spec := declareSpec{
 		Name:       name,
-		Namespace:  ns,
-		Repository: declareRepository(s, ns, org, name),
+		Org:        dir,
+		Repository: declareRepository(s, dir, name),
 		Tag:        req.Tag,
 		Hosts:      []string{host},
 		Env:        req.Env,
@@ -237,7 +242,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 
 	resp := declareResp{}
 	if build {
-		b, err := launchDeclareBuild(s, c, req, spec.Repository, name)
+		b, err := launchDeclareBuild(s, c, req, dir, spec.Repository, name)
 		if err != nil {
 			return err
 		}
@@ -253,7 +258,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 		// The build (if any) is already launched and its record stands. Saying so
 		// matters: a caller that reads "failed" and retries would otherwise build
 		// twice for one deploy.
-		return zip.Errorf(http.StatusBadGateway, "declare %s/%s: %v", ns, name, err)
+		return zip.Errorf(http.StatusBadGateway, "declare %s/%s: %v", dir, name, err)
 	}
 	resp.App, resp.Declaration = res.Declaration, res
 	return c.JSON(http.StatusAccepted, resp)
@@ -262,7 +267,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 // launchDeclareBuild runs the repository through the SAME privileged BuildKit
 // lane /v1/runner drives — one build path, one set of validations, one job spec.
 // The output image is the one derived above, never a caller's string.
-func launchDeclareBuild(s *cloud.Service[state], c *zip.Ctx, req declareReq, repository, name string) (*buildRef, error) {
+func launchDeclareBuild(s *cloud.Service[state], c *zip.Ctx, req declareReq, org, repository, name string) (*buildRef, error) {
 	id, err := genID("bld")
 	if err != nil {
 		return nil, zip.ErrInternal("could not mint a build id")
@@ -278,7 +283,10 @@ func launchDeclareBuild(s *cloud.Service[state], c *zip.Ctx, req declareReq, rep
 	if !imageAllowed(image) {
 		return nil, zip.ErrForbidden("the derived image is not in a registry this deployment may push to: " + image)
 	}
-	job, err := s.State.k8s.launchDirectBuild(c.Context(), url, ref, image, dockerfile, id)
+	// Charged to the ORG that asked, not to the fabric pool: the concurrency
+	// ceiling is per-org, so one org looping deploys can only exhaust its own
+	// share instead of locking every other org out of building (red F3).
+	job, err := s.State.k8s.launchDirectBuild(c.Context(), org, url, ref, image, dockerfile, id)
 	if err != nil {
 		s.Log.Error("declare build failed to launch", "app", name, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "could not launch the build: %v", err)
@@ -290,11 +298,11 @@ func launchDeclareBuild(s *cloud.Service[state], c *zip.Ctx, req declareReq, rep
 
 // declaredResp is the board: what this org declares, and what CD did with it.
 type declaredResp struct {
-	// Namespace is the directory read — the caller's tenant directory, or the
-	// platform's when a SuperAdmin asked for it.
-	Namespace string      `json:"namespace"`
-	Apps      []declared  `json:"apps"`
-	CD        *cdPlaneErr `json:"cdUnavailable,omitempty"`
+	// Org is the directory read — the caller's own, or another when a SuperAdmin
+	// asked to act as it.
+	Org  string      `json:"org"`
+	Apps []declared  `json:"apps"`
+	CD   *unreadable `json:"cdUnavailable,omitempty"`
 }
 
 // declared is one app: the declaration, and the reconciliation of it. `cd` is
@@ -305,9 +313,9 @@ type declared struct {
 	CD *CDApp `json:"cd"`
 }
 
-// cdPlaneErr says WHY the reconciliation half of the board is missing, so an
-// unreadable plane never renders as "no app has been reconciled".
-type cdPlaneErr struct {
+// unreadable says WHY the reconciliation half of the board is missing, so a
+// plane that could not be read never renders as "no app has been reconciled".
+type unreadable struct {
 	Reason string `json:"reason"`
 }
 
@@ -316,16 +324,16 @@ func listDeclared(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zip
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	ns, err := declareNamespace(s, org, c.Query("tier"), principal.IsSuperAdmin(c))
+	dir, err := resolveOrg(org, c.Query("org"), principal.IsSuperAdmin(c))
 	if err != nil {
 		return err
 	}
-	ds, err := declarations(s, c.Context(), ns)
+	ds, err := declarations(s, c.Context(), dir)
 	if err != nil {
-		s.Log.Error("inventory read failed", "namespace", ns, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "could not read the declarations in %s: %v", ns, err)
+		s.Log.Error("inventory read failed", "org", dir, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "could not read the declarations in %s: %v", dir, err)
 	}
-	out := declaredResp{Namespace: ns, Apps: make([]declared, 0, len(ds))}
+	out := declaredResp{Org: dir, Apps: make([]declared, 0, len(ds))}
 	for _, d := range ds {
 		out.Apps = append(out.Apps, declared{Declaration: d})
 	}
@@ -335,7 +343,7 @@ func listDeclared(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zip
 	// readable. What must never happen is a silent null — hence cdUnavailable.
 	apps, cdErr := cdApps(fs, c.Context(), requestPrincipal(c))
 	if cdErr != nil {
-		out.CD = &cdPlaneErr{Reason: cdErr.Error()}
+		out.CD = &unreadable{Reason: cdErr.Error()}
 	} else {
 		by := map[string]*CDApp{}
 		for i := range apps {
@@ -357,20 +365,20 @@ func getDeclared(s *cloud.Service[state], c *zip.Ctx) error {
 	if !slugRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-	ns, err := declareNamespace(s, org, c.Query("tier"), principal.IsSuperAdmin(c))
+	dir, err := resolveOrg(org, c.Query("org"), principal.IsSuperAdmin(c))
 	if err != nil {
 		return err
 	}
-	ds, err := declarations(s, c.Context(), ns)
+	ds, err := declarations(s, c.Context(), dir)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "could not read the declarations in %s: %v", ns, err)
+		return zip.Errorf(http.StatusBadGateway, "could not read the declarations in %s: %v", dir, err)
 	}
 	for _, d := range ds {
 		if d.Name == name {
 			return c.JSON(http.StatusOK, d)
 		}
 	}
-	return zip.ErrNotFound("no declaration for " + name + " in " + ns)
+	return zip.ErrNotFound("no declaration for " + name + " in " + dir)
 }
 
 // getDeclaredCD answers one app's reconciliation alone — the poll a deploy UI
@@ -384,7 +392,7 @@ func getDeclaredCD(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zi
 	if !slugRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-	ns, err := declareNamespace(s, org, c.Query("tier"), principal.IsSuperAdmin(c))
+	dir, err := resolveOrg(org, c.Query("org"), principal.IsSuperAdmin(c))
 	if err != nil {
 		return err
 	}
@@ -392,7 +400,7 @@ func getDeclaredCD(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zi
 	if err != nil {
 		return err
 	}
-	want := ns + "-" + name
+	want := dir + "-" + name
 	for i := range apps {
 		if apps[i].Name == want {
 			return c.JSON(http.StatusOK, apps[i])
@@ -431,54 +439,60 @@ func listCI(s *cloud.Service[state], c *zip.Ctx) error {
 
 // ── derivation (the security spine) ──────────────────────────────────────────
 
-// declareNamespace resolves the values DIRECTORY, which is the destination
-// namespace AND the AppProject fence. It is derived from the validated org and
-// never from a path, a header or a body field.
+// resolveOrg resolves the values DIRECTORY — which is also the destination
+// namespace and the AppProject fence, because an org is its name and that name
+// is all three.
 //
-// The default is the caller's tenant directory. `tier=platform` selects the
-// brand's own directory, whose AppProject admits every namespace and
-// cluster-scoped RBAC — so it is SuperAdmin only, and a non-super caller asking
-// for it is refused rather than quietly given its tenant directory.
-func declareNamespace(s *cloud.Service[state], org, tier string, super bool) (string, error) {
-	switch strings.TrimSpace(tier) {
-	case "", "tenant":
-		slug := namespace.Sanitize(org)
-		if slug == "" {
-			return "", zip.ErrForbidden("the caller's organization does not resolve to a namespace")
-		}
-		return "tenant-" + slug, nil
-	case "platform":
-		if !super {
-			return "", zip.ErrForbidden(
-				"tier=platform writes the platform's own delivery directory, whose fence admits every namespace and cluster-scoped RBAC: SuperAdmin required")
-		}
-		brand := namespace.Sanitize(s.Brand)
-		if brand == "" {
-			return "", zip.ErrInternal("this deployment declares no brand namespace")
-		}
-		return brand, nil
-	default:
-		return "", zip.ErrBadRequest(`tier must be "" (the caller's tenant) or "platform"`)
+// TWO REFUSALS, and they are different questions. Naming ANOTHER org is an
+// act-as and belongs to platform sudo. Naming a RESERVED org is reaching into
+// the platform's own namespace family — the control plane, the delivery plane,
+// the brands, the reserved admin org — and belongs there too, even when it IS
+// the caller's own org, because a caller whose IAM org is `kube-system` is not
+// thereby the owner of Kubernetes.
+//
+// Both refuse rather than downgrade. Quietly substituting the caller's own org
+// for one it asked for would make an escape attempt indistinguishable from a
+// normal request, in the logs and in the response.
+func resolveOrg(own, asked string, super bool) (string, error) {
+	dir := namespace.Sanitize(own)
+	if dir == "" {
+		return "", zip.ErrForbidden("the caller's organization does not resolve to a name")
 	}
+	if a := strings.TrimSpace(asked); a != "" {
+		want := namespace.Sanitize(a)
+		if want == "" {
+			return "", zip.ErrBadRequest("org does not resolve to a name")
+		}
+		if want != dir && !super {
+			return "", zip.ErrForbidden("acting as another organization requires SuperAdmin")
+		}
+		dir = want
+	}
+	if reserved(dir) && !super {
+		return "", zip.ErrForbidden(dir +
+			" is the platform's own: its fence admits every namespace and cluster-scoped RBAC, so declaring there requires SuperAdmin")
+	}
+	if err := checkOrg(dir); err != nil {
+		return "", zip.ErrBadRequest(err.Error())
+	}
+	return dir, nil
 }
 
-// declareRepository derives the image a declaration may name.
+// declareRepository derives the image a declaration may name: <prefix>/<org>/<app>,
+// for every org alike.
 //
-// Tenant apps land under tenant-<org>/<app>, which is the injective per-tenant
-// path the build lane already uses (k8sClient.buildImageRef): distinct tenants
-// always target distinct repositories, so one tenant can never push an image
-// another's declaration would pull. The platform tier keeps the flat repository
-// its own services already publish to.
-func declareRepository(s *cloud.Service[state], ns, org, name string) string {
+// It is INJECTIVE, which is the property that matters: org and app are both
+// DNS-1123 labels and neither can contain the '/' that separates them, so the
+// (org, app) pair is uniquely recoverable from the ref and two orgs can never
+// derive one repository. That is what stops one org pushing an image another
+// org's declaration would pull — the same guarantee k8sClient.buildImageRef
+// carries, reached without prefixing anything onto the org's name.
+func declareRepository(s *cloud.Service[state], org, name string) string {
 	prefix := s.State.k8s.imagePrefix
 	if prefix == "" {
 		prefix = defaultBuildImagePrefix
 	}
-	prefix = strings.TrimRight(prefix, "/")
-	if strings.HasPrefix(ns, "tenant-") {
-		return fmt.Sprintf("%s/tenant-%s/%s", prefix, namespace.Sanitize(org), name)
-	}
-	return prefix + "/" + name
+	return strings.TrimRight(prefix, "/") + "/" + org + "/" + name
 }
 
 // declareName resolves the app name: the caller's, or the repository's basename.
@@ -511,10 +525,23 @@ func repoBase(repo string) string {
 // is not the same as owning it, and the claim-and-verify flow for a custom
 // domain already exists at /v1/platform/projects/:project/apps/:app/domains. A
 // deploy endpoint that accepted an arbitrary host would be a way around it.
+//
+// `org` here is the CANONICAL org — the same slug that is the directory and the
+// namespace — never the raw `owner` claim. defaultHost interpolates it into a
+// DNS name, and a raw claim is not a DNS label: org "Acme" produced the literal
+// host "web.Acme.hanzo.app", which is not a hostname at all, so the default
+// deploy for any org without a clean name emitted an Ingress the cluster would
+// refuse (red F4). Deriving it from the slug also keeps the subtree test and the
+// directory reading the same value, which is the same one-canonical-form rule
+// that fixes the confinement compare above.
 func declareHost(s *cloud.Service[state], org, name, host string, super bool) (string, error) {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if host == "" {
-		return defaultHost(s, org, name), nil
+		d := defaultHost(s, org, name)
+		if !hostname(d) {
+			return "", zip.ErrInternal("this organization does not resolve to a hostname")
+		}
+		return d, nil
 	}
 	if !hostname(host) {
 		return "", zip.ErrBadRequest("host is not a valid hostname")
@@ -604,16 +631,22 @@ func init() {
 			"image the registry cannot serve is an ImagePullBackOff with no rollback path.\n\n"+
 			"Omit `tag` to build; give it to declare an image an earlier call already built, which is "+
 			"how a green build is released without rebuilding it.\n\n"+
-			"The values DIRECTORY and the image REPOSITORY are derived from the caller's organization "+
-			"and are not request fields. The directory decides the AppProject fence CD admits the sync "+
-			"under, and the repository decides what the cluster pulls; a caller who could name either "+
-			"could reach outside its own tenant. `tier=platform` places the declaration in the "+
-			"platform's own directory and is SuperAdmin only. A host outside the caller's org subtree "+
-			"is refused: claim and verify a custom domain first.")
+			"An org is its name: the values DIRECTORY, the destination NAMESPACE and the AppProject "+
+			"FENCE are all `<org>`, and the image is `<registry>/<org>/<app>`. None of them is a "+
+			"request field — the directory decides what CD admits the sync under and the repository "+
+			"decides what the cluster pulls, so a caller who could name either could reach outside "+
+			"its own org.\n\n"+
+			"`org` is an ACT-AS, not a placement field: it defaults to the caller's own, and naming "+
+			"another requires SuperAdmin. So does naming a RESERVED org — the platform's own namespace "+
+			"family (the brands and their environments, the control and delivery planes, `admin`) — "+
+			"even when it is the caller's own, because an IAM org named `kube-system` does not own "+
+			"Kubernetes. Both refuse rather than downgrade, so an escape attempt is never "+
+			"indistinguishable from a normal request.\n\n"+
+			"A host outside the caller's org subtree is refused: claim and verify a custom domain first.")
 
 	openapi.Describe("/v1/platform/apps", http.MethodGet,
 		"What this organization has declared, and what CD did with it",
-		"Returns the declarations in the caller's tenant directory, each joined with the Hanzo CD "+
+		"Returns the declarations in the caller's own org directory, each joined with the Hanzo CD "+
 			"Application reconciling it — sync verdict, health, the universe commit last applied. "+
 			"`cd` is null for a declaration the delivery plane has no Application for, which is the "+
 			"normal state of one that exists only on a branch.\n\n"+
@@ -637,7 +670,7 @@ func init() {
 		"Every Hanzo CD Application this caller may observe, with its sync verdict, health, the "+
 			"universe revision last applied, and whether automation and self-heal are on. A "+
 			"SuperAdmin sees the fleet; an org admin sees only Applications whose destination "+
-			"namespace its own organization owns.\n\n"+
+			"namespace IS its own organization, and never a reserved one.\n\n"+
 			"A cluster with no CD installed answers an empty plane. A plane that cannot be READ "+
 			"answers 503 and says why — the two are opposite facts and never share a shape.")
 

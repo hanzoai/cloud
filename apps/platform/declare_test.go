@@ -15,36 +15,52 @@ import (
 
 // ── the path decides the fence, so the path is derived ───────────────────────
 
-// The values DIRECTORY selects the AppProject: `tenant-<org>` admits ONE
-// namespace and no cluster scope, `hanzo` (hanzo-platform) admits every
-// namespace and ClusterRole/ClusterRoleBinding. A caller that could name its own
-// directory could name its own fence, so this is the single most load-bearing
-// derivation on the surface.
-func TestNamespaceIsDerivedFromTheOrgAndTierIsSuperOnly(t *testing.T) {
-	s := testDeclareService()
+// The values DIRECTORY selects the AppProject: an org's own fence admits ONE
+// namespace and no cluster scope, the platform fence admits every namespace and
+// ClusterRole/ClusterRoleBinding. A caller that could name its own directory
+// could name its own fence, so this is the single most load-bearing derivation
+// on the surface — and with the prefix gone, RESERVATION is the whole of what
+// keeps a customer out of the platform's namespace family.
+func TestOrgIsDerivedAndReservedNamesAreSuperOnly(t *testing.T) {
 	for _, tc := range []struct {
-		name, org, tier string
-		super           bool
-		want, wantErr   string
+		name, own, asked string
+		super            bool
+		want, wantErr    string
 	}{
-		{name: "tenant by default", org: "acme", want: "tenant-acme"},
-		{name: "tenant named explicitly", org: "acme", tier: "tenant", want: "tenant-acme"},
-		{name: "the brand org is still a tenant", org: "hanzo", want: "tenant-hanzo"},
-		{name: "a super with no tier is still a tenant", org: "acme", super: true, want: "tenant-acme"},
-		{name: "platform tier for a super", org: "acme", tier: "platform", super: true, want: "hanzo"},
-		{name: "platform tier refused for an org admin", org: "acme", tier: "platform", wantErr: "SuperAdmin required"},
-		{name: "an unknown tier is refused, never defaulted", org: "acme", tier: "hanzo", wantErr: "tier must be"},
-		{name: "an unknown tier is refused for a super too", org: "acme", tier: "../hanzo", super: true, wantErr: "tier must be"},
-		{name: "no org resolves to no namespace", org: "", wantErr: "does not resolve"},
+		{name: "an org is its name", own: "acme", want: "acme"},
+		{name: "a super acting normally is still its own org", own: "acme", super: true, want: "acme"},
+		{name: "acting as another org needs sudo", own: "acme", asked: "other", wantErr: "requires SuperAdmin"},
+		{name: "a super may act as another org", own: "admin", asked: "acme", super: true, want: "acme"},
+		{name: "a super may act as the platform", own: "admin", asked: "hanzo", super: true, want: "hanzo"},
+		{name: "naming your own org is not acting as another", own: "acme", asked: "acme", want: "acme"},
+
+		// RESERVATION — the control the `tenant-` prefix used to provide, and the
+		// reason dropping the prefix is safe. namespace.Sanitize is the identity on
+		// a clean label, so without these an IAM org named `kube-system` would
+		// resolve to the real `kube-system`.
+		{name: "a brand is reserved", own: "hanzo", wantErr: "platform's own"},
+		{name: "a brand environment is reserved", own: "hanzo-testnet", wantErr: "platform's own"},
+		{name: "the delivery plane is reserved", own: "hanzo-cd", wantErr: "platform's own"},
+		{name: "kubernetes' own is reserved", own: "kube-system", wantErr: "platform's own"},
+		{name: "so is the whole kube- family", own: "kube-anything", wantErr: "platform's own"},
+		{name: "default is reserved", own: "default", wantErr: "platform's own"},
+		{name: "the admin org is reserved", own: "admin", wantErr: "platform's own"},
+		{name: "a platform service directory is reserved", own: "zen", wantErr: "platform's own"},
+		{name: "cert-manager is reserved", own: "cert-manager", wantErr: "platform's own"},
+		{name: "a lux brand env is reserved", own: "lux-mainnet", wantErr: "platform's own"},
+		{name: "a reserved org is not reachable by acting-as", own: "acme", asked: "kube-system", wantErr: "requires SuperAdmin"},
+		{name: "a super may reach a reserved org", own: "admin", asked: "kube-system", super: true, want: "kube-system"},
+
+		{name: "no org resolves to no name", own: "", wantErr: "does not resolve"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := declareNamespace(s, tc.org, tc.tier, tc.super)
+			got, err := resolveOrg(tc.own, tc.asked, tc.super)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("want an error containing %q, got %q / %v", tc.wantErr, got, err)
 				}
 				if got != "" {
-					t.Fatalf("a refused derivation must yield NO namespace, got %q", got)
+					t.Fatalf("a refused derivation must yield NO directory, got %q", got)
 				}
 				return
 			}
@@ -52,7 +68,7 @@ func TestNamespaceIsDerivedFromTheOrgAndTierIsSuperOnly(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got != tc.want {
-				t.Fatalf("namespace = %q, want %q", got, tc.want)
+				t.Fatalf("org = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -62,11 +78,14 @@ func TestNamespaceIsDerivedFromTheOrgAndTierIsSuperOnly(t *testing.T) {
 // same string, or the record lies about what a sync may reach.
 func TestProjectMatchesTheApplicationSetDerivation(t *testing.T) {
 	for ns, want := range map[string]string{
-		"tenant-acme":   "tenant-acme",
-		"tenant-hanzo":  "tenant-hanzo",
+		"acme":          "acme",
+		"widgets-co":    "widgets-co",
 		"hanzo":         "hanzo-platform",
 		"hanzo-testnet": "hanzo-platform",
+		"hanzo-cd":      "hanzo-platform",
+		"kube-system":   "hanzo-platform",
 		"zen":           "hanzo-platform",
+		"admin":         "hanzo-platform",
 	} {
 		if got := declareProject(ns); got != want {
 			t.Errorf("declareProject(%q) = %q, want %q", ns, got, want)
@@ -74,21 +93,28 @@ func TestProjectMatchesTheApplicationSetDerivation(t *testing.T) {
 	}
 }
 
-// A tenant's image repository must be recoverable from the ref and distinct per
-// tenant: two orgs must never derive one repository, or one tenant's declaration
-// pulls another tenant's build.
-func TestRepositoryIsPerTenantAndInjective(t *testing.T) {
+// An org's image repository must be recoverable from the ref and distinct per
+// org: two orgs must never derive one repository, or one org's declaration pulls
+// another org's build.
+func TestRepositoryIsPerOrgAndInjective(t *testing.T) {
 	s := testDeclareService()
-	a := declareRepository(s, "tenant-acme", "acme", "web")
-	b := declareRepository(s, "tenant-acme-web", "acme-web", "x")
+	a := declareRepository(s, "acme", "web")
+	b := declareRepository(s, "acme-web", "x")
 	if a == b {
-		t.Fatalf("two distinct tenants derived ONE repository: %q", a)
+		t.Fatalf("two distinct orgs derived ONE repository: %q", a)
 	}
-	if !strings.HasPrefix(a, defaultBuildImagePrefix+"/tenant-") {
-		t.Errorf("a tenant repository must sit under tenant-<org>/: %q", a)
+	if a != defaultBuildImagePrefix+"/acme/web" {
+		t.Errorf("repository = %q, want <prefix>/<org>/<app>", a)
 	}
-	if p := declareRepository(s, "hanzo", "hanzo", "papers"); p != defaultBuildImagePrefix+"/papers" {
-		t.Errorf("the platform tier keeps the flat repository its services publish to: %q", p)
+	// The '/' is what makes the pair recoverable: neither an org nor an app name
+	// may contain one, so no two (org, app) pairs can render the same ref. This
+	// is what the `tenant-` prefix was NOT doing — the separator was always the
+	// real control.
+	if strings.Count(strings.TrimPrefix(a, defaultBuildImagePrefix+"/"), "/") != 1 {
+		t.Errorf("the org/app boundary is not a single separator: %q", a)
+	}
+	if p := declareRepository(s, "hanzo", "papers"); p != defaultBuildImagePrefix+"/hanzo/papers" {
+		t.Errorf("every org derives the same way, the platform included: %q", p)
 	}
 }
 
@@ -117,8 +143,8 @@ func TestNameRefusesAnythingThatIsNotADNSLabel(t *testing.T) {
 // A path is built from the derived namespace and the validated name only, so it
 // can never leave the inventory directory however either is spelled.
 func TestPathStaysInsideTheInventory(t *testing.T) {
-	p := declarePath("tenant-acme", "web")
-	if p != "charts/app/values/tenant-acme/web.yaml" {
+	p := declarePath("acme", "web")
+	if p != "charts/app/values/acme/web.yaml" {
 		t.Fatalf("path = %q", p)
 	}
 	if !strings.HasPrefix(filepath.ToSlash(filepath.Clean(p)), declarePrefix+"/") {
@@ -219,9 +245,9 @@ func TestRenderedKeysAreAllInTheChartSchema(t *testing.T) {
 func TestReadDeclarationRoundTripsAndFlattensBothHostShapes(t *testing.T) {
 	root := t.TempDir()
 	spec := testSpec()
-	writeDecl(t, root, spec.Namespace, spec.Name, string(spec.render()))
+	writeDecl(t, root, spec.Org, spec.Name, string(spec.render()))
 
-	d, err := readDeclaration(root, spec.Namespace, spec.Name)
+	d, err := readDeclaration(root, spec.Org, spec.Name)
 	if err != nil {
 		t.Fatalf("readDeclaration: %v", err)
 	}
@@ -234,10 +260,10 @@ func TestReadDeclarationRoundTripsAndFlattensBothHostShapes(t *testing.T) {
 	if !d.Automated {
 		t.Error("cd.automated did not round-trip")
 	}
-	if d.Application != spec.Namespace+"-"+spec.Name {
+	if d.Application != spec.Org+"-"+spec.Name {
 		t.Errorf("Application = %q; it is the ApplicationSet's <dir>-<file> join key", d.Application)
 	}
-	if d.Project != declareProject(spec.Namespace) {
+	if d.Project != declareProject(spec.Org) {
 		t.Errorf("Project = %q", d.Project)
 	}
 
@@ -267,11 +293,11 @@ cd:
 // unreachable cluster rendering as an empty fleet.
 func TestUnreadableDeclarationIsAnErrorNotAnEmptyRow(t *testing.T) {
 	root := t.TempDir()
-	writeDecl(t, root, "tenant-acme", "web", "image:\n\ttag: [unbalanced\n")
-	if _, err := readDeclaration(root, "tenant-acme", "web"); err == nil {
+	writeDecl(t, root, "acme", "web", "image:\n\ttag: [unbalanced\n")
+	if _, err := readDeclaration(root, "acme", "web"); err == nil {
 		t.Fatal("a values file that does not parse was reported as a declaration")
 	}
-	if _, err := readDeclaration(root, "tenant-acme", "absent"); err == nil {
+	if _, err := readDeclaration(root, "acme", "absent"); err == nil {
 		t.Fatal("an absent file was reported as a declaration")
 	}
 }
@@ -310,7 +336,7 @@ func TestEnvValuesAreQuoted(t *testing.T) {
 func TestUpdateRefusesToRewriteADeclaration(t *testing.T) {
 	root := t.TempDir()
 	spec := testSpec()
-	writeDecl(t, root, spec.Namespace, spec.Name, string(spec.render()))
+	writeDecl(t, root, spec.Org, spec.Name, string(spec.render()))
 
 	other := spec
 	other.Hosts = []string{"elsewhere.acme.hanzo.app"}
@@ -348,7 +374,7 @@ func TestDeclareToABranchLeavesMainUntouched(t *testing.T) {
 	if res.Live {
 		t.Fatal("a branch declaration reported itself LIVE; the generator reads main")
 	}
-	branch := declareBranch(spec.Namespace, spec.Name, spec.Tag)
+	branch := declareBranch(spec.Org, spec.Name, spec.Tag)
 	if res.Ref != branch {
 		t.Fatalf("ref = %q, want %q", res.Ref, branch)
 	}
@@ -356,12 +382,12 @@ func TestDeclareToABranchLeavesMainUntouched(t *testing.T) {
 		t.Errorf("a branch write must return where to open the review, got %q", res.Review)
 	}
 
-	got := mustGit(t, bare, "show", branch+":"+declarePath(spec.Namespace, spec.Name))
+	got := mustGit(t, bare, "show", branch+":"+declarePath(spec.Org, spec.Name))
 	if !strings.Contains(got, "repository: "+spec.Repository) || !strings.Contains(got, "tag: "+spec.Tag) {
 		t.Fatalf("the branch does not carry the declaration:\n%s", got)
 	}
 	// main must not have it.
-	if _, err := gitTry(bare, "show", universeBranch+":"+declarePath(spec.Namespace, spec.Name)); err == nil {
+	if _, err := gitTry(bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name)); err == nil {
 		t.Fatal("the declaration reached main; a branch write must deploy NOTHING")
 	}
 }
@@ -378,7 +404,7 @@ func TestCommitRefusesAnImageTheRegistryDoesNotHave(t *testing.T) {
 	if _, err := declare(serviceWithKMS(kmsWithPinToken(t)), context.Background(), spec, modeCommit); err == nil {
 		t.Fatal("a commit to main was allowed for an image the registry does not have")
 	}
-	if _, err := gitTry(bare, "show", universeBranch+":"+declarePath(spec.Namespace, spec.Name)); err == nil {
+	if _, err := gitTry(bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name)); err == nil {
 		t.Fatal("the refused declaration was written to main anyway")
 	}
 }
@@ -398,7 +424,7 @@ func TestCommitWritesMainWhenTheImageIsReal(t *testing.T) {
 	if !res.Live || res.Ref != universeBranch {
 		t.Fatalf("a commit must report itself live on main: %+v", res)
 	}
-	got := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Namespace, spec.Name))
+	got := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name))
 	if !strings.Contains(got, "tag: "+spec.Tag) {
 		t.Fatalf("main does not carry the declaration:\n%s", got)
 	}
@@ -422,7 +448,7 @@ func TestUpdateMovesOnlyTheTagAndKeepsTheComments(t *testing.T) {
 	if _, err := declare(s, context.Background(), spec, modeCommit); err != nil {
 		t.Fatalf("first declare: %v", err)
 	}
-	before := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Namespace, spec.Name))
+	before := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name))
 
 	next := spec
 	next.Tag = "bld_second"
@@ -434,7 +460,7 @@ func TestUpdateMovesOnlyTheTagAndKeepsTheComments(t *testing.T) {
 	if res.Created {
 		t.Error("the second declare reported Created on an existing declaration")
 	}
-	after := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Namespace, spec.Name))
+	after := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name))
 	if after != strings.Replace(before, "tag: "+spec.Tag, "tag: "+next.Tag, 1) {
 		t.Fatalf("an update changed more than the tag scalar:\nbefore:\n%s\nafter:\n%s", before, after)
 	}
@@ -479,7 +505,7 @@ func TestUpdateRefusesAForeignRepository(t *testing.T) {
 		t.Fatalf("first declare: %v", err)
 	}
 	foreign := spec
-	foreign.Repository = defaultBuildImagePrefix + "/tenant-other/web"
+	foreign.Repository = defaultBuildImagePrefix + "/other/web"
 	if _, err := declare(s, context.Background(), foreign, modeCommit); err == nil ||
 		!strings.Contains(err.Error(), "refusing to point one app's declaration at another's image") {
 		t.Fatalf("want the foreign-repository refusal, got %v", err)
@@ -504,17 +530,17 @@ func TestDeclareFailsClosedWithNoCredential(t *testing.T) {
 // sibling namespace's files however it is spelled.
 func TestDeclaredNamesStayInOneDirectory(t *testing.T) {
 	root := t.TempDir()
-	writeDecl(t, root, "tenant-acme", "web", "image:\n  repository: r\n  tag: t\n")
-	writeDecl(t, root, "tenant-other", "secret", "image:\n  repository: r\n  tag: t\n")
+	writeDecl(t, root, "acme", "web", "image:\n  repository: r\n  tag: t\n")
+	writeDecl(t, root, "other", "secret", "image:\n  repository: r\n  tag: t\n")
 
-	names, err := declaredNames(root, "tenant-acme")
+	names, err := declaredNames(root, "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(names) != 1 || names[0] != "web" {
 		t.Fatalf("the inventory crossed a tenant boundary: %v", names)
 	}
-	for _, escape := range []string{"tenant-acme/../tenant-other", "*", ".."} {
+	for _, escape := range []string{"acme/../other", "*", ".."} {
 		got, _ := declaredNames(root, escape)
 		for _, n := range got {
 			if n == "secret" {
@@ -536,8 +562,8 @@ func testDeclareService() *cloud.Service[state] {
 func testSpec() declareSpec {
 	return declareSpec{
 		Name:       "web",
-		Namespace:  "tenant-acme",
-		Repository: defaultBuildImagePrefix + "/tenant-acme/web",
+		Org:        "acme",
+		Repository: defaultBuildImagePrefix + "/acme/web",
 		Tag:        "bld_first",
 		Hosts:      []string{"web.acme.hanzo.app"},
 		Port:       declarePort,
@@ -622,7 +648,7 @@ func TestRepeatingTheSameEnvIsNotARewrite(t *testing.T) {
 	root := t.TempDir()
 	spec := testSpec()
 	spec.Env = []declareEnv{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}}
-	writeDecl(t, root, spec.Namespace, spec.Name, string(spec.render()))
+	writeDecl(t, root, spec.Org, spec.Name, string(spec.render()))
 
 	reordered := spec
 	reordered.Env = []declareEnv{{Name: "B", Value: "2"}, {Name: "A", Value: "1"}}
@@ -633,5 +659,67 @@ func TestRepeatingTheSameEnvIsNotARewrite(t *testing.T) {
 	changed.Env = []declareEnv{{Name: "A", Value: "9"}}
 	if err := checkDeclared(root, changed); err == nil {
 		t.Error("a genuinely different environment was accepted as an update")
+	}
+}
+
+// ── the fence is verified against the repository that enforces it ────────────
+
+// A commit to main is REFUSED while the ApplicationSet would fence the
+// declaration wider than this API reports. The template is the thing that
+// actually decides, and it lives in another repository — so it is read out of
+// the clone on the write path rather than trusted.
+//
+// This is the mutation proof of checkFence: the same declaration that succeeds
+// against the reservation-based template must FAIL against the prefix-based one,
+// and the failure must name the fence that would really apply.
+func TestCommitRefusesAStaleFence(t *testing.T) {
+	stale := strings.Replace(fleetSetFixture,
+		`{{ if has .path.basename (list "hanzo" "lux" "zoo" "admin" "default" "hanzo-cd" "hanzo-build") }}hanzo-platform{{ else }}{{ .path.basename }}{{ end }}`,
+		`{{ if hasPrefix "tenant-" .path.basename }}{{ .path.basename }}{{ else }}hanzo-platform{{ end }}`, 1)
+	if stale == fleetSetFixture {
+		t.Fatal("the mutation did not apply; the fixture's fence rule changed shape")
+	}
+
+	remote, bare := gitRemote(t, pinFixture)
+	defer swapUniverseRemote(remote)()
+	// Rewrite the remote's template to the stale form, on main.
+	work := t.TempDir()
+	mustGit(t, "", "clone", "-q", bare, work)
+	set := filepath.Join(work, "infra", "k8s", "hanzo-cd", "applicationset-fleet.yaml")
+	if err := os.WriteFile(set, []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, work, "add", "-A")
+	mustGit(t, work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "stale fence")
+	mustGit(t, work, "push", "-q", "origin", "HEAD:"+universeBranch)
+
+	reg := fakeRegistryFunc(t, func(string) bool { return true })
+	defer swapRegistryBase(reg.URL)()
+	s := serviceWithKMS(kmsWithPinToken(t))
+	spec := testSpec()
+
+	_, err := declare(s, context.Background(), spec, modeCommit)
+	if err == nil {
+		t.Fatal("a commit to main was allowed while the ApplicationSet would fence the org under the platform project")
+	}
+	if !strings.Contains(err.Error(), platformProject) {
+		t.Errorf("the refusal must name the fence that would actually apply: %v", err)
+	}
+	if _, err := gitTry(bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name)); err == nil {
+		t.Fatal("the refused declaration was written to main anyway")
+	}
+
+	// A BRANCH write is unaffected: nothing is generated from a branch, and its
+	// pull request is exactly where a human sees the mismatch.
+	if _, err := declare(s, context.Background(), spec, modeBranch); err != nil {
+		t.Errorf("a branch declaration was blocked by a fence that cannot apply to it: %v", err)
+	}
+
+	// And the platform's own directory is never blocked — it is fenced the same
+	// way under either template, so a release must still be able to move.
+	reserved := spec
+	reserved.Org, reserved.Repository = "hanzo", defaultBuildImagePrefix+"/hanzo/web"
+	if _, err := declare(s, context.Background(), reserved, modeCommit); err != nil {
+		t.Errorf("a reserved directory was blocked by the stale-fence refusal: %v", err)
 	}
 }
