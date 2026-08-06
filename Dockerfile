@@ -295,6 +295,20 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # one-line manifest edit and this Dockerfile does not change. An app with no
 # plugin/<app> fails HERE (the generator's bijection would have caught it first).
 #
+# EXCEPT the CORESIDENT ones, which get no binary. Coresident means the app is not
+# prefix-routed: it mounts as middleware on a sibling's router, and cmd/cloud's
+# mount() returns before it can ever resolve a path or spawn a child. So its binary
+# is linked, copied and pulled on every deploy to be executed never. zen is the one:
+# 164.7 MB, 3.9% of this image, for a process that cannot start. Its behaviour ships
+# in /ai, which links apps/zen and mounts the Claim ahead of ai's catch-all.
+#
+# TWO lists, because they answer two questions. `names` is every manifest app and
+# still guards the bijection above — a coresident app must STILL have a plugin/<app>
+# (gen-app-cmds requires it, and it is what runs standalone in dev). `spawned` is
+# what the host can actually load, and that is what earns a binary. Flip
+# Coresident:false in the manifest and the binary comes back on the next build,
+# because both lists read the same source the host does.
+#
 # Each link is the ONE app's own graph (~600–2200 packages), NEVER the ~3040-pkg
 # fleet union the fused binary was. 112 lean links, sequential, none of them mega —
 # which is the whole point of this change.
@@ -327,8 +341,10 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     for p in $names; do \
       [ -d "./plugin/$p" ] || { echo "FATAL: manifest app '$p' has no plugin/$p — run 'make generate' and commit"; exit 1; }; \
     done; \
-    echo "building $(echo "$names" | wc -w) plugins, $(nproc) at a time"; \
-    printf '%s\n' $names | xargs -P "$(nproc)" -I{} sh -c \
+    coresident="$(sed -n '/Coresident: *true/{s/.*{Name: "\([^"]*\)".*/\1/p;}' manifest/apps.go)"; \
+    spawned="$(sed -n '/Coresident: *true/d; s/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)"; \
+    echo "building $(echo "$spawned" | wc -w) of $(echo "$names" | wc -w) plugins, $(nproc) at a time (coresident, never spawned: ${coresident:-none})"; \
+    printf '%s\n' $spawned | xargs -P "$(nproc)" -I{} sh -c \
       'CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$1" "./plugin/$1" || { echo "FATAL: plugin $1 failed to build" >&2; exit 255; }' _ {}
 # THE STAMP LANDED — asked of the ARTIFACT, not of the flag string.
 #
