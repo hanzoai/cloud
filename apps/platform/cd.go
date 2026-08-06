@@ -207,7 +207,7 @@ func observeCDApp(cr *unstructured.Unstructured) CDApp {
 // share a namespace, therefore never read each other.
 func owns(ns, org string) bool {
 	slug := namespace.Sanitize(org)
-	return slug != "" && ns == slug && !reserved(ns)
+	return slug != "" && owner(ns) == slug
 }
 
 // nested reads a string at a path, or "" if any segment is absent or not a
