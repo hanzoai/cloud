@@ -1,14 +1,13 @@
-// Package types holds the placeholder transport types AND the
-// inter-subsystem client interfaces shared between cloud (the
-// orchestrator) and cloud/clients (the in-process and RPC client
-// implementations). Both packages reference this leaf package to
-// avoid an import cycle.
+// Package types holds the shared transport shapes AND the inter-subsystem client
+// interfaces used between cloud (the orchestrator) and cloud/clients (the
+// co-resident and disabled client implementations). Both packages reference this
+// leaf package to avoid an import cycle.
 //
-// As subsystems ship their .zap schemas and zapc generates typed
-// bindings, the placeholders here are replaced by aliases to the
-// generated structs in <subsystem>/zap/gen/*.go. Until then the
-// stable shape lives here so subsystem code can pin signatures
-// without re-importing through cloud.
+// These are the shapes of CO-RESIDENT calls — a dependency mounted in this
+// process, reached by direct Go dispatch. A call that genuinely crosses a
+// process declares its In/Out in package plane instead, and plane/gen emits the
+// typed peer client for it; nothing here is waiting to be replaced by a
+// generator.
 package types
 
 import (

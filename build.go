@@ -52,15 +52,13 @@ import (
 //     clients.IsDisabled(err) and log a friendly "dep X needed by Y
 //     not configured" message.
 //
-// JSON does not appear in any of these paths. Inter-subsystem calls
-// are ZAP-typed Go values either via direct method dispatch (mode 1)
-// or via ZAP RPC over the wire (mode 2). JSON happens only at the
-// gateway/ingress edge, through the zip jsonenc helper.
+// JSON does not appear in any of these paths. A co-resident dependency is a
+// direct Go method call; a peer that is elsewhere is reached over the peer plane
+// (plane.Ask — ZAP bytes on the peer's own socket, addressed by name). JSON
+// happens only at the gateway/ingress edge, through the zip jsonenc helper.
 //
-// Payments and Vault are special: they are NEVER in-process per
-// HIP-0106 solo-vault CDE. Their clients always resolve via
-// clients.PaymentsRPCAt / clients.VaultRPCAt; the disabled stub fires
-// when no endpoint is configured.
+// Payments and Vault are NEVER in-process (PCI solo-vault CDE). They are also
+// not deployed, so both resolve to the disabled stub — see pickPaymentsClient.
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
 
@@ -105,9 +103,9 @@ func BuildDeps(cfg *Config) Deps {
 	// the embedded KMS builds per-org stores that want it. Discovered late, it could
 	// not reach them, and KMS's files were local-only for no reason anyone chose.
 	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
-	deps.IAM = pick(cfg, logger, "iam", "IAM", cfg.IAMZAPAddr, clients.IAMRPCAt, clients.DisabledIAM)
+	deps.IAM = pick(cfg, logger, "iam", "IAM", clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, deps.Durable, logger)
-	deps.Base = pick(cfg, logger, "base", "Base", cfg.BaseZAPAddr, clients.BaseRPCAt, clients.DisabledBase)
+	deps.Base = pick(cfg, logger, "base", "Base", clients.DisabledBase)
 	deps.Commerce = pickCommerceClient(cfg, logger)
 	// Metering client BEFORE the AI client: deps.AI is wrapped in the metering
 	// decorator (the ONE inference gate+meter — no exempt path, no bypass, no
@@ -124,9 +122,9 @@ func BuildDeps(cfg *Config) Deps {
 	deps.AI = meteredAIClient(pickCompletionsClient(cfg, logger), deps)
 	deps.Embed = meteredAIClient(pickEmbedClient(cfg, logger), deps)
 	wireFinance(cfg, logger)
-	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
+	deps.O11y = pick(cfg, logger, "o11y", "O11y", clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
-	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
+	deps.MQ = pick(cfg, logger, "mq", "MQ", clients.DisabledMQ)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -313,22 +311,25 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)
 }
 
-// pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
-// by every co-resident-capable dependency: enabled in THIS process → zero value
-// (nil) so the subsystem's own Mount installs the in-process client; not enabled
-// but a ZAP endpoint is configured → an RPC client at that endpoint; neither →
-// the fail-closed/no-op disabled stub. name is the enable-list id; label is the
-// deps.<X> log tag; rpc/disabled are the client's typed constructors. This is the
-// ONE implementation of that rule — KMS/AI/VFS opt out with bespoke pickers only
-// because their construction genuinely differs.
-func pick[T any](cfg *Config, log luxlog.Logger, name, label, zapAddr string, rpc func(string) T, disabled func() T) T {
+// pick resolves one inter-subsystem client: enabled in THIS process → zero value
+// (nil) so the subsystem's own Mount installs the in-process client; otherwise the
+// fail-closed/no-op disabled stub. name is the enable-list id; disabled is the
+// client's typed constructor.
+//
+// THERE IS NO THIRD CASE. A CLOUD_<X>_ZAP_ADDR used to select clients.<X>RPCAt,
+// whose every method returned "not yet wired (zapc-gen pending)" — so configuring
+// one produced a client that failed every call while the log line said
+// "deps.<X> → ZAP RPC". That is worse than no client at all, because it looks
+// configured: an operator reading the boot log saw the transport come up and the
+// calls fail somewhere else. pickKMSClient made exactly this argument when it
+// dropped CLOUD_KMS_ZAP_ADDR for the plane, and the argument is not specific to
+// KMS. The peer plane is the transport (plane.Ask, over the peer's socket), and
+// it is the only one; a subsystem that is not here and has no plane op is
+// honestly disabled rather than falsely addressed.
+func pick[T any](cfg *Config, log luxlog.Logger, name, label string, disabled func() T) T {
 	if cfg.Enabled(name) {
 		var zero T // enabled here → Mount fills deps.<label>
 		return zero
-	}
-	if zapAddr != "" {
-		log.Info("deps."+label+" → ZAP RPC", "addr", zapAddr)
-		return rpc(zapAddr)
 	}
 	return disabled()
 }
@@ -618,10 +619,13 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 		log.Info("deps.Commerce → in-process (embedded commerce)", "brand", cfg.Brand)
 		return commerceClientFactory(cfg, log)
 	}
-	if cfg.CommerceZAPAddr != "" {
-		log.Info("deps.Commerce → ZAP RPC", "addr", cfg.CommerceZAPAddr)
-		return clients.CommerceRPCAt(cfg.CommerceZAPAddr)
-	}
+	// Commerce is not in this process. The MONEY ops it owns are reachable over the
+	// peer plane (plane/commerce: authorize, balance, credit, record, scope rules,
+	// txns, usage) and the gate already asks for them there — see gatePeer in
+	// resource_billing_peer.go. GetOrgConfig and CheckEntitlement declare no plane
+	// op, so there is nothing to ask and nothing to pretend: the honest client is
+	// the disabled one, which says "enable the subsystem" rather than failing every
+	// call from behind a configured-looking address.
 	return clients.DisabledCommerce()
 }
 
@@ -751,10 +755,6 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	// nil-then-Mount-fills convention other subsystems use, nothing fills deps.VFS
 	// after MountAll (Mount receives deps by value), so we ALWAYS hand back a
 	// concrete client.
-	if cfg.VFSZAPAddr != "" {
-		log.Info("deps.VFS → ZAP RPC", "addr", cfg.VFSZAPAddr)
-		return clients.VFSRPCAt(cfg.VFSZAPAddr)
-	}
 	// Real blob backend (.97): the shared SeaweedFS S3 gateway — the canonical,
 	// key-based object store, reached with the SAME S3_ADMIN_* admin identity
 	// clients/s3 uses (s3admin, one construction). Present only when those creds
@@ -1004,19 +1004,21 @@ func hostnameOr(def string) string {
 	return def
 }
 
-func pickPaymentsClient(cfg *Config, log luxlog.Logger) PaymentsClient {
-	if cfg.PaymentsZAPAddr != "" {
-		log.Info("deps.Payments → ZAP RPC", "addr", cfg.PaymentsZAPAddr)
-		return clients.PaymentsRPCAt(cfg.PaymentsZAPAddr)
-	}
+// pickPaymentsClient and pickVaultClient resolve the two clients that are never
+// co-resident (PCI scope isolation — vault is the only system that touches PAN).
+//
+// Both are disabled, and saying so is the point. Neither has a caller: nothing in
+// the tree invokes CreateIntent, ConfirmIntent, GetIntentStatus or Charge — commerce
+// only nil-checks the fields. They were wired to an RPC client whose every method
+// returned "not yet wired", so the CDE transport was declared, logged as up, and
+// never carried a byte. A disabled stub carries exactly as much traffic and admits
+// it. When payments and vault do get a wire it will be a plane op like every other
+// peer, not a second mechanism resurrected from this one.
+func pickPaymentsClient(*Config, luxlog.Logger) PaymentsClient {
 	return clients.DisabledPayments()
 }
 
-func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
-	if cfg.VaultZAPAddr != "" {
-		log.Info("deps.Vault → ZAP RPC", "addr", cfg.VaultZAPAddr)
-		return clients.VaultRPCAt(cfg.VaultZAPAddr)
-	}
+func pickVaultClient(*Config, luxlog.Logger) VaultClient {
 	return clients.DisabledVault()
 }
 
