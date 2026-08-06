@@ -83,6 +83,36 @@ test:
         echo "$stale"
         exit 1
       fi
+  - name: zipdoc-current
+    # The 99 zipdoc_gen.go files are the ONLY path from a typed handler's doc
+    # comment to /v1/openapi.json: Go drops comments at compile time, so cmd/zipdoc
+    # lifting them into a compiled-in file is the whole mechanism. They are
+    # COMMITTED, which is what lets the release image compile the real prose into
+    # every binary WITHOUT running the generator — that RUN cost 355.9s of a
+    # 17-minute build to re-derive files the tree already had, and it is gone.
+    #
+    # Committed means they can go stale, and dropping the build-time pass is only
+    # sound if staleness cannot be MERGED. Nothing here checked that. `make test`
+    # has carried a zipdoc check for a long time, but CI does not run `make test` —
+    # it runs the raw-go steps in this file — so that check has never once executed
+    # in CI. app-contract cannot cover it either: it regenerates these files as a
+    # side effect (mk/plugin.mk: describe → build → generate) and then scopes its
+    # porcelain check to openapi.yaml, openapi/floor.json and plugin/, so a stale
+    # lift is silently repaired in the runner's tree and never reported. Main went
+    # stale straight through that gap — plane.go documents RunOnBehalfIn.Model and
+    # apps/agents/zipdoc_gen.go did not carry a word of it.
+    #
+    # BEFORE app-contract, necessarily: after it the tree is already regenerated and
+    # this would assert nothing. Cheap here — go-vet above has already warmed the
+    # build cache these package loads want (40s warm on an 8-core box).
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # ONE gate definition, called rather than restated — the discipline
+      # app-contract already follows with surface-check. This is the same target a
+      # developer runs, so CI and the Makefile cannot drift apart, which is exactly
+      # how the Makefile's own zipdoc check ended up policing nothing.
+      make zipdoc-check
   - name: host-is-light
     # The light host's ONE property is that it links no subsystem: it knows where
     # each app lives and what path it answers, never what the app does. That is
