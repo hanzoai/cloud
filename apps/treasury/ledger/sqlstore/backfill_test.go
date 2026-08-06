@@ -9,6 +9,12 @@ import (
 	"github.com/hanzoai/namespace"
 )
 
+// kindUsage is what apps/finance passes to [Open] as its wallet-scoped kind
+// (finance.KindUsage). The literal lives HERE, in the caller's position, because that
+// is the only place this package ever meets it — the store itself holds no constant
+// belonging to the app whose money it stores.
+const kindUsage = "finance.usage"
+
 // legacyUsage writes a usage entry the way it was written BEFORE a usage ref became
 // unique per wallet: the two real legs, and an EMPTY program. It goes in through the same
 // adapter production uses, so the only thing the test fabricates is the empty program.
@@ -17,7 +23,7 @@ func legacyUsage(t *testing.T, s *Store, id, ref, wallet string, cents int64) {
 	amt := money.FromCents(cents)
 	if err := s.Tx(context.Background(), func(tx ledger.Tx) error {
 		return tx.Insert(
-			ledger.JournalEntry{ID: id, Kind: "finance.usage", Program: "", Ref: ref, Amount: amt, CreatedAt: 1},
+			ledger.JournalEntry{ID: id, Kind: kindUsage, Program: "", Ref: ref, Amount: amt, CreatedAt: 1},
 			[]ledger.Posting{
 				{Account: wallet, Amount: amt.Neg()},
 				{Account: "revenue:platform", Amount: amt},
@@ -25,6 +31,37 @@ func legacyUsage(t *testing.T, s *Store, id, ref, wallet string, cents int64) {
 	}); err != nil {
 		t.Fatalf("write legacy usage %s: %v", id, err)
 	}
+}
+
+// currentUsage writes the same act the way the writer names it TODAY: the entry carries
+// the wallet the money left, so its ref is unique within that wallet rather than across
+// the whole book.
+func currentUsage(t *testing.T, s *Store, id, ref, wallet string, cents int64) {
+	t.Helper()
+	amt := money.FromCents(cents)
+	if err := s.Tx(context.Background(), func(tx ledger.Tx) error {
+		return tx.Insert(
+			ledger.JournalEntry{ID: id, Kind: kindUsage, Program: wallet, Ref: ref, Amount: amt, CreatedAt: 2},
+			[]ledger.Posting{
+				{Account: wallet, Amount: amt.Neg()},
+				{Account: "revenue:platform", Amount: amt},
+			})
+	}); err != nil {
+		t.Fatalf("write current usage %s: %v", id, err)
+	}
+}
+
+// entriesNamed counts the rows holding one (kind, program, ref) key — the key the probe
+// that asks "is this act already paid for?" looks under.
+func entriesNamed(t *testing.T, s *Store, kind, program, ref string) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRow(
+		`SELECT count(*) FROM treasury_entries WHERE kind=? AND program=? AND ref=?`,
+		kind, program, ref).Scan(&n); err != nil {
+		t.Fatalf("count entries named (%s,%s,%s): %v", kind, program, ref, err)
+	}
+	return n
 }
 
 // programOf reads an entry's program column straight out of the file, so the assertion
@@ -45,7 +82,7 @@ func reopen(t *testing.T, s *Store, dir string) *Store {
 	if err := s.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	next, err := Open(namespace.System(), houseSubsystem, dir)
+	next, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -61,7 +98,7 @@ func reopen(t *testing.T, s *Store, dir string) *Store {
 // TestBackfilledProgramStopsTheSecondDebit, which charges the money.
 func TestBackfillUsageProgramNamesTheDebitedWallet(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir)
+	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -92,7 +129,7 @@ func TestBackfillUsageProgramNamesTheDebitedWallet(t *testing.T) {
 // one writer's key, not about every entry that happens to have no program.
 func TestBackfillLeavesEveryOtherKindAlone(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir)
+	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -133,7 +170,7 @@ func TestBackfillLeavesEveryOtherKindAlone(t *testing.T) {
 // touched at all.
 func TestBackfillUsageProgramIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir)
+	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -176,7 +213,7 @@ func TestBackfillUsageProgramIsIdempotent(t *testing.T) {
 // mode a repair must never have.
 func TestBackfillSkipsAnEntryWithNoDebitedLeg(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir)
+	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -196,5 +233,81 @@ func TestBackfillSkipsAnEntryWithNoDebitedLeg(t *testing.T) {
 	}
 	if got := programOf(t, s, "use_ok"); got != "wallet" {
 		t.Errorf("a well-formed row beside it was not repaired: program = %q, want %q", got, "wallet")
+	}
+}
+
+// An act that is ALREADY named under its wallet leaves the legacy row nowhere to go, and
+// the open still SUCCEEDS.
+//
+// This is the shape that closes a tenant's books. A usage ref is only client-nameable on
+// the surfaces where the act has a natural name — an org that renews the SAME domain once
+// before the wallet scope existed and once after writes `domain:renew:foo.com` into BOTH
+// program namespaces, so the file holds (usage,”,ref) and (usage,'wallet:bob',ref) at
+// once. Re-keying the first onto the second violates UNIQUE(kind, program, ref); under a
+// plain UPDATE that aborts the statement, so migrate fails, Open fails, storeFor fails,
+// and the prepaid gate — which fails CLOSED, correctly — refuses every paid request that
+// org makes, permanently, on a store that no retry can open.
+//
+// Skipping the row is not a compromise. The wallet row IS that act's entry: the probe
+// finds it under the wallet, so the legacy row's empty program can never fund a second
+// debit, and no amount is touched either way. It is also CURATIVE — an org whose store
+// already aborted opens on the very next attempt.
+func TestBackfillSkipsAnActAlreadyNamedUnderItsWallet(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	const ref = "domain:renew:foo.com" // the act's own name, identical across the change
+
+	legacyUsage(t, s, "use_before", ref, "wallet:bob", 300) // written pre-scope: program ''
+	currentUsage(t, s, "use_after", ref, "wallet:bob", 300) // written post-scope: program wallet:bob
+	legacyUsage(t, s, "use_other", "act_other", "wallet:bob", 100)
+	legacyUsage(t, s, "use_pool", "act_pool", "wallet", 50)
+
+	// The precondition is the collision itself; if the fixture cannot hold both keys the
+	// test proves nothing.
+	if n := entriesNamed(t, s, kindUsage, "", ref); n != 1 {
+		t.Fatalf("fixture: rows under the empty program = %d, want 1", n)
+	}
+	if n := entriesNamed(t, s, kindUsage, "wallet:bob", ref); n != 1 {
+		t.Fatalf("fixture: rows under the wallet = %d, want 1", n)
+	}
+	before, err := s.Balance(ctx, "wallet:bob")
+	if err != nil {
+		t.Fatalf("balance before: %v", err)
+	}
+
+	// THE ASSERTION. A plain UPDATE errors here and the store never opens again.
+	s = reopen(t, s, dir)
+
+	if got := programOf(t, s, "use_before"); got != "" {
+		t.Errorf("colliding legacy row program = %q; want empty — its act is already named under the wallet", got)
+	}
+	if got := programOf(t, s, "use_after"); got != "wallet:bob" {
+		t.Errorf("the row written today was disturbed: program = %q, want %q", got, "wallet:bob")
+	}
+	if got := programOf(t, s, "use_other"); got != "wallet:bob" {
+		t.Errorf("a non-colliding row beside the collision was not repaired: program = %q, want %q",
+			got, "wallet:bob")
+	}
+	if got := programOf(t, s, "use_pool"); got != "wallet" {
+		t.Errorf("the org-pool row was not repaired: program = %q, want %q", got, "wallet")
+	}
+	// The act is named EXACTLY ONCE under the wallet, which is what makes the probe find
+	// it — one name, one debit.
+	if n := entriesNamed(t, s, kindUsage, "wallet:bob", ref); n != 1 {
+		t.Errorf("rows naming the act under its wallet = %d, want exactly 1", n)
+	}
+	// A repair moves KEYS, never money.
+	after, err := s.Balance(ctx, "wallet:bob")
+	if err != nil {
+		t.Fatalf("balance after: %v", err)
+	}
+	if after.Cmp(before) != 0 {
+		t.Errorf("the repair moved money: wallet:bob %s -> %s", before, after)
 	}
 }

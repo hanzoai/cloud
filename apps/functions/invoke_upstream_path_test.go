@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/sandbox/wire"
+	"github.com/hanzoai/cloud/apps/exec"
 )
 
 // The mirror of apps/exec/upstream_path_test.go, from the other consumer.
@@ -33,11 +33,11 @@ func TestExecClientAsksUpstreamForLibreChatExec(t *testing.T) {
 	if !res.Ok {
 		t.Fatalf("run not ok: %+v", res)
 	}
-	if got != wire.LibreChatExec {
+	if got != exec.Path {
 		t.Fatalf("upstream saw %q, want %q — this is the defect: apps/exec is a "+
 			"path-preserving proxy that asks for %q, so this client asking for "+
 			"anything else means no CODE_EXEC_UPSTREAM value serves both",
-			got, wire.LibreChatExec, wire.LibreChatExec)
+			got, exec.Path, exec.Path)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestExecClientTrimsTrailingSlash(t *testing.T) {
 	if _, err := e.run(context.Background(), Function{Runtime: "python", Code: "x"}, "", 5); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if got != wire.LibreChatExec {
-		t.Fatalf("upstream saw %q, want %q", got, wire.LibreChatExec)
+	if got != exec.Path {
+		t.Fatalf("upstream saw %q, want %q", got, exec.Path)
 	}
 }

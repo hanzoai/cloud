@@ -8,21 +8,19 @@ import (
 	"github.com/hanzoai/cloud/apps/sandbox"
 )
 
-// Standalone entry for the sandbox app.
+// Standalone entry for the sandboxes app.
 //
 // Without this file apps/sandbox compiles and serves nothing: the host loads a
-// sibling binary per manifest entry, so an app with a Mount and no plugin/<app>
-// is a package nothing links. That was the state for as long as the package
-// existed — `curl api.hanzo.ai/v1/sandbox/boxes` answered 404 while the code to
-// answer it sat in the tree — and it is why every consumer that points at the
-// executor (hanzo.app's ProjectFs, apps/exec's upstream, apps/functions'
-// invoke) had nothing behind it.
+// sibling binary per manifest row, so an app with a Mount and no plugin/<app> is
+// a package nothing links. That is not hypothetical — it is exactly the state
+// apps/sandbox sat in while four consumers pointed at it and `curl
+// api.hanzo.ai/v1/sandbox/boxes` answered 404.
 //
-// It is the SCHEDULER, not the executor. It claims a box, tracks its lease, and
-// forwards fs/proc/git through to the boxd running inside it; the work happens
-// in the pod. Free at this tier because the box itself is what gets metered —
-// billing for the call that starts a pod and again for the pod would charge
-// twice for one thing.
+// Free at the edge because the SANDBOX is what gets metered, not the call that
+// asks for one. Charging per request here and again for the machine-seconds it
+// runs would bill twice for one thing, and the lease is the honest unit: a
+// caller pays for how long they held a sandbox, not for how many times they
+// asked it a question.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "sandbox",
