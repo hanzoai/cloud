@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/fleet"
 )
 
 // RunOnBehalf runs agent `ref` for `org` ON BEHALF OF `userSub`, IN-PROCESS —
@@ -76,7 +76,7 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 		// persisted: writing a row here would fork the definition per org and make
 		// a later product change unable to reach the orgs that had already been
 		// seeded. A row the org DOES create wins, because Resolve is tried first.
-		if def, ok := builtinAgent(org, ref, builtinAgentModel()); ok {
+		if def, ok := builtinAgent(org, ref, cloud.ChatModel); ok {
 			a = def
 		} else {
 			return Run{}, err
@@ -104,16 +104,29 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 // not silently become the default agent, or a typo in `code: repo` would run the
 // chat agent and look like it worked.
 //
-// The model is enso, Hanzo's own auto-routing SKU, which picks the right model
-// per query server-side. NOT cloud.FallbackModel ("best"): that constant's own
-// doc says it "keeps a bot's reply landing when the flash tier is saturated; the
-// interactive chat path never uses it" — it is the degraded path, and a Slack
-// turn IS the interactive chat path. Studio names the same default for the same
-// reason (middleware/studio_home.py: STUDIO_CHAT_MODEL or "enso").
+// The model is cloud.ChatModel, which is where the tier and the evidence for it
+// now live — one constant in the file that owns model policy, instead of a literal
+// here behind a BRIDGE_AGENT_MODEL knob no deployment ever set.
 //
-// Tools is deliberately EMPTY. The tool-calling loop is what decides what an
-// agent may reach, and handing the default agent a tool set here would be
-// deciding that in the wrong place.
+// The tier did not change. Its JUSTIFICATION did, because the old one was false:
+// this called `enso` "the auto-routing SKU that selects per query in the gateway's
+// own catalog", and enso does no such thing — one fixed route entry
+// (deepseek-v4-pro, reasoning: medium), no ladder, no escalation. Measurement says
+// it is nonetheless the right tier for a tool-driving turn, and cloud.ChatModel
+// carries those numbers.
+//
+// It is also NOT cloud.FallbackModel ("best"): that constant's own doc says it
+// "keeps a bot's reply landing when the flash tier is saturated; the interactive
+// chat path never uses it" — it is the degraded path, and a Slack turn IS the
+// interactive chat path.
+//
+// A person who wants a different tier pins one in the App Home menu, and that pin
+// still wins below.
+//
+// Tools is the fleet's whole door (ToolsAll), not empty: the tool-calling loop
+// decides what may be OFFERED, but an agent that declares nothing is offered
+// nothing, which is how the default assistant came to report it could not reach a
+// cloud that was one socket away.
 func builtinAgent(org, ref, model string) (Agent, bool) {
 	if !strings.EqualFold(strings.TrimSpace(ref), builtinAgentName) {
 		return Agent{}, false
@@ -151,31 +164,19 @@ const builtinAgentInstructions = "You are Hanzo, the assistant for the Hanzo clo
 	// missing sentence. The surface was collapsed from 1,189 flat tools (977 KB,
 	// ~244k tokens just to list) to 88 grouped ones precisely so the schemas could
 	// be fetched on demand; the fetch has to be described or the trade is a loss.
-	"Your tools are grouped one per subsystem, named hanzo_<subsystem>. Each takes " +
-	"an `op` (choose from its enum) and an `input` object. The enum lists operation " +
-	"names only — to see what an operation accepts or returns, call hanzo_describe " +
-	"with that op name first, then call it. Prefer looking something up with a tool " +
+	"Your tools are grouped one per subsystem, and a tool IS its subsystem's name. " +
+	"Each takes an `op` (choose from its enum) and an `input` object. The enum lists " +
+	"operation names only — to see what an operation accepts or returns, call `" +
+	fleet.Describe + "` with that op name first, then call it. " +
+	"Prefer looking something up with a tool " +
 	"over answering from memory: you are answering about THIS organization's live " +
 	"cloud, and your training data does not contain it."
 
-// builtinAgentModel is the chat brain: enso, the auto-routing SKU that selects
-// per query in the gateway's own catalog, overridable per deployment.
-//
-// Forwarded verbatim and never validated here — the catalog (hanzoai/ai
-// conf/models.yaml) is what resolves and routes it, and a check in cloud could
-// only ever disagree with the thing that actually decides.
-func builtinAgentModel() string {
-	if v := strings.TrimSpace(os.Getenv("BRIDGE_AGENT_MODEL")); v != "" {
-		return v
-	}
-	return "enso"
-}
-
 // knownChatModel accepts only a model this deployment offers for chat.
 //
-// The enso family is the auto-routing SKU set the App Home menu is built from.
-// Anything else is refused rather than forwarded — an arbitrary string from a
-// client would let a caller pick what their org pays for.
+// The enso family is the SKU set the App Home menu is built from. Anything else
+// is refused rather than forwarded — an arbitrary string from a client would let
+// a caller pick what their org pays for.
 func knownChatModel(m string) bool {
 	switch m {
 	case "enso", "enso-flash", "enso-ultra":
