@@ -686,6 +686,24 @@ func init() {
 			"The payload is verified by HMAC against the webhook secret before it is parsed."+
 			vendorCall)
 
+	openapi.Describe("/v1/integrations/slack/install", http.MethodGet,
+		"Begin installing the Hanzo Slack app",
+		"The address behind \"Add to Slack\" and the Direct install URL in Slack's app "+
+			"directory. It redirects to Slack's consent screen and does nothing else — the "+
+			"consent URL is built by the same code the console's Connect button uses, so a "+
+			"workspace is asked for the same scopes however the install began.\n\n"+
+			"It is deliberately anonymous: it carries no state and binds no org, because the "+
+			"person clicking Install in the directory has no Hanzo session yet, and inventing "+
+			"an org for an anonymous click is exactly what the tenant rules forbid. The org is "+
+			"resolved where every other install resolves it — the provider callback, from the "+
+			"signed state a console connect minted or from the workspace already being "+
+			"connected — so an install that starts here finishes under the same rules.\n\n"+
+			"It exists as our own address rather than a bare slack.com link because Slack "+
+			"refuses a slack.com URL in that field, and routing the click through us is what "+
+			"lets the install be attributed. Where the app is not configured it answers 503, "+
+			"rather than a consent URL with an empty client_id that Slack would render as its "+
+			"own dead-end error page.")
+
 	// ── account-link flows (three legs each) ─────────────────────────────────
 	openapi.Describe("/v1/integrations/slack/link", http.MethodGet,
 		"Begin linking a Hanzo account from Slack",
