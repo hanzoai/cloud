@@ -28,7 +28,7 @@ import (
 // whose model failed returns a recorded error-status Run and a nil error.
 func RunOnBehalf(ctx context.Context, org, userSub, ref, input string) (Run, error) {
 	if mounted == nil {
-		return Run{}, fmt.Errorf("agents: not mounted")
+		return Run{}, fmt.Errorf("%w: agents", cloud.ErrNoPeer)
 	}
 	return runOnBehalf(mounted, ctx, org, userSub, ref, input)
 }

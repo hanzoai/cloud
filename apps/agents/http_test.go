@@ -26,28 +26,29 @@ func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 // to exercise the no-inference fail-closed path.
 func mountApp(t *testing.T, ai types.AIClient) *zip.App {
 	t.Helper()
-	return mountAppModel(t, ai, "")
+	return mountAppModel(t, ai)
 }
 
-// mountAppModel is mountApp with an explicit deployment default model
-// (deps.AIDefaultModel), so a test can exercise the empty-model → default path.
-func mountAppModel(t *testing.T, ai types.AIClient, defaultModel string) *zip.App {
+// mountAppModel mounts with a catalog-aware AI client. It took a deployment
+// default model until that knob was deleted: the default is cloud.DefaultModel,
+// full stop, so there is no per-deployment value left for a test to vary.
+func mountAppModel(t *testing.T, ai types.AIClient) *zip.App {
 	t.Helper()
-	return mountAppIn(t, t.TempDir(), ai, defaultModel)
+	return mountAppIn(t, t.TempDir(), ai)
 }
 
 // mountAppDir mounts over an EXISTING data dir, so a test can stand up what a
 // deployment already has on disk (a pre-split agents.db) and boot over it.
 func mountAppDir(t *testing.T, dir string) *zip.App {
 	t.Helper()
-	return mountAppIn(t, dir, &fakeAI{content: "x"}, "")
+	return mountAppIn(t, dir, &fakeAI{content: "x"})
 }
 
-func mountAppIn(t *testing.T, dir string, ai types.AIClient, defaultModel string) *zip.App {
+func mountAppIn(t *testing.T, dir string, ai types.AIClient) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: dir, AI: ai, AIDefaultModel: defaultModel}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: dir, AI: ai}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	// Mount starts the scheduler goroutine when AI is non-nil and sets the global
@@ -97,20 +98,33 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 		map[string]any{"name": "helper", "model": "gpt-4o-mini", "instructions": "be terse"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
-	// model is required — creating without one is a 400.
+	// Creating without a model is a 201 on cloud.DefaultModel. This asserted 400
+	// ("model is required") while the default came from deps.AIDefaultModel, which
+	// a hand-built test Deps left empty — but LoadConfig never did, so the 400 was
+	// reachable only from a fixture and NEVER from a deployment. The test pinned a
+	// state production could not be in; with the field gone there is one behaviour.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "maxpower",
-		map[string]any{"name": "nomodel"}); code != http.StatusBadRequest {
-		t.Fatalf("create without model want 400, got %d", code)
+		map[string]any{"name": "nomodel"}); code != http.StatusCreated {
+		t.Fatalf("create without model want 201 on the default model, got %d", code)
 	}
 
-	// List shape is {agents:[...]}.
+	// List shape is {agents:[...]}. maxpower owns BOTH creates above — the
+	// explicit-model one and the defaulted one — and sees neither org's rows but
+	// its own.
 	code, body := do(t, app, http.MethodGet, "/v1/agents", "maxpower", nil)
 	var listed struct {
 		Agents []agentView `json:"agents"`
 	}
 	_ = json.Unmarshal(body, &listed)
-	if code != http.StatusOK || len(listed.Agents) != 1 || listed.Agents[0].Name != "helper" {
-		t.Fatalf("maxpower should see [helper], got %d %+v", code, listed.Agents)
+	names := map[string]string{}
+	for _, a := range listed.Agents {
+		names[a.Name] = a.Model
+	}
+	if code != http.StatusOK || len(listed.Agents) != 2 || names["helper"] != "gpt-4o-mini" {
+		t.Fatalf("maxpower should see [helper nomodel], got %d %+v", code, listed.Agents)
+	}
+	if names["nomodel"] != cloud.DefaultModel {
+		t.Fatalf("defaulted agent stored model %q, want %q", names["nomodel"], cloud.DefaultModel)
 	}
 
 	// run executes via the (fake) AI and returns a real recorded run.

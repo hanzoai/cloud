@@ -1135,6 +1135,11 @@ type accruals struct {
 	Accrued          int `json:"accrued"`
 	RoyaltiesAccrued int `json:"royaltiesAccrued"`
 	Swept            int `json:"swept"`
+	// RoyaltyFailures is reported, not swallowed: a sweep that could not reach
+	// the royalty store must not read as one that found nothing owed. The count
+	// was already computed and then dropped on the floor, which is the same
+	// silence the typed leg was added to end.
+	RoyaltyFailures int `json:"royaltyFailures"`
 }
 
 // accrualsOut is the enveloped POST /v1/admin/affiliates/sweep answer.
@@ -1172,7 +1177,7 @@ func (o ops) adminSweep(ctx context.Context, _ *noInput) (*accrualsOut, error) {
 	}
 	period := periodKey(time.Now())
 	now := time.Now().Unix()
-	swept, accrued, royalties := 0, 0, 0
+	swept, accrued, royalties, royaltyErrs := 0, 0, 0, 0
 	for _, src := range sources {
 		swept++
 		// Read the source org's metered spend ONCE, then fan out to BOTH the affiliate
@@ -1190,9 +1195,18 @@ func (o ops) adminSweep(ctx context.Context, _ *noInput) (*accrualsOut, error) {
 			o.s.Log.Warn("affiliates: upline accrual failed", "source", src, "err", aerr)
 		}
 		accrued += n
-		royalties += authors.AccrueForOrg(ctx, src, spend, period, now)
+		// The royalty leg reports its own failure now. It used to return a bare
+		// int, so an unmounted authors — which is every deployment, authors being
+		// its own binary — was indistinguishable from "no author was owed
+		// anything", and the sweep reported a completed accrual of zero.
+		r, rerr := authors.AccrueForOrg(ctx, src, spend, period, now)
+		if rerr != nil {
+			royaltyErrs++
+			o.s.Log.Warn("affiliates: author royalty accrual failed", "source", src, "err", rerr)
+		}
+		royalties += r
 	}
-	return &accrualsOut{Data: accruals{Swept: swept, Accrued: accrued, RoyaltiesAccrued: royalties}, envelope: ok()}, nil
+	return &accrualsOut{Data: accruals{Swept: swept, Accrued: accrued, RoyaltiesAccrued: royalties, RoyaltyFailures: royaltyErrs}, envelope: ok()}, nil
 }
 
 // ── accrual core (the ONE multi-level walk, shared by sweep + lazy read) ───────
