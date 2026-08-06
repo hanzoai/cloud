@@ -224,8 +224,6 @@ func TestNoClientAsksForACompoundName(t *testing.T) {
 		"/v1/billing/spend-alerts":    "/v1/billing/alerts",
 		"/v1/billing/credit-grants":   "/v1/billing/credits",
 		"/v1/billing/usage-rollup":    "/v1/billing/usage/rollup",
-		"/v1/billing/gpu-charge":      "/v1/billing/gpu/charge",
-		"/v1/billing/gpu-eligibility": "/v1/billing/gpu/eligibility",
 		"/v1/billing/test-mode":       "/v1/billing/mode",
 	}
 

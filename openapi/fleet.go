@@ -41,8 +41,8 @@ import (
 // subsystem and 116 app binaries that each project their OWN router when they are
 // BUILT. What the host serves is the weave of those projections ([MountFleet]),
 // so nothing in production reads a live router, and the artifact is only as fresh
-// as the last `make -f mk/fleet.mk subsets`. It shipped stale — one binary
-// answered /v1/billing/gpu/eligibility while publishing /v1/billing/gpu-eligibility,
+// as the last `make -f mk/fleet.mk subsets`. It shipped stale — one binary answered
+// a renamed billing route under its new name while still publishing the old one,
 // because the rename commit did not regenerate the subset.
 //
 // A false provenance is worse than a missing one, because it is READ. hanzoai/cli's
