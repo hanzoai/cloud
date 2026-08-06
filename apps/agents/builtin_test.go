@@ -47,3 +47,24 @@ func TestNoModelIsAMiss(t *testing.T) {
 		t.Error("with no model configured the default must not resolve")
 	}
 }
+
+// The chat brain is enso — Hanzo's own auto-routing SKU — and explicitly NOT
+// cloud.FallbackModel ("best"), whose own doc says the interactive chat path
+// never uses it. A Slack turn IS the interactive chat path.
+func TestBuiltinModelIsEnso(t *testing.T) {
+	t.Setenv("BRIDGE_AGENT_MODEL", "")
+	if got := builtinAgentModel(); got != "enso" {
+		t.Errorf("the chat brain must default to enso, got %q", got)
+	}
+	if got := builtinAgentModel(); got == "best" {
+		t.Error(`"best" is the degraded fallback tier, never the interactive default`)
+	}
+}
+
+// A deployment can name its own.
+func TestBuiltinModelOverride(t *testing.T) {
+	t.Setenv("BRIDGE_AGENT_MODEL", "enso-ultra")
+	if got := builtinAgentModel(); got != "enso-ultra" {
+		t.Errorf("BRIDGE_AGENT_MODEL must win, got %q", got)
+	}
+}
