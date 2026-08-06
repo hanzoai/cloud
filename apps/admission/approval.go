@@ -16,46 +16,51 @@ package admission
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
+	iamplane "github.com/hanzoai/cloud/plane/iam"
 	"github.com/zap-proto/zip"
 )
 
 // approvalStatusPending is the ONE value that gates a user. This mirrors IAM's
-// object.ApprovalPending (hanzoai/iam object/user.go) and User.IsApproved() —
-// approval is FAIL-OPEN: a user is approved unless properties.approvalStatus is
-// EXACTLY "pending" (absent / "approved" / "rejected" all read approved via
-// IsApproved). Only "pending" holds a user on the waitlist. Keeping the literal
-// here (not importing IAM) keeps admission self-contained.
+// approval semantics — approval is FAIL-OPEN: a user is approved unless
+// approvalStatus is EXACTLY "pending" (absent / "approved" / "rejected" all read
+// approved). Only "pending" holds a user on the waitlist. The literal lives HERE,
+// with the gate that acts on it, rather than in the identity store: iam answers
+// what it recorded, admission decides what that means, and two places can never
+// disagree about who is on a waitlist.
 const approvalStatusPending = "pending"
 
 // approvedHeader is the FORWARD-PERFECT path: once IAM carries approvalStatus in
 // the token and the gateway mints it as a validated header (the same trust model
 // as X-User-IsAdmin), the enforcement points read approval for FREE with no IAM
-// round-trip. Until then the resolver falls back to an IAM get-account lookup.
+// round-trip. Until then the resolver falls back to asking iam over the plane.
 // Values: "true" (approved) / "false" (pending). Any other value → fall through.
 const approvedHeader = "X-User-Approved"
 
-// accountLookup fetches a caller's approvalStatus by replaying the caller's own
-// credentials to IAM get-account. Injected so the resolver is unit-testable
-// without a live IAM. It returns (status, ok): ok=false on any IAM error, which
-// the resolver treats FAIL-OPEN (approved) — the documented guard behavior
-// (availability over a hard gate when IAM is unreachable).
-type accountLookup func(ctx context.Context, cookie, auth string) (status string, ok bool)
+// accountLookup fetches the CALLER'S approvalStatus from iam. Injected so the
+// resolver is unit-testable without a live peer. It returns (status, ok): ok=false
+// on any failure, which the resolver treats FAIL-OPEN (approved) — the documented
+// guard behavior, availability over a hard gate when iam is unreachable.
+//
+// It takes only a context, and that is the change: it used to take the caller's
+// Cookie and Authorization header, because HTTP gave it no way to say who was
+// asking and REPLAYING the caller's own credential to iam was the way to make iam
+// answer about them. The plane carries the validated principal, so the credential
+// is no longer handled here — or anywhere between here and the store.
+type accountLookup func(ctx context.Context) (status string, ok bool)
 
 // Approvals resolves whether the current caller is off the waitlist. It is the ONE
 // approval predicate the native middleware uses, DRY with the @file waitlist-guard
-// (both read properties.approvalStatus == "pending"). Resolution order:
+// (both read approvalStatus == "pending"). Resolution order:
 //
 //  1. global admin (c.IsAdmin())            → approved (admins are never gated)
 //  2. validated header X-User-Approved      → its bit (forward-perfect, no lookup)
-//  3. IAM get-account (caller's creds)       → approved unless approvalStatus=="pending"
-//     — cached per user for ttl; FAIL-OPEN on any IAM error.
+//  3. the iam peer (plane.IAMApproval)      → approved unless approvalStatus=="pending"
+//     — cached per user for ttl; FAIL-OPEN on any error.
 type Approvals struct {
 	lookup accountLookup
 	ttl    time.Duration
@@ -69,19 +74,17 @@ type approvalEntry struct {
 	at       time.Time
 }
 
-// NewApprovals builds a resolver. iamBase is the in-cluster IAM base
-// (e.g. http://iam.hanzo.svc.cluster.local:8000); ttl bounds the per-user cache.
-// A zero iamBase yields a resolver whose lookup always fails-open (approved) —
-// safe for a deployment where approval is enforced elsewhere (the guard).
-func NewApprovals(iamBase string, ttl time.Duration) *Approvals {
+// NewApprovals builds a resolver over the iam peer; ttl bounds the per-user cache.
+//
+// It takes no address. iam is reached by NAME over its own socket, so there is no
+// base URL for a deployment to supply and no way for one to be wrong — the
+// zero-iamBase case this used to carry (a resolver that always failed open
+// because nobody had configured a URL) is not expressible any more.
+func NewApprovals(ttl time.Duration) *Approvals {
 	if ttl <= 0 {
 		ttl = 30 * time.Second
 	}
-	return &Approvals{
-		lookup: httpAccountLookup(strings.TrimRight(iamBase, "/")),
-		ttl:    ttl,
-		cache:  map[string]approvalEntry{},
-	}
+	return &Approvals{lookup: planeApproval, ttl: ttl, cache: map[string]approvalEntry{}}
 }
 
 // newApprovalsWithLookup is the test seam: a resolver over an injected lookup.
@@ -98,14 +101,14 @@ func (a *Approvals) Approved(c *zip.Ctx) bool {
 	if c.IsAdmin() {
 		return true
 	}
-	// (2) Forward-perfect validated header — no IAM round-trip when present.
+	// (2) Forward-perfect validated header — no round-trip when present.
 	switch strings.ToLower(strings.TrimSpace(c.Header(approvedHeader))) {
 	case "true", "1", "approved":
 		return true
 	case "false", "0", "pending":
 		return false
 	}
-	// (3) IAM get-account lookup, cached per user, fail-open on error.
+	// (3) Ask iam, cached per user, fail-open on error.
 	user := strings.TrimSpace(c.User())
 	if user == "" {
 		// No validated principal — an unauthenticated caller. The middleware
@@ -119,11 +122,13 @@ func (a *Approvals) Approved(c *zip.Ctx) bool {
 	if e, ok := a.get(user); ok {
 		return e.approved
 	}
-	status, ok := a.lookup(c.Context(),
-		c.Header("Cookie"), c.Header("Authorization"))
+	// As(c, "") delegates THIS request's principal unchanged — the caller's own
+	// authority, and nothing more. It is what replaces forwarding the raw bearer:
+	// iam learns who is asking from the assertion the gateway already minted.
+	status, ok := a.lookup(cloud.As(c, ""))
 	if !ok {
-		// IAM unreachable → FAIL-OPEN (approved). Do NOT cache a fail-open so the
-		// next request re-probes and a recovered IAM re-gates promptly.
+		// iam unreachable → FAIL-OPEN (approved). Do NOT cache a fail-open so the
+		// next request re-probes and a recovered iam re-gates promptly.
 		return true
 	}
 	approved := strings.TrimSpace(strings.ToLower(status)) != approvalStatusPending
@@ -147,76 +152,22 @@ func (a *Approvals) put(user string, approved bool) {
 	a.cache[user] = approvalEntry{approved: approved, at: time.Now()}
 }
 
-// httpAccountLookup builds the real IAM get-account lookup. It replays the
-// caller's Cookie / Authorization to IAM and reads data.properties.approvalStatus
-// (the field GetAccount returns via GetMaskedUser). Bounded read + timeout mirror
-// the guard's iamGet. Any non-200 / decode error → ok=false (fail-open upstream).
-func httpAccountLookup(iamBase string) accountLookup {
-	if iamBase == "" {
-		return func(context.Context, string, string) (string, bool) { return "", false }
+// planeApproval is the real lookup: one ZAP call to iam, by name.
+//
+// Every failure is ok=false and the resolver fails open — an absent iam, a
+// refused call, an unknown subject. That is unchanged behavior, deliberately: the
+// gate's availability rule is a property of the gate, and moving the transport
+// underneath it must not quietly turn a fail-open into a fail-closed.
+func planeApproval(ctx context.Context) (string, bool) {
+	ctx, cancel := context.WithTimeout(ctx, approvalTimeout)
+	defer cancel()
+	out, err := iamplane.IAMApproval(ctx)
+	if err != nil || out == nil {
+		return "", false
 	}
-	url := iamBase + "/v1/iam/get-account"
-	return func(ctx context.Context, cookie, auth string) (string, bool) {
-		ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
-		defer cancel()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return "", false
-		}
-		if cookie != "" {
-			req.Header.Set("Cookie", cookie)
-		}
-		if auth != "" {
-			req.Header.Set("Authorization", auth)
-		}
-		req.Header.Set("Accept", "application/json")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return "", false
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			return "", false
-		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		if err != nil {
-			return "", false
-		}
-		return approvalStatusFromAccount(body)
-	}
+	return out.Status, true
 }
 
-// approvalStatusFromAccount extracts properties.approvalStatus from an IAM
-// get-account response. The user object is at the top level or under `data`
-// (the casibase { status, data } envelope). Returns ("", false) on an error
-// envelope or a missing user (fail-open upstream). An ABSENT approvalStatus is
-// returned as "" (ok=true) — which the resolver reads as approved (fail-open,
-// matching IsApproved()).
-func approvalStatusFromAccount(body []byte) (string, bool) {
-	type acct struct {
-		Owner      string            `json:"owner"`
-		Properties map[string]string `json:"properties"`
-	}
-	var top struct {
-		Status string `json:"status"`
-		acct
-		Data acct `json:"data"`
-	}
-	if err := json.Unmarshal(body, &top); err != nil {
-		return "", false
-	}
-	if top.Status == "error" {
-		return "", false
-	}
-	a := top.acct
-	if a.Owner == "" && top.Data.Owner != "" {
-		a = top.Data
-	}
-	if a.Owner == "" {
-		return "", false
-	}
-	if a.Properties == nil {
-		return "", true // no properties → approved (fail-open)
-	}
-	return a.Properties["approvalStatus"], true
-}
+// approvalTimeout bounds the lookup. It sits in front of a request, so a slow iam
+// must resolve to the fail-open decision rather than holding the caller.
+const approvalTimeout = 8 * time.Second
