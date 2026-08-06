@@ -73,6 +73,7 @@ type Door struct {
 // apps is the deployment's COMPOSED set (cmd/cloud's `composed`), never the whole
 // manifest: a deployment that does not run a subsystem must not offer its tools,
 // for the same reason it must not publish its routes.
+//
 // It also signposts the address the door LEFT, and that belongs here rather than
 // in the console's terminal handler, which is where it used to live. The console
 // answered an unclaimed [manifest.FrameworkMCPPath] with "the door moved" on the

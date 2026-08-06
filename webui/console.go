@@ -87,6 +87,7 @@ func consoleTitle(host string) string {
 // bytes of its own (see the package doc). A nil fsys means this process serves no
 // console: the catch-all still keeps the API namespaces honest and still answers
 // the agent door, and a console path gets a 503 that says so.
+//
 // app is not only where the catch-all is registered: it is also where this
 // process's AGENT DOOR comes from. zip.App.MCP is that door as a value — a frame
 // in, a frame out — and the terminal handler answers with it at the address the
@@ -132,6 +133,7 @@ type consoleHandler struct {
 // client-side route would 404 and the failure would surface as a broken product
 // rather than as a bad source. nil is the separate, stated case of "no bundle in
 // this process" and is not an error.
+//
 // The door is REQUIRED. A terminal handler with no door cannot answer the one
 // address in the process that is guaranteed not to be a console route, and the
 // SPA fallback is the wrong answer there in the most damaging possible way — the
@@ -158,10 +160,11 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// The agent door, BEFORE the static-console gate — an MCP client speaks POST,
 	// and the gate below would have answered it "method not allowed" in the
 	// console's own voice, which is how POST /mcp came to look like a door that
-	// exists but is misconfigured. Both rules are self-scoping: this handler is
-	// TERMINAL, so it only ever sees a path no route claimed in THIS process. A
-	// plugin that serves its own door at FrameworkMCPPath matches a real route and
-	// never reaches here; the host, which moved its door to MCPPath, does.
+	// exists but is misconfigured. This handler is TERMINAL, so it only ever sees a
+	// path no route claimed in THIS process — which is why it is the right place to
+	// answer the door and the wrong place to guess where the door went. It answers
+	// with the process's OWN door, so a plugin whose route zip never mounted is
+	// served here and a host that claimed the path with a signpost never arrives.
 	if h.mcpDoor(w, r, upath) {
 		return
 	}
