@@ -148,7 +148,11 @@ func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error)
 	if s, ok := f.stores[name]; ok {
 		return s, nil
 	}
-	s, err := sqlstore.Open(name.ns, name.subsystem, f.dataDir)
+	// KindUsage travels WITH the open, because a usage ref is unique per wallet and the
+	// store has to know which of its kinds that is to repair the rows written before it
+	// was. Passing the constant means a rename here follows into the repair instead of
+	// silently turning it into a no-op that bills one act twice.
+	s, err := sqlstore.Open(name.ns, name.subsystem, f.dataDir, string(KindUsage))
 	if err != nil {
 		return nil, fmt.Errorf("finance: open %s ledger for %s: %w", name.subsystem, name.ns, err)
 	}

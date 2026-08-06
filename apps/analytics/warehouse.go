@@ -84,6 +84,16 @@ const (
 	maxDeliver = 8
 )
 
+// consumeConcurrency is how many clients pull each durable at once. It bounds how
+// many rows can be in flight for the store to coalesce into one async_insert block,
+// which is what decides throughput here — not the size of any buffer we keep.
+//
+// Every puller holds one message and one open insert, so this is also the ceiling on
+// concurrent inserts per signal. 16 is chosen against MaxAckPending (1000 by default,
+// so nowhere near it) and against the store, which handles this many concurrent
+// inserts comfortably while the materialized-view cascades overlap.
+const consumeConcurrency = 16
+
 // table is WHERE a signal lands and HOW a row is built for it: one name, one column
 // list, one row builder. There are exactly TWO, because there are exactly two grains —
 // an occurrence HAPPENED, a sample was MEASURED. Everything that used to differ per
@@ -424,16 +434,36 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 		}); err != nil {
 			return fmt.Errorf("create consumer %s: %w", durable, err)
 		}
-		// Contained: this runs over bus payloads, so a panic here would kill the
-		// process and every tenant with it rather than this one consumer.
-		cloud.Go(s.log, "event.sink", []any{"signal", string(w.signal)}, func() {
-			var once sync.Once
-			send := func(err error) { once.Do(func() { errc <- err }) }
-			defer send(fmt.Errorf("event sink: %s consumer panicked (recovered)", w.signal))
-			send(cl.ConsumeMessages(ctx, EventStream, durable, func(sm *infra.StreamMessage) error {
-				return s.land(ctx, w, sm)
-			}))
-		})
+		// One durable, MANY pullers. A JetStream pull consumer load-balances across
+		// every client bound to it, so this is concurrency without a second cursor:
+		// each message is still delivered once, and still acked only after ITS OWN
+		// row has landed. Redelivery, MaxDeliver and the abandoned-fact advisory all
+		// mean exactly what they meant with one puller.
+		//
+		// It is the fix for a throughput floor that had nothing to do with the store.
+		// The sink commits one row per message, and insertSettings asks the store to
+		// batch (async_insert) while wait_for_async_insert holds the call open until
+		// the block is durable. With a single puller those two are in deadlock: the
+		// one in-flight row IS the whole batch, so every insert pays a full
+		// materialized-view cascade to land it, and the next message cannot start
+		// until it finishes. Throughput collapses to 1/insert-latency — measured at
+		// ~24 rows/min against a ~2.5s cascade — regardless of how much is queued.
+		//
+		// Pulling concurrently gives async_insert real blocks to coalesce and lets
+		// the store overlap the cascades, so the ceiling becomes the store's rather
+		// than the round-trip's.
+		var once sync.Once
+		send := func(err error) { once.Do(func() { errc <- err }) }
+		for i := 0; i < consumeConcurrency; i++ {
+			// Contained: this runs over bus payloads, so a panic here would kill the
+			// process and every tenant with it rather than this one consumer.
+			cloud.Go(s.log, "event.sink", []any{"signal", string(w.signal), "puller", i}, func() {
+				defer send(fmt.Errorf("event sink: %s consumer panicked (recovered)", w.signal))
+				send(cl.ConsumeMessages(ctx, EventStream, durable, func(sm *infra.StreamMessage) error {
+					return s.land(ctx, w, sm)
+				}))
+			})
+		}
 	}
 	select {
 	case <-ctx.Done():

@@ -13,7 +13,7 @@ import (
 // but a refusal nobody can re-check is how a convertible route stays untyped
 // forever — and how a reason that has stopped being true keeps being believed.
 //
-// The consequence being pinned is worth stating plainly: /v1/dns publishes seven
+// The consequence being pinned is worth stating plainly: /v1/dns publishes five
 // operations at one greedy wildcard, and NOT ONE of them carries a description, a
 // summary, an MCP tool or a CLI command. This whole subsystem projects to nothing
 // a caller can read. That is a deliberate cost, and this file is where it stops
@@ -23,11 +23,11 @@ import (
 // with the WIRE FACT that typing it would move. Keyed by the address form the
 // document uses, so a stale entry names something and can be checked.
 var untypedByDesign = map[string]string{
-	"DELETE /v1/dns/{wildcard1}":  reasonForward,
-	"GET /v1/dns/{wildcard1}":     reasonForward,
-	"PATCH /v1/dns/{wildcard1}":   reasonForward,
-	"POST /v1/dns/{wildcard1}":    reasonForward,
-	"PUT /v1/dns/{wildcard1}":     reasonForward,
+	"DELETE /v1/dns/{wildcard1}": reasonForward,
+	"GET /v1/dns/{wildcard1}":    reasonForward,
+	"PATCH /v1/dns/{wildcard1}":  reasonForward,
+	"POST /v1/dns/{wildcard1}":   reasonForward,
+	"PUT /v1/dns/{wildcard1}":    reasonForward,
 }
 
 // reasonForward is the one reason all seven share, because all seven ARE one
