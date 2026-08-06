@@ -16,10 +16,8 @@ package storage
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,6 +25,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/internal/planetest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -36,38 +35,26 @@ import (
 type billServer struct {
 	available int64
 
-	mu        sync.Mutex
-	usageOrg  string
-	usageBody []byte
-	usages    int32
+	// The usage DEBIT crosses the internal plane, not HTTP — metering.Usage.Ref is
+	// `json:"-"` and could not survive a JSON body. The balance READ above is still
+	// HTTP. See internal/planetest.
+	peer *planetest.Commerce
 }
 
 func (b *billServer) start(t *testing.T) string {
 	t.Helper()
+	b.peer = planetest.Serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"available": b.available})
-	})
-	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&b.usages, 1)
-		body, _ := io.ReadAll(r.Body)
-		b.mu.Lock()
-		b.usageOrg, b.usageBody = r.Header.Get("X-Org-Id"), body
-		b.mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, `{"transactionId":"tx_1","type":"usage"}`)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
 }
 
-func (b *billServer) debits() int32 { return atomic.LoadInt32(&b.usages) }
-func (b *billServer) lastDebit() (string, []byte) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.usageOrg, b.usageBody
-}
+func (b *billServer) debits() int32               { return b.peer.Count() }
+func (b *billServer) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.Body() }
 
 // newBilledService builds an s3 Service with S3 admin credentials present (so guard does
 // not 503 on Configured()) and a metering client pointed at commerceURL (default
