@@ -77,7 +77,7 @@ func TestGeneratedDeclarationRendersThroughTheRealChart(t *testing.T) {
 	// The three objects a web app needs, and the facts the caller asked for.
 	for _, kind := range []string{"Deployment", "Service", "Ingress"} {
 		if kinds[kind] == "" {
-			t.Fatalf("the chart rendered no %s from the generated declaration; it rendered %v", kind, keysOf(anyMap(kinds)))
+			t.Fatalf("the chart rendered no %s from the generated declaration; it rendered %v", kind, mapKeys(anyMap(kinds)))
 		}
 	}
 	if !strings.Contains(kinds["Deployment"], spec.Repository+":"+spec.Tag) {
