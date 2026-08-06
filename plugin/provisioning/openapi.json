@@ -90,7 +90,7 @@
     },
     "/v1/datastore/{name}": {
       "delete": {
-        "operationId": "delete_v1_datastore_name",
+        "operationId": "delete_v1_datastore_by_name",
         "summary": "Deprovisions one Hanzo Datastore warehouse.",
         "description": "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
         "tags": [
@@ -115,7 +115,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_datastore_name",
+        "operationId": "get_v1_datastore_by_name",
         "summary": "Returns one Hanzo Datastore warehouse's metadata.",
         "description": "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
         "tags": [
@@ -203,7 +203,7 @@
     },
     "/v1/docdb/{name}": {
       "delete": {
-        "operationId": "delete_v1_docdb_name",
+        "operationId": "delete_v1_docdb_by_name",
         "summary": "DropDocDB deprovisions one Hanzo DocDB database.",
         "description": "DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated FerretDB\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
         "tags": [
@@ -228,7 +228,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_docdb_name",
+        "operationId": "get_v1_docdb_by_name",
         "summary": "GetDocDB returns one Hanzo DocDB database's metadata.",
         "description": "GetDocDB returns one Hanzo DocDB database's metadata. It carries the\ndatabase's status, its instance address and the SCRAM user the instance was\nset up with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view.",
         "tags": [
@@ -316,7 +316,7 @@
     },
     "/v1/kv/{name}": {
       "delete": {
-        "operationId": "delete_v1_kv_name",
+        "operationId": "delete_v1_kv_by_name",
         "summary": "DropKV deprovisions one Hanzo KV store.",
         "description": "DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to\nit back to Base BEFORE tearing down the org's dedicated Valkey instance, then\ndeletes the sealed credential and removes the metadata row. Answers 204 with\nno body; a second call is a 404.",
         "tags": [
@@ -341,7 +341,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_kv_name",
+        "operationId": "get_v1_kv_by_name",
         "summary": "GetKV returns one Hanzo KV store's metadata.",
         "description": "GetKV returns one Hanzo KV store's metadata. It carries the store's status,\nits instance address and the Valkey user it authenticates as (\"default\", the\nonly user a requirepass instance has) — never the password. A still-booting\ninstance reads \"provisioning\", reconciled from the operator's live view.",
         "tags": [
@@ -429,7 +429,7 @@
     },
     "/v1/s3/{name}": {
       "delete": {
-        "operationId": "delete_v1_s3_name",
+        "operationId": "delete_v1_s3_by_name",
         "summary": "Deletes one bucket from the shared object store and removes its metadata row.",
         "description": "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
@@ -454,7 +454,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_s3_name",
+        "operationId": "get_v1_s3_by_name",
         "summary": "Returns one bucket's metadata.",
         "description": "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
         "tags": [
@@ -542,7 +542,7 @@
     },
     "/v1/search/{name}": {
       "delete": {
-        "operationId": "delete_v1_search_name",
+        "operationId": "delete_v1_search_by_name",
         "summary": "Deletes one search index from the shared backend and removes its metadata row.",
         "description": "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
@@ -567,7 +567,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_search_name",
+        "operationId": "get_v1_search_by_name",
         "summary": "Returns one search index's metadata.",
         "description": "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
         "tags": [
@@ -655,7 +655,7 @@
     },
     "/v1/sql/{name}": {
       "delete": {
-        "operationId": "delete_v1_sql_name",
+        "operationId": "delete_v1_sql_by_name",
         "summary": "DropSQL deprovisions one Hanzo SQL database.",
         "description": "DropSQL deprovisions one Hanzo SQL database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated Postgres\ninstance — never a live app pointed at a deleted backend — then deletes the\nsealed credential and removes the metadata row. Answers 204 with no body; a\nsecond call is a 404, not a second delete.",
         "tags": [
@@ -680,7 +680,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_sql_name",
+        "operationId": "get_v1_sql_by_name",
         "summary": "GetSQL returns one Hanzo SQL database's metadata.",
         "description": "GetSQL returns one Hanzo SQL database's metadata. It carries the database's\nstatus, its instance address and the admin user Postgres booted with — never\nthe password, which is returned once at create and otherwise lives only in\nHanzo KMS. A still-booting instance reads \"provisioning\", reconciled from the\noperator's live view rather than from the row.",
         "tags": [
@@ -768,7 +768,7 @@
     },
     "/v1/vector/{name}": {
       "delete": {
-        "operationId": "delete_v1_vector_name",
+        "operationId": "delete_v1_vector_by_name",
         "summary": "Deletes one vector collection from the shared backend and removes its metadata row.",
         "description": "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
@@ -793,7 +793,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_vector_name",
+        "operationId": "get_v1_vector_by_name",
         "summary": "Returns one vector collection's metadata.",
         "description": "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
         "tags": [

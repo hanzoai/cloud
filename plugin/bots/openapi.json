@@ -145,7 +145,7 @@
     },
     "/v1/bots/{runId}/stop": {
       "post": {
-        "operationId": "post_v1_bots_runId_stop",
+        "operationId": "post_v1_bots_by_runid_stop",
         "summary": "Stop terminates one of the caller org's own bot runs and reports its terminal state.",
         "description": "Stop terminates one of the caller org's own bot runs and reports its terminal state.\n\nThe own-key guard is the org: it is the caller's validated org, never theirs to\nchoose, and the runtime resolves the run id UNDER it. A run belonging to another\ntenant is not among this org's runs, so it answers absent — the same 404 a\nnonexistent id gets, which is what keeps this from being an oracle.\n\nAbsence is honoured ONLY when the runtime answers it. A runtime that does not\nserve stop reports nothing about the run, and reporting \"stopped\" on that basis\nwould be a stop that cannot fail — so it is a 502.",
         "tags": [
