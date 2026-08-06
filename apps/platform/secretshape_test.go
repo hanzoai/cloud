@@ -177,3 +177,37 @@ func TestAnEmptyValueIsNeverPromoted(t *testing.T) {
 		t.Fatalf("an empty value was promoted, which would require a KMS seal of nothing: %+v", out)
 	}
 }
+
+// Red's eight, against the OPERATOR lane's classifier. That lane writes a
+// database column it can rewrite, so a heuristic is defensible there — but the
+// named misses are closed regardless, since they cost nothing.
+func TestOperatorLaneCatchesRedsEight(t *testing.T) {
+	for _, tc := range []struct{ key, value, why string }{
+		{"PGPASSWORD", "s3cr3t", "libpq's own variable; one token to any splitter"},
+		{"DB_PW", "s3cr3t", "`pw` was not a token"},
+		{"ADMIN_PW", "Tr0ub4dor&3", "symbol-rich: a stronger password was MORE likely plaintext"},
+		{"APP_PASSPHRASE", "correct horse battery staple", "spaces, so no token shape"},
+		{"KUBECONFIG", "apiVersion: v1\nclusters: []", "cluster-admin, no PEM armour"},
+		{"MFA_SEED", "JBSWY3DPEHPK3PXP", "base32, short, low entropy"},
+		{"SESSION_TOKEN", "abc", "short but unambiguously named"},
+		{"USER_PASSWORD_HASH", "x", "substring, not a token"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			if !mustSeal(tc.key, tc.value) {
+				t.Errorf("MISSED (%s): %s would be stored in plaintext", tc.why, tc.key)
+			}
+		})
+	}
+	// The symbol rule must not swallow ordinary configuration.
+	for _, tc := range []struct{ key, value string }{
+		{"TZ", "America/Los_Angeles"},
+		{"IMAGE", "ghcr.io/hanzoai/web"},
+		{"HEADER", "X-Idempotency-Key"},
+		{"CSP", "default-src 'self'; script-src 'self'"},
+		{"FLAGS", "newnav.checkout.search"},
+	} {
+		if mustSeal(tc.key, tc.value) {
+			t.Errorf("over-seal: %s=%q now reads back masked", tc.key, tc.value)
+		}
+	}
+}

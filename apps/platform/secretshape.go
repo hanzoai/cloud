@@ -97,6 +97,9 @@ var keyTokens = map[string]bool{
 	"sk": true, "pat": true, "dsn": true, "signature": true, "sig": true, "seed": true,
 	"mnemonic": true, "otp": true, "jwt": true, "session": true, "cookie": true,
 	"bearer": true, "signing": true, "encryption": true, "keypair": true, "passphrase": true,
+	// `pw` is as common an abbreviation as `pass` and was absent, so DB_PW and
+	// ADMIN_PW were published in the clear.
+	"pw": true,
 }
 
 // keyPairs are two adjacent tokens that together name a credential, for the
@@ -108,8 +111,24 @@ var keyPairs = map[string]bool{
 	"id token": true, "auth token": true, "session key": true,
 }
 
+// keySubstrings are fragments matched ANYWHERE in the key, for the names that
+// carry no separator to tokenise on. PGPASSWORD is libpq's own variable and is a
+// single token to any splitter — `pgpass` and `password` were both in the token
+// set and neither matched it. Substrings are unambiguous enough here that the
+// over-match risk the token rule guards against does not apply.
+var keySubstrings = []string{
+	"password", "passwd", "passphrase", "kubeconfig", "secret", "token",
+	"apikey", "credential", "privatekey", "privkey",
+}
+
 // secretKey reports whether an env KEY names a credential.
 func secretKey(key string) bool {
+	lower := strings.ToLower(key)
+	for _, sub := range keySubstrings {
+		if strings.Contains(lower, sub) {
+			return true
+		}
+	}
 	toks := strings.FieldsFunc(strings.ToLower(key), func(r rune) bool {
 		return r == '_' || r == '-' || r == '.' || r == ' '
 	})
@@ -190,14 +209,21 @@ func opaqueToken(v string) bool {
 			others = true
 		}
 	}
+	// A SYMBOL DOES NOT MAKE A VALUE SAFE. This returned false the moment it saw
+	// one, so a STRONGER password — "Tr0ub4dor&3" — was more likely to be stored
+	// in plaintext than a weak alphanumeric one. Inverted: a symbol-bearing,
+	// space-free string of a plausible password length is password-SHAPED.
+	// Prose and header values carry spaces and are excluded above; paths and
+	// image refs use only the token alphabet and reach neither branch.
 	if others {
-		return false
+		return len(v) >= 10 && classesOf(v) >= 2
 	}
 	for _, b := range []bool{lettersLower, lettersUpper, digits} {
 		if b {
 			classes++
 		}
 	}
+	_ = classes
 	// Hex and lowercase-base32 secrets have only two classes but are long; a
 	// mixed-case alphanumeric token has three. Require either.
 	if classes < 3 && len(v) < 32 {
@@ -207,6 +233,28 @@ func opaqueToken(v string) bool {
 		return false
 	}
 	return shannon(v) >= 3.0
+}
+
+// classesOf counts how many of {lowercase, uppercase, digit} a value uses.
+func classesOf(v string) int {
+	var lo, up, di bool
+	for _, r := range v {
+		switch {
+		case r >= 'a' && r <= 'z':
+			lo = true
+		case r >= 'A' && r <= 'Z':
+			up = true
+		case r >= '0' && r <= '9':
+			di = true
+		}
+	}
+	n := 0
+	for _, b := range []bool{lo, up, di} {
+		if b {
+			n++
+		}
+	}
+	return n
 }
 
 // shannon is the per-character entropy of a string, in bits. A generated token
