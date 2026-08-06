@@ -119,9 +119,15 @@ type planeTracker struct{}
 func (planeTracker) CreatePR(ctx context.Context, in PRInput) (PRRef, error) {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	out, err := plane.Ask[plane.AgentPRIn, plane.AgentPROut](ctx, trackerApp, plane.TrackerAgentPR,
+	// The org travels in the ENVELOPE (cloud.For), not in the body. Both spell the
+	// same word here, but only the envelope is checked: the plane's identity slot
+	// is read back through the same OrgOf rule as the HTTP boundary, so a call
+	// crossing the plane cannot be granted an org key the boundary would refuse.
+	// A body field would arrive unchecked — which is what made this a
+	// cross-tenant write. Same shape as cloud.UpsertIssue's Ask.
+	out, err := plane.Ask[plane.AgentPRIn, plane.AgentPROut](plane.For(ctx, in.Org), trackerApp, plane.TrackerAgentPR,
 		&plane.AgentPRIn{
-			Org: in.Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
+			Project: in.Project, Repo: in.Repo, Base: in.Base,
 			Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
 		})
 	if err != nil {

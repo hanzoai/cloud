@@ -86,8 +86,10 @@ func servePeers(t *testing.T, p *peers) {
 	trackerApp := zip.New(zip.Config{AppName: "tracker", DisableStartupMessage: true})
 	zip.Post[plane.AgentPRIn, plane.AgentPROut](trackerApp, "/tracker/agent-pr",
 		func(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, error) {
+			// No in.Org: the org is the caller's plane identity, mirroring the real
+			// handler (plugin/tracker/seams.go) after the cross-tenant write was closed.
 			ref, err := p.tracker.CreatePR(ctx, PRInput{
-				Org: in.Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
+				Org: zip.CallerOf(ctx).Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
 				Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
 			})
 			if err != nil {
