@@ -32,19 +32,28 @@
 //     project a failure onto another surface. apps/o11y installs one (errorsink.go)
 //     that lands each error on the embedded Sentry plane, so a /v1/event error
 //     surfaces on sentry.hanzo.ai beside the errors a Sentry SDK posts directly.
+//   - the SPAN sinks: the span-signal slice, on identical terms. apps/o11y installs one
+//     (spansink.go) that lands each LLM-shaped span on event.span, so a /v1/event span
+//     surfaces in the LLM views (GET /v1/o11y/llm/observations, /llm/traces, and the
+//     eval board) beside the gen_ai spans the ai emit path sends over the ZAP wire.
 //
 // The seam is:
 //
 //   - ONE-WAY. analytics never imports its consumers; a sink (destinations, o11y)
-//     calls AddSink / AddErrorSink from its own Mount. No sinks means no sink fan-out,
-//     so this file changes nothing about ingest when they are absent.
-//   - RAW. The sink receives the event BEFORE the warehouse privacy scrub, because a
-//     server-side Conversions-API forwarder must hash the match keys (email/phone/
-//     click ids) the warehouse deliberately drops. The org connected the destination
-//     and owns that consent; the destination adapters SHA-256 every PII field before
-//     it leaves the process. The exception text an error sink reads is already the
-//     folded copy foldException scrubbed, and the Sentry normalizer scrubs again on
-//     its side.
+//     calls AddSink / AddErrorSink / AddSpanSink from its own Mount. No sinks means no
+//     sink fan-out, so this file changes nothing about ingest when they are absent.
+//   - RAW, WHERE THE CONSUMER FORWARDS. The destination sink receives the event BEFORE
+//     the warehouse privacy scrub, because a server-side Conversions-API forwarder must
+//     hash the match keys (email/phone/click ids) the warehouse deliberately drops. The
+//     org connected the destination and owns that consent; the destination adapters
+//     SHA-256 every PII field before it leaves the process. The exception text an error
+//     sink reads is already the folded copy foldException scrubbed, and the Sentry
+//     normalizer scrubs again on its side.
+//   - SCRUBBED, WHERE THE CONSUMER STORES. The span slice carries the same scrubMap copy
+//     the write core stores in the fact's attributes, because its consumer writes a ROW:
+//     scrubText's whole contract is that a token in a property is redacted before
+//     storage, and a projection that stored more than the plane stores would be a second
+//     copy of the batch under a weaker rule.
 //   - FAIL-SOFT. Each sink runs detached (a panic-guarded goroutine) so a slow or
 //     broken consumer can never block, fail, or crash an ingest.
 //   - ADDITIVE. A projection failure is invisible to the ingest — the fact publish
@@ -52,7 +61,10 @@
 
 package analytics
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // SinkEvent is one accepted event handed to the downstream fan-out. It carries the
 // resolved canonical name plus the commerce + identity fields a conversion needs;
@@ -131,6 +143,43 @@ func AddErrorSink(fn func(org string, errs []ErrorEvent)) (remove func()) {
 	return func() { errorSinks[i] = nil }
 }
 
+// SpanEvent is one accepted span handed to the span fan-out. It is a carrier of exactly
+// the fields a span projection needs, so analytics stays orthogonal to its consumers —
+// apps/o11y decides on its side which of these spans are LLM calls and what a row of
+// event.span looks like. Properties is where a span states its OTel semantic attributes
+// (gen_ai.*), carried as the SCRUBBED copy the fact row stores (see the header); the
+// tenant is the org argument to the sink, never a field here.
+type SpanEvent struct {
+	MessageID   string // client idempotency id / minted; the fallback row identity
+	Time        time.Time
+	Name        string // the span's name, resolved by the plane's own rule
+	Kind        string // client|server|producer|consumer|internal
+	Status      string // how the span ended: ok|error|unset, lowercased
+	Duration    uint64 // elapsed nanoseconds
+	TraceID     string // the trace this span belongs to
+	SpanID      string // this span's own id
+	Parent      string // the enclosing span's id, empty for a root span
+	Service     string // emitting service, when the wire named one
+	Product     string // emitting surface: console|chat|app|site|admin
+	Site        string // deployed property the span came from
+	Release     string // build the span was recorded in
+	Environment string // deployment the span was recorded in
+	DistinctID  string // the reporting visitor (user id — never PII)
+	SessionID   string
+	Properties  map[string]any // RAW; where gen_ai.* semantic attributes travel
+}
+
+// spanSinks are the span fan-out consumers, on the same terms as sinks and errorSinks:
+// registered at Mount, package-global, each dispatch detached and panic-guarded.
+var spanSinks []func(org string, spans []SpanEvent)
+
+// AddSpanSink registers a span fan-out consumer and returns its remover.
+func AddSpanSink(fn func(org string, spans []SpanEvent)) (remove func()) {
+	i := len(spanSinks)
+	spanSinks = append(spanSinks, fn)
+	return func() { spanSinks[i] = nil }
+}
+
 // fanOut hands the accepted batch to the plane envelope and to every installed sink,
 // each detached and fail-soft. org is the SERVER-resolved tenant (already an owned
 // copy from principal.Org). One call site — the ingestEvents tail.
@@ -140,6 +189,7 @@ func fanOut(org string, evs []CaptureEvent) {
 	}
 	fanOutEvents(org, evs)
 	fanOutErrors(org, evs)
+	fanOutSpans(org, evs)
 }
 
 // fanOutEvents builds SinkEvents from the RAW events (skipping unroutable ones,
@@ -251,6 +301,90 @@ func fanOutErrors(org string, evs []CaptureEvent) {
 			fn(org, out)
 		}()
 	}
+}
+
+// fanOutSpans filters the batch to the events the plane routes as the span signal —
+// routeOf is the ONE routing rule, the same pin fanOutErrors holds, so a projection can
+// never carry a fact the plane filed as something else — builds SpanEvents, and
+// dispatches each installed span sink on a panic-guarded goroutine. Non-span events
+// (the overwhelming majority) are skipped, so a normal batch never touches this path.
+func fanOutSpans(org string, evs []CaptureEvent) {
+	live := make([]func(string, []SpanEvent), 0, len(spanSinks))
+	for _, fn := range spanSinks {
+		if fn != nil {
+			live = append(live, fn)
+		}
+	}
+	if len(live) == 0 {
+		return
+	}
+	now := time.Now()
+	out := make([]SpanEvent, 0)
+	for _, e := range evs {
+		r := routeOf(e)
+		if r.signal != signalSpan {
+			continue
+		}
+		b := spanBodyOf(e)
+		// The SCRUB the write core applies before it stores a fact's attributes, applied
+		// once here: the projection reads its property fallbacks out of the very map it
+		// hands the consumer, so what a row carries and what a fallback saw are the same
+		// values.
+		props := scrubMap(e.Properties)
+		// The plane's OWN precedence, restated (applySpan, fact.go): the route's default
+		// kind stands unless the envelope names one, and the span BODY refines both —
+		// a client emitting a span knows its role precisely.
+		kind := firstNonEmptyStr(trim(e.Kind), r.kind)
+		if k := trim(b.Kind); k != "" {
+			kind = k
+		}
+		out = append(out, SpanEvent{
+			MessageID: firstNonEmptyStr(trim(e.MessageID), randID()),
+			Time:      clampTS(e.Timestamp, now),
+			Name:      resolveName(r, e),
+			Kind:      strings.ToLower(kind),
+			Status:    strings.ToLower(trim(b.Status)),
+			Duration:  b.Duration,
+			// The first-class envelope ids win over the body's — the SAME order the fact
+			// row resolves them in (the envelope fills trace/span at build, applySpan
+			// fills only what is still empty), so the projected span and the fact carry
+			// one identity rather than two. The legacy $ spellings are the last resort
+			// for a client that has not moved to the first-class field, exactly as the
+			// error slice above reads them.
+			TraceID:     firstNonEmptyStr(firstNonEmptyStr(trim(e.TraceID), trim(b.Trace)), propStr(props, "$trace_id")),
+			SpanID:      firstNonEmptyStr(firstNonEmptyStr(trim(e.SpanID), trim(b.ID)), propStr(props, "$span_id")),
+			Parent:      trim(b.Parent),
+			Service:     trim(e.Service),
+			Product:     trim(e.Product),
+			Site:        trim(e.Site),
+			Release:     firstNonEmptyStr(trim(e.Release), propStr(props, "$release")),
+			Environment: firstNonEmptyStr(trim(e.Environment), propStr(props, "$environment")),
+			DistinctID:  trim(e.DistinctID),
+			SessionID:   trim(e.SessionID),
+			Properties:  props,
+		})
+	}
+	if len(out) == 0 {
+		return
+	}
+	for _, fn := range live {
+		fn := fn
+		go func() {
+			defer func() { _ = recover() }()
+			fn(org, out)
+		}()
+	}
+}
+
+// spanBodyOf returns the event's span body, or the ZERO body when the wire carried
+// none. A span-typed event without a body is still a span — applySpan stores it and the
+// fact lands — and the zero value states exactly the "nothing further known" that row
+// records, so the projection reads one shape instead of branching on a pointer.
+func spanBodyOf(e CaptureEvent) SpanBody {
+	if e.Span == nil {
+		return SpanBody{}
+	}
+	return *e.Span
 }
 
 // exceptionOf extracts the exception's (type, message, stack, handled) from whichever
