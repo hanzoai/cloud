@@ -22,7 +22,7 @@ import (
 
 // exposeSlack publishes the Slack egress on the internal plane. Mount calls it.
 func exposeSlack() {
-	zip.Post[plane.SlackSendIn, struct{}](cloud.Plane(), "/integrations/slack/send", planeSlackSend,
+	zip.Post[plane.SlackSendIn, plane.SlackSent](cloud.Plane(), "/integrations/slack/send", planeSlackSend,
 		zip.WithOperationID(plane.IntegrationsSlackSend),
 		zip.WithSummary("Post to an org's Slack channel via the org's KMS-custodied bot token"))
 }
@@ -31,13 +31,14 @@ func exposeSlack() {
 // the CALLER's (cloud.Who(ctx).Org, set on the peer context by the caller), never
 // an argument — a caller able to name it could post as another tenant. A named
 // handler, not a closure, so zipdoc lifts this prose into the registry.
-func planeSlackSend(ctx context.Context, in *plane.SlackSendIn) (*struct{}, error) {
+func planeSlackSend(ctx context.Context, in *plane.SlackSendIn) (*plane.SlackSent, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("slack send: no org on the call")
 	}
-	if err := SendSlack(ctx, org, in.Channel, in.Thread, in.Text); err != nil {
+	ts, err := SendSlackAt(ctx, org, in.Channel, in.Thread, in.Update, in.Text)
+	if err != nil {
 		return nil, err
 	}
-	return &struct{}{}, nil
+	return &plane.SlackSent{TS: ts}, nil
 }

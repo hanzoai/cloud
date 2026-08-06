@@ -116,7 +116,14 @@ var Apps = []App{
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompts", Prefixes: []string{"/v1/prompts"}},
-	{Name: "agents", Prefixes: []string{"/v1/agents"}},
+	// /v1/coding is the coding engine's app-facing door, and it is on THIS row
+	// rather than a row of its own because the engine is in this process and
+	// cannot be anywhere else: it needs the live session store the run streams
+	// into, the durable tasks engine, and the in-memory mailbox a routed run is
+	// handed through — all three of which are agents'. A separate app would put a
+	// socket between the run and its own mailbox. A second address on one app is
+	// the ordinary shape here (tasks answers /tasks and /v1/tasks).
+	{Name: "agents", Prefixes: []string{"/v1/agents", "/v1/coding"}},
 	{Name: "link", Prefixes: []string{"/v1/links"}},
 	{Name: "wallets", Prefixes: []string{"/v1/wallets"}},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
