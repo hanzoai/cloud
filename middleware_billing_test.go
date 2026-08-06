@@ -3,14 +3,13 @@ package cloud
 // Tests for the zip-native billing gate. They drive real requests through the
 // zip/fiber stack (app.Fiber().Test) against a fake commerce billing server, so
 // the whole path is exercised end-to-end: BillingGate -> metering.Authorize over
-// HTTP -> handler -> metering.Record. No mocks of the metering client itself —
-// the fake commerce server controls every outcome via the balance it returns.
+// HTTP -> handler -> metering.Record over the plane. No mocks of the metering client
+// itself — the fake commerce peer controls every outcome via the balance it returns.
 
 import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,20 +20,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// fakeCommerce answers the metering client's balance + usage calls. The balance
-// status/body it returns drives Authorize's outcome; usage POSTs are counted so
-// tests can assert Record fired (or did not).
+// fakeCommerce is the money peer: it answers the metering client's balance READ over
+// HTTP and receives its usage DEBIT over the plane, which is the split the client makes.
+// The balance status/body drives Authorize's outcome; debits are counted so tests can
+// assert Record fired (or did not).
 type fakeCommerce struct {
 	balanceStatus int    // HTTP status for GET /v1/billing/balance (0 => 200).
 	balanceBody   string // JSON body for the balance reply.
 
-	mu         sync.Mutex
-	usageCount int32 // atomic: number of POST /v1/billing/usage calls.
-	usageBody  []byte
+	debits planeDebits
 }
 
 func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	t.Helper()
+	f.debits.serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		status := f.balanceStatus
@@ -44,20 +43,14 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 		w.WriteHeader(status)
 		_, _ = io.WriteString(w, f.balanceBody)
 	})
-	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&f.usageCount, 1)
-		f.mu.Lock()
-		f.usageBody, _ = io.ReadAll(r.Body)
-		f.mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, `{"transactionId":"tx_1","user":"hanzo/alice","amount":1,"currency":"usd","type":"usage"}`)
-	})
+	// NO /v1/billing/usage route, and its absence is the assertion: a debit that still
+	// went over HTTP would 404 here rather than quietly counting.
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-func (f *fakeCommerce) usages() int32 { return atomic.LoadInt32(&f.usageCount) }
+func (f *fakeCommerce) usages() int32 { return f.debits.count() }
 
 // newGateApp wires a minimal zip app with the billing gate in front of a single
 // handler that flips `handlerRan` and returns 200. price forces a non-zero
