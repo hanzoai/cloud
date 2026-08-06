@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	luxlog "github.com/luxfi/log"
 )
@@ -316,6 +317,40 @@ func (g *gitPackStream) Close() error {
 // off git stdout closing (git exiting). The lingering client→git copy goroutine
 // unblocks when the caller closes the channel after we return.
 func runPackSSH(ctx context.Context, bareDir, service, protocol string, ch io.ReadWriteCloser) error {
+	return runPackSSHScreened(ctx, bareDir, service, protocol, ch, nil)
+}
+
+// screen decides whether a push may proceed, from the ref commands the client
+// sent. It returns the refusal to write back, or nil to let git have the stream.
+// A nil screen is a read (upload-pack), which has nothing to decide.
+type screen func(cmds []refCommand, caps string) error
+
+// runPackSSHScreened is runPackSSH with the ref policy standing between the
+// client and git.
+//
+// The SSH transport gets git's NATIVE protocol, not stateless-rpc: one
+// bidirectional stream carrying advertisement, commands and pack together. So
+// unlike the HTTP door there is no request body to inspect before deciding —
+// the commands arrive mid-conversation, and the multi-gigabyte pack arrives
+// immediately behind them and must never be buffered.
+//
+// The sequence that makes a decision possible without buffering:
+//
+//  1. git starts and writes its ref advertisement, which we relay, because the
+//     client will not send commands until it has read one.
+//  2. We read the COMMAND SECTION off the channel — bounded, small, and framed
+//     so we know exactly where it ends.
+//  3. The policy judges it.
+//  4. Admitted: git receives those exact bytes, then the rest of the stream is
+//     spliced through untouched, so the pack still streams to disk.
+//     Refused: git's stdin is closed instead. It has read no commands, so it
+//     applies nothing and exits; we then write git's own report-status, and the
+//     person who typed the push reads the reason rather than a broken pipe.
+//
+// Refusing at step 3 rather than inside git is what makes the SSH transport
+// carry the SAME rule as the HTTP one, from the same function, rather than
+// being the door the rule forgot.
+func runPackSSHScreened(ctx context.Context, bareDir, service, protocol string, ch io.ReadWriteCloser, sc screen) error {
 	if err := acquirePackSlot(ctx); err != nil {
 		return err
 	}
@@ -341,17 +376,74 @@ func runPackSSH(ctx context.Context, bareDir, service, protocol string, ch io.Re
 		_ = stdout.Close()
 		return fmt.Errorf("start git %s: %w", sub, err)
 	}
-	go func() { _, _ = io.Copy(stdin, ch); _ = stdin.Close() }() // client → git
-	_, copyErr := io.Copy(ch, stdout)                            // git → client (until git exits)
+
+	// client → git. With a screen the head of the stream is read and judged here
+	// FIRST; refused pushes never reach git's stdin at all.
+	//
+	// refused is written before stdin is closed and read only after git has been
+	// reaped, so the decision is always visible by the time it is consulted. It
+	// is a pointer rather than a "did the channel have anything" test because git
+	// can also die on its own — and then this goroutine is still blocked reading
+	// the client, having decided nothing, which must report GIT's failure and not
+	// a refusal that was never made.
+	var refusal atomic.Pointer[[]byte]
+	go func() {
+		defer func() { _ = stdin.Close() }()
+		if sc != nil {
+			report, ok := screenPush(ch, stdin, sc)
+			if !ok {
+				refusal.Store(&report)
+				return
+			}
+		}
+		_, _ = io.Copy(stdin, ch)
+	}()
+
+	_, copyErr := io.Copy(ch, stdout) // git → client (until git exits)
 	// On an SSH disconnect the channel write fails; git may be blocked writing to
 	// its (now-undrained) stdout, so Kill to guarantee reaping rather than hang.
 	if copyErr != nil {
 		_ = cmd.Process.Kill()
 	}
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("git %s: %w: %s", sub, err, strings.TrimSpace(stderr.String()))
+	waitErr := cmd.Wait()
+
+	// git has finished and everything it wrote is already on the channel, so the
+	// refusal goes last and is the last thing the client reads. It is written
+	// here rather than in the goroutine precisely so it cannot interleave with
+	// git's advertisement.
+	if report := refusal.Load(); report != nil {
+		_, _ = ch.Write(*report)
+		return nil
+	}
+	if waitErr != nil {
+		return fmt.Errorf("git %s: %w: %s", sub, waitErr, strings.TrimSpace(stderr.String()))
 	}
 	return nil
+}
+
+// screenPush reads the command section off the client stream, judges it, and
+// either forwards it to git verbatim (true) or returns the report-status to send
+// instead (false).
+//
+// Every failure is a REFUSAL, never a pass: a section that will not frame, will
+// not parse, or does not satisfy the policy all end the same way. The one thing
+// this must never do is hand git bytes it did not understand.
+func screenPush(client io.Reader, git io.Writer, sc screen) ([]byte, bool) {
+	raw, err := readCommandSection(client)
+	if err != nil {
+		return refusalReport(nil, "", "unreadable push: "+err.Error()), false
+	}
+	cmds, _, caps, err := parseRefCommandsCaps(raw)
+	if err != nil {
+		return refusalReport(nil, caps, "unreadable push: "+err.Error()), false
+	}
+	if verr := sc(cmds, caps); verr != nil {
+		return refusalReport(cmds, caps, verr.Error()), false
+	}
+	if _, err := git.Write(raw); err != nil {
+		return refusalReport(cmds, caps, "the forge could not accept this push"), false
+	}
+	return nil, true
 }
 
 // branchTips snapshots refs/heads/* → {shortName: fullHash} via a fresh git
@@ -381,6 +473,27 @@ func branchTips(ctx context.Context, bareDir string) map[string]string {
 		}
 	}
 	return tips
+}
+
+// defaultBranchOf reads the repo's symbolic HEAD as a short branch name. It is
+// the ref-policy's one input beyond the push itself, kept beside branchTips
+// because it is the same thing: a small read off our own bare storage.
+//
+// An unreadable HEAD answers "" rather than an error, and the policy treats ""
+// as "no branch is the default". That is the safe direction: it withholds one
+// protection rather than refusing every push to a repo whose HEAD we could not
+// read.
+func defaultBranchOf(ctx context.Context, bareDir string) string {
+	cmd, err := gitCmd(ctx, nil, "--git-dir="+bareDir, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return ""
+	}
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out.String())
 }
 
 // cappedBuffer captures at most cap bytes of a subprocess's stderr — bounded so a

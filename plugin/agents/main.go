@@ -8,6 +8,12 @@ import (
 	"github.com/hanzoai/cloud/apps/agents"
 )
 
+// agentsMount is the subsystem's own Mount, named here so coding.go can compose
+// it. The indirection exists because this process serves TWO things — the agents
+// subsystem and the coding engine — and only a composition root may hold both
+// (apps/coding imports apps/agents, so the reverse can never be an import).
+var agentsMount = agents.Mount
+
 // Standalone entry for the agents app.
 //
 // This is the app's OWN composition root: it links only its own subsystem and
@@ -19,7 +25,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "agents",
 		Price:    cloud.Metered,
-		Mount:    agents.Mount,
+		Mount:    mountAgents,
 		Shutdown: agents.Shutdown,
 	}}, []string{"agents"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
