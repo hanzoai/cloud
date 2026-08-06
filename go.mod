@@ -5,6 +5,7 @@ go 1.26.5
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
+	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/coder/websocket v1.8.14
 	github.com/digitalocean/godo v1.197.0
@@ -15,16 +16,16 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.1
 	github.com/hanzoai/cek v0.2.3
-	github.com/hanzoai/commerce v1.50.11
+	github.com/hanzoai/commerce v1.50.20
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.20
+	github.com/hanzoai/iam v1.34.21
 	github.com/hanzoai/kafka v1.3.1
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2
-	github.com/hanzoai/plans v1.4.11
+	github.com/hanzoai/plans v1.4.14
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
@@ -39,12 +40,13 @@ require (
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/nats-io/nats.go v1.50.0
 	github.com/spf13/cobra v1.10.2
+	github.com/twmb/franz-go v1.21.5
 	github.com/vulcand/oxy/v2 v2.2.0
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/http v0.3.1
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.25.1
+	github.com/zap-proto/zip v1.27.0
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
@@ -59,7 +61,6 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/lightsail v1.53.0 // indirect
 	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
@@ -92,13 +93,16 @@ require (
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
+	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/nats-io/nats-server/v2 v2.12.3 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
+	github.com/zap-proto/mcp v1.0.5 // indirect
 	github.com/zap-proto/zap2pb v0.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opentelemetry.io/collector/component v1.54.0 // indirect
@@ -119,6 +123,7 @@ require (
 	k8s.io/controller-manager v0.36.1 // indirect
 	k8s.io/kube-aggregator v0.36.1 // indirect
 	k8s.io/kubectl v0.36.2 // indirect
+	k8s.io/streaming v0.36.2 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
@@ -684,10 +689,10 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.832.29
+	github.com/hanzoai/ai v1.832.31
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.15
-	github.com/hanzoai/licensing v0.1.5
+	github.com/hanzoai/licensing v0.1.10
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.62
 	github.com/hanzoai/thinking v0.1.1 // indirect

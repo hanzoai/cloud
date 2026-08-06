@@ -215,3 +215,73 @@ func TestUnfitIgnoresAbsencesTheManifestDoesNotCallVital(t *testing.T) {
 		t.Errorf("unfit(ai absent) = %v, want ai carrying its reason", u)
 	}
 }
+
+// TestProbeAnswersAreByteStable pins the exact bodies and statuses of both
+// probes. They became typed ops, and the conversion must be invisible to every
+// caller: the raw handlers marshalled a map, encoding/json writes map keys
+// sorted, and probeOut declares its fields in that same order — so every body a
+// dashboard, a script or the kubelet has ever parsed is the same bytes still.
+func TestProbeAnswersAreByteStable(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		absent map[string]string
+		drain  bool
+		path   string
+		code   int
+		body   string
+	}{
+		{"healthz clean", nil, false, "/healthz", 200, `{"status":"ok"}`},
+		{"healthz reports an absence", map[string]string{"pubsub": "boom"}, false, "/healthz", 200,
+			`{"absent":{"pubsub":"boom"},"status":"ok"}`},
+		{"healthz stays alive while draining", nil, true, "/healthz", 200, `{"status":"ok"}`},
+		{"readyz clean", nil, false, "/readyz", 200, `{"status":"ok"}`},
+		{"readyz with a non-vital absence", map[string]string{"pubsub": "boom"}, false, "/readyz", 200,
+			`{"absent":{"pubsub":"boom"},"status":"ok"}`},
+		{"readyz with the vital app absent", map[string]string{"ai": "boom"}, false, "/readyz", 503,
+			`{"absent":{"ai":"boom"},"status":"unfit"}`},
+		{"readyz while draining", nil, true, "/readyz", 503, `{"status":"draining"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+			absent := tc.absent
+			if absent == nil {
+				absent = map[string]string{}
+			}
+			health(app, absent)
+			if tc.drain {
+				draining.Store(true)
+				t.Cleanup(func() { draining.Store(false) })
+			}
+			code, ctype, body := do(t, app, tc.path)
+			if code != tc.code {
+				t.Errorf("GET %s = %d, want %d", tc.path, code, tc.code)
+			}
+			if !strings.Contains(ctype, "application/json") {
+				t.Errorf("GET %s Content-Type = %q, want JSON", tc.path, ctype)
+			}
+			if body != tc.body {
+				t.Errorf("GET %s body = %s, want %s — the typed op changed the bytes", tc.path, body, tc.body)
+			}
+		})
+	}
+}
+
+// TestProbesAreTypedOps is the other half of the conversion: the routes must be
+// IN the registry every projection reads, or typing them bought nothing. The
+// registry is read through the CLI projection, the same a.ops the OpenAPI
+// subset and the MCP tool list are built from.
+func TestProbesAreTypedOps(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	health(app, map[string]string{})
+
+	got := map[string]bool{}
+	for _, c := range app.Commands() {
+		got[c.Method+" "+c.Path] = true
+	}
+	for _, want := range []string{"GET /healthz", "GET /readyz"} {
+		if !got[want] {
+			t.Errorf("%s is not a registered op — it slipped back to a raw handler and is invisible "+
+				"to OpenAPI, MCP, the CLI and typed Call", want)
+		}
+	}
+}

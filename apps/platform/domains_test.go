@@ -54,6 +54,7 @@ func mountDomains(t *testing.T) (*zip.App, *fakeDNS) {
 	fp := newFakeProjects()
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: fp, k8s: fakeK8s(), sitesHost: "hanzo.app", resolver: dns}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	testProjects.Store(app, fp)
 	return app, dns

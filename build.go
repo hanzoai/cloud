@@ -53,15 +53,13 @@ import (
 //     clients.IsDisabled(err) and log a friendly "dep X needed by Y
 //     not configured" message.
 //
-// JSON does not appear in any of these paths. Inter-subsystem calls
-// are ZAP-typed Go values either via direct method dispatch (mode 1)
-// or via ZAP RPC over the wire (mode 2). JSON happens only at the
-// gateway/ingress edge, through the zip jsonenc helper.
+// JSON does not appear in any of these paths. A co-resident dependency is a
+// direct Go method call; a peer that is elsewhere is reached over the peer plane
+// (plane.Ask — ZAP bytes on the peer's own socket, addressed by name). JSON
+// happens only at the gateway/ingress edge, through the zip jsonenc helper.
 //
-// Payments and Vault are special: they are NEVER in-process per
-// HIP-0106 solo-vault CDE. Their clients always resolve via
-// clients.PaymentsRPCAt / clients.VaultRPCAt; the disabled stub fires
-// when no endpoint is configured.
+// Payments and Vault are NEVER in-process (PCI solo-vault CDE). They are also
+// not deployed, so both resolve to the disabled stub — see pickPaymentsClient.
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
 
@@ -103,9 +101,9 @@ func BuildDeps(cfg *Config) Deps {
 	// the embedded KMS builds per-org stores that want it. Discovered late, it could
 	// not reach them, and KMS's files were local-only for no reason anyone chose.
 	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
-	deps.IAM = pick(cfg, logger, "iam", "IAM", cfg.IAMZAPAddr, clients.IAMRPCAt, clients.DisabledIAM)
+	deps.IAM = pick(cfg, logger, "iam", "IAM", clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, deps.Durable, logger)
-	deps.Base = pick(cfg, logger, "base", "Base", cfg.BaseZAPAddr, clients.BaseRPCAt, clients.DisabledBase)
+	deps.Base = pick(cfg, logger, "base", "Base", clients.DisabledBase)
 	deps.Commerce = pickCommerceClient(cfg, logger)
 	// Metering client BEFORE the AI client: deps.AI is wrapped in the metering
 	// decorator (the ONE inference gate+meter — no exempt path, no bypass, no
@@ -122,9 +120,9 @@ func BuildDeps(cfg *Config) Deps {
 	deps.AI = meteredAIClient(pickCompletionsClient(cfg, logger), deps)
 	deps.Embed = meteredAIClient(pickEmbedClient(cfg, logger), deps)
 	wireFinance(cfg, logger)
-	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
+	deps.O11y = pick(cfg, logger, "o11y", "O11y", clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
-	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
+	deps.MQ = pick(cfg, logger, "mq", "MQ", clients.DisabledMQ)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -312,22 +310,25 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)
 }
 
-// pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
-// by every co-resident-capable dependency: enabled in THIS process → zero value
-// (nil) so the subsystem's own Mount installs the in-process client; not enabled
-// but a ZAP endpoint is configured → an RPC client at that endpoint; neither →
-// the fail-closed/no-op disabled stub. name is the enable-list id; label is the
-// deps.<X> log tag; rpc/disabled are the client's typed constructors. This is the
-// ONE implementation of that rule — KMS/AI/VFS opt out with bespoke pickers only
-// because their construction genuinely differs.
-func pick[T any](cfg *Config, log luxlog.Logger, name, label, zapAddr string, rpc func(string) T, disabled func() T) T {
+// pick resolves one inter-subsystem client: enabled in THIS process → zero value
+// (nil) so the subsystem's own Mount installs the in-process client; otherwise the
+// fail-closed/no-op disabled stub. name is the enable-list id; disabled is the
+// client's typed constructor.
+//
+// THERE IS NO THIRD CASE. A CLOUD_<X>_ZAP_ADDR used to select clients.<X>RPCAt,
+// whose every method returned "not yet wired (zapc-gen pending)" — so configuring
+// one produced a client that failed every call while the log line said
+// "deps.<X> → ZAP RPC". That is worse than no client at all, because it looks
+// configured: an operator reading the boot log saw the transport come up and the
+// calls fail somewhere else. pickKMSClient made exactly this argument when it
+// dropped CLOUD_KMS_ZAP_ADDR for the plane, and the argument is not specific to
+// KMS. The peer plane is the transport (plane.Ask, over the peer's socket), and
+// it is the only one; a subsystem that is not here and has no plane op is
+// honestly disabled rather than falsely addressed.
+func pick[T any](cfg *Config, log luxlog.Logger, name, label string, disabled func() T) T {
 	if cfg.Enabled(name) {
 		var zero T // enabled here → Mount fills deps.<label>
 		return zero
-	}
-	if zapAddr != "" {
-		log.Info("deps."+label+" → ZAP RPC", "addr", zapAddr)
-		return rpc(zapAddr)
 	}
 	return disabled()
 }
@@ -641,10 +642,13 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 		log.Info("deps.Commerce → in-process (embedded commerce)", "brand", cfg.Brand)
 		return commerceClientFactory(cfg, log)
 	}
-	if cfg.CommerceZAPAddr != "" {
-		log.Info("deps.Commerce → ZAP RPC", "addr", cfg.CommerceZAPAddr)
-		return clients.CommerceRPCAt(cfg.CommerceZAPAddr)
-	}
+	// Commerce is not in this process. The MONEY ops it owns are reachable over the
+	// peer plane (plane/commerce: authorize, balance, credit, record, scope rules,
+	// txns, usage) and the gate already asks for them there — see gatePeer in
+	// resource_billing_peer.go. GetOrgConfig and CheckEntitlement declare no plane
+	// op, so there is nothing to ask and nothing to pretend: the honest client is
+	// the disabled one, which says "enable the subsystem" rather than failing every
+	// call from behind a configured-looking address.
 	return clients.DisabledCommerce()
 }
 
@@ -774,10 +778,6 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	// nil-then-Mount-fills convention other subsystems use, nothing fills deps.VFS
 	// after MountAll (Mount receives deps by value), so we ALWAYS hand back a
 	// concrete client.
-	if cfg.VFSZAPAddr != "" {
-		log.Info("deps.VFS → ZAP RPC", "addr", cfg.VFSZAPAddr)
-		return clients.VFSRPCAt(cfg.VFSZAPAddr)
-	}
 	// Real blob backend (.97): the shared SeaweedFS S3 gateway — the canonical,
 	// key-based object store, reached with the SAME S3_ADMIN_* admin identity
 	// clients/s3 uses (s3admin, one construction). Present only when those creds
@@ -1027,19 +1027,21 @@ func hostnameOr(def string) string {
 	return def
 }
 
-func pickPaymentsClient(cfg *Config, log luxlog.Logger) PaymentsClient {
-	if cfg.PaymentsZAPAddr != "" {
-		log.Info("deps.Payments → ZAP RPC", "addr", cfg.PaymentsZAPAddr)
-		return clients.PaymentsRPCAt(cfg.PaymentsZAPAddr)
-	}
+// pickPaymentsClient and pickVaultClient resolve the two clients that are never
+// co-resident (PCI scope isolation — vault is the only system that touches PAN).
+//
+// Both are disabled, and saying so is the point. Neither has a caller: nothing in
+// the tree invokes CreateIntent, ConfirmIntent, GetIntentStatus or Charge — commerce
+// only nil-checks the fields. They were wired to an RPC client whose every method
+// returned "not yet wired", so the CDE transport was declared, logged as up, and
+// never carried a byte. A disabled stub carries exactly as much traffic and admits
+// it. When payments and vault do get a wire it will be a plane op like every other
+// peer, not a second mechanism resurrected from this one.
+func pickPaymentsClient(*Config, luxlog.Logger) PaymentsClient {
 	return clients.DisabledPayments()
 }
 
-func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
-	if cfg.VaultZAPAddr != "" {
-		log.Info("deps.Vault → ZAP RPC", "addr", cfg.VaultZAPAddr)
-		return clients.VaultRPCAt(cfg.VaultZAPAddr)
-	}
+func pickVaultClient(*Config, luxlog.Logger) VaultClient {
 	return clients.DisabledVault()
 }
 
@@ -1123,19 +1125,15 @@ func MountMetrics(app Router, deps Deps) error {
 //     ONLY zap-proto/zip + luxfi, deliberately (mount.go's own argument: it
 //     depends on the three things it uses). Importing hanzoai/cloud to describe
 //     itself would give that up to buy prose.
-//   - hanzoai/licensing is a separate, proprietary module whose Mount registers
-//     one wildcard, app.All("/v1/licensing/*"), over its own net/http mux.
 //
-// So the prose lands at cloud's OWN wire fact — MountMetrics above for the first,
-// and for the second the fact that cloud's Serve is what mounts it — rather than
-// nowhere. Both plugin binaries link this package, so this init runs for both, and
-// the registry cannot contradict a router either way: a Describe whose route is
-// not live never renders, and the key is the fiber pattern the router carries
-// (`/v1/licensing/*`), not the `{wildcard1}` template the document renders it as.
-//
-// Without it these sixteen operations publish an operationId and NOTHING else —
-// every generated SDK offers a call it cannot explain and the spec-derived CLI a
-// command with no help text.
+// hanzoai/licensing USED to be the second case: its Mount registered one untyped
+// wildcard, app.All("/v1/licensing/*"), so its prose had to be declared here. At
+// v0.1.10 it types its own ops instead — app.Group("/v1/licensing") with
+// zip.Post(g, "/issue", ...) and siblings — and a typed op carries its prose in the
+// handler's doc comment, which zipdoc lifts. The seven wildcard descriptions that
+// lived here now name no operation at all, so they render nowhere while reading, in
+// this file, as though they had landed. They are deleted with the route they
+// described; the surface gate is what noticed.
 func init() {
 	// ── metrics: one native store, three signals ──────────────────────────────
 	//
@@ -1283,104 +1281,6 @@ func init() {
 	// get wrong, so each of the five unserved methods says so in its own words
 	// rather than leaving the operation bare.
 
-	openapi.Describe("/v1/licensing/*", http.MethodGet,
-		"Read the licensing subtree: releases, the public verification key, health",
-		"The subtree is mounted as ONE wildcard route, so the path segment selects the real "+
-			"operation. Under GET those are:\n\n"+
-			"- `/v1/licensing/releases` — every release the deployment knows.\n"+
-			"- `/v1/licensing/releases/{release}` — one release's metadata; an unknown id is 404.\n"+
-			"- `/v1/licensing/download/{release}` — the license-gated artifact download. It is "+
-			"gated on the minted LICENSE token rather than the OIDC bearer, because that is exactly "+
-			"what the engine runs on: present it as an `X-License-Token` header or a `?token=` "+
-			"query parameter. No token is 401; a token whose signature, app or expiry fails, or "+
-			"that has been revoked, or that lacks the features the release requires, is 403; a "+
-			"yanked release is 410. The answer carries the artifact AND its cosign signature, so a "+
-			"client verifies the binary before trusting it.\n"+
-			"- `/v1/licensing/pubkey` and `/v1/licensing/jwks` — the same Ed25519 PUBLIC key, in "+
-			"raw base64 and as a JWK. This is the only public-safe surface here, and it is what "+
-			"lets an engine verify tokens OFFLINE. The private key never enters this process: "+
-			"signing goes through the KMS signer abstraction, not key material.\n"+
-			"- `/v1/licensing/healthz` — status, deployment env, and which signer provider is in "+
-			"use.\n\n"+
-			"Any other path under the subtree is 404.")
-
-	openapi.Describe("/v1/licensing/*", http.MethodPost,
-		"Issue, verify and revoke license tokens, bind a device, publish a release",
-		"The subtree is mounted as ONE wildcard route, so the path segment selects the real "+
-			"operation. Under POST those are:\n\n"+
-			"- `/v1/licensing/issue` — mints an Ed25519 license token for a paid product. The "+
-			"caller must be authenticated (mounted in cloud, that is an IAM-verified bearer), and "+
-			"the entitlement is then checked in commerce for that caller's org and subject: a "+
-			"caller who does not own the product is 403, never a token. The token's `app_id` is the "+
-			"DEPLOYMENT's brand, so a hanzo deployment can never mint a lux- or zoo-scoped token. "+
-			"Device binding comes from a `fingerprint` you registered earlier or from `signals` "+
-			"bound at issue time, and a deployment configured to require one refuses without it. "+
-			"The lifetime is clamped both to policy and to the entitlement's own expiry, so a token "+
-			"never outlives the entitlement that justified it. Naming a `release` scopes the token "+
-			"to it as a `release:<id>` feature, which is what makes release-scoped revocation "+
-			"reach it.\n"+
-			"- `/v1/licensing/verify` — an online, unauthenticated check of a token: signature, "+
-			"app and expiry, then the revocation list. The rule worth knowing is that an INVALID "+
-			"token is still 200 — the answer is `{valid:false, reason}`, not an HTTP error — "+
-			"because this read is informational and the engine is what enforces the license, "+
-			"offline, from the public key.\n"+
-			"- `/v1/licensing/revoke` — appends a revocation entry scoped by `nonce`, `holder`, "+
-			"`fingerprint` or `release`, stamped with the admin who did it. Authenticated; any "+
-			"other scope, or a missing value, is 400.\n"+
-			"- `/v1/licensing/fingerprint` — turns device signals into the opaque binding value "+
-			"`/issue` accepts. Authenticated, and the raw signals are never echoed back.\n"+
-			"- `/v1/licensing/releases` — publishes a release, answering 201. Authenticated, and "+
-			"outside dev a release carrying no cosign signature is refused, so an unsigned binary "+
-			"cannot enter the download path.\n\n"+
-			"Any other path under the subtree is 404.")
-
-	openapi.Describe("/v1/licensing/*", http.MethodPut,
-		"Not served — nothing in the licensing subtree is replaced by PUT",
-		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
-			"published — but the mux behind it registers GET and POST handlers only. A PUT to a "+
-			"real licensing path (`/v1/licensing/issue`, `/v1/licensing/releases`, and the rest) is "+
-			"405, with an `Allow` header naming the methods that path does serve; a PUT to a path "+
-			"the subtree does not have at all is 404.\n\n"+
-			"There is no replace-in-place anywhere here: a release is published again through POST "+
-			"/v1/licensing/releases, and a license is re-issued rather than edited.")
-
-	openapi.Describe("/v1/licensing/*", http.MethodPatch,
-		"Not served — nothing in the licensing subtree is patched",
-		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
-			"published — but the mux behind it registers GET and POST handlers only. A PATCH to a "+
-			"real licensing path is 405, with an `Allow` header naming the methods that path does "+
-			"serve; a PATCH to a path the subtree does not have is 404.\n\n"+
-			"Nothing here is mutable in part. A license is an immutable signed token — you issue a "+
-			"new one — and a release is republished whole.")
-
-	openapi.Describe("/v1/licensing/*", http.MethodDelete,
-		"Not served — a license is revoked, never deleted",
-		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
-			"published — but the mux behind it registers GET and POST handlers only. A DELETE to a "+
-			"real licensing path is 405, with an `Allow` header naming the methods that path does "+
-			"serve; a DELETE to a path the subtree does not have is 404.\n\n"+
-			"The delete-shaped operation here is revocation, and it is POST /v1/licensing/revoke. "+
-			"It APPENDS a revocation entry rather than removing anything, because a token already "+
-			"in the field cannot be recalled — it can only be denied at verify and download time, "+
-			"and the entry is the record of who denied it and why.")
-
-	openapi.Describe("/v1/licensing/*", http.MethodOptions,
-		"Not served — but the refusal still names the methods a path allows",
-		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
-			"published — but the mux behind it registers GET and POST handlers only, and OPTIONS is "+
-			"not among them. An OPTIONS to a real licensing path is therefore 405 rather than a "+
-			"capability answer; it does still carry the `Allow` header naming that path's real "+
-			"methods, which is the part a client was asking for. An OPTIONS to a path the subtree "+
-			"does not have is 404.")
-
-	openapi.Describe("/v1/licensing/*", http.MethodTrace,
-		"Not served — the licensing subtree does not echo requests",
-		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
-			"published — but the mux behind it registers GET and POST handlers only. A TRACE to a "+
-			"real licensing path is 405 with an `Allow` header naming that path's real methods, and "+
-			"a TRACE to a path the subtree does not have is 404. No request is ever echoed back, "+
-			"which is what you want of a surface that carries bearer tokens and license tokens in "+
-			"headers.")
 }
 
 // App describes one subsystem to mount. There is NO Order field: the slice

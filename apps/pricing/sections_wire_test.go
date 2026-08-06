@@ -51,6 +51,8 @@ var sectionRoutes = map[string]string{
 	"/v1/pricing/policy":          "policy",
 	"/v1/pricing/tools":           "tools",
 	"/v1/pricing/gpu":             "gpu",
+	"/v1/pricing/datastore":       "datastore",
+	"/v1/pricing/services":        "services",
 }
 
 // TestSectionsAreByteIdenticalToTheBundle drives every section route on the live
@@ -169,6 +171,12 @@ func TestSectionsCoverEverySectionRoute(t *testing.T) {
 	mountSections(app, ops{log: luxlog.New("test")})
 	declared := map[string]bool{}
 	for _, r := range app.Fiber().GetRoutes() {
+		if r.Path == "/" {
+			// Middleware territory: every app.Use (the composer's bridge,
+			// telemetry) rides fiber's "/" route as a handler CHAIN, by
+			// design, so it is not a section address and never was one.
+			continue
+		}
 		if r.Method == http.MethodGet {
 			declared[r.Path] = true
 		}

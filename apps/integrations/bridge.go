@@ -233,18 +233,9 @@ func bridgeRunContext(org string) (context.Context, context.CancelFunc) {
 // silently discards the org. Removing the parameter is what makes that unavailable
 // rather than merely discouraged.
 func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text string) (reply string, ephemeral bool) {
-	link, linked, err := getUserLink(s, org, provider, user)
-	if err != nil {
-		s.Log.Warn("bridge: user link lookup", "provider", provider, "org", org, "err", err)
-		return "Sorry — I couldn't reach your Hanzo account just now. Please try again shortly.", false
-	}
-	if !linked {
-		u, lerr := linkURL(s, provider, externalID, user)
-		if lerr != nil {
-			s.Log.Error("bridge: link url", "provider", provider, "err", lerr)
-			return "Connect your Hanzo account to use @hanzo.", true
-		}
-		return "Connect your Hanzo account to use @hanzo: " + u, true
+	link, say, ephemeral := bridgeIdentity(s, org, provider, externalID, user)
+	if say != "" {
+		return say, ephemeral
 	}
 	// On-behalf-of run over the PLANE (ZAP/UDS): org is the isolation gate, tenant
 	// and balance; the linked user's Hanzo subject drives attribution. No bearer,
@@ -312,6 +303,32 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text 
 		return "(the agent returned an empty response)", false
 	}
 	return run.Output, false
+}
+
+// bridgeIdentity resolves the caller's linked Hanzo account, or the sentence to
+// say INSTEAD of running anything. link is meaningful only when say is empty;
+// ephemeral marks the (sensitive) link prompt, which carries a URL that must
+// reach only the person who asked.
+//
+// It is its own function because two things now run on behalf of a linked user —
+// the agent turn above and a registry command (slack_command.go) — and the
+// prompt is the one sentence that must not be written twice: a second copy is a
+// second chance to forget the ephemeral bit.
+func bridgeIdentity(s *cloud.Service[state], org, provider, externalID, user string) (link userLink, say string, ephemeral bool) {
+	link, linked, err := getUserLink(s, org, provider, user)
+	if err != nil {
+		s.Log.Warn("bridge: user link lookup", "provider", provider, "org", org, "err", err)
+		return userLink{}, "Sorry — I couldn't reach your Hanzo account just now. Please try again shortly.", false
+	}
+	if linked {
+		return link, "", false
+	}
+	u, lerr := linkURL(s, provider, externalID, user)
+	if lerr != nil {
+		s.Log.Error("bridge: link url", "provider", provider, "err", lerr)
+		return userLink{}, "Connect your Hanzo account to use @hanzo.", true
+	}
+	return userLink{}, "Connect your Hanzo account to use @hanzo: " + u, true
 }
 
 // linkURL builds the per-user "connect your Hanzo account" URL for a provider. Each

@@ -270,12 +270,18 @@ func (o ops) listK8sNodes(ctx context.Context, _ *noArgs) (*nodeList, error) {
 	if err != nil {
 		return nil, err
 	}
-	var nodes []visorMachine
-	if err := o.State.cl.call(c, http.MethodGet, "/v1/k8s/nodes", q("owner", org), nil, &nodes); err != nil {
+	var res visorNodes
+	if err := o.State.cl.op(c, http.MethodGet, "/v1/k8s/nodes", q("owner", org), nil, &res); err != nil {
 		return nil, err
 	}
-	out := make([]machineView, 0, len(nodes))
-	for _, m := range nodes {
+	// The op ALWAYS writes the key, so a missing one is not an empty fleet — it is
+	// a Visor that does not serve this op, and answering `{"nodes":[]}` to that
+	// would report an operator's clusters as having no workers. Say so instead.
+	if res.Nodes == nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "visor: /v1/k8s/nodes answered without a nodes list")
+	}
+	out := make([]machineView, 0, len(res.Nodes))
+	for _, m := range res.Nodes {
 		out = append(out, toMachineView(m))
 	}
 	return &nodeList{Nodes: out}, nil

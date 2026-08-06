@@ -807,6 +807,14 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 			// The act's name and the correlation id cross as two different things,
 			// which is the whole distinction this key exists on.
 			Ref: u.Ref, RequestID: u.RequestID, ClientIP: u.ClientIP,
+			// WHO acted and WHAT WORK was priced. Both rode the old HTTP body and had
+			// no field on the crossing, so every split-deploy debit arrived without an
+			// actor and without the counts its own amount was computed from — the same
+			// class of silent field loss as the anonymous Ref this crossing exists to
+			// fix, and invisible for the same reason: a dropped field is not an error.
+			Actor:        u.Actor,
+			PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens,
+			TotalTokens: u.TotalTokens,
 		},
 	}); err != nil {
 		return nil, fmt.Errorf("metering: plane usage debit: %w", err)

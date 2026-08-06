@@ -32,18 +32,21 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/tracker/projects/:key/issues", zip.Doc{
-		Description: "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo and source.\n\nThis is the ONE place a surface takes its slice of the shared issue table:\nhanzo.team passes no filter or a status, a git repository's Issues tab passes\nkind=issue&repo=<r> and its Pull Requests tab kind=pr&repo=<r>. A filter value\noutside its closed set is refused with 400 rather than silently returning an\nempty board.",
+		Description: "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo, source and whether they are scheduled.\n\nThis is the ONE place a surface takes its slice of the shared issue table: the\nboard passes no filter or a status, the timeline passes scheduled=true, a git\nrepository's Issues tab passes kind=issue&repo=<r> and its Pull Requests tab\nkind=pr&repo=<r>. A filter value outside its closed set is refused with 400\nrather than silently returning an empty board.",
 		Fields: map[string]string{
 			"issueQuery.key":       "Key is the project whose issues to list, from the path.",
 			"issueQuery.kind":      "Kind keeps only work items of that shape: issue, pr or epic. An unknown\nvalue is refused with 400.",
 			"issueQuery.repo":      "Repo keeps only issues bound to that git repository.",
+			"issueQuery.scheduled": "Scheduled keeps only issues that carry a date — a start, a due date or\nboth. This is the timeline's slice of the board: pass scheduled=true to\nget exactly the rows a gantt has somewhere to draw, instead of fetching\nevery issue and discarding the undated ones client-side.",
 			"issueQuery.source":    "Source keeps only issues opened from that surface: team, git, crm,\nhelpdesk, cms or agent. An unknown value is refused with 400.",
 			"issueQuery.status":    "Status keeps only issues in that board column: backlog, todo, in_progress,\ndone or canceled. An unknown value is refused with 400.",
+			"issueView.dueAt":      "unix seconds; absent = no due date",
 			"issueView.extRef":     "external anchor",
 			"issueView.identifier": "KEY-<number>, the human handle",
 			"issueView.kind":       "issue | pr | epic",
 			"issueView.repo":       "git repo binding",
 			"issueView.source":     "team | git | crm | helpdesk | cms | agent",
+			"issueView.startAt":    "unix seconds; absent = unscheduled",
 		},
 		Example: json.RawMessage(`{"key":"ENG","kind":"pr","repo":"hanzoai/cloud"}`),
 	})
@@ -52,11 +55,13 @@ func init() {
 		Fields: map[string]string{
 			"issueRef.key":         "Key is the issue's project, from the path.",
 			"issueRef.num":         "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
+			"issueView.dueAt":      "unix seconds; absent = no due date",
 			"issueView.extRef":     "external anchor",
 			"issueView.identifier": "KEY-<number>, the human handle",
 			"issueView.kind":       "issue | pr | epic",
 			"issueView.repo":       "git repo binding",
 			"issueView.source":     "team | git | crm | helpdesk | cms | agent",
+			"issueView.startAt":    "unix seconds; absent = unscheduled",
 		},
 	})
 	zip.Describe("PATCH /v1/tracker/projects/:key", zip.Doc{
@@ -69,21 +74,25 @@ func init() {
 		Example: json.RawMessage(`{"name":"Platform Engineering"}`),
 	})
 	zip.Describe("PATCH /v1/tracker/projects/:key/issues/:num", zip.Doc{
-		Description: "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, or replace its\nlabels. Every field is optional: one the caller omits keeps its stored value,\nand `labels` REPLACES the set rather than adding to it.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
+		Description: "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, reschedule, or\nreplace its labels. Every field is optional: one the caller omits keeps its\nstored value, and `labels` REPLACES the set rather than adding to it.\n\n`startAt` and `dueAt` are the issue's place on the timeline, in unix seconds;\n0 clears one. They are validated as the interval they RESULT in, so moving\nonly the due date is still checked against the stored start — a due date\nbefore its start is 400, never a bar drawn backwards.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
 		Fields: map[string]string{
 			"issuePatch.assignee":    "Assignee is who owns the issue, at most 256 characters. Empty unassigns it.",
 			"issuePatch.description": "Description is the issue body, at most 32768 characters.",
+			"issuePatch.dueAt":       "DueAt is when the work is due, in unix seconds — the right edge of its\nbar, or the milestone marker when there is no start. 0 clears it. It may\nnot fall before startAt.",
 			"issuePatch.key":         "Key is the issue's project, from the path.",
 			"issuePatch.labels":      "Labels REPLACES the issue's labels with exactly this set. Each label is at\nmost 48 characters and may not contain a comma (the storage separator);\nempty entries are dropped.",
 			"issuePatch.num":         "Num is the issue's number within that project, from the path.",
 			"issuePatch.priority":    "Priority is none, urgent, high, medium or low. Empty resets it to none.",
+			"issuePatch.startAt":     "StartAt is when the work starts, in unix seconds — the left edge of its\nbar on the timeline. 0 clears it.",
 			"issuePatch.status":      "Status moves the issue between board columns: backlog, todo, in_progress,\ndone or canceled. Empty resets it to backlog.",
 			"issuePatch.title":       "Title is the issue's one-line summary. Non-empty, at most 512 characters.",
+			"issueView.dueAt":        "unix seconds; absent = no due date",
 			"issueView.extRef":       "external anchor",
 			"issueView.identifier":   "KEY-<number>, the human handle",
 			"issueView.kind":         "issue | pr | epic",
 			"issueView.repo":         "git repo binding",
 			"issueView.source":       "team | git | crm | helpdesk | cms | agent",
+			"issueView.startAt":      "unix seconds; absent = unscheduled",
 		},
 		Example: json.RawMessage(`{"key":"ENG","num":14,"status":"in_progress","assignee":"z"}`),
 	})

@@ -28,7 +28,7 @@ func TestListUsage(t *testing.T) {
 		t.Fatalf("usage r2: %v", err)
 	}
 
-	rows, err := f.ListUsage(ctx, org, 100)
+	rows, err := f.ListUsage(ctx, org, false, 100)
 	if err != nil {
 		t.Fatalf("ListUsage: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestListUsage(t *testing.T) {
 	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(150), Model: "gpt-x", Ref: "r1"}); err != nil {
 		t.Fatalf("usage r1 replay: %v", err)
 	}
-	rows2, err := f.ListUsage(ctx, org, 100)
+	rows2, err := f.ListUsage(ctx, org, false, 100)
 	if err != nil {
 		t.Fatalf("ListUsage after replay: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestListUsage(t *testing.T) {
 	}
 
 	// An org with no file yet reads empty, not an error.
-	empty, err := f.ListUsage(ctx, "neverused", 100)
+	empty, err := f.ListUsage(ctx, "neverused", false, 100)
 	if err != nil {
 		t.Fatalf("ListUsage empty org: %v", err)
 	}

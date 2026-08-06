@@ -84,57 +84,81 @@ func TestBuildDeps_DisabledNoEndpointReturnsDisabled(t *testing.T) {
 	}
 }
 
-// TestBuildDeps_DisabledWithEndpointReturnsRPC verifies that a
-// disabled subsystem with a configured ZAP endpoint resolves to the
-// RPC stub.
-func TestBuildDeps_DisabledWithEndpointReturnsRPC(t *testing.T) {
+// A subsystem that is not in this process is DISABLED, and there is no address
+// that can say otherwise.
+//
+// This test used to assert the opposite: that CLOUD_IAM_ZAP_ADDR resolved to an
+// RPC client which was NOT disabled. It passed for the wrong reason. That client
+// answered every method with "not yet wired (zapc-gen pending)", so what the
+// assertion actually pinned was that a configured address produces a client that
+// fails differently from an unconfigured one — not that it reaches anything. Boot
+// logged "deps.IAM → ZAP RPC" and every VerifyJWT failed, which is the worst of
+// both: an operator reading the log saw the transport up, and the calls broke
+// somewhere they had no reason to look.
+//
+// The peer plane is the transport (plane.Ask, over the peer's own socket). A
+// subsystem reachable that way is reached by NAME with no address to configure;
+// one that is not reachable is honestly disabled. Neither state has room for an
+// endpoint string, so there is nothing left to set.
+func TestBuildDeps_AnAddressCannotUndisableASubsystem(t *testing.T) {
 	cfg := &cloud.Config{
-		Brand:      "hanzo",
-		Domain:     "api.hanzo.ai",
-		DataDir:    "/tmp",
-		Enable:     []string{"gateway"},
-		IAMZAPAddr: "iam.hanzo.svc:9653",
+		Brand:   "hanzo",
+		Domain:  "api.hanzo.ai",
+		DataDir: "/tmp",
+		Enable:  []string{"gateway"},
 	}
 	deps := cloud.BuildDeps(cfg)
 
 	if deps.IAM == nil {
-		t.Fatal("deps.IAM: expected RPC stub")
+		t.Fatal("deps.IAM: not enabled here must give a disabled stub, got nil")
 	}
 	_, err := deps.IAM.VerifyJWT(context.Background(), "tok")
 	if err == nil {
-		t.Fatal("expected error from RPC stub (transport pending)")
+		t.Fatal("expected an error from the disabled stub")
 	}
-	if clients.IsDisabled(err) {
-		t.Errorf("expected NOT-disabled, got disabled: %v", err)
+	// The ONE failure mode. Anything else means a second transport grew back.
+	if !clients.IsDisabled(err) {
+		t.Errorf("a subsystem that is not here must report itself DISABLED, not "+
+			"fail in some transport-specific way; got %v", err)
 	}
 }
 
-// TestBuildDeps_PaymentsAndVault_AlwaysRPC verifies that payments and
-// vault always resolve to a non-nil client even though neither is in
-// the enabled list — they are not co-resident per HIP-0106.
-func TestBuildDeps_PaymentsAndVault_AlwaysRPC(t *testing.T) {
+// Payments and Vault are never co-resident (PCI scope isolation), so they are
+// always absent — and being absent, they are disabled and SAY so.
+//
+// Non-nil is the load-bearing half: commerce nil-checks both fields, and a nil
+// there is a per-request nil deref rather than a fail-closed refusal. What the
+// call must NOT be is a lie. Previously both resolved to an RPC client at a
+// configured address whose every method returned "not yet wired" — a declared
+// cardholder-data transport that never carried a byte. A disabled stub carries
+// exactly as much and reports the truth about it.
+func TestBuildDeps_PaymentsAndVaultAreAbsentAndSayItPlainly(t *testing.T) {
 	cfg := &cloud.Config{
-		Brand:           "hanzo",
-		Domain:          "api.hanzo.ai",
-		DataDir:         "/tmp",
-		Enable:          []string{"commerce"},
-		PaymentsZAPAddr: "payments.hanzo.svc:9653",
-		VaultZAPAddr:    "vault.hanzo.svc:9653",
+		Brand:   "hanzo",
+		Domain:  "api.hanzo.ai",
+		DataDir: "/tmp",
+		Enable:  []string{"commerce"},
 	}
 	deps := cloud.BuildDeps(cfg)
 
 	if deps.Payments == nil {
-		t.Fatal("deps.Payments must be non-nil even when not enabled")
+		t.Fatal("deps.Payments must be non-nil even when not enabled (commerce nil-checks it)")
 	}
 	if deps.Vault == nil {
-		t.Fatal("deps.Vault must be non-nil even when not enabled")
+		t.Fatal("deps.Vault must be non-nil even when not enabled (commerce nil-checks it)")
 	}
-	// Call them to confirm typed dispatch — they'll return "transport
-	// pending" errors but not nil deref.
-	if _, err := deps.Payments.CreateIntent(context.Background(), &cloud.IntentRequest{Token: "tok-1", Currency: "USD", AmountCents: 100}); err == nil {
-		t.Fatal("expected RPC stub error")
+	_, perr := deps.Payments.CreateIntent(context.Background(), &cloud.IntentRequest{Token: "tok-1", Currency: "USD", AmountCents: 100})
+	if perr == nil {
+		t.Fatal("payments is not deployed; CreateIntent must refuse")
 	}
-	if _, err := deps.Vault.Charge(context.Background(), &cloud.VaultChargeRequest{Token: "tok-1", AmountCents: 100}); err == nil {
-		t.Fatal("expected RPC stub error")
+	if !clients.IsDisabled(perr) {
+		t.Errorf("payments must report itself DISABLED, not a pending transport; got %v", perr)
+	}
+	_, verr := deps.Vault.Charge(context.Background(), &cloud.VaultChargeRequest{Token: "tok-1", AmountCents: 100})
+	if verr == nil {
+		t.Fatal("vault is not deployed; Charge must refuse")
+	}
+	if !clients.IsDisabled(verr) {
+		t.Errorf("vault must report itself DISABLED, not a pending transport; got %v", verr)
 	}
 }

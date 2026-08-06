@@ -9,6 +9,29 @@ import (
 )
 
 func init() {
+	zip.Describe("GET /v1/analytics/health", zip.Doc{
+		Description: "Health reports whether the event plane can take a write and the warehouse can\nanswer a read.\n\nIt reports the analytics subsystem's own liveness in BOTH directions: plane is\nthe event plane it WRITES (the bus and the JetStream stream every accepted\nevent is published to, both named in the report), and datastore is the\nwarehouse it READS, with each read lens's table reported as it is provisioned\n(the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed\nindependently and never collapse into a single bit. This endpoint used to\nreport the read half only, and answered 200/ok while every POST /v1/event\nfailed on a stream that could not bind: a total ingest outage behind a green\nprobe. A readiness gate here now gates on the write path too.\n\nplane.ready IS A REAL PROBE and walks the ingest path itself — the same\nconnection and the same stream a publish uses — so it cannot answer ready while\na publish would 503. plane.reason carries the plane's own error text when it is\nfalse.\n\ndatastore IS NOT PROBED WITH A QUERY. It is the state of the process's own\nshared client — established, and not since closed — so a warehouse accepting\nconnections and failing reads still reports true. Degraded CARRIES the report\n(status, the failing half, reason) as its body rather than an error envelope,\nso a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens\nreported available:false answers honest-empty rather than erroring, so a fresh\ndeployment whose collector has not emitted yet is legitimately 200 with the\nproduct-event lens unavailable. The lens block is reported whenever the\nwarehouse is REACHABLE — including on a report degraded by the plane, where the\ntables genuinely were probed — and is absent only when the warehouse is not,\nhaving nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO\ntenant data: table existence and stream presence only, never a row and never an\nevent.",
+		Fields: map[string]string{
+			"healthLens.available":   "Available reports whether that table exists in the warehouse right now.",
+			"healthLens.table":       "Table is the fully-qualified warehouse table the lens reads.",
+			"healthLenses.events":    "Events is the web/commerce lens (event.fact, signal='act'), honest-empty until the\ncollector emits.",
+			"healthLenses.llm":       "LLM is the live per-org usage ledger lens (hanzo.cloud_usage).",
+			"healthPlane.bus":        "Bus is the address this process reaches the plane at.",
+			"healthPlane.ready":      "Ready reports whether an ingest would succeed right now. False is a 503.",
+			"healthPlane.reason":     "Reason is the plane's own failure text, present only when Ready is false.",
+			"healthPlane.stream":     "Stream is the JetStream stream every signal lands on.",
+			"healthReport.datastore": "Datastore reports whether the shared warehouse client has a live connection.\nIt is load-bearing for the READ path: false is one of the two ways this\nanswers 503.",
+			"healthReport.lenses":    "Lenses is per-lens table availability, probed only when connected — so it is\nabsent from a degraded report, which has nothing to say about tables it could\nnot reach.",
+			"healthReport.lost":      "Lost is the count of facts the sink irrecoverably dropped since boot\n(warehouse.go). It is reported on the DEGRADED report too, and deliberately: a\nwarehouse that is unreachable is exactly when facts start failing their\ndeliveries, so suppressing the number here would hide it precisely when it\nmoves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the door already\nanswered 200 for.",
+			"healthReport.plane":     "Plane reports the event plane — the bus and the stream every accepted event is\npublished to BEFORE any of it reaches the warehouse. It is load-bearing for the\nWRITE path, and it is here because its absence was a real outage: this endpoint\nanswered 200/ok on warehouse connectivity alone while every POST /v1/event 503'd\non a stream that could not bind, so 100% ingest loss was invisible to monitoring.\nA probe that cannot see the write path cannot report the write path.",
+			"healthReport.reason":    "Reason is the human-readable cause, present only on a degraded report.",
+			"healthReport.service":   "Service names the subsystem answering, so a probe aggregating several health\nendpoints can attribute a degraded one.",
+			"healthReport.status":    "Status is ok or degraded. Degraded is the 503 and means EITHER load-bearing\ndependency is down — the warehouse this subsystem reads, or the event plane it\nwrites. It is not moved by a missing lens table, which is honest-empty.",
+			"healthReport.warehouse": "Warehouse names the datastore database every lens reads.",
+			"loss.exhausted":         "Exhausted counts facts the bus abandoned after maxDeliver failed inserts.",
+			"loss.undecodable":       "Undecodable counts messages acked without landing because they did not parse.",
+		},
+	})
 	zip.Describe("GET /v1/analytics/overview", zip.Doc{
 		Description: "Overview returns the caller org's analytics KPIs for one time window. Three lenses\nover one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,\nspend, models, providers, errors) and is always real; web (pageviews, visitors,\nsessions) and commerce (orders, revenue, AOV) read the product-event table and\nreport available=false rather than fabricating zeros when it holds nothing yet.\n\nThe org is the validated principal's — never a parameter — so a caller can only\never read its own tenant. 403 without a validated bearer, 400 on an unknown range,\n503 when the warehouse is unreachable.",
 		Fields: map[string]string{

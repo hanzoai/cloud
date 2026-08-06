@@ -1,12 +1,13 @@
 package books
 
-// ingest.go — the ONE posting source: a per-org cursor over commerce's transaction
-// ledger (GET /v1/billing/transactions). commerce's prepaid wallet is the source of
-// truth for money moved; this projects each transaction into a balanced double-entry
-// voucher via a FIXED rule map (no AI, no heuristics) and posts it through the choke
-// point. It is READ-ONLY against commerce — it never calls the mint-gated
-// deposit/credit/payout endpoints — and the transactions endpoint is the SOLE source, so
-// the books can never double-count a move that is also visible in cloud_usage/finance.
+// ingest.go — the ONE posting source: a per-org cursor over commerce's ledger
+// entries, read by NAME over the internal plane (plane.FinanceTxns). commerce's
+// prepaid wallet is the source of truth for money moved; this projects each entry
+// into a balanced double-entry voucher via a FIXED rule map (no AI, no
+// heuristics) and posts it through the choke point. It is READ-ONLY against
+// commerce — the plane exposes no mint to it — and that one list is the SOLE
+// source, so the books can never double-count a move that is also visible in
+// cloud_usage/finance.
 //
 // IDEMPOTENCY. Every voucher is keyed (commerce_txn, txn.ID), so re-running ingestion —
 // on a schedule, after a crash, over an overlapping cursor window — posts each commerce
@@ -17,19 +18,26 @@ import (
 	"context"
 	"sort"
 	"strings"
+
+	"github.com/hanzoai/cloud/apps/finance"
 )
 
-// commerceTxn is one row of commerce GET /v1/billing/transactions (only the fields the
-// rule map reads). Type is "deposit" (a top-up / credit purchase) or "withdraw" (usage /
-// consumption); Amount is the magnitude in cents.
+// commerceTxn is one ledger entry, projected to the fields the rule map reads.
+// Amount is the signed magnitude in cents.
 type commerceTxn struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Amount    int64  `json:"amount"`
-	Currency  string `json:"currency"`
-	Tags      string `json:"tags"`
-	Notes     string `json:"notes"`
-	CreatedAt string `json:"createdAt"`
+	ID string `json:"id"`
+	// Kind is the LEDGER'S own classification, parsed once at the boundary with
+	// finance.ParseKind and never compared to a string literal here. This field
+	// was a bare string matched against "deposit" and "withdraw" — spellings the
+	// ledger has never written; it writes finance.deposit and finance.usage — so
+	// every row classified as nothing and every posting was skipped. Nothing
+	// failed. The strings just never met.
+	Kind      finance.Kind `json:"kind"`
+	Amount    int64        `json:"amount"`
+	Currency  string       `json:"currency"`
+	Tags      string       `json:"tags"`
+	Notes     string       `json:"notes"`
+	CreatedAt string       `json:"createdAt"`
 }
 
 // txnSource is the measurement seam to commerce: per-org transactions, live or sandbox.
@@ -49,20 +57,25 @@ const (
 	kindDeposit
 	kindGrant
 	kindUsage
-	kindRefund
 )
 
+// The ledger writes exactly TWO kinds — money in and money out — so this maps
+// two, and a kind it never wrote posts nothing rather than guessing a leg.
+//
+// There is no refund arm because there is no refund kind. A return of unspent
+// funds is a NEGATIVE deposit in the ledger, and ruleFor already books a
+// negative amount as the exact reversal of its event, which is the same two
+// legs a refund has always posted. A third spelling for the same movement is
+// how one event comes to be booked twice.
 func classify(t commerceTxn) kind {
-	switch strings.ToLower(strings.TrimSpace(t.Type)) {
-	case "deposit", "topup", "top-up", "credit", "grant":
+	switch t.Kind {
+	case finance.KindDeposit:
 		if isGrant(t) {
 			return kindGrant
 		}
 		return kindDeposit
-	case "withdraw", "usage", "debit", "charge":
+	case finance.KindUsage:
 		return kindUsage
-	case "refund":
-		return kindRefund
 	}
 	return kindNone
 }
@@ -76,9 +89,13 @@ func classify(t commerceTxn) kind {
 //	                          a processor-cash asset; booking it to 1010 would invent money)
 //	withdraw / usage       →  Dr 2000 Customer Wallet  / Cr 4000 AI usage revenue
 //	                          (the revenue-RECOGNITION moment: consumed credit becomes revenue)
-//	refund                 →  Dr 2000 Customer Wallet  / Cr 1000 Bank
-//	                          (return of UNSPENT prepaid funds draws the liability down against
-//	                          cash — NOT revenue; booking it as usage would fabricate revenue)
+//
+// A REFUND is not a fourth row here, because it is not a fourth kind. The ledger
+// writes two — money in, money out — and a return of unspent funds is a NEGATIVE
+// deposit, which the sign rule below books as the exact reversal of the top-up it
+// undoes: the liability draws down against the same clearing account the cash
+// arrived through, and no revenue is recognized. A third spelling for one
+// movement is how one event comes to be booked twice.
 //
 // SIGN IS MEANING, not noise. A commerce amount is a signed cents figure: a POSITIVE amount
 // is the event above; a NEGATIVE amount is its REVERSAL (a chargeback of a top-up, a
@@ -102,7 +119,7 @@ func ruleFor(t commerceTxn) (Voucher, bool) {
 		SourceKind:  "commerce_txn",
 		SourceID:    t.ID,
 		PostingAt:   t.CreatedAt,
-		Description: firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), strings.TrimSpace(t.Type)),
+		Description: firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), string(t.Kind)),
 	}
 	switch k {
 	case kindDeposit:
@@ -111,8 +128,6 @@ func ruleFor(t commerceTxn) (Voucher, bool) {
 		v.Legs = entry(reverse, PromoCredit, CustomerWallet, mag)
 	case kindUsage:
 		v.Legs = entry(reverse, CustomerWallet, UsageRevenue, mag)
-	case kindRefund:
-		v.Legs = entry(reverse, CustomerWallet, Bank, mag)
 	}
 	return v, true
 }
@@ -171,8 +186,7 @@ func cogsVoucher(t commerceTxn, cents int64) (Voucher, bool) {
 // author) in the ledger row's tag, or arrive as a "grant" type. No cash moves, so the
 // offsetting debit is a promotional expense, never processor cash.
 func isGrant(t commerceTxn) bool {
-	return strings.EqualFold(strings.TrimSpace(t.Type), "grant") ||
-		strings.Contains(strings.ToLower(t.Tags), "grant:")
+	return strings.Contains(strings.ToLower(t.Tags), "grant:")
 }
 
 // ingestOrg advances one org's books (a single ledger — live OR sandbox) over commerce's

@@ -153,7 +153,7 @@
     },
     "/v1/captable/convertibles/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_convertibles_id",
+        "operationId": "delete_v1_captable_convertibles_by_id",
         "summary": "Removes one of the caller org's convertible notes, taking its principal out of the cap table's unconverted-instrument totals.",
         "description": "Removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
         "tags": [
@@ -238,7 +238,7 @@
     },
     "/v1/captable/options/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_options_id",
+        "operationId": "delete_v1_captable_options_by_id",
         "summary": "Removes one of the caller org's option grants, taking its shares out of the cap table's granted-options and fully-diluted counts.",
         "description": "Removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
         "tags": [
@@ -331,7 +331,7 @@
     },
     "/v1/captable/rounds/{id}": {
       "get": {
-        "operationId": "get_v1_captable_rounds_id",
+        "operationId": "get_v1_captable_rounds_by_id",
         "summary": "Returns one of the caller org's fundraising rounds together with every investment written into it, oldest first.",
         "description": "Returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
         "tags": [
@@ -364,7 +364,7 @@
     },
     "/v1/captable/rounds/{id}/close": {
       "post": {
-        "operationId": "post_v1_captable_rounds_id_close",
+        "operationId": "post_v1_captable_rounds_by_id_close",
         "summary": "Closes one of the caller org's fundraising rounds, recording the close date and moving its status to CLOSED.",
         "description": "Closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
         "tags": [
@@ -457,7 +457,7 @@
     },
     "/v1/captable/safes/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_safes_id",
+        "operationId": "delete_v1_captable_safes_by_id",
         "summary": "Removes one of the caller org's SAFEs, taking its capital out of the cap table's unconverted-instrument totals.",
         "description": "Removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
         "tags": [
@@ -530,7 +530,7 @@
     },
     "/v1/captable/shares/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_shares_id",
+        "operationId": "delete_v1_captable_shares_by_id",
         "summary": "Removes one of the caller org's share certificates, taking its shares out of the cap table's outstanding and fully-diluted counts.",
         "description": "Removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
         "tags": [
@@ -596,7 +596,7 @@
     },
     "/v1/captable/stakeholders/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_stakeholders_id",
+        "operationId": "delete_v1_captable_stakeholders_by_id",
         "summary": "Removes one of the caller org's stakeholders.",
         "description": "Removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
         "tags": [
@@ -627,7 +627,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_captable_stakeholders_id",
+        "operationId": "patch_v1_captable_stakeholders_by_id",
         "summary": "Changes one of the caller org's stakeholders.",
         "description": "Changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
         "tags": [

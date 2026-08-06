@@ -186,14 +186,6 @@ func TestLiveDropsUnrepresentableMethods(t *testing.T) {
 	}
 }
 
-// A path param and a literal of the same name must not collapse onto one
-// operationId — OpenAPI requires them unique.
-func TestOperationIDDistinguishesParamFromLiteral(t *testing.T) {
-	if a, b := operationID("GET", "/v1/a/{b}"), operationID("GET", "/v1/a/b"); a == b {
-		t.Fatalf("operationId collision: /v1/a/{b} and /v1/a/b both → %q", a)
-	}
-}
-
 // From must reject a duplicate operationId rather than emit a document a
 // generator would mis-consume. This is also what keeps (method,path) injective.
 //

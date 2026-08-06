@@ -99,11 +99,9 @@ type EnforceConfig struct {
 	WaitlistURL string
 
 	// Approvals resolves whether the caller is off the waitlist. When nil, Enforce
-	// builds one from IAMBase.
+	// builds one over the iam peer — which takes no address, so there is nothing
+	// else for a deployment to supply.
 	Approvals *Approvals
-
-	// IAMBase is the in-cluster IAM base used to build Approvals when it is nil.
-	IAMBase string
 
 	// ExemptPrefixes are request-path prefixes never gated (health/metrics/auth).
 	// A sensible default set is used when empty.
@@ -135,7 +133,7 @@ var defaultExemptPrefixes = []string{
 func Enforce(cfg EnforceConfig) zip.Handler {
 	approvals := cfg.Approvals
 	if approvals == nil {
-		approvals = NewApprovals(cfg.IAMBase, 0)
+		approvals = NewApprovals(0)
 	}
 	gate := cfg.Gate
 	if gate == nil {

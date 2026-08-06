@@ -691,7 +691,7 @@ func validToolName(name string) bool {
 }
 
 func meterUnit(s *cloud.Service[state], c *zip.Ctx) {
-	s.Bill.Meter(principal.Ledger(c), principal.Project(c), meterKind,
+	s.Bill.Meter(principal.Payer(c), principal.Project(c), meterKind,
 		cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
 }
 

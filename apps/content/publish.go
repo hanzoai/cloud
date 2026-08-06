@@ -176,6 +176,29 @@ func Publish(ctx context.Context, org string, in PublishInput) (PublishResult, e
 	}
 	defer func() { _ = lease.Release(ctx) }()
 
+	return publishHeld(ctx, org, in)
+}
+
+// publishHeld is the fan-out itself: read the skip-set, post what is missing, record
+// what came back. THE CALLER HOLDS the item's publish lease (publishLeaseKey) for the
+// whole of it — that is the precondition the idempotency argument above rests on, and
+// it is a precondition rather than something this function takes itself because the
+// section that must be serialized is LARGER than the fan-out for one caller.
+//
+// Transition is that caller. Its status write carries the whole document (UpdateData
+// replaces it — a field left out of the map is dropped, so external_ids cannot simply
+// be omitted), and the snapshot it writes is read BEFORE the fan-out. Leasing only the
+// fan-out therefore cannot see the erasure: publisher A records external_ids and
+// releases, B's already-stale snapshot writes the skip-set back to empty, and B's
+// fan-out — correctly leased, correctly re-reading — finds nothing to skip and posts
+// the item a second time. Whoever must serialize the write serializes the fan-out with
+// it, on the same key, in one section.
+func publishHeld(ctx context.Context, org string, in PublishInput) (PublishResult, error) {
+	s := mounted
+	if s == nil {
+		return PublishResult{}, errNotMounted
+	}
+
 	doc, err := framework.Get(ctx, org, in.DocType, in.Name)
 	if err != nil {
 		return PublishResult{}, err

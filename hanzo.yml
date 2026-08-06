@@ -3,7 +3,16 @@
 #
 # NO images: lane HERE, and the reason changed. The cloud MAIN image and its v*
 # tags still have exactly ONE owner, and the tag-is-a-receipt invariant still
-# holds (main push → build → smoke → tag → pin → prove live). But that owner is
+# holds (main push → claim → build → smoke → RECORD → pin → prove live). But that owner is
+#
+# RECORD is not decoration in that list. A resume used to read "have these bytes
+# been published" and answer "then skip the smoke too" — so a run that pushed and
+# then failed the smoke came back, found its own image, and handed rollout bytes
+# nothing had ever booted. Smoking is now a FACT, written when it happens:
+# refs/smoked/sha256-<digest> at the commit, in the same compare-and-swap
+# namespace the version claim uses. Resume reads that fact. An artifact existing
+# proves it was built and never that it was tested, and the two questions are now
+# asked of the two systems that know — the registry, and git.
 # now the `image` job of .hanzo/workflows/cicd.yml, not apps/platform/release.go.
 #
 # release.go held it until a release could be shown to reliably kill itself: it
@@ -27,17 +36,56 @@
 # NO deploy here either: the `rollout` job ends in universe/charts/app/pin.sh,
 # and cd.hanzo.ai reconciles what that pin records.
 
-# NO binaries: lane. Every subsystem now ships as its OWN plugin/<app> binary, and
-# the per-app binaries travel INSIDE the release image — the Dockerfile builds the
-# light host plus one binary per app into /plugins beside it, and the host resolves
-# each plugin as a file on disk (manifest.App.Plugin). There is no longer a single
-# multi-call binary that one binaries: entry could publish to cover the whole fleet;
-# 112 per-app entries would blow the artifact lane's 16-binary bound, and its
-# out:-glob path names every file with one recipe name (incompatible with the
-# per-app, per-arch index manifest/release.go reads). So the image IS the
-# distribution. The CLOUD_PLUGINS runtime path (manifest/release.go) remains a valid
-# opt-in for a plugin-less host, to be fed by a dedicated per-arch publisher if one
-# is ever needed — not by this 16-bounded lane.
+# NO binaries: LANE YET, AND THE MISSING PIECE IS A CREDENTIAL NOBODY HAS.
+#
+# The build half is done and lives in this repo: `make -f mk/fleet.mk dist` puts
+# all 121 plugins for linux/amd64 + linux/arm64 into dist/<app>-<os>-<arch> —
+# the exact triple manifest/release.go resolves a plugin by, through the same
+# mk/plugin.mk recipe an app's own Makefile runs, CGO_ENABLED=0 so a fetched
+# plugin does not demand a libsqlite3 on a box we did not build. (The image's
+# /plugins are built the other way, cgo + libsqlite3, because there the host owns
+# the filesystem they land on. Same source, two consumers, one recipe.)
+#
+# Two things outside this repo have to be true before the declaration at the
+# bottom of this comment becomes real:
+#
+#   1. hanzoai/ci's run:/out: lane must index per FILE, not per RECIPE. It records
+#      {name: <the recipe's>, os: any, arch: any} for every file it collects —
+#      right for a wheel, and precisely what manifest/release.go cannot read. The
+#      fix is to derive the triple from the filename when it carries the
+#      <name>-<os>-<arch> shape ci's OWN Go lane already writes: one naming
+#      convention, either lane. (`out: dist/*` also aborts that lane today — it
+#      copies each match into dist/ by basename, and `cp x x` is an error, not a
+#      no-op.) The alternative is not 121 entries: that would blow the platform
+#      front door's 16-binary bound AND restate manifest/apps.go in YAML.
+#
+#   2. Somebody has to answer where the write credential comes from. `bucket:`
+#      uploads through S3_ADMIN_ACCESS_KEY/S3_ADMIN_SECRET_KEY read from KMS, and
+#      those names are in KMS for NO ORG. The lane fails CLOSED on that, so
+#      declaring it would publish nothing and turn every TAG build of this repo
+#      red — and rollout, reach, fanout and receipt all declare needs: on the gate
+#      below. That is the release train stopped in exchange for nothing, which is
+#      exactly the state ci's `site:` lane shipped in. The answer being built next
+#      door is to stop needing the credential: publish through an authenticated
+#      cloud endpoint on the IAM bearer the KMS step already mints, so CI names no
+#      bucket and holds no bucket key. If that is the direction, this wants the
+#      same door rather than a provisioned S3_ADMIN_*.
+#
+# When both hold, the whole declaration is:
+#
+#   bucket: plugins
+#   binaries:
+#     - name: plugins
+#       run: make -f mk/fleet.mk dist   # PLATFORMS lives in mk/fleet.mk, not here
+#       out: dist/*
+#
+# ONE entry, not 121, so the app set stays in the one place that owns it. It
+# publishes to https://s3.hanzo.ai/plugins/hanzoai/cloud/<tag>/ — artifacts first
+# and binaries.json LAST, so the index never names an object that is not there —
+# which is the index CLOUD_PLUGINS already reads (manifest/release.go), on a tag
+# only, digest-verified before anything is executed. The image keeps its own copy
+# of every plugin regardless; this is the same artifact set for the host that has
+# no such copy, not a second distribution channel.
 
 # THE CGO TAG FLOOR for every raw `go` invocation below. Under cgo,
 # `sqlite_math_functions` is not a preference — hanzoai/base declares a
@@ -193,13 +241,13 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # ONE gate definition, called here rather than restated: mk/fleet.mk's
-      # surface-check regenerates every subset AND weaves the golden, then fails
+      # check regenerates every subset AND weaves the golden, then fails
       # on any porcelain change. This step used to regenerate the subsets only,
       # so openapi.yaml — the file the SDK repos actually pull — was never checked
       # against source by anything: openapi-composed above compares it to the
       # subsets, and both are derived. That is how plugin/ingress lost eight paths
       # with every gate green.
-      make -f mk/fleet.mk surface-check
+      make -f mk/fleet.mk check
   - name: go-unit
     run: |
       set -e

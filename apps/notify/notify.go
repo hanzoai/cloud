@@ -57,6 +57,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -65,7 +66,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	ntypes "github.com/hanzoai/notify/pkg/types"
 	"github.com/hanzoai/notify/service/mail"
 	"github.com/hanzoai/notify/service/plivo"
@@ -86,9 +86,9 @@ type notifier interface {
 	Send(ctx context.Context, subject, message string) error
 }
 
-// service holds the mount-time dependencies. send is the delivery seam:
-// production wires sendReal; tests inject a fake to assert the handler contract
-// without touching a real provider.
+// service holds the mount-time dependencies. send is the ONE delivery function:
+// production points it at sendReal; tests inject a fake to assert the route
+// contract without touching a real provider.
 type service struct {
 	log  luxlog.Logger
 	kms  cloud.KMSClient
@@ -96,6 +96,11 @@ type service struct {
 }
 
 // Mount registers the native /v1/notify/* send surface on app.
+//
+// Every route here is a TYPED op — the one registration REST, OpenAPI, the MCP
+// tool list, the CLI and the by-name call plane all project from. Typing the
+// send routes is what lets a sibling process (IAM's OTP sender) reach them as a
+// typed zip.Call instead of hand-rolling HTTP against an undeclared shape.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("notify.Mount: nil app")
@@ -106,21 +111,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s := &service{log: log, kms: deps.KMS}
 	s.send = s.sendReal
-
-	g := app.Group("/v1/notify")
-	zip.Get(g, "/health", s.health)
-	// UNTYPED, all three, and they have to be: ONE address answers with TWO shapes
-	// at 200. A send to a SINGLE recipient returns the bare SendResponse
-	// ({messageId,status}); a send to several returns the {items:[SendResponse]}
-	// envelope (see handleSend's tail). A typed op declares one Out, so either
-	// shape would publish the other as a lie — and publishing a false response
-	// schema is worse than publishing none, because every generated SDK binds it.
-	// They convert the day zip can declare a polymorphic response (the #78 family);
-	// typing them then also needs a cloud.Bridge on this group, which no route here
-	// needs today.
-	g.Post("/send", s.handleSend(""))
-	g.Post("/send/sms", s.handleSend(string(ntypes.ChannelSMS)))
-	g.Post("/send/email", s.handleSend(string(ntypes.ChannelEmail)))
+	routes(app, s)
 
 	if log != nil {
 		log.Info("notify send surface mounted", "prefix", "/v1/notify")
@@ -128,48 +119,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// The three send routes' prose, declared beside the wire fact that keeps them
-// untyped. A typed op's prose is lifted from its doc comment by zipdoc; these
-// have no typed op to lift from (the two-shape refusal above), so without a
-// Describe they publish an operationId and nothing else — an SDK method that
-// cannot explain itself and a CLI command with no help text. Declared through the
-// same registry Register uses, so a description renders only while the router
-// actually serves the route.
-func init() {
-	const delivery = "Delivery is synchronous and per recipient: one recipient answers the bare " +
-		"{messageId,status} SendResponse, several answer the {items:[…]} envelope. A terminal " +
-		"provider failure is a 200 whose status is failed with the reason in error, never a " +
-		"transport error. ?sync=true is REQUIRED — an async dispatch answers 503, because the " +
-		"queue plane that would run it is owned elsewhere and is not folded in here. The message " +
-		"body wins verbatim when present; otherwise template_id (or the event name) selects a " +
-		"built-in template rendered against template_vars."
-
-	openapi.Describe("/v1/notify/send", http.MethodPost,
-		"Send one transactional message by email or SMS through your org's own provider credential",
-		"Delivers a message to each address in `to` over the channel the body names — sms or "+
-			"email — using the CALLER ORG'S own provider credential, read from KMS at "+
-			"orgs/<org>/notify/<service>/<key> and never from the environment. The org is the "+
-			"validated principal's, never a client-supplied header, so a caller can only ever send "+
-			"as their own tenant; an unauthenticated caller gets 401. Naming no provider picks the "+
-			"one whose credentials are actually configured (Twilio, then Plivo for SMS; Twilio Email, "+
-			"then SMTP for email) and fails closed when none is. "+delivery)
-
-	openapi.Describe("/v1/notify/send/sms", http.MethodPost,
-		"Send one transactional SMS through your org's own provider credential",
-		"The channel-pinned form of the generic send: identical in every respect except that the "+
-			"channel is fixed to sms, OVERRIDING whatever the body names — so a body that says email "+
-			"still goes out as a text message. The provider is the org's own SMS credential from KMS "+
-			"(Twilio, then Plivo), resolved for the validated principal's org and never from a "+
-			"client-supplied header; an unauthenticated caller gets 401. "+delivery)
-
-	openapi.Describe("/v1/notify/send/email", http.MethodPost,
-		"Send one transactional email through your org's own provider credential",
-		"The channel-pinned form of the generic send: identical in every respect except that the "+
-			"channel is fixed to email, OVERRIDING whatever the body names — so a body that says sms "+
-			"still goes out as mail. The provider is the org's own email credential from KMS (Twilio "+
-			"Email, then SMTP), resolved for the validated principal's org and never from a "+
-			"client-supplied header; an unauthenticated caller gets 401. Subject is carried on the "+
-			"email channel only. "+delivery)
+// routes is the ONE place the surface is declared, so a test drives the same
+// router the binary serves rather than a reconstruction of it.
+func routes(app cloud.Router, s *service) {
+	g := app.Group("/v1/notify")
+	zip.Get(g, "/health", s.health)
+	zip.Post(g, "/send", s.sendAny)
+	zip.Post(g, "/send/sms", s.sendSMS)
+	zip.Post(g, "/send/email", s.sendEmail)
 }
 
 // noIn is the input of an op that takes nothing: no body, no path parameter, no
@@ -195,72 +152,197 @@ func (s *service) health(ctx context.Context, _ *noIn) (*notifyHealth, error) {
 	return &notifyHealth{Service: "notify", Status: "ok"}, nil
 }
 
-// handleSend returns the POST /v1/notify/send handler. pinnedChannel is set on the
-// per-channel convenience routes (/send/sms, /send/email) and left empty on the
-// generic route, which reads the channel from the body.
-func (s *service) handleSend(pinnedChannel string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		// The org is the VALIDATED principal, never a client header — the whole
-		// point of moving the trust boundary into cloud (see package doc).
-		if !principal.Validated(c) {
-			return zip.ErrUnauthorized("notify: authentication required")
-		}
-		org, ok := principal.Org(c)
-		if !ok || org == "" {
-			return zip.ErrUnauthorized("notify: org scope required")
-		}
+// notifySend is the send contract — notifyd's SendRequest, restated field by field so
+// the published schema can describe itself (an imported type's prose is invisible
+// to zipdoc). The fields this fold ignores (idempotency_key, send_at, options) are
+// deliberately not declared: a body carrying them still decodes, and a schema that
+// listed them would promise machinery the fold does not run.
+type notifySend struct {
+	// To is the destination address per recipient — a phone number for sms, an
+	// email address for email. Several recipients fan out into one provider call
+	// each, and the response shape follows the count (see the items field).
+	To []string `json:"to"`
+	// Channel selects the delivery channel, sms or email. The per-channel routes
+	// (/send/sms, /send/email) pin it, overriding whatever the body names; on the
+	// generic route it is required.
+	Channel string `json:"channel"`
+	// Provider pins a provider service name (twilio, plivo, twilio_email, mail).
+	// Empty picks the one whose org credentials are actually configured in KMS.
+	Provider string `json:"provider,omitempty"`
+	// Subject is the message subject, carried on the email channel only.
+	Subject string `json:"subject,omitempty"`
+	// Body is the message text, sent verbatim when present — the no-template path.
+	Body string `json:"body,omitempty"`
+	// TemplateID selects a built-in template when Body is empty.
+	TemplateID string `json:"template_id,omitempty"`
+	// TemplateVars carries the values the selected template renders against, as
+	// a raw JSON object. Raw on purpose: the by-name call plane computes an
+	// input's layout before reading any payload and refuses a map field
+	// outright, which would make every typed call to these ops fail — and that
+	// call is the reason they are typed at all (IAM's OTP sender). deliver
+	// decodes it right before the template renders, so REST bodies decode
+	// byte-identically to the map this replaced.
+	TemplateVars json.RawMessage `json:"template_vars,omitempty"`
+	// Event is the event name, which doubles as the template id when TemplateID is
+	// empty — the IAM OTP path sends event=iam.otp_sent and nothing else.
+	Event string `json:"event,omitempty"`
+	// Sync must be exactly "true": delivery here is synchronous, and anything else
+	// answers 503 because the queue plane that would run an async dispatch is owned
+	// elsewhere. Over REST it rides as ?sync=true (the URL binds over the body); a
+	// by-name call states it in its arguments.
+	Sync string `json:"sync,omitempty"`
+}
 
-		var req ntypes.SendRequest
-		if err := c.Bind(&req); err != nil {
-			return zip.Errorf(http.StatusBadRequest, "notify: malformed request body: %v", err)
-		}
-		if pinnedChannel != "" {
-			req.Channel = ntypes.Channel(pinnedChannel)
-		}
-		if len(req.To) == 0 {
-			return zip.Errorf(http.StatusBadRequest, "notify: 'to' is required")
-		}
-		channel := string(req.Channel)
-		if channel == "" {
-			return zip.Errorf(http.StatusBadRequest, "notify: channel is required (in the body or via /send/{sms,email})")
-		}
+// notifyOutcome is one recipient's outcome — notifyd's SendResponse as the sync
+// fold has always answered it, so IAM's decoder keeps working unchanged.
+type notifyOutcome struct {
+	// MessageID is the opaque per-recipient message handle this service minted.
+	MessageID string `json:"message_id"`
+	// Status is "sent" on success and "failed" on a terminal provider failure —
+	// which is still a 200, never a transport error, so a batch reports every
+	// recipient's outcome instead of dying on the first.
+	Status string `json:"status"`
+	// Error carries the provider's failure reason when Status is "failed".
+	Error string `json:"error,omitempty"`
+}
 
-		subject, body, err := render(&req)
-		if err != nil {
-			return zip.Errorf(http.StatusBadRequest, "notify: %v", err)
-		}
+// notifyDelivery is the send answer, and it keeps the bytes notifyd shipped: ONE
+// recipient answers the bare outcome object ({message_id,status}), several answer
+// this envelope. MarshalJSON states that fold once, so every JSON projection —
+// REST, MCP — writes the exact bytes the raw handler always wrote, while a typed
+// caller on the call plane reads the one declared shape.
+type notifyDelivery struct {
+	// Items is the per-recipient outcome, in request order. A single-recipient
+	// send answers items[0] BARE — the object itself, not this envelope.
+	Items []notifyOutcome `json:"items"`
+}
 
-		// Sync-only fold: async requires the Temporal worker plane, which is not
-		// folded. Fail closed and loud, exactly as notifyd does without a worker —
-		// never a silent sync fallback that would mask a misconfiguration.
-		if c.Query("sync") != "true" {
-			return zip.Errorf(http.StatusServiceUnavailable,
-				"notify: async dispatch is not available in the cloud fold — call POST /v1/notify/send?sync=true")
-		}
-
-		out := make([]ntypes.SendResponse, 0, len(req.To))
-		for _, to := range req.To {
-			resp := ntypes.SendResponse{MessageID: newMessageID()}
-			usedProvider, sendErr := s.send(c.Context(), org, channel, req.Provider, []string{to}, subject, body)
-			if sendErr != nil {
-				// Sync terminal failure is a 200 body with status "failed" (the
-				// notifyd contract IAM decodes), not a transport error.
-				resp.Status = "failed"
-				resp.Error = sendErr.Error()
-				if s.log != nil {
-					s.log.Warn("notify send failed", "org", org, "channel", channel, "provider", usedProvider, "err", sendErr)
-				}
-			} else {
-				resp.Status = "sent"
-			}
-			out = append(out, resp)
-		}
-
-		if len(out) == 1 {
-			return c.JSON(http.StatusOK, out[0])
-		}
-		return c.JSON(http.StatusOK, map[string]any{"items": out})
+// MarshalJSON folds a single-recipient delivery to its bare outcome, which is the
+// shape IAM's OTP sender has always decoded.
+func (d *notifyDelivery) MarshalJSON() ([]byte, error) {
+	if len(d.Items) == 1 {
+		return json.Marshal(d.Items[0])
 	}
+	type envelope notifyDelivery // sheds the method, so the envelope marshals plainly
+	return json.Marshal((*envelope)(d))
+}
+
+// SendAny delivers one transactional message by email or SMS through the caller
+// org's own provider credential.
+//
+// The channel comes from the body — sms or email — and the provider credential is
+// read from KMS at orgs/<org>/notify/<service>/<key>, never from the environment.
+// The org is the validated principal's, never a client-supplied value, so a caller
+// can only ever send as their own tenant; an unauthenticated caller gets 401.
+// Naming no provider picks the one whose credentials are actually configured
+// (Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed
+// when none is. Delivery is synchronous and per recipient: one recipient answers
+// the bare {message_id,status} outcome, several answer the {items:[…]} envelope. A
+// terminal provider failure is a 200 whose status is failed with the reason in
+// error, never a transport error. sync=true is REQUIRED — an async dispatch
+// answers 503, because the queue plane that would run it is owned elsewhere. The
+// message body wins verbatim when present; otherwise template_id (or the event
+// name) selects a built-in template rendered against template_vars.
+func (s *service) sendAny(ctx context.Context, in *notifySend) (*notifyDelivery, error) {
+	return s.deliver(ctx, in, "")
+}
+
+// Delivers one transactional SMS through the caller org's own provider
+// credential.
+//
+// It is the channel-pinned form of the generic send: identical in every respect
+// except that the channel is fixed to sms, OVERRIDING whatever the body names —
+// so a body that says email still goes out as a text message. The provider is the
+// org's own SMS credential from KMS (Twilio, then Plivo), resolved for the
+// validated principal's org; an unauthenticated caller gets 401.
+func (s *service) sendSMS(ctx context.Context, in *notifySend) (*notifyDelivery, error) {
+	return s.deliver(ctx, in, string(ntypes.ChannelSMS))
+}
+
+// SendEmail delivers one transactional email through the caller org's own
+// provider credential.
+//
+// It is the channel-pinned form of the generic send: identical in every respect
+// except that the channel is fixed to email, OVERRIDING whatever the body names —
+// so a body that says sms still goes out as mail. The provider is the org's own
+// email credential from KMS (Twilio Email, then SMTP), resolved for the validated
+// principal's org; an unauthenticated caller gets 401. Subject is carried on the
+// email channel only.
+func (s *service) sendEmail(ctx context.Context, in *notifySend) (*notifyDelivery, error) {
+	return s.deliver(ctx, in, string(ntypes.ChannelEmail))
+}
+
+// deliver is the ONE send path behind all three routes. pinned is set on the
+// per-channel routes and empty on the generic one, which reads the channel from
+// the body. Every refusal is the raw handler's, status for status.
+func (s *service) deliver(ctx context.Context, in *notifySend, pinned string) (*notifyDelivery, error) {
+	// The org is the VALIDATED principal, never a client value — the whole point
+	// of moving the trust boundary into cloud (see package doc). Both facts come
+	// off the context cloud.Bridge parked, so the CLI's request-less invoke is
+	// refused with the same 401 an anonymous REST call gets.
+	if !principal.ValidatedFrom(ctx) {
+		return nil, zip.ErrUnauthorized("notify: authentication required")
+	}
+	org, ok := principal.OrgFrom(ctx)
+	if !ok || org == "" {
+		return nil, zip.ErrUnauthorized("notify: org scope required")
+	}
+
+	// The raw template_vars object becomes the map the renderer reads. A body
+	// whose template_vars is not an object is the same 400 the map field gave.
+	var vars map[string]any
+	if len(in.TemplateVars) > 0 {
+		if err := json.Unmarshal(in.TemplateVars, &vars); err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "notify: template_vars: %v", err)
+		}
+	}
+	req := ntypes.SendRequest{
+		To: in.To, Channel: ntypes.Channel(in.Channel), Provider: in.Provider,
+		Subject: in.Subject, Body: in.Body,
+		TemplateID: in.TemplateID, TemplateVars: vars, Event: in.Event,
+	}
+	if pinned != "" {
+		req.Channel = ntypes.Channel(pinned)
+	}
+	if len(req.To) == 0 {
+		return nil, zip.Errorf(http.StatusBadRequest, "notify: 'to' is required")
+	}
+	channel := string(req.Channel)
+	if channel == "" {
+		return nil, zip.Errorf(http.StatusBadRequest, "notify: channel is required (in the body or via /send/{sms,email})")
+	}
+
+	subject, body, err := render(&req)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadRequest, "notify: %v", err)
+	}
+
+	// Sync-only fold: async requires the Temporal worker plane, which is not
+	// folded. Fail closed and loud, exactly as notifyd does without a worker —
+	// never a silent sync fallback that would mask a misconfiguration.
+	if in.Sync != "true" {
+		return nil, zip.Errorf(http.StatusServiceUnavailable,
+			"notify: async dispatch is not available in the cloud fold — call POST /v1/notify/send?sync=true")
+	}
+
+	out := make([]notifyOutcome, 0, len(req.To))
+	for _, to := range req.To {
+		resp := notifyOutcome{MessageID: newMessageID()}
+		usedProvider, sendErr := s.send(ctx, org, channel, req.Provider, []string{to}, subject, body)
+		if sendErr != nil {
+			// Sync terminal failure is a 200 body with status "failed" (the
+			// notifyd contract IAM decodes), not a transport error.
+			resp.Status = "failed"
+			resp.Error = sendErr.Error()
+			if s.log != nil {
+				s.log.Warn("notify send failed", "org", org, "channel", channel, "provider", usedProvider, "err", sendErr)
+			}
+		} else {
+			resp.Status = "sent"
+		}
+		out = append(out, resp)
+	}
+	return &notifyDelivery{Items: out}, nil
 }
 
 // sendReal resolves the provider, constructs it from credentials, and delivers

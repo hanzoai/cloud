@@ -68,7 +68,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
@@ -166,7 +165,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "authors")
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:         store,
-		commerce:      newCommerceClient(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		commerce:      newCommerceClient(),
 		forge:         newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
 		badgeBase:     badgeBase(deps),
 		maintainerOrg: maintainerOrgFor(deps),
@@ -177,7 +176,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	routes(app, zapp, s)
 
 	b.Log.Info("authors mounted", "brand", deps.Brand, "badgeBase", s.State.badgeBase,
-		"maintainerOrg", s.State.maintainerOrg, "commerce", s.State.commerce.configured())
+		"maintainerOrg", s.State.maintainerOrg)
 	return nil
 }
 
@@ -338,7 +337,7 @@ func sweepAuthor(s *cloud.Service[state], ctx context.Context, a Author) (checke
 	now := time.Now().Unix()
 	for _, dorg := range orgs {
 		checked++
-		spend, serr := s.State.commerce.spendCents(ctx, dorg, orgSubject(dorg))
+		spend, serr := s.State.commerce.spendCents(ctx, dorg)
 		if serr != nil {
 			s.Log.Warn("authors: spend read failed", "author", a.ID, "deployingOrg", dorg, "err", serr)
 			continue
@@ -529,20 +528,66 @@ func emitAudit(s *cloud.Service[state], ctx context.Context, action string, a Au
 
 // adminAuthorView is one row in the SuperAdmin directory (org exposed).
 type adminAuthorView struct {
-	ID           string `json:"id"`
-	Org          string `json:"org"`
-	GithubLogin  string `json:"githubLogin"`
-	Status       string `json:"status"`
-	Verified     bool   `json:"verified"`
-	ShareBps     int64  `json:"shareBps"`
-	RepoCount    int    `json:"repoCount"`
-	DeployCount  int    `json:"deployCount"`
-	AccruedCents int64  `json:"accruedCents"`
-	PendingCents int64  `json:"pendingCents"`
-	PaidCents    int64  `json:"paidCents"`
-	CreatedAt    int64  `json:"createdAt"`
-	ApprovedAt   int64  `json:"approvedAt"`
-	SuspendedAt  int64  `json:"suspendedAt"`
+	// ID is the author record's server-minted handle, "aut_"-prefixed. It is the id
+	// the approve, suspend, payout and admin-basis routes address.
+	ID string `json:"id"`
+	// Org is the tenant org that owns this author record — UNIQUE, one author per
+	// org. It is exposed HERE and nowhere else (Author.Org is json:"-" on the tenant
+	// surface), and it is the org excluded from this author's own accrual: deploying
+	// your own repo earns you nothing.
+	Org string `json:"org"`
+	// GithubLogin is the linked forge account, lowercased. It comes from IAM's
+	// linked account when the connect had one — which is also what sets verified —
+	// and otherwise from the login the caller declared. The treasury author carries
+	// "<brand>-maintainers".
+	GithubLogin string `json:"githubLogin"`
+	// Status is connected, approved or suspended. Only an approved author accrues;
+	// a connected one may verify repos and collect deploy edges but earns nothing
+	// until a reviewer admits it.
+	Status string `json:"status"`
+	// Verified is IDENTITY proof of the login, NOT proof of any repository: true
+	// when the connect took the login from IAM's linked forge account (and for the
+	// seeded treasury author), false when the caller merely declared it. A false
+	// here still earns — repository ownership is proven separately, per claim.
+	Verified bool `json:"verified"`
+	// ShareBps is the royalty rate accrual applies, in basis points of a deploying
+	// org's metered spend for the period: 2000 (the platform default) is 20%, 10000
+	// would be the entire spend. The platform keeps 10000 − shareBps. Changing it
+	// never rewrites history — each ledger row keeps the rate it was written with.
+	ShareBps int64 `json:"shareBps"`
+	// RepoCount is how many of this author's repository claims are VERIFIED, counted
+	// for this response in one GROUP BY over the whole table rather than a query per
+	// row. The single-author replies from approve, suspend and payout report 0: they
+	// carry the mutated row, not a re-listing.
+	RepoCount int `json:"repoCount"`
+	// DeployCount is how many attribution edges point at this author — one per
+	// (repository, project, deploying org), so re-deploying the same project adds
+	// none. It includes self-deploys, which are recorded for provenance and excluded
+	// from accrual, so it measures reach, not the earning set.
+	DeployCount int `json:"deployCount"`
+	// AccruedCents is lifetime royalty accrued, in integer USD cents: the sum of
+	// every latched accrual (spend × shareBps / 10000). It only ever rises — a
+	// payout is recorded against paidCents and never reduces this.
+	AccruedCents int64 `json:"accruedCents"`
+	// PendingCents is what a payout may still draw against — accrued − paid, floored
+	// at zero. It is derived for each response, never stored, and it is the exact
+	// figure the atomic payout guard refuses to exceed.
+	PendingCents int64 `json:"pendingCents"`
+	// PaidCents is lifetime royalty RECORDED as paid, in integer USD cents. It rises
+	// the moment a payout reserves against pending — recording, not settling; a human
+	// moves the money out of band — and falls back only when a payout is voided.
+	PaidCents int64 `json:"paidCents"`
+	// CreatedAt is unix seconds at the FIRST connect. Re-connecting re-links the
+	// login and leaves this alone, so it dates the enrolment, not the latest link.
+	CreatedAt int64 `json:"createdAt"`
+	// ApprovedAt is unix seconds of the first approval, and 0 means never approved —
+	// which is also "has never been able to accrue". Re-approving to renegotiate the
+	// share leaves it at the original date.
+	ApprovedAt int64 `json:"approvedAt"`
+	// SuspendedAt is unix seconds of the most recent suspension. 0 means the author
+	// is not suspended: either never was, or was and has since been approved again,
+	// which clears this back to 0.
+	SuspendedAt int64 `json:"suspendedAt"`
 }
 
 func adminViewOf(a Author, repos, deploys int) adminAuthorView {
@@ -557,12 +602,35 @@ func adminViewOf(a Author, repos, deploys int) adminAuthorView {
 // authorRepo is one row of an author's verified/claimed repos, with the ready-to-paste
 // Deploy-on-Hanzo markdown snippet.
 type authorRepo struct {
-	RepoURL       string `json:"repoUrl"`
-	Verified      bool   `json:"verified"`
-	Method        string `json:"method,omitempty"`
+	// RepoURL is the claim key in canonical form — lowercased "host/owner/name",
+	// no scheme, no .git, host ∈ {github.com, gitlab.com}. A deploy's source repo is
+	// normalized through the same function before attribution, so the two sides can
+	// never miss on a cosmetic difference. UNIQUE across every author: first proven
+	// claim wins.
+	RepoURL string `json:"repoUrl"`
+	// Verified reports that ownership was proven. Only a proven claim is ever
+	// written, so it is true on every row this surface returns; the deploy path
+	// re-reads it regardless, because an unverified claim attributes nothing.
+	Verified bool `json:"verified"`
+	// Method is HOW ownership was proven: "oauth" — an IAM-linked forge token showed
+	// admin or push on the repository; "file" — a hanzo.json on the default branch
+	// carried this author's verify code; or "maintainer" — the repository sits in a
+	// first-party namespace, where ownership is intrinsic and the treasury author
+	// holds it with no proof step. Omitted on a row written before the method was
+	// recorded.
+	Method string `json:"method,omitempty"`
+	// BadgeMarkdown is the ready-to-paste README snippet, DERIVED for each response
+	// from this deployment's badge host and never stored: a "Deploy on Hanzo" image
+	// linking to the one-click import of this repository. Re-hosting the builder
+	// changes every badge without touching a row.
 	BadgeMarkdown string `json:"badgeMarkdown"`
-	VerifiedAt    int64  `json:"verifiedAt"`
-	CreatedAt     int64  `json:"createdAt"`
+	// VerifiedAt is unix seconds of the most recent successful proof. Re-verifying
+	// refreshes it, and the method beside it, in place.
+	VerifiedAt int64 `json:"verifiedAt"`
+	// CreatedAt is unix seconds when the claim was first recorded. It equals
+	// verifiedAt on the first proof and then stays put while verifiedAt moves, so the
+	// pair reads as "claimed since / last proven".
+	CreatedAt int64 `json:"createdAt"`
 }
 
 func authorRepoOf(r AuthorRepo, badgeBase string) authorRepo {
@@ -584,12 +652,32 @@ func authorRepos(rs []AuthorRepo, badgeBase string) []authorRepo {
 // orgView is one row of an author's verified OWNER-WIDE claims: the owner url + a
 // ready-to-paste badge deep-linking that owner's Hanzo template import.
 type orgView struct {
-	OwnerURL      string `json:"ownerUrl"`
-	Verified      bool   `json:"verified"`
-	Method        string `json:"method,omitempty"`
+	// OwnerURL is the claim key in canonical form — lowercased "host/owner" with NO
+	// repository segment, host ∈ {github.com, gitlab.com}. It covers every repository
+	// under that owner, so code with no claim of its own still earns; a per-repository
+	// claim outranks it. UNIQUE across every author: first proven claim wins.
+	OwnerURL string `json:"ownerUrl"`
+	// Verified reports that ownership of the WHOLE owner was proven — against that
+	// owner's ".github" control repository, which is exactly as strong as a
+	// per-repository claim. Only a proven claim is written, so every row returned
+	// here is true.
+	Verified bool `json:"verified"`
+	// Method is HOW the owner was proven, always against its ".github" control
+	// repository: "oauth" — an IAM-linked forge token showed admin or push on it; or
+	// "file" — a hanzo.json on its default branch carried this author's verify code.
+	// The "maintainer" shortcut is a per-repository attribution and never appears
+	// here. Omitted on a row written before the method was recorded.
+	Method string `json:"method,omitempty"`
+	// BadgeMarkdown is the ready-to-paste README snippet, DERIVED for each response
+	// from this deployment's badge host and never stored — here it deep-links the
+	// OWNER's template import rather than one repository's.
 	BadgeMarkdown string `json:"badgeMarkdown"`
-	VerifiedAt    int64  `json:"verifiedAt"`
-	CreatedAt     int64  `json:"createdAt"`
+	// VerifiedAt is unix seconds of the most recent successful proof of the owner;
+	// re-verifying refreshes it, and the method beside it, in place.
+	VerifiedAt int64 `json:"verifiedAt"`
+	// CreatedAt is unix seconds when the owner claim was first recorded — equal to
+	// verifiedAt on the first proof, then fixed while verifiedAt moves.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 func orgViewOf(o AuthorOrg, badgeBase string) orgView {
@@ -626,16 +714,34 @@ func deployViews(es []DeployEvent) []deployView {
 
 // payoutView is one row of an author's payout history.
 type payoutView struct {
-	ID          string `json:"id"`
-	AmountCents int64  `json:"amountCents"`
-	Method      string `json:"method"`
-	Reference   string `json:"reference,omitempty"`
-	Txn         string `json:"txn,omitempty"`
+	// ID is the payout row's server-minted handle, "apo_"-prefixed. A caller never
+	// supplies it; it is what an operator quotes when reconciling a settlement.
+	ID string `json:"id"`
+	// AmountCents is the amount RESERVED against pending royalty, in integer USD
+	// cents, always positive. The reservation is atomic and can never exceed
+	// accrued − paid, so this is owed money moved out of pending — not money moved.
+	AmountCents int64 `json:"amountCents"`
+	// Method is how the operator says this settles, lowercased as recorded.
+	// "credits" is the one method that means the author's own wallet; anything else
+	// — wire, paypal, check — is a cash disbursement a human performs. Recording it
+	// pays nobody either way.
+	Method string `json:"method"`
+	// Reference is the operator's external handle for the settlement: a wire
+	// confirmation, a PayPal transaction id. Absent when none was given.
+	Reference string `json:"reference,omitempty"`
+	// Txn is the commerce ledger transaction id of a SETTLED credits payout, and it
+	// is absent on every payout this service records. Recording moves no money, and
+	// authors asks the money plane exactly one question — what has this org spent? —
+	// with no write to answer it with, so there is no receipt to carry. It fills in
+	// only when a settlement stamps its transaction back onto the row.
+	Txn string `json:"txn,omitempty"`
 	// Settlement discloses treasury-vs-wallet-vs-cash on every payout, to the author
 	// and to the admin mirror alike — the disclosure that keeps a first-party
 	// settlement legible as internal accounting.
 	Settlement string `json:"settlement,omitempty"`
-	CreatedAt  int64  `json:"createdAt"`
+	// CreatedAt is unix seconds when the payout was RECORDED — the moment the amount
+	// left pending, not the moment a human moved the money.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 func payoutViewOf(p Payout) payoutView {
@@ -656,13 +762,27 @@ func payoutViews(ps []Payout) []payoutView {
 // product-qualified because the fleet's schema namespace is FLAT and apps/referrals
 // already publishes an "adminSummary" of its own.
 type authorProgramSummary struct {
-	Total        int   `json:"total"`
-	Connected    int   `json:"connected"`
-	Approved     int   `json:"approved"`
-	Suspended    int   `json:"suspended"`
+	// Total is how many author records this response actually carried. The roll-up
+	// is folded over the SAME page as authors — newest first, bounded by limit
+	// (default 500, ceiling 1000) — so on a program larger than the page it
+	// summarizes that page, not the fleet.
+	Total int `json:"total"`
+	// Connected is how many of those are enrolled but not yet admitted to earning.
+	Connected int `json:"connected"`
+	// Approved is how many are admitted and accruing.
+	Approved int `json:"approved"`
+	// Suspended is how many have been stopped from accruing further. An author holds
+	// exactly one status, so the three buckets never overlap and connected +
+	// approved + suspended = total.
+	Suspended int `json:"suspended"`
+	// AccruedCents is the page's lifetime royalty accrued, in integer USD cents.
 	AccruedCents int64 `json:"accruedCents"`
+	// PendingCents is what the platform still owes across the page, in integer USD
+	// cents — the sum of each author's own accrued − paid, each floored at zero.
 	PendingCents int64 `json:"pendingCents"`
-	PaidCents    int64 `json:"paidCents"`
+	// PaidCents is what has been RECORDED as paid across the page, in integer USD
+	// cents. Recorded, not settled: the money leaves in a human's hands.
+	PaidCents int64 `json:"paidCents"`
 }
 
 func (s *authorProgramSummary) add(a Author) {

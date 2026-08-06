@@ -189,13 +189,15 @@ type MQClient = types.MQClient
 type PaymentsClient = types.PaymentsClient
 type VaultClient = types.VaultClient
 
-// --- placeholder types (replaced by ZAP-generated types per subsystem) ---
+// --- shared transport shapes ---
 //
-// These re-export the canonical transport shapes from cloud/types so
-// subsystems and the clients package can both use them without
-// pulling cloud as a dependency. As zapc generates typed bindings per
-// subsystem, each alias here becomes an alias to the generated type
-// in <subsystem>/zap/gen/*.go.
+// These re-export the canonical shapes from cloud/types so subsystems and the
+// clients package can both use them without pulling cloud as a dependency.
+//
+// They are not placeholders waiting on a generator. The ops that DO cross a
+// process boundary declare their own In/Out types in package plane, and
+// plane/gen emits the typed peer client from them — that is where a wire shape
+// comes from now.
 
 type Claims = types.Claims
 type User = types.User

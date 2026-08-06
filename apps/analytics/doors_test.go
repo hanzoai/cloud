@@ -412,11 +412,23 @@ func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 			posts = append(posts, r.Path)
 		}
 	}
-	// The POST surface is the doors PLUS the obs error wire the door carries:
-	// /v1/event/{project}/envelope|store forwards to the o11y plane's installed
-	// consumer (cloud.ObsErrorIngest) and is DSN-authenticated there — a wire on
-	// the one event door, not a new door for handle to admit.
-	want := append(doorPaths(), "/v1/event/:project/envelope", "/v1/event/:project/store")
+	// The POST surface is the doors PLUS the two routes on this surface that are
+	// registered by hand, each because it is NOT a door:
+	//
+	//   - /v1/event/{project}/envelope|store — the obs error wire the event door
+	//     carries. It forwards to the o11y plane's installed consumer
+	//     (cloud.ObsErrorIngest) and is DSN-authenticated there: a wire on the one
+	//     event door, not a new door for handle to admit.
+	//   - /v1/replay — the session-replay snapshot door (replay.go). A `doors` row is
+	//     a wire that decodes to []CaptureEvent and flows through the ONE write core
+	//     onto the event plane; a snapshot batch is an opaque rrweb recording
+	//     produced to a different consumer on a different transport, and it lands no
+	//     warehouse row at all. It cannot be a row here without either a decoder that
+	//     returns nothing (a door that always drops) or a second meaning for
+	//     CaptureEvent. It shares ADMISSION — eventTenant, and the same refusals —
+	//     which is the part this file exists to hold shut, and replay_test.go
+	//     quantifies that gate over it directly.
+	want := append(doorPaths(), "/v1/event/:project/envelope", "/v1/event/:project/store", replayPath)
 	if !sameSet(posts, want) {
 		t.Fatalf("registered POST routes = %v, want doors + the obs error wire = %v — every other\n"+
 			"ingest route must come from doors, and nothing else may be registered as a POST here", posts, want)

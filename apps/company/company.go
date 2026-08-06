@@ -200,11 +200,24 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// JSON leaf, because fiber runs middleware in registration order.
 	g.Use(zip.H(limitBody))
 
-	// The root of the surface. Declared on the App with its whole path, not on the
-	// group with an empty leaf: joining "/v1/company" with "" yields
-	// "/v1/company/", a DIFFERENT path from the one these two have always served.
-	zip.Post(zapp, "/v1/company", o.begin)
-	zip.Get(zapp, "/v1/company", o.get)
+	// The root of the surface. It cannot hang off g with an empty leaf — joining
+	// "/v1/company" with "" yields "/v1/company/", a DIFFERENT path from the one
+	// these two have always served — and declaring it straight on the App put it
+	// outside every group's middleware stack, so the cap above did not reach it:
+	// zip middleware is scoped to the group INSTANCE it was installed on (and that
+	// group's children), never matched by prefix across the app.
+	//
+	// So the cap rides the ROUTER instead of a prefix. With() wraps the leaf it
+	// registers and installs no middleware at "/v1", which is what keeps this legal:
+	// a Use there would gate every other subsystem's /v1 routes and cloud's own
+	// ownership gate (scope.err) refuses a subsystem that installs middleware
+	// outside the prefixes it owns. .Group("/v1") is then only an address — it joins
+	// to exactly "/v1/company", and it is a prefix cmd/zipdoc can read, so both ops
+	// keep their prose. Same shape apps/sync uses for its terminal wrapper.
+	// Pinned by TestBodyCapCoversJSONNotTheDeck.
+	capped := zapp.With(capBody).Group("/v1")
+	zip.Post(capped, "/company", o.begin)
+	zip.Get(capped, "/company", o.get)
 
 	// The platform's own book — SuperAdmin operations, cross-tenant, read-only.
 	// Registered before the tenant edges so the static paths are unambiguous.
@@ -243,6 +256,20 @@ func limitBody(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
 	}
 	return c.Continue()
+}
+
+// capBody is the SAME cap as a leaf-wrapping zip.Middleware, for the two root ops
+// that hang off a router rather than a prefixed group (see routes). It is a
+// signature adapter, not a second policy: a group's Use takes a handler that calls
+// c.Continue(), With() takes func(Handler) Handler, and the ceiling both consult is
+// the one maxBody above.
+func capBody(next zip.Handler) zip.Handler {
+	return func(c *zip.Ctx) error {
+		if len(c.Fiber().Body()) > maxBody {
+			return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
+		}
+		return next(c)
+	}
 }
 
 // Shutdown closes the store. Idempotent. Matches cloud.ShutdownFunc so Wire can

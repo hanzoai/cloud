@@ -306,14 +306,14 @@ func TestBlueprintPathIsSlashless(t *testing.T) {
 	// The op registry is what every projection reads, so the tool list is where a
 	// trailing slash in the PATH shows up as a trailing separator in the NAME.
 	//
-	// The match is on "blueprint" rather than on a whole name. This asked for the
-	// prefix "get_v1_guide_blueprint", which was the flat tool-naming zip used when
-	// the test was written; names are namespaced now (v1.guide.get_blueprint,
-	// v1.guide.blueprint.get_versions), so the old prefix selected NOTHING and the
-	// assertion passed vacuously — or, once the surface composed again, failed
-	// claiming both tools were missing when both were present. Matching the part of
-	// the name that is about the SUBJECT keeps the test pinned to what it means
-	// rather than to a naming scheme it does not own.
+	// The match is on "blueprint" rather than on a whole name, and that is the
+	// point: this test is about the SUBJECT, not about how ids are spelled. It
+	// once pinned the whole prefix "get_v1_guide_blueprint" and then zip spelled
+	// composed ops dotted (v1.guide.get_blueprint), so the prefix selected NOTHING
+	// and the assertion passed vacuously. The spelling has since moved back — one
+	// rule, derived from the absolute path, so it is "get_v1_guide_blueprint"
+	// again — but a test that has to be edited every time a naming rule moves is
+	// pinned to the wrong thing. Matching the subject survives both.
 	var names []string
 	for _, tool := range app.MCPTools() {
 		if n, _ := tool["name"].(string); strings.Contains(n, "blueprint") {

@@ -320,6 +320,7 @@ func TestRemoveNeverGated(t *testing.T) {
 	_ = store.Enable(context.Background(), "acme", "engine", "u", 1)
 	s := &service{store: store, commerce: nil, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 
 	code, body := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"remove": []string{"engine"}}))

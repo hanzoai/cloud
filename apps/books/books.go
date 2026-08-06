@@ -26,16 +26,15 @@ package books
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/commerce/transport"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/plane/commerce"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -75,11 +74,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("books.Mount: empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "books")
-	src := newCommerceReader(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	mounted = &state{
 		live:    cloud.NewOrgStore[*store](b, "books", openStore),
 		sandbox: cloud.NewOrgStore[*store](b, "books-sandbox", openStore),
-		source:  src,
+		source:  ledgerReader{},
 		cost:    noCost{}, // revenue-only until the cloud_usage cost projection is wired (see costSource)
 		ai:      deps.AI,
 		model:   cloud.DefaultModel,
@@ -88,7 +86,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	svc := &cloud.Service[*state]{Base: b, State: mounted}
 	routes(app, svc)
-	b.Log.Info("books mounted", "prefix", "/v1/books", "commerce", src.configured())
+	// No "commerce configured" bit to report: the ledger is reached BY NAME, so
+	// there is nothing a deployment sets and nothing that can be set wrong.
+	b.Log.Info("books mounted", "prefix", "/v1/books")
 	return nil
 }
 
@@ -206,67 +206,77 @@ func (s *state) syncLedger(ctx context.Context, org string, sandbox bool) (int, 
 	return posted, nil
 }
 
-// ── commerce posting source (S2S read of /v1/billing/transactions) ──
+// ── the posting source: the ledger, asked by name ──────────────────────────
 
-// commerceReader reads commerce's per-org transaction ledger with the admin-scoped
-// COMMERCE_SERVICE_TOKEN, scoping every read to ONE org via X-Org-Id (the S2S selector
-// commerce's EdgeAuth honors after it verifies the service token) and routing sandbox
-// reads to commerce's TEST ledger with X-Hanzo-Test:true. It is the SAME S2S machinery
-// billing's commerceProxy uses — kept read-only (transactions only, never a mint).
-type commerceReader struct {
-	base  string
-	token string
-	http  *http.Client
-}
+// ledgerReader reads one org's money movements from the process that owns the
+// ledger, over the internal plane.
+//
+// It used to be an S2S HTTP read — GET /v1/billing/transactions with the
+// admin-scoped COMMERCE_SERVICE_TOKEN — sent through the commerce transport.
+// That transport does not reach a network when commerce is co-resident: it
+// dispatches the request back into THIS binary's own router by path, and
+// /v1/billing/transactions is registered nowhere here (commerce's own
+// api.Route() bundle is behind //go:build cloud and is never compiled in). So
+// the read was a 404 wearing an upstream failure's clothes. Split into per-app
+// binaries it was worse: the base URL is empty in every process but commerce's,
+// the reader reported itself "not configured", and the books ingested nothing
+// at all — silently, for as long as that shape has shipped.
+//
+// A peer is reached BY NAME. There is no URL, no service token, and nothing for
+// a deployment to configure, so there is no configuration that can be wrong.
+type ledgerReader struct{}
 
-func newCommerceReader(base, token string) *commerceReader {
-	return &commerceReader{
-		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
-		token: strings.TrimSpace(token),
-		http:  transport.Client(15 * time.Second),
-	}
-}
+// txnLimit is what the peer returns in one page, stated here so the number a
+// reader expects and the number the ledger sends are one fact. It matches
+// commerce's usageReadLimit.
+const txnLimit = 2000
 
-func (r *commerceReader) configured() bool { return r != nil && r.base != "" && r.token != "" }
-
-// transactions reads the org's commerce ledger (live or the X-Hanzo-Test sandbox),
-// tolerating both the wrapped {transactions:[…]} shape and a bare array. An unconfigured
-// reader returns no rows (an unconfigured deployment ingests nothing rather than erroring).
-func (r *commerceReader) transactions(ctx context.Context, org string, sandbox bool) ([]commerceTxn, error) {
-	if !r.configured() {
-		return nil, nil
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.base+"/v1/billing/transactions?limit=2000", nil)
+// transactions reads the org's ledger entries, newest first, bounded to one page.
+//
+// The ORG rides the call — cloud.For states the tenant for a read with no
+// request behind it — because a caller that could name the org in an argument
+// could post another tenant's money into these books.
+//
+// ABSENCE IS THE ROUTER'S WORD. cloud.ErrNoPeer means this deployment runs no
+// commerce, and only then are there honestly no rows to ingest. Every other
+// error is an OUTAGE and is returned as one: a dead ledger read as an empty one
+// would advance the ingestion cursor over a gap nobody could see afterwards.
+func (ledgerReader) transactions(ctx context.Context, org string, sandbox bool) ([]commerceTxn, error) {
+	reply, err := commerce.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{Test: sandbox, Limit: txnLimit})
 	if err != nil {
-		return nil, err
+		if errors.Is(err, cloud.ErrNoPeer) {
+			return nil, nil // no commerce in this fleet: nothing to post, honestly
+		}
+		return nil, fmt.Errorf("books: commerce ledger read: %w", err)
 	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+r.token)
-	req.Header.Set("X-Org-Id", org)
-	if sandbox {
-		req.Header.Set("X-Hanzo-Test", "true")
+	if reply == nil {
+		// A void reply is not an empty ledger. Nothing was read, so nothing is known.
+		return nil, errors.New("books: commerce answered nothing")
 	}
-	resp, err := r.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("commerce unreachable: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("commerce transactions status %d", resp.StatusCode)
-	}
-	var wrap struct {
-		Transactions []commerceTxn `json:"transactions"`
-	}
-	if json.Unmarshal(body, &wrap) == nil && wrap.Transactions != nil {
-		return wrap.Transactions, nil
-	}
-	var rows []commerceTxn
-	if err := json.Unmarshal(body, &rows); err != nil {
-		return nil, fmt.Errorf("commerce transactions decode: %w", err)
+	rows := make([]commerceTxn, 0, len(reply.Rows))
+	for _, t := range reply.Rows {
+		// A ledger row is a figure that lands in a general ledger, and a debit is
+		// routinely finer than a cent (0.00589 USD is a real row). RoundMinor is
+		// the explicit display rounding; Minor's exactness guard would turn every
+		// such row into a failed ingestion.
+		cents, cerr := t.Amount.RoundMinor()
+		if cerr != nil {
+			return nil, fmt.Errorf("books: ledger entry %s: %w", t.ID, cerr)
+		}
+		rows = append(rows, commerceTxn{
+			ID: t.ID,
+			// The kind arrives as the LEDGER'S own spelling and is parsed back with
+			// the one recognizer. This reader used to match string literals —
+			// "deposit", "withdraw" — against entries the ledger has always written
+			// as finance.deposit and finance.usage, so nothing ever classified and
+			// every posting was skipped. Nothing failed; the strings just never met.
+			Kind:      finance.ParseKind(t.Kind),
+			Amount:    cents,
+			Currency:  strings.ToLower(t.Amount.Currency),
+			Tags:      t.Ref,
+			Notes:     t.Memo,
+			CreatedAt: time.Unix(t.CreatedAt, 0).UTC().Format(time.RFC3339),
+		})
 	}
 	return rows, nil
 }

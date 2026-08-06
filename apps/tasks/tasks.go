@@ -73,12 +73,6 @@ const engine = "\n\nThis single address fronts the whole durable-workflow engine
 	"address serves several content types — JSON, plain-text refusals, and an event stream at " +
 	"the events path. Until the engine is wired the whole surface answers 503."
 
-// spa is the sentence the ten operations on the two UI addresses share.
-const spa = "\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET " +
-	"and HEAD are served; every other method is refused 405. Hashed assets are returned " +
-	"immutable and cached for a year, while the shell is always revalidated, so a new " +
-	"deployment replaces a stale console on the next request."
-
 // The prose for the twenty operations these four mounts publish. Not one of them
 // is a typed op, and each is refused for a fact typed_wire_test.go MEASURES
 // rather than for want of an edit — see Mount's note. That leaves openapi.Describe
@@ -134,26 +128,20 @@ func init() {
 			"the operations that change a running workflow — signal, cancel, terminate, reset — "+
 			"are all POST."+engine)
 
-	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-		openapi.Describe("/tasks", m,
-			"The tasks console",
-			"Serves the console's application shell on GET, which is the entry point a browser "+
-				"loads before it calls anything under /v1/tasks/."+spa)
-		openapi.Describe("/tasks/*", m,
-			"The tasks console's assets and client-side routes",
-			"Serves the console's static assets on GET, and returns the application shell for "+
-				"any path that is not a file — client-side routing means a deep link into the "+
-				"console is a shell load, not a 404.\n\n"+
-				"A path that looks like a missing asset therefore answers 200 with HTML rather "+
-				"than 404; look at the content type, not the status, when a resource seems to be "+
-				"missing."+spa)
-	}
-	// The methods left over. This address is bound with All(), so it publishes every
-	// method this generator knows and the ones above are only the ones that DO
-	// something. DescribeRest covers the remainder from the generator's own set, so a
-	// method added there is covered the day it appears rather than published bare —
-	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
-	for _, p := range []string{"/v1/tasks", "/v1/tasks/*", "/tasks", "/tasks/*"} {
+	// The two UI addresses, declared by the ONE helper every embedded SPA uses —
+	// see openapi.DescribeSPA. Written out here it was the same forty lines meet
+	// and tracker would each need, and the copy in this file had already drifted:
+	// it promised that a missing asset answers "200 with HTML rather than 404"
+	// after spa.Handler had begun answering 404 under assets/.
+	openapi.DescribeSPA("/tasks", "tasks console")
+
+	// The methods left over on the ENGINE's addresses. Bound with All(), so they
+	// publish every method this generator knows and the ones above are only the
+	// ones that DO something. DescribeRest covers the remainder from the
+	// generator's own set, so a method added there is covered the day it appears
+	// rather than published bare — which is what a hand-copied list here had
+	// already produced for OPTIONS and TRACE. The UI addresses are the helper's.
+	for _, p := range []string{"/v1/tasks", "/v1/tasks/*"} {
 		openapi.DescribeRest(p,
 			"Not routed by the durable engine",
 			"Published because this address accepts every method, but the engine routes nothing "+

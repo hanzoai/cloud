@@ -37,13 +37,11 @@ func newFakeCommerce() *fakeCommerce {
 	return &fakeCommerce{balance: map[string]int64{}, spend: map[string]int64{}}
 }
 
-func (f *fakeCommerce) configured() bool { return true }
-
 func (f *fakeCommerce) deposit(_ context.Context, org, _ string, amountCents int64, _, _, _, ref string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failDep {
-		return "", errUnconfigured
+		return "", errNoLedger
 	}
 	f.balance[org] += amountCents
 	f.deposits++
@@ -51,7 +49,7 @@ func (f *fakeCommerce) deposit(_ context.Context, org, _ string, amountCents int
 	return "txn_test_" + org + "_" + strconv.Itoa(f.seq), nil
 }
 
-func (f *fakeCommerce) spendCents(_ context.Context, org, _ string) (int64, error) {
+func (f *fakeCommerce) spendCents(_ context.Context, org string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.spend[org], nil
@@ -95,6 +93,9 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// The composer's install, once at the root, ahead of every route it serves:
+	// cloud.Bridge parks the validated org on the context for the typed ops.
+	app.Use(cloud.Bridge())
 	routes(app, s)
 	return app, s, fc
 }
@@ -547,7 +548,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	if a0.AccruedCents != wantCommission || a0.PendingCents != wantCommission {
 		t.Fatalf("admin row accrual: accrued=%d pending=%d, want %d", a0.AccruedCents, a0.PendingCents, wantCommission)
 	}
-	var sum adminSummary
+	var sum totals
 	if err := json.Unmarshal(data["summary"], &sum); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}

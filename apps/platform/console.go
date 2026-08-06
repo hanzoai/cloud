@@ -29,6 +29,7 @@
 package platform
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -39,62 +40,134 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ── views (the exact JSON the console FE modules consume) ─────────────────────
+// ── rows and boards (the exact JSON the console FE modules consume) ───────────
+//
+// The four row types are named `<thing>Row` rather than `<thing>View`, which is
+// what they were called while they were invisible to the document. Publishing them
+// puts them in the FLEET's schema namespace, which is flat and single-valued: one
+// name, one shape, wherever two apps meet (openapi.Weave). `pipelineView` is
+// already published by apps/world (a news pipeline) and `buildView` by apps/agents
+// (a provenance build), and neither is this. The name that was not yet published is
+// the one that yields — the same rule apps/templates followed when its Template
+// became a StarterKit — and it yields to the word this file already uses for these
+// values: every one of them is a ROW on a console page.
+//
+// The JSON is untouched: the FE normalizers read r.environments / r.pipelines /
+// r.builds / r.releases and the same field names underneath, which is the contract.
 
-// environmentView matches console EnvironmentsModule `Environment`.
-type environmentView struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Type      string   `json:"type"`
-	Status    string   `json:"status"`
-	Services  []string `json:"services"`
-	UpdatedAt string   `json:"updatedAt,omitempty"`
+// environmentRow matches console EnvironmentsModule `Environment`.
+type environmentRow struct {
+	// ID is the environment's name, which is also its identity — an environment
+	// is derived from the apps that target it, so it has no id of its own.
+	ID string `json:"id"`
+	// Name is the environment's name as an app declared it.
+	Name string `json:"name"`
+	// Type buckets the name for display: production, staging, development or
+	// custom.
+	Type string `json:"type"`
+	// Status rolls up the real states of this environment's apps: degraded,
+	// active, idle or empty.
+	Status string `json:"status"`
+	// Services are the apps that target this environment, by name.
+	Services []string `json:"services"`
+	// UpdatedAt is when any of them last changed, RFC3339 UTC; empty when unset.
+	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
-// pipelineView matches console PipelinesModule `Pipeline`.
-type pipelineView struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Repo     string `json:"repo,omitempty"`
-	Status   string `json:"status"`
-	LastRun  string `json:"lastRun,omitempty"`
+// pipelineRow matches console PipelinesModule `Pipeline`.
+type pipelineRow struct {
+	// ID is the application id — one pipeline is one application.
+	ID string `json:"id"`
+	// Name is the application's name.
+	Name string `json:"name"`
+	// Repo is the git repo or image the pipeline builds from.
+	Repo string `json:"repo,omitempty"`
+	// Status is the latest deployment's status, or the app's when it has none.
+	Status string `json:"status"`
+	// LastRun is when the most recent deployment started, RFC3339 UTC.
+	LastRun string `json:"lastRun,omitempty"`
+	// Duration is how long that run took; empty while it is still queued or
+	// building.
 	Duration string `json:"duration,omitempty"`
 }
 
-// buildView matches console BuildsModule `Build`.
-type buildView struct {
-	ID        string `json:"id"`
-	Repo      string `json:"repo,omitempty"`
-	Commit    string `json:"commit,omitempty"`
-	Status    string `json:"status"`
+// buildRow matches console BuildsModule `Build`.
+type buildRow struct {
+	// ID is the build record's id.
+	ID string `json:"id"`
+	// Repo is the repo the build built, or the image it produced.
+	Repo string `json:"repo,omitempty"`
+	// Commit is the short git ref the build pinned.
+	Commit string `json:"commit,omitempty"`
+	// Status is the build's real state: queued, building, succeeded or failed.
+	Status string `json:"status"`
+	// StartedAt is when the build was recorded, RFC3339 UTC.
 	StartedAt string `json:"startedAt,omitempty"`
-	Duration  string `json:"duration,omitempty"`
+	// Duration is the wall time of a TERMINAL build; empty while it still runs.
+	Duration string `json:"duration,omitempty"`
 }
 
-// releaseView matches console ReleasesModule `Release`.
-type releaseView struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Version     string `json:"version,omitempty"`
+// releaseRow matches console ReleasesModule `Release`.
+type releaseRow struct {
+	// ID is the deployment's id — a release IS a deployment that reached the
+	// cluster.
+	ID string `json:"id"`
+	// Name is the application the release belongs to.
+	Name string `json:"name"`
+	// Version is the released image tag, or v<n> when the image carries none.
+	Version string `json:"version,omitempty"`
+	// Environment is the deploy target the application names.
 	Environment string `json:"environment,omitempty"`
-	Status      string `json:"status"`
-	ReleasedAt  string `json:"releasedAt,omitempty"`
+	// Status is deploying or live — the two states that mean released.
+	Status string `json:"status"`
+	// ReleasedAt is when the deployment last changed, RFC3339 UTC.
+	ReleasedAt string `json:"releasedAt,omitempty"`
+}
+
+// environmentBoard is the Environments page.
+type environmentBoard struct {
+	// Environments are the org's deploy targets, in first-seen order.
+	Environments []environmentRow `json:"environments"`
+}
+
+// pipelineBoard is the Pipelines page.
+type pipelineBoard struct {
+	// Pipelines are one per application in the caller's org.
+	Pipelines []pipelineRow `json:"pipelines"`
+}
+
+// buildBoard is the Builds page.
+type buildBoard struct {
+	// Builds are the org's real BuildKit build records, newest first.
+	Builds []buildRow `json:"builds"`
+}
+
+// releaseBoard is the Releases page.
+type releaseBoard struct {
+	// Releases are the deployments that genuinely reached the cluster.
+	Releases []releaseRow `json:"releases"`
 }
 
 // ── environments ─────────────────────────────────────────────────────────────
 
-// listEnvironments aggregates the org's apps into their distinct deploy targets.
-// An environment is not a standalone record — it is the Application.Environment
-// scope — so this is list-only; a new environment appears the moment an app
-// targets it (create an app with that environment via POST .../apps).
-func listEnvironments(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	apps, err := s.State.store.ListAllApplications(c.Context(), org)
+// listEnvironments returns your deploy targets, and what is running on each.
+//
+// It returns the org's environments — the distinct deploy targets its applications
+// name, `production` for anything that names none — each aggregating the apps that
+// target it, a rolled-up status and when it last changed.
+//
+// An environment is DERIVED, not stored: there is nothing to create or delete here,
+// and an environment exists exactly as long as an app points at it. Requires a
+// validated principal; 403 without one.
+func (o ops) listEnvironments(ctx context.Context, _ *noInput) (*environmentBoard, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
+		return nil, err
+	}
+	apps, err := s.State.store.ListAllApplications(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
 	}
 
 	type agg struct {
@@ -125,10 +198,10 @@ func listEnvironments(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 
-	out := make([]environmentView, 0, len(order))
+	out := make([]environmentRow, 0, len(order))
 	for _, env := range order {
 		g := byEnv[env]
-		out = append(out, environmentView{
+		out = append(out, environmentRow{
 			ID:        env,
 			Name:      env,
 			Type:      classifyEnvType(env),
@@ -137,27 +210,31 @@ func listEnvironments(s *cloud.Service[state], c *zip.Ctx) error {
 			UpdatedAt: rfc3339(g.updated),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"environments": out})
+	return &environmentBoard{Environments: out}, nil
 }
 
 // ── pipelines ────────────────────────────────────────────────────────────────
 
-// listPipelines projects each app as a CI/CD pipeline: its build/deploy config
-// (source repo/image) plus the status/timing of its latest deployment run. One
-// pipeline per app — a pipeline is created by creating an app, so this is
-// list-only.
-func listPipelines(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	apps, err := s.State.store.ListAllApplications(c.Context(), org)
+// listPipelines returns one build-and-deploy pipeline per app, with its latest run.
+//
+// It returns one pipeline per application in the caller's org — its repo or image
+// source, its current status, and when its most recent deployment ran and how long
+// it took. A pipeline is a PROJECTION of an app plus its newest deployment, not a
+// separate record: it comes into existence with the app and is triggered only
+// through /deploy, never here. Requires a validated principal; 403 without one.
+func (o ops) listPipelines(ctx context.Context, _ *noInput) (*pipelineBoard, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
+		return nil, err
 	}
-	deps, err := s.State.store.ListDeploymentsByOrg(c.Context(), org)
+	apps, err := s.State.store.ListAllApplications(ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
+	}
+	deps, err := s.State.store.ListDeploymentsByOrg(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
 	}
 	// Latest deployment per app (deps are created_at DESC, so first seen is newest).
 	latest := make(map[string]Deployment, len(apps))
@@ -167,9 +244,9 @@ func listPipelines(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 
-	out := make([]pipelineView, 0, len(apps))
+	out := make([]pipelineRow, 0, len(apps))
 	for _, a := range apps {
-		v := pipelineView{
+		v := pipelineRow{
 			ID:     a.ID,
 			Name:   firstNonEmpty(a.Name, a.Slug),
 			Repo:   firstNonEmpty(a.RepoURL, a.ImageRepo),
@@ -182,34 +259,39 @@ func listPipelines(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, v)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"pipelines": out})
+	return &pipelineBoard{Pipelines: out}, nil
 }
 
 // ── builds ───────────────────────────────────────────────────────────────────
 
-// listBuilds returns the org's REAL arcd BuildKit build records (platform_builds),
-// joined to their app (source repo) and deployment (commit). Builds are triggered
-// by deploying a git-source app (POST .../deploy) — the ONE build trigger — so
-// this is list-only. Real records or an honest empty list; never fabricated.
-func listBuilds(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	builds, err := s.State.store.ListBuildsByOrg(c.Context(), org)
+// listBuilds returns real build records for your org.
+//
+// It lists the org's BuildKit build records — the git build step behind a deploy —
+// each with the repo it built, the short commit, its status, when it started and
+// how long it took. These are real records or an honest empty list; a build appears
+// here because one ran, never because a page needed a row. Builds are created only
+// by /deploy and the push-to-deploy hook. Requires a validated principal; 403
+// without one.
+func (o ops) listBuilds(ctx context.Context, _ *noInput) (*buildBoard, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list builds: %v", err)
+		return nil, err
 	}
-	appByID, err := appIndex(s, c, org)
+	builds, err := s.State.store.ListBuildsByOrg(ctx, org)
 	if err != nil {
-		return err
+		return nil, zip.Errorf(http.StatusInternalServerError, "list builds: %v", err)
 	}
-	depByID, err := deploymentIndex(s, c, org)
+	appByID, err := appIndex(s, ctx, org)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	depByID, err := deploymentIndex(s, ctx, org)
+	if err != nil {
+		return nil, err
 	}
 
-	out := make([]buildView, 0, len(builds))
+	out := make([]buildRow, 0, len(builds))
 	for _, b := range builds {
 		repo := ""
 		if a, has := appByID[b.ApplicationID]; has {
@@ -220,7 +302,7 @@ func listBuilds(s *cloud.Service[state], c *zip.Ctx) error {
 		if d, has := depByID[b.DeploymentID]; has {
 			commit = shortCommit(d.Commit)
 		}
-		out = append(out, buildView{
+		out = append(out, buildRow{
 			ID:        b.ID,
 			Repo:      repo,
 			Commit:    commit,
@@ -229,30 +311,34 @@ func listBuilds(s *cloud.Service[state], c *zip.Ctx) error {
 			Duration:  buildDuration(b.Status, b.CreatedAt, b.UpdatedAt),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"builds": out})
+	return &buildBoard{Builds: out}, nil
 }
 
 // ── releases ─────────────────────────────────────────────────────────────────
 
-// listReleases returns the org's released versions: deployments that were
-// actually applied to the cluster (status deploying|live), i.e. a released image
-// tag on an app/environment. A release is created by a successful deploy — the
-// ONE deploy path — so this is list-only. Real deployment history only.
-func listReleases(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	deps, err := s.State.store.ListDeploymentsByOrg(c.Context(), org)
+// listReleases returns the versions that actually reached the cluster.
+//
+// It lists the org's releases: the deployments that were genuinely applied to the
+// cluster, with the app they belong to, their version, environment, status and when
+// they were released. A deployment that failed or is still building is NOT a
+// release and is excluded — reaching the cluster is what makes one. Requires a
+// validated principal; 403 without one.
+func (o ops) listReleases(ctx context.Context, _ *noInput) (*releaseBoard, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+		return nil, err
 	}
-	appByID, err := appIndex(s, c, org)
+	deps, err := s.State.store.ListDeploymentsByOrg(ctx, org)
 	if err != nil {
-		return err
+		return nil, zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+	}
+	appByID, err := appIndex(s, ctx, org)
+	if err != nil {
+		return nil, err
 	}
 
-	out := make([]releaseView, 0, len(deps))
+	out := make([]releaseRow, 0, len(deps))
 	for _, d := range deps {
 		if !isReleased(d.Status) {
 			continue // only versions that reached the cluster count as releases
@@ -262,7 +348,7 @@ func listReleases(s *cloud.Service[state], c *zip.Ctx) error {
 			name = firstNonEmpty(a.Name, a.Slug)
 			env = a.Environment
 		}
-		out = append(out, releaseView{
+		out = append(out, releaseRow{
 			ID:          d.ID,
 			Name:        name,
 			Version:     releaseVersion(d),
@@ -271,13 +357,13 @@ func listReleases(s *cloud.Service[state], c *zip.Ctx) error {
 			ReleasedAt:  rfc3339(d.UpdatedAt),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"releases": out})
+	return &releaseBoard{Releases: out}, nil
 }
 
 // ── join indexes (all org-scoped) ────────────────────────────────────────────
 
-func appIndex(s *cloud.Service[state], c *zip.Ctx, org string) (map[string]Application, error) {
-	apps, err := s.State.store.ListAllApplications(c.Context(), org)
+func appIndex(s *cloud.Service[state], ctx context.Context, org string) (map[string]Application, error) {
+	apps, err := s.State.store.ListAllApplications(ctx, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
 	}
@@ -288,8 +374,8 @@ func appIndex(s *cloud.Service[state], c *zip.Ctx, org string) (map[string]Appli
 	return m, nil
 }
 
-func deploymentIndex(s *cloud.Service[state], c *zip.Ctx, org string) (map[string]Deployment, error) {
-	deps, err := s.State.store.ListDeploymentsByOrg(c.Context(), org)
+func deploymentIndex(s *cloud.Service[state], ctx context.Context, org string) (map[string]Deployment, error) {
+	deps, err := s.State.store.ListDeploymentsByOrg(ctx, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
 	}

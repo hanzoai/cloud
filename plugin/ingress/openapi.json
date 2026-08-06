@@ -77,7 +77,7 @@
     },
     "/v1/ingress/middlewares/{id}": {
       "delete": {
-        "operationId": "delete_v1_ingress_middlewares_id",
+        "operationId": "delete_v1_ingress_middlewares_by_id",
         "summary": "Removes one of the caller org's edge transforms and hot-applies the change.",
         "description": "Removes one of the caller org's edge transforms and hot-applies\nthe change. Routes still naming it stop being served (they compile as skipped)\nuntil they name a transform that exists. Answers 204; an id this org does not\nhold is 404.",
         "tags": [
@@ -102,7 +102,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_ingress_middlewares_id",
+        "operationId": "get_v1_ingress_middlewares_by_id",
         "summary": "Returns one of the caller org's edge transforms by id.",
         "description": "Returns one of the caller org's edge transforms by id.",
         "tags": [
@@ -134,7 +134,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_ingress_middlewares_id",
+        "operationId": "put_v1_ingress_middlewares_by_id",
         "summary": "Creates or replaces one edge transform and hot-applies it.",
         "description": "Creates or replaces one edge transform and hot-applies it. POST\nmints an id when the body omits one; PUT takes the id from the URL, which wins\nover any id in the body. type must be one of redirectScheme, stripPrefix,\naddPrefix or headers, and stripPrefix/addPrefix each require their config key.",
         "tags": [
@@ -243,7 +243,7 @@
     },
     "/v1/ingress/routes/{id}": {
       "delete": {
-        "operationId": "delete_v1_ingress_routes_id",
+        "operationId": "delete_v1_ingress_routes_by_id",
         "summary": "Removes one of the caller org's routing rules and hot-applies the shrunken table, freeing its host for another claim.",
         "description": "Removes one of the caller org's routing rules and hot-applies the\nshrunken table, freeing its host for another claim. Answers 204; an id this org\ndoes not hold is 404.",
         "tags": [
@@ -268,7 +268,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_ingress_routes_id",
+        "operationId": "get_v1_ingress_routes_by_id",
         "summary": "Returns one of the caller org's routing rules by id.",
         "description": "Returns one of the caller org's routing rules by id.",
         "tags": [
@@ -300,7 +300,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_ingress_routes_id",
+        "operationId": "put_v1_ingress_routes_by_id",
         "summary": "Creates or replaces one routing rule and hot-applies the new table — there is no config file and no restart.",
         "description": "Creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
         "tags": [
@@ -411,7 +411,7 @@
     },
     "/v1/ingress/services/{id}": {
       "delete": {
-        "operationId": "delete_v1_ingress_services_id",
+        "operationId": "delete_v1_ingress_services_by_id",
         "summary": "Removes one of the caller org's backend pools and hot-applies the change.",
         "description": "Removes one of the caller org's backend pools and hot-applies the\nchange. Routes still pointing at it stop being served (they compile as skipped)\nuntil they name a pool that exists. Answers 204; an id this org does not hold\nis 404.",
         "tags": [
@@ -436,7 +436,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_ingress_services_id",
+        "operationId": "get_v1_ingress_services_by_id",
         "summary": "Returns one of the caller org's backend pools by id.",
         "description": "Returns one of the caller org's backend pools by id.",
         "tags": [
@@ -468,7 +468,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_ingress_services_id",
+        "operationId": "put_v1_ingress_services_by_id",
         "summary": "Creates or replaces one backend pool and hot-applies it.",
         "description": "Creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
         "tags": [

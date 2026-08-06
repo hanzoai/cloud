@@ -54,7 +54,6 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/internal/fqdn"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -129,27 +128,44 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
 		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, deps.Brand),
 			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
-	// The project source is the CANONICAL IAM: external over HTTP when the
-	// deployment names one (IAM_URL), the embedded store when this binary IS
-	// the IAM. The HTTP client authenticates per-org with the SAME
-	// <org>-platform-kms identity the KMS sync uses — one identity per tenant.
-	s.State.projects = newProjectStore(deps.IAMIssuer, s.State.kmsIdentity)
+	// The project source is the CANONICAL IAM: the iam peer over the plane when
+	// the deployment names a separate one (IAM_URL), the embedded store when this
+	// binary IS the IAM. Neither takes an address or a credential — the peer is
+	// addressed by name and the tenant rides the call.
+	s.State.projects = newProjectStore()
 	mounted = s
+	// platform registers TYPED ops, which live on the *zip.App's registry — the one
+	// value OpenAPI, MCP, the CLI and the generated SDKs are projected from. A Router
+	// that is not backed by one must fail the mount rather than serve routes no
+	// projection knows.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("platform.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
 	// behind the caller's plan, wrap it with entitlements.RequireProduct(deps.Commerce,
-	// "platform") — note routes() registers FLAT app.Get paths (not a group), so
+	// "platform") — note routes() registers FLAT absolute paths (not a group), so
 	// enabling means converting them to app.Group("/v1/platform", mw) or wrapping each.
 	// DEFERRED — DO NOT ENABLE YET: the "platform" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "platform" to a tier. See clients/entitlements.
-	routes(app, s)
+	routes(zapp, s)
 
 	// The fleet board (/v1/platform/fleet) — the platform's view of its OWN service
 	// tier, folded in from what used to be the separate /v1/paas product. It carries
 	// its own dynamic client because it observes the whole platform tier, not one
 	// tenant namespace; the routes are siblings under the one /v1/platform prefix.
 	fb := cloud.NewBase(deps, "platform")
-	fleetRoutes(app, &cloud.Service[fleetState]{Base: fb, State: buildFleet(fb)})
+	fs := &cloud.Service[fleetState]{Base: fb, State: buildFleet(fb)}
+	fleetRoutes(zapp, fs)
+
+	// The delivery surface (/v1/platform/apps, /v1/platform/cd) — declarations in
+	// universe git reconciled by cd.hanzo.ai, which is the ONE deploy plane. It
+	// takes both services because it joins two planes: the declaration comes from
+	// git (s holds the KMS client the universe token is read with) and the
+	// reconciliation from the cluster (fs holds the dynamic client). Handed both
+	// here rather than reaching a package global at request time — see apps.go.
+	appsRoutes(zapp, s, fs)
 
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
 	// serves repos at this host), so a self-hosted-git app builds with no env.
@@ -198,433 +214,106 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the /v1/platform surface on app. Extracted from Mount so
+// routes registers the /v1/platform surface as TYPED ops. Extracted from Mount so
 // tests can mount the same routes over a Service with an injected (fake/nil) k8s
 // client — hermetic, never touching a real cluster.
-func routes(app cloud.Router, s *cloud.Service[state]) {
+//
+// Every op takes the ABSOLUTE path on the app rather than a leaf on a group. The
+// collection root IS /v1/platform/projects: declaring it as the empty leaf of a
+// Group("/v1/platform/projects") names /v1/platform/projects/ — a path this API has
+// never served — and op.Path is the identity every projection keys on. It is also
+// what keeps the surface free of a childless middleware node, which zip refuses to
+// compose.
+//
+// Registration order is match order, and it is the order these routes have always
+// had: the static collections before the parameterised forms, /v1/run and the flat
+// console reads at order 124 so they bind ahead of the AI /v1/* catch-all (150).
+//
+// This surface installs no middleware of its own — see ops.go on why the identity
+// bridge belongs to whoever composes the app.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
+
 	// projects
 	// A project is IAM's resource, created and deleted at /v1/iam/projects. The
 	// platform makes APPS under one, never the project itself, so it exposes no
 	// project lifecycle — only this read, which is a PROJECTION IAM cannot serve:
 	// the project plus how many platform apps live under it.
-	app.Get("/v1/platform/projects", cloud.Handle(s, listProjects))
-	app.Get("/v1/platform/projects/:project", cloud.Handle(s, getProject))
+	zip.Get(app, "/v1/platform/projects", o.listProjects)
+	zip.Get(app, "/v1/platform/projects/:project", o.getProject)
 
 	// applications
-	app.Get("/v1/platform/projects/:project/apps", cloud.Handle(s, listApps))
-	app.Post("/v1/platform/projects/:project/apps", cloud.Handle(s, createApp))
-	app.Get("/v1/platform/projects/:project/apps/:app", cloud.Handle(s, getApp))
-	app.Delete("/v1/platform/projects/:project/apps/:app", cloud.Handle(s, deleteApp))
+	zip.Get(app, "/v1/platform/projects/:project/apps", o.listApps)
+	zip.Post(app, "/v1/platform/projects/:project/apps", o.createApp, zip.WithStatus(http.StatusCreated))
+	zip.Get(app, "/v1/platform/projects/:project/apps/:app", o.getApp)
+	zip.Delete(app, "/v1/platform/projects/:project/apps/:app", o.deleteApp)
 
 	// env management: replace an app's env set (plain + secret). Secret values are
 	// sealed into KMS; plaintext is never persisted (secrets.go). One write path.
-	app.Put("/v1/platform/projects/:project/apps/:app/env", cloud.Handle(s, setEnv))
+	zip.Put(app, "/v1/platform/projects/:project/apps/:app/env", o.setEnv)
 
 	// deploy lifecycle + history (deploy.go)
-	app.Post("/v1/platform/projects/:project/apps/:app/deploy", cloud.Handle(s, deploy))
-	app.Post("/v1/platform/projects/:project/apps/:app/stop", cloud.Handle(s, stop))
-	app.Post("/v1/platform/projects/:project/apps/:app/start", cloud.Handle(s, start))
-	app.Get("/v1/platform/projects/:project/apps/:app/deployments", cloud.Handle(s, listDeployments))
-	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id", cloud.Handle(s, getDeployment))
-	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", cloud.Handle(s, deploymentLogs))
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/deploy", o.deploy, zip.WithStatus(http.StatusAccepted))
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/stop", o.stop)
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/start", o.start)
+	zip.Get(app, "/v1/platform/projects/:project/apps/:app/deployments", o.listDeployments)
+	zip.Get(app, "/v1/platform/projects/:project/apps/:app/deployments/:id", o.getDeployment)
+	zip.Get(app, "/v1/platform/projects/:project/apps/:app/deployments/:id/logs", o.deploymentLogs)
 
 	// Vercel-style release flows (preview.go), all reusing the ONE deploy mechanic
 	// (deployTagCore → applyLive; write the Service CR, the operator reconciles):
 	// a per-branch preview target with its OWN slug + host, promote an already-built
 	// tag/deployment to prod, and rollback to a prior image. Org-scoped like the rest.
-	app.Post("/v1/platform/projects/:project/apps/:app/preview", cloud.Handle(s, preview))
-	app.Post("/v1/platform/projects/:project/apps/:app/promote", cloud.Handle(s, promote))
-	app.Post("/v1/platform/projects/:project/apps/:app/rollback", cloud.Handle(s, rollback))
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/preview", o.preview, zip.WithStatus(http.StatusAccepted))
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/promote", o.promote, zip.WithStatus(http.StatusAccepted))
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/rollback", o.rollback, zip.WithStatus(http.StatusAccepted))
 
 	// custom domains + org-subtree hosts (domains.go): list, add (subtree active /
 	// custom pending-with-challenge), verify a custom claim's DNS, remove.
-	app.Get("/v1/platform/projects/:project/apps/:app/domains", cloud.Handle(s, listDomains))
-	app.Post("/v1/platform/projects/:project/apps/:app/domains", cloud.Handle(s, addDomain))
-	app.Post("/v1/platform/projects/:project/apps/:app/domains/:host/verify", cloud.Handle(s, verifyDomain))
-	app.Delete("/v1/platform/projects/:project/apps/:app/domains/:host", cloud.Handle(s, removeDomain))
+	zip.Get(app, "/v1/platform/projects/:project/apps/:app/domains", o.listDomains)
+	// Two success statuses, because attaching a host has two honest outcomes: a new
+	// claim is 201, and re-adding this app's own is idempotent at 200. The answer
+	// states which (domainView.StatusCode), so the document publishes both.
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/domains", o.addDomain,
+		zip.WithStatus(http.StatusOK, http.StatusCreated))
+	// Declared even though 200 is the default, because domainView STATES its status
+	// and zip refuses a code an op did not declare — an answer may only send what
+	// the document publishes. Verifying never creates a claim, so 200 is the whole
+	// set here.
+	zip.Post(app, "/v1/platform/projects/:project/apps/:app/domains/:host/verify", o.verifyDomain,
+		zip.WithStatus(http.StatusOK))
+	zip.Delete(app, "/v1/platform/projects/:project/apps/:app/domains/:host", o.removeDomain)
 
-	app.Get("/v1/platform/health", cloud.Handle(s, health))
+	// The probe declares its 503 because it answers a failure with its OWN body —
+	// the real reason and whether the CRD was found — rather than the error envelope.
+	zip.Get(app, "/v1/platform/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
 	// Container-serverless one-shot: POST /v1/run — create-or-update an image app
 	// (in the org's default project) and deploy it via the SAME Service-CR writer,
 	// returning its live URL. A top-level convenience over the project→app→deploy
-	// flow above; org-scoped by s.tenant, never by the body (run.go). Bound at order
-	// 124, before the AI /v1/* catch-all (150).
-	app.Post("/v1/run", cloud.Handle(s, run))
+	// flow above; org-scoped by the validated identity, never by the body (run.go).
+	zip.Post(app, "/v1/run", o.run, zip.WithStatus(http.StatusAccepted))
 
 	// console aggregates (Environments / Pipelines / Builds / Releases) — flat,
 	// top-level REST DERIVED from the SAME project/app/deploy/build data above
 	// (console.go). GET-only projections: the ONE write path stays POST .../apps
-	// and .../deploy. Registered here (order 124) so they bind before the /v1/*
-	// AI catch-all; every handler is org-scoped through s.tenant like the rest.
-	app.Get("/v1/environments", cloud.Handle(s, listEnvironments))
-	app.Get("/v1/pipelines", cloud.Handle(s, listPipelines))
-	app.Get("/v1/builds", cloud.Handle(s, listBuilds))
-	app.Get("/v1/releases", cloud.Handle(s, listReleases))
+	// and .../deploy. Every op is org-scoped through the validated identity like the
+	// rest.
+	zip.Get(app, "/v1/environments", o.listEnvironments)
+	zip.Get(app, "/v1/pipelines", o.listPipelines)
+	zip.Get(app, "/v1/builds", o.listBuilds)
+	zip.Get(app, "/v1/releases", o.listReleases)
 
 	// Native build API (the no-GitHub-builders trigger, ex-/v1/arcd). Privileged:
 	// token-gated + image-ref allowlisted (runner.go). `hanzo build`, the
 	// git-push-to-deploy hook, and cloud's own self-release all POST here.
-	app.Post("/v1/runner", cloud.Handle(s, runnerBuild))
+	zip.Post(app, "/v1/runner", o.runnerBuild, zip.WithStatus(http.StatusAccepted))
 	// A release answers 202 with an id, so the id has to be answerable. Without
 	// these a release that dies in the detached pipeline is indistinguishable from
 	// one still running — which is exactly how a release that launched nothing
 	// looked like one in flight.
-	app.Get("/v1/runner/releases", cloud.Handle(s, listSelfReleases))
-	app.Get("/v1/runner/releases/:id", cloud.Handle(s, getSelfRelease))
-}
-
-// The platform surface's declared bodies AND its prose, in the route table's own
-// order so path, payload and meaning are read (and changed) together. Register
-// names the exact struct the matching handler binds or serves — openapi reflects
-// the schema from it, so the published contract follows the code. Describe states
-// what a CALLER gets, which no reflection can derive: none of these routes is a
-// typed op, so there is no doc comment for zipdoc to lift, and a bare operation
-// publishes an operationId and NOTHING else — an SDK method that cannot explain
-// itself and a CLI command with no help text. Both halves render only while the
-// route is live, so this list can never add a path.
-func init() {
-	openapi.Register("/v1/platform/projects", "GET", nil, []projectView{})
-	openapi.Describe("/v1/platform/projects", "GET",
-		"Your org's projects, each with how many apps live under it",
-		"Lists the caller org's projects with the number of platform applications in each. A "+
-			"project is IAM's resource — it is created and deleted at /v1/iam/projects, never here "+
-			"— so this is the ONE projection IAM cannot serve: the project plus what the platform "+
-			"has put under it.\n\n"+
-			"Requires a validated principal; 403 without one, and the org comes from that validated "+
-			"identity rather than a request header. This is the console's first authenticated read, "+
-			"so a project store that is not yet initialised degrades to an EMPTY list rather than a "+
-			"500 — a new org genuinely has zero projects — and the real cause is surfaced to "+
-			"operators instead of to the caller.")
-
-	openapi.Register("/v1/platform/projects/:project", "GET", nil, projectView{})
-	openapi.Describe("/v1/platform/projects/:project", "GET",
-		"One project and its app count",
-		"Returns a single project of the caller's org with the number of platform applications "+
-			"under it. A project this org does not have is 404, which is also what another tenant's "+
-			"project looks like from here. Requires a validated principal; 403 without one.")
-
-	openapi.Register("/v1/platform/projects/:project/apps", "GET", nil, []appView{})
-	openapi.Describe("/v1/platform/projects/:project/apps", "GET",
-		"The applications in one project, with what the cluster says about them",
-		"Lists the caller org's applications under one project. Each row carries the stored record "+
-			"and, for an app that is live or deploying, the LIVE phase and health read from its "+
-			"operator Service CR; an app with sealed env also carries its secret-sync state. Those "+
-			"cluster reads are best-effort — an unreachable cluster leaves those fields empty and "+
-			"never blocks the listing.\n\n"+
-			"The project must exist in IAM for this org, or the answer is 404; the `default` "+
-			"project is implicit and always accepted, because it is part of what an org IS. "+
-			"Requires a validated principal; 403 without one.")
-
-	openapi.Register("/v1/platform/projects/:project/apps", "POST", createAppReq{}, appView{})
-	openapi.Describe("/v1/platform/projects/:project/apps", "POST",
-		"Create an application from a git repo or a container image",
-		"Registers a new application under one of the caller org's projects and answers 201 with "+
-			"it. Creating does NOT deploy: the app lands in `draft` and nothing reaches the cluster "+
-			"until /deploy.\n\n"+
-			"`source` is `git` — which requires `repo.url` — or `image`, which requires "+
-			"`image.repository`; anything else is 400. A git app builds with zero-config `pack` by "+
-			"default and may opt into `dockerfile`; an image app never builds. The repo URL and "+
-			"Dockerfile path are validated here against the SAME allowlist the privileged build "+
-			"enforces, so an unsafe source is refused before it is ever persisted.\n\n"+
-			"The `slug` is the app's identity in the cluster: given or derived from `name`, it must "+
-			"match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, and a slug already used in this project "+
-			"is 409. `replicas` and `storageGb` are clamped to the deployment's limits rather than "+
-			"refused.\n\n"+
-			"Env keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A variable marked `secret: true` is "+
-			"SEALED into KMS and its plaintext is never written to the database — and if KMS is "+
-			"unavailable the create fails 503 rather than falling back to storing a secret in the "+
-			"clear.\n\n"+
-			"The app is seeded with its canonical default host, so it has a working HTTPS URL the "+
-			"moment it deploys. A bare custom domain cannot be attached here — it has to go through "+
-			"add-domain and DNS verification first. Requires a validated principal; 403 without "+
-			"one, and every cluster object it will later create lands in that org's own "+
-			"`tenant-<org>` namespace.")
-
-	openapi.Register("/v1/platform/projects/:project/apps/:app", "GET", nil, appView{})
-	openapi.Describe("/v1/platform/projects/:project/apps/:app", "GET",
-		"One application, with its live phase, health and secret sync",
-		"Returns a single application of the caller's org together with what the cluster currently "+
-			"reports for it: the operator Service CR's phase and health, and whether its sealed env "+
-			"has synced. An app this org and project do not have is 404. Requires a validated "+
-			"principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app", "DELETE",
-		"Delete an application and tear down what it runs",
-		"Removes the application record and tears down what it owns in the org's tenant namespace "+
-			"— its operator Service CR and its KMSSecret — then answers 204. An app this org and "+
-			"project do not have is 404, never a silent success.\n\n"+
-			"Teardown is best-effort by design: a cluster that refuses or is unreachable does not "+
-			"block the delete, so the record cannot be left orphaned behind a broken cluster; the "+
-			"failure is logged for operators and the orphan reaper reconciles it. Requires a "+
-			"validated principal; 403 without one.")
-
-	openapi.Register("/v1/platform/projects/:project/apps/:app/env", "PUT", setEnvReq{}, appView{})
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/env", "PUT",
-		"Replace an app's environment variables",
-		"Writes the app's whole environment set and answers the updated application. This is the "+
-			"one post-create write path for env, and it REPLACES rather than merges: a variable "+
-			"absent from the body is gone, and a secret dropped from the set leaves the app's "+
-			"Secret on its next deploy.\n\n"+
-			"Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A value marked `secret: true` is sealed "+
-			"into KMS and blanked in the database, so plaintext is never persisted — and the write "+
-			"fails 503 if KMS is unavailable rather than storing one in the clear.\n\n"+
-			"The rule worth knowing: this does not restart anything. Once the app has been deployed "+
-			"the secret sync is re-declared immediately so the operator re-materialises the Secret, "+
-			"but RUNNING pods keep the environment they started with until their next deploy or "+
-			"restart. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/deploy", "POST",
-		"Deploy the app — build it first if it comes from git",
-		"Starts a new, monotonically versioned deployment of the app and answers 202 with the "+
-			"deployment record. A 202 is an ACCEPTED deployment, not a live one.\n\n"+
-			"An IMAGE app deploys the tag you name (falling back to the app's tag, then `latest`) "+
-			"by writing its operator Service CR; the operator reconciles it to running. A GIT app "+
-			"launches an in-cluster BuildKit Job at `commit` — or the app's branch — and comes back "+
-			"in `building`; the Service CR is applied later, by the reconciler, once the Job "+
-			"succeeds. The reconciler is restart-safe, so a build in flight survives a cloud "+
-			"restart.\n\n"+
-			"Deploys are bounded per org: over the concurrent-deploy cap is 429 and NOTHING is "+
-			"recorded, so a rejected deploy leaves no phantom in the history. An unreachable "+
-			"cluster is 503 but still records an honest `error` deployment, because a deploy that "+
-			"was attempted and failed must not be indistinguishable from one never made. Every "+
-			"other failure is likewise recorded in its real terminal state.\n\n"+
-			"This is metered work: a git build is billed to the org's ledger in wall-clock build "+
-			"minutes once the Job finishes, and the running deployment is billed for its compute "+
-			"per tick for as long as it stays live. Requires a validated principal; 403 without "+
-			"one, and everything is written into that org's own `tenant-<org>` namespace.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/stop", "POST",
-		"Stop an app without deleting it",
-		"Scales the app's Service to zero replicas and marks it stopped, answering the updated "+
-			"application. Nothing else is removed — the record, its env, its domains and its "+
-			"deployment history all survive, and /start brings it back at the same replica count."+
-			"\n\n"+
-			"An app that is not deployed has no Service CR to scale and is 404. An unreachable "+
-			"cluster is 503 and a cluster that refuses the scale is 502. Because the pods stop, so "+
-			"does the compute metering. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/start", "POST",
-		"Start a stopped app back up",
-		"Scales the app's Service back to its configured replica count and marks it live, "+
-			"answering the updated application. It does not redeploy: the image already on the "+
-			"Service CR is what comes back.\n\n"+
-			"The billing watermark is reset to now as part of starting, so the org is charged for "+
-			"THIS live span and never for the gap the app spent stopped. An app with no Service CR "+
-			"is 404, an unreachable cluster is 503, and a cluster that refuses the scale is 502. "+
-			"Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/deployments", "GET",
-		"An app's deployment history",
-		"Lists every deployment recorded for one of the caller org's applications, newest version "+
-			"first, each with its version, status, source, commit and image. Failed and superseded "+
-			"attempts are included — that is the point of a history. Requires a validated "+
-			"principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/deployments/:id", "GET",
-		"One deployment of one app",
-		"Returns a single deployment by id, scoped to the named application of the caller's org — "+
-			"so an id belonging to another app or another tenant is 404, not a read. Requires a "+
-			"validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", "GET",
-		"Real logs for a deployment — the build's, then the app's",
-		"Returns the deployment's recorded status timeline together with LIVE pod logs pulled from "+
-			"the cluster: the build pod's output while a git build is running, and the running "+
-			"app's output once it is deployed. The `source` field says which of the two the body "+
-			"is — `build`, `app` or `none` — so a console can label the pane honestly.\n\n"+
-			"It never fabricates log content. When no pod exists yet, or the cluster is "+
-			"unreachable, it degrades to the recorded timeline and says so. Every cluster read is "+
-			"confined to the caller org's own namespaces and time-boxed. Requires a validated "+
-			"principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/preview", "POST",
-		"Put a branch on its own URL",
-		"Deploys an already-built `image` to a per-branch preview and answers its URL, the branch, "+
-			"the preview's slug and the deployment. The preview is a FIRST-CLASS application named "+
-			"`<app>-<branch>` in the same project and tenant namespace, with its own default host — "+
-			"so it is completely isolated from production while reusing the same deploy mechanic. "+
-			"Re-previewing a branch converges that same target in place rather than stacking "+
-			"another one.\n\n"+
-			"It carries NO environment variables, deliberately: a preview never inherits "+
-			"production's secrets. It also does not build — `image` is required and must already "+
-			"exist, and `branch` defaults to the parent app's. A branch that does not resolve to a "+
-			"valid slug distinct from the parent's is 400. Requires a validated principal; 403 "+
-			"without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/promote", "POST",
-		"Promote an already-built release to the app",
-		"Redeploys an image that already exists — named either by `deploymentId`, which promotes "+
-			"that deployment's exact built image, or by `tag`, resolved the same way a deploy "+
-			"resolves one. One of the two is required; neither is 400.\n\n"+
-			"Promotion never builds. A deployment that carries no built image cannot be promoted "+
-			"and is 400, and a deployment id outside this app is 404. It runs through the same "+
-			"deploy core as everything else, so it takes a NEW version number and is subject to the "+
-			"same per-org concurrency cap. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/rollback", "POST",
-		"Go back to the previous release",
-		"Redeploys a prior image: the one named by `deploymentId`, or — with no body — the newest "+
-			"earlier deployment that carries a real built image and did not error, skipping the "+
-			"release currently live. An app with nothing earlier to return to is 400.\n\n"+
-			"A rollback is a deploy of an old image, not a rewind: it takes a NEW version number "+
-			"and appends to the history rather than erasing what came after. Both lookups are "+
-			"scoped to this app and org, so another tenant's image can never be rolled in. "+
-			"Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains", "GET",
-		"Every hostname this app answers on",
-		"Lists the app's hosts: the permanent default host it was born with, any org-subtree hosts "+
-			"attached to it, and every custom host claimed for it with its verification state and, "+
-			"while pending, the DNS challenge records to publish. Live endpoint status for each "+
-			"host is observed from the cluster. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains", "POST",
-		"Attach a hostname — instantly if you already own it, otherwise with a DNS challenge",
-		"Attaches `host` to the app, and which of two things happens depends on who owns the name. "+
-			"A host inside the caller org's own subtree is structurally owned, so it goes ACTIVE "+
-			"immediately and answers 201. A bring-your-own host is claimed as PENDING and answers "+
-			"the DNS challenge records to publish; it is NOT rendered into the app's ingress until "+
-			"/verify passes.\n\n"+
-			"Claims are globally unique. A host already claimed by another organization is 409, and "+
-			"so is one claimed by a different app in your own; re-adding this app's OWN claim is "+
-			"idempotent and answers its current state at 200. The default host is always attached "+
-			"and re-adding it is 409. A host under the platform's shared apex that is not the "+
-			"caller's own subtree is 403 — it belongs to whoever owns that subtree and can never be "+
-			"grabbed through the custom path.\n\n"+
-			"`host` must be a valid DNS hostname; anything else is 400. Requires a validated "+
-			"principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains/:host/verify", "POST",
-		"Check a custom domain's DNS and turn it on if it passes",
-		"Runs the DNS challenge check for a pending custom host and, when it passes, marks the "+
-			"host verified and renders it into the app's ingress so it starts serving.\n\n"+
-			"A check that RAN and did not pass is not an error: it answers 200 with the host still "+
-			"pending and the reason in `detail`, so a console can show the operator what DNS is "+
-			"actually returning. An already-verified host answers as-is without re-checking. A host "+
-			"not claimed by this app is 404. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains/:host", "DELETE",
-		"Detach a hostname and release the claim",
-		"Drops the host from the app's ingress and releases any custom claim on it, so the name "+
-			"becomes claimable again — by this org or any other. Answers 204.\n\n"+
-			"The default host is permanent and cannot be removed: that is 400, not 404. A host that "+
-			"is neither attached nor claimed here is 404. Requires a validated principal; 403 "+
-			"without one.")
-
-	openapi.Describe("/v1/platform/health", "GET",
-		"Whether this control plane can actually deploy anything",
-		"A real probe, not a status page. It answers 200 only when the metadata store is open AND "+
-			"the cluster is genuinely reachable — proved by LISTING the operator App CRD, which "+
-			"settles reachability and CRD presence in one bounded call, and which is the exact "+
-			"question every deploy depends on. Anything else is 503 carrying the real reason and "+
-			"whether the CRD was found.\n\n"+
-			"A constructed cluster client proves nothing — it is built from a kubeconfig, not from "+
-			"a reachable apiserver — so this deliberately spends a round trip rather than reporting "+
-			"`ok` while every deploy fails. Not admin-gated: liveness has to be probe-able without "+
-			"a credential.")
-
-	openapi.Register("/v1/run", "POST", runReq{}, runView{})
-	openapi.Describe("/v1/run", "POST",
-		"Run a container image and get back a URL",
-		"The one-call shortcut over project → app → deploy: give it a `name` and an `image` and it "+
-			"creates or updates an image-source application in your org's DEFAULT project, deploys "+
-			"it through the same operator Service-CR writer everything else uses, and answers its "+
-			"id, name, live URL, status and shape. Re-running the same name UPDATES it in place, so "+
-			"the call is idempotent by name.\n\n"+
-			"What it produces is a first-class application, not a special object: it is listable, "+
-			"stoppable and redeployable through the /v1/platform routes like any other app.\n\n"+
-			"`minScale` is the replica floor. `maxScale` above it declares an autoscaling ceiling; "+
-			"`maxScale: 0` means no autoscaler at all — a fixed run at the floor. Both are clamped "+
-			"to the deployment's limits. `runtime` and `shape` are accepted for the client contract "+
-			"and echoed back: the image is the runtime unit and sizing is the operator's default.\n\n"+
-			"It is BILLING-GATED before it touches the cluster: a flat per-run fee is authorized "+
-			"against the org's own prepaid balance first, so an org that cannot pay is refused "+
-			"without anything being created. An unreachable cluster is 503 — a run never reports a "+
-			"URL it did not create. Secret env is sealed into KMS and fails closed without it.\n\n"+
-			"Requires a validated principal; 403 without one. The org is resolved from that "+
-			"validated identity and is what both pays and owns the namespace — it is never read "+
-			"from the body.")
-
-	openapi.Describe("/v1/environments", "GET",
-		"Your deploy targets, and what is running on each",
-		"Returns the org's environments — the distinct deploy targets its applications name, "+
-			"`production` for anything that names none — each aggregating the apps that target it, "+
-			"a rolled-up status and when it last changed.\n\n"+
-			"An environment is DERIVED, not stored: there is nothing to create or delete here, and "+
-			"an environment exists exactly as long as an app points at it. Requires a validated "+
-			"principal; 403 without one.")
-
-	openapi.Describe("/v1/pipelines", "GET",
-		"One build-and-deploy pipeline per app, with its latest run",
-		"Returns one pipeline per application in the caller's org — its repo or image source, its "+
-			"current status, and when its most recent deployment ran and how long it took. A "+
-			"pipeline is a PROJECTION of an app plus its newest deployment, not a separate record: "+
-			"it comes into existence with the app and is triggered only through /deploy, never "+
-			"here. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/builds", "GET",
-		"Real build records for your org",
-		"Lists the org's BuildKit build records — the git build step behind a deploy — each with "+
-			"the repo it built, the short commit, its status, when it started and how long it took. "+
-			"These are real records or an honest empty list; a build appears here because one ran, "+
-			"never because a page needed a row. Builds are created only by /deploy and the "+
-			"push-to-deploy hook. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/releases", "GET",
-		"The versions that actually reached the cluster",
-		"Lists the org's releases: the deployments that were genuinely applied to the cluster, with "+
-			"the app they belong to, their version, environment, status and when they were "+
-			"released. A deployment that failed or is still building is NOT a release and is "+
-			"excluded — reaching the cluster is what makes one. Requires a validated principal; 403 "+
-			"without one.")
-
-	openapi.Describe("/v1/runner", "POST",
-		"Trigger a native build — an image, or the binaries a repo declares",
-		"The fabric's own build trigger, and what `hanzo build`, git-push-to-deploy and cloud's own "+
-			"self-release all call. It answers 202 with the build job id: a queued build, not a "+
-			"pushed artifact.\n\n"+
-			"Two lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and the "+
-			"output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane takes "+
-			"`binaries` — the same recipe the repo's hanzo.yml declares — and publishes to object "+
-			"storage instead; it must carry no `image`, because a build produces binaries or an "+
-			"image, never both. `release: true` is the third mode: cloud self-publishing its own "+
-			"image, version computed, built, smoke-tested, tagged and announced.\n\n"+
-			"PRIVILEGED, with exactly two credentials and never a third: the shared build-callback "+
-			"token compared in constant time — the machine path, which a user never holds — or a "+
-			"validated IAM principal who is an ADMIN of their org, which is the `hanzo build` user "+
-			"path and means one IAM login authorizes a build with no separate build token. A plain "+
-			"member is refused.\n\n"+
-			"Both paths are bounded the same way: the output must push to a registry the fabric "+
-			"owns, and on the IAM path the image's registry namespace must MATCH the caller's own "+
-			"validated org — so an org admin can only publish into their own brand and can never "+
-			"overwrite another's through the shared push credential. The same confinement applies "+
-			"to the artifact lane's repo owner.\n\n"+
-			"`release: true` is the exception, and takes SUPERADMIN. It publishes the platform's "+
-			"own image — the binary the whole fleet runs — so what it lands reaches every org at "+
-			"the next reconcile, and no role inside the caller's own org can authorize that. An "+
-			"org admin is refused however the registry namespace lines up, and the build token, "+
-			"which carries no identity at all, may enqueue an ordinary build but never a "+
-			"release.\n\n"+
-			"The output image is parsed and validated as a single well-formed OCI ref before any "+
-			"authorization decision reads it, so a crafted ref cannot smuggle a build-exporter "+
-			"attribute past the check.")
-
-	openapi.Describe("/v1/runner/releases", "GET",
-		"Self-publish releases this process has run",
-		"Lists the platform's own release runs with their current state, so a release that answered "+
-			"202 with an id can be followed to its end. SuperAdmin only — this is the platform's "+
-			"own publishing record, not a tenant surface.\n\n"+
-			"The record lives in THIS process's memory, so it covers the releases this instance "+
-			"started and does not survive a restart.")
-
-	openapi.Describe("/v1/runner/releases/:id", "GET",
-		"One self-publish release by the id its 202 returned",
-		"Returns the state of one release run — which is the whole reason the trigger answers with "+
-			"an id, because without this a release that died in the detached pipeline would look "+
-			"exactly like one still in flight. SuperAdmin only.\n\n"+
-			"A 404 means the id is unknown OR has aged out of this process's in-memory record. That "+
-			"is the honest answer either way: the process genuinely cannot tell the two apart.")
+	zip.Get(app, "/v1/runner/releases", o.listSelfReleases)
+	zip.Get(app, "/v1/runner/releases/:id", o.getSelfRelease)
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────
@@ -648,7 +337,7 @@ func init() {
 // (SanitizeIdentity sets it only for a JWT-verified SuperAdmin, HIP-0026), and
 // even then reaches only the admin bucket, never a real tenant's namespace. This
 // is the ONLY source of the tenant; no handler reads an org from body or path.
-func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
+func tenant(c *zip.Ctx) (string, bool) {
 	if !principal.Validated(c) {
 		return "", false // no validated principal — refuse the forgeable Phase-1 data path
 	}
@@ -757,86 +446,158 @@ func toDeploymentView(d Deployment) deploymentView {
 
 // ── project handlers ─────────────────────────────────────────────────────────
 
-func listProjects(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// projectList is the caller org's projects as one list answers them. It is a
+// NAMED slice because the route has always served a bare JSON array, and a bare
+// array is what its clients parse; naming it is what lets the document describe
+// the array instead of publishing an anonymous one.
+type projectList []projectView
+
+// listProjects returns your org's projects, each with how many apps live under it.
+//
+// It lists the caller org's projects with the number of platform applications in
+// each. A project is IAM's resource — it is created and deleted at
+// /v1/iam/projects, never here — so this is the ONE projection IAM cannot serve:
+// the project plus what the platform has put under it.
+//
+// Requires a validated principal; 403 without one, and the org comes from that
+// validated identity rather than a request header. This is the console's first
+// authenticated read, so a project store that is not yet initialised degrades to
+// an EMPTY list rather than a 500 — a new org genuinely has zero projects — and
+// the real cause is surfaced to operators instead of to the caller.
+func (o ops) listProjects(ctx context.Context, _ *noInput) (*projectList, error) {
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	rows, err := s.State.projects.List(c.Context(), org)
+	rows, err := o.s.State.projects.List(ctx, org)
 	if err != nil {
 		// This list is the console dashboard's first authenticated read. A
 		// co-resident IAM store that is not yet initialized (the iamStore guard's
 		// typed 503) — or any transient store failure — must degrade to an empty
 		// project set, never a 500 that breaks dashboard init: a new org genuinely
 		// has zero projects. The real cause is surfaced to operators, not swallowed;
-		// written in-band (nil returned) so no outer error filter can reflatten it.
-		s.Log.Warn("platform: project store unavailable; serving empty project list", "org", org, "err", err)
-		return c.JSON(http.StatusOK, []projectView{})
+		// answered as an empty list so no outer error filter can reflatten it.
+		o.s.Log.Warn("platform: project store unavailable; serving empty project list", "org", org, "err", err)
+		return &projectList{}, nil
 	}
-	out := make([]projectView, 0, len(rows))
+	out := make(projectList, 0, len(rows))
 	for _, p := range rows {
 		if p == nil {
 			continue // never nil-deref a stray nil row into a 500
 		}
-		apps, _ := s.State.store.ListApplications(c.Context(), org, p.Name)
+		apps, _ := o.s.State.store.ListApplications(ctx, org, p.Name)
 		out = append(out, toProjectView(p, len(apps)))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-func getProject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.projects.Get(c.Context(), org, projectParam(c))
+// getProject returns one project and its app count.
+//
+// It returns a single project of the caller's org with the number of platform
+// applications under it. A project this org does not have is 404, which is also
+// what another tenant's project looks like from here. Requires a validated
+// principal; 403 without one.
+func (o ops) getProject(ctx context.Context, in *projectRef) (*projectView, error) {
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
+	}
+	p, err := o.s.State.projects.Get(ctx, org, slugOf(in.Project))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	if p == nil {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("project not found")
 	}
-	apps, _ := s.State.store.ListApplications(c.Context(), org, p.Name)
-	return c.JSON(http.StatusOK, toProjectView(p, len(apps)))
+	apps, _ := o.s.State.store.ListApplications(ctx, org, p.Name)
+	v := toProjectView(p, len(apps))
+	return &v, nil
 }
 
 // ── application handlers ─────────────────────────────────────────────────────
 
+// createAppReq is a new application, from a git repo or a container image.
+//
+// Every field but Project carries `url:"-"`, which is what keeps this a BODY:
+// zip's binder fills an In field from the query string as well as the body, and
+// this route has never taken an application's fields there — without the opt-out
+// `?slug=other` would silently redirect the write the body asked for.
 type createAppReq struct {
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
-	Environment string `json:"environment"`
-	Source      string `json:"source"` // git | image
-	Repo        struct {
-		URL    string `json:"url"`
-		Branch string `json:"branch"`
-	} `json:"repo"`
-	Image struct {
-		Repository string `json:"repository"`
-		Tag        string `json:"tag"`
-	} `json:"image"`
-	BuildType  string       `json:"buildType"`
-	Dockerfile string       `json:"dockerfile"`
-	Port       int          `json:"port"`
-	Replicas   int          `json:"replicas"`
-	StorageGB  int          `json:"storageGb"`
-	Env        []EnvVarJSON `json:"env"`
-	Domains    []string     `json:"domains"`
+	// Project is the project to create the application under, from the path.
+	Project string `json:"project"`
+	// Name is the application's display name. Required; the slug is derived from
+	// it when none is given.
+	Name string `json:"name" url:"-"`
+	// Slug is the app's identity in the cluster — its CR name and part of its
+	// host. Given or derived from Name, it must match
+	// `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, and one already used in this
+	// project is 409.
+	Slug string `json:"slug" url:"-"`
+	// Description is free text about what the application is.
+	Description string `json:"description" url:"-"`
+	// Environment is the deploy target this app names ("production" by default).
+	Environment string `json:"environment" url:"-"`
+	// Source is `git`, which requires repo.url, or `image`, which requires
+	// image.repository. Anything else is 400.
+	Source string `json:"source" url:"-"` // git | image
+	// Repo is the git source to build from, for source `git`.
+	Repo gitOrigin `json:"repo" url:"-"`
+	// Image is the container image to run, for source `image`.
+	Image imageOrigin `json:"image" url:"-"`
+	// BuildType is `pack` — the zero-config default that detects any project —
+	// or `dockerfile`, the explicit escape hatch. An image app never builds.
+	BuildType string `json:"buildType" url:"-"`
+	// Dockerfile is the path to build from, for buildType `dockerfile`.
+	Dockerfile string `json:"dockerfile" url:"-"`
+	// Port is the container port the app listens on.
+	Port int `json:"port" url:"-"`
+	// Replicas is how many copies to run; clamped to the deployment's limit
+	// rather than refused.
+	Replicas int `json:"replicas" url:"-"`
+	// StorageGB is the persistent volume size in GiB; absent means stateless.
+	// Clamped to the deployment's limit rather than refused.
+	StorageGB int `json:"storageGb" url:"-"`
+	// Env is the application's environment. Keys must match
+	// `^[A-Za-z_][A-Za-z0-9_]*$`; a variable marked `secret: true` is sealed into
+	// KMS and its plaintext is never written to the database.
+	Env []EnvVarJSON `json:"env" url:"-"`
+	// Domains are extra ingress hosts. The canonical default host is always
+	// attached; a bare custom host is refused here and must go through
+	// add-domain → verify first.
+	Domains []string `json:"domains" url:"-"`
 }
 
-// requireProject confirms the request's :project exists in IAM for org, returning
+// gitOrigin is the git source an application builds from. It is a named type
+// rather than the anonymous struct it was, because the document names what it
+// publishes and an anonymous struct has no name to publish.
+type gitOrigin struct {
+	// URL is the repository clone URL. Required for source `git`, and validated
+	// against the same allowlist the privileged build enforces.
+	URL string `json:"url"`
+	// Branch is the branch to build; defaults to `main` for a git source.
+	Branch string `json:"branch"`
+}
+
+// imageOrigin is the container image an application runs.
+type imageOrigin struct {
+	// Repository is the image repository. Required for source `image`.
+	Repository string `json:"repository"`
+	// Tag is the image tag to deploy; `latest` when omitted.
+	Tag string `json:"tag"`
+}
+
+// requireProject confirms the request's project exists in IAM for org, returning
 // its name (the app-scope key) or a mapped 404/500. It is the ONE place the app
 // routes verify project existence before touching platform's app tree.
-func requireProject(s *cloud.Service[state], c *zip.Ctx, org string) (string, error) {
-	project := projectParam(c)
+func requireProject(s *cloud.Service[state], ctx context.Context, org, project string) (string, error) {
+	project = slugOf(project)
 	// The DEFAULT project is implicit — part of what an org IS. Its row is owed
 	// by IAM provisioning, and no surface (run, apps under it) fails an org for
 	// a row IAM owes it. Every other project must exist in IAM.
 	if project == principal.DefaultProject {
 		return project, nil
 	}
-	ok, err := s.State.projects.Exists(c.Context(), org, project)
+	ok, err := s.State.projects.Exists(ctx, org, project)
 	if err != nil {
 		return "", zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
@@ -846,51 +607,76 @@ func requireProject(s *cloud.Service[state], c *zip.Ctx, org string) (string, er
 	return project, nil
 }
 
-func createApp(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// createApp creates an application from a git repo or a container image.
+//
+// It registers a new application under one of the caller org's projects and
+// answers 201 with it. Creating does NOT deploy: the app lands in `draft` and
+// nothing reaches the cluster until /deploy.
+//
+// `source` is `git` — which requires `repo.url` — or `image`, which requires
+// `image.repository`; anything else is 400. A git app builds with zero-config
+// `pack` by default and may opt into `dockerfile`; an image app never builds. The
+// repo URL and Dockerfile path are validated here against the SAME allowlist the
+// privileged build enforces, so an unsafe source is refused before it is ever
+// persisted.
+//
+// The `slug` is the app's identity in the cluster: given or derived from `name`,
+// it must match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, and a slug already used in
+// this project is 409. `replicas` and `storageGb` are clamped to the deployment's
+// limits rather than refused.
+//
+// Env keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A variable marked `secret: true`
+// is SEALED into KMS and its plaintext is never written to the database — and if
+// KMS is unavailable the create fails 503 rather than falling back to storing a
+// secret in the clear.
+//
+// The app is seeded with its canonical default host, so it has a working HTTPS URL
+// the moment it deploys. A bare custom domain cannot be attached here — it has to
+// go through add-domain and DNS verification first. Requires a validated
+// principal; 403 without one, and every cluster object it will later create lands
+// in that org's own `tenant-<org>` namespace.
+func (o ops) createApp(ctx context.Context, body *createAppReq) (*appView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	project, herr := requireProject(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	var body createAppReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	project, err := requireProject(s, ctx, org, body.Project)
+	if err != nil {
+		return nil, err
 	}
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	slug := normalizeSlug(body.Slug, name)
 	if !slugRE.MatchString(slug) {
-		return zip.ErrBadRequest("slug must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+		return nil, zip.ErrBadRequest("slug must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
 	source := strings.ToLower(strings.TrimSpace(body.Source))
 	switch source {
 	case "git":
 		if strings.TrimSpace(body.Repo.URL) == "" {
-			return zip.ErrBadRequest("source 'git' requires repo.url")
+			return nil, zip.ErrBadRequest("source 'git' requires repo.url")
 		}
 		// (CRIT-1) Reject an unsafe repo.url / dockerfile at the boundary (400)
 		// before it is ever persisted or reaches the privileged build. This is the
 		// SAME validator the build path enforces (validate.go) — refusing early is
 		// defense in depth + a clear client error, not a new rule.
 		if _, err := validateRepoURL(body.Repo.URL); err != nil {
-			return zip.ErrBadRequest(err.Error())
+			return nil, zip.ErrBadRequest(err.Error())
 		}
 		if strings.TrimSpace(body.Dockerfile) != "" {
 			if _, err := validateDockerfile(body.Dockerfile); err != nil {
-				return zip.ErrBadRequest(err.Error())
+				return nil, zip.ErrBadRequest(err.Error())
 			}
 		}
 	case "image":
 		if strings.TrimSpace(body.Image.Repository) == "" {
-			return zip.ErrBadRequest("source 'image' requires image.repository")
+			return nil, zip.ErrBadRequest("source 'image' requires image.repository")
 		}
 	default:
-		return zip.ErrBadRequest("source must be 'git' or 'image'")
+		return nil, zip.ErrBadRequest("source must be 'git' or 'image'")
 	}
 	// buildType is a function of source: an image app never builds ("image"); a
 	// git app defaults to zero-config pack and may opt into the dockerfile escape
@@ -903,7 +689,7 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 			buildType = "pack"
 		}
 		if !buildTypes[buildType] {
-			return zip.ErrBadRequest("buildType must be 'pack' or 'dockerfile'")
+			return nil, zip.ErrBadRequest("buildType must be 'pack' or 'dockerfile'")
 		}
 	}
 	// Validate env keys at the boundary, then SEAL secret:true values into KMS so
@@ -912,12 +698,12 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 	// a plaintext secret never lands in the DB as a fallback.
 	for _, e := range body.Env {
 		if !envKeyRE.MatchString(e.Key) {
-			return zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
+			return nil, zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
 		}
 	}
-	sealedEnv, err := sealSecretEnv(s, c.Context(), org, slug, body.Env)
+	sealedEnv, err := sealSecretEnv(s, ctx, org, slug, body.Env)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%v", err)
 	}
 	envJSON, _ := json.Marshal(sealedEnv)
 	// Seed the canonical default host so every app has a working HTTPS URL the
@@ -925,15 +711,15 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 	// default always pass; a bare custom host at create still 501s — it must go
 	// through add-domain → verify first).
 	domains := seedDefaultDomain(s, org, slug, sanitizeDomains(body.Domains))
-	if err := validateOrgDomains(s, c.Context(), org, domains); err != nil {
-		return err
+	if err := validateOrgDomains(s, ctx, org, domains); err != nil {
+		return nil, err
 	}
 	domainsJSON, _ := json.Marshal(domains)
 
 	now := time.Now().Unix()
 	id, err := genID("app")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	a := Application{
 		ID: id, Org: org, ProjectID: project, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
@@ -945,54 +731,72 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 		EnvJSON:   string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.CreateApplication(c.Context(), a); err != nil {
+	if err := s.State.store.CreateApplication(ctx, a); err != nil {
 		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("application slug already exists in this project")
+			return nil, zip.ErrConflict("application slug already exists in this project")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toAppView(a))
+	v := toAppView(a)
+	return &v, nil
 }
 
-func listApps(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	project, herr := requireProject(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	rows, err := s.State.store.ListApplications(c.Context(), org, project)
+// appList is one project's applications as a list answers them — a bare JSON
+// array, named so the document can describe it.
+type appList []appView
+
+// listApps returns the applications in one project, with what the cluster says
+// about them.
+//
+// It lists the caller org's applications under one project. Each row carries the
+// stored record and, for an app that is live or deploying, the LIVE phase and
+// health read from its operator Service CR; an app with sealed env also carries
+// its secret-sync state. Those cluster reads are best-effort — an unreachable
+// cluster leaves those fields empty and never blocks the listing.
+//
+// The project must exist in IAM for this org, or the answer is 404; the `default`
+// project is implicit and always accepted, because it is part of what an org IS.
+// Requires a validated principal; 403 without one.
+func (o ops) listApps(ctx context.Context, in *projectRef) (*appList, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
+		return nil, err
 	}
-	out := make([]appView, 0, len(rows))
+	project, err := requireProject(s, ctx, org, in.Project)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.State.store.ListApplications(ctx, org, project)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
+	}
+	out := make(appList, 0, len(rows))
 	for _, a := range rows {
 		v := toAppView(a)
 		// Attach live phase/health from the operator CR when the cluster is
 		// reachable (best-effort; never blocks the list).
 		if a.Status == "live" || a.Status == "deploying" {
-			v.Phase, v.Health = s.State.k8s.observeService(c.Context(), org, a.Slug)
+			v.Phase, v.Health = s.State.k8s.observeService(ctx, org, a.Slug)
 		}
 		if len(secretEnvKeys(a.EnvJSON)) > 0 {
-			v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(c.Context(), org, a.Slug, true)
+			v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(ctx, org, a.Slug, true)
 		}
 		out = append(out, v)
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // loadApp resolves (projectName, app) for the caller's org, re-verifying tenancy
 // at each hop: the project must exist in IAM, then the app under it. Returns the
 // project name (the app-scope key / operator part-of label) and application, or a
 // mapped HTTP error.
-func loadApp(s *cloud.Service[state], c *zip.Ctx, org string) (string, Application, error) {
-	project, herr := requireProject(s, c, org)
+func loadApp(s *cloud.Service[state], ctx context.Context, org, project, app string) (string, Application, error) {
+	project, herr := requireProject(s, ctx, org, project)
 	if herr != nil {
 		return "", Application{}, herr
 	}
-	a, err := s.State.store.GetApplication(c.Context(), org, project, appParam(c))
+	a, err := s.State.store.GetApplication(ctx, org, project, slugOf(app))
 	if errors.Is(err, errNotFound) {
 		return "", Application{}, zip.ErrNotFound("application not found")
 	}
@@ -1002,131 +806,200 @@ func loadApp(s *cloud.Service[state], c *zip.Ctx, org string) (string, Applicati
 	return project, a, nil
 }
 
-func getApp(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	_, a, err := loadApp(s, c, org)
+// getApp returns one application, with its live phase, health and secret sync.
+//
+// It returns a single application of the caller's org together with what the
+// cluster currently reports for it: the operator Service CR's phase and health,
+// and whether its sealed env has synced. An app this org and project do not have
+// is 404. Requires a validated principal; 403 without one.
+func (o ops) getApp(ctx context.Context, in *appRef) (*appView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	_, a, err := loadApp(s, ctx, org, in.Project, in.App)
+	if err != nil {
+		return nil, err
 	}
 	v := toAppView(a)
-	v.Phase, v.Health = s.State.k8s.observeService(c.Context(), org, a.Slug)
-	v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
-	return c.JSON(http.StatusOK, v)
+	v.Phase, v.Health = s.State.k8s.observeService(ctx, org, a.Slug)
+	v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(ctx, org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
+	return &v, nil
 }
 
-func deleteApp(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	project, herr := requireProject(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	a, deleted, err := s.State.store.DeleteApplication(c.Context(), org, project, appParam(c))
+// deleteApp deletes an application and tears down what it runs.
+//
+// It removes the application record and tears down what it owns in the org's
+// tenant namespace — its operator Service CR and its KMSSecret — then answers 204.
+// An app this org and project do not have is 404, never a silent success.
+//
+// Teardown is best-effort by design: a cluster that refuses or is unreachable does
+// not block the delete, so the record cannot be left orphaned behind a broken
+// cluster; the failure is logged for operators and the orphan reaper reconciles
+// it. Requires a validated principal; 403 without one.
+func (o ops) deleteApp(ctx context.Context, in *appRef) (*noContent, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	project, err := requireProject(s, ctx, org, in.Project)
+	if err != nil {
+		return nil, err
+	}
+	a, deleted, err := s.State.store.DeleteApplication(ctx, org, project, slugOf(in.App))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("application not found")
+		return nil, zip.ErrNotFound("application not found")
 	}
-	if err := s.State.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
+	if err := s.State.k8s.deleteService(ctx, org, a.Slug); err != nil {
 		s.Log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
 	}
-	if err := s.State.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
+	if err := s.State.k8s.deleteKMSSecret(ctx, org, a.Slug); err != nil {
 		s.Log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── env management ─────────────────────────────────────────────────────────────
 
+// setEnvReq is an application's whole environment set. Env carries `url:"-"` so
+// the variables can only arrive in the body: this route has never taken them off
+// the query string, and a binder that filled them from there would let a URL
+// rewrite an app's environment.
 type setEnvReq struct {
-	Env []EnvVarJSON `json:"env"`
+	// Project is the project the application lives under, from the path.
+	Project string `json:"project"`
+	// App is the application's slug, from the path.
+	App string `json:"app"`
+	// Env is the app's whole environment set, REPLACING what it had. Keys must
+	// match `^[A-Za-z_][A-Za-z0-9_]*$`; a variable marked `secret: true` is
+	// sealed into KMS and blanked in the database.
+	Env []EnvVarJSON `json:"env" url:"-"`
 }
 
-// setEnv REPLACES an app's env set (plain + secret) — the ONE post-create write
-// path for env vars. Secret:true values are sealed into KMS (sealSecretEnv blanks
-// the persisted value); a secret dropped from the set is removed from the CR on
-// the next deploy. Fails closed if KMS is unavailable. If the app is already
-// deployed it re-declares the secret sync immediately (the operator re-materializes
-// the Secret); pods pick up changed env on their next deploy/restart.
-func setEnv(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// setEnv replaces an app's environment variables.
+//
+// It writes the app's whole environment set and answers the updated application.
+// This is the one post-create write path for env, and it REPLACES rather than
+// merges: a variable absent from the body is gone, and a secret dropped from the
+// set leaves the app's Secret on its next deploy.
+//
+// Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A value marked `secret: true` is
+// sealed into KMS and blanked in the database, so plaintext is never persisted —
+// and the write fails 503 if KMS is unavailable rather than storing one in the
+// clear.
+//
+// The rule worth knowing: this does not restart anything. Once the app has been
+// deployed the secret sync is re-declared immediately so the operator
+// re-materialises the Secret, but RUNNING pods keep the environment they started
+// with until their next deploy or restart. Requires a validated principal; 403
+// without one.
+func (o ops) setEnv(ctx context.Context, body *setEnvReq) (*appView, error) {
+	s := o.s
+	_, org, err := o.caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	_, a, herr := loadApp(s, c, org)
-	if herr != nil {
-		return herr
-	}
-	var body setEnvReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	_, a, err := loadApp(s, ctx, org, body.Project, body.App)
+	if err != nil {
+		return nil, err
 	}
 	for _, e := range body.Env {
 		if !envKeyRE.MatchString(e.Key) {
-			return zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
+			return nil, zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
 		}
 	}
-	sealed, err := sealSecretEnv(s, c.Context(), org, a.Slug, body.Env)
+	sealed, err := sealSecretEnv(s, ctx, org, a.Slug, body.Env)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%v", err)
 	}
 	envJSON, _ := json.Marshal(sealed)
 	a.EnvJSON = string(envJSON)
 	a.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.UpdateApplication(c.Context(), a); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist env: %v", err)
+	if err := s.State.store.UpdateApplication(ctx, a); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist env: %v", err)
 	}
 	// Re-declare the secret sync so an added/removed secret updates the KMSSecret CR
 	// now (only meaningful once the tenant namespace exists — i.e. after a deploy).
 	if a.Namespace != "" {
-		ensureSecretSync(s, c.Context(), org, a)
+		ensureSecretSync(s, ctx, org, a)
 	}
 	v := toAppView(a)
-	v.Phase, v.Health = s.State.k8s.observeService(c.Context(), org, a.Slug)
-	v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
-	return c.JSON(http.StatusOK, v)
+	v.Phase, v.Health = s.State.k8s.observeService(ctx, org, a.Slug)
+	v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(ctx, org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
+	return &v, nil
 }
 
 // ── health ───────────────────────────────────────────────────────────────────
 
-// health is a REAL probe: 200 when the metadata store is open AND the cluster is
-// reachable; 503 + the real reason otherwise (never status-theater). Not
-// admin-gated — liveness must be probe-able without a JWT.
-// health probes the cluster for real. A constructed client proves nothing — it is
-// built from a kubeconfig, not from a reachable apiserver — so this asks the one
-// question the deploy path depends on: can we LIST the operator App CRD? That
-// answers reachability AND CRD presence in a single bounded call (Limit 1). The
-// probe came from the folded /v1/paas/health, which is why it survived the fold and
-// the nil-check it replaced did not: two health routes cannot both be the truth,
-// and a nil-check reports "ok" while every deploy 502s.
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	res := map[string]any{"service": "platform", "status": "ok", "k8s": s.State.k8s.dyn != nil}
+// readiness is what the probe answers: whether this control plane can actually
+// deploy anything, and when it cannot, why.
+//
+// It states its own HTTP status (see StatusCode) because the two outcomes are the
+// SAME body at two codes — a degraded probe answers its real reason rather than
+// the error envelope, so the reason is a field a client reads and not a string it
+// parses out of a message.
+type readiness struct {
+	// Service is always "platform" — which control plane answered.
+	Service string `json:"service"`
+	// Status is "ok" when this plane can deploy, "degraded" when it cannot.
+	Status string `json:"status"`
+	// K8s is whether a cluster client resolved at all. False means no kubeconfig.
+	K8s bool `json:"k8s"`
+	// CRD is whether the operator App CRD was found, and is absent when no
+	// cluster client resolved and the question could not be asked.
+	CRD *bool `json:"crd,omitempty"`
+	// Error is the real reason the plane is degraded; absent when it is not.
+	Error string `json:"error,omitempty"`
+}
+
+// StatusCode is the code this answer carries: 200 for a plane that can deploy, 503
+// for one that cannot. Declared on the op with zip.WithStatus, so the document,
+// the SDKs and the CLI publish both.
+func (r *readiness) StatusCode() int {
+	if r.Status == "ok" {
+		return http.StatusOK
+	}
+	return http.StatusServiceUnavailable
+}
+
+// health reports whether this control plane can actually deploy anything.
+//
+// A real probe, not a status page. It answers 200 only when the metadata store is
+// open AND the cluster is genuinely reachable — proved by LISTING the operator App
+// CRD, which settles reachability and CRD presence in one bounded call, and which
+// is the exact question every deploy depends on. Anything else is 503 carrying the
+// real reason and whether the CRD was found.
+//
+// A constructed cluster client proves nothing — it is built from a kubeconfig, not
+// from a reachable apiserver — so this deliberately spends a round trip rather than
+// reporting `ok` while every deploy fails. Not admin-gated: liveness has to be
+// probe-able without a credential.
+func (o ops) health(ctx context.Context, _ *noInput) (*readiness, error) {
+	s := o.s
+	res := readiness{Service: "platform", Status: "ok", K8s: s.State.k8s.dyn != nil}
 	if s.State.k8s.dyn == nil {
-		res["status"] = "degraded"
-		res["error"] = s.State.k8s.initErr
-		return c.JSON(http.StatusServiceUnavailable, res)
+		res.Status, res.Error = "degraded", s.State.k8s.initErr
+		return &res, nil
 	}
 	if _, err := s.State.k8s.dyn.Resource(k8s.Apps).Namespace(scanOrder()[0]).
-		List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
-		res["status"], res["crd"], res["error"] = "degraded", false, err.Error()
-		return c.JSON(http.StatusServiceUnavailable, res)
+		List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		found := false
+		res.Status, res.CRD, res.Error = "degraded", &found, err.Error()
+		return &res, nil
 	}
-	res["crd"] = true
-	return c.JSON(http.StatusOK, res)
+	found := true
+	res.CRD = &found
+	return &res, nil
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 var envKeyRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-func projectParam(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("project"))) }
-func appParam(c *zip.Ctx) string     { return strings.ToLower(strings.TrimSpace(c.Param("app"))) }
 
 // normalizeSlug returns an explicit slug (lowercased/trimmed) or derives one
 // from the name.

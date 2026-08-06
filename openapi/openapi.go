@@ -11,7 +11,7 @@
 // cannot: the light host mounts no subsystem, so [MountFleet] weaves the
 // projections 116 app binaries wrote when they were BUILT (fleet.go). Between the
 // projection and the request sit two gaps no reading of any router closes: the
-// subset can be older than the code (mk/fleet.mk surface-check regenerates it
+// subset can be older than the code (mk/fleet.mk check regenerates it
 // from source and refuses the diff), and the deployed front door can hand the
 // path to somebody else entirely (only a probe of the live host sees that). See
 // fleetInfo for what the published document may therefore claim.
@@ -103,9 +103,22 @@ type Route struct {
 // on lifecycle stage — the CI exec path (never listens) and the live endpoint
 // (has listened) would emit different documents, which is exactly the drift this
 // package exists to prevent. Excluding it makes the projection total and stable.
+// TRACE and OPTIONS are excluded for the reason CONNECT and HEAD are: All()
+// binds them mechanically, nobody DECLARED them, and a published operation is a
+// promise. They are transport, not product.
+//
+// TRACE echoes the request back. It is a debugging verb, it is the Cross-Site
+// Tracing vector, and it should not be reachable on a public API at all — so
+// advertising 33 of them in the contract is worse than merely routing them,
+// because the contract is what SDKs, the CLI and the MCP tool list are built
+// from. OPTIONS is CORS preflight: a browser sends it, a person never does, and
+// `hanzo meet options` is not a command anyone wants.
+//
+// Between them they were 66 of the document's operations — 66 SDK methods, 66
+// CLI verbs and 66 MCP tools that existed because a route table was read as a
+// product surface.
 var methods = map[string]bool{
-	"GET": true, "PUT": true, "POST": true, "DELETE": true,
-	"OPTIONS": true, "PATCH": true, "TRACE": true,
+	"GET": true, "PUT": true, "POST": true, "DELETE": true, "PATCH": true,
 }
 
 // Methods returns the methods this generator publishes, sorted.
@@ -437,7 +450,7 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 	for _, r := range rs {
 		path, params := translate(r.Path)
 
-		op := &Operation{OperationID: operationID(r.Method, path)}
+		op := &Operation{OperationID: zip.ID(r.Method, path)}
 		if p := Product(r.Path); p != "" {
 			op.Tags = []string{p}
 			products[p] = true
@@ -696,56 +709,6 @@ func translate(pattern string) (string, []string) {
 		}
 	}
 	return strings.Join(segs, "/"), params
-}
-
-// operationID derives a stable id from method+path.
-//
-// '_' is the SEPARATOR (it encodes '/'), so any character that also folded to
-// '_' would collide with a path boundary. That was not hypothetical: the router
-// once served both GET /v1/pricing-policy and GET /v1/pricing/policy, and an
-// earlier "everything non-alphanumeric → _" rule collapsed them onto one id.
-// (The first of those was a pure alias of the second and has since been deleted,
-// but the encoding still has to survive the next such pair — and hyphenated
-// addresses we do not own, like /v1/git/…/git-upload-pack and
-// /v1/index/…/documents/delete-batch, are permanent.) '-' and '.' are legal in
-// an operationId and are therefore preserved rather than folded, which keeps any
-// such pair distinct (get_v1_pricing-policy vs get_v1_pricing_policy).
-//
-// Params contribute "by_<name>" so /v1/a/{b} and /v1/a/b do not collapse either.
-// This is derivation, not proof: a literal '_' in a segment can still alias a
-// '/' (/v1/a/b_c vs /v1/a/b/c). From VERIFIES uniqueness over the whole document
-// and fails loudly rather than emit a duplicate — the guard, not the encoding,
-// is what makes the ids trustworthy.
-func operationID(method, path string) string {
-	var b strings.Builder
-	b.WriteString(strings.ToLower(method))
-	for _, s := range strings.Split(path, "/") {
-		if s == "" {
-			continue
-		}
-		b.WriteByte('_')
-		if strings.HasPrefix(s, "{") {
-			b.WriteString("by_")
-			s = strings.TrimSuffix(strings.TrimPrefix(s, "{"), "}")
-		}
-		b.WriteString(sanitize(s))
-	}
-	return b.String()
-}
-
-// sanitize reduces a path segment to [a-z0-9.-], the characters that are legal
-// in an operationId and cannot be confused with the '_' path separator.
-func sanitize(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '.':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
 }
 
 // Mount serves the document at Path off app's OWN live router — the app it is

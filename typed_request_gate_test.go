@@ -29,6 +29,30 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
+	"apps/auto/billing.go": "gate + meter — a durable run is a priced act, and the money gate needs " +
+		"strictly more of the validated principal than the org: the PAYER (principal.Payer, which is " +
+		"the org's pool or the person's wallet — account.Payer decides, and in the shared signup org " +
+		"they differ), the validated project sub-scope (principal.ValidatedProject: the project AND " +
+		"whether a claim backs it), and the request id + client IP the debit is attributed with. None " +
+		"is the org and none can be an In field — a caller that could name its own payer would bill " +
+		"another org. Two call sites, one per half of the pair, and both fail closed off the HTTP " +
+		"path, where there is no principal and so nobody to charge.",
+	"apps/flow/billing.go": "gate + meter — identical to apps/auto/billing.go above, for the same " +
+		"reason: a workflow run executes a component graph that bills a model provider, so it is gated " +
+		"before it runs and debited after. Same three facts the org cannot supply (payer, validated " +
+		"project, request id + client IP), same two call sites, same fail-closed silence off HTTP.",
+	"apps/commerce/risk.go": "screen.op / seen — the fraud screen in front of the typed mint op, and an " +
+		"identity gate reading strictly more than the org. The AMOUNT comes off the decoded In and the " +
+		"SETTLEMENT off the returned receipt, both deliberately not read from the wire (see screen.op), " +
+		"so the request is consulted for exactly the facts no projection can carry on a type: the payer " +
+		"(principal.Subject, which is the validated caller and not the tenant), the door actually reached " +
+		"(c.Path(), which is /mcp on the agent plane and the mint on the browser's — the request is " +
+		"parked by the app-wide Bridge, which runs for both), and the address + " +
+		"jurisdiction signals a credit decision is made on. None of those is the org, and none may become " +
+		"an In field — a caller that could name its own payer or jurisdiction would screen as someone " +
+		"else. It fails OPEN of nothing: a call with no request at all (the CLI's LocalInvoke) resolves " +
+		"no payer and is screened as that state rather than exempted from it, and the handler's own " +
+		"payingOrg gate refuses it after.",
 	"apps/dataset/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
 		"establishes who is asking. The TENANT is resolved through apps/tenant, which reads " +
 		"principal.OrgFrom and nothing else; the request is needed for the other half, which is a " +
@@ -39,14 +63,17 @@ var allowedRequestUses = map[string]string{
 		"attributed with. None of those are the org and none can be an In field — a caller that could " +
 		"name its own ledger would bill another org. ONE function, which every op asks; it fails closed " +
 		"off the HTTP path, where there is no principal and so no tenant to act for.",
-	"apps/commerce/risk.go": "the credit screen's payer resolver. The op is served over BOTH the " +
-		"browser's REST call and an agent's tools/call, and the PAYER, the billing ADDRESS and the " +
-		"JURISDICTION are read off the request it is being served over — parked by the app-wide Bridge, " +
-		"which runs for /mcp and the op path alike. None of the three can be an In field, for the same " +
-		"reason apps/dataset is allowed here: a caller that could name its own payer would charge another " +
-		"org. On the MCP leg no HTTP response exists yet when this returns, so a response reader would " +
-		"watch an agent's payment settle and learn nothing. The screen fails closed when the request is " +
-		"absent.",
+	"apps/lsp/lsp.go": "the money gate in front of a query, for the same reason as apps/auto/billing.go " +
+		"above: answering one may have to CHECK OUT the repository and index it, so standing is " +
+		"required before the work starts rather than after. The gate needs strictly more of the " +
+		"validated principal than the org — the payer (principal.Ledger, which is the org's pool or " +
+		"the person's own ledger) and the validated project sub-scope (principal.ValidatedProject: the " +
+		"project AND whether a claim backs it, which is the per-project spend cap and a different " +
+		"question from the attribution the debit records). Neither is the org and neither can be an In " +
+		"field — a caller that could name its own payer would bill another org. ONE call site, guarded " +
+		"by onHTTP so it fails closed off the HTTP path, where there is no principal and so nobody to " +
+		"charge; the cold price is gated on every query because whether a workspace is warm is not " +
+		"known until the pool is asked, and the debit in apps/lsp/meter.go charges the real one.",
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
@@ -405,6 +432,30 @@ var allowedRequestUses = map[string]string{
 		"attributable. ONE function, asked from the one tenantOf every op goes through, which resolves " +
 		"the TENANT with principal.OrgFrom and never through the request. Fails closed off the HTTP " +
 		"path: no request, no attested asserter, no write.",
+	"apps/billing/typed.go": "payer / caller — the billing package's ONE resolver of the request for " +
+		"its typed ops. The TENANT is resolved with principal.OrgFrom, never through the request; the " +
+		"request is needed for the PAYER — the wallet subject principal.Subject resolves from the minted " +
+		"X-User-Name and the signed billing_account claim, headers the org does not carry, and the SAME " +
+		"resolution the spend gate and the debit use, so a finance view can never read a different wallet " +
+		"than the one charged. caller additionally reads the validated user id (X-User-Id) for the " +
+		"per-account routed-usage breakdown, which is scoped to the PERSON. Cache-Control rides the " +
+		"DECLARED contract instead (zip.WithResponseHeader + each Out's ResponseHeaders), so no-store " +
+		"needs no request at all. Both fail closed off the HTTP path: no request, no payer.",
+	"apps/affiliates/typed.go": "sudo / actor / requireBody — the affiliate program's ONE resolver of the request. " +
+		"Every /v1/admin route gates on platform sudo (X-User-IsAdmin), which principal.OrgFrom does not " +
+		"carry; an application and the user-level referral mirror are ATTRIBUTED to the validated user id " +
+		"(X-User-Id) — an attribution, never an authority; and requireBody replays the c.Bind refusal the " +
+		"raw write handlers answered on a bodyless request, because zip's typed decode is tolerant and " +
+		"without it a bodyless apply would enroll, a bodyless handle post would opt the caller out, and a " +
+		"bodyless rate post would set a rate of zero. The TENANT is resolved with principal.OrgFrom " +
+		"(tenant, in this same file), never through the request. All fail closed off the HTTP path: no " +
+		"request, no attested admin, no actor, and nothing to require a body of.",
+	"apps/link/http.go": "scope — the linked-account surface is scoped to (org, SUBJECT): every op keys " +
+		"the caller's own provider accounts and usage on the validated user id (c.User()) as well as the " +
+		"tenant, and principal.OrgFrom carries only the tenant. ONE function, which every op in the " +
+		"package asks — the SAME caller() boundary the raw handlers keyed — so both planes share one " +
+		"gate. Off the HTTP path there is no attested caller, so it refuses with exactly the 403 an " +
+		"anonymous REST call gets: fail closed, one gate, not two.",
 	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
 		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +
@@ -429,6 +480,22 @@ var allowedRequestUses = map[string]string{
 		"start rejecting a body that named a project — a wire the route has never had. ONE function, which " +
 		"all four scoped ops ask, delegating to the same scope() the SSE handler beside them uses; fails " +
 		"closed off the HTTP path, where there is no principal and therefore no tenant.",
+	"apps/platform/ops.go": "caller / request / admit — the PaaS control plane's three identity seams, " +
+		"in one file, which every one of its 32 typed ops goes through. caller resolves the tenant with " +
+		"platform's own tenant(), not principal.OrgFrom: this surface keys NAMESPACES and per-tenant image " +
+		"refs on the org, so it needs the injective namespace.Sanitize form and the \"admin\" bucket a " +
+		"validated SuperAdmin with no org falls into — neither of which principal.OrgFrom can express, since " +
+		"it returns the owner claim verbatim and refuses an empty org outright. It also hands the request " +
+		"back because this plane SPENDS the caller's identity rather than only reading it: /v1/run gates and " +
+		"meters the caller's own ledger (principal.Ledger, the request id and the client IP), and every " +
+		"deploy, preview, promote and rollback writes the actor and request id to the audit log. request is " +
+		"for the two ops that authorize on something OTHER than a tenant — /v1/runner compares a shared " +
+		"build credential in constant time off the Authorization header, and the release reads gate on " +
+		"cloud.Super — so asking for an org would refuse the machine caller the endpoint exists for. admit is " +
+		"the fleet board's role gate, cloud.Scope.Admits over cloud.AuthorityOf, which reads X-User-IsAdmin " +
+		"and X-User-IsOrgAdmin; it was cloud.Guard around the handler until these routes became typed ops, " +
+		"and a typed op has no zip.Handler for a wrapper to compose with. All three fail closed off the HTTP " +
+		"path: no request, no tenant, no attested authority, no answer.",
 	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +

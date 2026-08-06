@@ -246,9 +246,28 @@ type riskLabelFact struct {
 
 // riskLabelOut reports what happened to each member of the batch.
 type riskLabelOut struct {
-	Recorded  int `json:"recorded"`
+	// Recorded is how many members became a NEW row in the tenant's record.
+	// Recorded + Duplicate + Refused is exactly the number of labels sent, so a
+	// caller reconciling a webhook delivery can do it on the counts alone.
+	Recorded int `json:"recorded"`
+	// Duplicate is how many members this tenant already held, byte for byte. The
+	// idempotency key is the assertion's CONTENT digest — kind, subject, at, seen,
+	// disposition, source, evidence, the asserting identity and confidence, folded
+	// in length-prefixed — so a webhook redelivering one chargeback is a duplicate
+	// and costs nothing, while an assertion differing in ANY of those fields is a
+	// DIFFERENT assertion and is recorded beside the first. Nothing was written and
+	// nothing was overwritten; it is an outcome, never an error. The asserting
+	// identity is in the digest, so the same claim filed by a second credential is
+	// two assertions and not a redelivery.
 	Duplicate int `json:"duplicate"`
-	Refused   int `json:"refused"`
+	// Refused is how many members failed admission and were NOT recorded. Refusal
+	// is per member and never discards the rest of the batch: an empty or
+	// over-512-byte subject or evidence, a kind, disposition or source outside the
+	// closed vocabulary, an `at` or `seen` that is not RFC 3339, a `seen` before the
+	// `at` it judges, either instant more than five minutes past the server clock,
+	// or a confidence outside [0,1]. Results names which member and why, so the
+	// refused ones are exactly the ones to fix and resend.
+	Refused int `json:"refused"`
 	// Results is per fact, in the order sent, so a caller can retry exactly the
 	// members that were refused and can log the content digest of the ones that
 	// landed.
@@ -413,10 +432,27 @@ type riskLabelsOut struct {
 
 // riskLabelRecord is one assertion as it was recorded, with its whole provenance.
 type riskLabelRecord struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
+	// ID is the assertion's content digest — SHA-256 over every semantic field,
+	// rendered hex — computed server-side and never supplied. It is the key a
+	// redelivery collapses onto, and it is the id the hold op names.
+	ID string `json:"id"`
+	// Kind is what the subject IS, from the closed set: account, agent, merchant,
+	// payout, person, session or transaction. With Subject and At it is the IDENTITY
+	// of the judged event — the triple a resolve names and the triple assertions are
+	// grouped by, so a typo in it would file a label against an event nobody asks
+	// about.
+	Kind string `json:"kind"`
+	// Subject is the entity that was judged, named in the TENANT'S OWN namespace and
+	// at most 512 bytes. It is opaque here: stored, matched and returned verbatim,
+	// never dereferenced. It has no meaning outside this tenant — the record is the
+	// tenant's own file — so an id lifted from another tenant's response names
+	// nothing.
 	Subject string `json:"subject"`
-	At      string `json:"at"`
+	// At is when the judged EVENT happened, RFC 3339 in UTC, truncated to the
+	// second. The filer supplies it, and it is what a maturity horizon measures
+	// from: this event's as-of is At plus the horizon. A resolve names it back
+	// exactly, to the second.
+	At string `json:"at"`
 	// Seen is when the FILER said the assertion became knowable. It is
 	// provenance: it is recorded and published, and it decides nothing.
 	Seen string `json:"seen"`
@@ -425,14 +461,38 @@ type riskLabelRecord struct {
 	// It is the instant the leakage guard compares, so it is published beside the
 	// claim it was derived from — an answer whose rule nobody can see is one
 	// nobody can check.
-	Knowable    string `json:"knowable"`
+	Knowable string `json:"knowable"`
+	// Disposition is what was concluded, from the closed set: `productive` — the
+	// event led somewhere, escalated, reported or charged back; `unproductive` —
+	// judged not suspicious; or the empty string for an explicit UNJUDGED, which is
+	// a real assertion ("we looked and could not say") and not the absence of one.
 	Disposition string `json:"disposition"`
-	Source      string `json:"source"`
-	Evidence    string `json:"evidence"`
+	// Source is WHO asserted, from the closed set: chargeoff, dispute, case, refund,
+	// review or sample. It is the primary term of the precedence rule — an unknown
+	// source has no rank and a conflict with it could not be resolved — so it is
+	// what decides which of two disagreeing assertions is in force.
+	Source string `json:"source"`
+	// Evidence is the pointer to the record this conclusion came from: a dispute id,
+	// a case id, a decision id. At most 512 bytes, required at the write, and opaque
+	// to this plane — stored and returned verbatim, never resolved. It is what an
+	// adverse action is defended with, which is why an assertion carrying none is
+	// refused at the door.
+	Evidence string `json:"evidence"`
 	// By is the identity that asserted, stamped server-side at the write.
-	By         string  `json:"by"`
+	By string `json:"by"`
+	// Confidence is the filer's own confidence in [0,1] — 1 for a processor
+	// chargeback, less for an analyst's hunch. Zero is the ordinary value for a
+	// filer that stated none, and it means the weakest tie-break there is rather
+	// than "unknown". It breaks a tie only WITHIN one precedence rank and can never
+	// lift a weak source above a strong one.
 	Confidence float64 `json:"confidence"`
-	Hold       bool    `json:"hold,omitempty"`
+	// Hold is true while a litigation hold is on this record: retention will not
+	// dispose of it, at any age. False — and it is omitted then — leaves the record
+	// disposable once it is older than the boundary a sweep names. It is a fact
+	// about the RECORD and not about the world, so it is not folded into ID, no
+	// write path can set it, and the hold op is the one way it moves in either
+	// direction.
+	Hold bool `json:"hold,omitempty"`
 	// Wrote is the server clock at the write. It is the only time on the record
 	// the tenant did not supply, and it is what retention measures against.
 	Wrote string `json:"wrote"`
@@ -522,17 +582,39 @@ type riskResolveIn struct {
 }
 
 type riskLabelEvent struct {
-	Kind    string `json:"kind"`
+	// Kind is the judged entity's type, from the closed set: account, agent,
+	// merchant, payout, person, session or transaction. One outside it is refused
+	// rather than answered `unlabelled`, because it could only ever match nothing
+	// and the caller would read a real absence into a typo.
+	Kind string `json:"kind"`
+	// Subject is the entity id in the tenant's own namespace, at most 512 bytes. It
+	// is matched EXACTLY against what was recorded — this is a lookup, not a search,
+	// and no prefix, pattern or normalisation is applied.
 	Subject string `json:"subject"`
-	At      string `json:"at"`
+	// At is the event's own instant, RFC 3339. It is part of the event's IDENTITY
+	// and not a filter: it is matched exactly, to the second, against the `at` the
+	// assertions were filed under, so an instant a second off names a different
+	// event and resolves to nothing. It is also what this event's as-of is measured
+	// from — At plus the horizon.
+	At string `json:"at"`
 }
 
 type riskResolveOut struct {
 	// Now and Horizon echo the observation this answer was computed under. A
 	// resolved label without them is a claim nobody can check.
-	Now     string         `json:"now"`
-	Horizon int            `json:"horizon"`
-	Labels  []riskResolved `json:"labels"`
+	Now string `json:"now"`
+	// Horizon is the maturity horizon this answer was computed under, IN DAYS — the
+	// caller's, or 120 when it stated none. Each event's as-of is its own `at` plus
+	// this many days, and that as-of is what decides which assertions were visible
+	// to it; an event whose as-of falls after Now is not resolved at all and is
+	// counted in Unmatured instead.
+	Horizon int `json:"horizon"`
+	// Labels is one entry per named event that BOTH matured and had at least one
+	// assertion knowable by its own as-of, in the order the events were named. The
+	// three outcomes partition the ask: len(labels) + Unmatured + Unlabelled is the
+	// number of DISTINCT events named, an event named twice having been answered
+	// once.
+	Labels []riskResolved `json:"labels"`
 	// Unmatured is how many named events had not aged past the horizon. They are
 	// not unlabelled — they are not yet ASKABLE, and a supervised training set
 	// must exclude them rather than treat them as negatives.
@@ -546,18 +628,54 @@ type riskResolveOut struct {
 
 // riskResolved is the label in force for one event, and what it beat.
 type riskResolved struct {
-	Kind    string `json:"kind"`
+	// Kind is the judged entity's type, echoed from the event that was named. With
+	// Subject and At it is how a caller joins this answer back onto the training row
+	// or the decision it asked about.
+	Kind string `json:"kind"`
+	// Subject is the entity id, echoed from the event that was named — the tenant's
+	// own key, returned verbatim.
 	Subject string `json:"subject"`
-	At      string `json:"at"`
+	// At is the event's instant, RFC 3339, echoed. It is what the horizon is
+	// measured from, so At plus the horizon is AsOf.
+	At string `json:"at"`
 	// AsOf is the instant this answer was true at: the event time plus the
 	// horizon. Nothing seen after it was visible to this resolution.
-	AsOf        string  `json:"asOf"`
-	Disposition string  `json:"disposition"`
-	Source      string  `json:"source"`
-	Evidence    string  `json:"evidence"`
-	By          string  `json:"by"`
-	ID          string  `json:"id"`
-	Confidence  float64 `json:"confidence"`
+	AsOf string `json:"asOf"`
+	// Disposition is the claim IN FORCE at AsOf: productive, unproductive, or the
+	// empty string for an explicit unjudged. It is the winning assertion's own
+	// claim, never a vote or an average — an average of two adjudications is a third
+	// claim nobody made. A matured event nobody judged is not answered here at all;
+	// it is counted in Unlabelled, because manufacturing a negative there is how a
+	// fraud model comes to describe the incumbent block list.
+	Disposition string `json:"disposition"`
+	// Source is who filed the winning assertion, and it is the PRIMARY term of the
+	// rule that picked it. Sources rank by adjudication weight — chargeoff,
+	// dispute, case, refund, review, sample, strongest first — and only inside one
+	// rank do the tie-breaks run, in order: the assertion that became KNOWABLE
+	// latest, then the higher confidence, then the lower id. The vocabulary op
+	// publishes that order from the same declaration the resolver reads, so a caller
+	// holding a contested answer can reproduce it.
+	Source string `json:"source"`
+	// Evidence is the winning assertion's pointer to the record behind it — the
+	// dispute, case or decision id it was filed with, opaque and verbatim. It
+	// travels with the answer so an adverse action can name what judged the subject
+	// without a second read.
+	Evidence string `json:"evidence"`
+	// By is the identity that filed the WINNING assertion, `<home org>/<user>`,
+	// stamped server-side from the validated principal at the write and never taken
+	// from a body — an attribution the caller chose is not attribution. It is the
+	// winner's alone; every losing assertion keeps its own and is returned whole in
+	// Conflicts.
+	By string `json:"by"`
+	// ID is the winning assertion's content digest, so this answer traces to the
+	// exact record it came from — and that record can be placed under litigation
+	// hold by naming this id.
+	ID string `json:"id"`
+	// Confidence is the winning assertion's own confidence in [0,1], zero when its
+	// filer stated none. It is reported because it is a term of the rule that picked
+	// the winner, and it is the weakest term but one: it breaks a tie inside one
+	// rank and never lifts a weak source above a strong one.
+	Confidence float64 `json:"confidence"`
 	// Contested is true when a visible assertion claimed a DIFFERENT disposition.
 	// Two sources agreeing is corroboration, not conflict.
 	Contested bool `json:"contested"`
@@ -728,13 +846,30 @@ type riskCoverageIn struct {
 // riskLabelCoverage answers the only question that decides whether a model can be
 // trained at all.
 type riskLabelCoverage struct {
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Horizon int    `json:"horizon"`
+	// From is the INCLUSIVE start of the EVENT window these counts were folded over,
+	// RFC 3339, echoed with the defaults filled in — the caller's, or 90 days before
+	// To. An assertion is in the window when its event time satisfies at >= From.
+	From string `json:"from"`
+	// To is the EXCLUSIVE end of that window (at < To). Unstated it is one horizon
+	// before now, never now: a window running to now under a maturity horizon can
+	// hold no matured event at all, so every count below would read zero however
+	// much ground truth the tenant held.
+	To string `json:"to"`
+	// Horizon is the maturity horizon these counts were measured under, IN DAYS —
+	// the caller's, or 120. It decides Matured (an event is matured when its `at`
+	// plus this many days is not after now), it sets each event's own as-of and so
+	// which assertions were visible to it, and when the caller bounds nothing it
+	// also places the default window's end.
+	Horizon int `json:"horizon"`
 	// Facts is how many assertions the window holds; Events is how many distinct
 	// judged events they cover. The two differ by exactly the corroboration and
 	// the conflict in the plane.
-	Facts  int `json:"facts"`
+	Facts int `json:"facts"`
+	// Events is how many DISTINCT judged events those assertions name, keyed on
+	// (kind, subject, at). It counts only events something was ASSERTED about: what
+	// share of the whole event stream carries a label is a question about the
+	// feature plane's denominator and is not answerable here. Matured + Unmatured is
+	// Events.
 	Events int `json:"events"`
 	// Matured is how many of those events have aged past the horizon and may
 	// therefore be admitted to a supervised set at all. It counts every matured
@@ -760,8 +895,18 @@ type riskLabelCoverage struct {
 	// disagree. It is the number that says whether the precedence rule is
 	// load-bearing or decorative, and it is the one to watch after wiring a new
 	// source.
-	Contested    int `json:"contested"`
-	Productive   int `json:"productive"`
+	Contested int `json:"contested"`
+	// Productive is how many matured events resolve, at their own as-of, to a
+	// WINNING assertion of `productive` — the event led somewhere: escalated,
+	// reported, charged back. It is the positive class a supervised fit would train
+	// on, and a near-zero count is the number that says the fit is not worth
+	// running.
+	Productive int `json:"productive"`
+	// Unproductive is every OTHER judged event: the winner claimed `unproductive`,
+	// judged not suspicious. Productive + Unproductive is Judged exactly, because a
+	// winner of the explicit unjudged is counted in neither — it is a matured event
+	// somebody looked at and could not conclude about, and rolling it into the
+	// negatives would hand a model a claim nobody made.
 	Unproductive int `json:"unproductive"`
 	// Sources breaks the judged events down by the source that WON, so a plane
 	// that looks labelled because one noisy source dominates is visible as such.
@@ -784,13 +929,24 @@ type riskLabelCoverage struct {
 }
 
 type riskSourceCoverage struct {
+	// Source is the asserter these two counts are for — chargeoff, dispute, case,
+	// refund, review or sample. There is one entry per source that either filed in
+	// the window or won in it, in precedence order, strongest first. A source no
+	// longer in the vocabulary still has rows and is reported after the known ones
+	// rather than dropped out of a total that is supposed to add up.
 	Source string `json:"source"`
 	// Facts is how many assertions this source filed; Won is how many judged
 	// events it was the assertion in force for. A source with many facts and few
 	// wins is one that is being outranked, which is worth knowing before
 	// concluding it is wired correctly.
 	Facts int `json:"facts"`
-	Won   int `json:"won"`
+	// Won is how many JUDGED events this source's assertion was the one IN FORCE
+	// for, at that event's own as-of — it beat every other visible claim under the
+	// precedence rule. Summed over the sources it is Judged. Read against Facts it
+	// is the ratio that matters: many filed and few won is a source being outranked,
+	// not a source that is broken, and one source winning nearly everything is a
+	// plane that looks labelled because one noisy filer dominates it.
+	Won int `json:"won"`
 }
 
 // coverage reports how much of a window has matured and how much of that is
@@ -936,7 +1092,14 @@ type riskVocabularyIn struct{}
 type riskLabelVocabulary struct {
 	// Kinds, Dispositions and Sources are the closed vocabularies. A value
 	// outside them is refused at the door.
-	Kinds        []string `json:"kinds"`
+	Kinds []string `json:"kinds"`
+	// Dispositions is the closed set a write's `disposition` must be drawn from,
+	// published in full so a caller can validate a batch before filing it instead of
+	// discovering a refusal per member: "productive", "unproductive", and "" — the
+	// EMPTY STRING is a member and means an explicit unjudged, so a client that
+	// filters empties out of this list drops a third of the vocabulary and can never
+	// file "we looked and could not say". They are the AML engine's own spelling,
+	// verbatim, which is what lets a replay there report against these values.
 	Dispositions []string `json:"dispositions"`
 	// Precedence is the sources in the order that resolves a conflict, strongest
 	// first. It is DERIVED from the same declaration the resolver reads, so the
@@ -1003,6 +1166,13 @@ type riskDisposeIn struct {
 }
 
 type riskDisposeOut struct {
+	// Before echoes the retention boundary that was applied, RFC 3339 in UTC, as
+	// this plane parsed it from the request. What was disposed of is every record
+	// WRITTEN strictly before it and not under litigation hold — written, measured
+	// against the server clock at the write, and not against the event or
+	// observation times the asserting caller supplies, because a tenant that could
+	// back-date could delete a compliance record on demand. A boundary younger than
+	// the platform floor of five years is refused before anything is removed.
 	Before string `json:"before"`
 	// Disposed is how many whole records were removed. Records are disposed of
 	// whole, never redacted: a partially-erased compliance record is one nobody
@@ -1031,7 +1201,12 @@ type riskDisposeOut struct {
 	// Total and Oldest describe what the tenant still holds afterwards, so a
 	// disposal that removed nothing is distinguishable from a tenant that had
 	// nothing.
-	Total  int    `json:"total"`
+	Total int `json:"total"`
+	// Oldest is the WRITE time of the oldest assertion this tenant still holds after
+	// the sweep, RFC 3339, and it is omitted exactly when nothing remains at all.
+	// Still older than Before means records survived on purpose and says which
+	// mechanism kept them: a litigation hold (Held), or the per-call bound with more
+	// to sweep on the next call (Remaining).
 	Oldest string `json:"oldest,omitempty"`
 }
 

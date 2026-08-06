@@ -524,8 +524,16 @@ func TestTypedWritesAddressThroughArgumentsAlone(t *testing.T) {
 	holder := addHolder(t, app, "acme", "ada@example.com")
 	round := addOpenRound(t, app, "acme", "R-mcp")
 
-	patch := toolNamed(t, app, "captable", "patch_stakeholders")
-	closer := toolNamed(t, app, "captable", "post_rounds", "close")
+	// Named the way zip v1.26.0 settled it: ONE rule, an id derives from the
+	// absolute path the occurrence answers at (zip.ID), so these are
+	// patch_v1_captable_stakeholders_by_id and post_v1_captable_rounds_by_id_close.
+	// The pins below were the pre-v1.26 spelling ("patch_stakeholders",
+	// "post_rounds"), which bab535c2 taught the bots/agents projections and missed
+	// here. The segments still name the same two ops unambiguously — no other
+	// derived tool carries all of them — and what this test proves is unchanged:
+	// the op is reachable through its In alone.
+	patch := toolNamed(t, app, "captable", "patch", "stakeholders")
+	closer := toolNamed(t, app, "captable", "post", "rounds", "close")
 
 	// The stakeholder the arguments name must reach the handler.
 	text, isErr := toolsCall(t, app, "acme", patch, `{"id":"`+holder+`","city":"Paris"}`)

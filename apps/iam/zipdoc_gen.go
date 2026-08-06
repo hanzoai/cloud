@@ -7,6 +7,9 @@ import (
 )
 
 func init() {
+	zip.Describe("POST /iam/approval", zip.Doc{
+		Description: "Answers with the CALLER'S OWN recorded approvalStatus.\n\nThe subject is the caller's and can never be an argument. A caller able to name\na subject could read another person's waitlist state, which is a small leak on\nits own and a membership oracle in bulk.\n\nIt returns the raw status and judges nothing. Whether \"pending\" gates a person\nis admission's rule, and it lives with the gate — one place decides, and the\nidentity store is not it.\n\nA subject with no user row is a REFUSAL, not an empty status. A machine token's\napp-id subject and a deleted user both land there, and admission reads an empty\nstatus as approved: answering \"\" for a principal the store does not know would\nwave through exactly the callers least entitled to it. The error path is\nadmission's documented fail-open, which is a decision it makes knowingly about\nan IAM it could not reach — not one this handler makes for it silently.",
+	})
 	zip.Describe("POST /iam/mailable", zip.Doc{
 		Description: "Answers with the people in the CALLER'S OWN org who may be sent mail —\nid, owner, name and email, and nothing else.\n\nIt is the internal-plane replacement for reading the identity store through DB().\nThat read worked only while every subsystem shared one binary and returned nil\nthe moment one did not, so marketing resolved every audience to \"IAM unavailable\"\nand could mail nobody. This op runs in the process that owns the store, so it\nanswers wherever the caller happens to live.\n\nThe org is taken from the authenticated call and can never be named in an\nargument: it is the tenancy key for the whole identity store, so a caller able to\npass it could enumerate another tenant's people. A call carrying no org is\nrefused, not answered with an empty roster.\n\nThe projection is deliberately narrow. Four fields are what it takes to name a\nperson and reach them; returning the identity record itself would put every\ncredential column on the wire for what is only an audience count.\n\nIt fails closed on a store that is not open: this process owns the store, so a\nnil handle is a boot-order fault, and an empty roster would read as \"this org has\nnobody\" — an announcement that silently reaches no one is worse than one that\nrefuses out loud.",
 		Fields: map[string]string{
@@ -15,6 +18,15 @@ func init() {
 			"Recipient.name":    "the person's name within that org, unique there",
 			"Recipient.owner":   "the org that owns the record — the tenancy key",
 			"Roster.recipients": "everyone in the org who may be mailed; empty is a real answer, not an error",
+		},
+	})
+	zip.Describe("POST /iam/projects", zip.Doc{
+		Description: "Answers with the projects owned by the CALLER'S OWN org.\n\nThe org comes from the authenticated call and can never be an argument. Owner\nis the tenancy key of the whole project table, so a caller able to pass it\ncould list another tenant's work — which is exactly the hole the HTTP client\nthis replaces had to mint a per-org credential to close.\n\nThe projection is narrow on purpose: five fields are what it takes to key,\nname and date a project. Returning the record itself would put IAM's metadata\nand workspace columns on a wire whose layout is positional, so every field\nhere is one the contract can never reorder.\n\nIt fails closed on a store that is not open. This process owns the store, so a\nnil handle is a boot-order fault, and an empty list would read as \"this org has\nno projects\" — a lie that a caller would act on by offering to create one that\nalready exists.",
+		Fields: map[string]string{
+			"Project.createdTime": "RFC3339, as IAM stores it; empty when IAM has none, never a fabricated time",
+			"Project.displayName": "the human name; may be empty, and the caller falls back to Name",
+			"Project.name":        "the slug, unique within the org",
+			"Project.owner":       "the org that owns it — the tenancy key",
 		},
 	})
 }

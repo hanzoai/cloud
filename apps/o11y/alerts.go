@@ -186,7 +186,12 @@ func init() {
 // a new receiver must not need a deploy.
 func mountAlerts(a cloud.Router) {
 	g := a.Group("/v1/o11y/alerts")
+	// Raw: the replay serves text/plain lines for an operator's tail, not JSON.
 	g.Get("/last", replay)
+	// Raw: this speaks Alertmanager's webhook protocol, whose unparseable body
+	// must reach the handler rather than be refused — a typed op would decode
+	// first and answer 400, while receive records the raw payload and answers
+	// for the CARRYING (503 when no egress delivers, even unparsed).
 	g.Post("/:receiver", receive)
 }
 

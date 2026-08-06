@@ -210,7 +210,7 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 // the computed version and image; the pipeline outlives the request (like
 // buildFromPush). Because the tag is minted only after a proven image, a failure at
 // build or smoke leaves NO tag and universe is never told of a phantom version.
-func startRelease(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq) error {
+func startRelease(s *cloud.Service[state], ctx context.Context, req runnerBuildReq) (*runnerBuildResp, error) {
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	// A repo is a CLONE URL, and an unparseable one is refused here rather than
 	// deep in the detached pipeline. Otherwise a bare name ("cloud" for
@@ -220,16 +220,16 @@ func startRelease(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq) error
 	repo := strings.TrimSpace(req.Repo)
 	if repo != "" {
 		if u, err := url.Parse(repo); err != nil || u.Scheme == "" || u.Host == "" {
-			return zip.ErrBadRequest("repo must be a clone URL such as https://github.com/hanzoai/cloud; omit it to release " + releaseRepoURL)
+			return nil, zip.ErrBadRequest("repo must be a clone URL such as https://github.com/hanzoai/cloud; omit it to release " + releaseRepoURL)
 		}
 	}
-	bldID, image, err := launchRelease(s, c.Context(), ref, repo, strings.TrimSpace(req.Dockerfile))
+	bldID, image, err := launchRelease(s, ctx, ref, repo, strings.TrimSpace(req.Dockerfile))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return c.JSON(http.StatusAccepted, runnerBuildResp{
+	return &runnerBuildResp{
 		BuildJobID: bldID, Status: "releasing", RunnerPool: "32g", Image: image,
-	})
+	}, nil
 }
 
 // ReleaseState is what a release id can be asked about. A 202 hands back an id,
@@ -386,7 +386,7 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, bldID string) releasePlan {
 	return releasePlan{
 		build: func(ctx context.Context) error {
-			job, err := s.State.k8s.launchDirectBuild(ctx, repoURL, sha, image, dockerfile, bldID)
+			job, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, repoURL, sha, image, dockerfile, bldID)
 			if err != nil {
 				return fmt.Errorf("launch build: %w", err)
 			}
@@ -825,29 +825,63 @@ func githubJSON(s *cloud.Service[state], ctx context.Context, method, path, toke
 	return resp.StatusCode, nil
 }
 
-// listSelfReleases answers the platform SELF-PUBLISH releases this process has
-// recorded. Distinct from /v1/releases, which lists a tenant's deployments, newest first.
-// SuperAdmin-only, like cutting one: a release names the commits and versions of
-// the platform itself.
-func listSelfReleases(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := mayRelease(c); err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": Releases()})
+// selfReleaseList is the platform's own release runs as a list answers them.
+// Distinct from /v1/releases, which lists a TENANT's deployments.
+type selfReleaseList struct {
+	// Data is the recorded release runs, newest first.
+	Data []ReleaseState `json:"data"`
 }
 
-// getSelfRelease answers one self-publish release by the id its 202 returned. A 404 means the id
-// is unknown OR has aged out of the in-memory record — the honest answer either
-// way, since this process cannot distinguish them.
-func getSelfRelease(s *cloud.Service[state], c *zip.Ctx) error {
+// selfReleaseRef addresses one self-publish release by the id its 202 returned.
+// It is not `releaseRef`: that name already belongs to the git ref whose merges
+// publish the next version (push.go), and two things that mean different things do
+// not share a name.
+type selfReleaseRef struct {
+	// ID is the build id the release trigger answered with, from the path.
+	ID string `json:"id"`
+}
+
+// listSelfReleases lists the self-publish releases this process has run.
+//
+// It lists the platform's own release runs with their current state, so a release
+// that answered 202 with an id can be followed to its end. SuperAdmin only — this
+// is the platform's own publishing record, not a tenant surface.
+//
+// The record lives in THIS process's memory, so it covers the releases this
+// instance started and does not survive a restart.
+func (o ops) listSelfReleases(ctx context.Context, _ *noInput) (*selfReleaseList, error) {
+	c, err := o.request(ctx)
+	if err != nil {
+		return nil, cloud.Super.Refusal()
+	}
 	if err := mayRelease(c); err != nil {
-		return err
+		return nil, err
 	}
-	st, ok := ReleaseByID(c.Param("id"))
+	return &selfReleaseList{Data: Releases()}, nil
+}
+
+// getSelfRelease returns one self-publish release by the id its 202 returned.
+//
+// It returns the state of one release run — which is the whole reason the trigger
+// answers with an id, because without this a release that died in the detached
+// pipeline would look exactly like one still in flight. SuperAdmin only.
+//
+// A 404 means the id is unknown OR has aged out of this process's in-memory record.
+// That is the honest answer either way: the process genuinely cannot tell the two
+// apart.
+func (o ops) getSelfRelease(ctx context.Context, in *selfReleaseRef) (*ReleaseState, error) {
+	c, err := o.request(ctx)
+	if err != nil {
+		return nil, cloud.Super.Refusal()
+	}
+	if err := mayRelease(c); err != nil {
+		return nil, err
+	}
+	st, ok := ReleaseByID(in.ID)
 	if !ok {
-		return zip.ErrNotFound("no such release in this process's record")
+		return nil, zip.ErrNotFound("no such release in this process's record")
 	}
-	return c.JSON(http.StatusOK, st)
+	return &st, nil
 }
 
 // mayRelease is the ONE authority question this surface asks: may this caller act

@@ -35,6 +35,7 @@ func TestPriceDeclared(t *testing.T) {
 
 	var checked int
 	for _, root := range roots {
+		before := checked
 		src, err := os.ReadFile(root)
 		if err != nil {
 			t.Fatalf("read %s: %v", root, err)
@@ -71,6 +72,21 @@ func TestPriceDeclared(t *testing.T) {
 			}
 			return true
 		})
+
+		// PER ROOT, NOT IN TOTAL. The global count below only catches the pattern
+		// moving for EVERYONE; it says nothing about one root that quietly stops
+		// matching. Three already had: o11y, kmsreseal and smoke are hand-written
+		// mains that never build a cloud.Plugin, so the walk found nothing in them and
+		// reported success — the surface at /v1/o11y resolved to Undeclared at runtime
+		// and the gate whose whole claim is "a surface cannot ship unpriced" had three
+		// exits nobody could see. A hand-written root is a legitimate shape; being
+		// invisible to the price gate is not, so it is NAMED here with its reason.
+		if checked == before && !unpricedRoot[filepath.Base(filepath.Dir(root))] {
+			t.Errorf("%s: declares no cloud.Plugin, so nothing here was price-checked.\n"+
+				"Either build the surface with cloud.Listen([]cloud.Plugin{{…, Price: …}}) "+
+				"like every other root, or name it in unpricedRoot with the reason it "+
+				"serves no priced surface.", root)
+		}
 	}
 
 	// A literal that stops matching (a rename, a helper indirection) would make
@@ -80,6 +96,25 @@ func TestPriceDeclared(t *testing.T) {
 			"the pattern this test recognises has moved, so it is asserting nothing", len(roots))
 	}
 	t.Logf("checked %d cloud.Plugin declarations across %d composition roots", checked, len(roots))
+}
+
+// unpricedRoot names the composition roots that build no cloud.Plugin, and
+// therefore serve no surface the edge gate can price. Each entry is a claim about
+// what the binary DOES, checked by a human once, rather than a hole the walk cannot
+// see. A root that grows a customer-facing surface leaves this list.
+var unpricedRoot = map[string]bool{
+	// Telemetry ingest, mounted by hand (MountO11y) because it owns a trace-sink
+	// lifetime cloud.Listen's lean stub does not model. It charges nothing —
+	// billing a customer to send us their own logs is not a product — and spend.go
+	// already names it as one of the two Metered-prefix exceptions.
+	"o11y": true,
+	// An operator job: re-wraps KMS material under a new key and exits. No routes.
+	"kmsreseal": true,
+	// The deployment smoke prober. It CALLS surfaces; it serves none.
+	"smoke": true,
+	// The generator that scaffolds the other roots. It writes Price declarations;
+	// it does not make one.
+	"gen-app-cmds": true,
 }
 
 // isCloudPlugin reports whether an expression names the cloud.Plugin type.

@@ -300,7 +300,7 @@ func TestOpsAddressThroughArgumentsAlone(t *testing.T) {
 		t.Fatalf("seed run: %v", err)
 	}
 
-	text, isErr := toolsCall(t, app, "acme", "get_v1_automations_runs_id", `{"id":"run_mcp"}`)
+	text, isErr := toolsCall(t, app, "acme", "get_v1_automations_runs_by_id", `{"id":"run_mcp"}`)
 	if isErr {
 		t.Fatalf("a typed op must be addressable by its arguments alone: %s", text)
 	}
@@ -308,7 +308,7 @@ func TestOpsAddressThroughArgumentsAlone(t *testing.T) {
 		t.Fatalf("tools/call must answer the run its arguments named, got %s", text)
 	}
 	// Without the address the SAME tool cannot find it — so "found" below discriminates.
-	if _, isErr := toolsCall(t, app, "acme", "get_v1_automations_runs_id", `{}`); !isErr {
+	if _, isErr := toolsCall(t, app, "acme", "get_v1_automations_runs_by_id", `{}`); !isErr {
 		t.Fatal("a tools/call with no id must not resolve a run — the discriminator is dead")
 	}
 
