@@ -23,7 +23,6 @@ package fleet_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -51,50 +50,27 @@ const slackKeeps = 128
 // the fleet's own operation corpus
 // ---------------------------------------------------------------------------
 
-// corpus is every operation id this fleet declares, by the subsystem that
-// declares it, read from the plugins' own OpenAPI documents.
-func corpus(t *testing.T) map[string][]string {
+// corpus is every operation this fleet declares, by the subsystem that declares
+// it. The reading lives in fleet/corpus_test.go, because the naming tests are
+// inside the package and read the same one — a corpus with two loaders is the
+// second source this package exists to delete.
+func corpus(t *testing.T) map[string][]fleet.Op {
 	t.Helper()
-	specs, err := filepath.Glob(filepath.Join("..", "plugin", "*", "openapi.json"))
-	if err != nil || len(specs) == 0 {
-		t.Fatalf("no plugin specs at ../plugin/*/openapi.json (%v): the corpus is this fleet's own ops, not invented ones", err)
-	}
-	out := map[string][]string{}
-	for _, path := range specs {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		var doc struct {
-			Paths map[string]map[string]struct {
-				OperationID string `json:"operationId"`
-			} `json:"paths"`
-		}
-		if err := json.Unmarshal(raw, &doc); err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		app := filepath.Base(filepath.Dir(path))
-		seen := map[string]bool{}
-		for _, methods := range doc.Paths {
-			for _, op := range methods {
-				if op.OperationID == "" || seen[op.OperationID] {
-					continue
-				}
-				seen[op.OperationID] = true
-				out[app] = append(out[app], op.OperationID)
-			}
-		}
-		sort.Strings(out[app])
+	out := map[string][]fleet.Op{}
+	for _, op := range fleet.Corpus(t) {
+		out[op.App] = append(out[op.App], op)
 	}
 	return out
 }
 
-// serving brings up one child per app, each declaring the operation ids given,
-// and returns a door over all of them.
+// serving brings up one child per app, each declaring the operations given, and
+// returns a door over all of them.
 //
-// The routes are this test's, the ids are the fleet's: zip derives a tool name
-// from the route only when nobody declared one, and every op here declares.
-func serving(t *testing.T, by map[string][]string) *zip.App {
+// The routes are this test's, the ids and the DOCUMENTATION are the fleet's: zip
+// derives a tool name from the route only when nobody declared one, and every op
+// here declares. Carrying the real doc comment is what makes the byte
+// measurement below a measurement — an enum's prose is a projection of it.
+func serving(t *testing.T, by map[string][]fleet.Op) *zip.App {
 	t.Helper()
 	dir := t.TempDir()
 	kids := map[string]*child{}
@@ -109,19 +85,33 @@ func serving(t *testing.T, by map[string][]string) *zip.App {
 	return host(t, apps, kids)
 }
 
-func serve(t *testing.T, dir, name string, ops []string) *child {
+func serve(t *testing.T, dir, name string, ops []fleet.Op) *child {
 	t.Helper()
 	sock := filepath.Join(dir, name+".sock")
 	a := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
-	for i, id := range ops {
+	for i, op := range ops {
 		zip.Post(a, "/v1/"+name+"/op"+strconv.Itoa(i), func(_ context.Context, in *thingIn) (*thingOut, error) {
 			return &thingOut{App: name, Which: in.Which}, nil
-		}, zip.WithOperationID(id), zip.WithSummary("what "+name+" does at "+id))
+		}, zip.WithOperationID(op.ID), zip.WithSummary(op.Doc))
 	}
 	go func() { _ = a.Listen(sock) }()
 	t.Cleanup(func() { _ = a.Shutdown() })
 	waitFor(t, sock)
 	return &child{name: name, addr: sock, app: a}
+}
+
+// declaring is a fixture built from ids alone, for the tests whose subject is the
+// shape of the surface rather than what the fleet documents.
+func declaring(t *testing.T, by map[string][]string) *zip.App {
+	t.Helper()
+	ops := map[string][]fleet.Op{}
+	for app, list := range by {
+		ops[app] = make([]fleet.Op, 0, len(list))
+		for _, id := range list {
+			ops[app] = append(ops[app], fleet.Op{App: app, ID: id, Doc: "what " + app + " does at " + id})
+		}
+	}
+	return serving(t, ops)
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +121,7 @@ func serve(t *testing.T, dir, name string, ops []string) *child {
 // TestTheDoorPublishesOneToolPerSubsystem is the shape of the answer: a tool per
 // app that has something to offer, plus describe. Nothing else.
 func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
-	h := serving(t, map[string][]string{
+	h := declaring(t, map[string][]string{
 		"ai":    {"post_v1_chat_completions", "get_v1_models"},
 		"git":   {"post_v1_git_repos", "get_v1_git_repos"},
 		"iam":   {"CreateUser", "DeleteUser"}, // every op refused: no tool at all
@@ -150,9 +140,11 @@ func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 		t.Errorf("the first tool is %q; the tool a truncated surface cannot do without leads", got[0])
 	}
 	// Within an enum the order is gather's: rank first (chat before models),
-	// then name inside a bucket (both git ops share one).
+	// then name inside a bucket (both git ops share one) — and rank still reads
+	// the ROUTE, so ordering is unchanged by naming. What the enum CARRIES is the
+	// verb phrase: `create_chat_completion`, not `post_v1_chat_completions`.
 	if ops := offered(res); strings.Join(ops, ",") !=
-		"post_v1_chat_completions,get_v1_models,get_v1_git_repos,post_v1_git_repos" {
+		"create_chat_completion,list_models,list_git_repos,create_git_repo" {
 		t.Errorf("the enums carry %v; within a subsystem the product surface still leads", ops)
 	}
 	// Names only. The 977 KB was the schemas, so an enum that carried them would
@@ -199,13 +191,15 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	tools, ops := names(res), offered(res)
 
 	// Every published tool is ONE subsystem of the corpus, and every name in its
-	// enum is an operation THAT subsystem declared. Nothing leaks between apps,
-	// and nothing is invented.
+	// enum is an operation THAT subsystem declared — under the name the door
+	// publishes for it, or under its own id where naming it would have been
+	// ambiguous. Nothing leaks between apps, and nothing is invented.
 	owns := map[string]map[string]bool{}
-	for app, ids := range by {
+	for app, ops := range by {
 		owns[app] = map[string]bool{}
-		for _, id := range ids {
-			owns[app][id] = true
+		for _, op := range ops {
+			owns[app][op.ID] = true
+			owns[app][fleet.Phrase(op.ID)] = true
 		}
 	}
 	subsystems := 0
@@ -313,6 +307,86 @@ func textOf(t *testing.T, res map[string]any) string {
 	first, _ := content[0].(map[string]any)
 	text, _ := first["text"].(string)
 	return text
+}
+
+// routed brings up a child whose operation ids zip DERIVES from its routes,
+// which is where `post_v1_projects_by_slug_deploy` comes from in the first place
+// — every fixture above declares its ids, and a declared id is never renamed, so
+// nothing above exercises this at all.
+func routed(t *testing.T, name string, routes ...string) *child {
+	t.Helper()
+	sock := filepath.Join(t.TempDir(), name+".sock")
+	a := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
+	for _, r := range routes {
+		zip.Post(a, r, func(_ context.Context, in *thingIn) (*thingOut, error) {
+			return &thingOut{App: name, Which: in.Which}, nil
+		}, zip.WithSummary("what "+name+" does at "+r))
+	}
+	go func() { _ = a.Listen(sock) }()
+	t.Cleanup(func() { _ = a.Shutdown() })
+	waitFor(t, sock)
+	return &child{name: name, addr: sock, app: a}
+}
+
+// TestACallByThePUBLISHEDNameReachesTheSameHandler is the claim the renaming
+// lives or dies on, and it is asked of a real child over a real socket rather
+// than of the naming function.
+//
+// The door publishes `deploy_project`. A model reads that in the enum and sends
+// it back, and what has to happen is that the child's own
+// `post_v1_projects_by_slug_deploy` handler runs, with the model's arguments,
+// and answers what it would have answered anyway. So the two spellings are
+// compared to EACH OTHER — a change that broke either path by breaking both
+// would still fail here, because the third assertion is that the handler was
+// actually reached and got its argument.
+func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
+	kid := routed(t, "projects", "/v1/projects/:slug/deploy", "/v1/projects")
+	h := host(t, []string{"projects"}, map[string]*child{"projects": kid})
+
+	// The child really derives those ids — otherwise this proves nothing.
+	served := map[string]bool{}
+	for _, tl := range kid.app.MCPTools() {
+		served[tl["name"].(string)] = true
+	}
+	if !served["post_v1_projects_by_slug_deploy"] {
+		t.Fatalf("fixture is wrong: the child derived %v, not the route id this renames", served)
+	}
+
+	// 1. The enum reads as a verb on an object, and the route is nowhere in it.
+	if got := strings.Join(offered(rpc(t, h, toolsListBody)), ","); got != "create_project,deploy_project" {
+		t.Fatalf("the enum carries %q, want the verb phrases", got)
+	}
+
+	// 2. A call by the published name and a call by the operation's own id reach
+	//    one handler and come back byte for byte identical.
+	as := rpc(t, h, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"projects",`+
+		`"arguments":{"op":"deploy_project","input":{"which":"ship-it"}}}}`)
+	id := rpc(t, h, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"projects",`+
+		`"arguments":{"op":"post_v1_projects_by_slug_deploy","input":{"which":"ship-it"}}}}`)
+	byName, _ := json.Marshal(as)
+	byID, _ := json.Marshal(id)
+	if string(byName) != string(byID) {
+		t.Fatalf("deploy_project answered\n  %s\nand post_v1_projects_by_slug_deploy answered\n  %s", byName, byID)
+	}
+
+	// 3. …and that one handler is the child's, with the model's own argument in
+	//    it. Two identical -32602s would satisfy (2) and nothing else.
+	if isErr, _ := as["isError"].(bool); isErr {
+		t.Fatalf("deploy_project reported an error: %v", as)
+	}
+	if text := textOf(t, as); !strings.Contains(text, `"app":"projects"`) || !strings.Contains(text, `"which":"ship-it"`) {
+		t.Fatalf("deploy_project did not reach projects' own handler with its arguments: %q", text)
+	}
+
+	// 4. describe answers to the published name too, with the OWNER's own
+	//    descriptor — which carries the child's name, which is why that spelling
+	//    has to keep working.
+	desc := rpc(t, h, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"`+fleet.Describe+
+		`","arguments":{"op":"deploy_project"}}}`)
+	if text := textOf(t, desc); !strings.Contains(text, `"name":"post_v1_projects_by_slug_deploy"`) ||
+		!strings.Contains(text, `"which"`) {
+		t.Fatalf("describe deploy_project returned %q", text)
+	}
 }
 
 // TestASubsystemToolWithNoOpSaysWhatItNeeds: a model that named the subsystem
@@ -441,7 +515,7 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 		t.Errorf("the name survives somewhere in tools/list: %s", raw)
 	}
 	// …and the surviving siblings are still offered, so this is a gate and not a broken door.
-	if got := strings.Join(offered(res), ","); got != "post_v1_chat_completions,GetUser" {
+	if got := strings.Join(offered(res), ","); got != "create_chat_completion,GetUser" {
 		t.Errorf("the gate ate a surviving op: enum is %q", got)
 	}
 
@@ -487,5 +561,29 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	first, _ := content[0].(map[string]any)
 	if text, _ := first["text"].(string); !strings.Contains(text, `"which":"hello"`) {
 		t.Fatalf("the grouped call lost its arguments: %q", text)
+	}
+}
+
+// TestAColdDoorDispatchesAPublishedNameOnTheFirstCall is the path a real client
+// takes and the fixtures above do not: a process that has answered no
+// tools/list has an empty routing table AND an empty published-name table, and
+// it must fill BOTH before it decides the name is nobody's.
+//
+// A client caches tools/list across reconnects; the door remembers nothing
+// between requests. So the very first thing a restarted door sees can be a
+// tools/call naming an operation it has never gathered, spelled the way it
+// published it an hour ago.
+func TestAColdDoorDispatchesAPublishedNameOnTheFirstCall(t *testing.T) {
+	kid := routed(t, "projects", "/v1/projects/:slug/deploy")
+	h := host(t, []string{"projects"}, map[string]*child{"projects": kid})
+
+	// No tools/list first. This is the door's first request.
+	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"projects",`+
+		`"arguments":{"op":"deploy_project","input":{"which":"cold"}}}}`)
+	if e, refused := res["error"].(map[string]any); refused {
+		t.Fatalf("a cold door refused its own published name: %v", e)
+	}
+	if text := textOf(t, res); !strings.Contains(text, `"which":"cold"`) {
+		t.Fatalf("the cold call did not reach projects' handler: %q", text)
 	}
 }

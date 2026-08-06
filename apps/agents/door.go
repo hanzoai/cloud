@@ -232,10 +232,18 @@ func opsOf(schema json.RawMessage) []string {
 // describe fetches ONE operation's descriptor through the door's own
 // fleet.Describe, and reads the owning subsystem's bytes back out of it.
 //
-// The name check is not paranoia about the door: it is what makes "the model is
-// offered exactly what it will call" true at the seam, since a descriptor under
-// another name would put a schema in front of the model for a tool it cannot
-// reach.
+// What the seam guarantees is that the model is offered exactly what it will
+// CALL, and op is that name: it came out of a subsystem tool's `op` enum a
+// moment ago, and a tools/call naming it reaches the operation's own handler.
+// So the offer is named op, with the owner's own description and schema behind
+// it.
+//
+// The descriptor's own `name` is NOT compared to op, and that is a change. The
+// door publishes an operation as a verb on an object — `deploy_project` for
+// `post_v1_projects_by_slug_deploy` (fleet/verbs.go) — while the descriptor it
+// hands back is the owning subsystem's, carried verbatim, so it still says the
+// id. Requiring the two to match would reject 1,730 of the fleet's 2,229
+// operations for being correctly named.
 func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error) {
 	args, err := json.Marshal(map[string]string{"op": op})
 	if err != nil {
@@ -258,10 +266,10 @@ func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error)
 		Description string          `json:"description"`
 		InputSchema json.RawMessage `json:"inputSchema"`
 	}
-	if err := json.Unmarshal([]byte(text), &d); err != nil || d.Name != op {
+	if err := json.Unmarshal([]byte(text), &d); err != nil || d.Name == "" || len(d.InputSchema) == 0 {
 		return types.ToolDef{}, fmt.Errorf("agents: %s did not answer %s's own descriptor", fleet.Describe, op)
 	}
-	return types.ToolDef{Name: d.Name, Description: d.Description, Schema: d.InputSchema}, nil
+	return types.ToolDef{Name: op, Description: d.Description, Schema: d.InputSchema}, nil
 }
 
 // maxDoorMeta bounds what one span attribute may carry: `_meta` names every
