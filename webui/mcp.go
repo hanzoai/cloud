@@ -15,9 +15,11 @@
 package webui
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/hanzoai/cloud/manifest"
+	zapmcp "github.com/zap-proto/mcp"
 )
 
 // mcpDoor answers the two MCP addresses when — and only when — no route claimed
@@ -30,21 +32,32 @@ import (
 // apart — so an agent POSTing JSON-RPC at the framework's default path was
 // answered in the console's voice and, on GET, with 200 text/html.
 //
-// Neither branch SERVES MCP. The door is zip's, projected from the typed-op
-// registry at manifest.MCPPath; these are the two things the front door owes a
-// caller who did not find it — where it is, and that it exists but not for this
-// method. A signpost is not a second surface: nothing here has a tool list.
-func mcpDoor(w http.ResponseWriter, r *http.Request, upath string) bool {
+// It used to answer the framework default with a REDIRECT to manifest.MCPPath,
+// on the reasoning that a plugin serving its own door there matched a real route
+// and never reached here. That was false, and it is the defect this file now
+// exists to close: zip mounts the /mcp route only when the app has something to
+// expose, so a plugin with no typed ops of its own — kms, whose four secret ops
+// are on the internal plane by design — reached here AT ITS OWN DOOR and was sent
+// to an address only a host serves. The signpost is the host's, and it lives with
+// the host's door now (fleet.Mount).
+func (h *consoleHandler) mcpDoor(w http.ResponseWriter, r *http.Request, upath string) bool {
 	switch upath {
 	case manifest.FrameworkMCPPath:
-		// zip's default, unclaimed in this process => the door was moved. 308
-		// preserves method AND body, so a POSTed initialize or tools/list arrives at
-		// the real door instead of being answered with the SPA shell. The body is
-		// JSON for the same reason the redirect exists at all: a caller who reads
-		// bytes rather than following the hop must never get HTML here.
-		w.Header().Set("Location", manifest.MCPPath)
-		writeJSON(w, http.StatusPermanentRedirect,
-			`{"error":"the MCP door moved","door":"`+manifest.MCPPath+`"}`)
+		// THIS PROCESS'S OWN DOOR. Reaching a terminal handler here means zip
+		// registered no route for it, never that the door is elsewhere — and the
+		// door is not the route: it is [zip.App.MCP], a frame in and a frame out,
+		// which exists whether or not anything was mounted over it. So answer it.
+		// Serving zip's own door is not a second surface; re-implementing one, or
+		// redirecting to a door this process does not have, would be.
+		if r.Method != http.MethodPost {
+			// The optional server→client SSE stream, which zip's door does not
+			// have either. Same answer as below, for the same reason.
+			w.Header().Set("Allow", http.MethodPost)
+			writeJSON(w, http.StatusMethodNotAllowed,
+				`{"error":"the MCP door speaks JSON-RPC over POST","door":"`+manifest.FrameworkMCPPath+`"}`)
+			return true
+		}
+		h.serveDoor(w, r)
 		return true
 
 	case manifest.MCPPath:
@@ -64,6 +77,48 @@ func mcpDoor(w http.ResponseWriter, r *http.Request, upath string) bool {
 		return true
 	}
 	return false
+}
+
+// serveDoor is HTTP over the door, not a door of its own: read the JSON-RPC body
+// into a frame, hand it to [zip.App.MCP], write the answer back. zip's own /mcp
+// route is the identical adapter over the identical value — one door, and the
+// transport is a choice, which is the whole point of the frame-in/frame-out
+// signature. What is NOT duplicated is any tool: this file knows no tool names,
+// no schemas and no dispatch.
+func (h *consoleHandler) serveDoor(w http.ResponseWriter, r *http.Request) {
+	var f zapmcp.Frame
+	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+		writeFrame(w, &zapmcp.Frame{Kind: zapmcp.Response,
+			Err: &zapmcp.Error{Code: zapmcp.CodeParse, Message: "parse error"}})
+		return
+	}
+	ans := h.door(r.Context(), &f)
+	if ans == nil {
+		// A notification: nothing to say, and 202 says exactly that.
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	writeFrame(w, ans)
+}
+
+// writeFrame writes one frame as the JSON-RPC message an HTTP client reads. The
+// rendering is [zapmcp.Frame]'s own, so the bytes an agent reads here and the
+// bytes it reads from zip's route describe the same value and cannot drift.
+//
+// A JSON-RPC error is still a 200: the transport delivered it. Only the envelope
+// says no.
+func writeFrame(w http.ResponseWriter, f *zapmcp.Frame) {
+	b, err := json.Marshal(f)
+	if err != nil {
+		http.Error(w, "the MCP door could not render its answer", http.StatusInternalServerError)
+		return
+	}
+	// zip's media type exactly, not this file's usual `; charset=utf-8`. An agent
+	// must not be able to tell which adapter carried the answer — that difference
+	// would be the second door reappearing as a header.
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(b)
 }
 
 // writeJSON writes one short literal body with its content type — the machine

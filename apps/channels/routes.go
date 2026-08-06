@@ -138,44 +138,179 @@ func requireOrgAdmin(ctx context.Context) error {
 
 // ── JSON projections (camelCase, closed shapes) ──────────────────────────────
 
+// channelView is one chat transport as this org sees it: the fixed transport
+// facts, the org's connection to it, and the org's access policy for it.
 type channelView struct {
-	ID             string       `json:"id"`
-	Connected      bool         `json:"connected"`
-	Account        string       `json:"account"`
-	AccountLabel   string       `json:"accountLabel"`
-	Capabilities   capabilities `json:"capabilities"`
-	DMPolicy       DMPolicy     `json:"dmPolicy"`
-	GroupPolicy    GroupPolicy  `json:"groupPolicy"`
-	PendingPairing int          `json:"pendingPairing"`
+	// ID is the fixed transport identifier — discord, slack, teams or telegram —
+	// and the value every route on this surface names a channel by, including the
+	// `:channel` segment of the send path. The listing is always in that order.
+	ID string `json:"id"`
+	// Connected is whether integrations holds a connection for (this org, this
+	// transport) — whether someone finished its connect flow. False leaves Account
+	// and AccountLabel empty, and a send is then refused downstream rather than
+	// here: by the transport's own binding check (403 for a Telegram chat this org
+	// has not bound, 409 for a Discord or Teams room with no inbound-learned
+	// route), or on Slack by the absent per-org bot token, which surfaces as 502.
+	Connected bool `json:"connected"`
+	// Account is the id-shaped fact about that connection: the lowercased external
+	// id integrations custodies for it — a Discord guild id, a Slack team
+	// (workspace) id, a Teams AAD tenant id, or the Telegram chat the org bound.
+	// Empty when not connected. Informational: the access policy keys on
+	// (org, channel), so exactly one account is representable per pair.
+	Account string `json:"account"`
+	// AccountLabel is the human label of that same account — the Discord guild
+	// name, the Slack team name, the Teams tenant name (falling back to the tenant
+	// id), the Telegram chat title. DISPLAY ONLY: never a key, and never swapped
+	// with Account, on any surface.
+	AccountLabel string `json:"accountLabel"`
+	// Capabilities is what this transport renders natively — read it before
+	// composing a message that needs threading, media or interactive actions.
+	Capabilities capabilities `json:"capabilities"`
+	// DMPolicy is how this org admits direct messages here: "pairing", "allowlist"
+	// or "open", defaulting to "pairing" when the org has never set one.
+	DMPolicy DMPolicy `json:"dmPolicy"`
+	// GroupPolicy is how this org admits group and thread rooms here: "open",
+	// "allowlist" or "disabled", defaulting to "open". Both policy fields come
+	// back EMPTY — rather than the listing failing — when the policy cannot be
+	// read; GET /v1/channels/allowlist carries the same two with the entries they
+	// consult.
+	GroupPolicy GroupPolicy `json:"groupPolicy"`
+	// PendingPairing counts the org's UNEXPIRED pairing requests on this channel:
+	// exactly the rows GET /v1/channels/pairing returns for it, one per person
+	// waiting on an admin. It never exceeds three — the pending cap per
+	// (org, channel) — and expired requests are not counted.
+	PendingPairing int `json:"pendingPairing"`
 }
 
+// inboxView is one stored inbound message: the portable envelope (envelope.go)
+// as this API publishes it, identical in shape whichever transport it came from.
 type inboxView struct {
-	ID         int64  `json:"id"`
-	Channel    string `json:"channel"`
-	Account    string `json:"account"`
-	RoomID     string `json:"roomId"`
-	RoomKind   string `json:"roomKind"`
-	Sender     string `json:"sender"`
+	// ID is the store's row id, assigned on insert — SERVER-SET, and the cursor:
+	// pass a page's last id back as `since`. It rises with arrival order but is
+	// not contiguous, because one sequence is shared by every org in the store and
+	// a caller reads only its own rows.
+	ID int64 `json:"id"`
+	// Channel is the transport this message arrived on — discord, slack, teams or
+	// telegram — and the `:channel` segment to reply through.
+	Channel string `json:"channel"`
+	// Account is the lowercased external id of the org's connected account on that
+	// transport: the Discord guild id, the Slack team id, the Teams AAD tenant id,
+	// or the bound Telegram chat id. Informational only — the gate keys on
+	// (org, channel), never on the account.
+	Account string `json:"account"`
+	// RoomID is the conversation on the ORIGINATING transport, and the value to
+	// send back as `room.id`: a Discord channel snowflake, a Slack conversation id
+	// (D… IM, C… public channel, G… private or mpim), a Teams conversation id
+	// (19:…@thread.… for a channel or group chat, a:… for a personal chat), or a
+	// Telegram chat id in decimal (negative for a group, positive for a DM). It is
+	// stable for the life of the room, so every message from one conversation
+	// carries the same value.
+	RoomID string `json:"roomId"`
+	// RoomKind is how ingest classified the room: "dm", "group" or "thread". It
+	// decides which policy gated the message — dmPolicy for "dm", groupPolicy for
+	// BOTH "group" and "thread". Only Slack ever reports "thread"; Telegram's
+	// reply-to id becomes ReplyTo instead, and Discord's ingress is guild-scoped
+	// so its rooms are always "group".
+	RoomKind string `json:"roomKind"`
+	// Sender is the TRANSPORT-NATIVE user id of whoever wrote the message — a
+	// Discord member.user.id, a Slack U… user id, a Teams aadObjectId (falling
+	// back to from.id), a Telegram from.id in decimal. Stable per person per
+	// transport, and the identity the gate keys on: an allow entry, an access-group
+	// member and a pairing approval all name exactly this value.
+	Sender string `json:"sender"`
+	// SenderUser is the HANZO account subject that chat identity is linked to,
+	// resolved at ingest through the org's user link. Best-effort and omitted when
+	// absent: a person who never linked their chat account — or a link store that
+	// could not be read — leaves it empty and is never blocked for it.
 	SenderUser string `json:"senderUser,omitempty"`
-	Text       string `json:"text"`
-	ReplyTo    string `json:"replyTo,omitempty"`
-	CreatedAt  int64  `json:"createdAt"`
+	// Text is the body as the transport delivered it, with the bot mention already
+	// stripped by the ingress adapter (on Discord it is the /hanzo prompt argument,
+	// since that ingress is slash commands only), truncated to 8 KiB on store.
+	// Inbound attachments are not stored — this is the whole of what was said.
+	Text string `json:"text"`
+	// ReplyTo is the transport's reply target for this message: Slack's thread_ts,
+	// or the Telegram message id it arrived as. Send it back as the body's
+	// `replyTo` to answer in the SAME thread. Empty means the transport reported
+	// none — a top-level Slack message, and every Discord and Teams message, since
+	// neither carries one — and a reply then lands at the top level of the room.
+	ReplyTo string `json:"replyTo,omitempty"`
+	// CreatedAt is Unix SECONDS, stamped by the ingest goroutine when the message
+	// was accepted — not the transport's own send time. Rows are dropped 30 days
+	// after it.
+	CreatedAt int64 `json:"createdAt"`
 }
 
+// pairingView is one pending pairing request: someone who messaged a
+// pairing-gated channel and is waiting on an org admin.
 type pairingView struct {
-	Channel   string `json:"channel"`
-	Sender    string `json:"sender"`
-	Code      string `json:"code"`
-	CreatedAt int64  `json:"createdAt"`
-	LastSeen  int64  `json:"lastSeen"`
+	// Channel is the transport the request arrived on — discord, slack, teams or
+	// telegram — and half of what approval names. The cap of three unapproved
+	// requests applies per (org, channel); while it is full no further code is
+	// minted until one is approved or expires.
+	Channel string `json:"channel"`
+	// Sender is the transport-native user id waiting for access — the same
+	// identity inbox messages carry. Approving mints a DM allow entry for exactly
+	// this value and nothing wider: pairing never grants group access.
+	Sender string `json:"sender"`
+	// Code is the CAPABILITY that authorises the approval: eight characters from a
+	// 32-symbol uppercase alphabet (A-Z0-9 minus the confusables 0, O, 1 and I),
+	// minted with crypto/rand and also sent to the requester in chat. An org admin
+	// passes it with the channel to POST /v1/channels/pairing/approve, which
+	// CONSUMES it — the request row is deleted, so a code approves once — and which
+	// takes org admin as well as the code. It lives ONE HOUR from CreatedAt;
+	// expired requests are not listed here, and approving one is a 404. It is shown
+	// on this admin surface and NEVER logged.
+	Code string `json:"code"`
+	// CreatedAt is Unix SECONDS of FIRST contact: when the request was minted and
+	// the code sent. Expiry is measured from here and from nowhere else.
+	CreatedAt int64 `json:"createdAt"`
+	// LastSeen is Unix SECONDS of the MOST RECENT message from this sender while
+	// the request has been pending. It moves as they keep writing, which is how an
+	// admin tells a live request from an abandoned one — but it does not extend the
+	// hour and does not re-send the code, since one request sends exactly one chat
+	// reply.
+	LastSeen int64 `json:"lastSeen"`
 }
 
+// allowlistView is one channel's access policy for this org: what the gate does
+// to an inbound message, and every entry it consults doing it. Both the GET and
+// the PUT answer this shape.
 type allowlistView struct {
-	DMPolicy     DMPolicy                       `json:"dmPolicy"`
-	GroupPolicy  GroupPolicy                    `json:"groupPolicy"`
-	DM           []string                       `json:"dm"`
-	Group        []string                       `json:"group"`
-	Paired       []string                       `json:"paired"`
+	// DMPolicy decides every inbound DIRECT message, defaulting to "pairing" when
+	// the org has never set one. "pairing": a sender with no entry is sent a
+	// pairing code and the message is DROPPED — it never reaches the inbox — and
+	// they are admitted only once an admin approves. "allowlist": only DM admits,
+	// and Paired senders are suspended, since a pairing grant counts under
+	// "pairing" alone. "open" is not unconditional either — it still requires `*`
+	// or a matching entry in DM.
+	DMPolicy DMPolicy `json:"dmPolicy"`
+	// GroupPolicy decides every inbound GROUP or THREAD message — a thread is a
+	// group surface — defaulting to "open". "open" admits every sender in the room.
+	// "allowlist" admits only what Group lists, so an EMPTY Group blocks the
+	// channel's group rooms outright. "disabled" drops all of them.
+	GroupPolicy GroupPolicy `json:"groupPolicy"`
+	// DM is the CONFIG-managed DM allow entries — the list PUT
+	// /v1/channels/allowlist owns and replaces wholesale. An entry matches a sender
+	// either EXACTLY, as the transport-native id inbox messages carry, or as
+	// `accessGroup:<name>` resolved through AccessGroups. A bare `*` admits
+	// everyone, but only while DMPolicy is "open": it is gate syntax, not an
+	// identity, so under "allowlist" it matches nobody.
+	DM []string `json:"dm"`
+	// Group is the CONFIG-managed group allow entries, consulted only while
+	// GroupPolicy is "allowlist". Entries match the same two ways as DM, and here a
+	// bare `*` admits every sender in the room.
+	Group []string `json:"group"`
+	// Paired is the senders admitted by PAIRING — the entries POST
+	// /v1/channels/pairing/approve minted, DM scope only. READ-ONLY on this
+	// endpoint: the PUT writes config entries and can never revoke one of these
+	// (listing a paired sender under DM instead promotes that entry to config,
+	// which the admin then owns). They admit only while DMPolicy is "pairing".
+	Paired []string `json:"paired"`
+	// AccessGroups is the org's named sender sets, as group name -> channel ->
+	// member entries, held once for the whole org. A DM or Group entry written
+	// `accessGroup:<name>` admits any sender listed under that name for THIS
+	// channel, or under the channel `*`, which is how one set covers all four
+	// transports. Replaced wholesale by the PUT.
 	AccessGroups map[string]map[string][]string `json:"accessGroups"`
 }
 
