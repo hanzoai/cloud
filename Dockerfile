@@ -76,7 +76,15 @@
 # release reaches users only when this line moves and a cloud image is cut.
 # Learned the expensive way: console:v8.5.59 was built, pinned and rolled to
 # Ready, and served no one.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.62
+#
+# PIN THE SHA TAG, NEVER THE SEMVER. `console-embed:8.5.62` was re-published from a
+# DIFFERENT commit while this pin named it, so a cloud build that asked for 8.5.62
+# got a console two commits stale and every signal still read green — the image
+# built, rolled and served, just not the bytes anyone had reviewed. More than one
+# lineage pushes that repo (its own `hanzo.yml` says so and pins the sha for exactly
+# this reason), and a mutable name is not an identity. `sha-<sha7>-amd64` is one
+# commit's output forever.
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-54d6ce9-amd64
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
