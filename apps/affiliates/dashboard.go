@@ -80,9 +80,17 @@ const (
 // ── earnings (the per-affiliate share-ledger projection) ────────────────────────
 
 type periodEarningView struct {
-	Period          string `json:"period"`
-	MarginCents     int64  `json:"marginCents"`
-	CommissionCents int64  `json:"commissionCents"`
+	// Period is the accrual bucket: the UTC year-month, "YYYY-MM". Commission is
+	// latched at most once per referred org per period, so one row is one month.
+	Period string `json:"period"`
+	// MarginCents is the margin Hanzo earned in that period on the spend of every
+	// org the caller referred, in cents — the base commission is a rate OF. It is
+	// the aggregate base, never any one customer's bill.
+	MarginCents int64 `json:"marginCents"`
+	// CommissionCents is what the caller earned that period, in cents: the sum over
+	// each referred org and upline level of margin × that level's rate. Always ≤
+	// marginCents, by construction.
+	CommissionCents int64 `json:"commissionCents"`
 }
 
 // orgEarningView is the affiliate's per-referred-org contribution: the affiliate's OWN
@@ -90,8 +98,13 @@ type periodEarningView struct {
 // referred org's gross usage is never restated to the affiliate (only the affiliate's
 // own earned share, which it is entitled to).
 type orgEarningView struct {
-	ReferredOrg     string `json:"referredOrg"`
-	CommissionCents int64  `json:"commissionCents"`
+	// ReferredOrg is the org slug this contribution came from — one the caller
+	// referred, directly or up to three levels down.
+	ReferredOrg string `json:"referredOrg"`
+	// CommissionCents is what the caller earned from that org across ALL periods, in
+	// cents. Deliberately the caller's own share and nothing else: that org's spend
+	// and the margin on it are not restated here.
+	CommissionCents int64 `json:"commissionCents"`
 }
 
 // affiliateEarnings is the caller's commission ledger, or the honest
@@ -105,7 +118,10 @@ type affiliateEarnings struct {
 	// ByReferredOrg is each referral's aggregate contribution — the affiliate's
 	// OWN share, never the referred org's spend.
 	ByReferredOrg *[]orgEarningView `json:"byReferredOrg,omitempty"`
-	IsAffiliate   bool              `json:"isAffiliate"`
+	// IsAffiliate says whether the caller org has an affiliate record. On false it
+	// is the ONLY field present — there is no ledger to report, and the zeros you
+	// might expect are absent rather than reported as earnings of nothing.
+	IsAffiliate bool `json:"isAffiliate"`
 	// MarginBps is the platform gross-margin fraction commission is a rate OF.
 	MarginBps *int64 `json:"marginBps,omitempty"`
 	// PaidCents is lifetime commission already paid out, in cents.
@@ -171,24 +187,48 @@ func (o ops) earnings(ctx context.Context, _ *noInput) (*affiliateEarnings, erro
 // (orgs attributed with this code), conversions (of those, how many produced a
 // commission). Signups/conversions are DERIVED from the ledger, never stored.
 type codeView struct {
-	Code        string `json:"code"`
-	Label       string `json:"label"`
-	URL         string `json:"url"`
-	Clicks      int64  `json:"clicks"`
-	Signups     int    `json:"signups"`
-	Conversions int    `json:"conversions"`
-	CreatedAt   int64  `json:"createdAt"`
+	// Code is the link's slug — 3–32 chars of a–z, 0–9 and hyphen — unique across
+	// the WHOLE directory, so any affiliate's code resolves an attribution.
+	Code string `json:"code"`
+	// Label is the caller's own note for the link ("twitter", "newsletter").
+	// Cosmetic: trimmed, stripped of control characters, capped at 48 bytes, and
+	// never part of the code. "primary" on the link mirrored at approval.
+	Label string `json:"label"`
+	// URL is the full shareable link, the brand host plus ?aff=<code>. The host is
+	// the deployment's own brand, so a Lux or Zoo install never mints a hanzo.ai
+	// link.
+	URL string `json:"url"`
+	// Clicks is how many pings this code has taken. The one STORED counter here and
+	// pure vanity: no accrual or payout reads it, pings are coalesced in memory and
+	// flushed in batches, and a dropped tally is accepted rather than contending
+	// with the money write path. Do not reconcile it against anything.
+	Clicks int64 `json:"clicks"`
+	// Signups is how many orgs were attributed with this code — DERIVED by counting
+	// attribution edges, never stored, so it cannot drift from the ledger.
+	Signups int `json:"signups"`
+	// Conversions is how many of those signups have actually produced positive
+	// commission for the caller. Also derived, from the accrual rows, so it is
+	// ≤ signups and lags a referral until the first sweep after it spends.
+	Conversions int `json:"conversions"`
+	// CreatedAt is when the link was minted, Unix seconds UTC.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // affiliateLinks is the caller's share links with their funnel, or the honest
 // `isAffiliate:false` beside the link cap.
 type affiliateLinks struct {
+	// IsAffiliate says whether the caller org has an affiliate record. On false only
+	// maxLinks comes back — there are no links, and there is no link to mint until
+	// the org applies and is approved.
 	IsAffiliate bool `json:"isAffiliate"`
 	// Links is the caller's share links, each with its URL and funnel.
 	Links *[]codeView `json:"links,omitempty"`
 	// MaxLinks is how many share links one affiliate may hold.
-	MaxLinks int    `json:"maxLinks"`
-	Status   string `json:"status,omitempty"`
+	MaxLinks int `json:"maxLinks"`
+	// Status is the caller's affiliate status: "applied", "approved" or
+	// "suspended"; absent for a non-affiliate. Minting a link requires "approved",
+	// because a link that cannot accrue quietly loses the referral.
+	Status string `json:"status,omitempty"`
 }
 
 // links answers the caller's share links, each with its URL and its funnel:
@@ -262,6 +302,8 @@ type createLinkRequest struct {
 
 // linkMint is the minted share link, answered 201.
 type linkMint struct {
+	// Link is the link just minted, with its full shareable URL. Its funnel counters
+	// all start at zero — nothing has clicked or signed up through it yet.
 	Link codeView `json:"link"`
 }
 
@@ -359,6 +401,10 @@ type clickRequest struct {
 
 // clickCount reports that the buffer took the ping — not that the code is real.
 type clickCount struct {
+	// Counted says the in-memory buffer took the ping. It does NOT say the code
+	// exists — this is deliberately not a code-existence oracle, and an unknown code
+	// simply no-ops at flush time. false means the buffer was full and the ping was
+	// dropped, which is harmless: clicks are vanity and move no money.
 	Counted bool `json:"counted"`
 }
 
@@ -410,6 +456,9 @@ type handleRequest struct {
 
 // handleSet echoes the handle as stored — empty when the caller opted out.
 type handleSet struct {
+	// Handle is the display name as STORED, echoed back after trimming. Empty means
+	// the caller opted out: it keeps its rank and still sees its own row, it is just
+	// no longer listed to anyone else.
 	Handle string `json:"handle"`
 }
 
@@ -456,11 +505,24 @@ func (o ops) setHandle(ctx context.Context, in *handleRequest) (*handleSet, erro
 // leaderboardRow is one public leaderboard entry: rank + opt-in handle + aggregate
 // share + referred count. NEVER an org identity. IsYou flags the caller's own row.
 type leaderboardRow struct {
-	Rank          int    `json:"rank"`
-	Handle        string `json:"handle"`
-	AccruedCents  int64  `json:"accruedCents"`
-	ReferredCount int    `json:"referredCount"`
-	IsYou         bool   `json:"isYou,omitempty"`
+	// Rank is the position in the GLOBAL approved set ordered by lifetime accrued
+	// commission, 1-based. Affiliates that set no handle still occupy their rank and
+	// are simply not listed, so the visible ranks have gaps and the board is not a
+	// complete roster. On the caller's own row the rank is computed over the whole
+	// set, so it is exact well outside the top page.
+	Rank int `json:"rank"`
+	// Handle is the affiliate's self-chosen display name — the only identity the
+	// board ever carries. The org behind it is never disclosed.
+	Handle string `json:"handle"`
+	// AccruedCents is that affiliate's lifetime commission accrued, in cents, and
+	// what the board is ordered by. An aggregate: no per-customer figure is exposed.
+	AccruedCents int64 `json:"accruedCents"`
+	// ReferredCount is how many orgs that affiliate directly referred — a count
+	// only, never which orgs.
+	ReferredCount int `json:"referredCount"`
+	// IsYou marks the caller's own row, so a client can highlight it without
+	// matching on a handle. Absent on every other row.
+	IsYou bool `json:"isYou,omitempty"`
 }
 
 // affiliateBoard is the public board plus the caller's own exact rank.
