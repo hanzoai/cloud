@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/sandbox/wire"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -53,10 +54,10 @@ const defaultUpstream = "http://code-exec.hanzo.svc.cluster.local:8000"
 // Each is forwarded verbatim to the executor (no path rewrite: the executor
 // serves the same /exec, /upload, … paths the LibreChat client expects).
 var prefixes = []string{
-	"/v1/exec",     // covers /v1/exec and /v1/exec/programmatic
-	"/v1/upload",   // multipart file upload into a session
-	"/v1/download", // /v1/download/{id}
-	"/v1/files",    // /v1/files/{session_id}
+	wire.LibreChatExec, // covers /v1/exec and /v1/exec/programmatic
+	"/v1/upload",       // multipart file upload into a session
+	"/v1/download",     // /v1/download/{id}
+	"/v1/files",        // /v1/files/{session_id}
 }
 
 func upstream() string {
@@ -96,7 +97,7 @@ const relay = "\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxe
 // below reads. A prefix added to `prefixes` with no entry here panics at init
 // rather than publishing a bare operationId.
 var surfaces = map[string]prose{
-	"/v1/exec": {
+	wire.LibreChatExec: {
 		summary: "Run a code snippet in a sandboxed interpreter",
 		description: "The code-interpreter entry point: a snippet with its language, plus any " +
 			"files already uploaded to the session, runs in an isolated executor and comes back " +
