@@ -153,7 +153,7 @@ func liftUser(ev analytics.SinkEvent) UserData {
 		FBP:        strProp(p, "fbp", "_fbp"),
 	}
 	clicks := map[string]string{}
-	for _, k := range []string{"fbclid", "gclid", "ttclid", "twclid", "rdt_cid", "li_fat_id", "msclkid"} {
+	for _, k := range []string{"fbclid", "gclid", "ttclid", "twclid", "rdt_cid", "li_fat_id", "msclkid", "epik"} {
 		if v := strProp(p, k); v != "" {
 			clicks[k] = v
 		}
