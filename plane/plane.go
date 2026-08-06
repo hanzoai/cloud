@@ -104,6 +104,16 @@ const (
 
 	IAMMailable = "iam_mailable"
 
+	// IAMApproval answers "is this person off the waitlist?" about the CALLER.
+	//
+	// It is on the plane because the alternative was worse than a URL. admission
+	// asked IAM over HTTP and, having no way to say who was asking, REPLAYED the
+	// caller's own Cookie and Authorization header to do it — cloud presenting a
+	// user's raw credential to another service so that service would answer about
+	// that user. The plane carries the validated principal, so the credential
+	// never has to be handled, let alone forwarded.
+	IAMApproval = "iam_approval"
+
 	// IAMProjects lists the projects an org owns, from the store that owns them.
 	//
 	// A project is IAM's noun. Platform reads it because a PaaS app is scoped to
@@ -567,6 +577,22 @@ type Recipient struct {
 // Roster is who an org may mail.
 type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
+}
+
+// ---- iam.approval ----------------------------------------------------------
+
+// Approval is the caller's waitlist state, as the identity store holds it.
+//
+// Status is the RAW approvalStatus string, not a verdict. What the value MEANS —
+// that only the exact word "pending" gates a person, and an absent value reads as
+// approved — is admission's policy, and it stays in admission next to the gate it
+// decides. A boolean here would move that rule into the identity store and leave
+// two places able to disagree about who is on a waitlist.
+//
+// An empty Status is a real answer: the person has no approvalStatus recorded.
+// "I could not tell" is an error from the call, never a value in this struct.
+type Approval struct {
+	Status string `json:"status"`
 }
 
 // ---- iam.projects ----------------------------------------------------------
