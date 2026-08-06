@@ -12,19 +12,28 @@
 // The generator derives FOUR facts from the file's own path and NOTHING from its
 // contents: the Application name (`<dir>-<file>`), the destination namespace
 // (`<dir>`), the Helm release name (`<file>`), and — load-bearing — the AppProject
-// the sync is admitted under (`tenant-<org>` for a `tenant-` directory,
-// `hanzo-platform` for everything else). project-tenants.yaml states the rule the
-// generator implements: for org `<org>` the namespace, the project, the values
-// directory and the CD RBAC role are ALL `tenant-<org>`, and that string is the
-// same key IAM puts in the `owner` claim.
+// the sync is admitted under.
 //
-// hanzo-platform admits destination namespace `*` and cluster-scoped
-// ClusterRole/ClusterRoleBinding. `tenant-<org>` admits ONE namespace, no
-// cluster scope at all, and six harmless kinds. A caller who could name its own
-// directory could therefore name its own fence — so `dir` here is DERIVED from
-// the verified principal and is not a field of any request. Writing a customer's
-// app into `values/hanzo/` is not a filing mistake, it is a tenant escaping into
-// the platform's fence.
+// AN ORG IS ITS NAME. The values directory, the destination namespace, the
+// AppProject and the org are ONE STRING and it is the org's own name, unadorned:
+// `charts/app/values/<org>/<app>.yaml` lands in namespace `<org>` under
+// AppProject `<org>`, and `<org>` is exactly the key IAM puts in the `owner`
+// claim. One value, four roles, nothing prefixed onto it.
+//
+// The platform's own fence (`hanzo-platform`) admits destination namespace `*`
+// and cluster-scoped ClusterRole/ClusterRoleBinding; an org's own fence admits
+// ONE namespace, no cluster scope, six harmless kinds. A caller who could name
+// its own directory could name its own fence — so the directory is DERIVED from
+// the verified principal and is not a field of any request.
+//
+// WHAT REPLACED THE PREFIX. A `tenant-` prefix used to partition customer
+// directories from every other namespace in the cluster. Dropping it puts both in
+// ONE name space, and namespace.Sanitize is the identity on a clean label — so an
+// org named `kube-system` would otherwise resolve to the real `kube-system`.
+// RESERVATION is what holds that line now (reserved, below): the platform's own
+// namespace family is refused to every caller but a SuperAdmin, on READ and on
+// WRITE, through one predicate. A prefix is a weaker control anyway — it was a
+// naming convention doing a policy's job.
 //
 // ── create renders, update moves one scalar ─────────────────────────────────
 //
@@ -110,13 +119,15 @@ const (
 // different questions and a board that blends them cannot report drift.
 type Declaration struct {
 	Name string `json:"name"` // the Helm release name — the file's basename
-	// Namespace is the values DIRECTORY, which IS the destination namespace.
-	Namespace string `json:"namespace"`
-	// Application is the CD Application name the generator mints: <dir>-<file>.
+	// Org is the owner. It is ALSO the values directory and the destination
+	// namespace, because those are one value under one name — see the header.
+	Org string `json:"org"`
+	// Application is the CD Application name the generator mints: <org>-<name>.
 	// It is the join key against /v1/platform/cd.
 	Application string `json:"application"`
 	// Project is the AppProject the sync is admitted under, derived from the
-	// directory exactly as the ApplicationSet derives it.
+	// directory exactly as the ApplicationSet derives it. It differs from Org
+	// for a reserved directory, which syncs under the platform fence.
 	Project string `json:"project"`
 	// Path is the file, relative to the repository root.
 	Path string `json:"path"`
@@ -136,11 +147,11 @@ type Declaration struct {
 }
 
 // declareSpec is a declaration about to be written. Every field is resolved —
-// the handler derives Namespace, Repository and Hosts before constructing one,
+// the handler derives Org, Repository and Hosts before constructing one,
 // so nothing here is still a caller's opinion.
 type declareSpec struct {
 	Name       string
-	Namespace  string
+	Org        string
 	Repository string
 	Tag        string
 	Hosts      []string
@@ -164,36 +175,100 @@ type declareEnv struct {
 	Value string `json:"value" yaml:"value"`
 }
 
-// project mirrors the ApplicationSet's own derivation. Stated here so the record
-// this API returns and the fence the cluster applies cannot disagree.
-func declareProject(namespace string) string {
-	if strings.HasPrefix(namespace, "tenant-") {
-		return namespace
+// platformProject is the fence the PLATFORM's own directories sync under. It
+// admits destination namespace `*` and cluster-scoped RBAC, which is why nothing
+// but a reserved directory may ever name it.
+const platformProject = "hanzo-platform"
+
+// declareProject mirrors the ApplicationSet's own derivation, so the record this
+// API returns and the fence the cluster applies cannot disagree. A reserved
+// directory is the platform's and syncs under the platform fence; every other
+// directory is an org's own and syncs under a fence of its own name.
+//
+// ⚠ THIS IS THE HALF THAT LIVES IN ANOTHER REPOSITORY, so it is VERIFIED rather
+// than assumed — see checkFence, which reads the live template out of the clone
+// this seam already makes and refuses to write main while the two disagree.
+func declareProject(dir string) string {
+	if reserved(dir) {
+		return platformProject
 	}
-	return "hanzo-platform"
+	return dir
+}
+
+// reservedNames is the platform's own namespace family: the directories a
+// customer org may never be, because something else already answers to them.
+//
+// It is a LIST because it is a policy, and a policy you cannot read is a policy
+// nobody can check. Three sources, and no fourth:
+//
+//   - Kubernetes' own namespaces, plus the `kube-` family covered structurally
+//     below. An org here would deploy into the control plane.
+//   - The delivery and infrastructure planes this cluster runs. `hanzo-cd` is
+//     where the Applications themselves live; an org there could write its own.
+//   - The brands, and `admin` — the reserved SuperAdmin org (HIP-0519). These
+//     are ours by identity, not merely by occupancy.
+//
+// The platform's per-service directories that already exist (collab, enso, team,
+// zen, integrations, kserve, extract-svc) are covered by the same rule for the
+// same reason: something already answers there.
+var reservedNames = map[string]bool{
+	// Kubernetes' own
+	"default": true, "kube-system": true, "kube-public": true, "kube-node-lease": true,
+	// delivery + infrastructure planes
+	"hanzo-cd": true, "hanzo-build": true, "cert-manager": true, "ingress": true,
+	"ingress-nginx": true, "monitoring": true, "scheduling": true, "kserve": true,
+	"knative-serving": true, "istio-system": true, "cattle-system": true,
+	// the platform's own service directories, as the inventory holds them today
+	"collab": true, "enso": true, "extract-svc": true, "integrations": true,
+	"team": true, "zen": true,
+	// brands, and the reserved SuperAdmin org
+	"hanzo": true, "lux": true, "zoo": true, "admin": true,
+}
+
+// reserved reports whether a directory belongs to the platform rather than to a
+// customer. It is ONE predicate and both the read and the write path ask it —
+// two rules for one fact drift apart, and this one decides a fence.
+//
+// The `<brand>-` and `kube-` families are structural rather than listed: every
+// environment of a brand (hanzo-testnet, hanzo-devnet, hanzo-mainnet, and any
+// added later) and every namespace Kubernetes reserves for itself are the
+// platform's, with no list to extend when one is added.
+func reserved(dir string) bool {
+	if reservedNames[dir] {
+		return true
+	}
+	if strings.HasPrefix(dir, "kube-") {
+		return true
+	}
+	for _, brand := range []string{"hanzo", "lux", "zoo"} {
+		if strings.HasPrefix(dir, brand+"-") {
+			return true
+		}
+	}
+	return false
 }
 
 // declarePath is the ONE place a declaration's path is spelled.
 //
 // Both segments are checked by checkLoc before any path is built from them —
 // never here, because a function that returns a string has nowhere to refuse.
-func declarePath(namespace, name string) string {
-	return declarePrefix + "/" + namespace + "/" + name + ".yaml"
+func declarePath(org, name string) string {
+	return declarePrefix + "/" + org + "/" + name + ".yaml"
 }
 
 // checkLoc holds the two path segments to the grammar the cluster holds them to
 // anyway: a namespace is a DNS-1123 label and so is an app name.
 //
 // It is DEFENCE IN DEPTH and it is not redundant. The HTTP surface derives both
-// from a validated principal (declareNamespace, declareName), so nothing a
+// from a validated principal (resolveOrg, declareName), so nothing a
 // caller sends reaches here unchecked today — but every function in this file
 // takes them as plain strings, filepath.Join CLEANS `..` out of a segment rather
 // than refusing it, and a single future caller that forgets is a read or a write
 // in another tenant's directory. The guard belongs where the path is built, so
 // there is no way to build one without it.
-func checkLoc(ns, name string) error {
-	if !appNameRE.MatchString(ns) {
-		return fmt.Errorf("%q is not a namespace: a values directory is a DNS-1123 label", ns)
+func checkLoc(org, name string) error {
+	if err := checkOrg(org); err != nil {
+		return err
 	}
 	if !slugRE.MatchString(name) {
 		return fmt.Errorf("%q is not an app name: a declaration is a DNS-1123 label", name)
@@ -201,10 +276,10 @@ func checkLoc(ns, name string) error {
 	return nil
 }
 
-// checkNS is checkLoc's namespace half, for the reads that name no app.
-func checkNS(ns string) error {
-	if !appNameRE.MatchString(ns) {
-		return fmt.Errorf("%q is not a namespace: a values directory is a DNS-1123 label", ns)
+// checkOrg is checkLoc's directory half, for the reads that name no app.
+func checkOrg(org string) error {
+	if !appNameRE.MatchString(org) {
+		return fmt.Errorf("%q is not an org: a values directory is a DNS-1123 label", org)
 	}
 	return nil
 }
@@ -212,8 +287,8 @@ func checkNS(ns string) error {
 // declareBranch is the ref one declaration is pushed to. It carries the tag, so
 // a re-declare of the SAME build is idempotent (the push is a no-op) and a new
 // build never has to force anything: a fresh tag is a fresh ref.
-func declareBranch(namespace, name, tag string) string {
-	return declareBranchPrefix + "/" + namespace + "/" + name + "/" + tag
+func declareBranch(org, name, tag string) string {
+	return declareBranchPrefix + "/" + org + "/" + name + "/" + tag
 }
 
 // ── rendering (pure) ─────────────────────────────────────────────────────────
@@ -317,11 +392,11 @@ type valuesDoc struct {
 // A file that fails to parse is an ERROR and never an empty row: an inventory
 // that renders an unreadable declaration as "no image, no hosts" is the same lie
 // as an unreachable cluster rendering as an empty fleet.
-func readDeclaration(root, namespace, name string) (Declaration, error) {
-	if err := checkLoc(namespace, name); err != nil {
+func readDeclaration(root, org, name string) (Declaration, error) {
+	if err := checkLoc(org, name); err != nil {
 		return Declaration{}, err
 	}
-	rel := declarePath(namespace, name)
+	rel := declarePath(org, name)
 	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 	if err != nil {
 		return Declaration{}, fmt.Errorf("read %s: %w", rel, err)
@@ -332,9 +407,9 @@ func readDeclaration(root, namespace, name string) (Declaration, error) {
 	}
 	d := Declaration{
 		Name:        name,
-		Namespace:   namespace,
-		Application: namespace + "-" + name,
-		Project:     declareProject(namespace),
+		Org:         org,
+		Application: org + "-" + name,
+		Project:     declareProject(org),
 		Path:        rel,
 		Repository:  v.Image.Repository,
 		Tag:         v.Image.Tag,
@@ -368,6 +443,52 @@ func flattenHosts(items []any) []string {
 		}
 	}
 	return out
+}
+
+// ── the fence, verified against the repository that enforces it ─────────────
+
+// fleetSet is the ApplicationSet whose template decides every generated
+// Application's AppProject. It travels in the same repository as the values
+// files, so a clone that carries a declaration also carries the rule that will
+// fence it.
+const fleetSet = "infra/k8s/hanzo-cd/applicationset-fleet.yaml"
+
+// checkFence refuses to put a declaration on main while the ApplicationSet would
+// fence it WIDER than this API reports.
+//
+// declareProject is a copy of a rule whose original is a Go template in another
+// repository, and only the original decides anything. The template derived the
+// project by `hasPrefix "tenant-"` — a naming convention doing a policy's job —
+// so with an org's name unadorned every org directory falls to the else branch
+// and syncs under hanzo-platform, the fence that admits destination namespace `*`
+// and cluster-scoped ClusterRole/ClusterRoleBinding. The chart renders no
+// cluster-scoped kind today, so nothing has escaped; a fence that holds only
+// because the thing inside it has not tried is not a fence, which is the
+// ApplicationSet's own words about a different instance of this same mistake.
+//
+// A CROSS-REPOSITORY INVARIANT IS CHECKED, NOT DOCUMENTED. A comment saying
+// "land the companion change first" is not a control, and neither is a test that
+// fails on a developer's machine and skips in CI. This runs on the write path,
+// against the bytes CD actually reads, and it clears itself the moment universe
+// carries the reservation rule — no flag to set, nothing to remember.
+//
+// A BRANCH write is exempt: the generator reads main, so a branch declaration is
+// inert and its pull request is exactly where a human sees the mismatch.
+func checkFence(root, org string) error {
+	if reserved(org) {
+		return nil // the platform's own directory is fenced the same way either way
+	}
+	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(fleetSet)))
+	if err != nil {
+		return fmt.Errorf("read %s: %w — the delivery plane's own rule could not be read, so the fence this declaration would sync under cannot be confirmed", fleetSet, err)
+	}
+	if strings.Contains(string(b), `hasPrefix "tenant-"`) {
+		return fmt.Errorf(
+			"%s still derives the AppProject with hasPrefix \"tenant-\", so %q would sync under %s — the fence that admits every namespace and cluster-scoped RBAC — while this API reports %q. "+
+				"Refusing to write main until that template asks whether a directory is RESERVED instead. A branch declaration is unaffected: nothing is generated from one",
+			fleetSet, org, platformProject, declareProject(org))
+	}
+	return nil
 }
 
 // ── the git seam ─────────────────────────────────────────────────────────────
@@ -421,13 +542,13 @@ func (c *inventoryCache) invalidate() {
 // A directory that does not exist is an EMPTY inventory and not an error: an org
 // that has declared nothing yet is a real, correct answer. A directory that
 // exists and cannot be read IS an error — the two must never look alike.
-func declarations(s *cloud.Service[state], ctx context.Context, namespace string) ([]Declaration, error) {
-	if err := checkNS(namespace); err != nil {
+func declarations(s *cloud.Service[state], ctx context.Context, org string) ([]Declaration, error) {
+	if err := checkOrg(org); err != nil {
 		return nil, err
 	}
 	inventory.mu.Lock()
 	if time.Since(inventory.at) < inventoryTTL {
-		if d, ok := inventory.dirs[namespace]; ok {
+		if d, ok := inventory.dirs[org]; ok {
 			out := append([]Declaration(nil), d...)
 			inventory.mu.Unlock()
 			return out, nil
@@ -444,12 +565,12 @@ func declarations(s *cloud.Service[state], ctx context.Context, namespace string
 
 	var out []Declaration
 	err = universeClone(ctx, pinGitEnv(token), func(dir string) error {
-		names, err := declaredNames(dir, namespace)
+		names, err := declaredNames(dir, org)
 		if err != nil {
 			return err
 		}
 		for _, n := range names {
-			d, err := readDeclaration(dir, namespace, n)
+			d, err := readDeclaration(dir, org, n)
 			if err != nil {
 				return err
 			}
@@ -466,7 +587,7 @@ func declarations(s *cloud.Service[state], ctx context.Context, namespace string
 		inventory.dirs = map[string][]Declaration{}
 		inventory.at = time.Now()
 	}
-	inventory.dirs[namespace] = append([]Declaration(nil), out...)
+	inventory.dirs[org] = append([]Declaration(nil), out...)
 	inventory.mu.Unlock()
 	return out, nil
 }
@@ -474,11 +595,11 @@ func declarations(s *cloud.Service[state], ctx context.Context, namespace string
 // declaredNames lists the app names declared in one directory, sorted. The glob
 // is anchored at the directory, so a name can never reach a sibling namespace's
 // files however it is spelled.
-func declaredNames(root, namespace string) ([]string, error) {
-	if err := checkNS(namespace); err != nil {
+func declaredNames(root, org string) ([]string, error) {
+	if err := checkOrg(org); err != nil {
 		return nil, err
 	}
-	matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(declarePrefix), namespace, "*.yaml"))
+	matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(declarePrefix), org, "*.yaml"))
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +659,7 @@ type declareResult struct {
 // never silently drops a host or an environment variable a human added.
 func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mode declareMode) (declareResult, error) {
 	res := declareResult{Mode: mode}
-	if err := checkLoc(spec.Namespace, spec.Name); err != nil {
+	if err := checkLoc(spec.Org, spec.Name); err != nil {
 		return res, err
 	}
 
@@ -562,7 +683,7 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 
 	target := universeBranch
 	if mode == modeBranch {
-		target = declareBranch(spec.Namespace, spec.Name, spec.Tag)
+		target = declareBranch(spec.Org, spec.Name, spec.Tag)
 	}
 
 	err = universeClone(ctx, env, func(dir string) error {
@@ -592,7 +713,15 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 				}
 			}
 
-			rel := declarePath(spec.Namespace, spec.Name)
+			// The fence is confirmed against the live template in THIS clone,
+			// before a byte is written and on the tip we are about to push onto.
+			if mode == modeCommit {
+				if err := checkFence(dir, spec.Org); err != nil {
+					return err
+				}
+			}
+
+			rel := declarePath(spec.Org, spec.Name)
 			abs := filepath.Join(dir, filepath.FromSlash(rel))
 			_, statErr := os.Stat(abs)
 			created := os.IsNotExist(statErr)
@@ -631,7 +760,7 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 				}
 			}
 
-			d, err := readDeclaration(dir, spec.Namespace, spec.Name)
+			d, err := readDeclaration(dir, spec.Org, spec.Name)
 			if err != nil {
 				return err
 			}
@@ -655,7 +784,7 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 				verb = "release"
 			}
 			msg := fmt.Sprintf("%s %s/%s at %s\n\n%s renders charts/app against this file; the image.tag scalar is what runs.\nDeclared through platform.hanzo.ai from %s.",
-				verb, spec.Namespace, spec.Name, spec.Tag, d.Application, orDash(spec.Origin))
+				verb, spec.Org, spec.Name, spec.Tag, d.Application, source(spec.Origin))
 			if _, err := runGit(ctx, dir, env,
 				"-c", "user.name="+pinCommitUser, "-c", "user.email="+pinCommitEmail,
 				"commit", "-m", msg); err != nil {
@@ -682,10 +811,10 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 				return fmt.Errorf("push %s: %w", target, err)
 			}
 			s.Log.Info("another write landed on universe first; re-reading the tip",
-				"app", spec.Name, "namespace", spec.Namespace, "attempt", attempt)
+				"app", spec.Name, "org", spec.Org, "attempt", attempt)
 		}
 		return fmt.Errorf("declare %s/%s: %d concurrent writes landed first — the declaration was NOT written",
-			spec.Namespace, spec.Name, pinAttempts)
+			spec.Org, spec.Name, pinAttempts)
 	})
 	if err != nil {
 		return declareResult{Mode: mode}, err
@@ -703,7 +832,7 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 // that, so a spec that disagrees is an error naming the file — the caller edits
 // the declaration, which is where the decision belongs.
 func checkDeclared(root string, spec declareSpec) error {
-	d, err := readDeclaration(root, spec.Namespace, spec.Name)
+	d, err := readDeclaration(root, spec.Org, spec.Name)
 	if err != nil {
 		return err
 	}
@@ -762,7 +891,9 @@ func reviewURL(branch string) string {
 	return strings.TrimSuffix(universeRemote, ".git") + "/compare/" + universeBranch + "..." + branch
 }
 
-func orDash(s string) string {
+// source names where a build came from, for the commit message. It reads as what
+// it returns; the previous name described a dash it never emitted.
+func source(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "an unrecorded source"
 	}
