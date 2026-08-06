@@ -64,7 +64,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/authors"
-	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
@@ -291,14 +290,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "affiliates"), State: state{
 		store:      store,
-		commerce:   newCommerceClient(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		commerce:   newCommerceClient(),
 		clicks:     newClicks(),
 		linkBase:   linkBase(deps),
 		auditStore: deps.Audit,
 	}}
 	mounted = s
 	routes(app, s)
-	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", affiliateMarginBps(), "commerce", s.State.commerce.configured())
+	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", affiliateMarginBps())
 	return nil
 }
 
@@ -1178,7 +1177,7 @@ func (o ops) adminSweep(ctx context.Context, _ *noInput) (*accrualsOut, error) {
 		swept++
 		// Read the source org's metered spend ONCE, then fan out to BOTH the affiliate
 		// upline and the OSS-author royalty — the one accrual walk, one spend read.
-		spend, serr := o.s.State.commerce.spendCents(ctx, src, orgSubject(src))
+		spend, serr := o.s.State.commerce.spendCents(ctx, src)
 		if serr != nil {
 			o.s.Log.Warn("affiliates: spend read failed", "source", src, "err", serr)
 			continue
