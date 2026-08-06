@@ -14,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/apps/sandbox/wire"
 	"github.com/zap-proto/zip"
 )
 
@@ -89,7 +90,17 @@ func (e *execClient) run(ctx context.Context, f Function, input string, timeoutS
 		"args": []string{input},
 	}
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(rctx, http.MethodPost, e.upstream+"/exec", bytes.NewReader(body))
+	// "/v1/exec", not "/exec" — and this is a fix, not a preference.
+	//
+	// The other consumer of CODE_EXEC_UPSTREAM is apps/exec, a path-PRESERVING
+	// reverse proxy: the request arrives at cloud as /v1/exec and reaches the
+	// upstream as /v1/exec. This client built upstream+"/exec". So for any single
+	// value of CODE_EXEC_UPSTREAM the two asked the executor for different paths,
+	// and no value fixed both — appending /v1 to the env var only moved the
+	// mismatch (the proxy then asks for /v1/v1/exec). One of the two had to move,
+	// and it is this one, because the other cannot: apps/exec forwards whatever
+	// the LibreChat client sends, and that client's contract is not ours.
+	req, err := http.NewRequestWithContext(rctx, http.MethodPost, e.upstream+wire.LibreChatExec, bytes.NewReader(body))
 	if err != nil {
 		return execResult{}, err
 	}
