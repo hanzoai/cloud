@@ -51,18 +51,17 @@ package usage
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
@@ -78,7 +77,7 @@ const maxLedgerRows = 1000
 // (logger, billing, brand) live in the embedded cloud.Base, reached as s.Log /
 // s.Bill — never re-plumbed here.
 type state struct {
-	commerce  *commerceReader
+	commerce  ledgerReader
 	warehouse *warehouse
 }
 
@@ -88,14 +87,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "usage", build, routes)
 }
 
-// build constructs the usage state: the commerce S2S reader from its env
-// (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env, never
-// hard-coded) and the account-usage warehouse (a DDL latch over clients/datastore's
-// shared connection — no handle of its own, so the subsystem needs no Shutdown).
+// build constructs the usage state: the ledger reader (which takes no
+// configuration — a peer is reached by name) and the account-usage warehouse (a
+// DDL latch over clients/datastore's shared connection — no handle of its own, so
+// the subsystem needs no Shutdown).
 func build(b cloud.Base) (state, error) {
-	cr := newCommerceReader(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
-	b.Log.Info("usage surface", "prefix", "/v1/usage", "commerce", cr.configured())
-	return state{commerce: cr, warehouse: &warehouse{}}, nil
+	// No "commerce configured" bit to report: the ledger is reached BY NAME, so
+	// there is nothing a deployment sets and nothing that can be set wrong.
+	b.Log.Info("usage surface", "prefix", "/v1/usage")
+	return state{commerce: ledgerReader{}, warehouse: &warehouse{}}, nil
 }
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -469,13 +469,18 @@ func buildAccountsBlock(s *cloud.Service[state], ctx context.Context, org, user 
 // the cost roll-up. A commerce error is logged and degrades to honest zeros
 // (Available=false) rather than failing the whole summary.
 func buildSpendBlock(s *cloud.Service[state], ctx context.Context, org string, start, end time.Time, interval string) Spend {
-	if !s.State.commerce.configured() {
-		return buildSpend(false, rollupWire{}, nil, start, end, interval)
-	}
-	roll, rerr := s.State.commerce.rollup(ctx, org)
+	roll, rerr := s.State.commerce.spend(ctx, org)
 	if rerr != nil {
-		s.Log.Warn("commerce rollup read failed; spend honest-empty", "org", org, "err", rerr)
-		return buildSpend(false, rollupWire{}, nil, start, end, interval)
+		// ABSENCE IS THE ROUTER'S WORD. A fleet with no commerce has no spend to
+		// show, and that is the honest-empty block. Everything else is an OUTAGE,
+		// and it degrades to the same block only because a summary must not 5xx —
+		// so it is logged as what it is rather than as a deployment shape.
+		if errors.Is(rerr, cloud.ErrNoPeer) {
+			s.Log.Debug("no commerce in this fleet; spend honest-empty", "org", org)
+		} else {
+			s.Log.Warn("commerce spend read FAILED; spend honest-empty", "org", org, "err", rerr)
+		}
+		return buildSpend(false, rollup{}, nil, start, end, interval)
 	}
 	txns, terr := s.State.commerce.transactions(ctx, org, maxLedgerRows)
 	if terr != nil {
@@ -522,99 +527,77 @@ func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 // arg — identical to ai/object/cloud_usage.go's transport.
 func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
 
-// ── commerce reader ──────────────────────────────────────────────────────────
+// ── the ledger, asked by name ───────────────────────────────────────────────
 
-// commerceReader is a thin service-to-service reader for the two commerce billing
-// endpoints the cost roll-up needs (usage/rollup + transactions). It authenticates
-// with the admin-scoped COMMERCE_SERVICE_TOKEN (a KMS-sourced secret already on the
-// cloud env — never hard-coded) and scopes every read to ONE org via the trusted
-// X-Org-Id S2S selector, which commerce's EdgeAuth honors only after it verifies
-// the bearer is the service token. It is deliberately narrow (two typed reads),
-// distinct from the admin god-view reader (typed MRR/COGS) and the billing proxy
-// (verbatim passthrough) — a third concern: org-scoped typed roll-up.
-type commerceReader struct {
-	base  string
-	token string
-	http  *http.Client
-}
+// ledgerReader reads the two facts the cost roll-up needs — the org's
+// month-to-date consumption with the wallet behind it, and the movement list the
+// category/series breakdown folds over — from the process that owns the ledger.
+//
+// It used to be two service-token GETs, /v1/billing/usage/rollup and
+// /v1/billing/transactions, sent through the commerce transport. That transport
+// does not reach a network when commerce is co-resident: it dispatches back into
+// this binary's own router BY PATH, and neither route is registered here —
+// commerce's api.Route() bundle is behind //go:build cloud and is never compiled
+// in. Both reads were 404s. Split into per-app binaries the base URL was empty,
+// the reader called itself "not configured", and the whole spend block degraded
+// to honest zeros — which is how a customer's usage page came to show a blank
+// month while their wallet was being debited all along.
+//
+// A peer is reached BY NAME, so there is no URL, no service token, and nothing a
+// deployment can set wrong.
+type ledgerReader struct{}
 
-func newCommerceReader(base, token string) *commerceReader {
-	return &commerceReader{
-		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
-		token: strings.TrimSpace(token),
-		http:  transport.Client(15 * time.Second),
-	}
-}
-
-func (r *commerceReader) configured() bool { return r != nil && r.base != "" && r.token != "" }
-
-// rollup reads GET /v1/billing/usage/rollup for org — the authoritative MTD consumed
-// + prepaid wallet balance.
-func (r *commerceReader) rollup(ctx context.Context, org string) (rollupWire, error) {
-	var out rollupWire
-	body, err := r.get(ctx, "/v1/billing/usage/rollup", org, url.Values{"user": {org}})
+// spend reads the org's month-to-date consumption and the wallet behind it.
+func (ledgerReader) spend(ctx context.Context, org string) (rollup, error) {
+	reply, err := commercepeer.FinanceSpend(cloud.For(ctx, org), &plane.SpendIn{})
 	if err != nil {
-		return out, err
+		return rollup{}, err
 	}
-	if err := json.Unmarshal(body, &out); err != nil {
-		return out, fmt.Errorf("commerce rollup decode: %w", err)
+	if reply == nil {
+		return rollup{}, errors.New("usage: commerce answered nothing")
 	}
-	return out, nil
+	// A month's consumption and a wallet are figures someone READS, and
+	// per-token debits are routinely finer than a cent, so the rounding is
+	// explicit — an exactness guard here turns a real ledger into a 502.
+	consumed, err := reply.Consumed.RoundMinor()
+	if err != nil {
+		return rollup{}, err
+	}
+	balance, err := reply.Balance.RoundMinor()
+	if err != nil {
+		return rollup{}, err
+	}
+	return rollup{ConsumedCents: consumed, BalanceCents: balance}, nil
 }
 
-// transactions reads GET /v1/billing/transactions for org (newest-first, up to
-// limit) — the raw ledger the category/series breakdown rolls up. Commerce serves
-// it WRAPPED as { transactions:[...] }; a bare array is tolerated so a contract
-// change in either direction degrades gracefully.
-func (r *commerceReader) transactions(ctx context.Context, org string, limit int) ([]ledgerTxn, error) {
-	q := url.Values{"user": {org}}
-	if limit > 0 {
-		q.Set("limit", fmt.Sprintf("%d", limit))
-	}
-	body, err := r.get(ctx, "/v1/billing/transactions", org, q)
+// transactions reads the org's ledger entries, newest first, up to limit.
+func (ledgerReader) transactions(ctx context.Context, org string, limit int) ([]ledgerTxn, error) {
+	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{Limit: limit})
 	if err != nil {
 		return nil, err
 	}
-	var wrap struct {
-		Transactions []ledgerTxn `json:"transactions"`
+	if reply == nil {
+		return nil, errors.New("usage: commerce answered nothing")
 	}
-	if err := json.Unmarshal(body, &wrap); err == nil && wrap.Transactions != nil {
-		return wrap.Transactions, nil
-	}
-	var rows []ledgerTxn
-	if err := json.Unmarshal(body, &rows); err != nil {
-		return nil, fmt.Errorf("commerce transactions decode: %w", err)
+	rows := make([]ledgerTxn, 0, len(reply.Rows))
+	for _, t := range reply.Rows {
+		cents, cerr := t.Amount.RoundMinor()
+		if cerr != nil {
+			return nil, fmt.Errorf("usage: ledger entry %s: %w", t.ID, cerr)
+		}
+		rows = append(rows, ledgerTxn{
+			ID: t.ID,
+			// The LEDGER'S own spelling, parsed once by the one recognizer. This
+			// was a bare string matched against "withdraw" — a word the ledger has
+			// never written; it writes finance.usage — so isSpend was false for
+			// every real row and the whole breakdown summed to zero.
+			Kind:      finance.ParseKind(t.Kind),
+			Amount:    cents,
+			Currency:  strings.ToLower(t.Amount.Currency),
+			Tags:      t.Ref,
+			Notes:     t.Memo,
+			CreatedAt: time.Unix(t.CreatedAt, 0).UTC().Format(time.RFC3339),
+		})
 	}
 	return rows, nil
-}
-
-// get performs one service-token commerce GET scoped to org. The org rides X-Org-Id
-// (the S2S selector commerce keys the per-org wallet under) AND the `user` query
-// param — pinned server-side to the caller's OWN org, so a client can never widen
-// scope. A non-2xx is an error the caller degrades to honest-empty on.
-func (r *commerceReader) get(ctx context.Context, path, org string, q url.Values) ([]byte, error) {
-	u := r.base + path
-	if enc := q.Encode(); enc != "" {
-		u += "?" + enc
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+r.token)
-	req.Header.Set("X-Org-Id", org)
-	resp, err := r.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("commerce unreachable: %w", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("commerce status %d", resp.StatusCode)
-	}
-	return body, nil
 }
