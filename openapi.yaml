@@ -1345,6 +1345,8 @@ components:
           type: string
         name:
           type: string
+        session_id:
+          type: string
         storage_session_id:
           type: string
       type: object
