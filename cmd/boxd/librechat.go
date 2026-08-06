@@ -27,8 +27,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"mime"
+	mp "mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,6 +41,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/sandbox/wire"
+
+	"github.com/zap-proto/zip"
 )
 
 // execRequest is the client's shape. `files` are names already uploaded into the
@@ -164,33 +170,46 @@ func newID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func (b *box) librechatRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/v1/exec", b.lcExec)
-	mux.HandleFunc("/v1/exec/programmatic", b.lcExec)
-	mux.HandleFunc("/v1/upload", b.lcUpload)
-	mux.HandleFunc("/v1/download/", b.lcDownload)
-	mux.HandleFunc("/v1/files/", b.lcFiles)
+func (b *box) librechatRoutes(app *zip.App) {
+	app.Post(wire.LibreChatExec, b.lcExec)
+	app.Post(wire.LibreChatExec+"/programmatic", b.lcExec)
+	app.Post("/v1/upload", b.lcUpload)
+	app.Get("/v1/download/*", b.lcDownload)
+	app.Get("/v1/files/*", b.lcFiles)
 }
 
-func (b *box) lcExec(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "POST only")
-		return
+// form reads the request as a multipart form.
+//
+// zip has no multipart accessor yet, and reaching through c.Fiber() to get one
+// would put the framework we are hiding back in a handler. So this parses the
+// body zip already read, with the stdlib, against the boundary the request
+// declares. The whole body is in memory either way — zip's BodyLimit is the
+// ceiling that matters, and it is 32 MiB.
+func form(c *zip.Ctx) (*mp.Form, error) {
+	ct := c.Header("Content-Type")
+	_, params, err := mime.ParseMediaType(ct)
+	if err != nil {
+		return nil, err
 	}
+	boundary, ok := params["boundary"]
+	if !ok {
+		return nil, errors.New("not a multipart body")
+	}
+	return mp.NewReader(bytes.NewReader(c.Body()), boundary).ReadForm(maxBody)
+}
+
+func (b *box) lcExec(c *zip.Ctx) error {
 	var req execRequest
-	if err := bind(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "body: "+err.Error())
-		return
+	if err := c.Bind(&req); err != nil {
+		return zip.Errorf(http.StatusBadRequest, "%s", "body: "+err.Error())
 	}
 	argv, ok := langs[strings.ToLower(strings.TrimSpace(req.Lang))]
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "unsupported lang: "+req.Lang)
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "unsupported lang: "+req.Lang)
 	}
 	sid, dir, ok := b.sessions.dir(req.SessionID)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "invalid session_id")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "invalid session_id")
 	}
 	before := listNames(dir)
 
@@ -206,8 +225,7 @@ func (b *box) lcExec(w http.ResponseWriter, r *http.Request) {
 	if argv[0] == "go" {
 		f := filepath.Join(dir, "main.go")
 		if err := os.WriteFile(f, []byte(req.Code), fileMode); err != nil {
-			writeErr(w, http.StatusInternalServerError, "stage: "+err.Error())
-			return
+			return zip.Errorf(http.StatusInternalServerError, "%s", "stage: "+err.Error())
 		}
 		er.Argv, er.Stdin = []string{"go", "run", f}, ""
 	}
@@ -223,10 +241,9 @@ func (b *box) lcExec(w http.ResponseWriter, r *http.Request) {
 	// runIn, not runCmd: the session directory is one THIS process minted under
 	// /tmp, not a path the caller named, so it is not the caller's cwd to be
 	// contained under the project root.
-	res, err := b.runIn(r.Context(), dir, er)
+	res, err := b.runIn(c.Context(), dir, er)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", err.Error())
 	}
 	// The contract has no exit-code field, so a non-zero exit is reported the
 	// only way it can be: through stderr, at 200. That is the client's model —
@@ -235,28 +252,24 @@ func (b *box) lcExec(w http.ResponseWriter, r *http.Request) {
 	if res.TimedOut {
 		stderr = strings.TrimSpace(stderr + "\nexecution timed out")
 	}
-	writeJSON(w, http.StatusOK, execResponse{
+	return c.JSON(http.StatusOK, execResponse{
 		SessionID: sid, Stdout: res.Stdout, Stderr: stderr,
 		Files: newFiles(dir, before),
 	})
 }
 
-func (b *box) lcUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "POST only")
-		return
+func (b *box) lcUpload(c *zip.Ctx) error {
+	f, err := form(c)
+	if err != nil {
+		return zip.Errorf(http.StatusBadRequest, "%s", "multipart: "+err.Error())
 	}
-	if err := r.ParseMultipartForm(64 << 20); err != nil {
-		writeErr(w, http.StatusBadRequest, "multipart: "+err.Error())
-		return
-	}
-	sid, dir, ok := b.sessions.dir(r.FormValue("session_id"))
+	defer func() { _ = f.RemoveAll() }()
+	sid, dir, ok := b.sessions.dir(first(f.Value["session_id"]))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "invalid session_id")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "invalid session_id")
 	}
 	out := []uploadFile{}
-	for _, hs := range r.MultipartForm.File {
+	for _, hs := range f.File {
 		for _, h := range hs {
 			// filepath.Base is the whole containment story for an upload name:
 			// the client controls it, and "../../etc/cron.d/x" is a real thing
@@ -287,44 +300,45 @@ func (b *box) lcUpload(w http.ResponseWriter, r *http.Request) {
 	// message:"success" is load-bearing, not decorative: crud.js:108 does
 	// `if (result.message !== 'success') throw`, so omitting it fails EVERY
 	// upload with "Error uploading file: undefined".
-	writeJSON(w, http.StatusOK, map[string]any{"message": "success", "session_id": sid, "files": out})
+	return c.JSON(http.StatusOK, map[string]any{"message": "success", "session_id": sid, "files": out})
 }
 
 // lcDownload serves /v1/download/{id} where id is "{sid}/{name}" — the id this
 // box mints in lcExec and lcUpload, so it round-trips by construction.
-func (b *box) lcDownload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "GET only")
-		return
-	}
-	id := strings.TrimPrefix(r.URL.Path, "/v1/download/")
+func (b *box) lcDownload(c *zip.Ctx) error {
+	id := c.Param("*")
 	sid, name, found := strings.Cut(id, "/")
 	if !found || !validID(sid) {
-		writeErr(w, http.StatusBadRequest, "bad id")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "bad id")
 	}
 	name = filepath.Base(name)
 	p := filepath.Join(b.sessions.root, sid, name)
 	f, err := os.Open(p)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "no such file")
-		return
+		return zip.Errorf(http.StatusNotFound, "%s", "no such file")
 	}
-	defer func() { _ = f.Close() }()
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
-	http.ServeContent(w, r, name, time.Time{}, f)
+	// The file is handed to the response STREAM, which reads it after this
+	// handler has returned — so it is not closed here. Closing it on the way out
+	// is what a deferred Close does, and it makes the read fail with "file
+	// already closed" on a body nobody has written yet. The stream owns it now.
+	c.SetHeader("Content-Type", "application/octet-stream")
+	c.SetHeader("Content-Disposition", `attachment; filename="`+name+`"`)
+	return c.SendStream(f)
 }
 
-func (b *box) lcFiles(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "GET only")
-		return
+// first is the one value of a repeated form field, or "" when it is absent —
+// the shape r.FormValue had, restated because form.Value is a map of slices.
+func first(v []string) string {
+	if len(v) == 0 {
+		return ""
 	}
-	sid := strings.TrimPrefix(r.URL.Path, "/v1/files/")
+	return v[0]
+}
+
+func (b *box) lcFiles(c *zip.Ctx) error {
+	sid := c.Param("*")
 	if !validID(sid) {
-		writeErr(w, http.StatusBadRequest, "bad session id")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "bad session id")
 	}
 	dir := filepath.Join(b.sessions.root, sid)
 	out := []sessionFile{}
@@ -338,7 +352,7 @@ func (b *box) lcFiles(w http.ResponseWriter, r *http.Request) {
 	// A BARE ARRAY. ProgrammaticToolCalling guards with Array.isArray and
 	// process.js:294 calls .find directly, so wrapping this in an object makes
 	// the session look permanently empty rather than erroring.
-	writeJSON(w, http.StatusOK, out)
+	return c.JSON(http.StatusOK, out)
 }
 
 func listNames(dir string) []string {

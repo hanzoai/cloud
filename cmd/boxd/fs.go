@@ -26,6 +26,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/sandbox/wire"
+
+	"github.com/zap-proto/zip"
 )
 
 // skip is what never appears in a listing or a search: build output and vendor
@@ -84,17 +86,12 @@ func (b *box) relOf(abs string) string {
 // depth=1 is one directory. The cap is a hard limit, not a page: a caller that
 // hits it is asking the wrong question and a truncated 50k-entry answer is not
 // more useful than a small one.
-func (b *box) fsList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "GET only")
-		return
-	}
-	root, ok := b.resolve(r.URL.Query().Get("path"))
+func (b *box) fsList(c *zip.Ctx) error {
+	root, ok := b.resolve(c.Query("path"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "path escapes the project")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "path escapes the project")
 	}
-	depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
+	depth, _ := strconv.Atoi(c.Query("depth"))
 	limit := envInt("BOX_LIST_LIMIT", 20000)
 
 	out := make([]wire.Entry, 0, 256)
@@ -131,24 +128,18 @@ func (b *box) fsList(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil && err != io.EOF {
-		writeErr(w, http.StatusInternalServerError, "list: "+err.Error())
-		return
+		return zip.Errorf(http.StatusInternalServerError, "%s", "list: "+err.Error())
 	}
-	writeJSON(w, http.StatusOK, wire.ListResult{Entries: out})
+	return c.JSON(http.StatusOK, wire.ListResult{Entries: out})
 }
 
 // fsRead streams a file's BYTES, not JSON. A source file, a generated PNG and a
 // 40 MB core dump are all legitimate answers here, and wrapping bytes in a JSON
 // string would base64 every one of them for the benefit of none.
-func (b *box) fsRead(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "GET only")
-		return
-	}
-	abs, ok := b.resolve(r.URL.Query().Get("path"))
+func (b *box) fsRead(c *zip.Ctx) error {
+	abs, ok := b.resolve(c.Query("path"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "path escapes the project")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "path escapes the project")
 	}
 	f, err := os.Open(abs)
 	if err != nil {
@@ -156,49 +147,42 @@ func (b *box) fsRead(w http.ResponseWriter, r *http.Request) {
 		// "not there" as null and anything else as a failure, and collapsing
 		// the two makes a broken box look like an empty project.
 		if os.IsNotExist(err) {
-			writeErr(w, http.StatusNotFound, "no such file")
-			return
+			return zip.Errorf(http.StatusNotFound, "%s", "no such file")
 		}
-		writeErr(w, http.StatusInternalServerError, "read: "+err.Error())
-		return
+		return zip.Errorf(http.StatusInternalServerError, "%s", "read: "+err.Error())
 	}
-	defer func() { _ = f.Close() }()
 	if st, serr := f.Stat(); serr == nil && st.IsDir() {
-		writeErr(w, http.StatusBadRequest, "path is a directory")
-		return
+		_ = f.Close()
+		return zip.Errorf(http.StatusBadRequest, "%s", "path is a directory")
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, f)
+	// The file is handed to the response STREAM, which reads it after this
+	// handler has returned — so it is NOT closed on the way out. A deferred
+	// Close here fails the read with "file already closed" on a body nobody has
+	// written yet; the stream owns the handle from this point. The one path that
+	// does not reach the stream closes it itself, above.
+	c.SetHeader("Content-Type", "application/octet-stream")
+	return c.SendStream(f)
 }
 
-func (b *box) fsWrite(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodPut {
-		writeErr(w, http.StatusMethodNotAllowed, "POST or PUT only")
-		return
-	}
+func (b *box) fsWrite(c *zip.Ctx) error {
 	var req wire.WriteRequest
-	if err := bind(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "body: "+err.Error())
-		return
+	if err := c.Bind(&req); err != nil {
+		return zip.Errorf(http.StatusBadRequest, "%s", "body: "+err.Error())
 	}
 	abs, ok := b.resolve(req.Path)
 	if !ok || abs == b.workdir {
-		writeErr(w, http.StatusBadRequest, "path escapes the project")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "path escapes the project")
 	}
 	data := []byte(req.Content)
 	if req.ContentB64 != "" {
 		d, err := base64.StdEncoding.DecodeString(req.ContentB64)
 		if err != nil {
-			writeErr(w, http.StatusBadRequest, "contentB64: "+err.Error())
-			return
+			return zip.Errorf(http.StatusBadRequest, "%s", "contentB64: "+err.Error())
 		}
 		data = d
 	}
 	if err := os.MkdirAll(filepath.Dir(abs), dirMode); err != nil {
-		writeErr(w, http.StatusInternalServerError, "mkdir: "+err.Error())
-		return
+		return zip.Errorf(http.StatusInternalServerError, "%s", "mkdir: "+err.Error())
 	}
 	mode := fileMode
 	if req.Mode != "" {
@@ -207,31 +191,24 @@ func (b *box) fsWrite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := os.WriteFile(abs, data, mode); err != nil {
-		writeErr(w, http.StatusInternalServerError, "write: "+err.Error())
-		return
+		return zip.Errorf(http.StatusInternalServerError, "%s", "write: "+err.Error())
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return c.NoContent(http.StatusNoContent)
 }
 
-// fsRoot serves the bare /v1/box/fs address, which exists for exactly one verb.
-func (b *box) fsRoot(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		writeErr(w, http.StatusMethodNotAllowed, "DELETE only")
-		return
-	}
-	abs, ok := b.resolve(r.URL.Query().Get("path"))
+// fsDelete serves the bare /v1/box/fs address, whose one verb the route states.
+func (b *box) fsDelete(c *zip.Ctx) error {
+	abs, ok := b.resolve(c.Query("path"))
 	if !ok || abs == b.workdir {
 		// Refusing to delete the workdir itself is not paranoia: `path=` empty
 		// resolves to the root, and an rm -rf of the project by omitting a query
 		// parameter is the kind of thing that only happens once.
-		writeErr(w, http.StatusBadRequest, "path escapes the project")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "path escapes the project")
 	}
 	if err := os.RemoveAll(abs); err != nil {
-		writeErr(w, http.StatusInternalServerError, "delete: "+err.Error())
-		return
+		return zip.Errorf(http.StatusInternalServerError, "%s", "delete: "+err.Error())
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return c.NoContent(http.StatusNoContent)
 }
 
 // fsSearch greps the checkout ON THE BOX. This is the one operation where a box
@@ -241,33 +218,25 @@ func (b *box) fsRoot(w http.ResponseWriter, r *http.Request) {
 // The default is a case-insensitive SUBSTRING, not a regex, and `regex=1` is
 // opt-in — a model that emits `(a+)+$` against a large tree should not be able
 // to wedge the box it is running in.
-func (b *box) fsSearch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "GET only")
-		return
-	}
-	q := r.URL.Query()
-	needle := q.Get("q")
+func (b *box) fsSearch(c *zip.Ctx) error {
+	needle := c.Query("q")
 	if strings.TrimSpace(needle) == "" {
-		writeJSON(w, http.StatusOK, wire.SearchResult{Matches: []wire.Match{}})
-		return
+		return c.JSON(http.StatusOK, wire.SearchResult{Matches: []wire.Match{}})
 	}
-	root, ok := b.resolve(q.Get("path"))
+	root, ok := b.resolve(c.Query("path"))
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "path escapes the project")
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", "path escapes the project")
 	}
-	limit, _ := strconv.Atoi(q.Get("limit"))
+	limit, _ := strconv.Atoi(c.Query("limit"))
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
 
 	var re *regexp.Regexp
-	if q.Get("regex") == "1" || q.Get("regex") == "true" {
+	if c.Query("regex") == "1" || c.Query("regex") == "true" {
 		var err error
 		if re, err = regexp.Compile(needle); err != nil {
-			writeErr(w, http.StatusBadRequest, "regex: "+err.Error())
-			return
+			return zip.Errorf(http.StatusBadRequest, "%s", "regex: "+err.Error())
 		}
 	}
 	lower := strings.ToLower(needle)
@@ -312,7 +281,7 @@ func (b *box) fsSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
-	writeJSON(w, http.StatusOK, wire.SearchResult{Matches: out})
+	return c.JSON(http.StatusOK, wire.SearchResult{Matches: out})
 }
 
 const (
