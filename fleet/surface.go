@@ -69,18 +69,18 @@ const TheRule = "a tool is not projected when its name discloses a bearer secret
 //
 // The rule, in two clauses over the name's words:
 //
-//	1. DISCLOSURE. The name says it handles a bearer secret — a token, a
-//	   password, a credential, a private key. Refused at EVERY verb, because
-//	   reading `GET /v1/o11y/users/{id}/reset_password_tokens` hands the secret
-//	   over just as surely as the PUT that mints it. Verb-blindness is the whole
-//	   point of this clause.
+//  1. DISCLOSURE. The name says it handles a bearer secret — a token, a
+//     password, a credential, a private key. Refused at EVERY verb, because
+//     reading `GET /v1/o11y/users/{id}/reset_password_tokens` hands the secret
+//     over just as surely as the PUT that mints it. Verb-blindness is the whole
+//     point of this clause.
 //
-//	2. AUTHORITY MUTATION. A mutating verb acts on an identity or authority
-//	   object — a user, a role, a policy, an invite, a key, a sign-in session, a
-//	   service account, an auth domain. Refused. The matching READ is not:
-//	   GetRole and GetUser survive, because knowing who holds a role is not the
-//	   same act as granting one, and an agent that cannot see the org cannot
-//	   reason about it.
+//  2. AUTHORITY MUTATION. A mutating verb acts on an identity or authority
+//     object — a user, a role, a policy, an invite, a key, a sign-in session, a
+//     service account, an auth domain. Refused. The matching READ is not:
+//     GetRole and GetUser survive, because knowing who holds a role is not the
+//     same act as granting one, and an agent that cannot see the org cannot
+//     reason about it.
 //
 // Neither clause is a list of ops. Both are lists of NOUNS and VERBS, so op
 // 1,324 is classified the day it is written — which is the property a

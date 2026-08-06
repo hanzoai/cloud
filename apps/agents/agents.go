@@ -985,8 +985,23 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 		used  string
 		aiErr error
 	)
-	if defs := runTools.catalog(ctx, org, actor, a.Tools); len(defs) > 0 {
-		span.SetAttributes(attribute.Int("hanzo.agent.tools", len(defs)))
+	// An agent nested at the depth limit is offered nothing and has to answer for
+	// itself — the one thing that stops a cycle of agents-as-tools, since each
+	// level would otherwise start its round cap over (tools.go).
+	var offer []string
+	if agentDepth(ctx) < maxAgentDepth {
+		offer = callableTools(a)
+	}
+	defs := runTools.catalog(ctx, org, actor, offer)
+	// BOTH numbers, always. An agent that declares tools and is offered none is
+	// the exact shape of the split-fleet gap tools.go describes, and it is only
+	// diagnosable if the span says "declared 3, offered 0" rather than staying
+	// silent about a run that quietly had no hands.
+	span.SetAttributes(
+		attribute.Int("hanzo.agent.tools_declared", len(a.Tools)),
+		attribute.Int("hanzo.agent.tools", len(defs)),
+	)
+	if len(defs) > 0 {
 		resp, used, aiErr = completeWithTools(ctx, ai, org, actor, prompt, a.Model, fallback, defs)
 	} else {
 		resp, used, aiErr = completeWithFailover(ctx, ai,
