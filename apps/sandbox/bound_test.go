@@ -1,6 +1,10 @@
 package sandbox
 
 import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -135,4 +139,67 @@ func TestDeletePinsTheExactObject(t *testing.T) {
 	if opts.Preconditions == bare.Preconditions {
 		t.Error("precondition() produced a bare DeleteOptions")
 	}
+}
+
+// TestExecSandboxesHaveACeiling. The single-attach rule bounds `dev` and `desktop`
+// because they carry a project; an `exec` sandbox carries none, so nothing bounded
+// how many an org could hold. The code tool sends no session_id, so every call mints
+// a fresh pod on a 15-minute lease — a loop of 40 calls took 40 pods, and each is a
+// real 250m/512Mi/2Gi reservation on a node.
+//
+// The reaper cannot fix this: it ends leases that are over, so it bounds the steady
+// state and not the burst, and the burst is what fills a node.
+func TestExecSandboxesHaveACeiling(t *testing.T) {
+	st := memStore(t)
+	ctx := context.Background()
+	for i := range maxLiveExec {
+		if err := st.Put(ctx, Sandbox{
+			ID: fmt.Sprintf("m_%02d", i), Org: "acme", Class: "exec", Status: "running",
+			CreatedAt: 1, LastUsedAt: 1,
+		}); err != nil {
+			t.Fatalf("seed %d: %v", i, err)
+		}
+	}
+	n, err := st.LiveOfClass(ctx, "acme", "exec")
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != maxLiveExec {
+		t.Fatalf("counted %d live exec sandboxes, want %d — a cap read through a LIMITed "+
+			"query stops counting exactly where refusing starts to matter", n, maxLiveExec)
+	}
+
+	// The count is per (org, class): another org is unaffected, and this org's `dev`
+	// sandboxes are not what the exec ceiling is about.
+	if n, _ := st.LiveOfClass(ctx, "other", "exec"); n != 0 {
+		t.Errorf("another org counted %d, want 0 — the ceiling is per tenant", n)
+	}
+	if n, _ := st.LiveOfClass(ctx, "acme", "dev"); n != 0 {
+		t.Errorf("dev counted %d, want 0 — dev is bounded by single-attach, not by this", n)
+	}
+
+	// An ENDED sandbox stops counting, so the ceiling is a live-set bound and not a
+	// lifetime quota: a tenant that finishes its work can always start more.
+	if err := st.Delete(ctx, "acme", "m_00"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := st.LiveOfClass(ctx, "acme", "exec"); n != maxLiveExec-1 {
+		t.Errorf("after ending one, counted %d, want %d", n, maxLiveExec-1)
+	}
+}
+
+// memStore opens a real per-test store — the same openStore the service uses, so the
+// count above is measured against the actual schema and not a stand-in.
+func memStore(t *testing.T) *Store {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "sandbox.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	st, err := openStore(db)
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	return st
 }

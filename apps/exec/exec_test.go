@@ -14,6 +14,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -373,4 +374,102 @@ func TestProgrammaticRefusesInTheOpen(t *testing.T) {
 	if b, _ := io.ReadAll(resp.Body); !strings.Contains(string(b), "continuation token") {
 		t.Errorf("body %q does not say what would be needed to serve it", b)
 	}
+}
+
+// TestAttachedFilesAreNotSilentlyDropped. hanzo.chat primes a user's attachment as
+// {id, session_id, name} (Files/Code/process.js pushFile) while @hanzochat/agents
+// spells the same field `storage_session_id` (tools.d.ts FileRef). Reading only the
+// second meant every chat-attached file arrived with an empty session, was skipped
+// by the copy loop, AND was skipped by the "not available" note — so a user's CSV
+// was invisible to the program with nothing anywhere saying why.
+func TestAttachedFilesAreNotSilentlyDropped(t *testing.T) {
+	p := servePeer(t)
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "", "", 0, nil }
+	app := mount(t)
+
+	// A file uploaded in one session, then attached to a run in another.
+	up := decode[uploaded](t, uploadFile(t, app, "", "data.csv", "id,v\n1,2\n"))
+	res := decode[CodeResult](t, post(t, app, Path, CodeRun{
+		Lang: "py", Code: "open('data.csv')",
+		// The chat's spelling, NOT the agents one.
+		Files: []CodeFile{{ID: "data.csv", Name: "data.csv", SessionID: up.SessionID}},
+	}))
+	got := p.Pod(res.SessionID)
+	if got == nil {
+		t.Fatal("no sandbox was leased")
+	}
+	if string(got.Files["data.csv"]) != "id,v\n1,2\n" {
+		t.Fatalf("the attached file did not reach the run's sandbox (files: %v) — `session_id` "+
+			"is the spelling hanzo.chat actually sends", sortedKeys(got.Files))
+	}
+}
+
+// TestAFileWithNoSessionSaysSo. The other half of the same silence: a ref naming
+// bytes this deployment cannot find must be reported, not skipped.
+func TestAFileWithNoSessionSaysSo(t *testing.T) {
+	p := servePeer(t)
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "", "", 0, nil }
+	app := mount(t)
+
+	res := decode[CodeResult](t, post(t, app, Path, CodeRun{
+		Lang: "py", Code: "pass",
+		Files: []CodeFile{{ID: "ghost.csv", Name: "ghost.csv"}}, // no session, either spelling
+	}))
+	if !strings.Contains(res.Stderr, "ghost.csv") {
+		t.Fatalf("stderr = %q, want it to name the input it could not provide — a run that "+
+			"silently cannot see its own input reads as a bug in the model's code", res.Stderr)
+	}
+}
+
+// TestNestedArtifactsAreListed. Artifacts were COLLECTED recursively (`find`) and
+// LISTED top-level only (`ls -1A`), so a run that wrote out/plot.png reported it in
+// the reply and then omitted it from the session listing — and the client's
+// `name.startsWith(session/id)` found nothing and read the file as expired. Two
+// traversals of one directory is two answers about what a session holds.
+func TestNestedArtifactsAreListed(t *testing.T) {
+	p := servePeer(t)
+	p.Run = func(string, []string) (string, string, int, map[string][]byte) {
+		return "", "", 0, map[string][]byte{"out/plot.png": []byte("\x89PNG"), "top.csv": []byte("a,b")}
+	}
+	app := mount(t)
+	res := decode[CodeResult](t, post(t, app, Path, CodeRun{Lang: "py", Code: "savefig"}))
+
+	var reported []string
+	for _, f := range res.Files {
+		reported = append(reported, f.ID)
+	}
+	if len(reported) != 2 {
+		t.Fatalf("the run reported %v, want both the nested and the top-level artifact", reported)
+	}
+
+	resp := call(t, app, http.MethodGet, "/v1/files/"+res.SessionID, "", nil)
+	raw, _ := io.ReadAll(resp.Body)
+	var rows []listing
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatalf("decode %s: %v", raw, err)
+	}
+	// EVERY id the run reported must be findable by the identifier the client
+	// downloads with, or that artifact reads as expired.
+	for _, id := range reported {
+		want := res.SessionID + "/" + id
+		found := false
+		for _, r := range rows {
+			if r.Name == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the listing %+v has no row named %q — the run reported that artifact, so "+
+				"the client will ask for it and be told it is gone", rows, want)
+		}
+	}
+}
+
+func sortedKeys(m map[string][]byte) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

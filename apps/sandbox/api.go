@@ -129,6 +129,32 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 		}
 	}
 
+	// THE CEILING. An `exec` sandbox carries no project, so the single-attach check
+	// above never applies to one and nothing bounded how many an org could hold.
+	// That is not a theoretical gap: the code tool sends no session_id, so every call
+	// mints a fresh pod with a 15-minute lease, and a loop of 40 calls took 40 pods.
+	//
+	// The reaper is the FLOOR, not the ceiling. It ends leases that are over; it
+	// cannot decline to start one, so on its own it bounds the steady state and not
+	// the burst — and the burst is what fills a node. Each of these is a real pod at
+	// 250m/512Mi/2Gi, so the cap is written in what a node can hold rather than as a
+	// round number: maxLive x 512Mi is 8Gi of memory and 4 cores of requests, which
+	// is one worker's worth for one tenant.
+	//
+	// It is refused with 429 and not 409, because the caller's correct response is to
+	// wait rather than to change the request.
+	if class == "exec" {
+		n, err := store.LiveOfClass(ctx, org, class)
+		if err != nil {
+			return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "count: %v", err)
+		}
+		if n >= maxLiveExec {
+			return Sandbox{}, zip.Errorf(http.StatusTooManyRequests,
+				"org already holds %d live exec sandboxes (max %d); end one or wait for a lease to expire",
+				n, maxLiveExec)
+		}
+	}
+
 	id, err := genID()
 	if err != nil {
 		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "id: %v", err)
