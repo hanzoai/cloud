@@ -59,7 +59,8 @@
 # 8.5.62 adds the agent quickstart — describe an agent or take a template, then
 # configure, run and integrate, with a real endpoint behind every one of those
 # four steps — wires the builder's tool field to the live `/v1/tools` plane, and
-# stops the rail drilling: a product's sub-pages now expand beneath its own row
+# fixes the six playground starters that suggested models the gateway does not
+# serve, and stops the rail drilling: a product's sub-pages now expand beneath its own row
 # instead of swapping the whole sidebar for one product. Creating an agent has ONE
 # door now: the board's New-Agent button goes to the quickstart, and the side-pane
 # form that was the second entrance to the same builder is deleted.
@@ -84,7 +85,7 @@
 # lineage pushes that repo (its own `hanzo.yml` says so and pins the sha for exactly
 # this reason), and a mutable name is not an identity. `sha-<sha7>-amd64` is one
 # commit's output forever.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-54d6ce9-amd64
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-c709b1f-amd64
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
