@@ -61,6 +61,7 @@ import (
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -831,8 +832,10 @@ func abs64(v int64) int64 {
 func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, txnsPeerTimeout)
 	defer cancel()
-	reply, err := cloud.Ask[struct{}, plane.Txns](cloud.For(ctx, org), "commerce",
-		plane.FinanceTxns, &struct{}{})
+	// The generated peer client, not three loose strings: it is this call with the
+	// app name, the op name and the In/Out pair already fixed to each other, so
+	// the compiler checks what only a running fleet could check here.
+	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			return nil, false, nil

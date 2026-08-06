@@ -2,6 +2,7 @@ package books
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/apps/finance"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -88,7 +89,7 @@ func TestBooksRevenueRecognition(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "txn-deposit-1", Type: "deposit", Amount: 10000, Currency: "usd", Notes: "top-up", CreatedAt: "2026-07-01T10:00:00Z"},
+		{ID: "txn-deposit-1", Kind: finance.KindDeposit, Amount: 10000, Currency: "usd", Notes: "top-up", CreatedAt: "2026-07-01T10:00:00Z"},
 	}}
 
 	// Phase 1: deposit only. The prepaid credit is a liability, NOT income yet.
@@ -122,7 +123,7 @@ func TestBooksRevenueRecognition(t *testing.T) {
 	// Phase 2: add a usage event. Deposit re-appears in the feed but must NOT re-post
 	// (idempotency), and usage RECOGNIZES revenue by consuming the wallet.
 	src.live = append(src.live, commerceTxn{
-		ID: "txn-usage-1", Type: "withdraw", Amount: 3000, Currency: "usd", Tags: "ai:tokens", CreatedAt: "2026-07-02T12:00:00Z",
+		ID: "txn-usage-1", Kind: finance.KindUsage, Amount: 3000, Currency: "usd", Tags: "ai:tokens", CreatedAt: "2026-07-02T12:00:00Z",
 	})
 	posted, err = ingestOrg(ctx, src, nil, st, "acme", false)
 	if err != nil {
@@ -253,7 +254,7 @@ func TestGrantBooksAsPromoExpense(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "grant-1", Type: "deposit", Amount: 500, Currency: "usd", Tags: "grant:starter", CreatedAt: "2026-07-01T00:00:00Z"},
+		{ID: "grant-1", Kind: finance.KindDeposit, Amount: 500, Currency: "usd", Tags: "grant:starter", CreatedAt: "2026-07-01T00:00:00Z"},
 	}}
 	if _, err := ingestOrg(ctx, src, nil, st, "acme", false); err != nil {
 		t.Fatalf("ingest grant: %v", err)
@@ -275,15 +276,22 @@ func TestGrantBooksAsPromoExpense(t *testing.T) {
 }
 
 // TestRefundReturnsFundsNotRevenue proves a refund draws the wallet liability down against
-// CASH (Dr 2000 Customer Wallet / Cr 1000 Bank), never recognizing revenue on a return of
-// unspent prepaid funds.
+// CASH, never recognizing revenue on a return of unspent prepaid funds.
+//
+// A refund is not a KIND. The ledger writes two — money in and money out — and a
+// return of funds is a NEGATIVE deposit, which ruleFor already books as the exact
+// reversal of the top-up it undoes: the wallet liability draws down and the cash
+// leg goes back out the way it came in, through the processor clearing account.
+// This test used to assert a third spelling ("refund") against a Bank leg, and
+// the ledger has never written that word — so the arm it exercised could not fire
+// on a real row, and the property it was defending was untested where it counts.
 func TestRefundReturnsFundsNotRevenue(t *testing.T) {
 	ctx := context.Background()
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-1", Type: "deposit", Amount: 5000, Currency: "usd", CreatedAt: "2026-07-01T00:00:00Z"},
-		{ID: "ref-1", Type: "refund", Amount: 2000, Currency: "usd", CreatedAt: "2026-07-02T00:00:00Z"},
+		{ID: "dep-1", Kind: finance.KindDeposit, Amount: 5000, Currency: "usd", CreatedAt: "2026-07-01T00:00:00Z"},
+		{ID: "ref-1", Kind: finance.KindDeposit, Amount: -2000, Currency: "usd", CreatedAt: "2026-07-02T00:00:00Z"},
 	}}
 	if _, err := ingestOrg(ctx, src, nil, st, "acme", false); err != nil {
 		t.Fatalf("ingest: %v", err)
@@ -296,8 +304,12 @@ func TestRefundReturnsFundsNotRevenue(t *testing.T) {
 	if _, wc := closingOf(tb, CustomerWallet); wc != 3000 {
 		t.Fatalf("wallet liability must draw down to $30.00 after refund, got credit=%d", wc)
 	}
-	if _, bankC := closingOf(tb, Bank); bankC != 2000 {
-		t.Fatalf("refund must Cr Bank $20.00 (cash out), got credit=%d", bankC)
+	// The clearing account is where the cash came IN and where it goes back out,
+	// so after $50 in and $20 back it closes at a $30 debit — the same $30 the
+	// wallet still owes. A closing balance is a NET, so asserting a gross credit
+	// here would only ever read zero.
+	if clearingD, _ := closingOf(tb, SquareClearing); clearingD != 3000 {
+		t.Fatalf("1010 Square-clearing must close at $30.00 debit after a $50 top-up and a $20 refund, got debit=%d", clearingD)
 	}
 	if _, revC := closingOf(tb, UsageRevenue); revC != 0 {
 		t.Fatalf("a refund must recognize NO revenue, got usage revenue credit=%d", revC)
@@ -307,10 +319,10 @@ func TestRefundReturnsFundsNotRevenue(t *testing.T) {
 // TestZeroAmountSkipped proves a zero-amount row (no accounting weight) and an unknown type
 // are SKIPPED — never posted as an empty or malformed voucher.
 func TestZeroAmountSkipped(t *testing.T) {
-	if _, ok := ruleFor(commerceTxn{ID: "zero-1", Type: "withdraw", Amount: 0}); ok {
+	if _, ok := ruleFor(commerceTxn{ID: "zero-1", Kind: finance.KindUsage, Amount: 0}); ok {
 		t.Fatalf("a zero-amount row must be skipped")
 	}
-	if _, ok := ruleFor(commerceTxn{ID: "huh-1", Type: "mystery", Amount: 100}); ok {
+	if _, ok := ruleFor(commerceTxn{ID: "huh-1", Kind: finance.KindUnknown, Amount: 100}); ok {
 		t.Fatalf("an unknown type must be skipped")
 	}
 }
@@ -320,14 +332,14 @@ func TestZeroAmountSkipped(t *testing.T) {
 // (chargeback) is Dr 2000 Customer Wallet / Cr 1010 Square-clearing; a negative usage
 // (de-recognition) is Dr 4000 Usage revenue / Cr 2000 Customer Wallet.
 func TestReversalBooksOpposite(t *testing.T) {
-	dep, ok := ruleFor(commerceTxn{ID: "cb-1", Type: "deposit", Amount: -5000})
+	dep, ok := ruleFor(commerceTxn{ID: "cb-1", Kind: finance.KindDeposit, Amount: -5000})
 	if !ok {
 		t.Fatalf("a negative deposit must book a reversal, not be skipped")
 	}
 	if len(dep.Legs) != 2 || legDebit(dep.Legs, CustomerWallet) != 5000 || legCredit(dep.Legs, SquareClearing) != 5000 {
 		t.Fatalf("negative deposit must be Dr 2000 / Cr 1010, got %+v", dep.Legs)
 	}
-	use, ok := ruleFor(commerceTxn{ID: "dr-1", Type: "usage", Amount: -3000})
+	use, ok := ruleFor(commerceTxn{ID: "dr-1", Kind: finance.KindUsage, Amount: -3000})
 	if !ok {
 		t.Fatalf("a negative usage must book a de-recognition, not be skipped")
 	}
@@ -344,9 +356,9 @@ func TestUsageReversalDeRecognizes(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-1", Type: "deposit", Amount: 5000, CreatedAt: "2026-07-01T00:00:00Z"},
-		{ID: "use-1", Type: "usage", Amount: 3000, CreatedAt: "2026-07-02T00:00:00Z"},
-		{ID: "rev-1", Type: "usage", Amount: -3000, CreatedAt: "2026-07-03T00:00:00Z"},
+		{ID: "dep-1", Kind: finance.KindDeposit, Amount: 5000, CreatedAt: "2026-07-01T00:00:00Z"},
+		{ID: "use-1", Kind: finance.KindUsage, Amount: 3000, CreatedAt: "2026-07-02T00:00:00Z"},
+		{ID: "rev-1", Kind: finance.KindUsage, Amount: -3000, CreatedAt: "2026-07-03T00:00:00Z"},
 	}}
 	if _, err := ingestOrg(ctx, src, nil, st, "acme", false); err != nil {
 		t.Fatalf("ingest: %v", err)
@@ -373,8 +385,8 @@ func TestCOGSAccrual(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-1", Type: "deposit", Amount: 10000, CreatedAt: "2026-07-01T00:00:00Z"},
-		{ID: "use-1", Type: "usage", Amount: 4000, CreatedAt: "2026-07-02T00:00:00Z"},
+		{ID: "dep-1", Kind: finance.KindDeposit, Amount: 10000, CreatedAt: "2026-07-01T00:00:00Z"},
+		{ID: "use-1", Kind: finance.KindUsage, Amount: 4000, CreatedAt: "2026-07-02T00:00:00Z"},
 	}}
 	cost := &fakeCost{perTxn: map[string]int64{"use-1": 2500}}
 	if _, err := ingestOrg(ctx, src, cost, st, "acme", false); err != nil {
@@ -415,8 +427,8 @@ func TestCOGSBackfillsPastRevenueCursor(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-1", Type: "deposit", Amount: 10000, CreatedAt: "2026-07-01T00:00:00Z"},
-		{ID: "use-1", Type: "usage", Amount: 4000, CreatedAt: "2026-07-02T00:00:00Z"},
+		{ID: "dep-1", Kind: finance.KindDeposit, Amount: 10000, CreatedAt: "2026-07-01T00:00:00Z"},
+		{ID: "use-1", Kind: finance.KindUsage, Amount: 4000, CreatedAt: "2026-07-02T00:00:00Z"},
 	}}
 
 	// Phase 1: ingest with NO cost seam — the live revenue-only path. Books revenue and
@@ -505,8 +517,8 @@ func TestBalanceSheetBalances(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-1", Type: "deposit", Amount: 10000, CreatedAt: "2026-07-01T00:00:00Z"},
-		{ID: "use-1", Type: "usage", Amount: 4000, CreatedAt: "2026-07-02T00:00:00Z"},
+		{ID: "dep-1", Kind: finance.KindDeposit, Amount: 10000, CreatedAt: "2026-07-01T00:00:00Z"},
+		{ID: "use-1", Kind: finance.KindUsage, Amount: 4000, CreatedAt: "2026-07-02T00:00:00Z"},
 	}}
 	cost := &fakeCost{perTxn: map[string]int64{"use-1": 2500}}
 	if _, err := ingestOrg(ctx, src, cost, st, "acme", false); err != nil {
@@ -536,8 +548,8 @@ func TestExportPackage(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-1", Type: "deposit", Amount: 8000, CreatedAt: "2026-07-01T00:00:00Z"},
-		{ID: "use-1", Type: "usage", Amount: 3000, CreatedAt: "2026-07-02T00:00:00Z"},
+		{ID: "dep-1", Kind: finance.KindDeposit, Amount: 8000, CreatedAt: "2026-07-01T00:00:00Z"},
+		{ID: "use-1", Kind: finance.KindUsage, Amount: 3000, CreatedAt: "2026-07-02T00:00:00Z"},
 	}}
 	cost := &fakeCost{perTxn: map[string]int64{"use-1": 1800}}
 	if _, err := ingestOrg(ctx, src, cost, st, "acme", false); err != nil {
@@ -573,8 +585,8 @@ func TestSandboxSegregation(t *testing.T) {
 	sandbox := newBookStore(t, "books-sandbox")
 
 	src := &fakeSource{
-		live:    []commerceTxn{{ID: "live-dep", Type: "deposit", Amount: 5000, CreatedAt: "2026-07-01T00:00:00Z"}},
-		sandbox: []commerceTxn{{ID: "test-dep", Type: "deposit", Amount: 999999, CreatedAt: "2026-07-01T00:00:00Z"}},
+		live:    []commerceTxn{{ID: "live-dep", Kind: finance.KindDeposit, Amount: 5000, CreatedAt: "2026-07-01T00:00:00Z"}},
+		sandbox: []commerceTxn{{ID: "test-dep", Kind: finance.KindDeposit, Amount: 999999, CreatedAt: "2026-07-01T00:00:00Z"}},
 	}
 	if _, err := ingestOrg(ctx, src, nil, live, "acme", false); err != nil {
 		t.Fatalf("ingest live: %v", err)

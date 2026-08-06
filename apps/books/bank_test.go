@@ -2,6 +2,7 @@ package books
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/apps/finance"
 	"testing"
 )
 
@@ -165,7 +166,7 @@ func TestBankInflowMatchedClearsSquare(t *testing.T) {
 
 	// Seed a Square capture via the spine: deposit → Dr 1010 Square-clearing / Cr 2000.
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-1", Type: "deposit", Amount: 10000, Currency: "usd", Notes: "card top-up", CreatedAt: "2026-07-01T10:00:00Z"},
+		{ID: "dep-1", Kind: finance.KindDeposit, Amount: 10000, Currency: "usd", Notes: "card top-up", CreatedAt: "2026-07-01T10:00:00Z"},
 	}}
 	if _, err := ingestOrg(ctx, src, nil, st, "acme", false); err != nil {
 		t.Fatalf("seed capture: %v", err)
@@ -249,7 +250,7 @@ func TestBankInflowCoincidentalAmountRaisesQuestion(t *testing.T) {
 
 	// Seed a $5.00 Square capture via the spine (deposit → Dr 1010 / Cr 2000).
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-500", Type: "deposit", Amount: 500, Currency: "usd", Notes: "card top-up", CreatedAt: "2026-07-01T10:00:00Z"},
+		{ID: "dep-500", Kind: finance.KindDeposit, Amount: 500, Currency: "usd", Notes: "card top-up", CreatedAt: "2026-07-01T10:00:00Z"},
 	}}
 	if _, err := ingestOrg(ctx, src, nil, st, "acme", false); err != nil {
 		t.Fatalf("seed capture: %v", err)
@@ -302,7 +303,7 @@ func TestBankSecondSettlementNoOverClear(t *testing.T) {
 	st := newBookStore(t, "books")
 
 	src := &fakeSource{live: []commerceTxn{
-		{ID: "dep-x", Type: "deposit", Amount: 800, Currency: "usd", Notes: "top-up", CreatedAt: "2026-07-01T10:00:00Z"},
+		{ID: "dep-x", Kind: finance.KindDeposit, Amount: 800, Currency: "usd", Notes: "top-up", CreatedAt: "2026-07-01T10:00:00Z"},
 	}}
 	if _, err := ingestOrg(ctx, src, nil, st, "acme", false); err != nil {
 		t.Fatalf("seed capture: %v", err)

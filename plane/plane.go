@@ -459,6 +459,20 @@ type Txn struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
+// TxnsIn selects which books to read and how much of them.
+//
+// Test picks the SANDBOX ledger. Sandbox money and real money live in
+// physically separate files and must never mix, so the selector travels rather
+// than being inferred at the far end: a reader that posts test rows into real
+// revenue has restated the company's income, and nothing downstream can tell.
+//
+// Limit is a page size; 0 takes the ledger's own default. There is no org and
+// no subject, for the usual reason — the tenant rides the caller.
+type TxnsIn struct {
+	Test  bool `json:"test,omitempty"`
+	Limit int  `json:"limit,omitempty"`
+}
+
 // Txns is a page of ledger entries.
 type Txns struct {
 	Rows []Txn `json:"rows"`
