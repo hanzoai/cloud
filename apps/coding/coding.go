@@ -34,10 +34,21 @@ import (
 var RepoRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // OrgRE is the tenant-name rule, mirroring the git subsystem's own (git.go
-// orgRE). A run's org is interpolated into a KMS path and a git namespace, so it
-// is shape-checked rather than merely required: a tenant name that can carry a
-// separator or a `..` can address another tenant's secret.
+// orgRE). A run's org is interpolated into a git namespace, so it is
+// shape-checked rather than merely required: a tenant name that can carry a
+// separator or a `..` can address another tenant's repositories.
 var OrgRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+// BaseRE is the branch-name rule, mirroring the git subsystem's own (push.go
+// branchRE) — nested names allowed, so `release/2.1` works.
+//
+// The load-bearing property is the FIRST character class: a branch is alnum-led,
+// so a base can never begin with '-'. The base reaches a `git clone -b <base>`
+// argument on a machine we do not own, where a leading dash makes it a flag
+// rather than a branch, and `--upload-pack=` / `--config=core.fsmonitor=` are
+// each arbitrary command execution on that machine. Length and the absence of a
+// space matter too, but the dash is the one that turns data into a program.
+var BaseRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
 
 // BranchFor is the ONE branch a run is permitted to write, derived from the
 // session that owns it. It is a pure function of the session id — not a name the
@@ -344,10 +355,17 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	res.Diffstat = runRes.Diffstat
 	res.Changed = runRes.Changed
 	res.LogTail = runRes.LogTail
-	if runRes.Branch != "" {
-		res.Branch = runRes.Branch
-		branch = runRes.Branch
-	}
+	// runRes.Branch is NOT read. The branch is BranchFor(sessionID) — issued by
+	// cloud, named after a session the sandbox did not choose — and adopting the
+	// sandbox's self-report let a compromised one answer `main`, which then flowed
+	// into VerifyRef (which only asks whether a ref EXISTS, and main does) and out
+	// as CreatePR{Head: "main"}. A PR headed at the trunk, filed by us, from a run
+	// that never had permission to write there.
+	//
+	// The sandbox has nothing to report here: it was TOLD which branch to push,
+	// and its grant admits that one ref and no other, so a disagreement between
+	// what it claims and what we issued is not new information — it is the
+	// signal that something is wrong.
 	res.CommitSha = runRes.CommitSha
 
 	if !runRes.OK {
@@ -448,10 +466,10 @@ func (d Dispatcher) finalizeRouted(ctx context.Context, in RoutedRun, res Routed
 		_ = d.Sessions.Close(ctx, in.Org, in.SessionID, statusDone)
 		return
 	}
-	branch := strings.TrimSpace(res.Branch)
-	if branch == "" {
-		branch = in.Branch
-	}
+	// res.Branch is NOT read, for the reason stated in Run: the branch is the one
+	// cloud issued and put in the RoutedRun, and a machine that reports a
+	// different one is reporting something it was never asked.
+	branch := in.Branch
 	out.Branch = branch
 	out.CommitSha = res.CommitSha
 	out.Changed = true

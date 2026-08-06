@@ -258,6 +258,18 @@ func init() {
 	zip.Describe("POST /git/files", zip.Doc{
 		Description: "Reads the glob-selected files of one of the caller's repos at one\nrevision, returning the resolved commit and each file's path and contents.\nThe org is the CALLER's plane identity, never the argument — an anonymous\ncaller is refused — and the whole reply is read at one resolved commit, so a\ncaller can never assemble half an inventory from each side of a push. A named\nhandler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
+	zip.Describe("POST /git/grant", zip.Doc{
+		Description: "Mints a push grant for the CALLER's org.\n\nThe org is the caller's plane identity and never an argument, so an app acting\nfor one tenant cannot delegate a write into another's repository — the same\nrule planeImport and planeInbound state, for the same reason.\n\nThe ref is checked against the agent namespace HERE as well as at the pack\ndoor. Not as a second line of defence but because it is a different sentence:\nthe door says \"this push may only write the ref its grant names\", and this\nsays \"the only ref the forge will ever delegate is a machine ref\". A grant for\nrefs/heads/main would satisfy the door and must therefore never be minted.",
+		Fields: map[string]string{
+			"GrantIn.project":    "Project is the repository's sub-scope; empty is the org's default scope.",
+			"GrantIn.ref":        "Ref is the FULL ref the grant may create, and the only one. The forge\ndelegates the machine namespace and nothing else.",
+			"GrantIn.repo":       "Repo is the repository the grant addresses, and the only one it opens.",
+			"GrantIn.ttlSeconds": "TTLSeconds bounds the grant. Absent, or longer than the forge's cap, gets\nthe cap — a grant is never open-ended.",
+			"Granted.expiresAt":  "ExpiresAt is the unix second the grant stops working regardless.",
+			"Granted.handle":     "Handle revokes the grant. It is the token's digest, so carrying it back\nnever means presenting the secret twice.",
+			"Granted.token":      "Token is the bearer. It authenticates nobody and opens nothing but the pack\nprotocol on the repository named in the request — never a log line.",
+		},
+	})
 	zip.Describe("POST /git/import", zip.Doc{
 		Description: "Creates the repo and mirrors the upstream, for the CALLER's org.\n\nThe org is never read off the argument: it is the identity the edge minted and\nthe plane carried, so a caller holding one org's context cannot create a repo\nin another's namespace. Project carries the provider-side account, which is\nwhat keeps two upstreams of the same name — hanzoai/ai and hanzo-apps/ai —\ndistinct repos rather than one overwriting the other.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -294,6 +306,12 @@ func init() {
 	})
 	zip.Describe("POST /git/publish", zip.Doc{
 		Description: "Reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
+	})
+	zip.Describe("POST /git/revoke", zip.Doc{
+		Description: "Drops a grant the caller's org holds, so a grant's life is the\nRUN's life rather than its TTL. The TTL is the backstop for a run that dies\nwithout saying so; this is the ordinary path.",
+		Fields: map[string]string{
+			"RevokeIn.handle": "Handle is what Granted returned. An unknown handle, or one belonging to\nanother org, is a no-op rather than an error: revoking is idempotent.",
+		},
 	})
 	zip.Describe("POST /git/status", zip.Doc{
 		Description: "Reports which of the named repos the CALLER's org has imported and\nwhich a prior inbound sync left in conflict.\n\nThe app that DRAWS the repo list is integrations (it has the provider's\ncatalogue of what could be imported); the app that knows what WAS is this one.\nIn a split fleet the in-process importer is nil over there, so the list\nrendered every repo as never-imported — a wrong answer delivered confidently,\nwhich is worse than the import failure the same split caused, because nothing\nerrored.\n\nThe reply is a SLICE, not a map: a map cannot cross this wire, so each row\ncarries the name it answers for. A name git holds nothing under is ABSENT\nrather than a false row — the caller reads absence as not-imported, which is\nthe same value the in-process leg's zero entry yields, so neither leg can be\ntold from the other by its result.\n\nIt calls the in-process implementation directly rather than\ncloud.GitRepoStatuses: the package func dispatches to whatever is registered,\nand in THIS process that resolution would come back around through the plane\nto this same handler.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",

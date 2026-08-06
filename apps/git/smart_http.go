@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"io"
 	"net/http"
 	"strings"
@@ -132,14 +133,15 @@ func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("service must be git-upload-pack or git-receive-pack")
 	}
 	// Anonymous read is allowed ONLY for the fetch advertisement of a PUBLIC
-	// repo; the push advertisement (receive-pack) always requires the org.
-	org, project, name, err := resolvePackRepo(s, c, service == svcUploadPack)
+	// repo; the push advertisement (receive-pack) always requires an org or a
+	// grant.
+	who, err := resolvePackRepo(s, c, service == svcUploadPack)
 	if err != nil {
 		return err
 	}
 
 	// Advertisement is bounded by ref count (not pack size) — safe to buffer.
-	bareDir := s.State.storage.absRepoPath(org, project, name)
+	bareDir := s.State.storage.absRepoPath(who.org, who.project, who.repo)
 	refs, err := advertiseRefs(c.Context(), bareDir, service, gitProtocol(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "advertise refs: %v", err)
@@ -162,7 +164,7 @@ func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
 // `git upload-pack --stateless-rpc` stdin and git's stdout is handed to fasthttp
 // as the response body — no pack bytes are buffered in this process.
 func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, err := resolvePackRepo(s, c, true) // public repos fetch anonymously
+	who, err := resolvePackRepo(s, c, true) // public repos fetch anonymously
 	if err != nil {
 		return err
 	}
@@ -170,7 +172,7 @@ func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("unexpected content-type for " + svcUploadPack)
 	}
 	body := packRequestBody(c)
-	bareDir := s.State.storage.absRepoPath(org, project, name)
+	bareDir := s.State.storage.absRepoPath(who.org, who.project, who.repo)
 	stream, err := startPackRPC(c.Context(), s.Log, bareDir, svcUploadPack, gitProtocol(c), body)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
@@ -189,21 +191,22 @@ func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
 // push returns. Memory stays bounded: the pack streams to disk, only the tiny
 // report is buffered.
 func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, err := resolvePackRepo(s, c, false) // push is NEVER anonymous
+	who, err := resolvePackRepo(s, c, false) // push is NEVER anonymous
 	if err != nil {
 		return err
 	}
+	org, project, name := who.org, who.project, who.repo
 	if ct := c.Header("Content-Type"); ct != "application/x-"+svcReceivePack+"-request" {
 		return zip.ErrBadRequest("unexpected content-type for " + svcReceivePack)
 	}
 	bareDir := s.State.storage.absRepoPath(org, project, name)
 
-	// THE REF POLICY, applied before a single object is indexed.
+	// THE REF POLICY, applied before a single object is indexed. Refusing BEFORE
+	// receive-pack runs also means a refused push costs no disk: the pack is
+	// never unpacked.
 	//
-	// It runs here because this is the point every push passes through and none
-	// can decline to — a rule in the client, the sandbox or the orchestrator is a
-	// rule the compromised party gets to skip. Refusing BEFORE receive-pack runs
-	// also means a refused push costs no disk: the pack is never unpacked.
+	// This is one of the writers, not "the" writer — refwriters.go enumerates the
+	// rest and each states its own intent to the same rule.
 	//
 	// The body is read once and reused: packRequestBody already copies it out of
 	// the framework's reused buffer, so the policy reads the same bytes git will,
@@ -217,7 +220,7 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 		// report-status framing to answer in.
 		return zip.ErrBadRequest("unreadable push: " + perr.Error())
 	}
-	if verr := checkRefPolicy(cmds, defaultBranchOf(c.Context(), bareDir)); verr != nil {
+	if verr := checkRefPolicy(cmds, defaultBranchOf(c.Context(), bareDir), who.ref); verr != nil {
 		s.Log.Warn("git push refused by ref policy", "org", org, "repo", name, "reason", verr.Error())
 		// 200 with a report-status, NOT a 403. The push is refused either way;
 		// the difference is whether the human reads the reason or reads
@@ -320,37 +323,103 @@ func packProject(c *zip.Ctx, authed bool) (string, error) {
 	return projectScope(c), nil
 }
 
-func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (string, string, string, error) {
+// packCaller is who is driving a pack request, and what they may do with it.
+//
+// It exists because there are now two ways to reach the pack protocol and only
+// one of them is a person. A PRINCIPAL is an org member, reaches every
+// repository that org owns, and is bound by the ref policy's namespace rules. A
+// GRANT is not an identity at all (grant.go): it names one repository and one
+// ref, and ref carries that confinement to the policy so the door and the rule
+// cannot drift apart.
+type packCaller struct {
+	org, project, repo string
+	// ref is the ONE ref a granted caller may write, or "" for a principal.
+	ref string
+}
+
+// resolvePackRepo is the shared front-half of every smart-HTTP pack handler, and
+// the ONE place a grant is honoured anywhere in the binary. Three callers, all
+// in this file; nothing else in cloud can be reached with a grant, because
+// nothing else asks.
+//
+// A principal WINS. The grant is consulted only where there is no principal, so
+// it can never widen what an authenticated caller already had.
+func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (packCaller, error) {
 	orgID, authed := org(c)
+	granted, hasGrant := grant{}, false
 	if !authed {
-		if !allowPublic {
-			return "", "", "", zip.ErrForbidden("X-Org-Id required")
-		}
-		orgID = c.Param("org")
-		if orgID == "" || !orgRE.MatchString(orgID) {
-			return "", "", "", zip.ErrForbidden("X-Org-Id required")
+		granted, hasGrant = issued.lookup(packBearer(c))
+		switch {
+		case hasGrant:
+			orgID = granted.org
+		case allowPublic:
+			orgID = c.Param("org")
+			if orgID == "" || !orgRE.MatchString(orgID) {
+				return packCaller{}, zip.ErrForbidden("X-Org-Id required")
+			}
+		default:
+			return packCaller{}, zip.ErrForbidden("X-Org-Id required")
 		}
 	}
 	name, err := repoNameParam(c)
 	if err != nil {
-		return "", "", "", err
+		return packCaller{}, err
 	}
 	project, err := packProject(c, authed)
 	if err != nil {
-		return "", "", "", err
+		return packCaller{}, err
 	}
 	if p := c.Param("org"); p != "" && p != orgID {
-		return "", "", "", zip.ErrForbidden("org path does not match authenticated org")
+		return packCaller{}, zip.ErrForbidden("org path does not match authenticated org")
+	}
+	// A grant addresses the repository it was minted for and no other. The
+	// refusal is the SAME 404 a stranger gets, so a grant cannot be used to probe
+	// which of an org's repositories exist.
+	if hasGrant && (granted.project != project || granted.repo != name) {
+		return packCaller{}, zip.ErrNotFound("repo not found")
 	}
 	store, serr := storeFor(s, orgID)
 	if serr != nil {
-		return "", "", "", zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
+		return packCaller{}, zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
 	}
 	r, gerr := store.Get(c.Context(), orgID, project, name)
-	if gerr != nil || (!authed && !r.Public) {
-		return "", "", "", zip.ErrNotFound("repo not found")
+	if gerr != nil || (!authed && !hasGrant && !r.Public) {
+		return packCaller{}, zip.ErrNotFound("repo not found")
 	}
-	return orgID, project, name, nil
+	return packCaller{org: orgID, project: project, repo: name, ref: granted.ref}, nil
+}
+
+// packBearer reads the credential a git client presents. git sends a token as
+// the BASIC password (there is no way to make it send a bearer), so both
+// spellings are read and neither is validated here — issued.lookup is the only
+// thing that decides whether these bytes mean anything.
+func packBearer(c *zip.Ctx) string {
+	auth := strings.TrimSpace(c.Header("Authorization"))
+	if v, ok := cutPrefixFold(auth, "Bearer "); ok {
+		return strings.TrimSpace(v)
+	}
+	v, ok := cutPrefixFold(auth, "Basic ")
+	if !ok {
+		return ""
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))
+	if err != nil {
+		return ""
+	}
+	_, pass, ok := strings.Cut(string(raw), ":")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(pass)
+}
+
+// cutPrefixFold is strings.CutPrefix over an ASCII-case-insensitive scheme name,
+// which is what RFC 7235 says an auth-scheme is.
+func cutPrefixFold(s, prefix string) (string, bool) {
+	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
+		return "", false
+	}
+	return s[len(prefix):], true
 }
 
 // fireBranchBuilds fires a push-to-deploy build for every branch whose tip
