@@ -11,19 +11,19 @@ import (
 	"strings"
 )
 
-var errNotFound = errors.New("machines: machine not found")
+var errNotFound = errors.New("sandbox: sandbox not found")
 
-// Machine is one leased execution machine. It is the SAME record whether the
+// Sandbox is one leased execution sandbox. It is the SAME record whether the
 // lease is seconds long (a function invoke) or a week (a suspended coding
 // session) — status and expiresAt carry the difference, not a second table.
 //
-// Pod is the machine's ADDRESS, and it is `json:"-"` on purpose. It is a pod
+// Pod is the sandbox's ADDRESS, and it is `json:"-"` on purpose. It is a pod
 // name in a namespace a caller has no business knowing, and handing it out both
-// maps the cluster for whatever runs inside a machine and invites a client to
-// try reaching the machine directly, which would mean terminating auth somewhere
+// maps the cluster for whatever runs inside a sandbox and invites a client to
+// try reaching the sandbox directly, which would mean terminating auth somewhere
 // other than the IAM edge. The predecessor returned a pod IP in every create,
 // get and list response.
-type Machine struct {
+type Sandbox struct {
 	ID         string `json:"id"`
 	Org        string `json:"org"`
 	Kind       string `json:"kind"`
@@ -39,8 +39,8 @@ type Machine struct {
 	ExpiresAt  int64  `json:"expiresAt,omitempty"`
 }
 
-// Store is one org's machine registry — ONE SQLite file per org at
-// {DataDir}/orgs/{orgSlug}/machines.db (cloud.OrgDB, HIP-0302). Org isolation is
+// Store is one org's sandbox registry — ONE SQLite file per org at
+// {DataDir}/orgs/{orgSlug}/sandbox.db (cloud.OrgDB, HIP-0302). Org isolation is
 // PHYSICAL (a different file), with the org column kept as defence in depth so a
 // query that somehow reached the wrong file still returns nothing.
 type Store struct{ db *sql.DB }
@@ -56,7 +56,7 @@ func openStore(db *sql.DB) (*Store, error) {
 
 func (s *Store) migrate() error {
 	const ddl = `
-CREATE TABLE IF NOT EXISTS machines (
+CREATE TABLE IF NOT EXISTS sandbox (
   id           TEXT PRIMARY KEY,
   org          TEXT NOT NULL,
   kind         TEXT NOT NULL DEFAULT 'sandbox',
@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS machines (
   last_used_at INTEGER NOT NULL,
   expires_at   INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS ix_machines_org_project ON machines(org, project);
-CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON machines(org, status);
+CREATE INDEX IF NOT EXISTS ix_machines_org_project ON sandbox(org, project);
+CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON sandbox(org, status);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -82,9 +82,9 @@ CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON machines(org, status);
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) Put(ctx context.Context, m Machine) error {
+func (s *Store) Put(ctx context.Context, m Sandbox) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO machines (id,org,kind,class,project,status,image,pod,volume,error,created_at,last_used_at,expires_at)
+INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,volume,error,created_at,last_used_at,expires_at)
 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   status=excluded.status, image=excluded.image, pod=excluded.pod, volume=excluded.volume,
@@ -96,24 +96,24 @@ ON CONFLICT(id) DO UPDATE SET
 
 // Get is org-scoped in the WHERE clause, always. The file is already per-org;
 // this is the second lock on the same door.
-func (s *Store) Get(ctx context.Context, org, id string) (Machine, error) {
+func (s *Store) Get(ctx context.Context, org, id string) (Sandbox, error) {
 	row := s.db.QueryRowContext(ctx, selectCols+` WHERE org=? AND id=?`, org, id)
 	return scanMachine(row)
 }
 
-// Live is the single-attach check: the machine, if any, currently holding this
+// Live is the single-attach check: the sandbox, if any, currently holding this
 // project's volume.
-func (s *Store) Live(ctx context.Context, org, project string) (Machine, error) {
+func (s *Store) Live(ctx context.Context, org, project string) (Sandbox, error) {
 	row := s.db.QueryRowContext(ctx,
 		selectCols+` WHERE org=? AND project=? AND status IN ('running','pending') LIMIT 1`, org, project)
 	m, err := scanMachine(row)
 	if err == errNotFound {
-		return Machine{}, nil
+		return Sandbox{}, nil
 	}
 	return m, err
 }
 
-func (s *Store) List(ctx context.Context, org, project, status string) ([]Machine, error) {
+func (s *Store) List(ctx context.Context, org, project, status string) ([]Sandbox, error) {
 	q := selectCols + ` WHERE org=?`
 	args := []any{org}
 	if project != "" {
@@ -127,9 +127,9 @@ func (s *Store) List(ctx context.Context, org, project, status string) ([]Machin
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	out := []Machine{}
+	out := []Sandbox{}
 	for rows.Next() {
-		var m Machine
+		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
 			&m.Image, &m.Pod, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
 			return nil, err
@@ -139,17 +139,17 @@ func (s *Store) List(ctx context.Context, org, project, status string) ([]Machin
 	return out, rows.Err()
 }
 
-// Expired is what a reaper reads: every machine whose lease has run out.
-func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Machine, error) {
+// Expired is what a reaper reads: every sandbox whose lease has run out.
+func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Sandbox, error) {
 	rows, err := s.db.QueryContext(ctx,
 		selectCols+` WHERE org=? AND expires_at>0 AND expires_at<? ORDER BY expires_at LIMIT 200`, org, now)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	out := []Machine{}
+	out := []Sandbox{}
 	for rows.Next() {
-		var m Machine
+		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
 			&m.Image, &m.Pod, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
 			return nil, err
@@ -160,18 +160,18 @@ func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Machine, 
 }
 
 func (s *Store) Delete(ctx context.Context, org, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM machines WHERE org=? AND id=?`, org, id)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sandbox WHERE org=? AND id=?`, org, id)
 	return err
 }
 
-const selectCols = `SELECT id,org,kind,class,project,status,image,pod,volume,error,created_at,last_used_at,expires_at FROM machines`
+const selectCols = `SELECT id,org,kind,class,project,status,image,pod,volume,error,created_at,last_used_at,expires_at FROM sandbox`
 
-func scanMachine(row *sql.Row) (Machine, error) {
-	var m Machine
+func scanMachine(row *sql.Row) (Sandbox, error) {
+	var m Sandbox
 	err := row.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
 		&m.Image, &m.Pod, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Machine{}, errNotFound
+		return Sandbox{}, errNotFound
 	}
 	return m, err
 }
@@ -184,7 +184,7 @@ func genID() (string, error) {
 	return IDPrefix + hex.EncodeToString(b[:]), nil
 }
 
-// podName is the machine's address, minted once per machine and NEVER REUSED.
+// podName is the sandbox's address, minted once per sandbox and NEVER REUSED.
 // That is the whole property: an address that can be recycled is an address a
 // second tenant can be handed, and no credential check downstream can undo it.
 func podName(id string) string { return "m-" + strings.TrimPrefix(id, IDPrefix) }
