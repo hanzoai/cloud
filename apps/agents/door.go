@@ -159,9 +159,9 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 			offered[op] = true
 		}
 	}
-	// ToolsAll offers the door's tools AS THE DOOR GROUPS THEM — hanzo_<subsystem>
-	// carrying an `op` enum, plus hanzo_describe — and not the ops flattened back
-	// out.
+	// ToolsAll offers the door's tools AS THE DOOR GROUPS THEM — one per subsystem,
+	// named for it, carrying an `op` enum, plus [fleet.Describe] — and not the ops
+	// flattened back out.
 	//
 	// The grouping is the whole reason the surface is affordable: 1,189 flat tools
 	// were 977 KB (~244k tokens) merely to LIST, and the same operations grouped
@@ -169,7 +169,7 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 	// door just saved and blow the context before the question is read.
 	//
 	// It is also what the assistant's instructions describe — pick a subsystem,
-	// choose an op from its enum, call hanzo_describe for a shape you do not know.
+	// choose an op from its enum, call [fleet.Describe] for a shape you do not know.
 	// The prose and the offer have to be the same surface or the model is being
 	// taught a protocol it cannot practise.
 	if all {
