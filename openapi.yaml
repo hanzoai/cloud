@@ -1539,6 +1539,42 @@ components:
       - lang
       - code
       type: object
+    CodingStartIn:
+      properties:
+        agentRef:
+          type: string
+        base:
+          type: string
+        project:
+          type: string
+        prompt:
+          type: string
+        replyChannel:
+          type: string
+        replyThread:
+          type: string
+        repo:
+          type: string
+        subject:
+          type: string
+        targetId:
+          type: string
+        timeoutSeconds:
+          type: integer
+      type: object
+    CodingStarted:
+      properties:
+        branch:
+          type: string
+        repo:
+          type: string
+        routed:
+          type: boolean
+        sessionId:
+          type: string
+        targetId:
+          type: string
+      type: object
     CollectOut:
       properties:
         balanceUsedCents:
@@ -14121,13 +14157,24 @@ components:
     crawlDocument:
       properties:
         markdown:
+          description: |-
+            Markdown is the page's content, extracted and rendered to markdown. This is
+            the field to read.
           type: string
         metadata:
-          additionalProperties: {}
-          type: object
+          description: |-
+            Metadata is whatever the document said about itself — description, og:*,
+            language — plus the response status, the final URL and the content type. It
+            is an OPEN key space, so it is carried as raw JSON: `map[string]any`
+            publishes `additionalProperties:{"type":"object"}`, which the integer
+            `status` inside it refutes, while raw JSON publishes `{}` — "any JSON",
+            which is true. The bytes are identical either way (encoding/json writes a
+            map's keys sorted, and this IS that marshalling).
         title:
+          description: Title is the document's title, when it carried one.
           type: string
         url:
+          description: URL is the address actually read, after redirects.
           type: string
       type: object
     crawlRequest:
@@ -14139,9 +14186,16 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/crawlDocument'
+          description: Data is the page, present exactly when Success.
         error:
+          description: |-
+            Error says what stopped the fetch: the host was refused, unreachable, or
+            served something that is not a document.
           type: string
         success:
+          description: |-
+            Success is whether the page was fetched and read. FALSE with an Error is a
+            complete answer, not a fault — check this before reading Data.
           type: boolean
       type: object
     createAccountIn:
@@ -20719,52 +20773,25 @@ components:
           description: Tool is the capability the write applied to.
           type: string
       type: object
-    issuePatch:
+    issueEdit:
       properties:
-        assignee:
-          description: Assignee is who owns the issue, at most 256 characters. Empty
-            unassigns it.
-          type: string
         description:
-          description: Description is the issue body, at most 32768 characters.
+          description: Description rewrites the body.
           type: string
-        dueAt:
-          description: |-
-            DueAt is when the work is due, in unix seconds — the right edge of its
-            bar, or the milestone marker when there is no start. 0 clears it. It may
-            not fall before startAt.
-          type: integer
         key:
-          description: Key is the issue's project, from the path.
+          description: Key is the board — the repository name, from the path.
           type: string
-        labels:
-          description: |-
-            Labels REPLACES the issue's labels with exactly this set. Each label is at
-            most 48 characters and may not contain a comma (the storage separator);
-            empty entries are dropped.
-          items:
-            type: string
-          type: array
         num:
-          description: Num is the issue's number within that project, from the path.
+          description: Num is the issue number on that repository, from the path.
           type: integer
         priority:
-          description: Priority is none, urgent, high, medium or low. Empty resets
-            it to none.
+          description: Priority re-prioritises it.
           type: string
-        startAt:
-          description: |-
-            StartAt is when the work starts, in unix seconds — the left edge of its
-            bar on the timeline. 0 clears it.
-          type: integer
         status:
-          description: |-
-            Status moves the issue between board columns: backlog, todo, in_progress,
-            done or canceled. Empty resets it to backlog.
+          description: Status moves the card to another column.
           type: string
         title:
-          description: Title is the issue's one-line summary. Non-empty, at most 512
-            characters.
+          description: Title renames the work item.
           type: string
       type: object
     issueView:
@@ -21600,6 +21627,23 @@ components:
             $ref: '#/components/schemas/seriesLine'
           type: array
       type: object
+    milestoneView:
+      properties:
+        closed:
+          type: integer
+        dueAt:
+          type: integer
+        id:
+          type: integer
+        open:
+          type: integer
+        repo:
+          type: string
+        state:
+          type: string
+        title:
+          type: string
+      type: object
     mintedKey:
       properties:
         accessKey:
@@ -21918,6 +21962,26 @@ components:
           description: |-
             Status is "connected" once at least one of the org's edge-routers is
             online, else "provisioning" (routers exist but none has dialed home).
+          type: string
+      type: object
+    newIssue:
+      properties:
+        description:
+          description: Description becomes the issue body.
+          type: string
+        key:
+          description: Key is the board — the repository name, from the path.
+          type: string
+        priority:
+          description: Priority is one of none, urgent, high, medium or low.
+          type: string
+        status:
+          description: |-
+            Status is the board column to open into: backlog, todo, in_progress, done
+            or canceled. Empty opens into backlog.
+          type: string
+        title:
+          description: Title is required.
           type: string
       type: object
     newsResponse:
@@ -35475,19 +35539,6 @@ components:
         total:
           type: integer
       type: object
-    projectPatch:
-      properties:
-        description:
-          description: Description is the board's free-form blurb, at most 32768 characters.
-          type: string
-        key:
-          description: Key is the project to update, from the path.
-          type: string
-        name:
-          description: Name is the project's display name. Non-empty, at most 256
-            characters.
-          type: string
-      type: object
     projectView:
       properties:
         applications:
@@ -42672,6 +42723,56 @@ components:
           description: Wallets are the matching wallets, newest first.
           items:
             $ref: '#/components/schemas/Wallet'
+          type: array
+      type: object
+    webResult:
+      properties:
+        content:
+          description: |-
+            Content is the ENGINE's snippet — the few lines shown under the title, not
+            the page's text. Read the page itself with POST /v1/crawl.
+          type: string
+        engine:
+          description: |-
+            Engine names the backend that found this hit, so one engine's view of a
+            query can be told from another's.
+          type: string
+        title:
+          description: Title is the page's title.
+          type: string
+        url:
+          description: URL is the page's address, as the engine reported it.
+          type: string
+      type: object
+    webSearchQuery:
+      properties:
+        language:
+          description: |-
+            Language narrows the engines to a locale, BCP-47-ish ("en", "ja", "de").
+            Empty means no narrowing.
+          type: string
+        q:
+          description: |-
+            Q is the query. Required — an empty one is refused rather than answered
+            with the whole web.
+          type: string
+      type: object
+    webSearchResults:
+      properties:
+        number_of_results:
+          description: |-
+            NumberOfResults is len(results) — what this answer carries, never an
+            estimate of what the web holds.
+          type: integer
+        query:
+          description: Query is the query that ran, echoed back.
+          type: string
+        results:
+          description: |-
+            Results are the merged hits, deduplicated by normalised URL and capped at
+            20. Always an array and never null: no hits is an ANSWER, not a fault.
+          items:
+            $ref: '#/components/schemas/webResult'
           type: array
       type: object
     workerList:
@@ -58482,6 +58583,26 @@ paths:
       tags:
       - code
       x-app: code
+  /v1/coding:
+    post:
+      operationId: post_v1_coding
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodingStartIn'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodingStarted'
+          description: accepted
+      summary: Start one autonomous coding run against a repo in the caller's org
+      tags:
+      - coding
+      x-app: agents
   /v1/collections:
     delete:
       description: |-
@@ -63693,24 +63814,56 @@ paths:
   /v1/crawl:
     post:
       description: |-
-        Fetches a single URL from inside the cluster and answers with the page's title, its content rendered to markdown, and whatever metadata the document carried.
+        Reads one URL and answers with the page as markdown.
 
-        A page that could not be fetched is a NORMAL outcome, not a fault: an unreachable host, a refused address or a non-document content type all answer 200 with `success:false` and the reason in `error`. Non-2xx is reserved for a caller problem — 401 for a bad key, 400 for a missing url, 503 when the surface is unconfigured — so error handling can trust the status.
+        It fetches a single URL from inside the cluster and answers with the address it
+        actually landed on, the document's title, its content rendered to MARKDOWN, and
+        whatever the page said about itself. One URL per call: batching would make the
+        answer a partial-failure envelope every caller then has to unpack.
 
-        Admission is either a validated principal or the shared service key, presented as X-API-Key or a Bearer; neither is refused, and an unset key fails closed rather than opening the fetcher to the private network. Crawled pages are archived under the scope of the VERIFIED principal, never a scope named in the body; a service caller has no org and its pages land in the shared corpus. One URL per call, and the request body is bounded at 1 MiB.
+        A PAGE THAT COULD NOT BE FETCHED IS A NORMAL ANSWER, not a fault. An
+        unreachable host, a refused address and a content type that is not a document
+        all answer 200 with `success:false` and the reason in `error`, because the
+        caller sent a well-formed ask and gets a well-formed answer. Non-2xx is reserved
+        for a caller problem — 400 with the same body when there is no url, 401 for a
+        bad key, 503 when the surface is unconfigured — so error handling can trust the
+        status. Check `success` before reading `data`.
+
+        Admission is either a validated principal or the shared service key, presented
+        as X-API-Key or a Bearer; neither is refused, and an unset key fails closed
+        rather than opening the fetcher to the private network. Pages are archived under
+        the scope of the VERIFIED principal and NEVER a scope named in the body, so a
+        URL already read under that scope is answered from the archive without touching
+        the network; a service caller has no org and its pages land in the shared
+        corpus.
+
+        The URL is caller-supplied and dialled from INSIDE the cluster, which makes this
+        a request-forgery primitive by construction. Only http and https are accepted,
+        and every address actually dialled must be public unicast — loopback,
+        link-local, private and multicast are refused. The check lives in the DIALER
+        rather than on the hostname, because resolving a name to validate it and then
+        letting the transport resolve it again is a gap DNS rebinding walks straight
+        through; redirects re-enter the same dialer.
       operationId: post_v1_crawl
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/crawlRequest'
+        required: true
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/crawlResult'
-          description: Success
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/crawlResult'
+          description: bad request
       summary: Fetch one URL and read it back as markdown
       tags:
       - crawl
@@ -103755,15 +103908,41 @@ paths:
       tags:
       - traces
       x-app: metrics
+  /v1/tracker/milestones:
+    get:
+      description: |-
+        Returns every milestone across your org's repositories, each
+        stamped with the repository it belongs to.
+
+        The forge scopes milestones to a repository and publishes no org-level list,
+        so this is a server-side fan-out over the repositories you can see. It runs
+        here rather than in the browser because a client-side fan-out would need the
+        forge reachable from the page and a credential held there.
+      operationId: get_v1_tracker_milestones
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/milestoneView'
+                type: array
+          description: ok
+      summary: Returns every milestone across your org's repositories, each stamped
+        with the repository it belongs to.
+      tags:
+      - tracker
+      x-app: tracker
   /v1/tracker/projects:
     get:
       description: |-
-        Returns every tracker project in the caller's org, newest first.
+        Returns the boards of your org — one per repository on the
+        deployment's forge that you can see. The key is the repository name, and it is
+        what addresses the board's issues.
 
-        A project is the board: it owns a KEY (the uppercase handle that prefixes every
-        issue identifier, "ENG-14") and the issues filed under it. The listing is
-        org-scoped server-side — the org is the validated bearer claim, never a
-        client-supplied header — so one org can never see another's boards.
+        Archived repositories are omitted: they are not live work. The set is the
+        FORGE's answer for your own account, so two people in one org can legitimately
+        see different boards.
       operationId: get_v1_tracker_projects
       responses:
         "200":
@@ -103774,59 +103953,47 @@ paths:
                   $ref: '#/components/schemas/trackerProject'
                 type: array
           description: ok
-      summary: Returns every tracker project in the caller's org, newest first.
+      summary: Returns the boards of your org — one per repository on the deployment's
+        forge that you can see.
       tags:
       - tracker
       x-app: tracker
     post:
       description: |-
-        Creates a board and returns it, including the KEY that will prefix every issue identifier filed under it — the same key GET, PATCH and DELETE address the board by, and the ENG in ENG-14.
+        Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
 
-        `name` is required. `key` is optional and is UPPERCASED: omit it and one is derived from the name — its first four letters and digits, or PRJ when that yields nothing usable. A key that is not 2-8 characters starting with a letter is 400.
+        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
 
-        THE KEY IS UNIQUE PER ORG AND A COLLISION IS REFUSED, NOT MERGED: a second board on a key already taken is 409, and the derived key is not made unique for you, so two similarly named boards collide and the second caller must name a key. Re-POSTing is therefore not idempotent — it fails rather than returning the existing board.
-
-        The org is the validated bearer's own, never a client header, and the board is stored under the caller's selected IAM PROJECT: the same key in two IAM projects is two unrelated boards. 403 without a validated org.
-
-        Free by default. The create runs the shared per-org balance gate at a fee of zero unless a deployment prices it, and a priced deployment out of balance refuses with the nested {"error":{"code","message"}} body at 402/503 rather than a flat error.
+        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.
       operationId: post_v1_tracker_projects
-      summary: Open a tracker board in your org
+      summary: Refused — a board is a repository on the forge
       tags:
       - tracker
       x-app: tracker
   /v1/tracker/projects/{key}:
     delete:
       description: |-
-        Removes one tracker project of the caller's org AND every issue
-        filed under it, and answers 204 with no body. 404 when the org has no project
-        under that key.
+        Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
 
-        The cascade is the point: an issue has no meaning without the board whose key
-        names it, so deleting the board deletes them together rather than leaving
-        orphans addressable by an identifier that no longer resolves.
+        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+
+        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.
       operationId: delete_v1_tracker_projects_by_key
       parameters:
-      - description: |-
-          Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting
-          with a letter ("ENG", "OPS2"). Matched case-insensitively.
-        in: path
+      - in: path
         name: key
         required: true
         schema:
           type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one tracker project of the caller's org AND every issue filed
-        under it, and answers 204 with no body.
+      summary: Refused — a board is a repository on the forge
       tags:
       - tracker
       x-app: tracker
     get:
       description: |-
-        Returns one tracker project of the caller's org by its key —
-        its name, description and timestamps. 404 when the org has no project
-        under that key.
+        Returns one board of your org by its key — the repository name.
+        404 when your org has no repository under that key, or when your own forge
+        account cannot see it.
       operationId: get_v1_tracker_projects_by_key
       parameters:
       - description: |-
@@ -103844,63 +104011,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/trackerProject'
           description: ok
-      summary: Returns one tracker project of the caller's org by its key — its name,
-        description and timestamps.
+      summary: Returns one board of your org by its key — the repository name.
       tags:
       - tracker
       x-app: tracker
     patch:
       description: |-
-        Renames a tracker project or rewrites its description, and
-        returns the updated project. Both fields are optional: one the caller omits
-        keeps its stored value.
+        Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
 
-        The project KEY is never editable — it prefixes every issue identifier already
-        filed under the board, so changing it would rewrite the human handle of every
-        issue in it.
+        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+
+        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.
       operationId: patch_v1_tracker_projects_by_key
       parameters:
-      - description: Key is the project to update, from the path.
-        in: path
+      - in: path
         name: key
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              name: Platform Engineering
-            schema:
-              $ref: '#/components/schemas/projectPatch'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/trackerProject'
-          description: ok
-      summary: Renames a tracker project or rewrites its description, and returns
-        the updated project.
+      summary: Refused — a board is a repository on the forge
       tags:
       - tracker
       x-app: tracker
   /v1/tracker/projects/{key}/issues:
     get:
       description: |-
-        Returns the issues of one tracker project, optionally filtered by
-        status, kind, repo, source and whether they are scheduled.
+        Returns one board's issues — the work items of that repository on
+        the forge, with their column, priority, assignee and labels.
 
-        This is the ONE place a surface takes its slice of the shared issue table: the
-        board passes no filter or a status, the timeline passes scheduled=true, a git
-        repository's Issues tab passes kind=issue&repo=<r> and its Pull Requests tab
-        kind=pr&repo=<r>. A filter value outside its closed set is refused with 400
-        rather than silently returning an empty board.
+        The column is a LABEL on the forge, so the board and the forge web UI are the
+        same object seen twice: relabelling in either moves the card in both. A closed
+        issue reads as done whatever its labels say.
       operationId: get_v1_tracker_projects_by_key_issues
       parameters:
       - description: Key is the project whose issues to list, from the path.
-        example: ENG
         in: path
         name: key
         required: true
@@ -103917,14 +104061,12 @@ paths:
       - description: |-
           Kind keeps only work items of that shape: issue, pr or epic. An unknown
           value is refused with 400.
-        example: pr
         in: query
         name: kind
         required: false
         schema:
           type: string
       - description: Repo keeps only issues bound to that git repository.
-        example: hanzoai/cloud
         in: query
         name: repo
         required: false
@@ -103957,89 +104099,33 @@ paths:
                   $ref: '#/components/schemas/issueView'
                 type: array
           description: ok
-      summary: Returns the issues of one tracker project, optionally filtered by status,
-        kind, repo, source and whether they are scheduled.
+      summary: Returns one board's issues — the work items of that repository on the
+        forge, with their column, priority, assignee and labels.
       tags:
       - tracker
       x-app: tracker
     post:
       description: |-
-        Files a work item on one board and returns it, carrying the `identifier` — KEY-<number> — it will be known by everywhere else.
+        Opens a work item on the board — an issue on that repository on
+        the deployment's forge, filed as YOU.
 
-        THE NUMBER IS THE SERVER'S TO ASSIGN and is not accepted from the caller: it is the board's highest plus one, taken inside the insert's own transaction, and it counts PER BOARD — ENG-1 and OPS-1 are different issues.
-
-        `title` is required; everything else is optional and defaults. `kind` (issue, pr, epic) says what the item IS, `source` (team, git, crm, helpdesk, cms, agent) says which surface OPENED it, and the two are orthogonal — an issue escalated from support is kind=issue&source=helpdesk. `status` defaults to backlog, `priority` to none. A value outside one of these closed sets is 400, never silently defaulted. `labels` may not contain a comma, the storage separator.
-
-        `startAt` and `dueAt` place the item on the TIMELINE, in unix seconds, and both default to unset. A due date on its own is a milestone — an interval of zero length — and the two together are a bar; a start with no due date is work under way with no deadline. There is no separate milestone resource: a milestone is this row, dated. A negative bound, or a due date before its start, is 400 rather than a silently reordered interval.
-
-        `repo` and `extRef` RECORD an external binding; they do not create one. Filing here writes to your tracker and reaches no external system — nothing is pushed to GitHub. The GitHub integration runs the other way, mirroring upstream issues INTO this tracker.
-
-        404 when the caller's org has no board under that key. The org is the validated bearer's own and the board is resolved within the caller's selected IAM project; 403 without a validated org. Free by default, on the same balance gate as the board create — an epic, a pull request and an issue are priced identically, since the fee is per work item rather than per kind.
+        The column and priority are written as LABELS, which is what makes the card
+        and the forge issue the same object: someone relabelling in the forge web UI
+        has moved your card.
       operationId: post_v1_tracker_projects_by_key_issues
       parameters:
-      - in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      summary: File an issue on a tracker board
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/projects/{key}/issues/{num}:
-    delete:
-      description: |-
-        Removes one issue from a tracker project and answers 204 with no
-        body. 404 when the project or the issue does not exist in the caller's org.
-
-        The issue's number is NOT reused: the next issue on the board takes the next
-        number, so a deleted identifier stays retired rather than silently pointing at
-        different work.
-      operationId: delete_v1_tracker_projects_by_key_issues_by_num
-      parameters:
-      - description: Key is the issue's project, from the path.
+      - description: Key is the board — the repository name, from the path.
         in: path
         name: key
         required: true
         schema:
           type: string
-      - description: |-
-          Num is the issue's number within that project — the digits of KEY-14.
-          Positive; anything else is refused with 400.
-        in: path
-        name: num
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/newIssue'
         required: true
-        schema:
-          type: integer
-      responses:
-        "204":
-          description: no content
-      summary: Removes one issue from a tracker project and answers 204 with no body.
-      tags:
-      - tracker
-      x-app: tracker
-    get:
-      description: |-
-        Returns one issue of one tracker project by its per-project number —
-        title, description, status, priority, assignee, labels, kind, source and its
-        git bindings. 404 when the project or the issue does not exist in the caller's
-        org.
-      operationId: get_v1_tracker_projects_by_key_issues_by_num
-      parameters:
-      - description: Key is the issue's project, from the path.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      - description: |-
-          Num is the issue's number within that project — the digits of KEY-14.
-          Positive; anything else is refused with 400.
-        in: path
-        name: num
-        required: true
-        schema:
-          type: integer
       responses:
         "200":
           content:
@@ -104047,38 +104133,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/issueView'
           description: ok
-      summary: Returns one issue of one tracker project by its per-project number
-        — title, description, status, priority, assignee, labels, kind, source and
-        its git bindings.
+      summary: Opens a work item on the board — an issue on that repository on the
+        deployment's forge, filed as YOU.
       tags:
       - tracker
       x-app: tracker
+  /v1/tracker/projects/{key}/issues/{num}:
     patch:
       description: |-
-        Edits one issue in place and returns it — retitle it, rewrite its
-        body, move it between board columns, reprioritize, reassign, reschedule, or
-        replace its labels. Every field is optional: one the caller omits keeps its
-        stored value, and `labels` REPLACES the set rather than adding to it.
+        Edits a work item — rename it, rewrite it, move it to another
+        column, or re-prioritise it. Absent fields are left alone.
 
-        `startAt` and `dueAt` are the issue's place on the timeline, in unix seconds;
-        0 clears one. They are validated as the interval they RESULT in, so moving
-        only the due date is still checked against the stored start — a due date
-        before its start is 400, never a bar drawn backwards.
-
-        The issue's kind, source and git bindings are not editable here: they record
-        where the work item came FROM, which is a fact about its origin rather than
-        its current state.
+        MOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the
+        move replaces that set rather than writing a status column here that a
+        forge-side change could contradict. Moving to `done` also CLOSES the issue on
+        the forge, because a done card and an open issue are a contradiction.
       operationId: patch_v1_tracker_projects_by_key_issues_by_num
       parameters:
-      - description: Key is the issue's project, from the path.
-        example: ENG
+      - description: Key is the board — the repository name, from the path.
         in: path
         name: key
         required: true
         schema:
           type: string
-      - description: Num is the issue's number within that project, from the path.
-        example: 14
+      - description: Num is the issue number on that repository, from the path.
         in: path
         name: num
         required: true
@@ -104087,13 +104165,8 @@ paths:
       requestBody:
         content:
           application/json:
-            example:
-              assignee: z
-              key: ENG
-              num: 14
-              status: in_progress
             schema:
-              $ref: '#/components/schemas/issuePatch'
+              $ref: '#/components/schemas/issueEdit'
         required: true
       responses:
         "200":
@@ -104102,9 +104175,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/issueView'
           description: ok
-      summary: Edits one issue in place and returns it — retitle it, rewrite its body,
-        move it between board columns, reprioritize, reassign, reschedule, or replace
-        its labels.
+      summary: Edits a work item — rename it, rewrite it, move it to another column,
+        or re-prioritise it.
       tags:
       - tracker
       x-app: tracker
@@ -105686,6 +105758,53 @@ paths:
       tags:
       - webhooks
       x-app: webhooks
+  /v1/websearch:
+    post:
+      description: |-
+        Searches the live web and answers with ranked results.
+
+        This is the fleet's path to what is happening RIGHT NOW — today's weather, an
+        outage, a release that postdates any model's training. `q` is the query and
+        `language` narrows it to a locale. The answer is `{query, number_of_results,
+        results:[{url, title, content, engine}]}`, where `content` is the ENGINE's
+        snippet and not the page: read a page with POST /v1/crawl.
+
+        It is served in-process by a Go meta-search over keyless public engines — never
+        a third-party search API and never a search key. The enabled engines run
+        concurrently and their hits are merged, deduplicated by normalised URL (host
+        and path, trailing slash and fragment dropped, query kept, so distinct queries
+        stay distinct results) and capped at 20. Ranking is deterministic rather than
+        scored: the first configured engine's hits lead.
+
+        It fails SOFT on the engines. One that errors, times out or is served a
+        bot-challenge page contributes zero results and never fails the call, so an
+        empty `results` is a real answer — nothing was found — and not an outage. The
+        array is always present, never null.
+
+        A VALIDATED PRINCIPAL IS REQUIRED, and there is no tenant beyond that: the
+        results are public web pages, identical for every caller, so nothing here is
+        scoped and nothing here can leak across orgs. A typed op is also an MCP tool
+        and a CLI command, and tools/call invokes it with no route and therefore no
+        middleware — so the gate is in the handler, where every door reaches it, rather
+        than in a middleware only one door passes through.
+      operationId: post_v1_websearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/webSearchQuery'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/webSearchResults'
+          description: ok
+      summary: Search the live web
+      tags:
+      - websearch
+      x-app: websearch
   /v1/websearch/search:
     delete:
       description: |-
@@ -106100,6 +106219,9 @@ tags:
 - description: Package code is search and symbols across your repos, for you and your
     agents.
   name: code
+- description: 'Package agents is autonomous agents for your org: define them, run
+    them, keep every run.'
+  name: coding
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
     — collections, records, access rules and sign-in.'
   name: collections
