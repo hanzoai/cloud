@@ -35,7 +35,7 @@ func hostApp(t *testing.T) *zip.App {
 		MCP: zip.MCPConfig{Path: manifest.MCPPath}})
 	zip.Get[pingIn, pingOut](app, "/v1/probe/ping",
 		func(ctx context.Context, in *pingIn) (*pingOut, error) { return &pingOut{OK: true}, nil })
-	if err := Mount(app); err != nil {
+	if err := Mount(app, testBundle()); err != nil {
 		t.Fatal(err)
 	}
 	return app
@@ -49,7 +49,7 @@ func pluginApp(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{AppName: "plug", DisableStartupMessage: true})
 	zip.Get[pingIn, pingOut](app, "/v1/probe/ping",
 		func(ctx context.Context, in *pingIn) (*pingOut, error) { return &pingOut{OK: true}, nil })
-	if err := Mount(app); err != nil {
+	if err := Mount(app, testBundle()); err != nil {
 		t.Fatal(err)
 	}
 	return app
