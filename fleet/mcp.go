@@ -213,7 +213,7 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 	// ONE dispatch for both spellings: the same routing table, the same gate on
 	// the way into it, the same hop, the same reply.
 	msg := c.Fiber().Request().Body()
-	if composed(p.Name) {
+	if d.composed(p.Name) {
 		op, body, ok := unwrap(req.ID, p.Arguments)
 		if !ok {
 			return c.JSON(200, rpcErr(req.ID, -32602, p.Name+` needs {"op":"<operation>","input":{}}`))
