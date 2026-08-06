@@ -93,7 +93,14 @@ var Apps = []App{
 	// rather than a new product. Named here or it falls to ai's bare "/v1"
 	// remainder, whose prepaid balance gate would make filling a basket require the
 	// balance the basket exists to create.
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/recharge", "/v1/billing/invoices", "/v1/billing/settings", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/mode", "/v1/billing/methods", "/v1/billing/portal/methods", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/cart", "/v1/payments", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/tenant", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
+	// /v1/billing/topup is the stem, not /v1/billing/topup/token, because commerce
+	// serves BOTH top-up doors and a prefix owns its whole subtree — naming the stem
+	// states that once instead of twice. The saved-card door was added beside the
+	// token one but never named here, so the fleet published it and routed it to
+	// ai's bare "/v1" remainder, whose prepaid balance gate would have made topping
+	// up require the balance the top-up exists to create — the same trap /v1/cart
+	// describes above, on the door that funds it.
+	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/alerts", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/invoices", "/v1/billing/methods", "/v1/billing/mode", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/portal/methods", "/v1/billing/recharge", "/v1/billing/settings", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/topup", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/cart", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tenant", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook", "/v1/payments", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
@@ -107,7 +114,7 @@ var Apps = []App{
 	// /v1/vector/collections (product). No route moves.
 	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
 	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/s3", "/v1/search", "/v1/sql", "/v1/vector"}},
-	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/gpu/charge", "/v1/billing/gpu/eligibility", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
+	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	{Name: "do", Prefixes: []string{"/v1/balancers", "/v1/vpcs"}},
 	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
@@ -257,23 +264,28 @@ var Apps = []App{
 	// aliases under it are retired — and /v1/errors, /v1/insights/events and
 	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:
 	// the tracker product owns that name (its row is above, and it wins the prefix).
-	// "/v1/event.js" is its OWN entry and not covered by "/v1/event": a prefix owns a
-	// SEGMENT subtree, and ".js" makes this a sibling segment, not a child. Without it
-	// the tag script falls through to ai's "/v1" and the fleet publishes an address it
-	// routes elsewhere — which is what the router oracle caught the moment analytics'
-	// subset caught up and started publishing it.
-	// /v1/replay is the session-replay snapshot door (apps/analytics/replay.go) and
-	// it is a WRITE, so it belongs here for exactly the reason the comment above
-	// gives for /v1/event: a path this row omits is a path the fleet router hands to
-	// commerce's bare "/v1" catch-all, which does not serve it — 405, silently, for
-	// every recorder in the fleet.
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health", "/v1/replay"}},
+	//
+	// "/v1/event.js" is its OWN prefix and cannot be folded into "/v1/event": a
+	// prefix owns segments, and ".js" is part of this one's single segment rather
+	// than a child of it, so the ingest door's claim stops short of the tag. It is
+	// the hosted tag — the script every instrumented surface loads before it can
+	// emit a single beacon — and unclaimed it fell to ai's bare "/v1", which answers
+	// a 404 that reads to a browser as a broken script tag rather than as a routing
+	// mistake. That was invisible for as long as plugin/analytics/openapi.json went
+	// unregenerated: the path was in the router and not in the artifact this table
+	// is checked against, so the check had nothing to disagree with.
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/replay", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
 	{Name: "venue", Prefixes: []string{"/v1/cloud"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
+	// lsp sits next to code because they are two reads of one checkout: code is
+	// the static index, lsp the live language server. Adjacency is documentation,
+	// not routing — /v1/lsp is a deeper static prefix than ai's "/v1", so it wins
+	// on specificity wherever it registers.
+	{Name: "lsp", Prefixes: []string{"/v1/lsp"}},
 	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud

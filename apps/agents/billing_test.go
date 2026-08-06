@@ -89,10 +89,11 @@ func mountBilled(t *testing.T, commerceURL string, ai types.AIClient) *zip.App {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	// AIFallbackModel="best" arms the agent runner's failover so the retry/failover
-	// tests exercise the real escalation path; it never fires for a run whose model
-	// answers (or fails non-transiently), so the other billed tests are unaffected.
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai, Metering: m, AIFallbackModel: "best"}
+	// The agent runner's failover is armed by cloud.FallbackModel, so the
+	// retry/failover tests exercise the real escalation path with no fixture to
+	// set; it never fires for a run whose model answers (or fails
+	// non-transiently), so the other billed tests are unaffected.
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai, Metering: m}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

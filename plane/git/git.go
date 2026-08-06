@@ -33,7 +33,9 @@ var Ops = []string{
 	plane.GitFiles,
 	plane.GitImport,
 	plane.GitInbound,
+	plane.GitMirror,
 	plane.GitPublish,
+	plane.GitStatus,
 }
 
 // GitFiles a repo's files at one revision.
@@ -57,9 +59,23 @@ func GitInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, error)
 	return plane.Ask[plane.InboundIn, plane.Synced](ctx, App, plane.GitInbound, in)
 }
 
+// GitMirror declare or remove a repo's outbound mirror target.
+//
+// Calls plane.GitMirror on git over the peer plane.
+func GitMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, error) {
+	return plane.Ask[plane.MirrorIn, plane.Mirrored](ctx, App, plane.GitMirror, in)
+}
+
 // GitPublish reconcile a project's repo visibility.
 //
 // Calls plane.GitPublish on git over the peer plane.
 func GitPublish(ctx context.Context, in *plane.Visibility) (*struct{}, error) {
 	return plane.Ask[plane.Visibility, struct{}](ctx, App, plane.GitPublish, in)
+}
+
+// GitStatus which of these repos are imported, and which are in conflict.
+//
+// Calls plane.GitStatus on git over the peer plane.
+func GitStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, error) {
+	return plane.Ask[plane.StatusIn, plane.Statuses](ctx, App, plane.GitStatus, in)
 }

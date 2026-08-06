@@ -106,7 +106,7 @@
     },
     "/v1/plans/entitlements/{id}": {
       "get": {
-        "operationId": "get_v1_plans_entitlements_by_id",
+        "operationId": "get_v1_plans_entitlements_id",
         "summary": "Returns what one plan GRANTS and not what it costs: the canonical namespaced entitlement block and the flat license-feature list derived from it.",
         "description": "Returns what one plan GRANTS and not what it costs: the\ncanonical namespaced entitlement block and the flat license-feature list\nderived from it. It is the entitlement half of ResolvePlan, over the same\ncatalog and the same 404 for an id no catalog holds — the read a licensing or\nquota gate makes.",
         "tags": [
@@ -233,7 +233,7 @@
     },
     "/v1/plans/resolve/{id}": {
       "get": {
-        "operationId": "get_v1_plans_resolve_by_id",
+        "operationId": "get_v1_plans_resolve_id",
         "summary": "Resolves one plan to everything a consumer of the catalog needs at once: its canonical entitlement block, the flat license-feature list a signed license carries, its billing reference, and the catalog it came from.",
         "description": "Resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nmay be the plan's id or its slug, and it is resolved against the caller's\ncatalog, so a reseller's override wins over the canonical record. An id no\ncatalog holds answers 404.",
         "tags": [

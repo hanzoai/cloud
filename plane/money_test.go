@@ -68,3 +68,83 @@ func TestFloorMinorRefusesMalformed(t *testing.T) {
 		t.Error("a malformed amount must error, never floor to zero")
 	}
 }
+
+// THE THREE MINOR VARIANTS ARE A CHOICE, AND THE CHOICE IS THE POINT.
+//
+// An adversarial review found two call sites that had picked the wrong one, both
+// silently:
+//
+//   - apps/admin/finance/backfill.go used Minor() on a BALANCE BEING MIGRATED.
+//     Minor() refuses a sub-cent amount, and every org that has spent anything
+//     carries a sub-cent tail, so the finance backfill migrated ZERO for every
+//     active org while returning an honest-looking error.
+//   - apps/admin/moneyboard.go used Minor() on a DISPLAY. The treasury reserve has
+//     the same tail, so the board rendered "could not reach the treasury" for a
+//     treasury that was reachable.
+//
+// The rule, and why each direction:
+//
+//	Minor()       a DEBIT      — exact or refuse. Rounding money you TAKE is theft
+//	                             in one direction and a gift in the other.
+//	FloorMinor()  a COMPARISON — never overstate. Admitting spend a balance cannot
+//	              or MIGRATION   cover leaves a negative balance nobody authorised;
+//	                             migrating more than is held mints the difference.
+//	RoundMinor()  a DISPLAY    — nearest. Nothing is spent from it, and refusing to
+//	                             show a figure is worse than a half-cent.
+func TestTheThreeMinorVariantsDifferWhereItMatters(t *testing.T) {
+	// The real production balance, from apps/billing/balance.go's own comment.
+	const prod = "149913.078983985999994361"
+	m := Money{Decimal: prod, Currency: "USD"}
+
+	if _, err := m.Minor(); err == nil {
+		t.Error("Minor() accepted a sub-cent amount — a debit must refuse rather than " +
+			"round money it is about to take")
+	}
+	floor, err := m.FloorMinor()
+	if err != nil {
+		t.Fatalf("FloorMinor: %v", err)
+	}
+	round, err := m.RoundMinor()
+	if err != nil {
+		t.Fatalf("RoundMinor: %v", err)
+	}
+	if floor != 14991307 {
+		t.Errorf("FloorMinor = %d, want 14991307", floor)
+	}
+	if round != 14991308 {
+		t.Errorf("RoundMinor = %d, want 14991308", round)
+	}
+	if round <= floor {
+		t.Error("this value must distinguish the two variants, or the test proves nothing")
+	}
+}
+
+// RoundMinor rounds to NEAREST and is total where Minor refuses — but it is still
+// money arithmetic, so it must not wrap or invent a value.
+func TestRoundMinorIsNearestAndStillRefusesTheImpossible(t *testing.T) {
+	for _, c := range []struct {
+		decimal string
+		want    int64
+	}{
+		{"4.994", 499},
+		{"4.995", 500}, // half away from zero
+		{"5.00", 500},
+		{"-4.995", -500},
+		{"0.004", 0},
+	} {
+		got, err := Money{Decimal: c.decimal, Currency: "USD"}.RoundMinor()
+		if err != nil {
+			t.Errorf("RoundMinor(%s): %v", c.decimal, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("RoundMinor(%s) = %d, want %d", c.decimal, got, c.want)
+		}
+	}
+	if _, err := (Money{Decimal: "99999999999999999999.99", Currency: "USD"}).RoundMinor(); err == nil {
+		t.Error("an amount beyond int64 minor units must error, not wrap")
+	}
+	if _, err := (Money{Decimal: "not-a-number", Currency: "USD"}).RoundMinor(); err == nil {
+		t.Error("a malformed amount must error, never round to zero")
+	}
+}

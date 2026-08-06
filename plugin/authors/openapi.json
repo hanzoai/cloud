@@ -76,7 +76,7 @@
     },
     "/v1/admin/authors/{id}/approve": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_approve",
+        "operationId": "post_v1_admin_authors_id_approve",
         "summary": "Admits one author to EARNING, optionally on a negotiated royalty share.",
         "description": "Admits one author to EARNING, optionally on a negotiated royalty\nshare. Until this runs, a connected author accrues nothing however many verified\nrepositories they have.\n\nA share override applies from here forward only — existing ledger rows keep the\nshare that was applied when they were written, because a rate change must never\nrewrite what was already owed.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -124,7 +124,7 @@
     },
     "/v1/admin/authors/{id}/basis": {
       "get": {
-        "operationId": "get_v1_admin_authors_by_id_basis",
+        "operationId": "get_v1_admin_authors_id_basis",
         "summary": "Returns the audit trail behind ONE author's royalty — the same payload the author reads at /v1/authors/basis, from the same builder, so support sees exactly what the author sees rather than a parallel view free to drift.",
         "description": "Returns the audit trail behind ONE author's royalty — the same\npayload the author reads at /v1/authors/basis, from the same builder, so support\nsees exactly what the author sees rather than a parallel view free to drift.\n\nThe data object carries: id, status, asOf, shareBps, platformShareBps,\ndefaultShareBps, shareSource, settlesTo, method (the formula, the rate card and the\nsizing), ledger (every row with its spend, the share applied then, the platform's\nmatching half, whether it satisfies the formula and the attribution edges that\nexplain it), reconciliation (does the ledger foot to the balance) and window (what\nslice was actually returned) — plus period when one was requested.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -168,7 +168,7 @@
     },
     "/v1/admin/authors/{id}/payout": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_payout",
+        "operationId": "post_v1_admin_authors_id_payout",
         "summary": "Records a payout of accrued royalty and settles it.",
         "description": "Records a payout of accrued royalty and settles it.\n\nThe amount is RESERVED against the author's pending royalty atomically before\nanything is paid, so a payout can never exceed what is owed even under concurrent\ncalls. An external author's payout is then BACKED against the platform reserve\nfund — a second, independent guard — and refused with 402 if the reserve cannot\ncover it, with the reservation voided. A \"credits\" method issues the actual wallet\ngrant after both guards; a cash method is record-only. A first-party (treasury)\nauthor's royalty is realized into Hanzo's own reserve instead of an external\nwallet, and every payout row discloses which of the three it was.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -217,7 +217,7 @@
     },
     "/v1/admin/authors/{id}/suspend": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_suspend",
+        "operationId": "post_v1_admin_authors_id_suspend",
         "summary": "Stops one author earning.",
         "description": "Stops one author earning. Their record, verified claims and ledger\nare untouched — suspension halts future accrual, it does not erase what was already\nowed, and it does not delete the evidence behind it.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [

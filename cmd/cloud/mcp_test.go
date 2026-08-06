@@ -56,8 +56,8 @@ func app308(t *testing.T) *zip.App {
 	fleet.Mount(app, manifest.MCPPath, nil, func(string) (string, error) {
 		return "", errNoFleetHere
 	})
-	if err := webui.Mount(app); err != nil {
-		t.Skipf("console embed unavailable in this build: %v", err)
+	if err := webui.Mount(app, consoleBundle()); err != nil {
+		t.Fatalf("mount console: %v", err)
 	}
 	return app
 }

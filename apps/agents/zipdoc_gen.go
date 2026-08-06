@@ -215,6 +215,29 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1","status":"draining"}`),
 	})
+	zip.Describe("POST /agents/run-on-behalf", zip.Doc{
+		Description: "Answers a bridge's turn.\n\nUnlike the session ops, the org travels IN the request rather than being taken\nfrom the caller's plane identity: the tenant here is the one that connected the\nSlack workspace, resolved by the bridge from the signed team_id, and the bridge\nplugin's own identity is not it. That is safe because this op only SPENDS the\nnamed org's own balance under its own agent — it reads nothing across tenants —\nand because the subject must be a link the bridge already proved.\n\nAn empty subject is refused rather than defaulted. A turn that lost its caller\nmust not run AS THE ORG: that would bill the tenant for an unattributable act\nand hand an unlinked user the org's agent.",
+		Fields: map[string]string{
+			"RunOnBehalfIn.input":   "Input is the user's message, already stripped of the leading @mention.",
+			"RunOnBehalfIn.org":     "Org is the isolation gate, the tenant, and the balance the run bills.",
+			"RunOnBehalfIn.ref":     "Ref names the agent to run.",
+			"RunOnBehalfIn.subject": "Subject is the caller's LINKED Hanzo identity, unqualified. Attribution and\nauthorization both hang off it, so a turn can never run as nobody: the\nanswering side refuses an empty subject rather than falling back to the org.",
+		},
+	})
+	zip.Describe("POST /agents/sessions/count", zip.Doc{
+		Description: "Answers the active-session count the device view shows,\nunder the same tenancy and actor rules as the stop above.",
+		Fields: map[string]string{
+			"SessionMatchIn.host":    "Host/Provider/Account narrow WITHIN the actor's own sessions; empty is any.",
+			"SessionMatchIn.subject": "Subject is the revoking user, unqualified. The answering side qualifies it.",
+		},
+	})
+	zip.Describe("POST /agents/sessions/stop", zip.Doc{
+		Description: "Tears down every live session of the CALLER's org matching\nthe revoking subject, and reports how many it stopped.\n\nThe org is the caller's plane identity and never the argument — plane\n.SessionMatchIn has no org field, deliberately, because this op STOPS things\nand a caller able to state the org could stop a co-tenant's work. Anonymous is\nrefused rather than defaulted: a teardown arriving with no principal must\nfail, not pick a tenant.\n\nThe actor is built HERE, from the org the plane proved and the subject the\ncaller names, so the HIGH-1 actor scoping (a revoke stops only that user's own\nsessions) is enforced by the side that owns the store rather than trusted from\nthe wire.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"SessionMatchIn.host":    "Host/Provider/Account narrow WITHIN the actor's own sessions; empty is any.",
+			"SessionMatchIn.subject": "Subject is the revoking user, unqualified. The answering side qualifies it.",
+		},
+	})
 	zip.Describe("POST /v1/agents", zip.Doc{
 		Description: "Defines an agent in the caller's org: a model, a system prompt\n(instructions) and a set of tool names. The name must be unique in the org and\nmatch ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. An omitted model takes the\ndeployment's configured default; a named one is checked against the gateway's\nserved catalog, so a model this deployment never serves is refused here rather\nthan failing at run time. A long-running agent must carry a 5-field cron\nschedule (the scheduler would otherwise never fire it) and counts against a\nper-org cap on scheduled agents.",
 		Example:     json.RawMessage(`{"name":"helper","model":"enso-flash","instructions":"be terse"}`),

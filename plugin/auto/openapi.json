@@ -78,7 +78,7 @@
     },
     "/v1/auto/flows/{flow}": {
       "delete": {
-        "operationId": "delete_v1_auto_flows_by_flow",
+        "operationId": "delete_v1_auto_flows_flow",
         "summary": "Deletes one of the caller's flows.",
         "description": "Deletes one of the caller's flows. A foreign id answers 404 and\ndeletes nothing.",
         "tags": [
@@ -107,7 +107,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_auto_flows_by_flow",
+        "operationId": "get_v1_auto_flows_flow",
         "summary": "Flow reads one of the caller's flows — the full record, graph included.",
         "description": "Flow reads one of the caller's flows — the full record, graph included. A\nflow outside the caller's org answers 404, indistinguishable from one that\ndoes not exist.",
         "tags": [
@@ -136,7 +136,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_auto_flows_by_flow",
+        "operationId": "patch_v1_auto_flows_flow",
         "summary": "Patches one of the caller's flows: the name, the graph, or both — only the stated fields move.",
         "description": "Patches one of the caller's flows: the name, the graph, or both\n— only the stated fields move.",
         "tags": [
@@ -180,7 +180,7 @@
     },
     "/v1/auto/flows/{flow}/publish": {
       "post": {
-        "operationId": "post_v1_auto_flows_by_flow_publish",
+        "operationId": "post_v1_auto_flows_flow_publish",
         "summary": "Publish snapshots the flow's current graph as its next immutable version and arms the flow's triggers.",
         "description": "Publish snapshots the flow's current graph as its next immutable version\nand arms the flow's triggers. Past versions stay addressable in the product\nfor rollback; runs always execute the graph as it was dispatched.",
         "tags": [
@@ -296,7 +296,7 @@
     },
     "/v1/auto/runs/{run}": {
       "get": {
-        "operationId": "get_v1_auto_runs_by_run",
+        "operationId": "get_v1_auto_runs_run",
         "summary": "Run reads one run record: status, input, output (each executed node's result keyed by node id once completed), error detail if it failed, and timestamps.",
         "description": "Run reads one run record: status, input, output (each executed node's\nresult keyed by node id once completed), error detail if it failed, and\ntimestamps. A run outside the caller's org answers 404.",
         "tags": [

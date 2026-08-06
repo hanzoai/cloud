@@ -109,10 +109,53 @@ CREATE TABLE IF NOT EXISTS treasury_policy (
 	if err := s.migrateCentsToUnits(); err != nil {
 		return err
 	}
+	if err := s.backfillUsageProgram(); err != nil {
+		return err
+	}
 	// Re-apply the DDL so any table REBUILT by the legacy migration regains its indexes
 	// (every statement is IF NOT EXISTS, so this is a no-op for already-present objects).
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("treasury reindex: %w", err)
+	}
+	return nil
+}
+
+// backfillUsageProgram gives every pre-existing usage entry the program it would be
+// written with today: the wallet the money left.
+//
+// A usage ref is unique WITHIN THE WALLET it debits — the entry's program is that wallet
+// — so one subject's key can never swallow another's. Entries written before that scope
+// existed carry an EMPTY program, and the probe that asks whether an act is already paid for
+// now asks under the wallet: it does not see them. On any surface whose ref is STABLE
+// across the deploy, that miss is a SECOND debit for one act, and the customer pays twice
+// for work they already paid for.
+//
+// The wallet is not guessed. A usage entry is exactly two legs — wallet out,
+// revenue:platform in — so the wallet is the NEGATIVE one, read off the posting itself.
+// Key and money therefore name the same account by construction, which is the identity
+// the writer states in code and this restates for the rows written before it.
+//
+// IDEMPOTENT by its own WHERE: a second run finds no usage row left with an empty program.
+//
+// SCOPED TO USAGE. A deposit's empty program is DELIBERATE — a settlement ref is unique
+// across the whole org's books, not per wallet — so widening this would re-key every
+// payment ever taken.
+//
+// An entry with NO negative leg is not a debit this ledger wrote, and it is SKIPPED
+// rather than given a NULL program: the column is NOT NULL, so writing one would abort
+// the migration and leave the org's wallet unopenable. One malformed row must not be able
+// to close a customer's books.
+func (s *Store) backfillUsageProgram() error {
+	const backfill = `
+UPDATE treasury_entries
+   SET program = (SELECT p.account FROM treasury_postings p
+                   WHERE p.entry_id = treasury_entries.id AND p.amount LIKE '-%')
+ WHERE kind = 'finance.usage'
+   AND program = ''
+   AND EXISTS (SELECT 1 FROM treasury_postings p
+                WHERE p.entry_id = treasury_entries.id AND p.amount LIKE '-%')`
+	if _, err := s.db.Exec(backfill); err != nil {
+		return fmt.Errorf("treasury backfill usage program: %w", err)
 	}
 	return nil
 }

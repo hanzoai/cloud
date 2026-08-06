@@ -529,3 +529,43 @@ func slackLinkSlackURI(s *cloud.Service[state]) string {
 	}
 	return "https://" + s.Domain + "/v1/integrations/slack/link/slack"
 }
+
+// slackInstall is the app's Direct install URL — the address Slack's "Add to
+// Slack" / Marketplace Install button points at.
+//
+// It exists because Slack REFUSES a slack.com URL in that field and requires one
+// of OURS that answers 302 to slack.com. That is not an obstacle to work around:
+// it is the point. The field is an ATTRIBUTION hook. Routing the click through
+// our own address is what lets an install be counted, and forcing the 302 is what
+// guarantees the counter cannot become a detour that never reaches consent.
+//
+// So this is a redirector and deliberately nothing more. The destination is the
+// SAME consent URL every time, built by slackAuthorize from the same scopes the
+// console's Connect button uses — one source of truth for what we ask a workspace
+// to grant, whether the click came from the Marketplace or from the console.
+//
+// It carries NO state and binds NO org, and that is correct rather than a gap:
+// the org is resolved where it has always been resolved — the generic
+// /v1/integrations/:provider/callback, from the signed state a console connect
+// minted, or OrgForExternalID for a workspace already connected. An install that
+// begins here finishes there under exactly the rules every other install obeys,
+// and the callback's labeled failure already returns the browser to the console
+// rather than a raw JSON dead end. Minting a principal here would be inventing an
+// org for an anonymous click, which is the one thing the isolation bar forbids.
+func slackInstall(s *cloud.Service[state], c *zip.Ctx) error {
+	if !slackConfigured() {
+		// Honest 503 over a consent URL with an empty client_id, which Slack answers
+		// with its own error page and no way back.
+		return zip.Errorf(http.StatusServiceUnavailable,
+			"slack install is not configured on this deployment (SLACK_CLIENT_ID unset)")
+	}
+	u, err := slackAuthorize(slackCreds(), "https://"+s.Domain+callbackPath("slack"), "")
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "authorize: %v", err)
+	}
+	// The install click, counted. The span this rides already ships to the
+	// datastore, so "how many installs did the Marketplace listing drive" is
+	// answerable without a second metrics path — the referrer is the listing.
+	s.Log.Info("slack install click", "referer", c.Header("Referer"))
+	return redirect(c, u)
+}

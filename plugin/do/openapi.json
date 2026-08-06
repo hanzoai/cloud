@@ -97,7 +97,7 @@
     },
     "/v1/balancers/{id}": {
       "delete": {
-        "operationId": "delete_v1_balancers_by_id",
+        "operationId": "delete_v1_balancers_id",
         "summary": "Removes one of the caller org's load balancers and answers 204.",
         "description": "Removes one of the caller org's load balancers and answers\n204. Ownership is confirmed by re-fetching the resource before anything is\ndeleted, so a cross-tenant id is a 404 rather than a delete of another org's\nload balancer.",
         "tags": [
@@ -121,7 +121,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_balancers_by_id",
+        "operationId": "get_v1_balancers_id",
         "summary": "Returns one of the caller org's load balancers by id.",
         "description": "Returns one of the caller org's load balancers by id. One that\nexists in another org's namespace is reported 404, never 403 — the same\nexistence-oracle guard the VPC read applies.",
         "tags": [
@@ -223,7 +223,7 @@
     },
     "/v1/vpcs/{id}": {
       "delete": {
-        "operationId": "delete_v1_vpcs_by_id",
+        "operationId": "delete_v1_vpcs_id",
         "summary": "Removes one of the caller org's VPCs and answers 204.",
         "description": "Removes one of the caller org's VPCs and answers 204. Ownership is\nconfirmed by re-fetching the resource and checking its physical name carries\nthe caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a\n404 rather than a delete of another org's VPC.",
         "tags": [
@@ -247,7 +247,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_vpcs_by_id",
+        "operationId": "get_v1_vpcs_id",
         "summary": "Returns one of the caller org's VPCs by id.",
         "description": "Returns one of the caller org's VPCs by id. A VPC that exists but sits\nin another org's namespace is reported 404, never 403 — the answer must not\ntell one tenant that another tenant's resource exists.",
         "tags": [

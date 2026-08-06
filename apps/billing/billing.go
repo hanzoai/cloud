@@ -1,7 +1,7 @@
 // Package billing is your org's balance, what it has spent, and the cards it pays with.
 //
 // It is the customer's own money door, serving the org-scoped
-// /v1/billing/{usage,usage/accounts,balance,gpu-eligibility,gpu-charge,payment-methods}
+// /v1/billing/{usage,usage/accounts,balance,payment-methods}
 // reads plus the six /v1/finance/{balance,credits,usage,invoices,payment-methods,ledger}
 // projections the finance UI renders (finance.go). It owns NEITHER prefix whole —
 // commerce serves the merchant half of /v1/billing/* (invoices, subscriptions,
@@ -43,9 +43,7 @@
 package billing
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -115,44 +113,11 @@ func (p *commerceProxy) get(ctx context.Context, path, org string, q url.Values)
 	return body, resp.StatusCode, nil
 }
 
-// post performs one service-token commerce POST scoped to org, forwarding the JSON
-// body and returning commerce's raw body + status VERBATIM. Same S2S trust as get: the
-// caller's OWN org rides X-Org-Id (the selector commerce keys the per-org wallet under)
-// and the admin service token authorizes the write.
-//
-// idempotencyKey, when non-empty, rides as X-Idempotency-Key — the header commerce's own
-// money moves guard themselves on. It is set by the split-deploy GPU charge, where the
-// ledger that would key the debit is in the OTHER process: a guarantee has to be made
-// where the write happens, so where it cannot be made here it is asked for there.
-func (p *commerceProxy) post(ctx context.Context, path, org string, body []byte, idempotencyKey string) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+path, bytes.NewReader(body))
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.token)
-	req.Header.Set("X-Org-Id", org)
-	if k := strings.TrimSpace(idempotencyKey); k != "" {
-		req.Header.Set("X-Idempotency-Key", k)
-	}
-	resp, err := p.http.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("commerce unreachable: %w", err)
-	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, resp.StatusCode, err
-	}
-	return b, resp.StatusCode, nil
-}
-
 // del performs one service-token commerce DELETE scoped to org, returning commerce's
-// raw body + status VERBATIM. Same S2S trust as get and post: the caller's OWN org
-// rides X-Org-Id and the admin service token authorizes the removal. It carries no
-// body and no idempotency key — DELETE of a named resource is idempotent by identity,
-// so a retry removes the same card or 404s, and there is nothing for a guard to add.
+// raw body + status VERBATIM. Same S2S trust as get: the caller's OWN org rides
+// X-Org-Id and the admin service token authorizes the removal. It carries no body and
+// no idempotency key — DELETE of a named resource is idempotent by identity, so a retry
+// removes the same card or 404s, and there is nothing for a guard to add.
 func (p *commerceProxy) del(ctx context.Context, path, org string, q url.Values) ([]byte, int, error) {
 	u := p.base + path
 	if enc := q.Encode(); enc != "" {
@@ -224,19 +189,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Raw: serves bytes — the split-deploy leg forwards commerce's body and
 	// status, and the co-resident leg writes the same envelope from the ledger.
 	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
-	// GPU launch gate + saved cards — the customer half of the prepay-only GPU rule
-	// commerce enforces server-side (api/billing/gpu_charge.go). Same org-scoping as
-	// usage/balance: the subject is pinned to the caller's OWN org, so the console reads
-	// eligibility/card status and charges exactly the wallet a launch debits — never
-	// another tenant's. These SPECIFIC customer routes register before (and so shadow)
-	// the console pkg's /v1/billing/* wildcard, giving an unauthenticated call an honest
-	// 401 (route exists) instead of the wildcard's admin-shaped 403.
+	// A GPU is a metered resource like any other, so it has no charge door here: a
+	// machine is launched through /v1/machines, which fronts the compute provider's
+	// resell endpoint (apps/visor) where the balance gate and the per-hour meter both
+	// live, keyed on the server-minted machine id. One meter bills every resource.
 	//
-	// Raw: serves bytes — forwards commerce's body and status verbatim.
-	app.Get("/v1/billing/gpu/eligibility", cloud.Handle(s, gpuEligibility))
-	// Raw: serves bytes — the split-deploy leg forwards commerce's body and status
-	// verbatim, and the co-resident refusal answers 402 in commerce's own envelope.
-	app.Post("/v1/billing/gpu/charge", cloud.Handle(s, gpuCharge))
 	// Saving a card must be registered on the SAME router as the read: a specific
 	// route shadows the console pkg's /v1/billing/* wildcard for its whole path, so
 	// a GET-only registration made POST miss on METHOD (405) before the wildcard or
@@ -308,58 +265,13 @@ func init() {
 			"principal. The co-resident read returns the 2000 most recent debits, newest first; "+
 			"`start` and `end` narrow the window only on the split-deploy upstream.")
 
-	openapi.Describe("/v1/billing/gpu/eligibility", http.MethodGet,
-		"Whether the caller's org may launch a GPU right now, and what is missing",
-		"Answers `eligible` plus the exact `reason` — `ok`, `card_required` or "+
-			"`insufficient_prepaid` — with the org's prepaid available, whether a card is on "+
-			"file, and the cents required. It answers 200 in EVERY case: a no is data the launch "+
-			"UI renders as a remedy, never a 402.\n\n"+
-			"Eligibility is prepaid REAL money and a chargeable card, both. `creditsRemaining` is "+
-			"reported and is NOT usable — a GPU debit is gpu-tagged and drawn from the prepaid "+
-			"bucket — so an org sitting on grant credit with zero prepaid is refused, "+
-			"deliberately.\n\n"+
-			"`amountCents` is the immediate charge and `minPrepaidCents` the 24h floor GPU policy "+
-			"requires; the gate needs prepaid available >= the larger of the two. Both default to "+
-			"0, so asking with neither answers whether a card exists, not whether a launch is "+
-			"affordable.\n\n"+
-			"The wallet is pinned server-side to the caller's own org, so this reads exactly the "+
-			"wallet a charge debits — the gate and the debit can never address two wallets. 401 "+
-			"without a validated principal.")
-
-	openapi.Describe("/v1/billing/gpu/charge", http.MethodPost,
-		"Debit the caller's org prepaid balance for a GPU",
-		"Records a gpu-tagged debit against the caller's own org and answers 201 with the "+
-			"transaction id and the prepaid balance left. This is the ONE endpoint on the customer "+
-			"billing surface that moves an org's ledger.\n\n"+
-			"`requestId` IS THE IDEMPOTENCY KEY. Two posts carrying the same one are ONE debit: "+
-			"the ledger recognizes the ref inside the same transaction as the insert, so the "+
-			"replay moves no money and answers the ORIGINAL transaction id — a retry, a proxy "+
-			"replay and a double-clicked launch button all cost one GPU. Send it. OMITTED, the "+
-			"debit takes a fresh ref and is additive, which is the same rule every other write on "+
-			"this ledger states for a missing key: without one there is nothing to recognize a "+
-			"repeat by, and two posts are two charges.\n\n"+
-			"THE PAYER IS NOT A FIELD. Every billing-subject key in the body — `user`, `userId`, "+
-			"`customerId` — is ignored and the wallet is resolved server-side from the caller's "+
-			"own validated org, so a forged body can never charge another tenant. `amountCents`, "+
-			"`currency`, `requestId`, `notes` and `tag` are the request, and `tag` is FORCED into "+
-			"the gpu bucket so this can never mint a credit-eligible debit.\n\n"+
-			"Two gates, both fail-closed: a chargeable card on file (402 `card_required`) and "+
-			"prepaid alone covering the amount (402 `insufficient_prepaid`) — credits are never "+
-			"consulted, so a GPU cannot draw on a grant. The prepaid gate reads the SAME wallet "+
-			"the debit posts to, so the gate and the charge can never address two wallets. A gate "+
-			"that cannot be READ is 502 and the charge does not happen: unknown is never "+
-			"permission, and a money verdict is never 500-masked.\n\n"+
-			"`amountCents` is whole USD cents and debits EXACTLY, with no rounding — the ledger "+
-			"holds 18-decimal USD, so the cents asked for are the cents taken.\n\n"+
-			"401 without a validated principal — a customer charging its OWN wallet, so an absent "+
-			"identity is not signed in, never not authorized.")
 }
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
 // identifies its subject. Kept identical to commerce's edge-auth billingSubjectKeys
 // {user,userId,customerId} AND clients/account's billingData: pinning ALL of them is what
-// scopes EVERY endpoint no matter which one it filters on — usage/balance/gpu-eligibility
-// read `user`, portal/methods requires `customerId`. Change all three in lockstep.
+// scopes EVERY endpoint no matter which one it filters on — usage and balance read
+// `user`, portal/methods requires `customerId`. Change all three in lockstep.
 var billingSubjectKeys = []string{"user", "userId", "customerId"}
 
 // readerOrg is the ONE tenant resolution the billing READ surface shares: the org of
@@ -379,8 +291,8 @@ var billingSubjectKeys = []string{"user", "userId", "customerId"}
 // configured COMMERCE_SERVICE_TOKEN by the predicate apps/account already owns
 // (account.IsServiceToken), and the org comes from X-Org-Id — which the gateway strips
 // from every client request — never from a caller-supplied field. It grants no user, no
-// admin and no roles, so it is a READ resolution only: the money WRITES (gpuCharge,
-// createPaymentMethod) and the user-scoped breakdown (usageAccounts, which needs
+// admin and no roles, so it is a READ resolution only: the money WRITE
+// (createPaymentMethod) and the user-scoped breakdown (usageAccounts, which needs
 // c.User()) keep asking principal.Org and refuse it.
 func readerOrg(c *zip.Ctx) (string, bool) {
 	if org, ok := principal.Org(c); ok {
@@ -534,7 +446,7 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := readerOrg(c)
 	if !ok {
 		// A customer's OWN billing — never admin-gate it; an absent identity is a
-		// true "not signed in" (401), matching usage/gpuCharge.
+		// true "not signed in" (401), matching usage.
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
 	// ONE resolution, used twice: the wallet to READ, and the account to REPORT. Calling
@@ -564,41 +476,3 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// gpuEligibility → commerce GET /v1/billing/gpu/eligibility: the read-only launch gate
-// ({eligible,reason,prepaidAvailable,cardOnFile,requiredCents,...}). It reads PREPAID
-// available (never the combined balance) + card-on-file, so the launch UI can show the
-// exact remedy (add a card / add prepaid) — it never 402s. The immediate charge
-// (amountCents) and the 24h-minimum floor (minPrepaidCents) + currency pass through; the
-// subject is pinned to the caller's OWN org (commerce keys the wallet under the bare org
-// slug), so the gate reads exactly the wallet gpu-charge debits.
-func gpuEligibility(s *cloud.Service[state], c *zip.Ctx) error {
-	return proxy(s, c, "/v1/billing/gpu/eligibility", "amountCents", "minPrepaidCents", "currency")
-}
-
-// pinSubjectBody overwrites every commerce billing-subject key on a top-level JSON object
-// with subject (the caller's OWN org), so a POST body can NEVER act on another tenant's
-// wallet. The keys mirror commerce's edge-auth billing-subject set {user,userId,customerId}
-// (kept identical to clients/account's scopedBillingBody), so whichever param commerce reads
-// is the caller's. A non-object/empty body starts fresh with only the pinned subject (commerce
-// then 400s on the missing amount — honest), so the subject can never be omitted. Non-subject
-// fields (amountCents/currency/requestId/tag) are preserved verbatim.
-func pinSubjectBody(raw []byte, subject string) []byte {
-	obj := map[string]json.RawMessage{}
-	if len(bytes.TrimSpace(raw)) > 0 {
-		if err := json.Unmarshal(raw, &obj); err != nil {
-			obj = map[string]json.RawMessage{} // non-object body — keep only the pinned subject
-		}
-	}
-	s, err := json.Marshal(subject)
-	if err != nil {
-		return raw
-	}
-	for _, k := range billingSubjectKeys {
-		obj[k] = s
-	}
-	out, err := json.Marshal(obj)
-	if err != nil {
-		return raw
-	}
-	return out
-}

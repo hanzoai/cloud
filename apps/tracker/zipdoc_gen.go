@@ -96,6 +96,22 @@ func init() {
 		},
 		Example: json.RawMessage(`{"key":"ENG","num":14,"status":"in_progress","assignee":"z"}`),
 	})
+	zip.Describe("POST /tracker/upsert", zip.Doc{
+		Description: "Mirrors one external work item into the CALLER's org — creating the\nrow, or updating the one already carrying that ExtRef — and reports which it did\nplus the tracker identity the item is now known by.\n\nThe org is the caller's plane identity and never the argument — plane.IssueIn has\nno org field, deliberately, because a feeder able to state the org could file\ninto another tenant's tracker. Anonymous is refused rather than defaulted: an\nitem arriving with no principal must fail, not land on somebody's board.\n\nIt calls upsertIssue, never cloud.UpsertIssue. cloud.UpsertIssue now falls\nthrough to THIS op when the local sink is nil, so a process serving it that went\nback through it would dial its own socket and ask itself, forever.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"IssueIn.extRef":           "ExtRef is the external anchor AND the idempotency key, e.g.\n\"github:owner/repo#123\".",
+			"IssueIn.key":              "Key is the tracker team the item files under, e.g. \"GH\"; ensured on first use.",
+			"IssueIn.kind":             "Kind is what it is — \"issue\" | \"pr\".",
+			"IssueIn.project":          "Project is the IAM project scope; empty means the org's default store.",
+			"IssueIn.repo":             "Repo is the git repo the item belongs to — the per-repo filter discriminator.",
+			"IssueIn.source":           "Source is which surface opened it, e.g. \"git\".",
+			"IssueIn.state":            "State is the upstream open/closed state; the tracker maps it to a column.",
+			"IssueIn.teamName":         "TeamName is the display name used when that team is first created.",
+			"IssueUpserted.created":    "Created distinguishes a new row from an update.",
+			"IssueUpserted.identifier": "Identifier is KEY-<number>.",
+			"IssueUpserted.number":     "Number is the tracker's own item number.",
+		},
+	})
 	zip.Describe("POST /v1/tracker/projects", zip.Doc{
 		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})

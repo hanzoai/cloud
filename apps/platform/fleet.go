@@ -273,6 +273,11 @@ func fleetRoutes(app *zip.App, s *cloud.Service[fleetState]) {
 	// GitOps hop (rollout.go).
 	registerReleaser(s)
 
+	// And on the plane, for the reason registerReleaser alone was not enough: the
+	// build that proves an image runs in a different process from this control
+	// plane, so the in-process hook was nil on every release that mattered.
+	exposeRelease(s)
+
 	// Internal plane: platform.fleet answers THIS board's observation, bound to THIS
 	// service, so the admin god-view (/v1/admin/products + the overview drift KPIs)
 	// gets the same scan and the same tenant confinement listFleet applies (rpc.go).
