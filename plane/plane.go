@@ -74,6 +74,18 @@ const (
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
 
+	// FinanceSpend is the org's TOTAL over a window — what it consumed, beside
+	// what its wallet still holds. It is the qualify signal three attributed-
+	// credit programs read (referrals, affiliates, authors), the month-to-date
+	// figure on the usage page, and the per-org money row every admin aggregator
+	// folds over.
+	//
+	// It is one op rather than each caller summing FinanceUsage, because the
+	// total and the rows are DIFFERENT questions with different costs: the cap
+	// already reads the ledger's own windowed sum, and a caller that re-derived
+	// it from a page of rows would silently answer for one page.
+	FinanceSpend = "finance_spend"
+
 	// FinanceScopeRules reads the org's per-scope request-rate ceilings — the
 	// rate-limited subset of its spend-alert rows. It is on the plane for the
 	// same reason the balance is, plus one of its own: the READER is a cloud
@@ -450,6 +462,35 @@ type Txn struct {
 // Txns is a page of ledger entries.
 type Txns struct {
 	Rows []Txn `json:"rows"`
+}
+
+// ---- finance.spend — the totals -------------------------------------------
+
+// SpendIn asks what an org has consumed, and since when.
+//
+// There is no subject and no org, for the usual reason: the tenant rides the
+// caller. Since is a unix second and 0 means the calendar month to date, which
+// is the window every existing reader of this figure asks for.
+type SpendIn struct {
+	Since int64 `json:"since,omitempty"`
+}
+
+// Spend is one org's metered consumption over that window, beside the wallet it
+// is drawn from.
+//
+// Consumed is the LEDGER'S OWN windowed sum — the same figure the rolling
+// spend cap reads, so a program that qualifies on spend and a gate that stops
+// it cannot disagree about how much was spent. The ledger reports that sum to
+// the cent and this carries it as an exact decimal rather than inventing a
+// precision it never had.
+//
+// There is ONE balance field because the ledger has one number: what it calls
+// available IS the settled balance (a hold is the caller's own in-pod
+// reservation, never a ledger row). Two fields would be two names for one
+// value, which is how a reader comes to subtract one from the other.
+type Spend struct {
+	Consumed Money `json:"consumed"`
+	Balance  Money `json:"balance"`
 }
 
 // ScopeRule is one scope's request-rate ceiling: the axes it covers and the
