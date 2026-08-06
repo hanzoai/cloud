@@ -65,7 +65,7 @@ func (f *fakeCommerce) usages() int32 { return atomic.LoadInt32(&f.usageCount) }
 func newGateApp(t *testing.T, m *metering.Client, handlerRan *atomic.Bool) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{})
-	app.Use(BillingGate(m, func(c *zip.Ctx) int64 { return 5 }))
+	app.Use(BillingGate(m, func(method, path string) int64 { return 5 }))
 	app.Post("/v1/agent/run", func(c *zip.Ctx) error {
 		handlerRan.Store(true)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
@@ -293,26 +293,16 @@ func priceForPath(t *testing.T, p string) int64 {
 	return priceForMethod(t, http.MethodPost, p)
 }
 
-// priceForMethod routes a real request at path p through a one-shot handler that
-// evaluates DefaultPrice against the genuine zip.Ctx and captures the result.
-// The price is read INSIDE the handler (never after Test returns) because Fiber
-// recycles its context once the handler completes.
+// priceForMethod asks DefaultPrice what one call to method p costs.
+//
+// It used to route a real request through a one-shot handler and read the price
+// inside it, because DefaultPrice took a *zip.Ctx and fiber recycles that context
+// the moment the handler returns. A price is a fact about an operation, not about
+// a request, so the whole apparatus — the app, the handler, the httptest request,
+// the done channel guarding the recycle — is gone with the argument that needed it.
 func priceForMethod(t *testing.T, method, p string) int64 {
 	t.Helper()
-	var got int64
-	done := make(chan struct{})
-	app := zip.New(zip.Config{})
-	app.Use(zip.H(func(c *zip.Ctx) error {
-		got = DefaultPrice(c)
-		close(done)
-		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
-	}))
-	req := httptest.NewRequest(method, p, nil)
-	if _, err := app.Test(req); err != nil {
-		t.Fatalf("Test(%q): %v", p, err)
-	}
-	<-done
-	return got
+	return DefaultPrice(method, p)
 }
 
 func waitFor(cond func() bool, d time.Duration) bool {
@@ -327,7 +317,7 @@ func waitFor(cond func() bool, d time.Duration) bool {
 }
 
 // billingProbe drives a request with the given identity headers through a handler
-// that captures BOTH the billing identity (identityFromCtx — who PAYS) and the
+// that captures BOTH the billing identity (identity — who PAYS) and the
 // data-scope org (principal.Org — whose DATA), so a test can assert the home/
 // effective SPLIT in one shot. Read inside the handler (Fiber recycles the ctx).
 func billingProbe(t *testing.T, headers map[string]string) (billingOrg, billingUser, dataOrg string) {
@@ -335,7 +325,7 @@ func billingProbe(t *testing.T, headers map[string]string) (billingOrg, billingU
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
 	app.Use(zip.H(func(c *zip.Ctx) error {
-		in := identityFromCtx(c)
+		in := identity(c, c.Path())
 		billingOrg, billingUser = in.Org, in.User
 		dataOrg, _ = principal.Org(c)
 		close(done)

@@ -100,32 +100,57 @@ type PlanChecker interface {
 func SpendGate(commerce CommerceClient) zip.Handler {
 	plans, _ := commerce.(PlanChecker)
 	return func(c *zip.Ctx) error {
-		if !Switch(SwitchPaywallEnforced) {
-			return c.Next() // dark — byte-identical to no middleware at all.
+		if reason := standing(c, c.Method(), c.Path(), plans); reason != "" {
+			return Refuse(c, "", reason)
 		}
-		if !Billable(c.Method(), c.Path()) {
-			return c.Next()
-		}
-		if !principal.Validated(c) {
-			return c.Next() // the route's own auth answers; a 402 would mask a 401.
-		}
-		if principal.IsSuperAdmin(c) {
-			return c.Next() // platform sudo, masquerade included.
-		}
-		w, ok := principal.WalletOf(c)
-		if !ok {
-			// No resolvable payer. Unknown, not unpaid, and never a free pass.
-			return unresolved(c, "no resolvable wallet")
-		}
-		switch s := Stand(c.Context(), licence(c.Context(), plans, w.Ledger), w); {
-		case s.Admits():
-			return c.Next()
-		case s == Unknown:
-			return unresolved(c, "billing authority unreadable")
-		default:
-			c.Log().Info("spend: no subscription and no credit", "org", w.Ledger, "account", w.Account, "path", c.Path())
-			return Refuse(c, "", ReasonUnpaid)
-		}
+		return c.Next()
+	}
+}
+
+// standing IS the ladder above — every step of it — returning "" to admit and
+// otherwise the reason to refuse with. It is split out of SpendGate for one
+// reason: the ladder decides, and SpendGate only renders, and the OP SEAM (Toll)
+// has to reach the same decision through a channel that cannot write a body. Two
+// copies of a seven-step money ladder is the drift this codebase has paid for
+// three times; there is one, and both seams call it.
+//
+// c may be nil — an operation reached from the command line runs with no request
+// behind it at all. That is the unvalidated case, already step 3, so it needs no
+// branch of its own: a caller with no attested principal is the route's own 401 to
+// make, and a 402 in front of it would mask that. The CHARGE leg is where an
+// absent payer refuses, because there the absence is decisive: you cannot debit
+// nobody.
+//
+// method and path name the OPERATION, not the transport. Over MCP the request is
+// POST /mcp and over the ZAP plane POST /.well-known/zip/op/<name>; neither is a
+// billable tree, so a ladder fed the request's own path admits every metered
+// operation ever reached through one.
+func standing(c *zip.Ctx, method, path string, plans PlanChecker) string {
+	if !Switch(SwitchPaywallEnforced) {
+		return "" // dark — byte-identical to no gate at all.
+	}
+	if !Billable(method, path) {
+		return ""
+	}
+	if c == nil || !principal.Validated(c) {
+		return "" // the route's own auth answers; a 402 would mask a 401.
+	}
+	if principal.IsSuperAdmin(c) {
+		return "" // platform sudo, masquerade included.
+	}
+	w, ok := principal.WalletOf(c)
+	if !ok {
+		// No resolvable payer. Unknown, not unpaid, and never a free pass.
+		return unresolved(c, "no resolvable wallet", path)
+	}
+	switch s := Stand(c.Context(), licence(c.Context(), plans, w.Ledger), w); {
+	case s.Admits():
+		return ""
+	case s == Unknown:
+		return unresolved(c, "billing authority unreadable", path)
+	default:
+		c.Log().Info("spend: no subscription and no credit", "org", w.Ledger, "account", w.Account, "path", path)
+		return ReasonUnpaid
 	}
 }
 
@@ -150,13 +175,13 @@ func licence(ctx context.Context, plans PlanChecker, org string) Licence {
 // default) admits and WARNs; paywall_strict refuses with the DISTINCT unresolved code,
 // because the caller's cure is different — an unpaid caller must buy something, an
 // unresolved one must retry.
-func unresolved(c *zip.Ctx, why string) error {
+func unresolved(c *zip.Ctx, why, path string) string {
 	if Switch(SwitchPaywallStrict) {
-		c.Log().Warn("spend: standing unresolvable; refusing (strict)", "why", why, "path", c.Path())
-		return Refuse(c, "", ReasonUnresolved)
+		c.Log().Warn("spend: standing unresolvable; refusing (strict)", "why", why, "path", path)
+		return ReasonUnresolved
 	}
-	c.Log().Warn("spend: standing unresolvable; admitting", "why", why, "path", c.Path())
-	return c.Next()
+	c.Log().Warn("spend: standing unresolvable; admitting", "why", why, "path", path)
+	return ""
 }
 
 // ── the refusal ─────────────────────────────────────────────────────────────────
