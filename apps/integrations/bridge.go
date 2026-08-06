@@ -297,6 +297,15 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text 
 		return "Sorry — the agent hit an error handling that. Please try again.", false
 	}
 	if run.Status != "ok" {
+		// SAID, not just returned. A run that EXECUTED and whose model failed comes
+		// back as a non-"ok" status with a nil error (agents.RunOnBehalf's contract),
+		// so this branch — not the one above — is the one a broken inference path
+		// lands in. It logged nothing, and the whole failure was therefore invisible:
+		// the op answered 200, the bridge posted its generic sentence, and the only
+		// trace of the cause was the run row. That is how a dead model wire survived
+		// a day of looking. The run id is here so the row is findable.
+		s.Log.Warn("bridge: agent run did not succeed", "provider", provider, "org", org,
+			"status", run.Status, "run_id", run.RunID)
 		return "Sorry — the agent hit an error handling that. Please try again.", false
 	}
 	if strings.TrimSpace(run.Output) == "" {
