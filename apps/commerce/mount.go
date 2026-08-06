@@ -40,8 +40,8 @@ import (
 	catalogapi "github.com/hanzoai/commerce/api/catalog"
 	planapi "github.com/hanzoai/commerce/api/plan"
 	commerceresources "github.com/hanzoai/commerce/api/resources"
-	"github.com/hanzoai/commerce/billing/paywall"
 	commercestore "github.com/hanzoai/commerce/api/store"
+	"github.com/hanzoai/commerce/billing/paywall"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
 	commercemid "github.com/hanzoai/commerce/middleware"
 	"github.com/hanzoai/commerce/middleware/iammiddleware"
@@ -358,10 +358,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// It calls the resources LEAF rather than commerce's api.Route. Route also
 	// binds an index route, a permissive CORS policy and a wildcard OPTIONS onto
 	// whatever router it is handed — right for a process that owns its tree,
-	// wrong in this shared one, where byte-identical patterns merge silently and
-	// two equal-specificity params with different names panic at registration.
-	// Importing that package would also drag checkout, subscriptions and
-	// thirdparty/netlify, which this binary deliberately does not carry.
+	// wrong in this shared one. Importing that package would also drag checkout,
+	// subscriptions and thirdparty/netlify, which this binary deliberately does
+	// not carry.
+	//
+	// A DUPLICATE DECLARATION IS A BOOT PANIC, not a silent merge. This comment
+	// used to say byte-identical patterns "merge silently, first wins"; measured
+	// against the zip this tree pins, they do not — the composer refuses the
+	// program outright and names every conflicting pair with file:line:
+	//
+	//	zip: this program does not compose, so it has no projection:
+	//	zip: GET /v1/collection: declared by "/collection" at rest/rest.go:133
+	//	  (via root → /v1 → /collection) and by "/collection" at rest/rest.go:133
+	//
+	// WHERE it lands differs by zip version, and both are before a request is
+	// served: this tree resolves v1.25.1, which accepts the second Route() call
+	// and refuses when the program is COMPOSED; commerce standalone pins v1.24.2,
+	// which refuses inside Route(). So a check that only registers reads "fine"
+	// here and is measuring nothing — ask for the composition.
+	//
+	// That matters for anything ADDED here later: a kind may be registered in
+	// exactly ONE place. Putting a kind on this leaf while commerce's api.Route
+	// still registers it takes the STANDALONE down at boot, and the failure is
+	// in the other binary from the one that changed.
 	//
 	// productEvents is nil: the storefront publish loop belongs to the
 	// standalone's event bus, and the CRUD does not depend on it.

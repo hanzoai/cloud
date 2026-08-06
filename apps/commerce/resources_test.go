@@ -3,12 +3,13 @@
 package commerce
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
 
-	commerceresources "github.com/hanzoai/commerce/api/resources"
 	"github.com/hanzoai/cloud/manifest"
+	commerceresources "github.com/hanzoai/commerce/api/resources"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -27,13 +28,14 @@ func boundLeaves(t *testing.T) []string {
 	// The same call Mount makes, with the gates as pass-throughs: this asks what
 	// the router BINDS, which is orthogonal to who may write a product.
 	//
-	// A shared router merges byte-identical patterns silently but PANICS on two
-	// equal-specificity params with different names — at registration, inside
-	// Mount, at boot, long after a green build. Nothing else here calls Route.
+	// Registration is where this fails, if it fails: the composer refuses a
+	// program with two declarations of one address — at boot, inside Mount, long
+	// after a green build. Nothing else in this package calls Route.
+	// TestOneKindRegistersOnce below pins that refusal.
 	defer func() {
 		if r := recover(); r != nil {
-			t.Fatalf("commerceresources.Route panicked at registration: %v\n"+
-				"two equal-specificity params with different names collide in this shared router — "+
+			t.Fatalf("commerceresources.Route was refused at registration: %v\n"+
+				"the composer rejects a program that declares one address twice — "+
 				"this is a BOOT panic, and it passes every build check", r)
 		}
 	}()
@@ -103,5 +105,50 @@ func TestEveryBoundMerchantLeafIsRoutedToCommerce(t *testing.T) {
 				"the host gives it to ai's bare \"/v1\" and the caller gets ai's 404. "+
 				"Add it to the commerce row in manifest/apps.go.", path)
 		}
+	}
+}
+
+// TestOneKindRegistersOnce pins the rule that makes this leaf load-bearing: an
+// address may be DECLARED once, and a second declaration is refused at boot.
+//
+// It is here because the comment in mount.go used to claim the opposite —
+// "byte-identical patterns merge silently, first wins" — and that reading makes
+// adding a kind to the leaf look free when commerce's api.Route still registers
+// it. It is not free: the composer rejects the whole program and the STANDALONE
+// dies at boot, in a different binary from the one that changed.
+//
+// Registering the leaf twice is the cheapest faithful stand-in for that mistake:
+// same kinds, same addresses, two declarations.
+//
+// WHERE the refusal lands depends on the zip in the graph, and both are before
+// a request is served. Cloud resolves v1.25.1, which ACCEPTS the second Route()
+// call and refuses when the program is COMPOSED — so the check must ask for the
+// composition, not merely register. Commerce standalone pins v1.24.2, which
+// refuses inside Route() itself. A test that only registered would have read
+// "accepted" here and concluded the rule was gone.
+func TestOneKindRegistersOnce(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	pass := func(c *zip.Ctx) error { return c.Next() }
+
+	refused := func() (msg string) {
+		defer func() {
+			if r := recover(); r != nil {
+				msg = fmt.Sprint(r)
+			}
+		}()
+		g := app.Group("/v1/commerce")
+		commerceresources.Route(g, pass, pass, pass, nil)
+		commerceresources.Route(g, pass, pass, pass, nil)
+		_ = app.Fiber().GetRoutes() // composes; this is where v1.25.1 refuses
+		return ""
+	}()
+
+	if refused == "" {
+		t.Fatal("a second declaration of the same addresses was ACCEPTED — the one-registration rule " +
+			"no longer holds, so mount.go's warning is stale and a kind could be added to this leaf " +
+			"while api.Route still registers it")
+	}
+	if !strings.Contains(refused, "does not compose") {
+		t.Errorf("refused, but not by the composer: %q", refused)
 	}
 }
