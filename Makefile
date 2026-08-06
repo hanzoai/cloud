@@ -44,8 +44,6 @@ REVISION        ?= $(shell git describe --always --abbrev=40 --match='' --dirty 
 # host and the plugins, because three copies of a stamp is three chances to
 # stamp one binary and forget the one that answers /v1/health.
 STAMP            = -X github.com/hanzoai/cloud.Version=$(VERSION) -X github.com/hanzoai/cloud.revision=$(REVISION)
-# Path to a hanzoai/console checkout used to build the embedded console bundle.
-CONSOLE_DIR    ?= ../console
 # Path to a hanzoai/openapi checkout — the SOT the agent-skills catalog is generated from.
 OPENAPI_DIR    ?= ../openapi
 
@@ -80,21 +78,23 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-.PHONY: help webui deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-webui: ## Build the real console static bundle into webui/dist (go:embed source). CONSOLE_DIR=<path to console>.
-	@command -v npm >/dev/null 2>&1 || { echo "npm is required to build the console bundle"; exit 1; }
-	@test -f "$(CONSOLE_DIR)/package.json" || { echo "console checkout not found at $(CONSOLE_DIR) — set CONSOLE_DIR=<path>"; exit 1; }
-	@test -d "$(CONSOLE_DIR)/node_modules" || (cd "$(CONSOLE_DIR)" && npm install --no-audit --no-fund)
-	cd "$(CONSOLE_DIR)" && NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=8192 npm run build:embed
-	# Overlay the fresh static export onto webui/dist, keeping only the tracked
-	# fallbacks (.gitignore + assets/.gitkeep); the real bundle is build-time-only.
-	find webui/dist -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name assets -exec rm -rf {} +
-	cp -r "$(CONSOLE_DIR)/out/." webui/dist/
-	@echo ">> embedded real console bundle into webui/dist (index.html $$(wc -c < webui/dist/index.html) bytes)"
+# THERE IS NO `webui` TARGET, and its absence is the change.
+#
+# It ran hanzoai/console's `npm run build:embed` and copied the static export into
+# webui/dist for //go:embed to bake — which made shipping a console change a cloud
+# BUILD (~22 min) plus a `strategy: Recreate` single-replica rollout, measured at
+# 2m15s of api.hanzo.ai down. The console is a published site now (see the
+# webui/release package): `hanzo sites publish` puts a release live in about a
+# second and rolls it back faster, with no build here and no restart there.
+#
+# Nothing replaces it in this file because nothing in this repo builds the
+# console any more. The e2e target that needed a localhost-pinned bundle now
+# points the running binary at one with CLOUD_CONSOLE_SITE / CLOUD_CONSOLE_ORG.
 
 deploy-ui: ## Build the monochrome ArgoCD dashboard bundle into apps/deploy/webui/dist (go:embed source). DEPLOY_DIR=<path to hanzoai/deploy>.
 	@command -v yarn >/dev/null 2>&1 || { echo "yarn is required to build the deploy dashboard bundle"; exit 1; }
@@ -225,15 +225,15 @@ e2e: ## Boot the binary locally and run the Playwright e2e suite against it.
 
 # The console's IAM/cloud origins are NEXT_PUBLIC_* — inlined at BUILD time — so a
 # bundle built for production points its login at hanzo.id and its reads at
-# api.hanzo.ai. This rebuilds it against the loopback instance so the UI specs
-# exercise the local binary end to end. It OVERWRITES webui/dist with a
-# localhost-pinned bundle: run plain `make webui` before shipping anything.
-E2E_ORIGIN ?= http://127.0.0.1:18080
-e2e-ui: ## Rebuild the console pointed at the local instance, then run e2e.
-	NEXT_PUBLIC_IAM_URL=$(E2E_ORIGIN) NEXT_PUBLIC_CLOUD_URL=$(E2E_ORIGIN) \
-	NEXT_PUBLIC_IAM_CLIENT_ID=hanzo-cloud NEXT_PUBLIC_IAM_APP_NAME=hanzo-cloud \
-	NEXT_PUBLIC_IAM_ORG_NAME=hanzo $(MAKE) webui
-	@E2E_ARGS="$(E2E_ARGS)" ./e2e/run.sh
+# api.hanzo.ai, and the UI specs need one pointed at the loopback instance
+# instead. That used to mean rebuilding webui/dist here, which OVERWROTE the
+# bundle the next `make build` would ship. It is a published site now, so the
+# binary is POINTED at a loopback-built release rather than rebuilt around one:
+# publish it once from a console checkout (`hanzo sites publish`) and name it.
+E2E_ORIGIN     ?= http://127.0.0.1:18080
+E2E_CONSOLE    ?= hanzo-console-e2e
+e2e-ui: ## Run e2e against a console release built for the local instance. E2E_CONSOLE=<site slug>.
+	CLOUD_CONSOLE_SITE=$(E2E_CONSOLE) E2E_ARGS="$(E2E_ARGS)" ./e2e/run.sh
 
 # The data plane has no plaintext-at-rest mode: cek refuses to open a store without
 # a master key, on every build. The server makes that a boot decision (serve.go); a
