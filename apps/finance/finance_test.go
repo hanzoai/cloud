@@ -171,8 +171,8 @@ func TestDepositRefIsOnePaymentAndNotJustOneKey(t *testing.T) {
 					"caller is told money landed that this ledger never credited",
 					tc.second.Subject, tc.second.Amount, got)
 			}
-			if !errors.Is(err, errRefTaken) {
-				t.Errorf("it failed with %v, want a conflict on the ref (%v)", err, errRefTaken)
+			if !errors.Is(err, ErrRefTaken) {
+				t.Errorf("it failed with %v, want a conflict on the ref (%v)", err, ErrRefTaken)
 			}
 			if got != "" {
 				t.Errorf("the conflict answered entry %q, want none — that id is the OTHER payment's", got)
@@ -221,8 +221,8 @@ func TestDepositRecoveryIsNotSomebodyElsesCredit(t *testing.T) {
 	}
 	// It names the REF as the reason, not the dead context: a retry under this ref can
 	// never succeed, so the caller must be told to stop retrying it rather than to loop.
-	if !errors.Is(err, errRefTaken) {
-		t.Errorf("it failed with %v, want a conflict on the ref (%v)", err, errRefTaken)
+	if !errors.Is(err, ErrRefTaken) {
+		t.Errorf("it failed with %v, want a conflict on the ref (%v)", err, ErrRefTaken)
 	}
 	if got != "" {
 		t.Errorf("it answered entry %q, want none", got)
@@ -358,6 +358,74 @@ func TestMigrateOrgIdempotent(t *testing.T) {
 		t.Fatalf("migrate zero id = %q; want \"\" (skipped)", id3)
 	}
 	mustBalance(t, f, "empty", "empty", 0)
+}
+
+// TestMigrateOrgRerunAfterTheBalanceMoved — the exactly-once promise over the one input
+// that MOVES.
+//
+// [MigrateOrg] documents a re-run as a no-op that answers the original entry, and the
+// caller is an operator-facing admin door that says "safe to retry". Both are only true
+// while the balance being carried is the same number, because the deposit's idempotency
+// answers a replay with the first entry only when the ref names the same (subject,
+// AMOUNT) — and a legacy balance is a moving figure by construction: the customer spends,
+// tops up, is granted credit between the first run and the second.
+//
+// So the honest re-run — the retry the doc invites, over a balance that changed in the
+// meantime — was answered with a REF CONFLICT. The cutover looked failed, its receipt was
+// an error, and an operator reading it has no way to tell "already carried" from "the
+// carry is broken".
+//
+// It is asserted AFTER A SPEND as well, because that is the state a real second run is
+// in: the wallet no longer holds the carried figure, and the re-run must still move
+// nothing rather than topping it back up.
+//
+// Mutation proof: drop the [ErrRefTaken] read-back from [MigrateOrg] (return the deposit's
+// error) and the re-run fails on the error; answer the conflict with a fresh deposit
+// instead and it fails on the balance, which is the money half.
+func TestMigrateOrgRerunAfterTheBalanceMoved(t *testing.T) {
+	ctx := context.Background()
+	f := New(t.TempDir())
+	defer func() { _ = f.Close() }()
+	Publish(f)
+	defer Publish(nil)
+
+	first, err := MigrateOrg(ctx, "acme", 2500)
+	if err != nil {
+		t.Fatalf("the cutover: %v", err)
+	}
+	mustBalance(t, f, "acme", "acme", 2500)
+
+	// The org spends part of what was carried, so the wallet no longer holds the figure
+	// the entry was posted for.
+	if err := f.RecordUsage(ctx, types.UsageInput{
+		Org: "acme", Subject: "acme", Amount: money.FromCents(1000), Ref: "spend-1",
+	}); err != nil {
+		t.Fatalf("spend: %v", err)
+	}
+	mustBalance(t, f, "acme", "acme", 1500)
+
+	// The cutover is run again and commerce's legacy balance is a DIFFERENT number now.
+	again, err := MigrateOrg(ctx, "acme", 1500)
+	if err != nil {
+		t.Fatalf("re-running the cutover over a MOVED balance answered %v — the documented no-op is an "+
+			"error, so a retried operator call reads as a broken cutover and the admin door reports "+
+			"a failure over money that is already carried", err)
+	}
+	if again != first {
+		t.Fatalf("the re-run answered entry %q, want the original %q — a carry that answers a new "+
+			"identity every time is not exactly-once, whatever it moved", again, first)
+	}
+	mustBalance(t, f, "acme", "acme", 1500) // no second carry: the wallet is untouched.
+
+	// And it is stable: a THIRD run, over a third figure, is the same answer again.
+	third, err := MigrateOrg(ctx, "acme", 90000)
+	if err != nil {
+		t.Fatalf("the third run: %v", err)
+	}
+	if third != first {
+		t.Fatalf("the third run answered entry %q, want the original %q", third, first)
+	}
+	mustBalance(t, f, "acme", "acme", 1500)
 }
 
 // TestBalanceReadErrorSurfaces pins the money invariant that a REAL balance-read

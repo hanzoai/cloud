@@ -17,6 +17,7 @@ package commerce
 // answer, which was the thing that always looked fine.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -468,13 +470,20 @@ var callers = []struct {
 // cannot see this: [stating] answers a settlement whatever it is asked, so a door reading
 // the right figure out of the wrong namespace looks identical to a correct one. Where the
 // money may then GO is the sibling property, and
-// [TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer] holds it.
+// [TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged] holds it.
 //
-// The masquerade row is asserted even though its credit is REFUSED, and that is the whole
-// reason the guard sits after this read rather than before it: the two names are one
-// string for every other caller, so a refusal taken earlier would leave nothing in the
-// suite able to tell p.org from p.ledger, and the read this commit fixed could quietly
-// go back to the payer's namespace under a green bar.
+// THE MASQUERADE ROW IS DRIVEN AT THE BOUNDARY RATHER THAN AT THE DOOR, and that is the
+// screen's refusal arriving BEFORE the charge rather than a weakening of this property.
+// A door that no longer takes that caller's card also never reads its receipt, so
+// [screen.settle] is where the read still exists and where it is asserted: the same value,
+// the same two names, no card charged. The other two rows keep driving the real door,
+// which is what holds [seen] to resolving both names off a request.
+//
+// The read is asserted for a payment whose credit is REFUSED, and that is the whole
+// reason the boundary's own guard sits after the read rather than before it: the two
+// names are one string for every other caller, so a boundary that refused before reading
+// would leave nothing in the suite able to tell p.org from p.ledger, and the read this
+// commit fixed could quietly go back to the payer's namespace under a green bar.
 //
 // Mutation proof: read the receipt from p.ledger (the shipped defect) and the masquerade
 // row fails on the captured org — "admin", where the charge was never written — while
@@ -484,11 +493,20 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			funded(t)
 			var seen asked
-			app := creditDoorBody(t,
-				capturing(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}, &seen),
-				`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
+			s := capturing(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}, &seen)
 
-			topupAs(t, app, tc.hdr)
+			if tc.charged != tc.ledger {
+				// No door takes this caller's card, so the boundary is called the way a
+				// mint outside the screen would call it. The credit refuses; the read
+				// under test has already happened by then.
+				_ = s.settle(context.Background(), payment{
+					org: tc.charged, ledger: tc.ledger, subject: wallet(tc.ledger),
+					door: "/v1/billing/topup/token", via: "/v1/billing/topup/token",
+				}, settledRef, settledReceipt)
+			} else {
+				topupAs(t, creditDoorBody(t, s,
+					`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`), tc.hdr)
+			}
 
 			if seen.org != tc.charged {
 				t.Errorf("the settled receipt was looked up in %q, want %q — the read is keyed on the "+
@@ -502,8 +520,8 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 	}
 }
 
-// TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer — the money half, and
-// the regression the split introduced.
+// TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged — the money half, and
+// the ORDER that makes it a control rather than a report.
 //
 // Naming the two organisations separately is right for every READ and wrong for the MINT.
 // A card top-up is charged on the EFFECTIVE org's merchant account and its receipt is
@@ -515,38 +533,59 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 //
 // NEITHER ADDRESS IS RIGHT, so the mint refuses rather than choosing. Crediting the ledger
 // is the bug above; crediting the charged org has an admin's card top up the customer it is
-// only inspecting, which is a different surprise and equally unasked-for. The refusal is
-// LOUD — the door's own 500 and a RECONCILE line naming both organisations — because the
-// alternative to a loud refusal here is a silent wrong credit, and a SuperAdmin who means
-// to fund a customer has the admin grant, a door whose whole subject is whose money it is.
+// only inspecting, which is a different surprise and equally unasked-for. A SuperAdmin who
+// means to fund a customer has the admin grant, a door whose whole subject is whose money
+// it is — so the refusal names it.
+//
+// AND THE REFUSAL IS WORTH NOTHING BEHIND THE CHARGE, which is what this asserts. The first
+// reading of the rule lived at the ledger boundary, which runs AFTER the handler: the
+// masquerading admin's top-up cleared on the CUSTOMER's merchant account, then found there
+// was nowhere to land it, and answered 500. Real money taken, permanently uncreditable, and
+// takeable again on the next attempt because a fresh idempotency key is a fresh card
+// authorisation. A status code cannot see the difference between that and a refusal that
+// cost nobody anything — both are a non-2xx — so the assertion is the CHARGE COUNT.
 //
 // The two org == ledger callers must be untouched by it, and they are asserted here rather
-// than assumed: the guard can only fire where the names differ, so a mistake in it shows up
-// as an ordinary customer's top-up refused.
+// than assumed: the rule can only fire where the names differ, so a mistake in it shows up
+// as an ordinary customer's top-up refused and their card never taken.
 //
-// Mutation proof: delete the p.org != p.ledger guard from [screen.settle] and the
-// masquerade row answers 200 with $42 of a customer's money in the admin's wallet — the
-// shipped regression, exactly, and ONLY that row moves, which is the no-regression half.
-// Delete the guard AND point the deposit at p.org and the row still fails, now on acme's
-// balance: the other address is not a fix either.
-func TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer(t *testing.T) {
+// Mutation proof: move the [payment.diverged] refusal out of [screen.decide] and leave
+// only the boundary's copy — the shipped ordering — and the masquerade row fails on the
+// COUNT (the handler runs once, the card is charged, the answer is a 500 over real money).
+// Refuse when the names are EQUAL instead and both other rows fail on the count, the
+// status and the balance, which is the no-regression half.
+func TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged(t *testing.T) {
 	for _, tc := range callers {
 		t.Run(tc.name, func(t *testing.T) {
 			fin := funded(t)
-			app := creditDoorBody(t,
+			var taken int
+			app := creditDoorHandler(t,
 				stating(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}),
-				`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
+				charging(settledBody(http.StatusOK,
+					`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`), &taken))
 
 			code, body := topupAs(t, app, tc.hdr)
 
 			if tc.charged != tc.ledger {
-				if code != http.StatusInternalServerError {
-					t.Fatalf("a top-up charged in %q against a wallet in %q answered %d %s, want 500 — "+
-						"a mint whose charge and credit are on different books cannot be silent",
-						tc.charged, tc.ledger, code, body)
+				// THE CARD WAS NEVER TAKEN. Everything else in this branch is a
+				// consequence; this is the property.
+				if taken != 0 {
+					t.Errorf("the charge handler ran %d time(s) for a payment that can never be credited, "+
+						"want 0 — the customer's card was charged on %q's merchant account for a top-up "+
+						"this process then refused, so the money is real, the credit is impossible, and "+
+						"the next attempt charges it again", taken, tc.charged)
+				}
+				if code != http.StatusConflict {
+					t.Errorf("a top-up charged in %q against a wallet in %q answered %d %s, want 409 — "+
+						"a mint whose charge and credit are on different books cannot be silent, and it "+
+						"is not a risk verdict either", tc.charged, tc.ledger, code, body)
+				}
+				if !strings.Contains(body, "/v1/admin/grants") {
+					t.Errorf("the refusal (%s) does not name the door that CAN fund another organisation — "+
+						"an operator told only 'no' has nowhere to go", body)
 				}
 				// AND NO WALLET MOVED, in EITHER organisation. A refusal that still credited
-				// somebody would be the defect wearing a 500.
+				// somebody would be the defect wearing a 409.
 				if got := held(t, fin, tc.ledger, false); got != 0 {
 					t.Errorf("the SuperAdmin's own wallet holds %d cents, want 0 — a customer's card "+
 						"funded a platform admin's balance", got)
@@ -559,6 +598,10 @@ func TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer(t *testin
 			}
 
 			// org == ledger: the ordinary path, and it must be exactly as it was.
+			if taken != 1 {
+				t.Fatalf("the charge handler ran %d time(s) for a caller that pays for itself, want 1 — "+
+					"the pre-charge refusal is closing the door on ordinary customers", taken)
+			}
 			if code != http.StatusOK {
 				t.Fatalf("a top-up whose charge and credit are the one org answered %d %s, want 200 — "+
 					"the mint guard is refusing a caller that pays for itself", code, body)
@@ -567,6 +610,47 @@ func TestSettle_AMintRefusesWhereTheChargedOrgAndTheCreditLedgerDiffer(t *testin
 				t.Fatalf("the wallet the spend gate reads holds %d cents, want %d", got, gateCents)
 			}
 		})
+	}
+}
+
+// TestSettle_TheLedgerBoundaryStillRefusesAMintReachedDirectly — the backstop, on its own.
+//
+// The refusal that matters now happens at the screen, before any card moves. The boundary
+// keeps its own reading of the same rule ([payment.diverged], one method, two callers)
+// because refusing at the screen is a property of the two doors the screen is composed
+// onto, and NOT a property of the ledger: a third mint, a replayed webhook, a job calling
+// [screen.settle] directly is one composition away, and the address a divergent payment
+// would land at is exactly as wrong there.
+//
+// So this calls the boundary the way such a caller would — no door, no screen in front —
+// and asserts it refuses and moves nothing. It is also the only place the boundary's own
+// answer is still asserted at all, now that no door can reach it.
+//
+// Mutation proof: delete the [payment.diverged] guard from [screen.settle] and this
+// credits $42 of a customer's money into the admin's wallet.
+func TestSettle_TheLedgerBoundaryStillRefusesAMintReachedDirectly(t *testing.T) {
+	fin := funded(t)
+	s := stating(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"})
+
+	err := s.settle(context.Background(), payment{
+		org: gateOrg, ledger: adminOrg, subject: wallet(adminOrg),
+		door: "/v1/billing/topup/token", via: "/v1/billing/topup/token",
+	}, settledRef, settledReceipt)
+
+	if err == nil {
+		t.Fatal("the ledger boundary CREDITED a payment charged in one organisation against a wallet " +
+			"in another — a mint reached outside the screen has no second refusal behind it")
+	}
+	// And it is TERMINAL: the two names are the same two names on every attempt, so the
+	// answer must not send anybody round a retry that takes the card again.
+	if !strings.Contains(err.Error(), "retrying will not credit it") {
+		t.Errorf("the boundary refused with %q, which invites a retry that can never credit", err)
+	}
+	if got := held(t, fin, adminOrg, false); got != 0 {
+		t.Errorf("the SuperAdmin's own wallet holds %d cents, want 0", got)
+	}
+	if got := held(t, fin, gateOrg, false); got != 0 {
+		t.Errorf("the org the charge was written in holds %d cents, want 0", got)
 	}
 }
 
@@ -619,57 +703,11 @@ func TestSettle_ARefusedCreditStillTeachesTheModel(t *testing.T) {
 // Mutation proof: return nil instead of the refusal from any branch of [screen.settle]
 // and that row answers 200 with a zero balance.
 func TestSettle_ATopUpThatCannotBeCreditedRefusesTheDoor(t *testing.T) {
-	const settled = `{"transactionId":"` + settledReceipt + `","status":"ok","processorRef":"` + settledRef + `"}`
-	for _, tc := range []struct {
-		name  string
-		body  string
-		screw func(screen) screen
-		// ledger says whether a finance ledger is published at all.
-		ledger bool
-	}{
-		{
-			"the receipt cannot be read, so the amount is unknown",
-			settled,
-			func(s screen) screen { return refusing(s, errors.New("payment not found")) },
-			true,
-		},
-		{
-			"the charge settled in a currency this ledger does not hold",
-			settled,
-			func(s screen) screen {
-				return stating(s, settlement{cents: 500000, currency: "jpy"})
-			},
-			true,
-		},
-		{
-			"the receipt states no money",
-			settled,
-			func(s screen) screen { return stating(s, settlement{cents: 0, currency: "usd"}) },
-			true,
-		},
-		{
-			"the answer names no settlement to key the credit on",
-			`{"status":"ok"}`,
-			func(s screen) screen { return stating(s, settlement{cents: gateCents, currency: "usd"}) },
-			true,
-		},
-		{
-			"there is no ledger in the process that owns it",
-			settled,
-			func(s screen) screen { return stating(s, settlement{cents: gateCents, currency: "usd"}) },
-			false,
-		},
-	} {
+	for _, tc := range refusals {
 		t.Run(tc.name, func(t *testing.T) {
-			var fin finance.Client
-			if tc.ledger {
-				fin = funded(t)
-			} else {
-				finance.Publish(nil)
-			}
-			app := creditDoorBody(t, tc.screw(riskGate(luxlog.New("settletest"))), tc.body)
+			fin, _ := refused(t, tc)
 
-			code, body := topup(t, app)
+			code, body := topup(t, refusalDoor(t, tc, riskGate(luxlog.New("settletest"))))
 			if code == http.StatusOK {
 				t.Fatalf("a settled charge that credited NOTHING answered 200 (%s) — the customer is "+
 					"charged and told it worked", body)
@@ -684,6 +722,201 @@ func TestSettle_ATopUpThatCannotBeCreditedRefusesTheDoor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSettle_ARefusalSaysWHETHERARetryCanClearIt — the other half of failing loud.
+//
+// Every row of [refusals] is the same fact to the customer — the card cleared and the
+// balance did not — and they are NOT the same fact to whoever has to fix it. Some clear
+// themselves the moment the top-up is retried: the idempotency key replays the receipt,
+// the deposit runs again, the credit lands. Some can never clear, because what refused
+// them is the settlement itself — a charge that settled in another currency or for
+// nothing, a settlement the door could not identify, a reference that is already another
+// payment's. The receipt is immutable, so every retry reads the same refusal.
+//
+// Telling a customer to retry one of those is worse than telling them nothing: they
+// retry, the same key replays into the same refusal, and a FRESH key takes the card
+// again. And an operator watching the door cannot page on a class that is indistinguish-
+// able from the transient one. So the refusal states which it is — to the customer in
+// the only terms they can act on, and on the RECONCILE line as a `terminal` field to
+// alert on, beside the two doors that DO settle it.
+//
+// It reads the log the door actually wrote rather than trusting the wire alone, because
+// the alertable field is the operator's half and it is not on the wire at all.
+//
+// Mutation proof: answer every refusal through [screen.uncredited] (the shipped state)
+// and the four terminal rows fail; answer every one through [screen.stranded] and the
+// two retryable rows fail.
+func TestSettle_ARefusalSaysWhetherARetryCanClearIt(t *testing.T) {
+	for _, tc := range refusals {
+		t.Run(tc.name, func(t *testing.T) {
+			refused(t, tc)
+			var lines journal
+			_, body := topup(t, refusalDoor(t, tc, riskGate(luxlog.NewWriter(&lines))))
+
+			// THE CUSTOMER'S HALF: a terminal refusal must not invite the retry that
+			// takes their card again, and a retryable one must not send them to support
+			// for something their own retry completes.
+			const never = "retrying will not credit it"
+			if got := strings.Contains(body, never); got != tc.terminal {
+				t.Errorf("the answer %q says the retry is pointless = %v, want %v — a customer told the "+
+					"wrong thing here either retries into a second charge or gives up on a top-up that "+
+					"was about to work", body, got, tc.terminal)
+			}
+
+			// THE OPERATOR'S HALF: the alertable field, and the recovery named.
+			log := lines.String()
+			if !strings.Contains(log, "RECONCILE") {
+				t.Fatalf("no RECONCILE line was written for a settled charge that credited nothing: %s", log)
+			}
+			want := `"terminal":false`
+			if tc.terminal {
+				want = `"terminal":true`
+			}
+			if !strings.Contains(log, want) {
+				t.Errorf("the RECONCILE line does not carry %s — an operator cannot page on the class "+
+					"that never self-heals: %s", want, log)
+			}
+			if tc.terminal && !strings.Contains(log, "/v1/admin/grants") {
+				t.Errorf("a terminal RECONCILE line does not name the door that credits the balance: %s", log)
+			}
+			if tc.terminal && !strings.Contains(log, "refund") {
+				t.Errorf("a terminal RECONCILE line does not say the charge must be refunded — the "+
+					"customer is out the money until somebody does: %s", log)
+			}
+		})
+	}
+}
+
+// settled is the answer commerce's core gives for a charge that cleared.
+const settled = `{"transactionId":"` + settledReceipt + `","status":"ok","processorRef":"` + settledRef + `"}`
+
+// refusals is EVERY way a settled charge can fail to credit, in one table.
+//
+// It is one table because three properties are asserted over it — the door never answers
+// 200, no wallet moves, and the refusal says whether a retry can clear it — and a row
+// list that drifted between them would leave one property asserted on a population
+// another never sees. That is the same reason [callers] is shared.
+var refusals = []refusal{
+	{
+		name:   "the receipt cannot be read, so the amount is unknown",
+		body:   settled,
+		screw:  func(s screen) screen { return refusing(s, errors.New("payment not found")) },
+		ledger: true,
+		// RETRYABLE: a read that failed is a read that may succeed. This process cannot
+		// tell a datastore blip from a row that is not there, and claiming to know it is
+		// terminal would page an operator for a payment about to credit itself.
+		terminal: false,
+	},
+	{
+		name:     "the charge settled in a currency this ledger does not hold",
+		body:     settled,
+		screw:    func(s screen) screen { return stating(s, settlement{cents: 500000, currency: "jpy"}) },
+		ledger:   true,
+		terminal: true, // the receipt is immutable: every retry reads the same yen.
+	},
+	{
+		name:     "the receipt states no money",
+		body:     settled,
+		screw:    func(s screen) screen { return stating(s, settlement{cents: 0, currency: "usd"}) },
+		ledger:   true,
+		terminal: true,
+	},
+	{
+		name:     "the answer names no settlement to key the credit on",
+		body:     `{"status":"ok"}`,
+		screw:    func(s screen) screen { return stating(s, settlement{cents: gateCents, currency: "usd"}) },
+		ledger:   true,
+		terminal: true, // the same core answers the same way, so there is never a key.
+	},
+	{
+		name:   "the settlement's reference is already another payment's",
+		body:   settled,
+		screw:  func(s screen) screen { return stating(s, settlement{cents: gateCents, currency: "usd"}) },
+		ledger: true,
+		// finance refuses a ref posted for a different (subject, amount) rather than
+		// answering with the other payment's entry — the one deposit failure that is a
+		// fact about the books instead of about this attempt's luck.
+		seed: func(t *testing.T, fin finance.Client) {
+			t.Helper()
+			// Another wallet in the same books, so the conflict is the ref naming a
+			// different payment and the pool this test reads is untouched by the seed.
+			if _, err := fin.Deposit(context.Background(), types.DepositInput{
+				Org: gateOrg, Subject: gateOrg + "/someone-else", Amount: money.FromCents(1),
+				Currency: "usd", Ref: settledRef,
+			}); err != nil {
+				t.Fatalf("seed the conflicting posting: %v", err)
+			}
+		},
+		terminal: true,
+	},
+	{
+		name:   "there is no ledger in the process that owns it",
+		body:   settled,
+		screw:  func(s screen) screen { return stating(s, settlement{cents: gateCents, currency: "usd"}) },
+		ledger: false,
+		// RETRYABLE: an operator fixes the deployment and the customer's own retry lands.
+		terminal: false,
+	},
+}
+
+// refusal is ONE way a settled charge fails to credit.
+type refusal struct {
+	name string
+	// body is what the charge handler answers.
+	body string
+	// screw is what is wrong with the settlement.
+	screw func(screen) screen
+	// ledger says whether a finance ledger is published at all.
+	ledger bool
+	// seed is money already in the books before the door runs — the only way to reach
+	// the deposit's own refusals, which need a real conflicting posting.
+	seed func(t *testing.T, fin finance.Client)
+	// terminal says whether NO retry can ever clear this one.
+	terminal bool
+}
+
+// refused puts the world in the state one row describes: the ledger (or deliberately
+// none) and whatever is already posted in it.
+func refused(t *testing.T, tc refusal) (finance.Client, bool) {
+	t.Helper()
+	if !tc.ledger {
+		finance.Publish(nil)
+		return nil, false
+	}
+	fin := funded(t)
+	if tc.seed != nil {
+		tc.seed(t, fin)
+	}
+	return fin, true
+}
+
+// refusalDoor is the credit door for one row, with the screen the caller states — the
+// production one, or one whose log a test can read.
+func refusalDoor(t *testing.T, tc refusal, s screen) *zip.App {
+	t.Helper()
+	return creditDoorBody(t, tc.screw(s), tc.body)
+}
+
+// journal is a logger's output a test can READ, and it is mutex-guarded because the
+// screen's logger is also held by the detached teaching goroutine ([screen.learn]):
+// an unguarded buffer is a data race the -race build would find, on a fixture rather
+// than on the code under test.
+type journal struct {
+	mu    sync.Mutex
+	lines bytes.Buffer
+}
+
+func (j *journal) Write(p []byte) (int, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.lines.Write(p)
+}
+
+func (j *journal) String() string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.lines.String()
 }
 
 // TestReceiptOf_ReadsTheRowTheMoneyCoreWROTE — the seam's DEFAULT, against a real
@@ -776,6 +1009,14 @@ func creditDoor(t *testing.T, s screen) *zip.App {
 
 func creditDoorBody(t *testing.T, s screen, body string) *zip.App {
 	t.Helper()
+	return creditDoorHandler(t, s, settledBody(http.StatusOK, body))
+}
+
+// creditDoorHandler is that same door in front of a handler the TEST supplies — the form
+// a test needs when what it asserts is not what the handler ANSWERED but whether it ran
+// at all. [charging] is the handler it exists for.
+func creditDoorHandler(t *testing.T, s screen, h zip.Handler) *zip.App {
+	t.Helper()
 	shortRuntimeDir(t)
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
@@ -783,8 +1024,24 @@ func creditDoorBody(t *testing.T, s screen, body string) *zip.App {
 	cloud.SetRiskScorer(allowAll)
 	quiet(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("settletest"), DisableStartupMessage: true})
-	app.Post("/v1/billing/topup/token", s.route(settledBody(http.StatusOK, body)))
+	app.Post("/v1/billing/topup/token", s.route(h))
 	return app
+}
+
+// charging is the charge handler with a COUNT of how many times the card was taken.
+//
+// The count is the only thing that can tell a refusal apart from a refusal that happened
+// AFTER the money moved, and the two are the whole difference this change is about. At
+// the wire they are identical: the shipped ordering answered 500 on a charge that had
+// really cleared on the customer's merchant account, which reads exactly like a 500 on a
+// charge that never happened. Reaching the handler IS the card being taken (the fixtures'
+// handler answers commerce's own settled receipt), so counting the calls counts the
+// charges.
+func charging(h zip.Handler, taken *int) zip.Handler {
+	return func(c *zip.Ctx) error {
+		*taken++
+		return h(c)
+	}
 }
 
 // reportedBalance drives the REAL GET /v1/billing/balance handler as the fixtures'
