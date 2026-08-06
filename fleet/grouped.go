@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/zap-proto/zip"
 )
@@ -38,7 +39,7 @@ import (
 //
 //   - THE GATE. [Door.gather] refuses a name before it writes the routing table,
 //     and that is still the only gate. A refused name never reaches [group], so
-//     it is in no enum; never reaches [Door.ownerOf], so [Door.call] cannot
+//     it is in no enum; never reaches [Door.lookup], so [Door.call] cannot
 //     dispatch it through an envelope any more than it could directly; and
 //     [Door.describe] answers out of the same gathered set, so it cannot be read
 //     either. One rule, one place, three paths through it.
@@ -99,13 +100,13 @@ const Describe = "describe"
 // serving nothing, because "one way to ask" does not depend on how much there
 // is to ask about.
 func group(all []named) []map[string]any {
-	ops := map[string][]string{}
+	ops := map[string][]named{}
 	best := map[string]int{}
 	for _, t := range all {
 		if r := rank(t.name); len(ops[t.app]) == 0 || r < best[t.app] {
 			best[t.app] = r
 		}
-		ops[t.app] = append(ops[t.app], t.name)
+		ops[t.app] = append(ops[t.app], t)
 	}
 	apps := make([]string, 0, len(ops))
 	for a := range ops {
@@ -127,7 +128,49 @@ func group(all []named) []map[string]any {
 }
 
 // subsystemTool is one app's whole operation set as a single MCP tool.
-func subsystemTool(app string, ops []string) map[string]any {
+//
+// The enum carries PUBLISHED names — `deploy_project`, not
+// `post_v1_projects_by_slug_deploy` (fleet/verbs.go) — and beside the product
+// ones it carries a line of their own documentation, which is the half that
+// removes a round trip. A name says what an operation is called and a model can
+// still be wrong about what it does; `create_project_fork — Creates a project
+// seeded from a PUBLISHED EXAMPLE.` leaves nothing to guess and nothing to fetch.
+//
+// PROSE IS RATIONED, and [productStems] is the ration, because it is already the
+// answer to "which of these does an agent actually reach for". Measured over the
+// fleet's own ~2,230 offered operations — fleet/verbs_internal_test.go prints
+// these to the byte, and reprints them as the fleet grows:
+//
+//	routes, as they shipped           63 KB
+//	verb phrases                      50 KB   a phrase is SHORTER than a route
+//	+ a summary on the ~140 ranked    64 KB   under a KB more than the routes ← shipped
+//	+ a summary on ALL of them       255 KB   four times over
+//
+// So the whole change is close to free: the naming pays for the prose. Giving
+// every operation a sentence would not — the point of grouping was 977 KB down
+// to 71, and four times the enum puts most of it back. The product surface reads
+// without asking, the console tail is named well enough to recognise, and
+// [Describe] is one call away for the rest. One curated list doing the one job of
+// saying what matters, rather than a second list to keep in step with the first.
+func subsystemTool(app string, ops []named) map[string]any {
+	names := make([]string, len(ops))
+	var doc strings.Builder
+	for i, t := range ops {
+		names[i] = t.as
+		if rank(t.name) == len(productStems) {
+			continue
+		}
+		if s := summary(t.desc); s != "" {
+			if doc.Len() > 0 {
+				doc.WriteByte('\n')
+			}
+			doc.WriteString(t.as + " — " + s)
+		}
+	}
+	op := map[string]any{"type": "string", "enum": names}
+	if doc.Len() > 0 {
+		op["description"] = doc.String()
+	}
 	return map[string]any{
 		"name": app,
 		"description": app + ": " + strconv.Itoa(len(ops)) + " operations. Name one in \"op\" and pass " +
@@ -135,7 +178,7 @@ func subsystemTool(app string, ops []string) map[string]any {
 		"inputSchema": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"op":    map[string]any{"type": "string", "enum": ops},
+				"op":    op,
 				"input": map[string]any{"type": "object", "description": "arguments for the chosen op"},
 			},
 			"required": []string{"op"},
@@ -178,32 +221,47 @@ type envelope struct {
 	Input json.RawMessage `json:"input"`
 }
 
-// unwrap reads the envelope back into what a DIRECT tools/call for the same
-// operation is: its name, and the canonical message that runs it. ok is false
+// unwrap reads the envelope back into the two things a DIRECT tools/call for the
+// same operation carries: the operation named, and its own arguments. ok is false
 // when the model named a subsystem without naming an operation in it.
 //
-// The operation's arguments are carried UNPARSED. They belong to the subsystem
-// that declared the schema, which is the only thing that knows how to read them,
-// and re-encoding them here would be this process having an opinion about a
-// shape it does not own.
-func unwrap(id, args json.RawMessage) (op string, msg []byte, ok bool) {
+// The operation's arguments come back UNPARSED. They belong to the subsystem that
+// declared the schema, which is the only thing that knows how to read them, and
+// re-encoding them here would be this process having an opinion about a shape it
+// does not own.
+func unwrap(args json.RawMessage) (op string, input json.RawMessage, ok bool) {
 	var e envelope
 	if err := json.Unmarshal(args, &e); err != nil || e.Op == "" {
 		return "", nil, false
 	}
-	if len(e.Input) == 0 {
-		e.Input = json.RawMessage("{}")
+	return e.Op, e.Input, true
+}
+
+// callBody is the tools/call a child is asked, written out.
+//
+// It exists once, and only for the calls that could not be forwarded verbatim —
+// an envelope to open, or a published name to read back to an id. Both arrive as
+// (name, arguments) by then, which is the whole of a tools/call, so there is one
+// spelling of the request no matter which decoding produced it.
+//
+// Arguments that will not re-encode become `{}` rather than an error: the bytes
+// came out of a document this door already parsed, so the only way here is a
+// caller who sent something the child was going to reject anyway, and the child
+// is the thing that owns that judgement.
+func callBody(id json.RawMessage, op string, input json.RawMessage) []byte {
+	if len(input) == 0 {
+		input = json.RawMessage("{}")
 	}
 	msg, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      idOrNull(id),
 		"method":  "tools/call",
-		"params":  map[string]any{"name": e.Op, "arguments": e.Input},
+		"params":  map[string]any{"name": op, "arguments": input},
 	})
 	if err != nil {
-		return "", nil, false
+		return callBody(id, op, nil)
 	}
-	return e.Op, msg, true
+	return msg
 }
 
 // describe answers the one question a surface of names leaves open: what does
@@ -221,7 +279,10 @@ func (d *Door) describe(c *zip.Ctx, req message, args json.RawMessage) error {
 
 	tools, _, _ := d.gather(c)
 	for _, t := range tools {
-		if t.name == in.Op {
+		// Either spelling: the name the enum published, or the id the owner knows.
+		// The gathered set carries both, so this needs no table and cannot answer
+		// out of a different one than list() and call() read.
+		if t.as == in.Op || t.name == in.Op {
 			return c.JSON(200, rpcResult(req.ID, map[string]any{
 				"content": []map[string]any{{"type": "text", "text": string(t.raw)}},
 			}))
