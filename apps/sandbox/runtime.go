@@ -56,6 +56,12 @@ const execdir = "/mnt/data"
 // how a sidecar someone adds later silently starts receiving the commands.
 const container = "sandbox"
 
+// serviceAccount is the identity a sandbox pod runs as. A constant and not an
+// env var: which account exists in the sandbox namespace is decided by the same
+// manifest that creates the namespace, so a second knob here could only ever
+// disagree with it. It is declared in infra/k8s/sandboxes/registry.yaml.
+const serviceAccount = "sandbox"
+
 // Labels a sandbox's objects carry, so an operator can find a tenant's sandbox
 // with kubectl and without reading a database.
 const (
@@ -99,7 +105,7 @@ type streamer interface {
 
 type runtime struct {
 	ns           string
-	image        string // registry.hanzo.ai/hanzoai/sandbox, without a tag
+	image        string // oci.hanzo.ai/hanzoai/sandbox, without a tag
 	tag          string
 	runtimeClass string
 	startTimeout time.Duration
@@ -117,7 +123,7 @@ func newRuntime() *runtime {
 		// and a sandbox must not sit beside the datastores it is forbidden to
 		// reach. One namespace, one policy, everything that runs submitted code.
 		ns:           envOr("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
-		image:        envOr("SANDBOX_IMAGE_REPO", "registry.hanzo.ai/hanzoai/sandbox"),
+		image:        envOr("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
 		tag:          envOr("SANDBOX_IMAGE_TAG", ""),
 		runtimeClass: strings.TrimSpace(os.Getenv("SANDBOX_RUNTIME_CLASS")),
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
@@ -275,7 +281,42 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		// service-account token in its filesystem is an API credential handed to
 		// that code. This is also why nothing else needs to strip credentials on
 		// the way in — there are none to strip.
+		// THE POD RUNS AS uid 1000, and fsGroup is why it can WRITE.
+		//
+		// The image ends `USER sandbox` (uid 1000). A mounted volume — the emptyDir
+		// at the exec class's workdir, or a project PVC — arrives owned by root:root
+		// mode 0755, so uid 1000 gets EPERM on the very first write and the sandbox
+		// is a read-only box that looks healthy. A Dockerfile `chown` cannot fix it:
+		// the mount happens after the image layer and shadows it.
+		//
+		// fsGroup makes the kubelet chown the volume to that GID and adds it as a
+		// supplemental group, which is the only mechanism that reaches a volume.
+		// runAsUser/runAsGroup are stated rather than inherited so the pod does not
+		// depend on the image's USER line staying 1000 — the two must agree, and the
+		// one that is checkable from outside the image should say so.
+		//
+		// This is also what the image's own comments already ASSUMED was here and
+		// was not: "the pod runs runAsNonRoot with runAsUser 1000, so the uid is
+		// fixed by the securityContext". It was not fixed by anything until now, and
+		// the live proof missed it only because a stock node:22 runs as root.
+		"securityContext": map[string]any{
+			"runAsUser":    int64(1000),
+			"runAsGroup":   int64(1000),
+			"fsGroup":      int64(1000),
+			"runAsNonRoot": true,
+		},
 		"automountServiceAccountToken": false,
+		// The account is NAMED, and naming it is the fix for a real outage rather
+		// than tidiness. Unnamed means `default`, and DOKS's registry integration
+		// re-attaches its own DigitalOcean pull secrets to every namespace's
+		// `default` account whenever it reconciles — so a sandbox inherited a
+		// credential for a registry that is not ours and died asking
+		// oci.hanzo.ai for its image ANONYMOUSLY, with a 401 that reads like a
+		// bad password and was in fact no password at all. `sandbox` is ours, DOKS
+		// does not manage it, and it carries exactly one thing: the pull secret.
+		// See infra/k8s/sandboxes/registry.yaml. It grants nothing — it is bound to
+		// no Role, and the line above still refuses it a token.
+		"serviceAccountName": serviceAccount,
 		// No service environment variables either. Kubernetes injects the address
 		// of every Service in the namespace as env vars by default, which is a
 		// free map of the neighbourhood for anything running inside.
