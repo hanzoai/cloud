@@ -14,32 +14,20 @@ import (
 	"github.com/hanzoai/cloud/apps/metering"
 )
 
-// commerceStub serves balance (GET) and records usage (POST), capturing the
-// recorded amount so the test can assert post-request metering happened.
+// commerceStub is the whole money peer for a middleware test: it serves the balance READ
+// over HTTP and receives the usage DEBIT over the plane, which is exactly the split the
+// client makes. The debit left HTTP because the act's name is `json:"-"` and could not
+// survive a JSON body; the read did not, so it is still here.
 type commerceStub struct {
 	available int64
+	debits    planeCommerce
 
-	mu          sync.Mutex
-	recordedAmt int64
-	recordedCnt int
-	recordedUsr string
+	mu sync.Mutex
 }
 
+// server stands the balance reader up. Call listen first when the test asserts debits.
 func (s *commerceStub) server() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			body, _ := io.ReadAll(r.Body)
-			// crude parse: amount + user
-			s.recordedCnt++
-			s.recordedAmt = extractInt(body, `"amount":`)
-			s.recordedUsr = extractStr(body, `"user":"`)
-			w.WriteHeader(201)
-			_, _ = io.WriteString(w, `{"transactionId":"tx","type":"withdraw"}`)
-			return
-		}
-		// balance
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		s.mu.Lock()
 		avail := s.available
 		s.mu.Unlock()
@@ -47,10 +35,19 @@ func (s *commerceStub) server() *httptest.Server {
 	}))
 }
 
+// listen binds the peer's socket so the post-request debit has somewhere to land.
+func (s *commerceStub) listen(t *testing.T) { s.debits.serve(t) }
+
+// records reports the debits that reached the peer: how many, the last amount in cents,
+// and whose wallet it named.
 func (s *commerceStub) records() (int, int64, string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.recordedCnt, s.recordedAmt, s.recordedUsr
+	calls := s.debits.all()
+	if len(calls) == 0 {
+		return 0, 0, ""
+	}
+	last := calls[len(calls)-1]
+	cents, _ := last.in.Amount.Minor()
+	return len(calls), cents, last.in.Subject
 }
 
 // setAvailable simulates a pre-pay deposit landing (or exhaustion): it moves the
@@ -75,6 +72,7 @@ func gatewayReq() *http.Request {
 // again. No trial credit anywhere — usage is pre-paid.
 func TestMiddleware_PrePayLifecycle(t *testing.T) {
 	stub := &commerceStub{available: 0} // fresh provisioned org: zero balance
+	stub.listen(t)
 	srv := stub.server()
 	defer srv.Close()
 
@@ -133,6 +131,7 @@ func TestMiddleware_PrePayLifecycle(t *testing.T) {
 
 func TestMiddleware_GatesAndRecords(t *testing.T) {
 	stub := &commerceStub{available: 5000}
+	stub.listen(t)
 	srv := stub.server()
 	defer srv.Close()
 
@@ -292,6 +291,7 @@ func TestMiddleware_Skip_Bypasses(t *testing.T) {
 
 func TestMiddleware_OnlyChargesSuccess(t *testing.T) {
 	stub := &commerceStub{available: 5000}
+	stub.listen(t)
 	srv := stub.server()
 	defer srv.Close()
 
@@ -387,55 +387,6 @@ func itoa(n int64) string {
 		b[i] = '-'
 	}
 	return string(b[i:])
-}
-
-func extractInt(body []byte, key string) int64 {
-	s := string(body)
-	idx := indexOf(s, key)
-	if idx < 0 {
-		return 0
-	}
-	idx += len(key)
-	var n int64
-	for idx < len(s) && (s[idx] == ' ') {
-		idx++
-	}
-	neg := false
-	if idx < len(s) && s[idx] == '-' {
-		neg = true
-		idx++
-	}
-	for idx < len(s) && s[idx] >= '0' && s[idx] <= '9' {
-		n = n*10 + int64(s[idx]-'0')
-		idx++
-	}
-	if neg {
-		return -n
-	}
-	return n
-}
-
-func extractStr(body []byte, key string) string {
-	s := string(body)
-	idx := indexOf(s, key)
-	if idx < 0 {
-		return ""
-	}
-	idx += len(key)
-	end := idx
-	for end < len(s) && s[end] != '"' {
-		end++
-	}
-	return s[idx:end]
-}
-
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
 }
 
 var _ = context.Background
