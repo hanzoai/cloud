@@ -1,52 +1,40 @@
 package lsp
 
-// mount.go is this subsystem's registration: build the state, bind the door.
+// mount.go is this subsystem's registration: build the state, bind the doors.
 //
 // It follows apps/code's Mount exactly — same signature, same fail-closed
-// argument checks, same package-global for Shutdown to reach, and routes() as a
-// FUNCTION rather than inline so this package's tests drive the REAL registration
-// instead of a reconstruction of it that can drift from what the binary serves.
+// argument checks, and routes() as a FUNCTION rather than inline so this
+// package's tests drive the REAL registration instead of a reconstruction of it
+// that can drift from what the binary serves.
 //
-// A NOTE ON MOUNT ORDER. The brief asked for "order ~135, before ai's /v1/*
-// catch-all at 150". Those integers no longer exist: apps.Wire() is gone, and
-// manifest/apps.go is the hand-authored fleet list whose SLICE POSITION is the
-// order (build.go: "There is NO Order field"). The "Order 134" in code.go's
-// header is a comment describing a position, not a field. So lsp's row sits
-// immediately after code's in manifest.Apps — the same intent expressed in the
-// mechanism that actually exists — and manifest/order_test.go's frozen sequence
-// is updated in the same commit, which is how a reorder stays a decision.
-// Routing does not in fact depend on it: nested static prefixes resolve by
-// SPECIFICITY, so /v1/lsp beats ai's /v1 wherever it registers.
+// A NOTE ON MOUNT ORDER. manifest/apps.go is the hand-authored fleet list whose
+// SLICE POSITION is the order (build.go: "There is NO Order field"). lsp's row
+// sits immediately after code's, and manifest/order_test.go freezes that
+// sequence, so a reorder stays a decision. Routing does not depend on it:
+// /v1/code/lsp is a deeper static prefix than both /v1/code and ai's bare /v1,
+// and nested static prefixes resolve by SPECIFICITY.
+//
+// There is no Shutdown. The subprocesses and the checkouts this app used to own
+// are the daemon's now; what is left here is an http.Client, which the process
+// exiting reclaims. A hook that closed nothing would be a hook nobody could
+// delete later without proving it closed nothing.
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
-// forgeDefault is the git host repositories are checked out from. WHICH host
-// this deployment's repositories live on is infra wiring, so it is env with a
-// constant default — not a policy row, and never a request field: see checkout,
-// where the owner segment is the validated principal's org and the caller
-// supplies only a slug.
-const forgeDefault = "https://git.hanzo.ai"
-
-// state is the subsystem: the shared Base plus the warm-workspace pool. It holds
+// state is the subsystem: the shared Base plus the one daemon client. It holds
 // no org in a field — the org is a parameter on every call, so one process serves
 // all orgs and an org can never be captured from stale state.
 type state struct {
 	cloud.Base
-	forge string
-	pool  *pool
+	daemon *daemon
 }
 
-var mounted *state
-
-// Mount wires /v1/lsp onto app per HIP-0106.
+// Mount wires /v1/code/lsp onto app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("lsp.Mount: nil app")
@@ -57,68 +45,37 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("lsp.Mount: empty DataDir")
 	}
-	s := &state{Base: cloud.NewBase(deps, "lsp"), forge: forge()}
-	s.pool = newPool(s.build)
-	mounted = s
+	s := &state{Base: cloud.NewBase(deps, "lsp"), daemon: newDaemon()}
 
 	if err := routes(app, s); err != nil {
 		return err
 	}
 
-	s.Log.Info("lsp surface mounted (native)",
-		"brand", deps.Brand, "forge", s.forge, "languages", len(table))
+	// The key is a KMS secret, so what is logged is whether one is PRESENT. A
+	// deployment that forgot it otherwise looks healthy until the first query
+	// answers 503.
+	s.Log.Info("lsp surface mounted (proxy)",
+		"brand", deps.Brand, "upstream", s.daemon.url, "keyed", s.daemon.key != "")
 	return nil
 }
 
-// routes registers the /v1/lsp surface: ONE typed op, because there is one value.
+// routes registers the /v1/code/lsp surface: one typed op per question.
+//
 // Typed rather than raw so the OpenAPI operation, the MCP tool, the CLI command
-// and every generated SDK method are all projected from this one entry — a
-// surface built for coding agents, where the MCP tool is the point.
+// and every generated SDK method are all projected from these five entries — a
+// surface built for coding agents, where the MCP tool list is not a side benefit
+// of typing it but the point. Five doors rather than one door with an `op` field
+// for the same reason: an agent picks a tool by its name and its description, and
+// a union behind one name is a tool it has to be told how to use.
 func routes(app cloud.Router, s *state) error {
 	// cloud.Bridge is not installed here: the composer installs it once at the
 	// root, after the identity check that mints the validated org and before any
 	// subsystem registers a route — an order only the whole program can assert.
-	//
-	// Grouped at "/v1" with "/lsp" as the member, the shape apps/bots and
-	// apps/account already use for a route that IS its prefix. The obvious
-	// spelling — Group("/v1/lsp") with an empty member — addresses "/v1/lsp/",
-	// a different path from the "/v1/lsp" the manifest row publishes, and that
-	// one-character mismatch between what the binary serves and what the host
-	// routes is invisible until a client 404s.
-	g := app.Group("/v1")
-	zip.Post(g, "/lsp", s.ask)
+	g := app.Group("/v1/code/lsp")
+	zip.Post(g, "/hover", s.hover)
+	zip.Post(g, "/locate", s.locate)
+	zip.Post(g, "/symbols", s.symbols)
+	zip.Post(g, "/diagnostics", s.diagnostics)
+	zip.Post(g, "/complete", s.complete)
 	return nil
-}
-
-// Shutdown closes every warm workspace: each is a live subprocess and a directory
-// on disk, and neither is reclaimed by the process exiting cleanly. Idempotent.
-func Shutdown(_ context.Context) error {
-	if mounted == nil {
-		return nil
-	}
-	mounted.pool.closeAll()
-	mounted = nil
-	return nil
-}
-
-// Invalidate drops every warm revision of one repository, for when a push or a
-// re-index makes a checkout stale.
-//
-// It is exported and unused IN THIS BINARY, which is the honest state of it:
-// apps/code and apps/lsp are separate processes, so code cannot call this
-// in-process when it re-indexes, and the push signal has to arrive over the bus.
-// That is phase 2. It is mostly self-correcting meanwhile — workspaces are keyed
-// by revision, so new content is a new key — and the gap is a caller that tracks
-// a branch while the branch moves.
-func Invalidate(org, repo string) {
-	if mounted != nil {
-		mounted.pool.drop(org, repo)
-	}
-}
-
-func forge() string {
-	if v := strings.TrimSpace(os.Getenv("LSP_FORGE_URL")); v != "" {
-		return v
-	}
-	return forgeDefault
 }
