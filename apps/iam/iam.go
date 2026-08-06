@@ -72,8 +72,9 @@ package iam
 // zipdoc_gen.go, which is the ONLY way that prose reaches a consumer — Go drops
 // comments at compile time. The grafted surface carries its own prose from
 // github.com/hanzoai/iam (each op's WithSummary/WithTags, which a graft copies
-// verbatim); the one op THIS package owns is the internal-plane roster read in
-// roster_rpc.go.
+// verbatim); the ops THIS package owns are the internal-plane reads of the store
+// it holds — the roster (roster_rpc.go), an org's projects (projects_rpc.go) and
+// a caller's waitlist state (approval_rpc.go).
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
