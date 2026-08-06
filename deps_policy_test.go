@@ -299,7 +299,15 @@ func TestJWKSHasOneDerivation(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if n := d.Name(); n == "vendor" || n == ".git" || n == "node_modules" {
+			// `.claude` and `.worktrees` hold WORKTREES — other checkouts of this
+			// same repo, at other commits, that git puts inside the working tree.
+			// Walking into them makes this gate read a different revision's source
+			// and blame this one for it: it failed here naming
+			// `.claude/worktrees/agent-…/apps/base/pool.go`, a file that is not in
+			// this commit at all. It cannot fire in CI, which checks out clean, so
+			// it is a phantom that only ever wastes the person who has a worktree.
+			switch d.Name() {
+			case "vendor", ".git", "node_modules", ".claude", ".worktrees":
 				return fs.SkipDir
 			}
 			return nil

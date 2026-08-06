@@ -105,10 +105,16 @@ const (
 )
 
 // servedMethods is the method set All() puts on each path, as the DOCUMENT counts
-// them — openapi.Live's filter drops HEAD and CONNECT from fiber's nine
-// (openapi/openapi.go:94). Written literally for the same reason the paths are:
-// a method appearing or disappearing has to be noticed.
-var servedMethods = []string{"DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"}
+// them.
+//
+// It comes from [openapi.Methods] — the projection's OWN set — rather than a
+// literal list here. It WAS a literal, on the reasoning that a method appearing
+// or disappearing has to be noticed. It was noticed, in the worst way: the
+// document stopped publishing TRACE and OPTIONS and this copy went on asserting
+// them, so a change to what we publish surfaced as eight unrelated-looking test
+// failures across four apps. Reading the projection's set moves both halves at
+// once, which is what openapi.Methods exists for.
+var servedMethods = openapi.Methods()
 
 // untypedByDesign crosses the two closed lists into the 56 operation addresses
 // the document publishes, appending the per-method fact where there is one.
@@ -205,14 +211,19 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // and the ledger above, the note at the registration site and the LLM.md entry get
 // updated together rather than drifting apart.
 //
-// 56 is 8 paths (4 prefixes, each exact and wildcard) x 7 published methods, and
-// it is the same 56 `bin/exec openapi` writes into plugin/exec/openapi.json. Every
+// 40 is 8 paths (4 prefixes, each exact and wildcard) x 5 published methods, and
+// it is the same 40 `bin/exec openapi` writes into plugin/exec/openapi.json. Every
 // one of them CARRIES PROSE (TestEveryOperationIsDescribed); none of them carries
 // a schema, a tool or an SDK method, which is the part that stays a cost.
+//
+// It read 56 while the projection published seven methods per path. TRACE and
+// OPTIONS came out: All() still binds them and the executor still answers them —
+// see the subtest below, which is why they are still exercised — but they are
+// transport, not operations anyone is offered, so they are no longer published.
 func TestTheSurfaceIsWhollyUntyped(t *testing.T) {
 	served, typed := execOps(t)
-	if len(served) != 56 {
-		t.Errorf("serves %d operations, want 56 — the surface moved; re-derive untypedPaths "+
+	if len(served) != 40 {
+		t.Errorf("serves %d operations, want 40 — the surface moved; re-derive untypedPaths "+
 			"and servedMethods from the live router before touching anything else", len(served))
 	}
 	if len(typed) != 0 {
@@ -413,9 +424,10 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 	})
 
 	t.Run("OPTIONS and TRACE are served here and are proxied too", func(t *testing.T) {
-		// The two methods zip cannot express as ops at all. They are 16 of the 56
-		// published operations, so leaving them out of the ledger would understate
-		// the gap by nearly a third.
+		// The two methods zip cannot express as ops at all, and which the document
+		// no longer publishes — they are transport. The ROUTER still binds them and
+		// the executor still answers them, which is what this proves: dropping them
+		// from the projection must not change what the wire does.
 		for _, method := range []string{http.MethodOptions, http.MethodTrace} {
 			up := &echoUpstream{respBody: `{}`}
 			app := up.mount(t)
