@@ -461,7 +461,7 @@ func TestXBuild(t *testing.T) {
 
 // TestRegistryComplete asserts every platform self-registered with a coherent Spec.
 func TestRegistryComplete(t *testing.T) {
-	want := []string{"ga4", "meta", "tiktok", "linkedin", "x", "reddit", "analytics", "insights", "pinterest"}
+	want := []string{"ga4", "meta", "tiktok", "linkedin", "x", "reddit", "analytics", "insights", "pinterest", "google-ads"}
 	m := snapshot()
 	for _, id := range want {
 		d, ok := m[id]
