@@ -120,11 +120,36 @@
         ]
       }
     },
+    "/v1/tracker/milestones": {
+      "get": {
+        "operationId": "get_v1_tracker_milestones",
+        "summary": "Returns every milestone across your org's repositories, each stamped with the repository it belongs to.",
+        "description": "Returns every milestone across your org's repositories, each\nstamped with the repository it belongs to.\n\nThe forge scopes milestones to a repository and publishes no org-level list,\nso this is a server-side fan-out over the repositories you can see. It runs\nhere rather than in the browser because a client-side fan-out would need the\nforge reachable from the page and a credential held there.",
+        "tags": [
+          "tracker"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/milestoneView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/tracker/projects": {
       "get": {
         "operationId": "get_v1_tracker_projects",
-        "summary": "Returns every tracker project in the caller's org, newest first.",
-        "description": "Returns every tracker project in the caller's org, newest first.\n\nA project is the board: it owns a KEY (the uppercase handle that prefixes every\nissue identifier, \"ENG-14\") and the issues filed under it. The listing is\norg-scoped server-side — the org is the validated bearer claim, never a\nclient-supplied header — so one org can never see another's boards.",
+        "summary": "Returns the boards of your org — one per repository on the deployment's forge that you can see.",
+        "description": "Returns the boards of your org — one per repository on the\ndeployment's forge that you can see. The key is the repository name, and it is\nwhat addresses the board's issues.\n\nArchived repositories are omitted: they are not live work. The set is the\nFORGE's answer for your own account, so two people in one org can legitimately\nsee different boards.",
         "tags": [
           "tracker"
         ],
@@ -146,8 +171,8 @@
       },
       "post": {
         "operationId": "post_v1_tracker_projects",
-        "summary": "Open a tracker board in your org",
-        "description": "Creates a board and returns it, including the KEY that will prefix every issue identifier filed under it — the same key GET, PATCH and DELETE address the board by, and the ENG in ENG-14.\n\n`name` is required. `key` is optional and is UPPERCASED: omit it and one is derived from the name — its first four letters and digits, or PRJ when that yields nothing usable. A key that is not 2-8 characters starting with a letter is 400.\n\nTHE KEY IS UNIQUE PER ORG AND A COLLISION IS REFUSED, NOT MERGED: a second board on a key already taken is 409, and the derived key is not made unique for you, so two similarly named boards collide and the second caller must name a key. Re-POSTing is therefore not idempotent — it fails rather than returning the existing board.\n\nThe org is the validated bearer's own, never a client header, and the board is stored under the caller's selected IAM PROJECT: the same key in two IAM projects is two unrelated boards. 403 without a validated org.\n\nFree by default. The create runs the shared per-org balance gate at a fee of zero unless a deployment prices it, and a priced deployment out of balance refuses with the nested {\"error\":{\"code\",\"message\"}} body at 402/503 rather than a flat error.",
+        "summary": "Refused — a board is a repository on the forge",
+        "description": "Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\nOffering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are different facts, and the body names the forge so a caller knows where the job IS done.\n\nWhat this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.",
         "tags": [
           "tracker"
         ]
@@ -156,8 +181,8 @@
     "/v1/tracker/projects/{key}": {
       "delete": {
         "operationId": "delete_v1_tracker_projects_by_key",
-        "summary": "Removes one tracker project of the caller's org AND every issue filed under it, and answers 204 with no body.",
-        "description": "Removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
+        "summary": "Refused — a board is a repository on the forge",
+        "description": "Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\nOffering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are different facts, and the body names the forge so a caller knows where the job IS done.\n\nWhat this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.",
         "tags": [
           "tracker"
         ],
@@ -166,22 +191,16 @@
             "name": "key",
             "in": "path",
             "required": true,
-            "description": "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
             "schema": {
               "type": "string"
             }
           }
-        ],
-        "responses": {
-          "204": {
-            "description": "no content"
-          }
-        }
+        ]
       },
       "get": {
         "operationId": "get_v1_tracker_projects_by_key",
-        "summary": "Returns one tracker project of the caller's org by its key — its name, description and timestamps.",
-        "description": "Returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
+        "summary": "Returns one board of your org by its key — the repository name.",
+        "description": "Returns one board of your org by its key — the repository name.\n404 when your org has no repository under that key, or when your own forge\naccount cannot see it.",
         "tags": [
           "tracker"
         ],
@@ -211,8 +230,8 @@
       },
       "patch": {
         "operationId": "patch_v1_tracker_projects_by_key",
-        "summary": "Renames a tracker project or rewrites its description, and returns the updated project.",
-        "description": "Renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
+        "summary": "Refused — a board is a repository on the forge",
+        "description": "Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\nOffering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are different facts, and the body names the forge so a caller knows where the job IS done.\n\nWhat this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.",
         "tags": [
           "tracker"
         ],
@@ -221,44 +240,18 @@
             "name": "key",
             "in": "path",
             "required": true,
-            "description": "Key is the project to update, from the path.",
             "schema": {
               "type": "string"
             }
           }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "name": "Platform Engineering"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/projectPatch"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/trackerProject"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
+        ]
       }
     },
     "/v1/tracker/projects/{key}/issues": {
       "get": {
         "operationId": "get_v1_tracker_projects_by_key_issues",
-        "summary": "Returns the issues of one tracker project, optionally filtered by status, kind, repo, source and whether they are scheduled.",
-        "description": "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo, source and whether they are scheduled.\n\nThis is the ONE place a surface takes its slice of the shared issue table: the\nboard passes no filter or a status, the timeline passes scheduled=true, a git\nrepository's Issues tab passes kind=issue\u0026repo=\u003cr\u003e and its Pull Requests tab\nkind=pr\u0026repo=\u003cr\u003e. A filter value outside its closed set is refused with 400\nrather than silently returning an empty board.",
+        "summary": "Returns one board's issues — the work items of that repository on the forge, with their column, priority, assignee and labels.",
+        "description": "Returns one board's issues — the work items of that repository on\nthe forge, with their column, priority, assignee and labels.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
         "tags": [
           "tracker"
         ],
@@ -270,8 +263,7 @@
             "description": "Key is the project whose issues to list, from the path.",
             "schema": {
               "type": "string"
-            },
-            "example": "ENG"
+            }
           },
           {
             "name": "status",
@@ -289,8 +281,7 @@
             "description": "Kind keeps only work items of that shape: issue, pr or epic. An unknown\nvalue is refused with 400.",
             "schema": {
               "type": "string"
-            },
-            "example": "pr"
+            }
           },
           {
             "name": "repo",
@@ -299,8 +290,7 @@
             "description": "Repo keeps only issues bound to that git repository.",
             "schema": {
               "type": "string"
-            },
-            "example": "hanzoai/cloud"
+            }
           },
           {
             "name": "source",
@@ -339,8 +329,8 @@
       },
       "post": {
         "operationId": "post_v1_tracker_projects_by_key_issues",
-        "summary": "File an issue on a tracker board",
-        "description": "Files a work item on one board and returns it, carrying the `identifier` — KEY-\u003cnumber\u003e — it will be known by everywhere else.\n\nTHE NUMBER IS THE SERVER'S TO ASSIGN and is not accepted from the caller: it is the board's highest plus one, taken inside the insert's own transaction, and it counts PER BOARD — ENG-1 and OPS-1 are different issues.\n\n`title` is required; everything else is optional and defaults. `kind` (issue, pr, epic) says what the item IS, `source` (team, git, crm, helpdesk, cms, agent) says which surface OPENED it, and the two are orthogonal — an issue escalated from support is kind=issue\u0026source=helpdesk. `status` defaults to backlog, `priority` to none. A value outside one of these closed sets is 400, never silently defaulted. `labels` may not contain a comma, the storage separator.\n\n`startAt` and `dueAt` place the item on the TIMELINE, in unix seconds, and both default to unset. A due date on its own is a milestone — an interval of zero length — and the two together are a bar; a start with no due date is work under way with no deadline. There is no separate milestone resource: a milestone is this row, dated. A negative bound, or a due date before its start, is 400 rather than a silently reordered interval.\n\n`repo` and `extRef` RECORD an external binding; they do not create one. Filing here writes to your tracker and reaches no external system — nothing is pushed to GitHub. The GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n404 when the caller's org has no board under that key. The org is the validated bearer's own and the board is resolved within the caller's selected IAM project; 403 without a validated org. Free by default, on the same balance gate as the board create — an epic, a pull request and an issue are priced identically, since the fee is per work item rather than per kind.",
+        "summary": "Opens a work item on the board — an issue on that repository on the deployment's forge, filed as YOU.",
+        "description": "Opens a work item on the board — an issue on that repository on\nthe deployment's forge, filed as YOU.\n\nThe column and priority are written as LABELS, which is what makes the card\nand the forge issue the same object: someone relabelling in the forge web UI\nhas moved your card.",
         "tags": [
           "tracker"
         ],
@@ -349,74 +339,22 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the board — the repository name, from the path.",
             "schema": {
               "type": "string"
             }
           }
-        ]
-      }
-    },
-    "/v1/tracker/projects/{key}/issues/{num}": {
-      "delete": {
-        "operationId": "delete_v1_tracker_projects_by_key_issues_by_num",
-        "summary": "Removes one issue from a tracker project and answers 204 with no body.",
-        "description": "Removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
-        "tags": [
-          "tracker"
         ],
-        "parameters": [
-          {
-            "name": "key",
-            "in": "path",
-            "required": true,
-            "description": "Key is the issue's project, from the path.",
-            "schema": {
-              "type": "string"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/newIssue"
+              }
             }
           },
-          {
-            "name": "num",
-            "in": "path",
-            "required": true,
-            "description": "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "no content"
-          }
-        }
-      },
-      "get": {
-        "operationId": "get_v1_tracker_projects_by_key_issues_by_num",
-        "summary": "Returns one issue of one tracker project by its per-project number — title, description, status, priority, assignee, labels, kind, source and its git bindings.",
-        "description": "Returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
-        "tags": [
-          "tracker"
-        ],
-        "parameters": [
-          {
-            "name": "key",
-            "in": "path",
-            "required": true,
-            "description": "Key is the issue's project, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "num",
-            "in": "path",
-            "required": true,
-            "description": "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -429,11 +367,13 @@
             "description": "ok"
           }
         }
-      },
+      }
+    },
+    "/v1/tracker/projects/{key}/issues/{num}": {
       "patch": {
         "operationId": "patch_v1_tracker_projects_by_key_issues_by_num",
-        "summary": "Edits one issue in place and returns it — retitle it, rewrite its body, move it between board columns, reprioritize, reassign, reschedule, or replace its labels.",
-        "description": "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, reschedule, or\nreplace its labels. Every field is optional: one the caller omits keeps its\nstored value, and `labels` REPLACES the set rather than adding to it.\n\n`startAt` and `dueAt` are the issue's place on the timeline, in unix seconds;\n0 clears one. They are validated as the interval they RESULT in, so moving\nonly the due date is still checked against the stored start — a due date\nbefore its start is 400, never a bar drawn backwards.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
+        "summary": "Edits a work item — rename it, rewrite it, move it to another column, or re-prioritise it.",
+        "description": "Edits a work item — rename it, rewrite it, move it to another\ncolumn, or re-prioritise it. Absent fields are left alone.\n\nMOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the\nmove replaces that set rather than writing a status column here that a\nforge-side change could contradict. Moving to `done` also CLOSES the issue on\nthe forge, because a done card and an open issue are a contradiction.",
         "tags": [
           "tracker"
         ],
@@ -442,34 +382,26 @@
             "name": "key",
             "in": "path",
             "required": true,
-            "description": "Key is the issue's project, from the path.",
+            "description": "Key is the board — the repository name, from the path.",
             "schema": {
               "type": "string"
-            },
-            "example": "ENG"
+            }
           },
           {
             "name": "num",
             "in": "path",
             "required": true,
-            "description": "Num is the issue's number within that project, from the path.",
+            "description": "Num is the issue number on that repository, from the path.",
             "schema": {
               "type": "integer"
-            },
-            "example": 14
+            }
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
-              "example": {
-                "assignee": "z",
-                "key": "ENG",
-                "num": 14,
-                "status": "in_progress"
-              },
               "schema": {
-                "$ref": "#/components/schemas/issuePatch"
+                "$ref": "#/components/schemas/issueEdit"
               }
             }
           },
@@ -492,49 +424,30 @@
   },
   "components": {
     "schemas": {
-      "issuePatch": {
+      "issueEdit": {
         "properties": {
-          "assignee": {
-            "description": "Assignee is who owns the issue, at most 256 characters. Empty unassigns it.",
-            "type": "string"
-          },
           "description": {
-            "description": "Description is the issue body, at most 32768 characters.",
+            "description": "Description rewrites the body.",
             "type": "string"
-          },
-          "dueAt": {
-            "description": "DueAt is when the work is due, in unix seconds — the right edge of its\nbar, or the milestone marker when there is no start. 0 clears it. It may\nnot fall before startAt.",
-            "type": "integer"
           },
           "key": {
-            "description": "Key is the issue's project, from the path.",
+            "description": "Key is the board — the repository name, from the path.",
             "type": "string"
           },
-          "labels": {
-            "description": "Labels REPLACES the issue's labels with exactly this set. Each label is at\nmost 48 characters and may not contain a comma (the storage separator);\nempty entries are dropped.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "num": {
-            "description": "Num is the issue's number within that project, from the path.",
+            "description": "Num is the issue number on that repository, from the path.",
             "type": "integer"
           },
           "priority": {
-            "description": "Priority is none, urgent, high, medium or low. Empty resets it to none.",
+            "description": "Priority re-prioritises it.",
             "type": "string"
           },
-          "startAt": {
-            "description": "StartAt is when the work starts, in unix seconds — the left edge of its\nbar on the timeline. 0 clears it.",
-            "type": "integer"
-          },
           "status": {
-            "description": "Status moves the issue between board columns: backlog, todo, in_progress,\ndone or canceled. Empty resets it to backlog.",
+            "description": "Status moves the card to another column.",
             "type": "string"
           },
           "title": {
-            "description": "Title is the issue's one-line summary. Non-empty, at most 512 characters.",
+            "description": "Title renames the work item.",
             "type": "string"
           }
         },
@@ -609,18 +522,52 @@
         },
         "type": "object"
       },
-      "projectPatch": {
+      "milestoneView": {
+        "properties": {
+          "closed": {
+            "type": "integer"
+          },
+          "dueAt": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "open": {
+            "type": "integer"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "newIssue": {
         "properties": {
           "description": {
-            "description": "Description is the board's free-form blurb, at most 32768 characters.",
+            "description": "Description becomes the issue body.",
             "type": "string"
           },
           "key": {
-            "description": "Key is the project to update, from the path.",
+            "description": "Key is the board — the repository name, from the path.",
             "type": "string"
           },
-          "name": {
-            "description": "Name is the project's display name. Non-empty, at most 256 characters.",
+          "priority": {
+            "description": "Priority is one of none, urgent, high, medium or low.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the board column to open into: backlog, todo, in_progress, done\nor canceled. Empty opens into backlog.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is required.",
             "type": "string"
           }
         },

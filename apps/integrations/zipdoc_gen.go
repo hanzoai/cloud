@@ -140,6 +140,9 @@ func init() {
 	})
 	zip.Describe("POST /integrations/slack/send", zip.Doc{
 		Description: "Posts one message through the org's own bot token. The ORG is\nthe CALLER's (cloud.Who(ctx).Org, set on the peer context by the caller), never\nan argument — a caller able to name it could post as another tenant. A named\nhandler, not a closure, so zipdoc lifts this prose into the registry.",
+		Fields: map[string]string{
+			"SlackSendIn.update": "Update, when set, EDITS the message with that timestamp instead of posting a\nnew one. It is a field of the same op rather than a second op because\n\"post\" and \"edit\" are the same act — put this text at this address — and\nthe address is simply more specific in one case.\n\nIt exists for the coding run. Slack has no server-sent stream and a long\nrun reporting each phase as a new message would bury a channel under a\ndozen of them; editing ONE message in the thread is the progress indicator\nthe platform actually offers. APPENDED at the end: the wire is field\nORDER, so a field inserted anywhere else changes what every existing peer\nreads.",
+		},
 	})
 	zip.Describe("POST /v1/connectors/:id/refresh", zip.Doc{
 		Description: "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",

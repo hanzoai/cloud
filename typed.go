@@ -70,16 +70,23 @@ type boundKey struct{}
 // installed after its leaves never runs — and after the identity boundary, so
 // the identity it parks is the validated one.
 //
-// It parks the TWO facts a gate turns on, in ONE expression, so they are always
-// set together and can never disagree: the validated ORG (principal.WithOrg, for
-// a plane with rows to scope) and VALIDATED-NESS itself (principal.WithValidated,
-// for a plane whose reads are deployment-global and whose gate is therefore
-// authentication). Both are read back through principal, so a gate that needs
-// either does not reach for the request.
+// It parks the facts a gate turns on, in ONE expression, so they are always set
+// together and can never disagree: the validated ORG (principal.WithOrg, for a
+// plane with rows to scope), VALIDATED-NESS itself (principal.WithValidated, for
+// a plane whose reads are deployment-global and whose gate is therefore
+// authentication), the vouching BRAND (principal.WithBrand, for a plane that
+// compares it with the deployment's), and the PROJECT (principal.WithProject, the
+// sub-scope that narrows within the org). Every one is read back through
+// principal, so a gate that needs any of them does not reach for the request.
+//
+// They are all SERVER-MINTED identity, which is what makes them belong here and
+// is the line: a fact a caller supplies is an In field, and a fact that needs the
+// request itself — admin-ness, the payer, a proxied identity — is cloud.Request,
+// pinned by typed_request_gate_test.go.
 func Bridge() zip.Handler {
 	return func(c *zip.Ctx) error {
 		b := &bound{req: c}
-		ctx := principal.WithBrand(principal.WithValidated(principal.WithOrg(c.Context(), c), c), c)
+		ctx := principal.WithProject(principal.WithBrand(principal.WithValidated(principal.WithOrg(c.Context(), c), c), c), c)
 		c.SetContext(context.WithValue(ctx, boundKey{}, b))
 		err := c.Continue()
 		// Success only: an error already carries its own status. fasthttp writes

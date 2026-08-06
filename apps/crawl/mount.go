@@ -264,18 +264,6 @@ func isAdmitted(ctx context.Context) bool {
 	return ok
 }
 
-// scope reads the caller's corpus scope from the VERIFIED principal.
-//
-// A service caller (the chat server, holding the shared key) has no user
-// principal and therefore no org — its pages land in the shared "_" prefix that
-// seg() produces for an empty segment. That is deliberate: a service-wide corpus
-// is the honest home for pages fetched on nobody's behalf, and inventing an org
-// for it would file them under a tenant that did not ask.
-func scope(c *zip.Ctx) Scope {
-	org, _ := principal.Org(c)
-	return Scope{Org: org, Project: principal.Project(c)}
-}
-
 // scopeOf is the ONE admission decision, and it never reads the body.
 //
 // A validated principal is admitted and scoped to its own org and project. A
@@ -284,9 +272,22 @@ func scope(c *zip.Ctx) Scope {
 // an empty scope. Neither ⇒ refused, so the fetcher is closed on every door
 // including the ones with no request behind them: the CLI projection runs an op
 // with no request at all, and it lands here.
+//
+// A service caller (the chat server, holding the shared key) has no user
+// principal and therefore no org — its pages land in the shared "_" prefix that
+// seg() produces for an empty segment. That is deliberate: a service-wide corpus
+// is the honest home for pages fetched on nobody's behalf, and inventing an org
+// for it would file them under a tenant that did not ask.
+//
+// It reads the CONTEXT and never the request. All three facts are server-minted
+// identity that cloud.Bridge parks in one expression, so holding the raw request
+// to re-read them would take back what typing bought for nothing: the org is the
+// tenant, the project only narrows within it, and neither is a fact a caller
+// supplies.
 func scopeOf(ctx context.Context) (Scope, error) {
-	if c, ok := cloud.Request(ctx); ok && principal.Validated(c) {
-		return scope(c), nil
+	if principal.ValidatedFrom(ctx) {
+		org, _ := principal.OrgFrom(ctx)
+		return Scope{Org: org, Project: principal.ProjectFrom(ctx)}, nil
 	}
 	if isAdmitted(ctx) {
 		return Scope{}, nil

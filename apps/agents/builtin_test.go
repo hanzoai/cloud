@@ -18,8 +18,13 @@ func TestBuiltinResolvesTheConventionalRef(t *testing.T) {
 	if a.Model != "zen-70b" {
 		t.Errorf("the default must use the deployment's model, got %q", a.Model)
 	}
-	if len(a.Tools) != 0 {
-		t.Errorf("the default carries no tools; the tool loop decides that, got %v", a.Tools)
+	// The default is offered the fleet's WHOLE door, not an empty list. It used
+	// to carry none and let the tool loop decide, and the result was an
+	// assistant that reported it could not reach the cloud while the door served
+	// 88 tools one socket away — an empty offer reads to the model as "there is
+	// nothing here", not as "ask later".
+	if len(a.Tools) != 1 || a.Tools[0] != ToolsAll {
+		t.Errorf("the default must be offered the whole door (%q), got %v", ToolsAll, a.Tools)
 	}
 	if a.Instructions == "" {
 		t.Error("the default must know what it is")
