@@ -16,6 +16,9 @@
 // The prose is written from the handlers, not from the paths: each summary is
 // what the caller GETS, and each description states the gate, the tenant scope,
 // what it fails closed on, and the one rule a reader would otherwise get wrong.
+// That holds for the derived families at the bottom of this file too — they are
+// derived from the ROUTE TABLE'S OWN gate wiring, so a sentence is generated
+// rather than repeated, and the generator is still reading the handler.
 package commerce
 
 import (
@@ -935,67 +938,166 @@ func describeCheckout() {
 
 // ---- the generated resource surface ----
 
-// resources are the CRUD families the commerce module registers wholesale — one
-// collection route and one item route each, over the same store. There are 17 of
-// them and each publishes 7 operations, which is 119 sentences that differ in
-// exactly one word.
+// resources are the CRUD families the commerce module registers wholesale
+// (hanzoai/commerce api/resources, bound onto the /v1/commerce group in
+// mount.go) — one collection route and one item route each, seven operations to
+// a family, 119 in all.
 //
 // So they are DERIVED, for the same reason openapi.DescribeSPA derives the two
 // SPA addresses: prose written 119 times is prose that drifts 119 ways, and the
 // next resource the module adds would arrive undescribed and stop the surface
 // gate again. Adding a family here is one line.
 //
-// The vocabulary is deliberately plain. These are generic store resources with no
-// per-resource semantics worth inventing — a caller learns what a `product` is
-// from the product, not from this document — so each sentence states the SHAPE
-// (what the address is, what the method does to it, what the id means) and stops.
-// Where a resource genuinely needs its own prose it gets an explicit Describe
-// above, which wins: Describe panics on a duplicate, so a hand-written sentence
-// and this loop cannot both claim one address.
-var resources = []string{
-	"collection", "disclosure", "discount", "movie", "note", "product", "return",
-	"saleschannel", "stocklocation", "submission", "subscriber", "tokentransaction",
-	"transfer", "variant", "wallet", "watchlist", "webhook",
+// WHAT THE TABLE CARRIES IS THE GATE, and that is the whole reason it is a table
+// of structs rather than a list of names. The seventeen are NOT uniform, and the
+// axis they differ on is the one a caller gets wrong: three are admin-only, six
+// sit behind the subscription paywall and answer 402, and five check a per-method
+// token permission on top of whichever of those applies. One sentence repeated
+// seventeen times is green and WRONG — it tells a reader that a plain member's
+// token can write a wallet, and that the only refusal on a product is 404. A
+// description that is confidently incorrect about a money path is worse than the
+// bare operationId it replaced, because nothing downstream can tell it is wrong.
+//
+// The shape talk stays plain, though. These are generic store resources and a
+// caller learns what a `product` is from the product, so each sentence states the
+// address, what the method does to it, and what it refuses — then stops. A family
+// that outgrows this comes OUT of the table and gets an explicit Describe
+// instead — not as WELL: Describe panics on a duplicate key, so the hand-written
+// sentence and this loop cannot both claim one address, and leaving the family
+// here while adding prose above would abort the binary at init.
+type gate int
+
+const (
+	// gateToken is an IAM token and nothing more (commercemid.TokenRequired()).
+	gateToken gate = iota
+	// gateSubscribed additionally passes paywall.Require.
+	gateSubscribed
+	// gateAdmin additionally carries permission.Admin.
+	gateAdmin
+)
+
+type resource struct {
+	kind string
+	gate gate
+	// scope marks the kinds util/rest carries a DefaultPermissions table for,
+	// which CheckPermissions enforces per method. For every other kind that
+	// lookup MISSES, and the miss logs a warning and ALLOWS — so claiming a
+	// scope check on those would be prose the server does not honour.
+	scope bool
+	// why is the one fact about THIS family that outranks its shape. Only the
+	// money and credential families have one; the rest are plain store rows and
+	// inventing a distinction for them is how a table like this starts lying.
+	why string
+}
+
+var resources = []resource{
+	{kind: "collection", gate: gateSubscribed, scope: true},
+	{kind: "disclosure", gate: gateToken},
+	{kind: "discount", gate: gateSubscribed},
+	{kind: "movie", gate: gateToken},
+	{kind: "note", gate: gateToken},
+	{kind: "product", gate: gateSubscribed, scope: true},
+	{kind: "return", gate: gateToken, scope: true},
+	{kind: "saleschannel", gate: gateSubscribed},
+	{kind: "stocklocation", gate: gateSubscribed},
+	{kind: "submission", gate: gateToken},
+	{kind: "subscriber", gate: gateToken, scope: true},
+	{kind: "tokentransaction", gate: gateToken},
+	{kind: "transfer", gate: gateAdmin,
+		why: "A transfer RECORDS that a payable was paid out-of-band; it does not move money. " +
+			"Commerce executes no payout, so writing one settles a debt in the books and nowhere " +
+			"else — which is why the family is admin-gated when the rest of the merchant CRUD is not."},
+	{kind: "variant", gate: gateSubscribed, scope: true},
+	{kind: "wallet", gate: gateAdmin,
+		why: "A wallet holds blockchain accounts and the keys generated for them, so it is " +
+			"admin-gated on reads as much as writes."},
+	{kind: "watchlist", gate: gateToken},
+	{kind: "webhook", gate: gateAdmin,
+		why: "A webhook carries the delivery endpoint and the access token sent with it, so it is " +
+			"admin-gated: this is outbound credential material, not catalogue."},
+}
+
+// refusals states what this family turns away and with what, in the order a
+// request meets the gates: the group's own IAM check, then the route's, then the
+// per-method permission.
+func (r resource) refusals() string {
+	s := "\n\nAn anonymous call is refused 401."
+	switch r.gate {
+	case gateAdmin:
+		s += " The token must carry the admin permission — a plain member's token is refused 403 " +
+			"here, on reads as well as writes."
+	case gateSubscribed:
+		s += " The org's subscription is checked on every call: with no active subscription, trial " +
+			"or redeemed invite the answer is 402 subscription_required, and a billing store this " +
+			"process cannot read fails closed with 503 billing_unavailable rather than serving. A " +
+			"platform service token or a superadmin passes without that check."
+	}
+	if r.scope {
+		s += " This kind also carries a per-method token permission, so a token that authenticates " +
+			"but lacks the scope for this method is refused 403; the admin permission satisfies " +
+			"every one of them."
+	}
+	if r.why != "" {
+		s += "\n\n" + r.why
+	}
+	return s
 }
 
 func describeResources() {
 	for _, r := range resources {
-		coll := "/v1/commerce/" + r + "/"
-		item := "/v1/commerce/" + r + "/:" + r + "id"
-		tenant := "\n\nScoped to the caller's own tenant: the org comes from the validated " +
-			"session, never from the body or a header, so one tenant's " + r + " is not " +
-			"addressable by another even by exact id — an id outside the caller's tenant " +
-			"answers 404, the same as one that does not exist."
+		k := r.kind
+		coll := "/v1/commerce/" + k + "/"
+		item := "/v1/commerce/" + k + "/:" + k + "id"
+		tail := "\n\nScoped to the caller's own tenant: the store is keyed by the org the edge " +
+			"resolves from the verified token, and a client-sent X-Org-Id is deleted before " +
+			"routing rather than trusted, so one tenant's " + k + " is not addressable by another " +
+			"even by exact id — an id outside the caller's tenant answers 404, the same as one " +
+			"that does not exist." + r.refusals()
 
 		openapi.Describe(coll, http.MethodGet,
-			"List "+r+" records",
-			"Returns this tenant's "+r+" records."+tenant)
+			"List "+k+" records",
+			"Returns this tenant's "+k+" records as a pagination envelope — page, display, count, "+
+				"models and facets — so the records are under `models` and not at the top level. "+
+				"`display` sets the page size and `page` the 1-based page (paging needs both; "+
+				"`display` alone just caps the result), and `sort` names the field to order by. "+
+				"When the request carries no resolvable org namespace this answers 200 with an "+
+				"EMPTY page rather than an error, so an empty `models` means nothing was readable "+
+				"for this tenant — not necessarily that no records exist."+tail)
 		openapi.Describe(coll, http.MethodPost,
-			"Create a "+r+" record",
-			"Creates one "+r+" record and returns it, including the id every other "+
-				"operation on this resource addresses it by."+tenant)
+			"Create a "+k+" record",
+			"Creates one "+k+" from the request body and returns the stored record, including the "+
+				"id every other operation on this resource addresses it by."+tail)
 
 		openapi.Describe(item, http.MethodGet,
-			"Read one "+r+" record",
-			"Returns the "+r+" record with this id."+tenant)
+			"Read one "+k+" record",
+			"Returns the one "+k+" with this id."+tail)
 		openapi.Describe(item, http.MethodPut,
-			"Replace a "+r+" record",
-			"Replaces the "+r+" record with this id: fields absent from the body are "+
-				"reset, which is what makes this different from PATCH."+tenant)
+			"Replace a "+k+" record",
+			"Replaces the "+k+" with this id: the body is decoded onto an EMPTY record that keeps "+
+				"only the existing key, so every field the body omits is reset to its zero value. "+
+				"That is the whole difference from PATCH, and it is how a partial PUT silently "+
+				"clears fields. An id that does not exist answers 404 — this verb never creates."+tail)
 		openapi.Describe(item, http.MethodPatch,
-			"Update part of a "+r+" record",
-			"Updates only the fields present in the body and leaves the rest as they "+
-				"are."+tenant)
+			"Update part of a "+k+" record",
+			"Loads the stored "+k+", decodes the body over it and writes the result, so fields the "+
+				"body omits keep the values they already had. An id that does not exist answers "+
+				"404."+tail)
 		openapi.Describe(item, http.MethodDelete,
-			"Delete a "+r+" record",
-			"Deletes the "+r+" record with this id."+tenant)
+			"Delete a "+k+" record",
+			"Removes the "+k+" with this id, after writing a copy aside under an internal deleted "+
+				"key — so the record stops answering here but is not erased from storage. An id "+
+				"that does not exist answers 404."+tail)
 
-		// POST on the ITEM address is published because the router binds every method
-		// here, not because it does something separate from create.
+		// POST on the ITEM address is the method-override door. Describing it as
+		// "creation, but on an id" would be wrong twice: it does not create, and it
+		// is the one address where a POST can DELETE.
 		openapi.Describe(item, http.MethodPost,
-			"Act on one "+r+" record",
-			"Published because this address accepts every method the generator knows. "+
-				"Creation is POST on the collection above; POST here addresses a record "+
-				"that already exists."+tenant)
+			"Update one "+k+" record, or tunnel another method at it",
+			"The method-override door, not a second create — creation is POST on the collection. "+
+				"With no override this does exactly what PATCH does: the fields present in the "+
+				"body are written and the rest are left alone. Set `_method` (form field or query "+
+				"parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it "+
+				"performs THAT method instead, so a POST to this address can replace or DELETE the "+
+				"record. Any other override value is ignored and the call stays a PATCH."+tail)
 	}
 }
