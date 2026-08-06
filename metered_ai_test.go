@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -157,14 +158,15 @@ func TestMeteredAI_AdminMasqueradeBillsHomeOrg(t *testing.T) {
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
 		t.Fatalf("no usage recorded (Record must fire on the metered AI path)")
 	}
-	fc.mu.Lock()
-	body := string(fc.usageBody)
-	fc.mu.Unlock()
-	if !strings.Contains(body, `"user":"admin"`) {
-		t.Fatalf("debit must land on the HOME org (admin), got usage body: %s", body)
+	debit, ok := fc.debits.last()
+	if !ok {
+		t.Fatal("no debit crossed the plane")
 	}
-	if strings.Contains(body, `"user":"victim"`) {
-		t.Fatalf("debit leaked to the acted-on org (victim): %s", body)
+	if debit.In.Subject != "admin" {
+		t.Fatalf("debit must land on the HOME org (admin), got subject %q", debit.In.Subject)
+	}
+	if debit.Org != "admin" {
+		t.Fatalf("debit must be written to the HOME org's books (admin), got org %q", debit.Org)
 	}
 }
 
@@ -346,14 +348,32 @@ func serveCommerceOK(t *testing.T) {
 		func(context.Context, *plane.AuthorizeIn) (*plane.Verdict, error) {
 			return &plane.Verdict{OK: true}, nil
 		}, zip.WithOperationID(plane.FinanceAuthorize))
-	go func() { _ = app.Listen(zip.SocketPath(peerCommerce)) }()
+
+	// RESOLVE THE ADDRESS HERE, NOT IN THE GOROUTINE.
+	//
+	// zip.SocketPath reads ZIP_RUNTIME_DIR on every call and every test points it at its
+	// own temp dir, so a listener that resolved its own address resolved it whenever the
+	// scheduler got to it — which can be after this test has ended and the NEXT one has
+	// repointed the directory. It then bound at the next test's address and registered
+	// as the app serving there (zip keys that registry by ADDRESS, here.go), so the next
+	// test's calls were answered by THIS stand-in. It only serves finance_authorize, so
+	// a debit came back "unknown op: finance_record" and read as "the meter never fired".
+	//
+	// Measured: 1 root-suite run in 4, with the shadow's op list naming this helper.
+	// It was harmless while the debit was an HTTP POST to a captured URL; it stopped
+	// being harmless when the debit moved onto the plane, where a peer is found by NAME.
+	addr := zip.SocketPath(peerCommerce)
+	go func() { _ = app.Listen(addr) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 200; i++ {
-		if c, err := Peer(peerCommerce); err == nil {
+
+	// Dial the SOCKET, not Peer: zip dials lazily, so Peer answers without a listener
+	// behind it and this loop would return before the stand-in was up.
+	for i := 0; i < 400; i++ {
+		if c, err := net.Dial("unix", addr); err == nil {
 			_ = c.Close()
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("commerce stand-in never began listening at %s", zip.SocketPath(peerCommerce))
+	t.Fatalf("commerce stand-in never began listening at %s", addr)
 }
