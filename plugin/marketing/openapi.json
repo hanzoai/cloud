@@ -87,7 +87,7 @@
     },
     "/v1/marketing/audiences/{id}": {
       "delete": {
-        "operationId": "delete_v1_marketing_audiences_by_id",
+        "operationId": "delete_v1_marketing_audiences_id",
         "summary": "Removes one of the caller org's audiences and answers 204.",
         "description": "Removes one of the caller org's audiences and answers 204. It\ndeletes the saved filter only — no customer, event or enrollment is touched.",
         "tags": [
@@ -112,7 +112,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_marketing_audiences_by_id",
+        "operationId": "get_v1_marketing_audiences_id",
         "summary": "Returns one of the caller org's saved audiences.",
         "description": "Returns one of the caller org's saved audiences. An audience\nbelonging to another org reads as not found.",
         "tags": [
@@ -146,7 +146,7 @@
     },
     "/v1/marketing/audiences/{id}/preview": {
       "get": {
-        "operationId": "get_v1_marketing_audiences_by_id_preview",
+        "operationId": "get_v1_marketing_audiences_id_preview",
         "summary": "Evaluates the cohort LIVE — the same resolution an enrollment would run — and reports how big it is and how many real mailboxes it reaches.",
         "description": "Evaluates the cohort LIVE — the same resolution an enrollment\nwould run — and reports how big it is and how many real mailboxes it reaches.\nIt is the honest answer to \"is this send worth making\": a cohort of 500 that\nmails 3 says so, in deliverable and unmatched. Nothing is sent.",
         "tags": [
@@ -271,7 +271,7 @@
     },
     "/v1/marketing/calendar/{id}": {
       "delete": {
-        "operationId": "delete_v1_marketing_calendar_by_id",
+        "operationId": "delete_v1_marketing_calendar_id",
         "summary": "Removes one of the caller org's posts and answers 204.",
         "description": "Removes one of the caller org's posts and answers 204. A\npost already published is deleted from the calendar only — nothing is\nretracted from the network it went out on.",
         "tags": [
@@ -296,7 +296,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_marketing_calendar_by_id",
+        "operationId": "get_v1_marketing_calendar_id",
         "summary": "Returns one of the caller org's posts, including the exact error behind a failed publish.",
         "description": "Returns one of the caller org's posts, including the exact\nerror behind a failed publish. A post belonging to another org reads as not\nfound.",
         "tags": [
@@ -328,7 +328,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_marketing_calendar_by_id",
+        "operationId": "put_v1_marketing_calendar_id",
         "summary": "Replaces a post's editable fields.",
         "description": "Replaces a post's editable fields. It is a full write, not\na patch, and it RESETS the lifecycle from the schedule: a scheduledAt makes\nthe post \"scheduled\" again and none makes it a draft — so editing a failed\npost requeues it rather than leaving it stuck.",
         "tags": [
@@ -377,7 +377,7 @@
     },
     "/v1/marketing/calendar/{id}/publish": {
       "post": {
-        "operationId": "post_v1_marketing_calendar_by_id_publish",
+        "operationId": "post_v1_marketing_calendar_id_publish",
         "summary": "Publishes a post NOW, synchronously, whatever its schedule.",
         "description": "Publishes a post NOW, synchronously, whatever its\nschedule. No social connector is wired today, so every channel answers an\nhonest 501 naming the seam a real one would plug into, and the post is\nrecorded failed with that exact reason — never a faked \"published\".",
         "tags": [
@@ -492,7 +492,7 @@
     },
     "/v1/marketing/campaigns/{id}": {
       "delete": {
-        "operationId": "delete_v1_marketing_campaigns_by_id",
+        "operationId": "delete_v1_marketing_campaigns_id",
         "summary": "Removes one of the caller org's campaigns and answers 204.",
         "description": "Removes one of the caller org's campaigns and answers 204. A\ncampaign belonging to another org reads as not found and is left untouched.",
         "tags": [
@@ -517,7 +517,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_marketing_campaigns_by_id",
+        "operationId": "get_v1_marketing_campaigns_id",
         "summary": "Returns one of the caller org's campaigns.",
         "description": "Returns one of the caller org's campaigns. A campaign belonging to\nanother org reads as not found.",
         "tags": [
@@ -549,7 +549,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_marketing_campaigns_by_id",
+        "operationId": "put_v1_marketing_campaigns_id",
         "summary": "Replaces a campaign's editable fields.",
         "description": "Replaces a campaign's editable fields. It is a full write, not\na patch: every field takes the value in the body, and an omitted one is\ncleared. The id comes from the path — the body cannot retarget another\ncampaign — and createdAt is never rewritten.",
         "tags": [
@@ -600,7 +600,7 @@
     },
     "/v1/marketing/campaigns/{id}/schedule": {
       "post": {
-        "operationId": "post_v1_marketing_campaigns_by_id_schedule",
+        "operationId": "post_v1_marketing_campaigns_id_schedule",
         "summary": "Sets a campaign's send time and moves it to \"scheduled\".",
         "description": "Sets a campaign's send time and moves it to \"scheduled\". A\nscheduledAt of 0 clears the schedule and returns it to \"draft\".",
         "tags": [
@@ -684,7 +684,7 @@
     },
     "/v1/marketing/promos/{code}/eligibility": {
       "get": {
-        "operationId": "get_v1_marketing_promos_by_code_eligibility",
+        "operationId": "get_v1_marketing_promos_code_eligibility",
         "summary": "Prices a promo against a plan and seat count.",
         "description": "Prices a promo against a plan and seat count. It is PURE: nothing\nis redeemed, credited or counted, so it is safe to call from a pricing page on\nevery keystroke. An inactive promo or an exhausted cap quotes ineligible with\nthe reason rather than erroring.",
         "tags": [
@@ -748,7 +748,7 @@
     },
     "/v1/marketing/promos/{code}/redeem": {
       "post": {
-        "operationId": "post_v1_marketing_promos_by_code_redeem",
+        "operationId": "post_v1_marketing_promos_code_redeem",
         "summary": "Records the caller org's claim on a promo.",
         "description": "Records the caller org's claim on a promo. NOTHING IS CREDITED:\nthe redemption is a row, and credit into an org is an admin decision made on\nthe admin surface against an auditable ledger.\n\nThe plan is DERIVED from the org's live ACTIVE/TRIALING paid subscription and\ncan never be named by the caller — an org with no qualifying subscription is\nrefused, and so is one whose subscription cannot be read. The seat count is\nthe single-seat floor (claimSeats), so the recorded figure has no input that\ncan inflate it.\n\nGuards run under one lock so the cap cannot be raced past: the fleet-wide\nredemption cap, one redemption per org, one per payment instrument (REQUIRED),\nand the per-redemption ceiling.\n\nIt is IDEMPOTENT: an org that already redeemed gets its original redemption\nback with alreadyRedeemed true.",
         "tags": [
@@ -796,7 +796,7 @@
     },
     "/v1/marketing/promos/{code}/redemption": {
       "get": {
-        "operationId": "get_v1_marketing_promos_by_code_redemption",
+        "operationId": "get_v1_marketing_promos_code_redemption",
         "summary": "Returns the caller org's OWN redemption of a promo — an org-scoped read, so it can never surface another tenant's.",
         "description": "Returns the caller org's OWN redemption of a promo — an\norg-scoped read, so it can never surface another tenant's. Not found when this\norg has not redeemed it.",
         "tags": [
@@ -898,7 +898,7 @@
     },
     "/v1/marketing/sequences/{id}": {
       "get": {
-        "operationId": "get_v1_marketing_sequences_by_id",
+        "operationId": "get_v1_marketing_sequences_id",
         "summary": "Returns one of the caller org's sequences together with its steps in send order.",
         "description": "Returns one of the caller org's sequences together with its steps\nin send order. A sequence belonging to another org reads as not found.",
         "tags": [
@@ -932,7 +932,7 @@
     },
     "/v1/marketing/sequences/{id}/enroll": {
       "post": {
-        "operationId": "post_v1_marketing_sequences_by_id_enroll",
+        "operationId": "post_v1_marketing_sequences_id_enroll",
         "summary": "Adds one contact or a whole audience to a sequence and schedules the first step for each.",
         "description": "Adds one contact or a whole audience to a sequence and schedules the\nfirst step for each. The sequence must be ACTIVE (a draft sends nothing), and\nthe request must name exactly one of address or audienceId.\n\nEnrolling is ALL this does: the message itself is sent later by the drip\nengine, through the suppression gate, so an opted-out customer can be enrolled\nhere and still never be mailed. Re-posting is safe — an address this sequence\nalready took is counted in alreadyEnrolled and never double-dripped — which is\nwhat makes retrying a partially-applied announcement a resume rather than a\nsecond send.",
         "tags": [
@@ -984,7 +984,7 @@
     },
     "/v1/marketing/sequences/{id}/enrollments": {
       "get": {
-        "operationId": "get_v1_marketing_sequences_by_id_enrollments",
+        "operationId": "get_v1_marketing_sequences_id_enrollments",
         "summary": "Returns who is walking one sequence, most recently enrolled first, with each walk's current step and next due time.",
         "description": "Returns who is walking one sequence, most recently enrolled\nfirst, with each walk's current step and next due time.",
         "tags": [
@@ -1028,7 +1028,7 @@
     },
     "/v1/marketing/sequences/{id}/enrollments/{eid}/cancel": {
       "post": {
-        "operationId": "post_v1_marketing_sequences_by_id_enrollments_by_eid_cancel",
+        "operationId": "post_v1_marketing_sequences_id_enrollments_eid_cancel",
         "summary": "Stops one walk mid-sequence and answers 204: no further step is sent, and steps already delivered are not recalled.",
         "description": "Stops one walk mid-sequence and answers 204: no further step\nis sent, and steps already delivered are not recalled. Only an ACTIVE\nenrollment can be canceled — one already completed or canceled reads as not\nfound.",
         "tags": [
@@ -1065,7 +1065,7 @@
     },
     "/v1/marketing/sequences/{id}/status": {
       "post": {
-        "operationId": "post_v1_marketing_sequences_by_id_status",
+        "operationId": "post_v1_marketing_sequences_id_status",
         "summary": "Flips draft/active/archived — the activation gate for sending, since only an active sequence accepts enrollments.",
         "description": "Flips draft/active/archived — the activation gate for\nsending, since only an active sequence accepts enrollments. It does not touch\nenrollments already walking: archiving stops new ones, not in-flight ones.",
         "tags": [
@@ -1113,7 +1113,7 @@
     },
     "/v1/marketing/sequences/{id}/steps": {
       "get": {
-        "operationId": "get_v1_marketing_sequences_by_id_steps",
+        "operationId": "get_v1_marketing_sequences_id_steps",
         "summary": "Returns one sequence's steps in send order.",
         "description": "Returns one sequence's steps in send order.",
         "tags": [
@@ -1145,7 +1145,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_marketing_sequences_by_id_steps",
+        "operationId": "post_v1_marketing_sequences_id_steps",
         "summary": "Appends a message to the END of a sequence: the new step's idx is one past the last, so steps arrive in the order they are added.",
         "description": "Appends a message to the END of a sequence: the new step's idx is one\npast the last, so steps arrive in the order they are added. Body is required\nand delaySeconds must be \u003e= 0. Adding a step does not disturb enrollments\nalready walking — one that has passed this index simply never sees it.",
         "tags": [

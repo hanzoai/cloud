@@ -215,6 +215,15 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1","status":"draining"}`),
 	})
+	zip.Describe("POST /agents/run-on-behalf", zip.Doc{
+		Description: "Answers a bridge's turn.\n\nUnlike the session ops, the org travels IN the request rather than being taken\nfrom the caller's plane identity: the tenant here is the one that connected the\nSlack workspace, resolved by the bridge from the signed team_id, and the bridge\nplugin's own identity is not it. That is safe because this op only SPENDS the\nnamed org's own balance under its own agent — it reads nothing across tenants —\nand because the subject must be a link the bridge already proved.\n\nAn empty subject is refused rather than defaulted. A turn that lost its caller\nmust not run AS THE ORG: that would bill the tenant for an unattributable act\nand hand an unlinked user the org's agent.",
+		Fields: map[string]string{
+			"RunOnBehalfIn.input":   "Input is the user's message, already stripped of the leading @mention.",
+			"RunOnBehalfIn.org":     "Org is the isolation gate, the tenant, and the balance the run bills.",
+			"RunOnBehalfIn.ref":     "Ref names the agent to run.",
+			"RunOnBehalfIn.subject": "Subject is the caller's LINKED Hanzo identity, unqualified. Attribution and\nauthorization both hang off it, so a turn can never run as nobody: the\nanswering side refuses an empty subject rather than falling back to the org.",
+		},
+	})
 	zip.Describe("POST /agents/sessions/count", zip.Doc{
 		Description: "Answers the active-session count the device view shows,\nunder the same tenancy and actor rules as the stop above.",
 		Fields: map[string]string{

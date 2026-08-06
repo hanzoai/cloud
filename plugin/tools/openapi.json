@@ -84,7 +84,7 @@
     },
     "/v1/mcp/servers/{id}": {
       "delete": {
-        "operationId": "delete_v1_mcp_servers_by_id",
+        "operationId": "delete_v1_mcp_servers_id",
         "summary": "Deregisters one of the caller org's external MCP servers, so its tools leave the registry.",
         "description": "Deregisters one of the caller org's external MCP servers, so its\ntools leave the registry. Scoped to the caller's org, so an id belonging to\nanother tenant is a 404 and not a delete. Answers 204 with no body; a server\nthis org does not have is 404.",
         "tags": [
@@ -165,7 +165,7 @@
     },
     "/v1/plugins/authored/{id}": {
       "delete": {
-        "operationId": "delete_v1_plugins_authored_by_id",
+        "operationId": "delete_v1_plugins_authored_id",
         "summary": "Removes one of the caller org's built plugins, so the runtime can no longer load it.",
         "description": "Removes one of the caller org's built plugins, so the\nruntime can no longer load it. Scoped to the caller's org, so an id belonging\nto another tenant answers 404 and is not deleted.",
         "tags": [
@@ -319,7 +319,7 @@
     },
     "/v1/skills/{id}": {
       "delete": {
-        "operationId": "delete_v1_skills_by_id",
+        "operationId": "delete_v1_skills_id",
         "summary": "Removes one of the caller org's authored skills.",
         "description": "Removes one of the caller org's authored skills. Scoped to the\ncaller's org, so an id belonging to another tenant is never reached. Removing\nwhat is not there is not an error — the caller's intent is \"gone\", and it is.",
         "tags": [
@@ -582,7 +582,7 @@
     },
     "/v1/tools/catalog/{id}": {
       "get": {
-        "operationId": "get_v1_tools_catalog_by_id",
+        "operationId": "get_v1_tools_catalog_id",
         "summary": "Returns one catalog entry in full: the publisher's description, its repository and site, every package form with the runtime that launches it, and every hosted endpoint.",
         "description": "Returns one catalog entry in full: the publisher's description, its\nrepository and site, every package form with the runtime that launches it, and\nevery hosted endpoint. It is what a branding page renders, and what tells a\ncaller whether the listing can be enabled here and now (a streamable-http\nremote) or needs somewhere to run first (a stdio package).\n\nA HIDDEN listing is not served to an org — a shelf that renders what it does\nnot list would be a way around the shelf — but is served to a SuperAdmin, who\nis the one deciding whether to put it back.",
         "tags": [
@@ -613,7 +613,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_tools_catalog_by_id",
+        "operationId": "patch_v1_tools_catalog_id",
         "summary": "Sets what WE say about one catalog entry — hidden, featured, official, logo — and answers with the stored listing.",
         "description": "Sets what WE say about one catalog entry — hidden, featured,\nofficial, logo — and answers with the stored listing. SuperAdmin only; every\nother caller is refused.\n\nCuration is the half of a catalog row a sync cannot write, and this is the only\nthing that writes it. The upstream half is never editable here: a description\nthat disagreed with the publisher's would be a fork of their listing, and the\nnext sync would silently undo it.",
         "tags": [

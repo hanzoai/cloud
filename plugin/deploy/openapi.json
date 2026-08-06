@@ -60,7 +60,7 @@
     },
     "/v1/deploy/applications/{name}": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name",
+        "operationId": "get_v1_deploy_applications_name",
         "summary": "Returns ONE projected argocd Application by name, with status.resources filled in from its reconciled resource tree — which is what makes it the detail view rather than a row of the list.",
         "description": "Returns ONE projected argocd Application by name, with\nstatus.resources filled in from its reconciled resource tree — which is what\nmakes it the detail view rather than a row of the list.\n\nIt is TENANT-SCOPED, and a name that belongs to another org is reported NOT\nFOUND rather than refused: a 403 would confirm the application exists, so the\nroute would become a cross-tenant existence oracle. A name that is not a\nDNS-1123 label is a 400 before any cluster read.",
         "tags": [
@@ -93,7 +93,7 @@
     },
     "/v1/deploy/applications/{name}/resource-tree": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name_resource-tree",
+        "operationId": "get_v1_deploy_applications_name_resource-tree",
         "summary": "Returns one application's argocd ApplicationTree: the objects the operator reconciled from its App CR, reached by ownerRef — the Deployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress, HorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node carrying its parent edges and its health.",
         "description": "Returns one application's argocd ApplicationTree: the\nobjects the operator reconciled from its App CR, reached by ownerRef — the\nDeployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress,\nHorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node\ncarrying its parent edges and its health.\n\nSecrets are DELIBERATELY not walked, so no materialized environment can ever\nappear in the tree. Tenant-scoped exactly like the application read: another\norg's name is not found, a malformed name is a 400.",
         "tags": [
@@ -126,7 +126,7 @@
     },
     "/v1/deploy/applications/{name}/revisions/{revision}/metadata": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name_revisions_by_revision_metadata",
+        "operationId": "get_v1_deploy_applications_name_revisions_revision_metadata",
         "summary": "Returns the argocd RevisionMetadata for one revision of one application — what the detail view shows beside a revision.",
         "description": "Returns the argocd RevisionMetadata for one revision\nof one application — what the detail view shows beside a revision.\n\nAn App CR is IMAGE-pinned rather than commit-pinned: the deploy names an image\ntag, and the git source this projection reports is the display-only manifest\nrepo, not the application's own source. Nothing in this process can read a\ncommit's author or message for an arbitrary revision. So rather than 404 (which\nthe SPA turns into an error toast) or invent a git author, it answers the\nHONEST minimum: date is when the App CR was created, message is the revision\nasked for — with the empty revision and \"HEAD\" resolving to the image tag the\nCR declares — and author is empty. An over-long revision is truncated before it\nis echoed back.\n\nTenant-scoped exactly like the application read.",
         "tags": [
@@ -208,7 +208,7 @@
     },
     "/v1/deploy/applications/{name}/syncwindows": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name_syncwindows",
+        "operationId": "get_v1_deploy_applications_name_syncwindows",
         "summary": "Returns one application's argocd ApplicationSyncWindowState — the answer to \"is anything blocking a sync of this application right now?\".",
         "description": "Returns one application's argocd\nApplicationSyncWindowState — the answer to \"is anything blocking a sync of this\napplication right now?\".\n\nThis platform runs NO sync windows, so the answer is always the permissive\nempty one: canSync true, with no active and no assigned windows. The\napplication is still resolved first, so a name that is not the caller's is not\nfound rather than handed the static body — the endpoint discloses nothing about\nanother tenant's fleet.",
         "tags": [
