@@ -25,7 +25,7 @@ require (
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/plans v1.4.11
-	github.com/hanzoai/pricing v1.4.7
+	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
