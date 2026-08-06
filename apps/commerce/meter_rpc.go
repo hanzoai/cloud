@@ -133,11 +133,16 @@ func (o meterOps) record(ctx context.Context, in *plane.RecordIn) (*plane.Record
 	}
 	if _, rerr := o.m.Record(ctx, metering.Usage{
 		User: subject, Org: org,
-		Amount:    credit.FromDecimal(amount.Decimal()),
-		Model:     firstNonEmpty(in.Usage.Model, in.Usage.Service),
-		Project:   in.Usage.Project,
-		Provider:  firstNonEmpty(in.Usage.Provider, in.Usage.Service),
-		Service:   in.Usage.Service,
+		Amount:   credit.FromDecimal(amount.Decimal()),
+		Model:    firstNonEmpty(in.Usage.Model, in.Usage.Service),
+		Project:  in.Usage.Project,
+		Provider: firstNonEmpty(in.Usage.Provider, in.Usage.Service),
+		Service:  in.Usage.Service,
+		// The act's name crosses as the act's name and the correlation id as the
+		// correlation id. Folding the second into the first is what let a client's
+		// X-Request-Id key a ledger entry; the peer's Ref is a server-assigned identity
+		// and an absent one lets the ledger mint its own.
+		Ref:       in.Usage.Ref,
 		RequestID: in.Usage.RequestID,
 		ClientIP:  in.Usage.ClientIP,
 		Currency:  amount.Currency().Code,
