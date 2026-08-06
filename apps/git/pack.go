@@ -33,10 +33,28 @@ func sshUploadPack(s *cloud.Service[state], ctx context.Context, org, project, n
 // produces. The branch diff (before/after tips) is ground truth for what changed,
 // so it runs regardless of a non-zero exit; both run on a cancel-immune context.
 // pusher is the SSH key's bound user id (best-effort lifecycle attribution).
+// An SSH push carries the SAME ref policy an HTTPS push does, from the same
+// function (gitexec.go runPackSSHScreened). It used to carry none: this handler
+// piped the channel straight into `git receive-pack`, so an org member who
+// enrolled a key through POST /v1/git/keys could create, rewrite, force or
+// DELETE any ref while the HTTP door next to it refused all four. A rule that
+// one transport enforces and another does not is not a rule.
+//
+// There is no grant on this path — a grant is an HTTP bearer and SSH
+// authenticates by key — so the confinement argument is "" and the namespace
+// rules apply alone, which is the same thing a human pushing over HTTPS gets.
 func sshReceivePack(s *cloud.Service[state], ctx context.Context, org, project, name, pusher, protocol string, ch io.ReadWriteCloser) error {
 	bareDir := s.State.storage.absRepoPath(org, project, name)
 	before := branchTips(ctx, bareDir)
-	err := runPackSSH(ctx, bareDir, svcReceivePack, protocol, ch)
+	def := defaultBranchOf(ctx, bareDir)
+	err := runPackSSHScreened(ctx, bareDir, svcReceivePack, protocol, ch,
+		func(cmds []refCommand, _ string) error {
+			verr := checkRefPolicy(cmds, def, "")
+			if verr != nil {
+				s.Log.Warn("git ssh push refused by ref policy", "org", org, "repo", name, "reason", verr.Error())
+			}
+			return verr
+		})
 
 	bg := context.WithoutCancel(ctx)
 	recordUsage(s, bg, org, project, name)

@@ -13,6 +13,9 @@
   "tags": [
     {
       "name": "agents"
+    },
+    {
+      "name": "coding"
     }
   ],
   "paths": {
@@ -198,6 +201,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/metricsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/agents/runs": {
+      "get": {
+        "operationId": "get_v1_agents_runs",
+        "summary": "Returns the org's agent runs across EVERY agent, newest first — what ran here, for whom, on which model, how long it took, and why it failed.",
+        "description": "Returns the org's agent runs across EVERY agent, newest first —\nwhat ran here, for whom, on which model, how long it took, and why it failed.\n\nIt is the feed the per-agent history could not be: an operator asking \"what is\nthis tenant's agent plane doing\" does not start out knowing an agent ref, and\nanswering by listing the agents and then paging each one's history is N+1 round\ntrips to reconstruct one ordering the database already has (RunsSince, ordered\nby created_at over the org index).\n\nThe org is the CALLER's, resolved from identity by tenantStore — never a\nparameter. There is deliberately no org field on orgRunsQuery to forge: run\nhistory is the tenant's own record, and the only tenant this can answer for is\nthe one asking.",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many runs come back, newest first. Absent, zero or out of\nrange (1..200) reads as 50.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 20
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status keeps only runs with this outcome (\"ok\" or \"error\"). Empty keeps\nboth. It is the filter an operator reaches for first — \"show me what broke\"\n— and answering it here rather than by paging the whole history client-side\nis the difference between a usable feed and a download.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "error"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runList"
                 }
               }
             },
@@ -1046,10 +1093,96 @@
           }
         }
       }
+    },
+    "/v1/coding": {
+      "post": {
+        "operationId": "post_v1_coding",
+        "summary": "Start one autonomous coding run against a repo in the caller's org",
+        "tags": [
+          "coding"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodingStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodingStarted"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "CodingStartIn": {
+        "properties": {
+          "agentRef": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "replyChannel": {
+            "type": "string"
+          },
+          "replyThread": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "timeoutSeconds": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CodingStarted": {
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "routed": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "GPU": {
         "properties": {
           "memory": {
@@ -1229,6 +1362,16 @@
       },
       "agentRunView": {
         "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "agent": {
+            "description": "What an operator needs to answer \"what ran, for whom, and what did it do\" —\nand, through traceId, to leave this record for the waterfall of the very\nsame run rather than a search that hopefully lands near it.\n\nAgent is on the row because the org-wide feed lists runs across agents, and\na run that cannot name its agent is an orphan in exactly the view built to\nmake sense of many of them. Every field is omitempty: a run recorded before\nthese columns existed reports absence rather than a zero it never measured.",
+            "type": "string"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -1250,7 +1393,16 @@
           "output": {
             "type": "string"
           },
+          "promptTokens": {
+            "type": "integer"
+          },
           "status": {
+            "type": "string"
+          },
+          "toolCalls": {
+            "type": "integer"
+          },
+          "traceId": {
             "type": "string"
           }
         },

@@ -34,16 +34,18 @@ func init() {
 	zip.Describe("GET /v1/agents/:ref", zip.Doc{
 		Description: "Returns one agent with its system prompt and its 20 most recent runs.\nThe ref is the agent's public id or its org-unique name — a created agent is\nimmediately gettable by whatever create handed back.",
 		Fields: map[string]string{
-			"agentRef.ref": "Ref is the agent's public id (the agent_… handle create and list return) or\nits org-unique name, from the path. Either resolves the same agent.",
+			"agentRef.ref":       "Ref is the agent's public id (the agent_… handle create and list return) or\nits org-unique name, from the path. Either resolves the same agent.",
+			"agentRunView.agent": "What an operator needs to answer \"what ran, for whom, and what did it do\" —\nand, through traceId, to leave this record for the waterfall of the very\nsame run rather than a search that hopefully lands near it.\n\nAgent is on the row because the org-wide feed lists runs across agents, and\na run that cannot name its agent is an orphan in exactly the view built to\nmake sense of many of them. Every field is omitempty: a run recorded before\nthese columns existed reports absence rather than a zero it never measured.",
 		},
 		Example: json.RawMessage(`{"ref":"helper"}`),
 	})
 	zip.Describe("GET /v1/agents/:ref/runs", zip.Doc{
 		Description: "Returns one agent's execution history, newest first — each run's\ninput, its output or its error, and how long it took. Every row is a run that\nactually happened.",
 		Fields: map[string]string{
-			"runList.runs":    "Runs is the agent's executions, newest first.",
-			"runsQuery.limit": "Limit caps how many runs come back, newest first. Absent, zero or out of\nrange (1..200) reads as 50.",
-			"runsQuery.ref":   "Ref is the agent's public id or its org-unique name, from the path.",
+			"agentRunView.agent": "What an operator needs to answer \"what ran, for whom, and what did it do\" —\nand, through traceId, to leave this record for the waterfall of the very\nsame run rather than a search that hopefully lands near it.\n\nAgent is on the row because the org-wide feed lists runs across agents, and\na run that cannot name its agent is an orphan in exactly the view built to\nmake sense of many of them. Every field is omitempty: a run recorded before\nthese columns existed reports absence rather than a zero it never measured.",
+			"runList.runs":       "Runs is the agent's executions, newest first.",
+			"runsQuery.limit":    "Limit caps how many runs come back, newest first. Absent, zero or out of\nrange (1..200) reads as 50.",
+			"runsQuery.ref":      "Ref is the agent's public id or its org-unique name, from the path.",
 		},
 		Example: json.RawMessage(`{"ref":"helper","limit":20}`),
 	})
@@ -83,6 +85,16 @@ func init() {
 			"seriesPoint.v":      "real invocation count in the bucket",
 		},
 		Example: json.RawMessage(`{"range":"7D"}`),
+	})
+	zip.Describe("GET /v1/agents/runs", zip.Doc{
+		Description: "Returns the org's agent runs across EVERY agent, newest first —\nwhat ran here, for whom, on which model, how long it took, and why it failed.\n\nIt is the feed the per-agent history could not be: an operator asking \"what is\nthis tenant's agent plane doing\" does not start out knowing an agent ref, and\nanswering by listing the agents and then paging each one's history is N+1 round\ntrips to reconstruct one ordering the database already has (RunsSince, ordered\nby created_at over the org index).\n\nThe org is the CALLER's, resolved from identity by tenantStore — never a\nparameter. There is deliberately no org field on orgRunsQuery to forge: run\nhistory is the tenant's own record, and the only tenant this can answer for is\nthe one asking.",
+		Fields: map[string]string{
+			"agentRunView.agent":  "What an operator needs to answer \"what ran, for whom, and what did it do\" —\nand, through traceId, to leave this record for the waterfall of the very\nsame run rather than a search that hopefully lands near it.\n\nAgent is on the row because the org-wide feed lists runs across agents, and\na run that cannot name its agent is an orphan in exactly the view built to\nmake sense of many of them. Every field is omitempty: a run recorded before\nthese columns existed reports absence rather than a zero it never measured.",
+			"orgRunsQuery.limit":  "Limit caps how many runs come back, newest first. Absent, zero or out of\nrange (1..200) reads as 50.",
+			"orgRunsQuery.status": "Status keeps only runs with this outcome (\"ok\" or \"error\"). Empty keeps\nboth. It is the filter an operator reaches for first — \"show me what broke\"\n— and answering it here rather than by paging the whole history client-side\nis the difference between a usable feed and a download.",
+			"runList.runs":        "Runs is the agent's executions, newest first.",
+		},
+		Example: json.RawMessage(`{"limit":20,"status":"error"}`),
 	})
 	zip.Describe("GET /v1/agents/sessions", zip.Doc{
 		Description: "Returns the caller org's live sessions, newest first — each with\nits event count, its direct-child count and a one-line preview of its latest\nevent. With no filter it returns ROOT sessions only, so a dashboard shows one\nrow per flow rather than one per subagent; ?root= or ?parent= descends.",
