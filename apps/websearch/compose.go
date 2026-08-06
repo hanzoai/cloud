@@ -11,7 +11,7 @@ import "context"
 
 // Result is one web result exposed to in-process composers. It mirrors the
 // SearXNG-compatible wire shape metaSearch produces (url/title/content/engine),
-// re-exported so a composer never reaches into the package-private searchResult.
+// re-exported so a composer never reaches into the package-private webResult.
 type Result struct {
 	URL     string
 	Title   string

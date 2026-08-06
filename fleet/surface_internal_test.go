@@ -105,6 +105,13 @@ var survivors = []struct{ name, why string }{
 	{"post_v1_deploy_applications_by_name_sync", "POST /v1/deploy/applications/{name}/sync"},
 	{"post_v1_exec", "POST /v1/exec"},
 
+	// The fleet's path to the live internet. These names have to be checked
+	// against the rule rather than assumed past it: the rule reads the NAME, so
+	// whether a capability projects is a property of what its operation is
+	// CALLED. Both are mutating verbs over nouns that confer no authority.
+	{"post_v1_websearch", "POST /v1/websearch — searching the web grants nothing"},
+	{"post_v1_crawl", "POST /v1/crawl — reading a page grants nothing"},
+
 	// Reads of the identity surface survive: knowing who holds a role is not
 	// granting one, and an agent that cannot see the org cannot reason about it.
 	{"GetUser", "GET /v1/o11y/users/{id}"},
