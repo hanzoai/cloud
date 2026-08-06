@@ -483,7 +483,7 @@ func mountRuntime(deps cloud.Deps) error {
 	} else if h != nil {
 		gh := gate(h)
 		runtimeHandler = gh
-		o11y.SetHandler(gh)
+		o11y.SetRuntime(o11y.Whole(gh))
 		// Runtime (and its ONE datastore connection) is live; start native
 		// metrics ingest — opt-in, fail-soft (metrics.go).
 		startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
@@ -504,7 +504,7 @@ func mountRuntime(deps cloud.Deps) error {
 	}
 	gh := gate(h)
 	runtimeHandler = gh
-	o11y.SetHandler(gh)
+	o11y.SetRuntime(o11y.Whole(gh))
 	log.Info("o11y runtime handler installed (reverse proxy fallback)", "upstream", upstream())
 	return nil
 }
