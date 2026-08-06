@@ -114,8 +114,7 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	// The direction is not cosmetic, and this comment used to get it backwards by
 	// calling the number a display. It is not. It is `available` on
 	// /v1/billing/balance — the field hanzoai/ai's balance gate reads over the S2S
-	// HTTP path — and gpu_charge.go compares the same value against a GPU's price.
-	// Money is spent against it.
+	// HTTP path. Money is spent against it.
 	//
 	// Minor() RESCALES, and hanzoai/decimal's Rescale rounds HALF-AWAY-FROM-ZERO
 	// (decimal.go:145) — it does not truncate. Measured: 4.995 comes back as 500
