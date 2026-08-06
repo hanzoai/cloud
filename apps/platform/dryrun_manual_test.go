@@ -50,7 +50,11 @@ func TestDryRunAgainstARealUniverse(t *testing.T) {
 		Repository: "ghcr.io/hanzoai/acme/dryrun",
 		Tag:        "bld_dryrun1",
 		Hosts:      []string{"dryrun.acme.hanzo.app"},
-		Env:        []declareEnv{{Name: "NODE_ENV", Value: "production"}},
+		// Seal-by-default: a value is a reference unless the caller marks it
+		// public. NODE_ENV is configuration an operator must be able to read.
+		Env:        []declareEnv{{Name: "NODE_ENV", Value: "production", Public: true}},
+		Public:     []string{"NODE_ENV"},
+		SecretKeys: []string{"DATABASE_PASSWORD"},
 		Port:       3000,
 		Replicas:   2,
 		Automated:  true,
