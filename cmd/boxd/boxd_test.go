@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/zap-proto/zip"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -19,7 +20,7 @@ import (
 
 const testKey = "test-service-key"
 
-func newTestBox(t *testing.T) (*box, *httptest.Server) {
+func newTestBox(t *testing.T) (*box, *zip.App) {
 	t.Helper()
 	dir := t.TempDir()
 	b := &box{
@@ -30,14 +31,20 @@ func newTestBox(t *testing.T) (*box, *httptest.Server) {
 	if err := os.MkdirAll(b.sessions.root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mux := http.NewServeMux()
-	b.routes(mux)
-	srv := httptest.NewServer(b.guard(mux))
-	t.Cleanup(srv.Close)
-	return b, srv
+	return b, mount(b)
 }
 
-func do(t *testing.T, srv *httptest.Server, method, path string, body any) (*http.Response, []byte) {
+// mount builds the app the same way run() does — guard first, then routes — so
+// a test exercises the composition the binary ships, not a hand-assembled one
+// that could disagree with it.
+func mount(b *box) *zip.App {
+	app := zip.New(zip.Config{AppName: "boxd-test", BodyLimit: maxBody})
+	app.Use(zip.H(b.guard))
+	b.routes(app)
+	return app
+}
+
+func do(t *testing.T, app *zip.App, method, path string, body any) (*http.Response, []byte) {
 	t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -47,13 +54,10 @@ func do(t *testing.T, srv *httptest.Server, method, path string, body any) (*htt
 		}
 		r = bytes.NewReader(buf)
 	}
-	req, err := http.NewRequest(method, srv.URL+path, r)
-	if err != nil {
-		t.Fatal(err)
-	}
+	req := httptest.NewRequest(method, path, r)
 	req.Header.Set(wire.KeyHeader, testKey)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := srv.Client().Do(req)
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 60 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,12 +71,10 @@ func do(t *testing.T, srv *httptest.Server, method, path string, body any) (*htt
 func TestUnsetKeyFailsClosed(t *testing.T) {
 	b, _ := newTestBox(t)
 	b.key = ""
-	mux := http.NewServeMux()
-	b.routes(mux)
-	srv := httptest.NewServer(b.guard(mux))
-	defer srv.Close()
-
-	resp, _ := srv.Client().Get(srv.URL + wire.PathHealth)
+	resp, err := mount(b).Test(httptest.NewRequest(http.MethodGet, wire.PathHealth, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() { _ = resp.Body.Close() }()
 	// 503, not 200. A box that answers everyone because nobody configured it is
 	// the failure mode that makes an isolation boundary decorative.
@@ -82,10 +84,10 @@ func TestUnsetKeyFailsClosed(t *testing.T) {
 }
 
 func TestWrongKeyIsRejected(t *testing.T) {
-	_, srv := newTestBox(t)
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+wire.PathHealth, nil)
+	_, app := newTestBox(t)
+	req := httptest.NewRequest(http.MethodGet, wire.PathHealth, nil)
 	req.Header.Set(wire.KeyHeader, "nope")
-	resp, err := srv.Client().Do(req)
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 60 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +98,8 @@ func TestWrongKeyIsRejected(t *testing.T) {
 }
 
 func TestHealthReportsWhatTheBoxIs(t *testing.T) {
-	_, srv := newTestBox(t)
-	resp, body := do(t, srv, http.MethodGet, wire.PathHealth, nil)
+	_, app := newTestBox(t)
+	resp, body := do(t, app, http.MethodGet, wire.PathHealth, nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("health: %d %s", resp.StatusCode, body)
 	}
@@ -125,13 +127,13 @@ func TestHealthReportsWhatTheBoxIs(t *testing.T) {
 // The property that actually matters is that NOTHING lands outside the workdir.
 // That is what this measures, by walking the parent directory afterwards.
 func TestPathTraversalStaysInsideTheProject(t *testing.T) {
-	b, srv := newTestBox(t)
+	b, app := newTestBox(t)
 	parent := filepath.Dir(b.workdir)
 	for _, p := range []string{
 		"/../../pwned", "../../pwned", "/a/../../../pwned", `\..\..\pwned`,
 		"/./../pwned", "//../pwned",
 	} {
-		do(t, srv, http.MethodPost, wire.PathFsWrite, wire.WriteRequest{Path: p, Content: "x"})
+		do(t, app, http.MethodPost, wire.PathFsWrite, wire.WriteRequest{Path: p, Content: "x"})
 		if _, err := os.Stat(filepath.Join(parent, "pwned")); err == nil {
 			t.Fatalf("write %q escaped the project", p)
 		}
@@ -146,7 +148,7 @@ func TestPathTraversalStaysInsideTheProject(t *testing.T) {
 }
 
 func TestSymlinkEscapeIsRefused(t *testing.T) {
-	b, srv := newTestBox(t)
+	b, app := newTestBox(t)
 	outside := t.TempDir()
 	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("s3cr3t"), 0o600); err != nil {
 		t.Fatal(err)
@@ -156,19 +158,19 @@ func TestSymlinkEscapeIsRefused(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(b.workdir, "escape")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	resp, body := do(t, srv, http.MethodGet, wire.PathFsRead+"?path=/escape/secret", nil)
+	resp, body := do(t, app, http.MethodGet, wire.PathFsRead+"?path=/escape/secret", nil)
 	if resp.StatusCode == http.StatusOK {
 		t.Fatalf("read through a symlink escaped the project: %s", body)
 	}
 }
 
 func TestDeleteRefusesTheWorkdirItself(t *testing.T) {
-	b, srv := newTestBox(t)
+	b, app := newTestBox(t)
 	if err := os.WriteFile(filepath.Join(b.workdir, "keep.txt"), []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// An omitted ?path= must not be an rm -rf of the project.
-	resp, _ := do(t, srv, http.MethodDelete, wire.PathFsDelete, nil)
+	resp, _ := do(t, app, http.MethodDelete, wire.PathFsDelete, nil)
 	if resp.StatusCode == http.StatusNoContent {
 		t.Fatal("DELETE with no path deleted the workdir")
 	}
@@ -180,20 +182,20 @@ func TestDeleteRefusesTheWorkdirItself(t *testing.T) {
 // ── the filesystem the agent edits ──────────────────────────────────────────
 
 func TestFsRoundTrip(t *testing.T) {
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 
-	resp, body := do(t, srv, http.MethodPost, wire.PathFsWrite,
+	resp, body := do(t, app, http.MethodPost, wire.PathFsWrite,
 		wire.WriteRequest{Path: "/src/app.ts", Content: "export const x = 1\n"})
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("write: %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = do(t, srv, http.MethodGet, wire.PathFsRead+"?path=/src/app.ts", nil)
+	resp, body = do(t, app, http.MethodGet, wire.PathFsRead+"?path=/src/app.ts", nil)
 	if resp.StatusCode != http.StatusOK || string(body) != "export const x = 1\n" {
 		t.Fatalf("read: %d %q", resp.StatusCode, body)
 	}
 
-	resp, body = do(t, srv, http.MethodGet, wire.PathFsList, nil)
+	resp, body = do(t, app, http.MethodGet, wire.PathFsList, nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list: %d %s", resp.StatusCode, body)
 	}
@@ -205,18 +207,18 @@ func TestFsRoundTrip(t *testing.T) {
 		t.Fatalf("list: %+v — paths must be project-relative, not absolute box paths", lr.Entries)
 	}
 
-	resp, _ = do(t, srv, http.MethodDelete, wire.PathFsDelete+"?path=/src/app.ts", nil)
+	resp, _ = do(t, app, http.MethodDelete, wire.PathFsDelete+"?path=/src/app.ts", nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}
-	resp, _ = do(t, srv, http.MethodGet, wire.PathFsRead+"?path=/src/app.ts", nil)
+	resp, _ = do(t, app, http.MethodGet, wire.PathFsRead+"?path=/src/app.ts", nil)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("read after delete: got %d, want 404", resp.StatusCode)
 	}
 }
 
 func TestListHidesBuildOutput(t *testing.T) {
-	b, srv := newTestBox(t)
+	b, app := newTestBox(t)
 	for _, p := range []string{"src/App.tsx", "node_modules/react/index.js", ".git/HEAD", "dist/bundle.js"} {
 		full := filepath.Join(b.workdir, p)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -226,7 +228,7 @@ func TestListHidesBuildOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	_, body := do(t, srv, http.MethodGet, wire.PathFsList, nil)
+	_, body := do(t, app, http.MethodGet, wire.PathFsList, nil)
 	var lr wire.ListResult
 	if err := json.Unmarshal(body, &lr); err != nil {
 		t.Fatal(err)
@@ -237,11 +239,11 @@ func TestListHidesBuildOutput(t *testing.T) {
 }
 
 func TestSearchGrepsOnTheBox(t *testing.T) {
-	b, srv := newTestBox(t)
+	b, app := newTestBox(t)
 	if err := os.WriteFile(filepath.Join(b.workdir, "a.txt"), []byte("one\ntwo\nthree\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, body := do(t, srv, http.MethodGet, wire.PathFsSearch+"?q=two", nil)
+	_, body := do(t, app, http.MethodGet, wire.PathFsSearch+"?q=two", nil)
 	var sr wire.SearchResult
 	if err := json.Unmarshal(body, &sr); err != nil {
 		t.Fatal(err)
@@ -252,18 +254,18 @@ func TestSearchGrepsOnTheBox(t *testing.T) {
 }
 
 func TestSearchIsSubstringUnlessAskedForRegex(t *testing.T) {
-	b, srv := newTestBox(t)
+	b, app := newTestBox(t)
 	if err := os.WriteFile(filepath.Join(b.workdir, "a.txt"), []byte("a.c\nabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// "a.c" as a substring matches one line; as a regex it would match both.
-	_, body := do(t, srv, http.MethodGet, wire.PathFsSearch+"?q=a.c", nil)
+	_, body := do(t, app, http.MethodGet, wire.PathFsSearch+"?q=a.c", nil)
 	var sr wire.SearchResult
 	_ = json.Unmarshal(body, &sr)
 	if len(sr.Matches) != 1 {
 		t.Fatalf("default must be substring, got %+v", sr.Matches)
 	}
-	_, body = do(t, srv, http.MethodGet, wire.PathFsSearch+"?q=a.c&regex=1", nil)
+	_, body = do(t, app, http.MethodGet, wire.PathFsSearch+"?q=a.c&regex=1", nil)
 	_ = json.Unmarshal(body, &sr)
 	if len(sr.Matches) != 2 {
 		t.Fatalf("regex=1 must be a regex, got %+v", sr.Matches)
@@ -273,9 +275,9 @@ func TestSearchIsSubstringUnlessAskedForRegex(t *testing.T) {
 // ── running things ──────────────────────────────────────────────────────────
 
 func TestExecRunsAndReportsExitCode(t *testing.T) {
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 
-	_, body := do(t, srv, http.MethodPost, wire.PathExec,
+	_, body := do(t, app, http.MethodPost, wire.PathExec,
 		wire.ExecRequest{Argv: []string{"/bin/sh", "-c", "echo hi; echo bad >&2; exit 3"}})
 	var res wire.ExecResult
 	if err := json.Unmarshal(body, &res); err != nil {
@@ -287,10 +289,10 @@ func TestExecRunsAndReportsExitCode(t *testing.T) {
 }
 
 func TestNonZeroExitIsStill200(t *testing.T) {
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 	// "your program failed" and "the box is broken" are different facts. A caller
 	// that cannot tell them apart retries the wrong one forever.
-	resp, _ := do(t, srv, http.MethodPost, wire.PathExec,
+	resp, _ := do(t, app, http.MethodPost, wire.PathExec,
 		wire.ExecRequest{Argv: []string{"/bin/sh", "-c", "exit 1"}})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("got %d, want 200 with exitCode!=0", resp.StatusCode)
@@ -298,8 +300,8 @@ func TestNonZeroExitIsStill200(t *testing.T) {
 }
 
 func TestExecTimesOutRatherThanHanging(t *testing.T) {
-	_, srv := newTestBox(t)
-	_, body := do(t, srv, http.MethodPost, wire.PathExec,
+	_, app := newTestBox(t)
+	_, body := do(t, app, http.MethodPost, wire.PathExec,
 		wire.ExecRequest{Argv: []string{"/bin/sh", "-c", "sleep 30"}, TimeoutSec: 1})
 	var res wire.ExecResult
 	_ = json.Unmarshal(body, &res)
@@ -309,7 +311,7 @@ func TestExecTimesOutRatherThanHanging(t *testing.T) {
 }
 
 func TestExecCannotReadTheServiceKeyFromItsOwnEnv(t *testing.T) {
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 	// Submitted code runs here by design. Handing it the credential that opens
 	// every other box in the pool would make the pod boundary decorative.
 	//
@@ -321,7 +323,7 @@ func TestExecCannotReadTheServiceKeyFromItsOwnEnv(t *testing.T) {
 	// valid X-API-Key to write and read through the guarded API. The defense
 	// that actually holds is a different uid for the child
 	// (TestKeyedBoxRefusesToRunCodeAsItsOwnUid below, and confine()).
-	_, body := do(t, srv, http.MethodPost, wire.PathExec,
+	_, body := do(t, app, http.MethodPost, wire.PathExec,
 		wire.ExecRequest{
 			Argv: []string{"/bin/sh", "-c", "echo [$CODE_EXEC_API_KEY][$HANZO_TARGET_KEY]"},
 			Env:  map[string]string{"CODE_EXEC_API_KEY": testKey, "HANZO_TARGET_KEY": "claim"},
@@ -383,13 +385,13 @@ func TestConfineGivesTheChildItsOwnUid(t *testing.T) {
 }
 
 func TestExecCwdIsContained(t *testing.T) {
-	_, srv := newTestBox(t)
-	resp, _ := do(t, srv, http.MethodPost, wire.PathExec,
+	_, app := newTestBox(t)
+	resp, _ := do(t, app, http.MethodPost, wire.PathExec,
 		wire.ExecRequest{Argv: []string{"/bin/pwd"}, Cwd: "/../../.."})
 	// Cleaned to the workdir root rather than escaping — either a 400 or a run
 	// inside the box is acceptable; a run in / is not.
 	if resp.StatusCode == http.StatusOK {
-		_, body := do(t, srv, http.MethodPost, wire.PathExec,
+		_, body := do(t, app, http.MethodPost, wire.PathExec,
 			wire.ExecRequest{Argv: []string{"/bin/pwd"}, Cwd: "/../../.."})
 		var res wire.ExecResult
 		_ = json.Unmarshal(body, &res)
@@ -417,9 +419,9 @@ func TestLibreChatExecContract(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not installed")
 	}
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 
-	resp, body := do(t, srv, http.MethodPost, wire.LibreChatExec,
+	resp, body := do(t, app, http.MethodPost, wire.LibreChatExec,
 		map[string]any{"lang": "py", "code": "print('hello from the box')"})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("exec: %d %s", resp.StatusCode, body)
@@ -449,10 +451,10 @@ func TestLibreChatExecContract(t *testing.T) {
 }
 
 func TestLibreChatUnknownLangIsRefused(t *testing.T) {
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 	// The lang set is CLOSED. "run whatever string arrives in lang" is command
 	// injection with a friendly name.
-	resp, _ := do(t, srv, http.MethodPost, wire.LibreChatExec,
+	resp, _ := do(t, app, http.MethodPost, wire.LibreChatExec,
 		map[string]any{"lang": "/bin/sh -c id", "code": "x"})
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("got %d, want 400", resp.StatusCode)
@@ -463,10 +465,10 @@ func TestLibreChatArtifactsAreTheDelta(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not installed")
 	}
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 
 	// Run 1 writes a file.
-	_, body := do(t, srv, http.MethodPost, wire.LibreChatExec,
+	_, body := do(t, app, http.MethodPost, wire.LibreChatExec,
 		map[string]any{"lang": "py", "code": "open('plot.png','w').write('png')"})
 	var r1 struct {
 		SessionID string `json:"session_id"`
@@ -481,7 +483,7 @@ func TestLibreChatArtifactsAreTheDelta(t *testing.T) {
 
 	// Run 2 in the same session writes nothing. It must report NOTHING, or the
 	// chat client re-attaches the same artifact on every subsequent turn.
-	_, body = do(t, srv, http.MethodPost, wire.LibreChatExec,
+	_, body = do(t, app, http.MethodPost, wire.LibreChatExec,
 		map[string]any{"lang": "py", "code": "print(1)", "session_id": r1.SessionID})
 	var r2 struct {
 		Files []struct {
@@ -494,13 +496,13 @@ func TestLibreChatArtifactsAreTheDelta(t *testing.T) {
 	}
 
 	// …but the session LISTING still holds it, which is what /v1/files is for.
-	resp, body := do(t, srv, http.MethodGet, "/v1/files/"+r1.SessionID, nil)
+	resp, body := do(t, app, http.MethodGet, "/v1/files/"+r1.SessionID, nil)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "plot.png") {
 		t.Fatalf("files/%s: %d %s", r1.SessionID, resp.StatusCode, body)
 	}
 
 	// …and it downloads by the id the run handed back.
-	resp, body = do(t, srv, http.MethodGet, "/v1/download/"+r1.SessionID+"/plot.png", nil)
+	resp, body = do(t, app, http.MethodGet, "/v1/download/"+r1.SessionID+"/plot.png", nil)
 	if resp.StatusCode != http.StatusOK || string(body) != "png" {
 		t.Fatalf("download: %d %q", resp.StatusCode, body)
 	}
@@ -510,7 +512,7 @@ func TestUploadThenRunSeesTheFile(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not installed")
 	}
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -520,10 +522,10 @@ func TestUploadThenRunSeesTheFile(t *testing.T) {
 	_ = mw.WriteField("session_id", "sess1")
 	_ = mw.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/upload", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/v1/upload", &buf)
 	req.Header.Set(wire.KeyHeader, testKey)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	resp, err := srv.Client().Do(req)
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 60 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +538,7 @@ func TestUploadThenRunSeesTheFile(t *testing.T) {
 		t.Fatalf("upload name was not flattened to a basename: %s", out)
 	}
 
-	_, body := do(t, srv, http.MethodPost, wire.LibreChatExec,
+	_, body := do(t, app, http.MethodPost, wire.LibreChatExec,
 		map[string]any{"lang": "py", "code": "print(open('data.csv').read().strip())", "session_id": "sess1"})
 	if !strings.Contains(string(body), "1,2") {
 		t.Fatalf("the run could not read the uploaded file: %s", body)
@@ -544,11 +546,11 @@ func TestUploadThenRunSeesTheFile(t *testing.T) {
 }
 
 func TestBadSessionIDIsRefused(t *testing.T) {
-	_, srv := newTestBox(t)
+	_, app := newTestBox(t)
 	// A session id names a directory. One "../" would turn /v1/files/{sid} into
 	// an arbitrary directory listing.
 	for _, sid := range []string{"..", "../../etc", "a/b"} {
-		resp, _ := do(t, srv, http.MethodGet, "/v1/files/"+sid, nil)
+		resp, _ := do(t, app, http.MethodGet, "/v1/files/"+sid, nil)
 		if resp.StatusCode == http.StatusOK {
 			t.Fatalf("session id %q was accepted", sid)
 		}
