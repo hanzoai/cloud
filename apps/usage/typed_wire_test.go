@@ -73,7 +73,7 @@ func TestEverySingleSampleFieldSurvives(t *testing.T) {
 // money must never be cached by a browser or an intermediary, and Cache-Control is a
 // RESPONSE header only the request reaches — so noStore writes it through the bridge.
 func TestMoneyReadsStayNoStore(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t)
 	for _, path := range []string{"/v1/usage/summary", "/v1/usage/analytics?plan=pro"} {
 		hdr := headerOf(t, app, path, "alice", "acme", "Cache-Control")
 		// analytics is entitlement-gated and may 402; the header only has to be
@@ -90,7 +90,7 @@ func TestMoneyReadsStayNoStore(t *testing.T) {
 // because an input field is caller-supplied. A request with an org header but NO
 // validated principal is refused, which is the fail-closed half of the same fact.
 func TestSubjectIsNeverAnInputField(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t)
 	for _, c := range []struct{ method, path string }{
 		{http.MethodGet, "/v1/usage/summary"},
 		{http.MethodGet, "/v1/usage/samples?provider=anthropic"},
@@ -122,7 +122,7 @@ func TestSubjectIsNeverAnInputField(t *testing.T) {
 // UNGATED: it reports a catalog contract and carries no tenant data, and typing it
 // must not have added an identity requirement.
 func TestAnalyticsAccessNeedsNoPrincipal(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t)
 	code, raw := drive(t, app, http.MethodGet, "/v1/usage/analytics/access", "", "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("analytics access with no principal: want 200, got %d (%s)", code, raw)
@@ -176,7 +176,7 @@ var untypedByDesign = map[string]string{}
 // Reading the REAL mount, not a reconstruction of it, is what makes this a gate.
 func usageOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	t.Helper()
-	app := mountApp(t, "", "")
+	app := mountApp(t)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "usage", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
@@ -252,7 +252,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // openapi.yaml with no description reaches every generated SDK and every MCP inputSchema
 // without one too.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "usage", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
