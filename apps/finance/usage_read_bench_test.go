@@ -21,7 +21,7 @@ func BenchmarkListUsage(b *testing.B) {
 			for i := 0; i < n; i++ {
 				if err := f.RecordUsage(ctx, types.UsageInput{
 					Org: "acme", Subject: "acme",
-					Amount: money.FromCents(int64(i + 1)), Model: "zen-1", RequestID: fmt.Sprintf("r%d", i),
+					Amount: money.FromCents(int64(i + 1)), Model: "zen-1", Ref: fmt.Sprintf("r%d", i),
 				}); err != nil {
 					b.Fatalf("seed: %v", err)
 				}
