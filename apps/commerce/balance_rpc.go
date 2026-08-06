@@ -142,12 +142,12 @@ func planeUsage(ctx context.Context, _ *struct{}) (*plane.UsageRows, error) {
 		return nil, err
 	}
 	lister, ok := fin.(interface {
-		ListUsage(context.Context, string, int) ([]financeclient.UsageRow, error)
+		ListUsage(context.Context, string, bool, int) ([]financeclient.UsageRow, error)
 	})
 	if !ok {
 		return nil, fmt.Errorf("usage: this ledger does not list usage")
 	}
-	rows, err := lister.ListUsage(ctx, org, usageReadLimit)
+	rows, err := lister.ListUsage(ctx, org, false, usageReadLimit)
 	if err != nil {
 		return nil, fmt.Errorf("usage: %w", err)
 	}
@@ -165,7 +165,7 @@ func planeUsage(ctx context.Context, _ *struct{}) (*plane.UsageRows, error) {
 // The ledger's entries. Three customer-facing pages read this one list, and all
 // three answered 501 from a process that does not hold the ledger.
 func exposeTxns() {
-	zip.Post[struct{}, plane.Txns](cloud.Plane(), "/finance/txns", planeTxns,
+	zip.Post[plane.TxnsIn, plane.Txns](cloud.Plane(), "/finance/txns", planeTxns,
 		zip.WithOperationID(plane.FinanceTxns),
 		zip.WithSummary("Ledger entries for this org"))
 }
@@ -175,15 +175,18 @@ func exposeTxns() {
 // behind the customer-facing transactions, credits and receipts pages, all three
 // of which read this one list.
 //
-// It takes NO input: the org comes from the caller and there is nothing else to
-// name, so one org can never read another's entries. Unlike the usage read the
-// amount crosses as a DECIMAL STRING with its currency rather than a bare
-// quantity, because an entry is a movement a customer reads rather than a number
-// a gate does arithmetic on. A ledger implementation that cannot list entries is
-// an error, not an empty page.
+// The org is the CALLER'S and cannot be named in the input, so one org can never
+// read another's entries. What the input DOES name is which books and how many
+// rows: `test` reads the SANDBOX ledger, a physically separate file, because a
+// caller that posted test rows into real revenue would have restated the
+// company's income with nothing downstream able to tell; `limit` is a page size
+// and 0 takes the default. Unlike the usage read the amount crosses as a DECIMAL
+// STRING with its currency rather than a bare quantity, because an entry is a
+// movement a customer reads rather than a number a gate does arithmetic on. A
+// ledger implementation that cannot list entries is an error, not an empty page.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTxns(ctx context.Context, _ *struct{}) (*plane.Txns, error) {
+func planeTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
 	org, err := callerOrg(ctx, "txns")
 	if err != nil {
 		return nil, err
@@ -193,12 +196,16 @@ func planeTxns(ctx context.Context, _ *struct{}) (*plane.Txns, error) {
 		return nil, err
 	}
 	lister, ok := fin.(interface {
-		ListEntries(context.Context, string, int) ([]financeclient.TxnRow, error)
+		ListEntries(context.Context, string, bool, int) ([]financeclient.TxnRow, error)
 	})
 	if !ok {
 		return nil, fmt.Errorf("txns: this ledger does not list entries")
 	}
-	rows, err := lister.ListEntries(ctx, org, usageReadLimit)
+	limit := in.Limit
+	if limit <= 0 {
+		limit = usageReadLimit
+	}
+	rows, err := lister.ListEntries(ctx, org, in.Test, limit)
 	if err != nil {
 		return nil, fmt.Errorf("txns: %w", err)
 	}

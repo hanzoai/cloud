@@ -71,8 +71,19 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
+			// A dot-directory is not this module's source. It is .git, or a
+			// worktree an agent parked under .claude — a whole second copy of
+			// this repository, whose orgns.go and apps/finance/finance.go are
+			// the SAME two doors reported at paths that exist for nobody else.
+			// This gate read one and went red while nothing in the module had
+			// changed. Every other source-walking gate here already states the
+			// rule (typed_request_gate_test.go, iamurl_test.go,
+			// cmd/cloud/mount_test.go); this was the one that did not.
+			if path != root && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
 			switch d.Name() {
-			case ".git", "node_modules", "webui", "vendor":
+			case "node_modules", "webui", "vendor", "testdata":
 				return filepath.SkipDir
 			}
 			return nil

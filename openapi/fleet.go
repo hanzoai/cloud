@@ -41,8 +41,8 @@ import (
 // subsystem and 116 app binaries that each project their OWN router when they are
 // BUILT. What the host serves is the weave of those projections ([MountFleet]),
 // so nothing in production reads a live router, and the artifact is only as fresh
-// as the last `make -f mk/fleet.mk describe-apps`. It shipped stale — one binary
-// answered /v1/billing/gpu/eligibility while publishing /v1/billing/gpu-eligibility,
+// as the last `make -f mk/fleet.mk subsets`. It shipped stale — one binary answered
+// a renamed billing route under its new name while still publishing the old one,
 // because the rename commit did not regenerate the subset.
 //
 // A false provenance is worse than a missing one, because it is READ. hanzoai/cli's
@@ -87,22 +87,43 @@ func FleetSpec(app *zip.App) (*Document, error) {
 // caller's, because there are two callers and ONE set of files: the drift gate
 // reads the working tree it is about to compare against (openapi/weave_test.go),
 // and the light host reads what it embedded from that same tree at build time
-// (plugin.Spec). Neither is a second source — surface-check regenerates the files
+// (plugin.Spec). Neither is a second source — check regenerates the files
 // both read, from source, and fails on any diff.
 //
 // A missing subset is refused rather than skipped. Skipping it would publish a
 // fleet document with one app's whole surface quietly absent, which is precisely
 // the failure mode plugin/ingress cost eight paths to.
+//
+// AND EACH SUBSET IS CHECKED FOR THE INVARIANT ITS GENERATOR ALREADY OWES, at the
+// one place the app's NAME is still in hand. [From] refuses to emit a document
+// whose operationIds collide, so a generated subset cannot arrive broken — but
+// "generated" was an assumption about a committed file, and a file can be edited.
+// One was: /v1/billing/methods was hand-written into commerce's subset by copying
+// the /v1/billing/portal/methods block, operationId and prose together, so two
+// paths claimed get_v1_billing_portal_methods and the fleet could not be woven at
+// all. [Weave] did catch it — but a collision INSIDE one part reaches Weave as a
+// collision between two paths with no app attached, so the report named the two
+// addresses and left which of 123 subsets to a search. Here the answer is the
+// loop variable.
+//
+// It is the same check, not a second one: uniqueOperationIDs is the single
+// statement of the rule, asked once per part here and once over the whole
+// composition there, because a part being injective and the weave being injective
+// are different facts and neither implies the other.
 func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
 	out := make([]Part, 0, len(apps))
 	for _, name := range apps {
 		raw := read(name)
 		if len(raw) == 0 {
-			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk describe-apps`", name)
+			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk subsets`", name)
 		}
 		var doc Document
 		if err := json.Unmarshal(raw, &doc); err != nil {
 			return nil, fmt.Errorf("%s subset: %w", name, err)
+		}
+		if err := uniqueOperationIDs(&doc); err != nil {
+			return nil, fmt.Errorf("%s subset: %w — its own generator refuses this, so the file was "+
+				"not generated; run `make -C apps/%s describe` rather than editing it", name, err, name)
 		}
 		out = append(out, Part{App: name, Doc: &doc})
 	}

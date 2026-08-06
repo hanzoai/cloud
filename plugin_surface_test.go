@@ -10,7 +10,7 @@ package cloud_test
 //     build time into plugin/<app>/openapi.json (describe.go: ONE mount of ONE
 //     registry, generated from the app's OWN router, from the code alone).
 //
-// The projection is a committed artifact and `make test`'s surface-check
+// The projection is a committed artifact and `make test`'s check
 // regenerates it and fails on any diff, so reading it here is reading the router
 // — one hop, with a check on the hop.
 //

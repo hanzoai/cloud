@@ -46,7 +46,7 @@ func TestKind_WrittenKindsReadBack(t *testing.T) {
 		t.Fatalf("record usage: %v", err)
 	}
 
-	rows, err := fin.ListEntries(ctx, "acme", 0)
+	rows, err := fin.ListEntries(ctx, "acme", false, 0)
 	if err != nil {
 		t.Fatalf("list entries: %v", err)
 	}

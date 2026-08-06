@@ -204,7 +204,7 @@ const researchArtifactInsert = `INSERT INTO ` + researchArtifactTable + ` (
 // rollUpArtifact mirrors one diary artifact into the warehouse, keyed by its sha256
 // content hash (idempotent). Fail-soft like the run roll-up: the SQLite manifest is the
 // source of truth.
-func (w *warehouse) rollUpArtifact(ctx context.Context, org, project string, a Artifact, now time.Time) error {
+func (w *warehouse) rollUpArtifact(ctx context.Context, org, project string, a ResearchArtifact, now time.Time) error {
 	if org == "" {
 		return fmt.Errorf("research warehouse: blank org")
 	}

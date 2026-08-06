@@ -35,6 +35,7 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
+	compose(app)
 	if err := iamclient.Mount(app, cloud.Deps{
 		Logger:  luxlog.NewNoOpLogger(),
 		DataDir: t.TempDir(),

@@ -48,7 +48,7 @@ func TestNoAppClaimsTheDoor(t *testing.T) {
 //
 // This is the structural reason a fourth registry cannot grow back. A hand-rolled
 // JSON-RPC door can only exist as a route; every route an app serves is
-// regenerated into its own subset by the drift gate (mk/fleet.mk surface-check);
+// regenerated into its own subset by the drift gate (mk/fleet.mk check);
 // and the one true door is the host's own route, which is in no subset at all. So
 // the next hand-rolled envelope turns this red and the message names the door it
 // should have used instead.
@@ -107,7 +107,13 @@ var foreignDoors = map[string]string{
 // It reads SOURCE, which is what lets it see what the document cannot: apps/tasks'
 // door is a raw net/http mux handler and appears in no subset at all.
 func TestNoSecondMCPDoorInSource(t *testing.T) {
-	lit := regexp.MustCompile(`"[a-z0-9/_:.-]*/mcp"`)
+	// A ROUTE path, which is what a door needs and what this gate hunts: it starts
+	// at the root and ends at /mcp. The leading slash is load-bearing — without it
+	// the pattern also matched `"github.com/zap-proto/mcp"`, and an import of the
+	// PROTOCOL is the opposite of a rival door: webui's terminal handler imports it
+	// precisely so it can hand a frame to zip's existing door instead of writing an
+	// envelope of its own.
+	lit := regexp.MustCompile(`"/(?:[a-z0-9/_:.-]*/)?mcp"`)
 	root := filepath.Join("..")
 	for _, dir := range []string{"apps", "clients", "webui"} {
 		_ = filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {

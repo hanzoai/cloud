@@ -48,7 +48,24 @@ func init() {
 		Example: json.RawMessage(`{"doctype":"SocialPost","name":"spring-teaser","to":"published"}`),
 	})
 	zip.Describe("POST /v1/content/generate", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Draft a piece of marketing content and file it in the CMS as a draft.\n\nAnswers 201 with the created draft's identity — {doctype, name, status} — and the\ndocument itself lands in the CMS through the SAME validate and lifecycle-hook\npipeline an ordinary create runs. This is a WRITE, not a preview: there is no\ndry-run, and every call that succeeds leaves a document behind.\n\n`doctype` picks which of two generation planes runs, and they are the only two.\nCampaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by\ndefault, overridable per request with `model` or per deployment); Asset is a studio\nimage render the AI plane never sees. Everything else about the call is identical.\n\nMONEY, metered in exactly one place per mode and never both. Copy rides the\nplatform's own inference meter — the org's balance is authorised before the model\ncall and debited at the exact token cost after — so content never re-bills it. A\nstudio render is invisible to that meter, so content is the sole meter for it: the\norg is gated BEFORE the GPU compute and refused 402 when out of funds or over its\nspend cap, and the debit is recorded only once the render actually returns, because\nthe billable event is the consumed compute and not the CMS row. `project` rides the\nBODY rather than a server-minted identity claim, so it attributes spend but a\nproject-scoped cap stays soft on it — the org is the value that is enforced.\n\nThe org is the caller's own, resolved once from the validated principal and never\nread from the body; a caller without one is refused 403. Status is not the\ngenerator's to choose: a generated item is ALWAYS a draft, and the storage-boundary\nhook enforces that a second time.\n\nIt fails closed rather than inventing anything. An unknown content type is 404 and a\ndeployment whose marketing module is not installed is 409 naming the install call.\nAn AI plane or studio that is unconfigured or unreachable, a graph the studio\nrejects, and a render that does not return in time all degrade to 503 — never\nfabricated copy, never a fake render. A `source_media` that fails the SSRF and\ntraversal validator is 400 raised before the billing gate and before the studio is\ncontacted, so a hostile source never costs the caller anything.",
+		Fields: map[string]string{
+			"GenerateInput.brief":        "the brief/goal driving copy generation",
+			"GenerateInput.channels":     "target channels (SocialPost)",
+			"GenerateInput.design":       "studio design slug (asset source)",
+			"GenerateInput.doctype":      "Campaign | SocialPost | Asset",
+			"GenerateInput.kind":         "asset kind: ecom|product|lifestyle|hover|hero",
+			"GenerateInput.model":        "optional zen model override (copy)",
+			"GenerateInput.product":      "commerce product handle (copy context)",
+			"GenerateInput.project":      "brand/site sub-scope (billing + tenancy axis)",
+			"GenerateInput.source_media": "asset source image (design CAD/photo)",
+			"GenerateInput.title":        "optional explicit title",
+			"GenerateInput.tone":         "tone override for a single draft",
+			"GenerateInput.voice":        "brand-voice guidance for the copy director",
+			"GenerateResult.doctype":     "the marketing type the draft was filed as",
+			"GenerateResult.name":        "the new document's name — its address for every later call",
+			"GenerateResult.status":      "always \"draft\"; the lifecycle owns the initial state",
+		},
 	})
 	zip.Describe("POST /v1/content/publish", zip.Doc{
 		Description: "Publish distributes one CMS content item to the channels recorded on it and\nreturns the honest per-channel outcome. The item names itself — its caption,\nmedia and channel list are read from the stored document, not from this request.\nIt is idempotent per channel (a channel already posted for this item is skipped),\nand a publish that loses the per-item lease to a live publisher answers status\n\"in_progress\" having posted nothing.",

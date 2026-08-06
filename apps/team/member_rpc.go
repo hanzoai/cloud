@@ -30,6 +30,65 @@ func exposeMember(accounts *accountStore) {
 		},
 		zip.WithOperationID(plane.TeamMember),
 		zip.WithSummary("This person's role in that workspace"))
+
+	zip.Post[plane.WorkspacesIn, plane.Spaces](cloud.Plane(), "/team/workspaces",
+		func(ctx context.Context, in *plane.WorkspacesIn) (*plane.Spaces, error) {
+			return workspacesOf(ctx, accounts, in)
+		},
+		zip.WithOperationID(plane.TeamWorkspaces),
+		zip.WithSummary("The workspaces this person is in"))
+}
+
+// workspacesOf answers which workspaces the caller holds a member row in, within
+// the CALLER'S OWN org, and with what role on each.
+//
+// It is memberOf asked the other way round, over exactly the same rows and the
+// same three refusals — org off the call, store open, subject present — so the
+// two can never disagree about who is a member of what. What it adds is the role
+// per row, which the peer needs to offer only the rooms it would also admit.
+//
+// The subject → account resolution is the STORE's (AccountForSubject), the same
+// one the request lane and memberOf use: one derivation of one address. An
+// identity this deployment has never seen resolves to no account and the answer
+// is an empty list — the honest "no rows", not an error a lobby would have to
+// render as a fault.
+//
+// WorkspacesOf is already owner_org-scoped on its join, so a subject known in
+// another tenant returns nothing here rather than that tenant's workspaces.
+func workspacesOf(ctx context.Context, accounts *accountStore, in *plane.WorkspacesIn) (*plane.Spaces, error) {
+	org := cloud.Who(ctx).Org
+	if org == "" {
+		return nil, zip.ErrUnauthorized("team: no org on the call")
+	}
+	if accounts == nil {
+		return nil, zip.Errorf(503, "team: account store not open in the process that owns it")
+	}
+	if in.Subject == "" {
+		return nil, zip.ErrBadRequest("team: subject is required")
+	}
+	account, ok := accounts.AccountForSubject(ctx, org, in.Subject)
+	if !ok {
+		return &plane.Spaces{}, nil
+	}
+	spaces, err := accounts.WorkspacesOf(ctx, org, account)
+	if err != nil {
+		return nil, zip.Errorf(500, "team: workspaces of: %v", err)
+	}
+	out := &plane.Spaces{Account: account, Items: make([]plane.Space, 0, len(spaces))}
+	for _, w := range spaces {
+		// The role is READ per row rather than assumed from the join, because the
+		// join proves a row exists and the peer decides on what the row SAYS. A row
+		// that vanishes between the two reads is simply not offered.
+		role, ok := accounts.Membership(ctx, w.ID, account)
+		if !ok {
+			continue
+		}
+		out.Items = append(out.Items, plane.Space{UUID: w.UUID, Name: w.Name, Role: role})
+		if out.Name == "" {
+			out.Name = accounts.MemberName(ctx, w.ID, account)
+		}
+	}
+	return out, nil
 }
 
 // memberOf answers whether the named account holds a member row in the named

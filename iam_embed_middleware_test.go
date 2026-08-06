@@ -150,20 +150,11 @@ func TestDefaultPriceExemptsIAM(t *testing.T) {
 		"/.well-known/jwks",
 		"/login/oauth/authorize",
 	} {
-		app := zip.New(zip.Config{})
-		var got int64 = -1
-		// DefaultPrice keys only on c.Path(), so one GET per path captures it.
-		app.Get(path, func(c *zip.Ctx) error {
-			got = DefaultPrice(c)
-			return c.JSON(http.StatusOK, map[string]bool{"ok": true})
-		})
-		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
-		if err != nil {
-			t.Fatalf("DefaultPrice(%s): %v", path, err)
-		}
-		_ = resp.Body.Close()
-		if got != 0 {
-			t.Errorf("DefaultPrice(%q) = %d, want 0 (IAM auth paths must never be billed)", path, got)
+		// A WRITE, deliberately: a read costs nothing on every surface (Consumes),
+		// so a GET here would answer 0 for a path priced at a pound and the
+		// exemption would be unfalsifiable.
+		if got := DefaultPrice(http.MethodPost, path); got != 0 {
+			t.Errorf("DefaultPrice(POST %q) = %d, want 0 (IAM auth paths must never be billed)", path, got)
 		}
 	}
 }

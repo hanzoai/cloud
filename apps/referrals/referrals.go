@@ -55,7 +55,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
@@ -101,13 +100,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "referrals"), State: state{
 		store:      store,
-		commerce:   newCommerceClient(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		commerce:   newCommerceClient(),
 		linkBase:   linkBase(deps),
 		auditStore: deps.Audit,
 	}}
 	mounted = s
 	routes(app, s)
-	s.Log.Info("referrals mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "commerce", s.State.commerce.configured())
+	s.Log.Info("referrals mounted", "brand", s.Brand, "linkBase", s.State.linkBase)
 	return nil
 }
 
@@ -514,7 +513,7 @@ func qualify(s *cloud.Service[state], ctx context.Context, ref Referral) (Referr
 	if ref.Status != StatusSignup {
 		return ref, nil
 	}
-	spent, err := s.State.commerce.spendCents(ctx, ref.RefereeOrg, orgSubject(ref.RefereeOrg))
+	spent, err := s.State.commerce.spendCents(ctx, ref.RefereeOrg)
 	if err != nil {
 		return ref, err // commerce hiccup — try again next sweep, stays pending
 	}

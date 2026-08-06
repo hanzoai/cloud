@@ -175,6 +175,7 @@ func TestTenantIsolation(t *testing.T) {
 func mount(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	if err := framework.Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("mount framework: %v", err)
 	}

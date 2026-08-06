@@ -147,6 +147,13 @@ func (o meterOps) record(ctx context.Context, in *plane.RecordIn) (*plane.Record
 		ClientIP:  in.Usage.ClientIP,
 		Currency:  amount.Currency().Code,
 		Status:    "success",
+		// Who acted, and the work the amount prices. Reconstructed here because the
+		// ledger row is written HERE — a field the crossing carries but this handler
+		// drops is lost just as completely as one the crossing never had.
+		Actor:            in.Usage.Actor,
+		PromptTokens:     in.Usage.PromptTokens,
+		CompletionTokens: in.Usage.CompletionTokens,
+		TotalTokens:      in.Usage.TotalTokens,
 	}); rerr != nil {
 		return nil, fmt.Errorf("record: %w", rerr)
 	}

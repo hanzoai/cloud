@@ -1,14 +1,13 @@
-// Package types holds the placeholder transport types AND the
-// inter-subsystem client interfaces shared between cloud (the
-// orchestrator) and cloud/clients (the in-process and RPC client
-// implementations). Both packages reference this leaf package to
-// avoid an import cycle.
+// Package types holds the shared transport shapes AND the inter-subsystem client
+// interfaces used between cloud (the orchestrator) and cloud/clients (the
+// co-resident and disabled client implementations). Both packages reference this
+// leaf package to avoid an import cycle.
 //
-// As subsystems ship their .zap schemas and zapc generates typed
-// bindings, the placeholders here are replaced by aliases to the
-// generated structs in <subsystem>/zap/gen/*.go. Until then the
-// stable shape lives here so subsystem code can pin signatures
-// without re-importing through cloud.
+// These are the shapes of CO-RESIDENT calls — a dependency mounted in this
+// process, reached by direct Go dispatch. A call that genuinely crosses a
+// process declares its In/Out in package plane instead, and plane/gen emits the
+// typed peer client for it; nothing here is waiting to be replaced by a
+// generator.
 package types
 
 import (
@@ -84,7 +83,9 @@ type OrgConfig struct {
 // max_vms, …) ride out of band and are NOT encoded here.
 type LicenseEntitlement struct {
 	// ProductID is the licensed product the entitlement was checked for
-	// (e.g. "engine", "engine-rocm", a plugin id).
+	// (e.g. "engine", "team", a plugin id). A product is a thing sold, never a
+	// build of it: engine ships CUDA, ROCm and Metal from one SKU, so an
+	// accelerator never appears here.
 	ProductID string
 	// Active reports whether the entitlement is currently valid (paid,
 	// not lapsed/cancelled). Licensing refuses to mint when false.

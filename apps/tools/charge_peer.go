@@ -88,8 +88,12 @@ func chargePeer(ctx context.Context, tool string) error {
 		// an unvalidated header would become a ledger. A context with no request and
 		// no stated tenant is the honest form: a free tool still settles for nothing,
 		// and a priced one is refused for want of a payer.
-		if payer := principal.Ledger(c); payer != "" {
-			call = cloud.As(c, payer)
+		// The TENANT, not the payer: cloud.As names whose books the settlement acts
+		// for, which is the org. principal.Payer (the wallet within it) is the gate's
+		// and the meter's question, asked in typed.go and http.go — a wallet key here
+		// would name an org that does not exist.
+		if tenant := principal.Ledger(c); tenant != "" {
+			call = cloud.As(c, tenant)
 		} else {
 			call = cloud.For(context.Background(), "")
 		}

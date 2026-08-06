@@ -395,6 +395,11 @@ func (o ops) run(ctx context.Context, in *flowRun) (*flowResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Pay before the graph runs, not after — a run the caller cannot afford must
+	// never reach the components that bill a model provider (billing.go).
+	if err := o.gate(ctx); err != nil {
+		return nil, err
+	}
 	body := map[string]any{"input_value": in.Input, "input_type": "chat", "output_type": "chat"}
 	if in.Session != "" {
 		body["session_id"] = in.Session
@@ -402,7 +407,12 @@ func (o ops) run(ctx context.Context, in *flowRun) (*flowResult, error) {
 	if len(in.Tweaks) > 0 {
 		body["tweaks"] = json.RawMessage(in.Tweaks)
 	}
-	return relay(ctx, http.MethodPost, "/v1/run/"+id+"?stream=false", body, timeoutRun)
+	res, err := relay(ctx, http.MethodPost, "/v1/run/"+id+"?stream=false", body, timeoutRun)
+	if err != nil {
+		return nil, err // the run never ran; nothing is owed.
+	}
+	o.meter(ctx)
+	return res, nil
 }
 
 // Runs reads one workflow's recorded runs: every component build with its

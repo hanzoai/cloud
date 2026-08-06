@@ -21,11 +21,13 @@ import (
 	"fmt"
 
 	aimod "github.com/hanzoai/ai"
+	webtools "github.com/hanzoai/ai/agent/builtin_tool/web"
 	aictl "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	airouters "github.com/hanzoai/ai/routers"
 	aiweb "github.com/hanzoai/ai/web"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
@@ -88,6 +90,34 @@ func aiProse() map[string]openapi.Said {
 		out[key] = openapi.Said{Summary: d.Summary, Description: d.Description}
 	}
 	return out
+}
+
+// installWebSearch closes the web-search seam over a meta-search function.
+//
+// It takes the searcher as a PARAMETER rather than calling websearch.Search
+// directly so the adapter — the part with the truncation and the field mapping —
+// can be exercised without a network round trip. The production call site passes
+// the real one; a test passes its own and asserts on what the tool actually
+// receives.
+//
+// The mapping is the whole of it: websearch.Result carries Content, the tool
+// contract calls that field Snippet, and a rename that goes unnoticed hands every
+// agent results with empty snippets — which reads as "the web had nothing to say
+// about this" rather than as a bug.
+func installWebSearch(search func(ctx context.Context, query, lang string) []websearch.Result) {
+	webtools.SetSearch(func(ctx context.Context, query string, limit int) ([]webtools.SearchResult, error) {
+		hits := search(ctx, query, "")
+		// Truncate to what the caller asked for. The tool clamps its own limit to a
+		// sane maximum before it ever reaches here; this only honours it.
+		if limit > 0 && len(hits) > limit {
+			hits = hits[:limit]
+		}
+		out := make([]webtools.SearchResult, 0, len(hits))
+		for _, h := range hits {
+			out = append(out, webtools.SearchResult{Title: h.Title, URL: h.URL, Snippet: h.Content})
+		}
+		return out, nil
+	})
 }
 
 // debitOverPlane charges one ai completion to the process that owns the ledger.
@@ -157,6 +187,47 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if cloud.TracerProviderInstalled() {
 		aiobject.AdoptHostTracerProvider()
 	}
+	// THE WEB, FOR EVERY RESPONSES-API AGENT.
+	//
+	// ai's builtin registry declares web_search / fetch_url / deep_research but holds
+	// no backend for the two this host serves — agent/builtin_tool/web must stay a
+	// leaf package (object imports agent, agent imports the registry), and websearch
+	// lives here in any case. This is where that seam is closed, beside the balance
+	// and tier readers, for the same reason they are here: this package links both
+	// sides and the host does not.
+	//
+	// In-process, never over api.hanzo.ai. The edge validates a CUSTOMER credential
+	// and answers 401 to a service; routing our own calls back through it is what
+	// once fail-closed every completion at 503 on a healthy pod.
+	//
+	// deep_research is deliberately NOT installed, and the reason is MONEY rather
+	// than plumbing.
+	//
+	// Research carries an explicit per-answer FEE — 25 cents, apps/answer/mode.go —
+	// charged through Bill.Gate on the request path, where a payer has been
+	// resolved and can be refused. A tool call has no payer. Installing this seam
+	// with a direct call to the engine would therefore be an unbilled 25-cent
+	// operation an agent may invoke in a loop: free inference, arrived at by the
+	// exact route this codebase keeps closing.
+	//
+	// That apps/answer makes it awkward is not an accident to route around:
+	// Params is built from request-scoped billing context and Sink's methods are
+	// unexported, so the money gate is structurally hard to bypass. Wiring this
+	// properly means giving the package an entry that takes a payer and charges
+	// it — a billing decision, not an adapter.
+	//
+	// The two tools above are different in kind, not merely cheaper: their HTTP
+	// routes gate on AUTHENTICATION (a validated principal or the service key),
+	// and the agent request that reaches this tool was already authenticated and
+	// metered at /v1/responses. Using them in-process is consistent with how they
+	// are reached over HTTP; deep_research is not.
+	//
+	// Until then the tool reports that it is unavailable in this deployment — the
+	// honest answer, and specifically NOT an empty result: an agent told "no
+	// results" concludes the web holds nothing on the subject and answers from
+	// memory in a confident voice.
+	installWebSearch(websearch.Search)
+
 	// THE PREPAID GATE'S COMPLETION CEILING, PER MODEL, FROM THE CATALOG.
 	//
 	// cloud's meter must bound a completion BEFORE it runs, and that bound is a

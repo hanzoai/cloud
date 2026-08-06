@@ -55,6 +55,13 @@ type Agent struct {
 // Execution modes. One-shot agents run only on an explicit POST; long-running
 // agents are additionally invoked by the scheduler on their Schedule.
 const (
+	// ToolsAll in an agent's Tools means "whatever the fleet's door serves",
+	// resolved per run rather than enumerated. It exists because the default
+	// assistant cannot list a surface that is discovered at runtime and changes
+	// whenever a subsystem ships. An agent that declares nothing still gets
+	// nothing — that default is its authority, and it is unchanged.
+	ToolsAll = "*"
+
 	ModeOneShot     = "one-shot"
 	ModeLongRunning = "long-running"
 )

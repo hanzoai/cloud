@@ -33,7 +33,7 @@ func testGate(_ context.Context, host string) (mode bool, service string, known 
 // injected approval status decides whether the caller is off the waitlist.
 func gateApp(t *testing.T, approvalStatus string) *zip.App {
 	t.Helper()
-	approvals := newApprovalsWithLookup(func(context.Context, string, string) (string, bool) {
+	approvals := newApprovalsWithLookup(func(context.Context) (string, bool) {
 		return approvalStatus, true
 	}, time.Minute)
 
@@ -217,7 +217,7 @@ func TestEnforce_DefaultGate_FailsOpenPreBoot(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	app.Use(Enforce(EnforceConfig{WaitlistURL: "https://waitlist.hanzo.ai",
-		Approvals: newApprovalsWithLookup(func(context.Context, string, string) (string, bool) { return "pending", true }, time.Minute)}))
+		Approvals: newApprovalsWithLookup(func(context.Context) (string, bool) { return "pending", true }, time.Minute)}))
 	app.Get("/*", func(c *zip.Ctx) error { return c.String(200, "ok") })
 	code, _ := drive(t, app, greq{host: "hanzo.chat", path: "/dashboard", user: "u", org: "acme", accept: html})
 	if code != 200 {

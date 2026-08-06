@@ -159,7 +159,7 @@ func (o toolOps) gate(ctx context.Context) error {
 	}
 	project, validated := principal.ValidatedProject(c)
 	fee := cloud.ResourceFeeCents(feeEnvPrefix, meterKind)
-	if err := o.s.Bill.Gate(c.Context(), principal.Ledger(c), project, validated, meterKind, fee); err != nil {
+	if err := o.s.Bill.Gate(c.Context(), principal.Payer(c), project, validated, meterKind, fee); err != nil {
 		return cloud.Denied(err)
 	}
 	return nil

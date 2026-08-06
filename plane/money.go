@@ -99,6 +99,33 @@ func (m Money) FloorMinor() (int64, error) {
 	return coef.Int64(), nil
 }
 
+// RoundMinor reads the amount as a count of its currency's smallest unit,
+// rounding HALF-AWAY-FROM-ZERO — the explicit rounding Minor() tells a DISPLAY
+// to make, made once here so every summary makes the same one.
+//
+// Use it for a FIGURE SOMEONE READS — a usage row, a rollup, an invoice line
+// preview. Never for a BALANCE a gate spends against (FloorMinor: down is the
+// only safe direction there) and never for a DEBIT (exact or refused; Minor()
+// refusing is correct there). The platform books per-token charges at eighteen
+// decimals, so a usage ledger routinely holds amounts finer than a cent —
+// 0.00589 USD is a real row, and a read that refuses it is a usage page that
+// 502s on an honest ledger.
+func (m Money) RoundMinor() (int64, error) {
+	a, err := m.Parse()
+	if err != nil {
+		return 0, err
+	}
+	// money.Amount.Minor() rescales to the currency's decimals, and
+	// hanzoai/decimal's Rescale rounds half-away-from-zero (decimal.go:145) —
+	// exactly the display convention wanted here. Plane Minor()'s exactness
+	// guard is the ONLY thing this method drops, and dropping it is the point.
+	u := a.Minor()
+	if !u.IsInt64() {
+		return 0, fmt.Errorf("amount %s %s exceeds int64 minor units", m.Decimal, m.Currency)
+	}
+	return u.Int64(), nil
+}
+
 func pow10(n int32) *big.Int {
 	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
 }

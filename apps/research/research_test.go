@@ -647,31 +647,31 @@ func TestHTTPArtifactsDiary(t *testing.T) {
 
 	// POST the bytes (no client sha256) → server derives the identity + ref.
 	code, m := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
-		Artifact{Content: b64, Kind: "snapshot", RunID: "benchmark:m:gpqa_diamond", GitSHA: "deadbeef"})
+		ResearchArtifact{Content: b64, Kind: "snapshot", RunID: "benchmark:m:gpqa_diamond", GitSHA: "deadbeef"})
 	if code != http.StatusOK || m["created"] != true || m["sha256"] != want || m["ref"] != "sha256:"+want {
 		t.Fatalf("POST artifact: %v (want server sha256 %s)", m, want)
 	}
 	// Re-POST identical bytes → no-op (hash-addressed idempotency).
 	_, m2 := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
-		Artifact{Content: b64, Kind: "snapshot", RunID: "benchmark:m:gpqa_diamond"})
+		ResearchArtifact{Content: b64, Kind: "snapshot", RunID: "benchmark:m:gpqa_diamond"})
 	if m2["created"] != false {
 		t.Fatalf("re-POST created=%v, want false", m2["created"])
 	}
 	// POISONING: a client-asserted sha256 that does NOT match the bytes is refused.
 	poison, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
-		Artifact{Content: b64, SHA256: fmt.Sprintf("%064d", 0), Kind: "snapshot"})
+		ResearchArtifact{Content: b64, SHA256: fmt.Sprintf("%064d", 0), Kind: "snapshot"})
 	if poison != http.StatusUnprocessableEntity {
 		t.Fatalf("mismatched sha256 status=%d, want 422 (un-poisonable)", poison)
 	}
 	// Content is required — a manifest with no bytes cannot be content-addressed.
-	nc, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", Artifact{Kind: "snapshot"})
+	nc, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", ResearchArtifact{Kind: "snapshot"})
 	if nc != http.StatusUnprocessableEntity {
 		t.Fatalf("no-content status=%d, want 422", nc)
 	}
 	// A newer report.
 	rpt := []byte("# report\nauto-generated")
 	do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
-		Artifact{Content: base64.StdEncoding.EncodeToString(rpt), Kind: "report", RunID: "benchmark:m:gpqa_diamond", TS: 200})
+		ResearchArtifact{Content: base64.StdEncoding.EncodeToString(rpt), Kind: "report", RunID: "benchmark:m:gpqa_diamond", TS: 200})
 
 	// Diary feed newest-first, private, server-derived ref.
 	code, g := do(t, app, http.MethodGet, "/v1/research/artifacts", "acme", "enso-bench", nil)
@@ -695,7 +695,7 @@ func TestHTTPArtifactsDiary(t *testing.T) {
 	}
 
 	// Kind validation.
-	bad, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", Artifact{Content: b64, Kind: "malware"})
+	bad, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", ResearchArtifact{Content: b64, Kind: "malware"})
 	if bad != http.StatusUnprocessableEntity {
 		t.Fatalf("bad kind status=%d, want 422", bad)
 	}

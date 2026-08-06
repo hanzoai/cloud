@@ -7,6 +7,13 @@ import (
 )
 
 func init() {
+	zip.Describe("GET /_/commerce/healthz", zip.Doc{
+		Description: "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated, and under /_ so the ingress withholds it\npublicly.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"liveness.service": "Service names the answering subsystem; it is always commerce.",
+			"liveness.status":  "Status is always ok: mounted is the only state that can answer.",
+		},
+	})
 	zip.Describe("GET /v1/billing/invoices/:id", zip.Doc{
 		Description: "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -27,6 +34,35 @@ func init() {
 			"InvoiceOut.subtotalCents":   "SubtotalCents is the sum of the lines.",
 			"InvoiceOut.userId":          "UserID is the customer billed.",
 			"InvoiceRefIn.id":            "ID is the invoice id.",
+		},
+	})
+	zip.Describe("GET /v1/cart/:id", zip.Doc{
+		Description: "Reads one cart: its lines, its status and what it comes to.\n\nThis is what a storefront calls to render the basket, and what a support agent\ncalls to see what a shopper is looking at. The totals are the cart's STORED\ntally — shipping and tax stay zero until checkout resolves a shipping option\nand a tax region, so a cart total before checkout is the merchandise total and\nis meant to be.\n\nThe org scopes the read by construction: the store is namespaced to it, so a\ncart id belonging to another tenant is simply not found rather than found and\nthen filtered, and answers 404 rather than 403 so the id space cannot be probed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
+			"Cart.currency":       "Currency is the ISO 4217 code every amount below is denominated in.",
+			"Cart.discountCents":  "DiscountCents is what coupons and promotions took off, in whole cents.",
+			"Cart.email":          "Email is the shopper's address, when the cart carries one.",
+			"Cart.id":             "ID is the cart's id — what every other cart op addresses it by, and what a\nstorefront persists against the browser session.",
+			"Cart.items":          "Items are the cart's lines, in the order they were added.",
+			"Cart.lineTotalCents": "LineTotalCents is the sum of the lines before any discount, in whole cents.",
+			"Cart.order":          "Order is the order this cart became, once checkout completed it. Empty\nuntil then, and its presence is what makes a cart final.",
+			"Cart.shippingCents":  "ShippingCents is the shipping charge, in whole cents. It stays zero until a\nshipping option is priced at checkout.",
+			"Cart.status":         "Status is \"active\" for a cart still being filled, \"ordered\" once checkout\nturned it into an order, and \"discarded\" when the shopper abandoned it.",
+			"Cart.store":          "Store is the storefront the cart is being filled on.",
+			"Cart.subtotalCents":  "SubtotalCents is LineTotalCents less DiscountCents, in whole cents.",
+			"Cart.taxCents":       "TaxCents is the sales tax, in whole cents. It stays zero until checkout\nresolves the shopper's tax region.",
+			"Cart.totalCents":     "TotalCents is what the shopper pays: subtotal plus shipping plus tax, in\nwhole cents.",
+			"Cart.updatedAt":      "UpdatedAt is when the cart was last amended, RFC3339.",
+			"Cart.user":           "User is the signed-in shopper this cart belongs to, empty for a guest cart.",
+			"CartItem.free":       "Free reports a line that costs nothing because a coupon or a promotion made\nit so, rather than because its price is zero.",
+			"CartItem.id":         "ID is the line's identity — the variant id when the line is a variant,\notherwise the product id. It is what a subsequent set call addresses.",
+			"CartItem.kind":       "Kind is \"variant\" when this line is a specific sellable variant and\n\"product\" when it is the product itself.",
+			"CartItem.name":       "Name is the item's display name, cached onto the line when it was added so\na cart renders without a second read.",
+			"CartItem.priceCents": "PriceCents is the unit price in whole cents, cached at the moment the line\nwas added. The line's contribution to the cart is this times Quantity.",
+			"CartItem.quantity":   "Quantity is how many units of this item the cart holds.",
+			"CartItem.sku":        "SKU is the line's stock-keeping unit — the variant's when it has one,\notherwise the product's. Empty when neither carries one.",
+			"CartRef.id":          "ID is the cart's id, as the open call answered it.",
 		},
 	})
 	zip.Describe("GET /v1/payments/:id", zip.Doc{
@@ -55,15 +91,20 @@ func init() {
 	zip.Describe("POST /finance/record", zip.Doc{
 		Description: "Debits one metered act against the prepaid ledger and records what it was for —\nmodel, provider, project, service, request id and client address — so usage a\nprocess cannot write locally still lands in the one ledger of record.\n\nIt is the DEBIT half and is deliberately a separate op from the credit: two\nseparate acts with separate idempotency and separate authority, because folding\nthem into one signed amount would make a sign error a transfer in the wrong\ndirection. It is also separate from the authorize gate, which decides and does\nnot move money.\n\nThe billed USER and ORG are set here from the CALLER, never from the argument:\na caller that could name the billed org could bill someone else. An empty\nsubject bills the org's own account. Unlike the gate, an unconfigured meter is\nan ERROR here rather than a verdict — there is no honest way to acknowledge a\ndebit that was never written.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
-			"Usage.ref":       "Ref is the SERVER-assigned name of the metered act, and the debit's idempotency\nkey within the subject's wallet: a peer re-sending the same act debits once. It\ncarries an identity the sending process already holds (a message row's id, a\nsettlement id), never a header a client chose — the ledger dedups on it, so the\npayer must not be the one who picks it. Empty lets the ledger mint the entry's\nown and the debit stands alone.",
-			"Usage.requestId": "RequestID is the call's CORRELATION id, for tracing a debit back to the request\nthat made it. Attribution only: it is NOT the idempotency key (see Ref).",
+			"Usage.actor":        "Actor is WHO acted, when that is not the wallet being billed — an admin or an\nagent running on behalf of the payer. The subject says whose money moved; this\nsays whose hand moved it, and a ledger entry without it cannot answer the only\nquestion an audit asks. It crossed on the old HTTP body (`actor`) and had no\nfield here, so the split-deploy debit landed unattributed.",
+			"Usage.promptTokens": "The token counts the charge was computed from. They are the WORK the amount\nprices, so a debit without them can be re-read but not re-derived — and they\nlikewise had no field here.",
+			"Usage.ref":          "Ref is the SERVER-assigned name of the metered act, and the debit's idempotency\nkey within the subject's wallet: a peer re-sending the same act debits once. It\ncarries an identity the sending process already holds (a message row's id, a\nsettlement id), never a header a client chose — the ledger dedups on it, so the\npayer must not be the one who picks it. Empty lets the ledger mint the entry's\nown and the debit stands alone.",
+			"Usage.requestId":    "RequestID is the call's CORRELATION id, for tracing a debit back to the request\nthat made it. Attribution only: it is NOT the idempotency key (see Ref).",
 		},
 	})
 	zip.Describe("POST /finance/scope-rules", zip.Doc{
 		Description: "Lists the caller org's per-scope request-rate ceilings, so the edge limiter in\nanother process can enforce a budget whose rows it cannot open.\n\nIt takes NO input: the org rides the caller and there is nothing else to name,\nso one org can never read another's ceilings. Only rows that SET a ceiling are\nreturned — a spend-alert row with no rate limit is a spend cap, a different\npolicy answered by a different op, and shipping it here would make the limiter\nweigh rules that bind nothing.\n\nThe row scan is the org's WHOLE policy set — the same query commerce's own cap\nverdict runs (loadOrgScopes), bounded the same way. The retired HTTP read went\nthrough the per-subject list instead, so the rate ceiling and the spend cap\ncould in principle bind on different rows; one query is what makes that\nimpossible rather than merely unlikely.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
+	zip.Describe("POST /finance/spend", zip.Doc{
+		Description: "Reads the caller org's metered consumption since a moment, beside the prepaid\nbalance it is drawn from. `since` is a unix second; 0 reads the calendar month\nto date, which is what every page showing this figure means by it.\n\nIt answers from the LEDGER'S OWN windowed sum — the same source the rolling\nspend cap reads — so a program that qualifies an org on its spend and the gate\nthat stops that org from spending cannot disagree about the amount. Deposits\nare not consumption and are excluded by that sum; the balance beside it is the\nwallet's settled figure.\n\nThe org is the CALLER'S and can never be named in the input, so one tenant can\nnever read another's totals. A missing ledger is an ERROR, never a zero: a\nzero here would qualify nobody, accrue nothing and show every customer a blank\nmonth, silently — which is exactly what the HTTP read it replaces did.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
 	zip.Describe("POST /finance/txns", zip.Doc{
-		Description: "Lists the caller org's ledger entries — id, kind, ref, memo, amount and\ntimestamp — most recent first and bounded to one page. It is the movement list\nbehind the customer-facing transactions, credits and receipts pages, all three\nof which read this one list.\n\nIt takes NO input: the org comes from the caller and there is nothing else to\nname, so one org can never read another's entries. Unlike the usage read the\namount crosses as a DECIMAL STRING with its currency rather than a bare\nquantity, because an entry is a movement a customer reads rather than a number\na gate does arithmetic on. A ledger implementation that cannot list entries is\nan error, not an empty page.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Description: "Lists the caller org's ledger entries — id, kind, ref, memo, amount and\ntimestamp — most recent first and bounded to one page. It is the movement list\nbehind the customer-facing transactions, credits and receipts pages, all three\nof which read this one list.\n\nThe org is the CALLER'S and cannot be named in the input, so one org can never\nread another's entries. What the input DOES name is which books and how many\nrows: `test` reads the SANDBOX ledger, a physically separate file, because a\ncaller that posted test rows into real revenue would have restated the\ncompany's income with nothing downstream able to tell; `limit` is a page size\nand 0 takes the default. Unlike the usage read the amount crosses as a DECIMAL\nSTRING with its currency rather than a bare quantity, because an entry is a\nmovement a customer reads rather than a number a gate does arithmetic on. A\nledger implementation that cannot list entries is an error, not an empty page.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("POST /finance/usage", zip.Doc{
 		Description: "Lists the caller org's recorded usage debits — id, model, exact amount and\ntimestamp — most recent first, bounded to the same page size the co-resident\nreader asks for so the page a customer sees does not change with which process\nanswered.\n\nIt takes NO input at all: the org comes from the caller and there is nothing\nelse to name, so one org can never list another's debits. It sends ROWS rather\nthan a rendered view — the HTTP surface builds its own envelope from these,\nbecause sending the envelope would put the renderer next to the ledger, which\nis the import cycle that shape implies. A ledger implementation that cannot\nlist usage is an error, not an empty page.\n\nEach amount is the ledger's OWN value, never rebuilt from its cent rounding:\nreconstructing an exact plane amount from the rounding was the sharpest form of\nthe flatten, a wire type promising precision the value had already lost.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
@@ -164,6 +205,99 @@ func init() {
 			"InvoiceOut.subtotalCents":   "SubtotalCents is the sum of the lines.",
 			"InvoiceOut.userId":          "UserID is the customer billed.",
 			"InvoiceRefIn.id":            "ID is the invoice id.",
+		},
+	})
+	zip.Describe("POST /v1/cart", zip.Doc{
+		Description: "Opens an empty cart for a shopper to fill, and answers it with its new id.\n\nThis is the first step of a sale: hold the id, add items to it with\nsetCartItem, then hand it to checkout. Every field of the request is optional —\nan empty body opens a perfectly good anonymous cart — and the fields exist only\nto pre-fill what is already known about the shopper.\n\nThe STORE defaults to the org's own default storefront, so a merchant selling\nthrough one storefront never has to name it. The CURRENCY defaults to usd; note\nthat checkout overrides it with the store's own currency when the sale is\nauthorized, so a currency set here is a hint rather than a commitment.\n\nThe cart is created in the CALLER'S OWN org namespace, taken from the validated\nprincipal and never from the body, so a cart can never be opened on another\ntenant's books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
+			"Cart.currency":       "Currency is the ISO 4217 code every amount below is denominated in.",
+			"Cart.discountCents":  "DiscountCents is what coupons and promotions took off, in whole cents.",
+			"Cart.email":          "Email is the shopper's address, when the cart carries one.",
+			"Cart.id":             "ID is the cart's id — what every other cart op addresses it by, and what a\nstorefront persists against the browser session.",
+			"Cart.items":          "Items are the cart's lines, in the order they were added.",
+			"Cart.lineTotalCents": "LineTotalCents is the sum of the lines before any discount, in whole cents.",
+			"Cart.order":          "Order is the order this cart became, once checkout completed it. Empty\nuntil then, and its presence is what makes a cart final.",
+			"Cart.shippingCents":  "ShippingCents is the shipping charge, in whole cents. It stays zero until a\nshipping option is priced at checkout.",
+			"Cart.status":         "Status is \"active\" for a cart still being filled, \"ordered\" once checkout\nturned it into an order, and \"discarded\" when the shopper abandoned it.",
+			"Cart.store":          "Store is the storefront the cart is being filled on.",
+			"Cart.subtotalCents":  "SubtotalCents is LineTotalCents less DiscountCents, in whole cents.",
+			"Cart.taxCents":       "TaxCents is the sales tax, in whole cents. It stays zero until checkout\nresolves the shopper's tax region.",
+			"Cart.totalCents":     "TotalCents is what the shopper pays: subtotal plus shipping plus tax, in\nwhole cents.",
+			"Cart.updatedAt":      "UpdatedAt is when the cart was last amended, RFC3339.",
+			"Cart.user":           "User is the signed-in shopper this cart belongs to, empty for a guest cart.",
+			"CartItem.free":       "Free reports a line that costs nothing because a coupon or a promotion made\nit so, rather than because its price is zero.",
+			"CartItem.id":         "ID is the line's identity — the variant id when the line is a variant,\notherwise the product id. It is what a subsequent set call addresses.",
+			"CartItem.kind":       "Kind is \"variant\" when this line is a specific sellable variant and\n\"product\" when it is the product itself.",
+			"CartItem.name":       "Name is the item's display name, cached onto the line when it was added so\na cart renders without a second read.",
+			"CartItem.priceCents": "PriceCents is the unit price in whole cents, cached at the moment the line\nwas added. The line's contribution to the cart is this times Quantity.",
+			"CartItem.quantity":   "Quantity is how many units of this item the cart holds.",
+			"CartItem.sku":        "SKU is the line's stock-keeping unit — the variant's when it has one,\notherwise the product's. Empty when neither carries one.",
+			"CartOpen.currency":   "Currency is the ISO 4217 code the cart is priced in, lower-cased. Empty\nmeans usd.",
+			"CartOpen.email":      "Email is the shopper's address, for a cart that belongs to someone who has\nnot signed in. It is what a guest checkout and an abandoned-cart follow-up\nkey on. Empty is fine.",
+			"CartOpen.store":      "Store is the storefront this cart is being filled on. Empty uses the org's\ndefault store, which is what a single-storefront merchant always wants.",
+			"CartOpen.user":       "User is the id of the signed-in shopper this cart belongs to, when there is\none. Empty means a guest cart identified only by its own id.",
+		},
+	})
+	zip.Describe("POST /v1/cart/:id/discard", zip.Doc{
+		Description: "Discards a cart the shopper abandoned, and answers it in its final state.\n\nA discarded cart is CLOSED, not deleted: the row stays, so abandoned-basket\nreporting and any follow-up that keys on it still have something to read. It\nstops being a cart anything will check out, which is the point — it is how a\nstorefront says \"this basket is over\" without destroying the evidence that it\nexisted.\n\nDiscarding is idempotent: a cart already discarded answers its stored state\nrather than failing, so a retry is safe.\n\nThe cart is resolved inside the caller's own org namespace, so another tenant's\nid answers 404.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
+			"Cart.currency":       "Currency is the ISO 4217 code every amount below is denominated in.",
+			"Cart.discountCents":  "DiscountCents is what coupons and promotions took off, in whole cents.",
+			"Cart.email":          "Email is the shopper's address, when the cart carries one.",
+			"Cart.id":             "ID is the cart's id — what every other cart op addresses it by, and what a\nstorefront persists against the browser session.",
+			"Cart.items":          "Items are the cart's lines, in the order they were added.",
+			"Cart.lineTotalCents": "LineTotalCents is the sum of the lines before any discount, in whole cents.",
+			"Cart.order":          "Order is the order this cart became, once checkout completed it. Empty\nuntil then, and its presence is what makes a cart final.",
+			"Cart.shippingCents":  "ShippingCents is the shipping charge, in whole cents. It stays zero until a\nshipping option is priced at checkout.",
+			"Cart.status":         "Status is \"active\" for a cart still being filled, \"ordered\" once checkout\nturned it into an order, and \"discarded\" when the shopper abandoned it.",
+			"Cart.store":          "Store is the storefront the cart is being filled on.",
+			"Cart.subtotalCents":  "SubtotalCents is LineTotalCents less DiscountCents, in whole cents.",
+			"Cart.taxCents":       "TaxCents is the sales tax, in whole cents. It stays zero until checkout\nresolves the shopper's tax region.",
+			"Cart.totalCents":     "TotalCents is what the shopper pays: subtotal plus shipping plus tax, in\nwhole cents.",
+			"Cart.updatedAt":      "UpdatedAt is when the cart was last amended, RFC3339.",
+			"Cart.user":           "User is the signed-in shopper this cart belongs to, empty for a guest cart.",
+			"CartItem.free":       "Free reports a line that costs nothing because a coupon or a promotion made\nit so, rather than because its price is zero.",
+			"CartItem.id":         "ID is the line's identity — the variant id when the line is a variant,\notherwise the product id. It is what a subsequent set call addresses.",
+			"CartItem.kind":       "Kind is \"variant\" when this line is a specific sellable variant and\n\"product\" when it is the product itself.",
+			"CartItem.name":       "Name is the item's display name, cached onto the line when it was added so\na cart renders without a second read.",
+			"CartItem.priceCents": "PriceCents is the unit price in whole cents, cached at the moment the line\nwas added. The line's contribution to the cart is this times Quantity.",
+			"CartItem.quantity":   "Quantity is how many units of this item the cart holds.",
+			"CartItem.sku":        "SKU is the line's stock-keeping unit — the variant's when it has one,\notherwise the product's. Empty when neither carries one.",
+			"CartRef.id":          "ID is the cart's id, as the open call answered it.",
+		},
+	})
+	zip.Describe("POST /v1/cart/:id/item", zip.Doc{
+		Description: "Sets how many of one item a cart holds, and answers the whole updated cart.\n\nThis is the ONE way a cart's contents change. The quantity is the RESULT, not a\ndelta: sending 3 leaves 3 however many were there before, so a retry is safe and\na double-submit cannot double an order. ZERO REMOVES the line — there is\ndeliberately no separate delete, because removal is the same act at the boundary\nvalue and a second spelling would be a second set of edge cases.\n\nName the item with EITHER product OR variant, never both. Prefer variant for\nanything sold in sizes, colours or tiers: the price and the stock belong to the\nvariant, so a product-level line on a varianted product prices the wrong thing.\nEither may be given as an id or as the human key — a product's URL slug, a\nvariant's SKU — which is what lets a storefront add to cart straight from a\nproduct page URL without a lookup first.\n\nThe item's price and name are CACHED onto the line as it is added, so the cart\nkeeps the price the shopper was shown even if the catalog moves underneath it.\n\nAn item that resolves to nothing in the catalog is refused 400 and the cart is\nleft exactly as it was; nothing is partially applied.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Cart.createdAt":       "CreatedAt is when the cart was opened, RFC3339.",
+			"Cart.currency":        "Currency is the ISO 4217 code every amount below is denominated in.",
+			"Cart.discountCents":   "DiscountCents is what coupons and promotions took off, in whole cents.",
+			"Cart.email":           "Email is the shopper's address, when the cart carries one.",
+			"Cart.id":              "ID is the cart's id — what every other cart op addresses it by, and what a\nstorefront persists against the browser session.",
+			"Cart.items":           "Items are the cart's lines, in the order they were added.",
+			"Cart.lineTotalCents":  "LineTotalCents is the sum of the lines before any discount, in whole cents.",
+			"Cart.order":           "Order is the order this cart became, once checkout completed it. Empty\nuntil then, and its presence is what makes a cart final.",
+			"Cart.shippingCents":   "ShippingCents is the shipping charge, in whole cents. It stays zero until a\nshipping option is priced at checkout.",
+			"Cart.status":          "Status is \"active\" for a cart still being filled, \"ordered\" once checkout\nturned it into an order, and \"discarded\" when the shopper abandoned it.",
+			"Cart.store":           "Store is the storefront the cart is being filled on.",
+			"Cart.subtotalCents":   "SubtotalCents is LineTotalCents less DiscountCents, in whole cents.",
+			"Cart.taxCents":        "TaxCents is the sales tax, in whole cents. It stays zero until checkout\nresolves the shopper's tax region.",
+			"Cart.totalCents":      "TotalCents is what the shopper pays: subtotal plus shipping plus tax, in\nwhole cents.",
+			"Cart.updatedAt":       "UpdatedAt is when the cart was last amended, RFC3339.",
+			"Cart.user":            "User is the signed-in shopper this cart belongs to, empty for a guest cart.",
+			"CartItem.free":        "Free reports a line that costs nothing because a coupon or a promotion made\nit so, rather than because its price is zero.",
+			"CartItem.id":          "ID is the line's identity — the variant id when the line is a variant,\notherwise the product id. It is what a subsequent set call addresses.",
+			"CartItem.kind":        "Kind is \"variant\" when this line is a specific sellable variant and\n\"product\" when it is the product itself.",
+			"CartItem.name":        "Name is the item's display name, cached onto the line when it was added so\na cart renders without a second read.",
+			"CartItem.priceCents":  "PriceCents is the unit price in whole cents, cached at the moment the line\nwas added. The line's contribution to the cart is this times Quantity.",
+			"CartItem.quantity":    "Quantity is how many units of this item the cart holds.",
+			"CartItem.sku":         "SKU is the line's stock-keeping unit — the variant's when it has one,\notherwise the product's. Empty when neither carries one.",
+			"CartItemSet.id":       "ID is the cart to amend, from the path.",
+			"CartItemSet.product":  "Product names the catalog product to set, by its id or its URL slug. Give\nthis or Variant, never both; a request naming neither is refused.",
+			"CartItemSet.quantity": "Quantity is how many of that item the cart should hold AFTER this call — it\nis the resulting count, not a delta, so sending 3 twice leaves 3 and not 6.\nZERO REMOVES the line, which is the only way to take an item out.",
+			"CartItemSet.variant":  "Variant names the specific sellable variant to set, by its id or its SKU.\nPrefer it over Product for anything sold in sizes, colours or tiers — the\nprice and the stock are the variant's, not the product's.",
 		},
 	})
 	zip.Describe("POST /v1/payments", zip.Doc{
