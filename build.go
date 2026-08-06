@@ -299,13 +299,14 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 		if err != nil {
 			return err
 		}
-		// The ai module names the act with the MESSAGE ROW's id — a row the server
-		// wrote, one per completion — so re-recording one message debits once and two
-		// messages debit twice. That identity is the ledger's key; it is not, and must
-		// never be, the caller's X-Request-Id.
+		// THE ACT IS NAMED HERE, BY THE LEDGER. No Ref goes in, so finance mints the
+		// entry's own id and each completion is its own debit. The ai module has no
+		// server-chosen name to offer: its message row id is `Owner + "/" + Name`, both
+		// read off the client's request body, and while that value was carried across
+		// a pinned pair made every completion after the first free.
 		return fin.RecordUsage(ctx, types.UsageInput{
 			Org: u.Namespace, Subject: u.Subject, Amount: amt,
-			Currency: u.Currency, Model: u.Model, Provider: u.Provider, Ref: u.Ref,
+			Currency: u.Currency, Model: u.Model, Provider: u.Provider,
 		})
 	}
 	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)

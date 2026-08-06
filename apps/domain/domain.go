@@ -59,9 +59,13 @@ type Biller interface {
 	// Authorize returns ErrInsufficientFunds when the balance can't cover cents, nil
 	// to proceed, or another error when the balance is unknown (fail-closed).
 	Authorize(ctx context.Context, org string, cents int64) error
-	// Capture records the debit against the org's ledger. ref is the idempotency /
-	// attribution key (e.g. "domain:register:acme.ai").
-	Capture(org string, cents int64, ref string)
+	// Capture records the debit against the org's ledger.
+	//
+	// It takes NO key. It used to take the purchase's own ref — a string naming the
+	// DOMAIN — and that reached the ledger as the debit's idempotency key, so buying one
+	// name twice charged once. A domain can be renewed, and can lapse and be bought back:
+	// each of those is its own act, and an act is named by whoever writes the entry.
+	Capture(org string, cents int64)
 }
 
 // Zones ensures an authoritative DNS zone exists for a freshly-registered domain and

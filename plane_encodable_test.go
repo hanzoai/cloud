@@ -23,10 +23,16 @@ package cloud_test
 
 import (
 	"context"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -97,11 +103,68 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 	}
 }
 
-// walkEncodable asserts every field a plane type reaches is a kind zapenc carries.
+// The same rule as the walk above, made TOTAL rather than list-driven.
+//
+// The walk can only inspect the types someone remembered to add to it, and the failure it
+// guards against is a type nobody thought about — so the guarantee is taken one level up:
+// package plane cannot NAME metering.Usage, because it does not import the package the
+// type lives in. That is a property of every plane type at once, including the ones
+// written after this test.
+//
+// It is also the leaf rule the plane already lives by for its own reasons (plane/ask.go:
+// cloud drags 576 packages, this leaf 75) — apps/metering pulls the finance ledger, its
+// SQLite store and the envelope keys behind it. One import would take the money's private
+// vocabulary and its whole dependency tree into the package every peer call links.
+func TestThePlaneCannotNameTheMetersUsage(t *testing.T) {
+	const forbidden = `"github.com/hanzoai/cloud/apps/metering"`
+	fset := token.NewFileSet()
+	err := filepath.WalkDir("plane", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
+		}
+		f, perr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if perr != nil {
+			t.Errorf("parse %s: %v", path, perr)
+			return nil
+		}
+		for _, imp := range f.Imports {
+			if imp.Path.Value == forbidden {
+				t.Errorf("%s imports apps/metering — the plane must not be able to name "+
+					"metering.Usage, whose Ref is the ledger's key and whose `json:\"-\"` tag "+
+					"zapenc does not honour", path)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk plane/: %v", err)
+	}
+}
+
+// meterUsage is the type no plane value may reach. See walkEncodable.
+var meterUsage = reflect.TypeOf(metering.Usage{})
+
+// walkEncodable asserts every field a plane type reaches is a kind zapenc carries, and
+// that none of them reaches the METER's usage value.
 func walkEncodable(t *testing.T, typ reflect.Type, path string) {
 	t.Helper()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
+	}
+	// THE METER'S USAGE MUST NEVER BE A PLANE TYPE, and the reason is a field that does
+	// not appear on any wire a reviewer would read. metering.Usage.Ref is the LEDGER'S
+	// IDEMPOTENCY KEY and is tagged `json:"-"` precisely so no caller can send one — but
+	// zapenc encodes by FIELD, not by tag, so the moment such a value became a plane op's
+	// input the key would cross the plane and a caller could name it. The plane's own
+	// Usage carries a Ref deliberately and separately: it is the SENDING PROCESS's
+	// server-assigned identity, not a client's.
+	//
+	// The tag makes this invisible to inspection, so it is asserted rather than reviewed.
+	if typ == meterUsage {
+		t.Errorf("%s reaches metering.Usage — its Ref is the ledger's idempotency key and is "+
+			"`json:\"-\"` to keep callers out of it, but zapenc ignores tags and would carry it "+
+			"across the plane. Send plane.Usage, whose Ref is the sender's own act name.", path)
+		return
 	}
 	if typ.Kind() != reflect.Struct {
 		return
