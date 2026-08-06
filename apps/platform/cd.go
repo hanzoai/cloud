@@ -18,12 +18,13 @@
 //
 // ── the confinement, and its honest limit ───────────────────────────────────
 //
-// A CD Application's tenant is its DESTINATION namespace, and every Application
-// object lives in hanzo-cd regardless of whose app it tracks. So unlike the
-// fleet board — which confines at the SCAN, before any CR is listed — this can
-// only confine on the way out: the API list is unavoidably fleet-wide because
-// the objects are not partitioned by tenant. A non-super caller therefore never
-// SEES another org's row, but the read that produced it was not itself narrowed.
+// A CD Application's owner is its DESTINATION namespace — which, an org being
+// its name, IS the org — and every Application object lives in hanzo-cd
+// regardless of whose app it tracks. So unlike the fleet board, which confines
+// at the SCAN before any CR is listed, this can only confine on the way out: the
+// API list is unavoidably fleet-wide because the objects are not partitioned by
+// owner. A non-super caller therefore never SEES another org's row, but the read
+// that produced it was not itself narrowed.
 // That is a property of CD's data model, not a choice here, and it is stated
 // rather than hidden because the difference matters to anyone reasoning about
 // what a compromised platform process could observe.
@@ -50,6 +51,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,8 +74,10 @@ type CDApp struct {
 	// Name is the Application name the generator mints: <namespace>-<app>. It is
 	// the join key against a Declaration.
 	Name string `json:"name"`
-	// Namespace is the DESTINATION namespace — where the workload lands, which
-	// for a values file is the directory it sits in.
+	// Namespace is the DESTINATION namespace as the CR declares it — where the
+	// workload lands. For a fleet Application that is the org, but this is the
+	// OBSERVED field and not our model of it: the two can disagree, and a board
+	// whose whole job is drift must be able to show that they do.
 	Namespace string `json:"namespace"`
 	// Project is the AppProject fence the sync is admitted under.
 	Project string `json:"project"`
@@ -137,7 +141,7 @@ func cdApps(s *cloud.Service[fleetState], ctx context.Context, p fleetPrincipal)
 	out := make([]CDApp, 0, len(list.Items))
 	for i := range list.Items {
 		a := observeCDApp(&list.Items[i])
-		if !p.Super && (p.org == "" || nsOrg(a.Namespace) != p.org) {
+		if !p.Super && !owns(a.Namespace, p.org) {
 			continue
 		}
 		out = append(out, a)
@@ -181,6 +185,29 @@ func observeCDApp(cr *unstructured.Unstructured) CDApp {
 		}
 	}
 	return a
+}
+
+// owns is the confinement rule: an org's Applications are the ones landing in
+// the namespace that IS its name, and a reserved namespace is never any
+// customer's however its org is spelled.
+//
+// ★ BOTH SIDES ARE CANONICALISED, and that is the whole of this function.
+// A namespace is namespace.Sanitize(org) — that is how the write path built it —
+// while p.org is the RAW `owner` claim. Comparing the two directly applies the
+// slugger to ONE side of an authorization test, and an asymmetric compare is a
+// collision waiting to be named: for org "Acme" the directory is
+// "acme-<hash>", so the raw claim never matches its OWN rows, and any org whose
+// raw name IS the literal string "acme-<hash>" matches them instead. The slugger
+// is public code, so that value is offline-computable by anyone. Red proved it
+// end to end (red_fence_poc_test.go); apps/platform/runner.go's own ownedBy
+// comment warns about exactly this class.
+//
+// Sanitize is INJECTIVE, so canonicalising both sides is not merely symmetric,
+// it is collision-free: two distinct orgs never share a slug, therefore never
+// share a namespace, therefore never read each other.
+func owns(ns, org string) bool {
+	slug := namespace.Sanitize(org)
+	return slug != "" && ns == slug && !reserved(ns)
 }
 
 // nested reads a string at a path, or "" if any segment is absent or not a

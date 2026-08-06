@@ -25,7 +25,7 @@ import (
 //	go test -tags dryrun ./apps/platform/ -run TestDryRun -v \
 //	  -args   # UNIVERSE_DRYRUN_REMOTE=<a bare clone of hanzo/universe>
 //
-// It writes to `deploy/tenant-acme/dryrun/<tag>` and NEVER to main. What it
+// It writes to `deploy/acme/dryrun/<tag>` and NEVER to main. What it
 // proves that the fixtures cannot: the seam works against the real 105-file
 // inventory, the real directory layout, and a real git history.
 func TestDryRunAgainstARealUniverse(t *testing.T) {
@@ -46,8 +46,8 @@ func TestDryRunAgainstARealUniverse(t *testing.T) {
 
 	spec := declareSpec{
 		Name:       "dryrun",
-		Namespace:  "tenant-acme",
-		Repository: "ghcr.io/hanzoai/tenant-acme/dryrun",
+		Org:        "acme",
+		Repository: "ghcr.io/hanzoai/acme/dryrun",
 		Tag:        "bld_dryrun1",
 		Hosts:      []string{"dryrun.acme.hanzo.app"},
 		Env:        []declareEnv{{Name: "NODE_ENV", Value: "production"}},

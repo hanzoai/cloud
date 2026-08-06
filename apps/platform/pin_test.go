@@ -558,6 +558,30 @@ func fakeRegistryFunc(t *testing.T, have func(tag string) bool) *httptest.Server
 // serves it over HTTP with git-http-backend — the same smart-HTTP transport the
 // forge speaks, so the clone, the fast-forward push and the rejection on a race are
 // all the real thing. Returns the clone URL and the bare repository's path.
+// fleetSetFixture is the ApplicationSet with the reservation-based fence — what
+// universe must carry for an org's bare name to be safe as a directory. The
+// discriminator checkFence looks for is the ABSENCE of the prefix rule.
+const fleetSetFixture = `apiVersion: apps.hanzo.ai/v1
+kind: ApplicationSet
+metadata:
+  name: fleet
+  namespace: hanzo-cd
+spec:
+  generators:
+    - git:
+        repoURL: https://git.hanzo.ai/hanzo/universe
+        revision: main
+        files:
+          - path: charts/app/values/*/*.yaml
+  template:
+    spec:
+      # The fence is derived from the path, and the question the path is asked is
+      # whether the directory is RESERVED — the platform's own namespace family —
+      # not whether it carries a prefix. hanzo, lux, zoo, admin and the kube-*
+      # family are ours; everything else is an org and is fenced under its own name.
+      project: '{{ if has .path.basename (list "hanzo" "lux" "zoo" "admin" "default" "hanzo-cd" "hanzo-build") }}hanzo-platform{{ else }}{{ .path.basename }}{{ end }}'
+`
+
 func gitRemote(t *testing.T, cloudValues string) (url, bare string) {
 	t.Helper()
 	gitBin, err := exec.LookPath("git")
@@ -577,6 +601,19 @@ func gitRemote(t *testing.T, cloudValues string) (url, bare string) {
 	}
 	write("cloud.yaml", cloudValues)
 	write("insights.yaml", "image:\n  repository: ghcr.io/hanzoai/insights\n  tag: 1.52.28\n")
+
+	// The delivery plane's own rule travels with the inventory it fences, and
+	// declare.go's checkFence reads it out of the clone before writing main. The
+	// fixture carries the RESERVATION form — the one an org's bare name needs —
+	// so a commit here exercises the post-companion-change world.
+	// declare_test.go's TestCommitRefusesAStaleFence covers the other form.
+	setDir := filepath.Join(seed, "infra", "k8s", "hanzo-cd")
+	if err := os.MkdirAll(setDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(setDir, "applicationset-fleet.yaml"), []byte(fleetSetFixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	mustGit(t, "", "init", "-q", "-b", universeBranch, seed)
 	mustGit(t, seed, "add", "-A")
