@@ -58,7 +58,7 @@
     },
     "/v1/ml/models/{name}": {
       "delete": {
-        "operationId": "delete_v1_ml_models_by_name",
+        "operationId": "delete_v1_ml_models_name",
         "summary": "Deletes a deployed inference model.",
         "description": "Deletes a deployed inference model. kserve owns the teardown: the\nInferenceService goes away and the serving deployment behind it follows, so the\nmodel stops answering predict calls. Answers 204, or 404 for a name the\ncaller's org does not own.",
         "tags": [
@@ -83,7 +83,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_ml_models_by_name",
+        "operationId": "get_v1_ml_models_name",
         "summary": "Returns one deployed inference model.",
         "description": "Returns one deployed inference model. Its spec comes with it, and\nkserve's live status, which is where readiness and the serving address appear.\nA name the caller's org does not own answers 404, exactly as an unknown name\ndoes, so a probe learns nothing about another tenant's models.",
         "tags": [

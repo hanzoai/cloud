@@ -16,759 +16,132 @@
     }
   ],
   "paths": {
-    "/v1/licensing/download/{release}": {
-      "get": {
-        "operationId": "get_v1_licensing_download_by_release",
-        "summary": "Download resolves a release to its artifact, gated on a valid license.",
-        "description": "Download resolves a release to its artifact, gated on a valid license.\n\nThe gate is the LICENSE token, not the IAM bearer: being signed in is not\npermission to download a paid binary — holding a good license for it is. The\ntoken must verify against this deployment's public key, be unrevoked, be\nscoped to the release's app, and carry every feature the release requires.\nPresent it as the `X-License-Token` header (preferred, since a header does not\nland in proxy logs) or as `?token=`.\n\nThe response pairs the artifact URL with its cosign signature so the client\nverifies the binary BEFORE trusting it: a signed URL alone proves where the\nbytes came from, not what they are. A yanked release is 410 Gone.",
+    "/v1/licensing/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_licensing_by_wildcard1",
+        "summary": "Not served — a license is revoked, never deleted",
+        "description": "The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only. A DELETE to a real licensing path is 405, with an `Allow` header naming the methods that path does serve; a DELETE to a path the subtree does not have is 404.\n\nThe delete-shaped operation here is revocation, and it is POST /v1/licensing/revoke. It APPENDS a revocation entry rather than removing anything, because a token already in the field cannot be recalled — it can only be denied at verify and download time, and the entry is the record of who denied it and why.",
         "tags": [
           "licensing"
         ],
         "parameters": [
           {
-            "name": "release",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Artifact"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/licensing/fingerprint": {
-      "post": {
-        "operationId": "post_v1_licensing_fingerprint",
-        "summary": "Fingerprint turns raw device signals into the opaque value that binds a license to one machine.",
-        "description": "Fingerprint turns raw device signals into the opaque value that binds a license\nto one machine.\n\nThis is the anti-copy step: the value returned here is folded into the signed\ntoken, so a token minted with it runs only on the device it was bound to. The\nderivation is one-way and salted — the signals are never stored and never\nechoed back — so the response is safe to persist client-side and pass to\nissue. Signals too weak to identify a machine (a hostname alone) are refused\nrather than turned into a binding that would collide with other machines.",
-        "tags": [
-          "licensing"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "signals": {
-                  "arch": "arm64",
-                  "cpuid": "…",
-                  "machine_id": "…",
-                  "os": "linux"
-                }
-              },
-              "schema": {
-                "$ref": "#/components/schemas/FingerprintRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FingerprintResponse"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/licensing/healthz": {
-      "get": {
-        "operationId": "get_v1_licensing_healthz",
-        "summary": "Health reports which signer this deployment mints with, and in which env.",
-        "description": "Health reports which signer this deployment mints with, and in which env.\n\nIt answers 200 whenever the process is up: there is nothing downstream to\nprobe, since the KMS is reached only when a token is actually minted. Its\nvalue is the `signer` field — `\"signer\":\"local\"` on a production host says\nthat deployment is signing licenses with a development key, which is a\nmisconfiguration worth paging on rather than a healthy 200.",
-        "tags": [
-          "licensing"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthView"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/licensing/issue": {
-      "post": {
-        "operationId": "post_v1_licensing_issue",
-        "summary": "Issue mints a signed license token for a product the caller's org already pays for.",
-        "description": "Issue mints a signed license token for a product the caller's org already pays\nfor.\n\nThe order is the whole security argument: the caller is an IAM-validated\nprincipal, commerce is then asked whether that principal's ORG holds an ACTIVE\nentitlement for the product, and only then is a token signed — by the KMS,\nnever by key material in this process. A product the org does not own answers\n403 and no token. The signed features are the plan's features verbatim, so the\nengine enforces exactly what was bought, and the expiry is clamped to the\nentitlement's so a token cannot outlive the subscription that paid for it.\n\nThe token is the credential the engine runs on. Treat it as a secret.",
-        "tags": [
-          "licensing"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "product": "engine",
-                "signals": {
-                  "machine_id": "…",
-                  "os": "linux"
-                }
-              },
-              "schema": {
-                "$ref": "#/components/schemas/IssueRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IssueResponse"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/licensing/jwks": {
-      "get": {
-        "operationId": "get_v1_licensing_jwks",
-        "summary": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks.",
-        "description": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and\n/jwks.\n\nThis is the only public-safe surface here and the reason the whole scheme\nworks offline: the engine embeds or fetches this key once and then verifies\nevery license itself, with no call home per launch. The private half never\nenters this process — it lives in the KMS — so nothing served here is a\nsecret. `provider` names the KMS holding that half; `\"local\"` means a\ndevelopment key, and a token signed by one is not a production credential.",
-        "tags": [
-          "licensing"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PubkeyView"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/licensing/pubkey": {
-      "get": {
-        "operationId": "get_v1_licensing_pubkey",
-        "summary": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks.",
-        "description": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and\n/jwks.\n\nThis is the only public-safe surface here and the reason the whole scheme\nworks offline: the engine embeds or fetches this key once and then verifies\nevery license itself, with no call home per launch. The private half never\nenters this process — it lives in the KMS — so nothing served here is a\nsecret. `provider` names the KMS holding that half; `\"local\"` means a\ndevelopment key, and a token signed by one is not a production credential.",
-        "tags": [
-          "licensing"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PubkeyView"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/licensing/releases": {
-      "get": {
-        "operationId": "get_v1_licensing_releases",
-        "summary": "Lists the signed binary releases this deployment can serve.",
-        "description": "Lists the signed binary releases this deployment can serve.\n\nMetadata only, and no download URL: the artifact is behind GET\n/v1/licensing/download/{release}, which is gated on a valid license token.\nKnowing that a release exists is not permission to run it, which is why this\nlist needs no license of its own.",
-        "tags": [
-          "licensing"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReleaseList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      },
-      "post": {
-        "operationId": "post_v1_licensing_releases",
-        "summary": "Publishes a signed binary release, answering 201 Created.",
-        "description": "Publishes a signed binary release, answering 201 Created.\n\nOutside dev a release MUST carry its cosign signature: this is how a binary\nbecomes downloadable, so accepting an unsigned one would let an unverifiable\nartifact into the distribution path. Org-admin only — publishing is an\noperator action, not something a licensee does.",
-        "tags": [
-          "licensing"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "artifact_ref": "s3://…",
-                "cosign_signature": "MEUCIQ…",
-                "id": "engine-1.4.0-linux-arm64",
-                "platform": "linux/arm64",
-                "product": "engine",
-                "version": "1.4.0"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/Release"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Release"
-                }
-              }
-            },
-            "description": "created"
-          }
-        }
-      }
-    },
-    "/v1/licensing/releases/{release}": {
-      "get": {
-        "operationId": "get_v1_licensing_releases_by_release",
-        "summary": "Reads one release's metadata: its product, version, platform and the cosign material a client verifies the binary against.",
-        "description": "Reads one release's metadata: its product, version, platform and the\ncosign material a client verifies the binary against.\n\nAn unknown id is 404. Like the list, this is metadata only — the bytes are\nbehind the license-gated download.",
-        "tags": [
-          "licensing"
-        ],
-        "parameters": [
-          {
-            "name": "release",
+            "name": "wildcard1",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string"
             }
           }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Release"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/licensing/revoke": {
-      "post": {
-        "operationId": "post_v1_licensing_revoke",
-        "summary": "Revoke turns off tokens that have already been issued.",
-        "description": "Revoke turns off tokens that have already been issued.\n\nA signed token cannot be un-signed, so revocation is the only way to withdraw\none: this appends an entry that verify and the license-gated download both\nconsult. It is a POST rather than a DELETE because it APPENDS a durable,\nattributed record — the entry names the admin who recorded it and when —\nrather than removing one.\n\nOrg-admin only. Scope it as narrowly as the incident allows: \"nonce\" for one\nleaked token, \"holder\" for one compromised account, \"fingerprint\" for one\nstolen machine, \"release\" when a whole build is bad.",
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_licensing_by_wildcard1",
+        "summary": "Read the licensing subtree: releases, the public verification key, health",
+        "description": "The subtree is mounted as ONE wildcard route, so the path segment selects the real operation. Under GET those are:\n\n- `/v1/licensing/releases` — every release the deployment knows.\n- `/v1/licensing/releases/{release}` — one release's metadata; an unknown id is 404.\n- `/v1/licensing/download/{release}` — the license-gated artifact download. It is gated on the minted LICENSE token rather than the OIDC bearer, because that is exactly what the engine runs on: present it as an `X-License-Token` header or a `?token=` query parameter. No token is 401; a token whose signature, app or expiry fails, or that has been revoked, or that lacks the features the release requires, is 403; a yanked release is 410. The answer carries the artifact AND its cosign signature, so a client verifies the binary before trusting it.\n- `/v1/licensing/pubkey` and `/v1/licensing/jwks` — the same Ed25519 PUBLIC key, in raw base64 and as a JWK. This is the only public-safe surface here, and it is what lets an engine verify tokens OFFLINE. The private key never enters this process: signing goes through the KMS signer abstraction, not key material.\n- `/v1/licensing/healthz` — status, deployment env, and which signer provider is in use.\n\nAny other path under the subtree is 404.",
         "tags": [
           "licensing"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "reason": "leaked in a public gist",
-                "scope": "nonce",
-                "value": "9f2c…"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/RevokeRequest"
-              }
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RevokeResponse"
-                }
-              }
-            },
-            "description": "ok"
           }
-        }
-      }
-    },
-    "/v1/licensing/verify": {
-      "post": {
-        "operationId": "post_v1_licensing_verify",
-        "summary": "Verify checks a license token online: signature, schema, expiry, app_id and the revocation list.",
-        "description": "Verify checks a license token online: signature, schema, expiry, app_id and\nthe revocation list.\n\nIt is UNAUTHENTICATED and always answers 200 — a bad token is `valid:false`\nwith a reason rather than an error status, because \"is this token good\" is a\nquestion anyone may ask about a credential they already hold and the answer is\nthe same either way. It is also OPTIONAL: the engine verifies OFFLINE against\nthe published public key (GET /v1/licensing/pubkey) and needs this endpoint\nonly to learn about revocation, so an outage here never stops a paid customer\nworking.",
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_licensing_by_wildcard1",
+        "summary": "Not served — but the refusal still names the methods a path allows",
+        "description": "The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only, and OPTIONS is not among them. An OPTIONS to a real licensing path is therefore 405 rather than a capability answer; it does still carry the `Allow` header naming that path's real methods, which is the part a client was asking for. An OPTIONS to a path the subtree does not have is 404.",
         "tags": [
           "licensing"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "token": "eyJ2Ijox….Ab3…"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/VerifyRequest"
-              }
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerifyResponse"
-                }
-              }
-            },
-            "description": "ok"
           }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "Artifact": {
-        "properties": {
-          "cosign_cert": {
-            "type": "string"
-          },
-          "cosign_signature": {
-            "type": "string"
-          },
-          "download_url": {
-            "description": "DownloadURL is a short-lived signed URL to the artifact bytes. The\nscaffold returns the ArtifactRef as-is; production issues a signed URL.",
-            "type": "string"
-          },
-          "release": {
-            "$ref": "#/components/schemas/Release"
-          }
-        },
-        "type": "object"
+        ]
       },
-      "DeviceSignals": {
-        "properties": {
-          "arch": {
-            "type": "string"
-          },
-          "cpuid": {
-            "description": "CPUID is a CPU/board identifier string.",
-            "type": "string"
-          },
-          "disk_serial": {
-            "description": "DiskSerial of the boot/root volume.",
-            "type": "string"
-          },
-          "hostname": {
-            "description": "Hostname is a weak signal, used only as a tiebreaker.",
-            "type": "string"
-          },
-          "install_id": {
-            "description": "InstallID is a per-install random the agent persists locally on first run.",
-            "type": "string"
-          },
-          "machine_id": {
-            "description": "MachineID is a stable per-host id (e.g. /etc/machine-id, IOPlatformUUID,\nMachineGuid). Strongest single signal where present.",
-            "type": "string"
-          },
-          "macs": {
-            "description": "MAC addresses of stable interfaces (order-insensitive; we sort).",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "os": {
-            "description": "OS / Arch coarse platform tags.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "FingerprintRequest": {
-        "properties": {
-          "signals": {
-            "$ref": "#/components/schemas/DeviceSignals",
-            "description": "Signals is the host material the client agent collected. Which fields\nactually participate in the binding is deliberately unspecified — send\neverything available and let the server decide."
-          }
-        },
-        "type": "object"
-      },
-      "FingerprintResponse": {
-        "properties": {
-          "fingerprint": {
-            "description": "Fingerprint is the OPAQUE binding value to pass to POST /v1/licensing/issue.\nIt is one-way: the raw signals cannot be recovered from it and are never\nechoed back.",
-            "type": "string"
-          },
-          "version": {
-            "description": "Version is the binding algorithm revision, so a stored fingerprint stays\nrecognizable across a recipe rotation.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "HealthView": {
-        "properties": {
-          "env": {
-            "description": "Env is the deployment environment (\"dev\" | \"staging\" | \"prod\").",
-            "type": "string"
-          },
-          "service": {
-            "description": "Service is always \"licensing\".",
-            "type": "string"
-          },
-          "signer": {
-            "description": "Signer names the KMS provider signing licenses here. \"local\" means a\ndevelopment key: tokens it mints are not production credentials.",
-            "type": "string"
-          },
-          "status": {
-            "description": "Status is \"ok\" whenever the process is up — this is not a dependency probe.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "IssueRequest": {
-        "properties": {
-          "fingerprint": {
-            "description": "Fingerprint is a previously-registered device binding value, as returned by\nPOST /v1/licensing/fingerprint. Leave it empty and pass Signals to bind the\ndevice at issue time instead.",
-            "type": "string"
-          },
-          "holder": {
-            "description": "Holder overrides who the token is issued to; defaults to the caller's own\nvalidated subject. It NAMES the token's bearer and grants nothing on its\nown — the entitlement checked is always the caller's org's.",
-            "type": "string"
-          },
-          "product": {
-            "description": "Product is the licensed commerce product the caller wants a token for.",
-            "type": "string"
-          },
-          "release": {
-            "description": "Release scopes the token to one signed binary release, recorded as a\n\"release:\u003cid\u003e\" feature so a single bad release can be revoked on its own.",
-            "type": "string"
-          },
-          "signals": {
-            "$ref": "#/components/schemas/DeviceSignals",
-            "description": "Signals binds the device at issue time, as an alternative to a\npre-registered fingerprint. The raw signals are never stored or echoed —\nthey are folded immediately into the one-way binding value."
-          },
-          "ttl_seconds": {
-            "description": "TTLSeconds requests a token lifetime in seconds. It is clamped to the\ndeployment maximum AND to the entitlement's own expiry — a token never\noutlives the subscription that paid for it.",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "product"
+      "patch": {
+        "operationId": "patch_v1_licensing_by_wildcard1",
+        "summary": "Not served — nothing in the licensing subtree is patched",
+        "description": "The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only. A PATCH to a real licensing path is 405, with an `Allow` header naming the methods that path does serve; a PATCH to a path the subtree does not have is 404.\n\nNothing here is mutable in part. A license is an immutable signed token — you issue a new one — and a release is republished whole.",
+        "tags": [
+          "licensing"
         ],
-        "type": "object"
-      },
-      "IssueResponse": {
-        "properties": {
-          "app_id": {
-            "description": "AppID is the brand this token runs under (\"hanzo\" | \"lux\" | \"zoo\"). The\nengine refuses a token whose app_id is not the one it was built for.",
-            "type": "string"
-          },
-          "exp": {
-            "description": "Exp is the token's expiry, Unix seconds.",
-            "type": "integer"
-          },
-          "features": {
-            "description": "Features are the capability grants copied verbatim from the plan the org\nbought. The engine enforces exactly these.",
-            "items": {
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
               "type": "string"
-            },
-            "type": "array"
-          },
-          "fingerprint_bound": {
-            "description": "Bound reports whether a device fingerprint was folded into the token. An\nunbound token runs on any machine; a bound one runs only on the machine it\nwas bound to.",
-            "type": "boolean"
-          },
-          "holder": {
-            "description": "Holder is who the token was issued to.",
-            "type": "string"
-          },
-          "nonce": {
-            "description": "Nonce uniquely identifies this token, and is what a per-token revocation\nnames.",
-            "type": "string"
-          },
-          "token": {
-            "description": "Token is the signed license, `base64url(payload).base64url(ed25519_sig)`.\nIt is the credential the engine runs on — treat it as a secret.",
-            "type": "string"
+            }
           }
-        },
-        "type": "object"
+        ]
       },
-      "JWK": {
-        "properties": {
-          "crv": {
-            "description": "Crv is always \"Ed25519\".",
-            "type": "string"
-          },
-          "kty": {
-            "description": "Kty is always \"OKP\".",
-            "type": "string"
-          },
-          "use": {
-            "description": "Use is always \"sig\".",
-            "type": "string"
-          },
-          "x": {
-            "description": "X is the public key, base64url (the JWK convention).",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "PubkeyView": {
-        "properties": {
-          "alg": {
-            "description": "Alg is always \"Ed25519\".",
-            "type": "string"
-          },
-          "keys": {
-            "description": "Keys is the same key as a single-entry JWKS (OKP/Ed25519), for JWKS-shaped\nconsumers.",
-            "items": {
-              "$ref": "#/components/schemas/JWK"
-            },
-            "type": "array"
-          },
-          "provider": {
-            "description": "Provider names the KMS holding the private half (\"local\" | \"aws\" | ...).\n\"local\" means a development key — never trust it in production.",
-            "type": "string"
-          },
-          "public_key": {
-            "description": "PublicKey is the 32-byte Ed25519 public key, standard base64. This is the\nform the engine embeds for offline verification.",
-            "type": "string"
-          },
-          "schema": {
-            "description": "Schema is the license payload schema version this key signs.",
-            "type": "integer"
-          },
-          "token_format": {
-            "description": "TokenFormat states the wire layout so an implementer can verify a token\nwithout this service's source.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "Release": {
-        "properties": {
-          "app_id": {
-            "description": "AppID scopes the release to an app build (\"hanzo\" | \"lux\" | \"zoo\").",
-            "type": "string"
-          },
-          "artifact_ref": {
-            "description": "ArtifactRef is where the binary lives (object-store key / OCI ref / path).",
-            "type": "string"
-          },
-          "cosign_cert": {
-            "description": "CosignCert is the cosign/Fulcio cert (keyless) or public key ref used to\nverify CosignSignature. The download response hands this to the client.",
-            "type": "string"
-          },
-          "cosign_signature": {
-            "description": "CosignSignature is the base64 cosign signature over the artifact digest.",
-            "type": "string"
-          },
-          "created_at": {
-            "type": "integer"
-          },
-          "id": {
-            "description": "ID is the release identifier, e.g. \"engine-rocm-0.4.2-linux-amd64\". The\naccelerator belongs here — one product is built several ways — and never\nin Product below.",
-            "type": "string"
-          },
-          "min_features": {
-            "description": "MinFeatures, when set, are features the license must include to download.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "platform": {
-            "description": "Platform is \"\u003cos\u003e/\u003carch\u003e\", e.g. \"linux/amd64\".",
-            "type": "string"
-          },
-          "product": {
-            "description": "Product is the licensed product this artifact belongs to (commerce SKU):\n\"engine\" for every one of those builds.",
-            "type": "string"
-          },
-          "sha256": {
-            "description": "SHA256 is the hex digest of the artifact (integrity + cosign subject).",
-            "type": "string"
-          },
-          "version": {
-            "description": "Version is the semantic version of the binary.",
-            "type": "string"
-          },
-          "yanked": {
-            "description": "Yanked marks a pulled release (download refused; tokens may be revoked\nrelease-scoped too).",
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "ReleaseList": {
-        "properties": {
-          "releases": {
-            "description": "Releases is the published releases, always an array and never null.",
-            "items": {
-              "$ref": "#/components/schemas/Release"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "RevocationEntry": {
-        "properties": {
-          "at": {
-            "type": "integer"
-          },
-          "by": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "scope": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "RevokeRequest": {
-        "properties": {
-          "reason": {
-            "description": "Reason is the operator's note, echoed back by verify so a support agent can\nexplain the refusal.",
-            "type": "string"
-          },
-          "scope": {
-            "description": "Scope is what the revocation matches on: \"nonce\" kills one token,\n\"holder\" every token issued to one bearer, \"fingerprint\" every token bound\nto one device, and \"release\" every token scoped to one binary release.",
-            "type": "string"
-          },
-          "value": {
-            "description": "Value is the concrete nonce, holder, fingerprint or release id to revoke.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "scope",
-          "value"
+      "post": {
+        "operationId": "post_v1_licensing_by_wildcard1",
+        "summary": "Issue, verify and revoke license tokens, bind a device, publish a release",
+        "description": "The subtree is mounted as ONE wildcard route, so the path segment selects the real operation. Under POST those are:\n\n- `/v1/licensing/issue` — mints an Ed25519 license token for a paid product. The caller must be authenticated (mounted in cloud, that is an IAM-verified bearer), and the entitlement is then checked in commerce for that caller's org and subject: a caller who does not own the product is 403, never a token. The token's `app_id` is the DEPLOYMENT's brand, so a hanzo deployment can never mint a lux- or zoo-scoped token. Device binding comes from a `fingerprint` you registered earlier or from `signals` bound at issue time, and a deployment configured to require one refuses without it. The lifetime is clamped both to policy and to the entitlement's own expiry, so a token never outlives the entitlement that justified it. Naming a `release` scopes the token to it as a `release:\u003cid\u003e` feature, which is what makes release-scoped revocation reach it.\n- `/v1/licensing/verify` — an online, unauthenticated check of a token: signature, app and expiry, then the revocation list. The rule worth knowing is that an INVALID token is still 200 — the answer is `{valid:false, reason}`, not an HTTP error — because this read is informational and the engine is what enforces the license, offline, from the public key.\n- `/v1/licensing/revoke` — appends a revocation entry scoped by `nonce`, `holder`, `fingerprint` or `release`, stamped with the admin who did it. Authenticated; any other scope, or a missing value, is 400.\n- `/v1/licensing/fingerprint` — turns device signals into the opaque binding value `/issue` accepts. Authenticated, and the raw signals are never echoed back.\n- `/v1/licensing/releases` — publishes a release, answering 201. Authenticated, and outside dev a release carrying no cosign signature is refused, so an unsigned binary cannot enter the download path.\n\nAny other path under the subtree is 404.",
+        "tags": [
+          "licensing"
         ],
-        "type": "object"
-      },
-      "RevokeResponse": {
-        "properties": {
-          "entry": {
-            "$ref": "#/components/schemas/RevocationEntry",
-            "description": "Entry is the stored revocation, including who recorded it and when."
-          },
-          "revoked": {
-            "description": "Revoked is always true — a failure is an error status, not a false here.",
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "VerifyRequest": {
-        "properties": {
-          "app": {
-            "description": "App overrides the app_id the token is expected to carry. Leave it empty and\nthe token's own app_id is used — an online verify is informational, and it\nis the ENGINE that enforces the app at boot.",
-            "type": "string"
-          },
-          "token": {
-            "description": "Token is the license token to check.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "token"
-        ],
-        "type": "object"
-      },
-      "VerifyResponse": {
-        "properties": {
-          "app_id": {
-            "description": "AppID is the brand the token runs under.",
-            "type": "string"
-          },
-          "exp": {
-            "description": "Exp is the token's expiry, Unix seconds.",
-            "type": "integer"
-          },
-          "features": {
-            "description": "Features are the capability grants the token carries.",
-            "items": {
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
               "type": "string"
-            },
-            "type": "array"
-          },
-          "fingerprint_bound": {
-            "description": "Bound reports that the token carries a device binding.",
-            "type": "boolean"
-          },
-          "holder": {
-            "description": "Holder is who the token was issued to.",
-            "type": "string"
-          },
-          "nonce": {
-            "description": "Nonce uniquely identifies the token.",
-            "type": "string"
-          },
-          "reason": {
-            "description": "Reason says why an invalid token was rejected. Empty when Valid.",
-            "type": "string"
-          },
-          "revoked": {
-            "description": "Revoked reports that the signature was good but the token has been revoked.",
-            "type": "boolean"
-          },
-          "valid": {
-            "description": "Valid is the single answer: signature, schema, expiry, app and revocation\nall passed.",
-            "type": "boolean"
+            }
           }
-        },
-        "type": "object"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_licensing_by_wildcard1",
+        "summary": "Not served — nothing in the licensing subtree is replaced by PUT",
+        "description": "The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only. A PUT to a real licensing path (`/v1/licensing/issue`, `/v1/licensing/releases`, and the rest) is 405, with an `Allow` header naming the methods that path does serve; a PUT to a path the subtree does not have at all is 404.\n\nThere is no replace-in-place anywhere here: a release is published again through POST /v1/licensing/releases, and a license is re-issued rather than edited.",
+        "tags": [
+          "licensing"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_licensing_by_wildcard1",
+        "summary": "Not served — the licensing subtree does not echo requests",
+        "description": "The subtree is mounted as ONE wildcard route, so every method that route can carry is published — but the mux behind it registers GET and POST handlers only. A TRACE to a real licensing path is 405 with an `Allow` header naming that path's real methods, and a TRACE to a path the subtree does not have is 404. No request is ever echoed back, which is what you want of a surface that carries bearer tokens and license tokens in headers.",
+        "tags": [
+          "licensing"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     }
   }

@@ -19,45 +19,45 @@
     "/tasks": {
       "delete": {
         "operationId": "delete_tasks",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "get": {
         "operationId": "get_tasks",
         "summary": "The tasks console",
-        "description": "Serves the application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the tasks console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request."
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "options": {
         "operationId": "options_tasks",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started."
       },
       "patch": {
         "operationId": "patch_tasks",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "post": {
         "operationId": "post_tasks",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "put": {
         "operationId": "put_tasks",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "trace": {
         "operationId": "trace_tasks",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started."
       }
     },
     "/tasks/{wildcard1}": {
       "delete": {
         "operationId": "delete_tasks_by_wildcard1",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -72,7 +72,7 @@
       "get": {
         "operationId": "get_tasks_by_wildcard1",
         "summary": "The tasks console's assets and client-side routes",
-        "description": "Serves the static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link is a shell load, not a 404.\n\nThe one exception is /tasks/assets/, which holds only content-addressed build output: a name that is not there is a purged chunk, never a route, and answers 404. Everywhere else a path that looks like a missing file answers 200 with the shell, so read the content type rather than the status when a resource seems to be missing.\n\nA bundle that was never built answers 503 under its own name on every path, which is a failed deploy rather than a missing page.\n\nThis is the tasks console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -86,8 +86,8 @@
       },
       "options": {
         "operationId": "options_tasks_by_wildcard1",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -101,8 +101,8 @@
       },
       "patch": {
         "operationId": "patch_tasks_by_wildcard1",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -116,8 +116,8 @@
       },
       "post": {
         "operationId": "post_tasks_by_wildcard1",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -131,8 +131,8 @@
       },
       "put": {
         "operationId": "put_tasks_by_wildcard1",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -146,8 +146,8 @@
       },
       "trace": {
         "operationId": "trace_tasks_by_wildcard1",
-        "summary": "Not served by the tasks console",
-        "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "parameters": [
           {
             "name": "wildcard1",
