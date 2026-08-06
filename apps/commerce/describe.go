@@ -141,6 +141,61 @@ func describeBilling() {
 			"/v1/billing/credit, which no browser can reach. Reading an empty balance is an empty "+
 			"array, not an error.")
 
+	// ---- the four reads the billing app's own tabs are built on ----
+	//
+	// All four take GetTier's chain, and the middleware that makes them safe is
+	// PinBillingSubject: it OVERWRITES the subject key each handler filters on
+	// with the caller's own account.Payer subject, so the ?user and ?userId these
+	// handlers read can never name anybody else. The prose below says so, because
+	// a reader who believes those parameters are theirs to choose has misread the
+	// operation in the direction that matters.
+	openapi.Describe("/v1/billing/transactions", http.MethodGet,
+		"List the movements on your own balance, newest first",
+		"Returns the caller's own ledger movements — every credit and debit against the subject "+
+			"the usage gate charges — newest first, with a count and the subject they belong to, "+
+			"so a customer can reconcile a bill against the acts that produced it. Paging is "+
+			"limit and offset, and the currency can be narrowed.\n\n"+
+			"The subject is NOT the caller's to choose. The handler filters on a user parameter, "+
+			"and that parameter is overwritten with the caller's own billing subject before the "+
+			"handler runs — so naming another subject returns your own rows rather than theirs, "+
+			"and the read can never disagree with the wallet it describes. An unauthenticated "+
+			"call is 401 rather than 403, because a browser re-authenticates on the first and "+
+			"only reports the second. No movements is an empty list, not an error.")
+
+	openapi.Describe("/v1/billing/credit-balance", http.MethodGet,
+		"What is left of your credit, as one number",
+		"Returns the total credit still available to the caller's own subject — the sum of what "+
+			"the grants have left, which is the figure the console shows above the usage meter. "+
+			"It is the balance a metered act draws down, so it answers the one question a "+
+			"customer asks before spending: how much is there.\n\n"+
+			"Like every read in this family the subject is pinned to the caller before the "+
+			"handler runs, so the userId parameter the handler reads can never name another "+
+			"tenant. For the grants BEHIND this number — each with its original amount and its "+
+			"expiry — read /v1/billing/credits. A subject with no credit is zero, which is an "+
+			"answer and not an error.")
+
+	openapi.Describe("/v1/billing/accounts", http.MethodGet,
+		"The billing account you are signed in to",
+		"Returns the billing accounts visible to the caller. One organisation is exactly one "+
+			"billing account here, so an authenticated caller sees precisely one: their own. "+
+			"The list shape is the honest one — it is what a caller with access to several "+
+			"would receive — rather than a promise that more will ever appear for a token "+
+			"scoped to a single org.\n\n"+
+			"The account is derived from the validated org claim and from nothing the caller "+
+			"sends, so there is no account parameter and a cross-tenant read is not "+
+			"expressible. An unauthenticated call is 401.")
+
+	openapi.Describe("/v1/billing/accounts/:id/members", http.MethodGet,
+		"Who is on a billing account",
+		"Returns the members of one billing account. The id must be the caller's OWN account — "+
+			"the handler compares it against the org resolved from the token and answers 403 "+
+			"when they differ, which is what guards this route: unlike its siblings it carries "+
+			"no subject key for the pin to overwrite, so it checks the path segment itself.\n\n"+
+			"The roster it can answer is currently the requesting user alone. Membership lives "+
+			"in IAM, not in the ledger, and this operation reports what commerce actually holds "+
+			"rather than inventing a roster from a source it does not read. An unauthenticated "+
+			"call is 401.")
+
 	openapi.Describe("/v1/billing/payouts", http.MethodGet,
 		"List your org's payouts, newest first",
 		"Returns the caller org's payout records ordered by creation time descending, read from "+

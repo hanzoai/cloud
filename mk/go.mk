@@ -28,9 +28,25 @@ export TMPDIR ?= $(HOME)/.cache/go-tmp
 # sat un-shippable behind it while hanzo.app answered 503 balance_unavailable.
 TMPDIR_READY := $(shell mkdir -p $(TMPDIR) && echo ok)
 
-# Each link peaks in the GiBs. Unbounded parallelism is how a fleet target OOMs
-# a 128GiB box.
-export GOFLAGS ?= -p=2
+# ONE number, split two ways, because the two multiply. A fleet target runs J
+# apps at once and each of those spawns P compilers, so the box sees J*P; a solo
+# build is J=1 and gets the whole box. NPROC is the number, mk/fleet.mk derives
+# JOBS from it, and this line derives P.
+#
+# P was a flat 2 for everyone, and that was the fleet's answer applied to the
+# solo case that never had the problem: `go build` bounded to two compilers on a
+# 20-core box. Measured on this repo, one app from an empty cache is 57.6s at
+# -p=2 and 41.4s at -p=20 — a 28% tax on every developer rebuild and on every
+# per-app CI job, paid to protect a fleet run that was never parallel to begin
+# with. mk/fleet.mk states the fleet's P where the fleet's J is stated, which is
+# the only place the product is actually known.
+#
+# It is stated rather than left to Go's default (which is also GOMAXPROCS)
+# because `go env -w GOFLAGS=-p=6` in a developer's own config would otherwise
+# decide it, and this file exists so that a developer builds EXACTLY what CI and
+# Docker build.
+NPROC := $(or $(NPROC),$(shell nproc 2>/dev/null || echo 4))
+export GOFLAGS ?= -p=$(NPROC)
 
 # The data plane has no plaintext-at-rest mode: cek refuses to open a store
 # without a master key, on every build. The server makes that a boot decision; a

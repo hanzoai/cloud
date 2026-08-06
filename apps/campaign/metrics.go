@@ -26,43 +26,106 @@ const defaultRangeDays = 30
 
 // ChannelMetric is one channel's spend contribution to a campaign's metrics.
 type ChannelMetric struct {
-	Kind       string `json:"kind"`
-	Platform   string `json:"platform"`
-	Status     string `json:"status"`
+	// Kind is which channel this row is: paid, organic or email. It is also the
+	// row's identity — a campaign carries at most one channel per kind.
+	Kind string `json:"kind"`
+	// Platform is the provider the spend was read from: meta, google, x, instagram,
+	// or the email provider.
+	Platform string `json:"platform"`
+	// Status is the channel's launch state on the campaign — pending, live, paused,
+	// failed or unavailable. Only a live channel is asked for its spend at all.
+	Status string `json:"status"`
+	// ExternalID is the provider-side id of the execution the spend belongs to.
+	// Absent until the channel has launched.
 	ExternalID string `json:"externalId,omitempty"`
-	SpendCents int64  `json:"spendCents"`
-	SpendError string `json:"spendError,omitempty"` // honest: connector spend read failed
+	// SpendCents is what the provider itself reports this channel spent, in CENTS.
+	// 0 when the channel never launched, when no executor is wired for it, or when
+	// the read failed — SpendError tells the last case apart from a genuine zero.
+	SpendCents int64 `json:"spendCents"`
+	// SpendError is why this channel's spend could not be read (connector not
+	// connected, provider error), as one secret-free line. Present only on failure;
+	// the campaign total then simply omits this channel rather than failing.
+	SpendError string `json:"spendError,omitempty"`
 }
 
-// Metrics is a campaign's results view: the analytics-sourced funnel + the
+// campaignResults is a campaign's results view: the analytics-sourced funnel + the
 // connector-sourced spend + the derived growth KPIs. Available reflects the
 // analytics events lens (false = warehouse not yet emitting, honest-empty).
-type Metrics struct {
-	CampaignID  string          `json:"campaignId"`
-	Name        string          `json:"name"`
-	Status      string          `json:"status"`
-	Range       string          `json:"range"`
-	Start       string          `json:"start"`
-	End         string          `json:"end"`
-	Available   bool            `json:"available"`
-	Impressions int64           `json:"impressions"`
-	Clicks      int64           `json:"clicks"`
-	Conversions int64           `json:"conversions"`
-	Revenue     float64         `json:"revenue"`
-	Visitors    int64           `json:"visitors"`
-	SpendCents  int64           `json:"spendCents"`
-	CTR         float64         `json:"ctr"`  // clicks / impressions
-	CVR         float64         `json:"cvr"`  // conversions / clicks
-	CAC         float64         `json:"cac"`  // spend $ per conversion
-	ROAS        float64         `json:"roas"` // revenue per spend $
-	Channels    []ChannelMetric `json:"channels"`
-	Source      string          `json:"source"`
+//
+// Declared under its published name for the reason campaignRecord is (store.go): a
+// field's prose reaches the document only under the name its struct literal is
+// declared with.
+type campaignResults struct {
+	// CampaignID is the campaign these results are for, echoed from the request.
+	CampaignID string `json:"campaignId"`
+	// Name is the campaign's display name at read time, so a result can be labelled
+	// without a second fetch.
+	Name string `json:"name"`
+	// Status is the campaign's lifecycle state at read time — draft, live, paused,
+	// completed or failed. A draft has never run, so its funnel is legitimately zero.
+	Status string `json:"status"`
+	// Range is the window actually used: 24h, 7d, 30d, 90d, or "custom" when an
+	// explicit start/end pair was honored. An unparseable or absent range reads 30d,
+	// so this is the value to trust, not the one that was sent.
+	Range string `json:"range"`
+	// Start is the window's inclusive start, RFC3339 UTC.
+	Start string `json:"start"`
+	// End is the window's end, RFC3339 UTC — the read's own clock unless an explicit
+	// pair was given. The window is a LOOKBACK, not the campaign's own lifetime.
+	End string `json:"end"`
+	// Available is false when the analytics warehouse is not connected or the query
+	// failed: the funnel below is then zero because nothing could be read, not
+	// because nothing happened. Spend and Channels are still real — they come from
+	// the connectors, not the warehouse.
+	Available bool `json:"available"`
+	// Impressions is how many times the campaign's creatives were shown, counted
+	// from its utm_campaign-tagged impression events.
+	Impressions int64 `json:"impressions"`
+	// Clicks is the campaign's click events over the window.
+	Clicks int64 `json:"clicks"`
+	// Conversions is the terminal funnel events attributed to the campaign — orders
+	// completed, signups completed, explicit conversion events.
+	Conversions int64 `json:"conversions"`
+	// Revenue is the summed revenue attribute of the campaign's events, in whole
+	// CURRENCY UNITS (dollars) — the one money value here that is not in cents.
+	Revenue float64 `json:"revenue"`
+	// Visitors is how many distinct people the campaign reached, counted by event
+	// identity across ALL its events in the window — not a subset of Impressions, so
+	// it can exceed them for a campaign whose provider reports clicks but not views.
+	Visitors int64 `json:"visitors"`
+	// SpendCents is the campaign's total spend in CENTS: the sum of what each live
+	// channel's provider reports. A channel whose spend could not be read
+	// contributes 0 and says so on its own row.
+	SpendCents int64 `json:"spendCents"`
+	// CTR is clicks per impression, a fraction rounded to 4 places (0.0123 = 1.23%),
+	// not a percentage. 0 when there were no impressions to divide by.
+	CTR float64 `json:"ctr"`
+	// CVR is conversions per click, a fraction rounded to 4 places. 0 when there
+	// were no clicks.
+	CVR float64 `json:"cvr"`
+	// CAC is customer acquisition cost: spend DOLLARS per conversion, rounded to
+	// cents. 0 when nothing converted — that is "not yet computable", not "free".
+	CAC float64 `json:"cac"`
+	// ROAS is return on ad spend: revenue per spend DOLLAR, rounded to 2 places
+	// (2.5 = $2.50 back per $1). 0 when nothing was spent.
+	ROAS float64 `json:"roas"`
+	// Channels is the per-channel spend breakdown that SpendCents sums, one row per
+	// channel on the campaign including the ones that never launched.
+	Channels []ChannelMetric `json:"channels"`
+	// Source names the analytics table the funnel was read from, so an operator can
+	// see exactly what was counted. Set even when Available is false.
+	Source string `json:"source"`
 	// ABTest is the creative A/B analysis from the experiments primitive
 	// (experiments.Analyze, pull-model), present only when the campaign runs
 	// more than one creative and an experiment is wired. Opaque JSON — campaign
 	// stays decoupled from the experiments analysis type.
 	ABTest json.RawMessage `json:"abTest,omitempty"`
 }
+
+// Metrics is the domain spelling of campaignResults — an ALIAS, the same type, for
+// the same reason Campaign is one for campaignRecord (store.go): apps/agents
+// already publishes a "Metrics" into the fleet's flat schema namespace.
+type Metrics = campaignResults
 
 // channelSpend fans the spend read across a campaign's live channels. Each read
 // is best-effort: a connector-disabled or provider-error channel contributes 0
