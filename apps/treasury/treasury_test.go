@@ -25,7 +25,7 @@ import (
 // singleton (so the Reserve helper resolves it), cleaning both up.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
-	store, err := sqlstore.Open(namespace.System(), "treasury", t.TempDir())
+	store, err := sqlstore.Open(namespace.System(), "treasury", t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

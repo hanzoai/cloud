@@ -34,9 +34,10 @@ package cloud
 // router rate limit did.
 
 import (
-	"net/url"
+	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
@@ -55,64 +56,119 @@ import (
 // allowed brand host works and every other origin gets no CORS headers.
 const (
 	corsAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+	// The list must name EVERY header a browser client actually sends: a header
+	// absent here fails PREFLIGHT, and the browser reports it as an opaque
+	// "TypeError: Failed to fetch" with no server-side log — the request never
+	// arrives. Measured against production before this line changed: from a
+	// signed-in console.hanzo.ai page, adding any one of X-Actor-Id,
+	// X-Act-As-Project, X-Act-As-Org or X-CSRF-Token blocked the call, while the
+	// identical request without it returned 200.
+	//
+	// Those four are what the console stamps on a signed-in call (console
+	// src/lib/api/client.ts baseHeaders + applyCsrfToInit):
+	//   X-Actor-Id       — the signed-in user, on EVERY authenticated request
+	//   X-Act-As-Project — project sub-scope INTENT (a request, never a claim)
+	//   X-Act-As-Org     — org-switch INTENT, same shape
+	//   X-CSRF-Token     — echoed on every mutating write the ambient-cookie path makes
+	//
+	// Naming a header here only lets the browser SEND it; each stays exactly as
+	// trustworthy as before — SanitizeIdentity still strips and re-mints
+	// client-supplied identity, so an intent is still validated, never believed.
 	corsAllowHeaders = "Content-Type, Authorization, X-User-Id, X-Org-Id, " +
 		"X-Project-Id, X-Environment, X-Roles, X-User-Email, X-Request-ID, " +
-		"X-Client-ID, X-Requested-With, Accept, Accept-Language"
+		"X-Client-ID, X-Requested-With, Accept, Accept-Language, " +
+		"X-Actor-Id, X-Act-As-Project, X-Act-As-Org, X-CSRF-Token"
 	corsMaxAge = "86400"
 )
 
-// EdgeCORS returns the browser-CORS middleware for the public /v1 edge. The origin
-// allowlist is the PLATFORM policy's CORSOrigins, read live (recompiled only when
-// it changes) so a SuperAdmin can add/remove origins via PUT /v1/gateway/config.
+// EdgeCORS returns the browser-CORS middleware for the public /v1 edge, and it is
+// THE CORS authority for this binary: one predicate decides the preflight and the
+// actual request, and nothing downstream re-decides.
 //
-// DEFAULT OFF (empty allowlist ⇒ no-op passthrough). On the RECOMMENDED rollout —
-// the shared Traefik ingress keeps fronting api.hanzo.ai and its `cors-allow-all`
-// middleware already answers CORS there — enabling cloud CORS too would emit a
-// SECOND Access-Control-Allow-Origin header and break every browser preflight. So
-// CORS stays owned by exactly ONE layer: the ingress until/unless the edge moves to
-// a direct DO-LB→cloud path (cloud terminates TLS for api.hanzo.ai), at which point
-// the operator sets CLOUD_CORS_ORIGINS (or PUTs it) and cloud becomes the sole CORS
-// authority. One policy, one place — never both.
+// An origin is admitted from either of two sources (cors_origin.go):
 //
-// When enabled it handles the OPTIONS preflight itself (204, short-circuit) and
-// reflects the allowlisted Origin on the actual response, then continues the chain.
+//	DECLARED — the PLATFORM policy's CORSOrigins, read live (recompiled only when it
+//	           changes) so a SuperAdmin can retune it via PUT /v1/gateway/config.
+//	PROVEN   — a host whose site_hosts row is VERIFIED and bound to an org, i.e. the
+//	           customer published the DNS-01 challenge token for it.
+//
+// PROVEN is why this is not a static list any more. The product is that a customer
+// forks hanzoai/console and deploys it on their OWN domain; a list of domains we own
+// can never name that domain, so the shipped feature could not work. It does not
+// widen trust: the name still has to be proved, and it is proved through the
+// existing boundary rather than a second one.
+//
+// AN EMPTY DECLARED LIST IS NO LONGER A NO-OP. It used to be, on the reasoning that
+// the shared Traefik ingress owned CORS and a second Access-Control-Allow-Origin
+// would break every preflight. That reasoning still holds for the header, and this
+// middleware still emits one only when it admits the origin — but PROVEN has to be
+// answerable even in a deployment that declared nothing, or a customer's own domain
+// would depend on an operator having typed something into a list.
+//
+// The preflight is short-circuited (204) and the actual response reflects the
+// origin. Both hang off the SAME boolean, so there is no arrangement in which a
+// browser is told yes at the preflight and no at the request.
 func EdgeCORS(pol *edge.Store) zip.Handler {
+	return edgeCORS(pol, corsVerifiedHost)
+}
+
+// edgeCORS is EdgeCORS over an explicit PROVEN source — the seam the tests drive
+// without standing up a projects store or a plane.
+func edgeCORS(pol *edge.Store, proven verifiedHostFn) zip.Handler {
 	var (
 		mu      sync.Mutex
 		lastKey string
-		matcher *originMatcher
+		origins = &corsOrigins{proven: proven}
 	)
-	// currentMatcher recompiles only when the live allowlist string changes; the
-	// list is small and Platform() is itself TTL-cached, so this stays cheap.
-	currentMatcher := func() *originMatcher {
-		origins := pol.Platform().CORSOrigins
-		key := strings.Join(origins, "\n")
+	// Publish the instance, not a copy: apps/ai asks THIS predicate, sharing its
+	// compiled allowlist and its cache, so the two layers cannot drift.
+	corsPredicate.Store(origins)
+	// current recompiles the DECLARED matcher only when the live allowlist string
+	// changes; the list is small and Platform() is itself TTL-cached, so this stays
+	// cheap. The PROVEN cache is deliberately NOT rebuilt with it — it is keyed on
+	// hostnames, not on the policy, and it ages out on its own TTL.
+	current := func() *corsOrigins {
+		list := pol.Platform().CORSOrigins
+		key := strings.Join(list, "\n")
 		mu.Lock()
 		defer mu.Unlock()
 		if key != lastKey {
 			lastKey = key
-			matcher = newOriginMatcher(origins)
+			origins.setDeclared(newOriginMatcher(list))
 		}
-		return matcher
+		return origins
 	}
 	return func(c *zip.Ctx) error {
-		m := currentMatcher()
-		if m == nil {
-			// No allowlist configured ⇒ CORS is owned elsewhere (ingress). No-op.
-			return c.Continue()
-		}
 		origin := c.Header("Origin")
-		if origin == "" || !m.allowed(origin) {
-			// Not a cross-origin browser request we vouch for: add nothing (a
-			// non-allowlisted origin never receives credentialed CORS headers).
-			// A preflight from an unknown origin falls through and is refused by
-			// the normal pipeline; the browser blocks it either way.
+		if origin == "" {
+			// Not a cross-origin browser request. Nothing here depends on Origin, so
+			// nothing is added — not even Vary.
 			return c.Continue()
 		}
-		// Allowlisted origin: reflect it (credentialed CORS is never wildcard).
+		// EVERY answer below depends on Origin, INCLUDING the one that carries no
+		// CORS header, so the cache key must say so or a shared cache will hand one
+		// origin the response computed for another. Set before the branch, and
+		// APPENDED rather than assigned: SetHeader("Vary", …) overwrites, which is
+		// how this used to fight middleware_markdown's Vary: Accept — last writer
+		// won and one of the two protections silently vanished. Fiber's Vary appends
+		// and is idempotent.
+		c.Fiber().Vary("Origin")
+
+		if !current().allowed(c.Context(), origin) {
+			// An origin we do not vouch for gets NO credentialed CORS headers, and
+			// the browser blocks the read. It is not refused here: this middleware
+			// is in front of every route, and a 403 would break the many non-browser
+			// callers that send a stray Origin, plus every same-origin POST whose
+			// host nobody thought to declare. Withholding the header is the whole
+			// enforcement — it is what the browser acts on.
+			return c.Continue()
+		}
+		// Admitted: reflect the exact origin. Credentialed CORS is NEVER wildcard —
+		// `*` with Access-Control-Allow-Credentials is invalid per the Fetch
+		// standard, and the value echoed here has already been matched against a
+		// declaration or resolved to a verified record.
 		c.SetHeader("Access-Control-Allow-Origin", origin)
 		c.SetHeader("Access-Control-Allow-Credentials", "true")
-		c.SetHeader("Vary", "Origin")
 		if c.Method() == "OPTIONS" {
 			c.SetHeader("Access-Control-Allow-Methods", corsAllowMethods)
 			c.SetHeader("Access-Control-Allow-Headers", corsAllowHeaders)
@@ -125,62 +181,35 @@ func EdgeCORS(pol *edge.Store) zip.Handler {
 	}
 }
 
-// originMatcher decides whether a request Origin is on the CORS allowlist. Each
-// config entry is either an EXACT origin ("https://hanzo.ai") or a host wildcard
-// ("*.hanzo.ai", which matches the apex `hanzo.ai` AND any subdomain
-// `<sub>.hanzo.ai`) — the two forms the gateway/ingress allowlists use, expressed
-// once. Bare-host entries ("hanzo.ai") are treated as a host match on any scheme.
-type originMatcher struct {
-	exact  map[string]struct{} // full origin strings, e.g. "https://hanzo.ai"
-	hosts  map[string]struct{} // bare hosts matched regardless of scheme
-	suffix []string            // wildcard hosts: apex value, e.g. "hanzo.ai"
-}
+// corsPredicate is the process's ONE compiled CORS origin predicate — the instance
+// EdgeCORS built, published so the other layer that would otherwise take its own
+// CORS decision can ask THIS one instead.
+//
+// That layer is hanzoai/ai. It is mounted in-process and registers a CORS filter
+// ahead of every /v1 route (routers/filters.go), which REFUSES with 403 any origin
+// outside a 21-domain suffix list compiled into that module — a list no customer
+// domain can ever be in, and no deployment can change. Two CORS authorities on one
+// request is the defect: without this, a customer's console passes the preflight
+// here and gets 403 on the actual call there, which is precisely the failure mode
+// CORS review exists to catch.
+//
+// Published as a FUNCTION over the shared instance rather than a per-request mark:
+// a mark travels as a request local or a header, and a header is forgeable by the
+// caller — it would let a client assert its own CORS verdict. Both layers calling
+// one function cannot disagree, and there is nothing on the wire to forge.
+var corsPredicate atomic.Pointer[corsOrigins]
 
-// newOriginMatcher compiles the allowlist. Returns nil when empty, so the caller
-// can make CORS a pure no-op (the "owned elsewhere" default).
-func newOriginMatcher(origins []string) *originMatcher {
-	if len(origins) == 0 {
-		return nil
-	}
-	m := &originMatcher{exact: map[string]struct{}{}, hosts: map[string]struct{}{}}
-	for _, o := range origins {
-		o = strings.TrimSpace(o)
-		if o == "" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(o, "*."):
-			m.suffix = append(m.suffix, strings.ToLower(o[2:]))
-		case strings.Contains(o, "://"):
-			m.exact[o] = struct{}{}
-		default:
-			m.hosts[strings.ToLower(o)] = struct{}{}
-		}
-	}
-	if len(m.exact) == 0 && len(m.hosts) == 0 && len(m.suffix) == 0 {
-		return nil
-	}
-	return m
-}
-
-func (m *originMatcher) allowed(origin string) bool {
-	if _, ok := m.exact[origin]; ok {
-		return true
-	}
-	u, err := url.Parse(origin)
-	if err != nil || u.Host == "" {
+// CORSAllows reports whether this deployment's CORS authority admits origin.
+//
+// Exported for apps/ai, which is the only caller and uses it to keep the mounted ai
+// module's own filter inert. Answers false before the edge is built (no app, no
+// policy, nothing admitted), which is the fail-secure direction.
+func CORSAllows(ctx context.Context, origin string) bool {
+	o := corsPredicate.Load()
+	if o == nil {
 		return false
 	}
-	host := strings.ToLower(u.Hostname())
-	if _, ok := m.hosts[host]; ok {
-		return true
-	}
-	for _, sfx := range m.suffix {
-		if host == sfx || strings.HasSuffix(host, "."+sfx) {
-			return true
-		}
-	}
-	return false
+	return o.allowed(ctx, origin)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
