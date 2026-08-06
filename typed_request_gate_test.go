@@ -63,6 +63,17 @@ var allowedRequestUses = map[string]string{
 		"attributed with. None of those are the org and none can be an In field — a caller that could " +
 		"name its own ledger would bill another org. ONE function, which every op asks; it fails closed " +
 		"off the HTTP path, where there is no principal and so no tenant to act for.",
+	"apps/lsp/lsp.go": "the money gate in front of a query, for the same reason as apps/auto/billing.go " +
+		"above: answering one may have to CHECK OUT the repository and index it, so standing is " +
+		"required before the work starts rather than after. The gate needs strictly more of the " +
+		"validated principal than the org — the payer (principal.Ledger, which is the org's pool or " +
+		"the person's own ledger) and the validated project sub-scope (principal.ValidatedProject: the " +
+		"project AND whether a claim backs it, which is the per-project spend cap and a different " +
+		"question from the attribution the debit records). Neither is the org and neither can be an In " +
+		"field — a caller that could name its own payer would bill another org. ONE call site, guarded " +
+		"by onHTTP so it fails closed off the HTTP path, where there is no principal and so nobody to " +
+		"charge; the cold price is gated on every query because whether a workspace is warm is not " +
+		"known until the pool is asked, and the debit in apps/lsp/meter.go charges the real one.",
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
