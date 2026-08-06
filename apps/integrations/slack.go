@@ -55,10 +55,21 @@ const (
 // of any message-injection. The invite requirement keeps the token minimally
 // scoped; a deployment that wants zero-invite posting can add chat:write.public via
 // SLACK_BOT_SCOPES as an explicit, documented choice.
+// assistant:write is what makes @hanzo a NATIVE agent rather than a plain bot.
+// Slack's "Add Agents" picker lists only apps that declare the Agents & AI Apps
+// surface, and that declaration is three parts, all required: this scope, the
+// assistant_thread_* event subscriptions (slack_events.go), and the Agents & AI
+// Apps toggle in the app config at api.slack.com. Without all three the app still
+// answers @mentions and DMs perfectly well — it is simply never OFFERED as an
+// agent, which is why only Claude appeared in that list.
+//
+// Adding a scope means the workspace must RE-INSTALL the app: Slack does not
+// grant new scopes to an existing token.
 var slackDefaultScopes = []string{
 	"app_mentions:read", "chat:write",
 	"channels:history", "groups:history",
 	"im:history", "im:read", "im:write", "users:read",
+	"assistant:write",
 }
 
 // slackAuthorizeURL is Slack's OAuth consent endpoint (a var so a test may point
