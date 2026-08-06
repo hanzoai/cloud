@@ -10412,7 +10412,7 @@ components:
         agentBindings:
           description: |-
             AgentBindings is one row per bound machine, emitted verbatim as vm reports
-            it so vm stays the single source of truth for the binding shape.
+            it.
           items:
             $ref: '#/components/schemas/agentBinding'
           type: array
