@@ -75,7 +75,7 @@
     },
     "/v1/templates/{slug}": {
       "delete": {
-        "operationId": "delete_v1_templates_slug",
+        "operationId": "delete_v1_templates_by_slug",
         "summary": "Deletes the caller org's OWN starter kit.",
         "description": "Deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org.",
         "tags": [
@@ -100,7 +100,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_templates_slug",
+        "operationId": "get_v1_templates_by_slug",
         "summary": "Returns one starter kit: the caller org's own by that slug, else the public catalog's.",
         "description": "Returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
         "tags": [
@@ -132,7 +132,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_templates_slug",
+        "operationId": "put_v1_templates_by_slug",
         "summary": "Overwrites the caller org's OWN starter kit at the path slug, answering the stored kit.",
         "description": "Overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit.",
         "tags": [
