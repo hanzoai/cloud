@@ -35,6 +35,7 @@ var Ops = []string{
 	plane.FinanceCredit,
 	plane.FinanceRecord,
 	plane.FinanceScopeRules,
+	plane.FinanceSpend,
 	plane.FinanceTxns,
 	plane.FinanceUsage,
 }
@@ -72,6 +73,13 @@ func FinanceRecord(ctx context.Context, in *plane.RecordIn) (*plane.Recorded, er
 // Calls plane.FinanceScopeRules on commerce over the peer plane.
 func FinanceScopeRules(ctx context.Context) (*plane.ScopeRules, error) {
 	return plane.Ask[struct{}, plane.ScopeRules](ctx, App, plane.FinanceScopeRules, &struct{}{})
+}
+
+// FinanceSpend metered consumption over a window, and the wallet behind it.
+//
+// Calls plane.FinanceSpend on commerce over the peer plane.
+func FinanceSpend(ctx context.Context, in *plane.SpendIn) (*plane.Spend, error) {
+	return plane.Ask[plane.SpendIn, plane.Spend](ctx, App, plane.FinanceSpend, in)
 }
 
 // FinanceTxns ledger entries for this org.

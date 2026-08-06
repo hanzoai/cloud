@@ -206,6 +206,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeCredit()
 	exposeUsage()
 	exposeTxns()
+	exposeSpend()
 	exposeScopeRules()
 
 	if app == nil {
