@@ -48,18 +48,27 @@ const (
 	routingCode = "code"
 )
 
-// homeModels is the model menu. The enso family is Hanzo's own auto-routing SKU
-// set — `enso` picks per query in the gateway's catalog, so it is the default
-// and the honest recommendation; the other two are the explicit fast/strong
-// ends for someone who wants to pin one.
+// homeModels is the model menu: three tiers, each labelled with what it actually
+// is, default first.
+//
+// `enso` was previously offered as "Enso — auto / Picks the right model for each
+// message". It does not: enso is one fixed route entry (deepseek-v4-pro, medium
+// reasoning) in the enso catalog, with no per-query selection anywhere in it. The
+// menu now names the tier instead of selling a property it does not have.
+//
+// Enso Flash is labelled "short answers" rather than "fastest", which is what it
+// measures as: on a tool-driving turn it emits at 11.7 tok/s against enso's 19.1,
+// so it is quicker only when the answer is short enough for its terseness to beat
+// its rate (see cloud.ChatModel). Calling it "fastest, for quick questions" sent
+// people to the slower tier for exactly the questions it is slower on.
 //
 // Named here rather than fetched from the catalog because this is a MENU, not an
 // inventory: /v1/models lists 107 entries and a dropdown of 107 is not a choice,
 // it is a search problem. A deployment that wants different options changes this
 // list, and the value is forwarded verbatim either way.
 var homeModels = []struct{ Value, Label, Note string }{
-	{"enso", "Enso — auto", "Picks the right model for each message"},
-	{"enso-flash", "Enso Flash", "Fastest, for quick questions"},
+	{"enso", "Enso", "Default. Reasons before answering, and drives tools best"},
+	{"enso-flash", "Enso Flash", "Terser and cheaper; best for short answers"},
 	{"enso-ultra", "Enso Ultra", "Strongest, for hard problems"},
 }
 
@@ -116,7 +125,12 @@ func homeView(s *cloud.Service[state], org, user string, link userLink, linked b
 
 	model := strings.TrimSpace(link.Model)
 	if model == "" {
-		model = homeModels[0].Value
+		// No pin: show what the turn will ACTUALLY use, read from the same constant
+		// the turn reads. Showing the menu's first row instead made the menu a second
+		// place that encoded the default, free to drift from the one that decides —
+		// and a Home that names a different model than the one answering is worse
+		// than no Home at all.
+		model = cloud.ChatModel
 	}
 	routing := strings.TrimSpace(link.Routing)
 	if routing != routingCode {

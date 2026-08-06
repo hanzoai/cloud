@@ -175,54 +175,37 @@ func (r *runtime) ready() error {
 // version; nothing here resolves `latest`, because an image decided by WHEN the
 // pod started rather than by what was shipped is not a deployment.
 func (r *runtime) imageFor(class string) string {
-	if d := r.digestFor(class); d != "" {
-		return r.image + "@" + d
-	}
 	tag := r.tag
 	if tag == "" {
 		tag = envOr("SANDBOX_IMAGE_TAG_"+strings.ToUpper(class), "")
 	}
 	if tag == "" {
-		// FALL BACK TO A NAME NOTHING PUBLISHES, on purpose.
+		// THE BARE CLASS TAG IS POISONED AND NOTHING CAN REPAIR IT.
 		//
-		// The bare `exec`/`dev`/`desktop` tags exist in the registry and all
-		// three point at stock node:22 — no toolchain, no agent, and running as
-		// ROOT. So this fallback, which fires on one empty env var, quietly
-		// swapped a hardened sandbox for a root shell. It looked fine: the pod
-		// runs, the API answers, and the only tell is a `whoami`.
+		// `<image>:dev` / `:exec` / `:desktop` are all sha256:0557ac14 — byte-identical
+		// to docker.io/library/node:22. A Job named `sandbox-image-seed` ran
+		// `crane copy docker.io/library/node:22` onto them at 20:08 UTC on 2026-08-06,
+		// from a locally built +dirty crane rather than CI's pinned one. The bare
+		// names were a stand-in from before our own image existed (see live_test.go).
 		//
-		// `-unset` is published by nothing, so an unset tag now fails at the
-		// image pull with a name that says why, instead of succeeding into the
-		// wrong image. A loud stop beats a silent downgrade.
-		return r.image + ":" + class + "-unset"
+		// They will never be repaired, because NO LANE EMITS A BARE CLASS TAG. hanzoai/ci
+		// publishes `sha-<short>-amd64-<class>`, `<class>-latest` and `<version>-<class>`;
+		// bot's lane publishes the same three shapes. A tag nothing can create is a tag
+		// nothing can fix.
+		//
+		// The failure was SILENT, which is why it cost a day: node:22 starts, reads EOF,
+		// exits 0 — a run that did nothing and reported success. Every sandbox in
+		// production was that.
+		//
+		// `<class>-latest` is a real published tag and is the honest default. It is not
+		// the strongest one: the version-pinned form above is, and a deployment that
+		// cares should set SANDBOX_IMAGE_TAG_<CLASS>. But an unpinned tag that is CORRECT
+		// beats a pinned-looking tag that is a stock node image, and the docstring's
+		// preference for a pinned version cannot be honoured by a name that carries no
+		// version at all.
+		return r.image + ":" + class + "-latest"
 	}
-	// <version>-<class>, which is the order CI PUBLISHES. This read
-	// `class + "-" + tag` and asked for `dev-2026.6.7` while the registry held
-	// `2026.6.7-dev`, so the default path 404'd on an image that was sitting
-	// right there. The publisher wins that argument: hanzoai/ci appends its
-	// per-image `tag-suffix` to the version, so every image in the fleet is
-	// <version>-<suffix> and a consumer that spells it the other way is simply
-	// wrong.
-	return r.image + ":" + tag + "-" + class
-}
-
-// DigestFor pins by CONTENT when the deployment names a digest, and it is the
-// only pin that cannot move.
-//
-// A version tag looks immutable and is not: hanzoai/bot ships the sandbox image
-// under bot's own package.json version, which was last bumped 2026-06-07, so a
-// rebuild TODAY republished `2026.6.7-dev` from a commit two months newer. A tag
-// that gets rewritten is not a pin, and one that LOOKS like a pin is worse than
-// `latest`, which at least admits what it is.
-//
-// SANDBOX_IMAGE_DIGEST is therefore honoured ahead of any tag: `repo@sha256:…`
-// names bytes, and bytes do not change under a running fleet.
-// It is PER CLASS, because the three classes are three different images and one
-// digest names one of them. A single SANDBOX_IMAGE_DIGEST would have quietly
-// given every class the exec image — the same shape of bug as a tag that looks
-// pinned and is not, which is what this function exists to end.
-func (r *runtime) digestFor(class string) string {
-	return strings.TrimSpace(os.Getenv("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class)))
+	return r.image + ":" + class + "-" + tag
 }
 
 func (r *runtime) pods() dynamic.ResourceInterface {
@@ -321,30 +304,6 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		// service-account token in its filesystem is an API credential handed to
 		// that code. This is also why nothing else needs to strip credentials on
 		// the way in — there are none to strip.
-		// THE POD RUNS AS uid 1000, and fsGroup is why it can WRITE.
-		//
-		// The image ends `USER sandbox` (uid 1000). A mounted volume — the emptyDir
-		// at the exec class's workdir, or a project PVC — arrives owned by root:root
-		// mode 0755, so uid 1000 gets EPERM on the very first write and the sandbox
-		// is a read-only box that looks healthy. A Dockerfile `chown` cannot fix it:
-		// the mount happens after the image layer and shadows it.
-		//
-		// fsGroup makes the kubelet chown the volume to that GID and adds it as a
-		// supplemental group, which is the only mechanism that reaches a volume.
-		// runAsUser/runAsGroup are stated rather than inherited so the pod does not
-		// depend on the image's USER line staying 1000 — the two must agree, and the
-		// one that is checkable from outside the image should say so.
-		//
-		// This is also what the image's own comments already ASSUMED was here and
-		// was not: "the pod runs runAsNonRoot with runAsUser 1000, so the uid is
-		// fixed by the securityContext". It was not fixed by anything until now, and
-		// the live proof missed it only because a stock node:22 runs as root.
-		"securityContext": map[string]any{
-			"runAsUser":    int64(1000),
-			"runAsGroup":   int64(1000),
-			"fsGroup":      int64(1000),
-			"runAsNonRoot": true,
-		},
 		"automountServiceAccountToken": false,
 		// The account is NAMED, and naming it is the fix for a real outage rather
 		// than tidiness. Unnamed means `default`, and DOKS's registry integration
