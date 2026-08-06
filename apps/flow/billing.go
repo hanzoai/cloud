@@ -47,11 +47,13 @@ const (
 // is sent — an unfunded org must not start a graph whose components bill a model
 // provider.
 //
-// Off the HTTP path (a CLI LocalInvoke, an MCP tools/call) there is no request
-// and therefore no payer to charge, so there is nothing to gate. That is the
-// same silence meter keeps below, for the same reason, and it is a KNOWN hole in
-// the edge rather than a decision made here: cloud sets no zip authorizer, so no
-// transport but HTTP reaches a money gate anywhere in the fleet.
+// Off the HTTP path (a CLI LocalInvoke) there is no request and therefore no
+// payer to charge, so there is nothing to gate HERE. That silence is no longer a
+// hole in the edge: cloud sets a zip authorizer now (cloud.Toll), it runs at
+// op.invoke on every transport, and a priced operation with no payer behind it is
+// refused there before this ever runs. An MCP tools/call DOES carry a request —
+// it arrives as POST /mcp — so the payer below resolves for it exactly as it does
+// over REST.
 //
 // The refusal is cloud.Denied, not DenyResource: a typed op cannot write a
 // response body — zip stamps the op's own status over a hand-written one — so
