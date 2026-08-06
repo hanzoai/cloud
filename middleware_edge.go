@@ -56,9 +56,28 @@ import (
 // allowed brand host works and every other origin gets no CORS headers.
 const (
 	corsAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+	// The list must name EVERY header a browser client actually sends: a header
+	// absent here fails PREFLIGHT, and the browser reports it as an opaque
+	// "TypeError: Failed to fetch" with no server-side log — the request never
+	// arrives. Measured against production before this line changed: from a
+	// signed-in console.hanzo.ai page, adding any one of X-Actor-Id,
+	// X-Act-As-Project, X-Act-As-Org or X-CSRF-Token blocked the call, while the
+	// identical request without it returned 200.
+	//
+	// Those four are what the console stamps on a signed-in call (console
+	// src/lib/api/client.ts baseHeaders + applyCsrfToInit):
+	//   X-Actor-Id       — the signed-in user, on EVERY authenticated request
+	//   X-Act-As-Project — project sub-scope INTENT (a request, never a claim)
+	//   X-Act-As-Org     — org-switch INTENT, same shape
+	//   X-CSRF-Token     — echoed on every mutating write the ambient-cookie path makes
+	//
+	// Naming a header here only lets the browser SEND it; each stays exactly as
+	// trustworthy as before — SanitizeIdentity still strips and re-mints
+	// client-supplied identity, so an intent is still validated, never believed.
 	corsAllowHeaders = "Content-Type, Authorization, X-User-Id, X-Org-Id, " +
 		"X-Project-Id, X-Environment, X-Roles, X-User-Email, X-Request-ID, " +
-		"X-Client-ID, X-Requested-With, Accept, Accept-Language"
+		"X-Client-ID, X-Requested-With, Accept, Accept-Language, " +
+		"X-Actor-Id, X-Act-As-Project, X-Act-As-Org, X-CSRF-Token"
 	corsMaxAge = "86400"
 )
 
