@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/agents"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/apps/kms"
 )
 
@@ -218,9 +218,22 @@ func bridgeReply(s *cloud.Service[state], ctx context.Context, org, provider, ex
 		}
 		return "Connect your Hanzo account to use @hanzo: " + u, true
 	}
-	// IN-PROCESS on-behalf-of run: org (isolation gate + tenant + balance) and the
-	// linked user's Hanzo subject drive billing/attribution. No bearer, no gateway hop.
-	run, rerr := agents.RunOnBehalf(ctx, org, link.Subject, bridgeAgentRef(provider), text)
+	// On-behalf-of run over the PLANE (ZAP/UDS): org is the isolation gate, tenant
+	// and balance; the linked user's Hanzo subject drives attribution. No bearer,
+	// no gateway hop, no public network.
+	//
+	// plane.Ask and NOT agents.RunOnBehalf, which reads that package's `mounted`
+	// global. A plugin is a PROCESS: the global is nil unless agents happens to be
+	// in THIS binary, so the direct call made co-residency an undeclared
+	// requirement and answered ErrNoPeer for every deployment that separates them —
+	// which is every real one. It failed the same way for every chat bridge, so the
+	// door belongs on the plane where the boundary is explicit.
+	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agents", plane.AgentsRunOnBehalf,
+		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: bridgeAgentRef(provider), Input: text})
+	run := plane.RunOnBehalfOut{}
+	if out != nil {
+		run = *out
+	}
 	if rerr != nil {
 		s.Log.Warn("bridge: agent run", "provider", provider, "org", org, "err", rerr) // never logs a token
 		return "Sorry — the agent hit an error handling that. Please try again.", false
