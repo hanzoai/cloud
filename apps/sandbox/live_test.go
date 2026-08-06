@@ -59,7 +59,15 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	}
 	// Always clean up: a leaked pod on a shared cluster is somebody else's
 	// problem tomorrow.
+	// stop ENDS THE POD; purge only ever deleted the volume, and returns at its
+	// first line when there is no volume to delete — which is every sandbox this
+	// file starts. Deferring purge alone therefore cleaned up nothing at all and
+	// left the pod Running: three of them, for eleven minutes, on a shared
+	// cluster. Both, in the order the product uses them.
 	defer func() {
+		if err := r.stop(context.Background(), m); err != nil {
+			t.Logf("stop: %v", err)
+		}
 		if err := r.purge(context.Background(), m); err != nil {
 			t.Logf("purge: %v", err)
 		}
@@ -144,7 +152,10 @@ func TestLiveSandboxDoesGit(t *testing.T) {
 	if err := r.start(ctx, m); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	defer func() { _ = r.purge(context.Background(), m) }()
+	defer func() {
+		_ = r.stop(context.Background(), m)
+		_ = r.purge(context.Background(), m)
+	}()
 
 	// git present at all — an image without it cannot host a coding agent.
 	res, err := r.exec(ctx, m, []string{"git", "--version"}, nil, 60)
