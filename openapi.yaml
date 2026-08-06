@@ -131,13 +131,24 @@ components:
     ActivityPoint:
       properties:
         costCents:
+          description: |-
+            CostCents is the day's spend in whole US cents. A series is only ever returned
+            for a subject the caller is authorized to see, so this is never withheld: 0 means
+            no spend that day.
           type: integer
         day:
-          description: '"2006-01-02"'
+          description: Day is the UTC calendar day this point covers, "2006-01-02".
           type: string
         requests:
+          description: |-
+            Requests is the subject's request count on this day. 0 is a real, quiet day: the
+            series is gap-filled, so every day in the range is present whether or not
+            anything happened.
           type: integer
         tokens:
+          description: |-
+            Tokens is prompt+completion tokens on this day — normally the heatmap's
+            intensity, scaled against ActivityTotals.MaxTokens.
           type: integer
       type: object
     ActivityRow:
@@ -158,45 +169,82 @@ components:
     ActivityTotals:
       properties:
         activeDays:
-          description: days with any usage
+          description: |-
+            ActiveDays counts the days with any usage at all — the streak/consistency number.
+            Compare it against len(days) for the share of days the subject showed up.
           type: integer
         costCents:
+          description: CostCents is the window's spend in whole US cents, the sum
+            of Days[].CostCents.
           type: integer
         maxRequests:
+          description: |-
+            MaxRequests is the same ceiling for a request-based heatmap — the busiest single
+            day's request count, 0 for an idle window.
           type: integer
         maxTokens:
-          description: busiest day's tokens (heatmap intensity ceiling)
+          description: |-
+            MaxTokens is the busiest single day's token count: the ceiling to normalize a
+            token heatmap against, so the darkest cell is that day. 0 for an idle window,
+            which a client must not divide by.
           type: integer
         requests:
+          description: Requests is the sum of Days[].Requests over the whole window.
           type: integer
         tokens:
+          description: Tokens is the sum of Days[].Tokens over the whole window.
           type: integer
       type: object
     ActivityView:
       properties:
         available:
+          description: |-
+            Available is false when nothing could be read: the warehouse is not connected,
+            the rollup is not ready, or the subject is one the ledger cannot attribute (see
+            Note). Days is then empty because there is no answer, not because there was no
+            activity.
           type: boolean
         days:
+          description: |-
+            Days is the gap-filled series, one point per calendar day from From up to (not
+            including) To, in ascending order, zero-valued days included. Always a list,
+            never null.
           items:
             $ref: '#/components/schemas/ActivityPoint'
           type: array
         from:
+          description: From is the first day in Days, "2006-01-02" inclusive.
           type: string
         id:
-          description: resolved subject id (echoed)
+          description: |-
+            ID is the subject the server actually read, after resolving "me"/empty to the
+            caller and bounding it to what they may see — a ledger "owner/name" for a user,
+            an org id for an org. Echoed so a client can confirm whose series it holds.
           type: string
         note:
-          description: honest note (e.g. project attribution not in the ledger)
+          description: |-
+            Note explains an empty-but-not-broken answer in plain words — today only
+            subject=project, which the usage ledger records no column for. Present only when
+            there is something to say; show it instead of an empty chart.
           type: string
         source:
+          description: |-
+            Source names the table the series was aggregated from (the derived daily rollup,
+            hanzo.usage_rollup_daily).
           type: string
         subject:
-          description: user|org|project
+          description: 'Subject echoes what the series is about: user|org|project.'
           type: string
         to:
+          description: |-
+            To is the EXCLUSIVE upper bound, "2006-01-02" — the day AFTER the last point in
+            Days. A request for to=2026-03-31 answers to=2026-04-01 with 2026-03-31 last.
           type: string
         totals:
           $ref: '#/components/schemas/ActivityTotals'
+          description: |-
+            Totals are the window's sums plus the busiest-day ceilings a heatmap scales
+            against. Derived from Days — nothing here is read separately.
       type: object
     AdCampaign:
       properties:
@@ -1169,18 +1217,33 @@ components:
     CatalogEntry:
       properties:
         labels:
+          description: Labels is the starter's second suggested taxonomy, same treatment
+            as Tags.
           items:
             type: string
           type: array
         name:
+          description: |-
+            Name is the starter's suggested handle. It is NOT taken in your org: the
+            catalog is shared reference content, so this name is free until you import it,
+            and posting it under a name you already use appends a version to yours.
           type: string
         prompt:
+          description: |-
+            Prompt is the starter's full template body, ready to POST as-is. Entries too
+            large to create (over 64 KiB) are dropped from this list rather than offered.
           type: string
         tags:
+          description: |-
+            Tags is the starter's suggested taxonomy, carried through unchanged if you
+            import it.
           items:
             type: string
           type: array
         type:
+          description: |-
+            Type labels the template's kind, defaulted to "text" for entries that declare
+            none.
           type: string
       type: object
     CategorySpend:
@@ -1214,17 +1277,36 @@ components:
     ChannelMetric:
       properties:
         externalId:
+          description: |-
+            ExternalID is the provider-side id of the execution the spend belongs to.
+            Absent until the channel has launched.
           type: string
         kind:
+          description: |-
+            Kind is which channel this row is: paid, organic or email. It is also the
+            row's identity — a campaign carries at most one channel per kind.
           type: string
         platform:
+          description: |-
+            Platform is the provider the spend was read from: meta, google, x, instagram,
+            or the email provider.
           type: string
         spendCents:
+          description: |-
+            SpendCents is what the provider itself reports this channel spent, in CENTS.
+            0 when the channel never launched, when no executor is wired for it, or when
+            the read failed — SpendError tells the last case apart from a genuine zero.
           type: integer
         spendError:
-          description: 'honest: connector spend read failed'
+          description: |-
+            SpendError is why this channel's spend could not be read (connector not
+            connected, provider error), as one secret-free line. Present only on failure;
+            the campaign total then simply omits this channel rather than failing.
           type: string
         status:
+          description: |-
+            Status is the channel's launch state on the campaign — pending, live, paused,
+            failed or unavailable. Only a live channel is asked for its spend at all.
           type: string
       type: object
     ChannelResult:
@@ -1248,21 +1330,38 @@ components:
     ChannelSpec:
       properties:
         account:
-          description: provider account ref (ad-account/page/list id)
+          description: |-
+            Account is the provider account this channel runs under: an ad-account, a page
+            or a mailing-list id. An executor may replace it at launch with the account it
+            actually used.
           type: string
         detail:
-          description: honest last-outcome detail (never a secret)
+          description: |-
+            Detail is the last outcome in one secret-free line — the failure reason, or
+            what the executor reported. Absent when there is nothing to explain.
           type: string
         externalId:
+          description: |-
+            ExternalID is the provider-side id of the running execution, recorded by the
+            orchestrator at launch and handed back verbatim to read spend or to pause.
+            Server-owned and absent until this channel has launched; anything a caller
+            sends for it is dropped.
           type: string
         kind:
-          description: paid | organic | email
+          description: |-
+            Kind is the channel and the identity a campaign holds at most one of: paid,
+            organic or email. It picks the executor the launch fans out to.
           type: string
         platform:
-          description: meta | google | x | instagram | (email provider)
+          description: |-
+            Platform is the provider within the kind — meta, google, x, instagram, or the
+            email provider.
           type: string
         status:
-          description: pending | live | paused | failed | unavailable
+          description: |-
+            Status is this channel's own launch outcome, not the campaign's: pending (added,
+            never launched), live, paused, failed (Detail says why) or unavailable (no
+            executor wired on this deployment). Server-owned — a caller can never assert it.
           type: string
       type: object
     Citation:
@@ -1342,46 +1441,99 @@ components:
     CodeFile:
       properties:
         id:
+          description: |-
+            ID is the file's path RELATIVE to its session's artifact directory, which is
+            also how it is fetched: GET /v1/download/{session}/{id}.
           type: string
         name:
+          description: |-
+            Name is the display name. On an ANSWER it carries the `{session}/{id}`
+            identifier whole, because the client matches on that prefix.
           type: string
         session_id:
+          description: |-
+            SessionID is the other accepted spelling of the same fact on the way IN. Both
+            are read; whichever is set wins.
           type: string
         storage_session_id:
+          description: |-
+            StorageSessionID names the session holding the bytes, and is the spelling the
+            answer always uses.
           type: string
       type: object
     CodeResult:
       properties:
         files:
+          description: |-
+            Files are what this run CREATED OR CHANGED, decided by mtime against a marker
+            taken before the program started — so it is the run's output, not a listing of
+            the directory. Fetch each from GET /v1/download/{session}/{id}.
           items:
             $ref: '#/components/schemas/CodeFile'
           type: array
         session_id:
+          description: |-
+            SessionID is the sandbox this run used — the one that was passed in, or the
+            fresh one that was leased. Pass it to the next run to keep the filesystem.
           type: string
         stderr:
+          description: |-
+            Stderr is what the program wrote to standard error, INCLUDING a compiler's
+            diagnostics and the trace of a program that exited non-zero. Its presence is
+            not a failed call.
           type: string
         stdout:
+          description: Stdout is what the program wrote to standard output.
           type: string
       type: object
     CodeRun:
       properties:
         args:
+          description: |-
+            Args become the PROGRAM's argv, never the compiler's. For the compiled
+            languages the toolchain builds first and these are passed to the binary it
+            produced.
           items:
             type: string
           type: array
         code:
+          description: |-
+            Code is the WHOLE program, not a fragment: it is written to a single file and
+            that file is what runs, so a compiled language needs its entry point and an
+            interpreted one runs top to bottom.
           type: string
         files:
+          description: |-
+            Files are inputs the host already put in some session. Each names the session
+            its bytes live in, which is usually — and ideally — the session this run wants.
           items:
             $ref: '#/components/schemas/CodeFile'
           type: array
         lang:
+          description: |-
+            Lang selects the toolchain, and with it the filename the code is written to
+            and the line that runs it: py, js, ts, bash, r, php, go, rs, c, cpp, java, d,
+            f90. Anything else is refused rather than guessed at — a run in the wrong
+            language fails somewhere deep in a compiler, which reads as an outage.
           type: string
         runtime_session_hint:
+          description: |-
+            RuntimeSessionHint is the stateful-session hint. It is carried so a client
+            that sends it is not silently misread, and it selects nothing here: every
+            session in this implementation is already a warm sandbox, so there is no
+            second kind of runtime for a hint to choose between.
           type: string
         session_id:
+          description: |-
+            SessionID continues an EXISTING sandbox, which is what makes runs stateful:
+            the same filesystem, so one run's output file is the next run's input. Empty
+            leases a fresh sandbox and the id it got comes back on the result.
           type: string
         user_id:
+          description: |-
+            UserID attributes the run inside the caller's org. It is a label, never a
+            tenant: the org is resolved from the validated principal and a value here
+            cannot widen what the run may reach.
           type: string
       required:
       - lang
@@ -3723,53 +3875,113 @@ components:
     LeaderboardRow:
       properties:
         anonymous:
+          description: |-
+            Anonymous is true when this subject's identity was withheld and Handle is the
+            "Anonymous" placeholder: the metric is real, the name is not. Render it as an
+            unnamed row, never as someone actually called Anonymous.
           type: boolean
         costCents:
+          description: |-
+            CostCents is this subject's spend in whole US cents (not dollars, not
+            millicents). It is 0 unless the viewer is entitled to this subject's spend —
+            their own row, an admin looking at their own org, an explicitly cost-ranked
+            board, or a platform admin on the global board — so 0 means "withheld or zero",
+            and the two are deliberately indistinguishable.
           type: integer
         handle:
+          description: |-
+            Handle is the display identity to render: the peer's chosen handle if they opted
+            into public listing, their username if the viewer is an admin of their org, the
+            org's chosen display name (or its id) on an org board, and the literal
+            "Anonymous" when the identity is withheld. Never an email or a raw ledger id.
           type: string
         metric:
+          description: |-
+            Metric is the value the board was ranked by, copied from Requests, Tokens or
+            CostCents according to the request's metric. It is what a client sizes bars
+            against without having to know which metric was asked for.
           type: integer
         rank:
+          description: |-
+            Rank is this subject's 1-based standing in the window, 1 being the top. Rows are
+            ordered by the ranked metric descending (ties broken by request count), and a
+            board is always the top of the list — there is no offset paging — so the first
+            row is always rank 1 and rank is also the row's index + 1.
           type: integer
         requests:
+          description: |-
+            Requests is how many AI requests this subject made in the window. Volume is not
+            sensitive, so it is reported for every row including anonymized ones.
           type: integer
         self:
+          description: |-
+            Self marks the caller's own row so a client can highlight it in place. At most
+            one row carries it, and it is never set on an org board — org rows carry no user
+            identity, so the caller's own org standing arrives in LeaderboardView.Self.
           type: boolean
         tokens:
+          description: |-
+            Tokens is prompt+completion tokens this subject spent in the window. Like
+            Requests it is reported for every row.
           type: integer
       type: object
     LeaderboardView:
       properties:
         available:
+          description: |-
+            Available is false when the usage warehouse is not connected or its rollup is not
+            ready. Rows is then empty because nothing could be read — not because nobody used
+            anything. Show that difference; never render an unavailable board as a real one.
           type: boolean
         end:
+          description: |-
+            End is the EXCLUSIVE upper bound of the window, "2006-01-02" — the day after the
+            last one counted. A board through today reports tomorrow's date here.
           type: string
         metric:
-          description: tokens|requests|cost
+          description: 'Metric echoes the value ranked: tokens|requests|cost.'
           type: string
         period:
-          description: day|week|month|all|custom
+          description: |-
+            Period is the window's canonical label: day|week|month|all. The server resolves
+            aliases (7d, 30d, today, …) to these, so this may differ from what was sent.
           type: string
         rows:
+          description: |-
+            Rows are the ranked subjects, best first, at most the requested limit of them.
+            Always a list, never null: an empty one means nothing was read, not an error.
           items:
             $ref: '#/components/schemas/LeaderboardRow'
           type: array
         scope:
-          description: personal|org|global
+          description: 'Scope echoes the board that was served: personal|org|global.'
           type: string
         self:
           $ref: '#/components/schemas/SelfRank'
+          description: |-
+            Self is the caller's own standing, reported even when they fall outside Rows.
+            Absent when the caller's ledger identity cannot be resolved, or when the query
+            behind it failed — never faked to keep the shape tidy.
         source:
+          description: |-
+            Source names the table these numbers were aggregated from (the derived daily
+            rollup, hanzo.usage_rollup_daily), so an operator can tell exactly what was read.
           type: string
         start:
-          description: '"" for all'
+          description: |-
+            Start is the first day counted, "2006-01-02" inclusive. Empty for period=all,
+            which has no lower bound at all.
           type: string
         subject:
-          description: user|org
+          description: |-
+            Subject is what the rows stand for — "user" on a personal or org board, "org" on
+            the global one. It tells a client whether Handle names a person or a company.
           type: string
         total:
-          description: ranked subjects in the window
+          description: |-
+            Total is how many subjects were ranked in the window — the org's active users, or
+            the active/opted-in orgs on the global board. It is the universe the ranks are
+            out of, so it is normally larger than len(rows).
           type: integer
       type: object
     Leg:
@@ -6683,23 +6895,55 @@ components:
     SelfRank:
       properties:
         costCents:
+          description: |-
+            CostCents is the caller's own spend in whole US cents. Always populated — your
+            own spend is never withheld from you — so here 0 really does mean zero.
           type: integer
         handle:
+          description: |-
+            Handle is how the caller appears on this board: their chosen handle, falling back
+            to their username, on a user board; their org id on the global board. Present
+            even when unlisted — this is the caller looking at themselves.
           type: string
         listed:
-          description: is the caller publicly listed (opted in)
+          description: |-
+            Listed says whether the caller is publicly visible on this board: opted in on a
+            user board, org opted in (or the viewer is a platform admin) on the global one.
+            False is the prompt to offer the opt-in, and explains an unranked global self.
           type: boolean
         metric:
+          description: |-
+            Metric is whichever of the three values above the board was ranked by, so a
+            client can compare the caller against the rows without re-reading the request.
+            Metric <= 0 is exactly the case that leaves Ranked false.
           type: integer
         ofTotal:
+          description: |-
+            OfTotal is the size of the universe Rank is out of — "rank N of OfTotal". On a
+            user board that is the org's users with any usage in the window; on the global
+            board it is every active org for a platform admin, and the count of opted-in
+            orgs for everyone else.
           type: integer
         rank:
+          description: |-
+            Rank is the caller's 1-based standing, computed as (subjects whose windowed
+            metric strictly exceeds the caller's) + 1. It is exact against the whole ranked
+            universe, not just the returned page, so it can far exceed len(rows). Read it
+            only when Ranked.
           type: integer
         ranked:
+          description: |-
+            Ranked is false when the caller holds no position: they had no usage in the
+            window, or (on the global board) their org has not opted into public listing and
+            so is not ranked against a set it never joined. Rank is then 0 and means nothing.
           type: boolean
         requests:
+          description: Requests is the caller's own request count in the window, 0
+            if they were idle.
           type: integer
         tokens:
+          description: Tokens is the caller's own prompt+completion tokens in the
+            window.
           type: integer
       type: object
     Sequence:
@@ -8654,8 +8898,16 @@ components:
     accruals:
       properties:
         accrued:
+          description: |-
+            Accrued is how many NEW commission accruals this run created, counted across
+            every upline level. The accrual is latched at most once per (affiliate, source
+            org, period), so a re-run inside the same month reports 0 having changed
+            nothing — 0 means "already accrued", not "failed".
           type: integer
         royaltiesAccrued:
+          description: |-
+            RoyaltiesAccrued is how many OSS-author royalty accruals the SAME spend read
+            produced in the sibling authors program. One read drives both.
           type: integer
         royaltyFailures:
           description: |-
@@ -8665,12 +8917,18 @@ components:
             silence the typed leg was added to end.
           type: integer
         swept:
+          description: |-
+            Swept is how many source (referred) orgs the run visited, bounded at 500 per
+            run. A source with no spend this period, or one whose spend could not be read,
+            still counts as swept.
           type: integer
       type: object
     accrualsOut:
       properties:
         data:
           $ref: '#/components/schemas/accruals'
+          description: 'Data is what the run did: sources visited, new accruals, royalties
+            alongside.'
         msg:
           type: string
         status:
@@ -8775,61 +9033,161 @@ components:
     adminAffiliateView:
       properties:
         accruedCents:
+          description: |-
+            AccruedCents is lifetime commission accrued, in cents. It only grows — a
+            payout moves paidCents, never this.
           type: integer
         approvedAt:
+          description: ApprovedAt is when staff approved, Unix seconds UTC. 0 means
+            never approved.
           type: integer
         code:
+          description: |-
+            Code is the minted referral code, the slug the ?aff link carries. Empty until
+            approval mints it. Codes are one global namespace across all affiliates.
           type: string
         createdAt:
+          description: CreatedAt is when the org applied, Unix seconds UTC.
           type: integer
         id:
+          description: |-
+            ID is the affiliate's server-minted handle, "aff_"-prefixed — the id the
+            approve, suspend, rate and payout routes address.
           type: string
         org:
+          description: |-
+            Org is the partner's own org slug. It appears ONLY on this cross-tenant admin
+            view; no partner-facing read ever names another org.
           type: string
         paidCents:
+          description: |-
+            PaidCents is lifetime commission already paid out, in cents — credits grants
+            and record-only cash disbursements alike.
           type: integer
         pendingCents:
+          description: |-
+            PendingCents is accrued minus paid, in cents: what is still owed, and the hard
+            ceiling the next payout is reserved against. Never negative.
           type: integer
         rateBps:
+          description: |-
+            RateBps is this affiliate's DIRECT (level 1) commission rate in basis points
+            OF Hanzo's margin (2000 = 20% of margin, never of the customer's bill). Levels
+            2 and 3 are platform-wide switches and are not carried per affiliate.
           type: integer
         referredCount:
+          description: |-
+            ReferredCount is how many orgs this affiliate is the DIRECT referrer of,
+            counted from the attribution edges. It is 0 on the single-affiliate answers
+            (approve, suspend, rate, payout), which do not run the count.
           type: integer
         requestedCode:
+          description: |-
+            RequestedCode is the vanity code the applicant asked for. A request, not an
+            allocation: approval mints a different slug if this one was taken. Absent when
+            none was asked for.
           type: string
         status:
+          description: |-
+            Status is "applied", "approved" or "suspended". Only "approved" resolves for
+            attribution and accrues; "suspended" stops future earning and claws nothing
+            back.
           type: string
         suspendedAt:
+          description: |-
+            SuspendedAt is when staff suspended, Unix seconds UTC. 0 means never
+            suspended; it is not cleared by a later re-approval.
           type: integer
       type: object
     adminAuthorView:
       properties:
         accruedCents:
+          description: |-
+            AccruedCents is lifetime royalty accrued, in integer USD cents: the sum of
+            every latched accrual (spend × shareBps / 10000). It only ever rises — a
+            payout is recorded against paidCents and never reduces this.
           type: integer
         approvedAt:
+          description: |-
+            ApprovedAt is unix seconds of the first approval, and 0 means never approved —
+            which is also "has never been able to accrue". Re-approving to renegotiate the
+            share leaves it at the original date.
           type: integer
         createdAt:
+          description: |-
+            CreatedAt is unix seconds at the FIRST connect. Re-connecting re-links the
+            login and leaves this alone, so it dates the enrolment, not the latest link.
           type: integer
         deployCount:
+          description: |-
+            DeployCount is how many attribution edges point at this author — one per
+            (repository, project, deploying org), so re-deploying the same project adds
+            none. It includes self-deploys, which are recorded for provenance and excluded
+            from accrual, so it measures reach, not the earning set.
           type: integer
         githubLogin:
+          description: |-
+            GithubLogin is the linked forge account, lowercased. It comes from IAM's
+            linked account when the connect had one — which is also what sets verified —
+            and otherwise from the login the caller declared. The treasury author carries
+            "<brand>-maintainers".
           type: string
         id:
+          description: |-
+            ID is the author record's server-minted handle, "aut_"-prefixed. It is the id
+            the approve, suspend, payout and admin-basis routes address.
           type: string
         org:
+          description: |-
+            Org is the tenant org that owns this author record — UNIQUE, one author per
+            org. It is exposed HERE and nowhere else (Author.Org is json:"-" on the tenant
+            surface), and it is the org excluded from this author's own accrual: deploying
+            your own repo earns you nothing.
           type: string
         paidCents:
+          description: |-
+            PaidCents is lifetime royalty RECORDED as paid, in integer USD cents. It rises
+            the moment a payout reserves against pending — recording, not settling; a human
+            moves the money out of band — and falls back only when a payout is voided.
           type: integer
         pendingCents:
+          description: |-
+            PendingCents is what a payout may still draw against — accrued − paid, floored
+            at zero. It is derived for each response, never stored, and it is the exact
+            figure the atomic payout guard refuses to exceed.
           type: integer
         repoCount:
+          description: |-
+            RepoCount is how many of this author's repository claims are VERIFIED, counted
+            for this response in one GROUP BY over the whole table rather than a query per
+            row. The single-author replies from approve, suspend and payout report 0: they
+            carry the mutated row, not a re-listing.
           type: integer
         shareBps:
+          description: |-
+            ShareBps is the royalty rate accrual applies, in basis points of a deploying
+            org's metered spend for the period: 2000 (the platform default) is 20%, 10000
+            would be the entire spend. The platform keeps 10000 − shareBps. Changing it
+            never rewrites history — each ledger row keeps the rate it was written with.
           type: integer
         status:
+          description: |-
+            Status is connected, approved or suspended. Only an approved author accrues;
+            a connected one may verify repos and collect deploy edges but earns nothing
+            until a reviewer admits it.
           type: string
         suspendedAt:
+          description: |-
+            SuspendedAt is unix seconds of the most recent suspension. 0 means the author
+            is not suspended: either never was, or was and has since been approved again,
+            which clears this back to 0.
           type: integer
         verified:
+          description: |-
+            Verified is IDENTITY proof of the login, NOT proof of any repository: true
+            when the connect took the login from IAM's linked forge account (and for the
+            seeded treasury author), false when the caller merely declared it. A false
+            here still earns — repository ownership is proven separately, per claim.
           type: boolean
       type: object
     adminBonusDirectory:
@@ -9059,6 +9417,9 @@ components:
       properties:
         affiliate:
           $ref: '#/components/schemas/adminAffiliateView'
+          description: |-
+            Affiliate is the row as it stands AFTER the action that returned it. Its
+            referredCount is 0 here: these single-affiliate answers do not run the count.
       type: object
     affiliateEarnings:
       properties:
@@ -9080,6 +9441,10 @@ components:
             $ref: '#/components/schemas/orgEarningView'
           type: array
         isAffiliate:
+          description: |-
+            IsAffiliate says whether the caller org has an affiliate record. On false it
+            is the ONLY field present — there is no ledger to report, and the zeros you
+            might expect are absent rather than reported as earnings of nothing.
           type: boolean
         marginBps:
           description: MarginBps is the platform gross-margin fraction commission
@@ -9096,6 +9461,10 @@ components:
     affiliateLinks:
       properties:
         isAffiliate:
+          description: |-
+            IsAffiliate says whether the caller org has an affiliate record. On false only
+            maxLinks comes back — there are no links, and there is no link to mint until
+            the org applies and is approved.
           type: boolean
         links:
           description: Links is the caller's share links, each with its URL and funnel.
@@ -9106,12 +9475,17 @@ components:
           description: MaxLinks is how many share links one affiliate may hold.
           type: integer
         status:
+          description: |-
+            Status is the caller's affiliate status: "applied", "approved" or
+            "suspended"; absent for a non-affiliate. Minting a link requires "approved",
+            because a link that cannot accrue quietly loses the referral.
           type: string
       type: object
     affiliateOut:
       properties:
         data:
           $ref: '#/components/schemas/affiliateData'
+          description: Data carries the affiliate row the action just wrote.
         msg:
           type: string
         status:
@@ -9120,20 +9494,40 @@ components:
     affiliateSelf:
       properties:
         accruedCents:
+          description: |-
+            AccruedCents is lifetime commission accrued, in cents. It only grows — a
+            payout is recorded against paidCents and never reduces this.
           type: integer
         code:
+          description: |-
+            Code is the minted referral code, the slug the ?aff link carries. Absent until
+            staff approve; codes live in ONE global namespace across all affiliates.
           type: string
         defaultRateBps:
+          description: |-
+            DefaultRateBps is the direct rate a new affiliate starts at, in basis points
+            of margin (2000 = 20%). Answered ONLY to a caller that has not applied, as the
+            quote beside `schedule`.
           type: integer
         downlineTotal:
           description: DownlineTotal counts every org in the caller's downline across
             the levels.
           type: integer
         handle:
+          description: |-
+            Handle is the opt-in public leaderboard name. Empty means opted out: the
+            caller keeps its rank and still sees its own row, it is just not listed.
           type: string
         id:
+          description: |-
+            ID is the affiliate's server-minted handle, "aff_"-prefixed. Absent until the
+            org applies.
           type: string
         isAffiliate:
+          description: |-
+            IsAffiliate says whether the caller org has an affiliate record. On false the
+            answer carries the rate SCHEDULE and the default rate instead of a downline,
+            so the console can show what the caller would earn.
           type: boolean
         levels:
           description: Levels is the caller's downline per upline level, with the
@@ -9142,18 +9536,36 @@ components:
             $ref: '#/components/schemas/levelView'
           type: array
         link:
+          description: |-
+            Link is the shareable ?aff URL built from the code. Empty until a code is
+            minted, since there is nothing to share before approval.
           type: string
         marginBps:
+          description: |-
+            MarginBps is the platform gross-margin fraction, in basis points, that every
+            rate here is a rate OF. Read live per request, so it is the value in force
+            now, not the one that applied to commission already accrued.
           type: integer
         paidCents:
+          description: |-
+            PaidCents is lifetime commission already paid out, in cents — credits grants
+            and record-only cash disbursements alike.
           type: integer
         payouts:
+          description: Payouts is the payout history, newest first, bounded to the
+            last 100 rows.
           items:
             $ref: '#/components/schemas/remittance'
           type: array
         pendingCents:
+          description: |-
+            PendingCents is accrued minus paid, in cents — what the platform still owes
+            and the ceiling on the next payout. Never negative.
           type: integer
         rateBps:
+          description: |-
+            RateBps is the caller's OWN direct (level 1) commission rate, in basis points
+            of margin. Levels 2 and 3 are platform-wide and appear in `levels`.
           type: integer
         schedule:
           description: Schedule is the rate schedule quoted to a caller that has not
@@ -9162,6 +9574,9 @@ components:
             $ref: '#/components/schemas/levelView'
           type: array
         status:
+          description: |-
+            Status is "applied", "approved" or "suspended"; absent for a caller that never
+            applied. Only "approved" mints links and accrues.
           type: string
       type: object
     affiliateStanding:
@@ -9182,8 +9597,15 @@ components:
             out.
           type: string
         id:
+          description: |-
+            ID is the affiliate's server-minted handle, "aff_"-prefixed — what staff
+            approve, suspend, re-rate and pay against. Absent until the org applies.
           type: string
         isAffiliate:
+          description: |-
+            IsAffiliate says whether the caller org has an affiliate record at all. It is
+            the ONE field an org that never applied gets besides defaultRateBps: on false,
+            read nothing else here — every other field is absent, not zero.
           type: boolean
         link:
           description: Link is the shareable ?aff URL; empty until a code is minted.
@@ -9212,8 +9634,16 @@ components:
           description: ReferredCount is how many orgs this affiliate has referred.
           type: integer
         requestedCode:
+          description: |-
+            RequestedCode is the vanity code asked for at apply time — a request, not an
+            allocation. Approval mints `code`, which may be a different slug if this one
+            was already taken.
           type: string
         status:
+          description: |-
+            Status is "applied", "approved" or "suspended". Only an approved affiliate has
+            a code that resolves for attribution and accrues commission; suspended keeps
+            what it already earned but stops earning more.
           type: string
       type: object
     agentBinding:
@@ -9577,20 +10007,56 @@ components:
                 type: string
               type: array
             type: object
+          description: |-
+            AccessGroups is the org's named sender sets, as group name -> channel ->
+            member entries, held once for the whole org. A DM or Group entry written
+            `accessGroup:<name>` admits any sender listed under that name for THIS
+            channel, or under the channel `*`, which is how one set covers all four
+            transports. Replaced wholesale by the PUT.
           type: object
         dm:
+          description: |-
+            DM is the CONFIG-managed DM allow entries — the list PUT
+            /v1/channels/allowlist owns and replaces wholesale. An entry matches a sender
+            either EXACTLY, as the transport-native id inbox messages carry, or as
+            `accessGroup:<name>` resolved through AccessGroups. A bare `*` admits
+            everyone, but only while DMPolicy is "open": it is gate syntax, not an
+            identity, so under "allowlist" it matches nobody.
           items:
             type: string
           type: array
         dmPolicy:
+          description: |-
+            DMPolicy decides every inbound DIRECT message, defaulting to "pairing" when
+            the org has never set one. "pairing": a sender with no entry is sent a
+            pairing code and the message is DROPPED — it never reaches the inbox — and
+            they are admitted only once an admin approves. "allowlist": only DM admits,
+            and Paired senders are suspended, since a pairing grant counts under
+            "pairing" alone. "open" is not unconditional either — it still requires `*`
+            or a matching entry in DM.
           type: string
         group:
+          description: |-
+            Group is the CONFIG-managed group allow entries, consulted only while
+            GroupPolicy is "allowlist". Entries match the same two ways as DM, and here a
+            bare `*` admits every sender in the room.
           items:
             type: string
           type: array
         groupPolicy:
+          description: |-
+            GroupPolicy decides every inbound GROUP or THREAD message — a thread is a
+            group surface — defaulting to "open". "open" admits every sender in the room.
+            "allowlist" admits only what Group lists, so an EMPTY Group blocks the
+            channel's group rooms outright. "disabled" drops all of them.
           type: string
         paired:
+          description: |-
+            Paired is the senders admitted by PAIRING — the entries POST
+            /v1/channels/pairing/approve minted, DM scope only. READ-ONLY on this
+            endpoint: the PUT writes config entries and can never revoke one of these
+            (listing a paired sender under DM instead promotes that entry to config,
+            which the admin then owns). They admit only while DMPolicy is "pairing".
           items:
             type: string
           type: array
@@ -9852,16 +10318,35 @@ components:
     application:
       properties:
         code:
+          description: |-
+            Code is the minted referral code. Empty on a first apply — applying does not
+            mint a code, approval does; a re-apply echoes whatever the row already holds.
           type: string
         created:
+          description: |-
+            Created says whether THIS call made the row. false means the org had already
+            applied and nothing changed — no second row, no reset of an existing approval.
+            The HTTP status states the same fact: 201 when true, 200 when false.
           type: boolean
         id:
+          description: |-
+            ID is the affiliate's server-minted handle, "aff_"-prefixed — the id staff
+            approve, suspend, re-rate and pay against.
           type: string
         rateBps:
+          description: |-
+            RateBps is the direct (level 1) commission rate the row carries, in basis
+            points OF Hanzo's margin (2000 = 20% of margin, never of the customer's bill).
           type: integer
         requestedCode:
+          description: |-
+            RequestedCode echoes the vanity code asked for, normalized to lower case. It
+            is a request only: approval mints a different slug if this one is taken.
           type: string
         status:
+          description: |-
+            Status is "applied" for a row this call created. A re-apply echoes the
+            existing row's status, which may already be "approved" or "suspended".
           type: string
       type: object
     applicationList:
@@ -10306,12 +10791,24 @@ components:
     attribution:
       properties:
         code:
+          description: |-
+            Code is the affiliate code the edge was recorded under, normalized to lower
+            case. On a re-post it is the code of the STANDING edge, which may differ from
+            the one just sent — first touch wins.
           type: string
         created:
+          description: |-
+            Created says whether THIS call made the edge. false means the caller org was
+            already attributed and nothing moved. The HTTP status says the same: 201 when
+            true, 200 when false.
           type: boolean
         createdAt:
+          description: |-
+            CreatedAt is when the edge was FIRST recorded, Unix seconds UTC. On a re-post
+            it is the original time, not now.
           type: integer
         id:
+          description: ID is the attribution edge's server-minted handle, "afr_"-prefixed.
           type: string
       type: object
     auditList:
@@ -10338,33 +10835,82 @@ components:
     authorProgramSummary:
       properties:
         accruedCents:
+          description: AccruedCents is the page's lifetime royalty accrued, in integer
+            USD cents.
           type: integer
         approved:
+          description: Approved is how many are admitted and accruing.
           type: integer
         connected:
+          description: Connected is how many of those are enrolled but not yet admitted
+            to earning.
           type: integer
         paidCents:
+          description: |-
+            PaidCents is what has been RECORDED as paid across the page, in integer USD
+            cents. Recorded, not settled: the money leaves in a human's hands.
           type: integer
         pendingCents:
+          description: |-
+            PendingCents is what the platform still owes across the page, in integer USD
+            cents — the sum of each author's own accrued − paid, each floored at zero.
           type: integer
         suspended:
+          description: |-
+            Suspended is how many have been stopped from accruing further. An author holds
+            exactly one status, so the three buckets never overlap and connected +
+            approved + suspended = total.
           type: integer
         total:
+          description: |-
+            Total is how many author records this response actually carried. The roll-up
+            is folded over the SAME page as authors — newest first, bounded by limit
+            (default 500, ceiling 1000) — so on a program larger than the page it
+            summarizes that page, not the fleet.
           type: integer
       type: object
     authorRepo:
       properties:
         badgeMarkdown:
+          description: |-
+            BadgeMarkdown is the ready-to-paste README snippet, DERIVED for each response
+            from this deployment's badge host and never stored: a "Deploy on Hanzo" image
+            linking to the one-click import of this repository. Re-hosting the builder
+            changes every badge without touching a row.
           type: string
         createdAt:
+          description: |-
+            CreatedAt is unix seconds when the claim was first recorded. It equals
+            verifiedAt on the first proof and then stays put while verifiedAt moves, so the
+            pair reads as "claimed since / last proven".
           type: integer
         method:
+          description: |-
+            Method is HOW ownership was proven: "oauth" — an IAM-linked forge token showed
+            admin or push on the repository; "file" — a hanzo.json on the default branch
+            carried this author's verify code; or "maintainer" — the repository sits in a
+            first-party namespace, where ownership is intrinsic and the treasury author
+            holds it with no proof step. Omitted on a row written before the method was
+            recorded.
           type: string
         repoUrl:
+          description: |-
+            RepoURL is the claim key in canonical form — lowercased "host/owner/name",
+            no scheme, no .git, host ∈ {github.com, gitlab.com}. A deploy's source repo is
+            normalized through the same function before attribution, so the two sides can
+            never miss on a cosmetic difference. UNIQUE across every author: first proven
+            claim wins.
           type: string
         verified:
+          description: |-
+            Verified reports that ownership was proven. Only a proven claim is ever
+            written, so it is true on every row this surface returns; the deploy path
+            re-reads it regardless, because an unverified claim attributes nothing.
           type: boolean
         verifiedAt:
+          description: |-
+            VerifiedAt is unix seconds of the most recent successful proof. Re-verifying
+            refreshes it, and the method beside it, in place.
           type: integer
       type: object
     authorResult:
@@ -11248,72 +11794,172 @@ components:
     campaignRecord:
       properties:
         audience:
+          description: |-
+            Audience is an opaque reference to the segment this campaign targets. It is
+            stored and echoed but not yet handed to the executors — a channel targets
+            through the provider account it runs under — so it is documentation for now.
+            Absent when never set.
           type: string
         budget:
+          description: |-
+            Budget is the campaign's total budget in CENTS, handed to each executor as the
+            budget for its channel. 0 means none was set.
           type: integer
         channels:
+          description: |-
+            Channels are the fan-out targets, at most one per kind and at most 12, each
+            carrying its own post-launch state. Empty means nothing to launch, which is
+            what makes a launch of this campaign a 400.
           items:
             $ref: '#/components/schemas/ChannelSpec'
           type: array
         content:
+          description: |-
+            Content is the ordered creative set, at most 32, empty entries dropped.
+            Content[0] is the creative that runs; the rest are A/B variants a wired
+            experiment can assign per launch.
           items:
             type: string
           type: array
         createdAt:
+          description: CreatedAt is when the campaign was created, in unix seconds.
+            Server-set.
           type: integer
         id:
+          description: |-
+            ID is the campaign's server-minted handle — "cmp_" and 128 random bits — and
+            the id every other campaign call is addressed by. Never read off the wire: a
+            create that sends one has it ignored.
           type: string
         name:
+          description: |-
+            Name is the campaign's display name. Required on write, trimmed, and capped at
+            2048 characters.
           type: string
         scheduleAt:
+          description: |-
+            ScheduleAt is when the campaign should run, in unix seconds. 0 (absent) means
+            launch immediately. It is passed to each executor; nothing in this service
+            wakes up to launch it for you.
           type: integer
         status:
+          description: |-
+            Status is the lifecycle state, server-owned and never accepted from a caller.
+            Four values actually occur: draft (inert and fully mutable — nothing is sent
+            and no budget is committed), live, paused and failed. After a fan-out live
+            means AT LEAST ONE channel launched — read the channel rows for the rest —
+            and failed means none did.
           type: string
         updatedAt:
+          description: |-
+            UpdatedAt is the last write in unix seconds — an edit, a launch or a pause.
+            Server-set on every save.
           type: integer
       type: object
     campaignResults:
       properties:
-        abTest: {}
+        abTest:
+          description: |-
+            ABTest is the creative A/B analysis from the experiments primitive
+            (experiments.Analyze, pull-model), present only when the campaign runs
+            more than one creative and an experiment is wired. Opaque JSON — campaign
+            stays decoupled from the experiments analysis type.
         available:
+          description: |-
+            Available is false when the analytics warehouse is not connected or the query
+            failed: the funnel below is then zero because nothing could be read, not
+            because nothing happened. Spend and Channels are still real — they come from
+            the connectors, not the warehouse.
           type: boolean
         cac:
+          description: |-
+            CAC is customer acquisition cost: spend DOLLARS per conversion, rounded to
+            cents. 0 when nothing converted — that is "not yet computable", not "free".
           type: number
         campaignId:
+          description: CampaignID is the campaign these results are for, echoed from
+            the request.
           type: string
         channels:
+          description: |-
+            Channels is the per-channel spend breakdown that SpendCents sums, one row per
+            channel on the campaign including the ones that never launched.
           items:
             $ref: '#/components/schemas/ChannelMetric'
           type: array
         clicks:
+          description: Clicks is the campaign's click events over the window.
           type: integer
         conversions:
+          description: |-
+            Conversions is the terminal funnel events attributed to the campaign — orders
+            completed, signups completed, explicit conversion events.
           type: integer
         ctr:
+          description: |-
+            CTR is clicks per impression, a fraction rounded to 4 places (0.0123 = 1.23%),
+            not a percentage. 0 when there were no impressions to divide by.
           type: number
         cvr:
+          description: |-
+            CVR is conversions per click, a fraction rounded to 4 places. 0 when there
+            were no clicks.
           type: number
         end:
+          description: |-
+            End is the window's end, RFC3339 UTC — the read's own clock unless an explicit
+            pair was given. The window is a LOOKBACK, not the campaign's own lifetime.
           type: string
         impressions:
+          description: |-
+            Impressions is how many times the campaign's creatives were shown, counted
+            from its utm_campaign-tagged impression events.
           type: integer
         name:
+          description: |-
+            Name is the campaign's display name at read time, so a result can be labelled
+            without a second fetch.
           type: string
         range:
+          description: |-
+            Range is the window actually used: 24h, 7d, 30d, 90d, or "custom" when an
+            explicit start/end pair was honored. An unparseable or absent range reads 30d,
+            so this is the value to trust, not the one that was sent.
           type: string
         revenue:
+          description: |-
+            Revenue is the summed revenue attribute of the campaign's events, in whole
+            CURRENCY UNITS (dollars) — the one money value here that is not in cents.
           type: number
         roas:
+          description: |-
+            ROAS is return on ad spend: revenue per spend DOLLAR, rounded to 2 places
+            (2.5 = $2.50 back per $1). 0 when nothing was spent.
           type: number
         source:
+          description: |-
+            Source names the analytics table the funnel was read from, so an operator can
+            see exactly what was counted. Set even when Available is false.
           type: string
         spendCents:
+          description: |-
+            SpendCents is the campaign's total spend in CENTS: the sum of what each live
+            channel's provider reports. A channel whose spend could not be read
+            contributes 0 and says so on its own row.
           type: integer
         start:
+          description: Start is the window's inclusive start, RFC3339 UTC.
           type: string
         status:
+          description: |-
+            Status is the campaign's lifecycle state at read time — draft, live, paused,
+            completed or failed. A draft has never run, so its funnel is legitimately zero.
           type: string
         visitors:
+          description: |-
+            Visitors is how many distinct people the campaign reached, counted by event
+            identity across ALL its events in the window — not a subset of Impressions, so
+            it can exceed them for a campaign whose provider reports clicks but not views.
           type: integer
       type: object
     campaignSummary:
@@ -11408,14 +12054,52 @@ components:
     capabilities:
       properties:
         actions:
+          description: "Actions is whether the transport renders an INTERACTIVE control
+            natively, and\nit is the flag to read before composing one. The vocabulary
+            is a closed\nkind-tagged union (envelope.go), exactly four kinds, each
+            carrying only its\nown field plus an optional label:\n\n\tcommand  — a
+            bot command to run (`command`), rendered as a button that\n\t           invokes
+            it.\n\turl      — an external link (`url`), rendered as a link button.\n\tselect
+            \  — a menu (`options`, each a label and the value choosing it\n\t           returns),
+            rendered as a picker.\n\tapproval — a reference to an approval request
+            (`approval.id`), rendered as\n\t           approve/deny controls bound
+            to that id.\n\nFalse on all four transports this pass, and nothing refuses
+            a send for it:\nactions are accepted, validated per kind, and flattened
+            by renderText to one\nline each after the text — `[label] command`, `[label]
+            url`,\n`[label] opt | opt`, `[label] approval requested: <id>`. So a caller
+            that\nneeds a real control must read this flag and degrade itself; a caller
+            that\nonly needs the choice communicated can send actions and take the
+            text form."
           type: boolean
         dm:
+          description: |-
+            DM is whether the transport carries a DIRECT message at all. True for slack,
+            teams and telegram. False for discord, honestly: that ingress is guild-scoped
+            slash commands — an interaction without a guild id is refused at the door —
+            so nothing ever arrives classified as a DM, no reply route is ever learned
+            for one, and a send addressed at a Discord DM is refused 409.
           type: boolean
         group:
+          description: |-
+            Group is whether the transport carries multi-person rooms — a Discord guild
+            channel, a Slack channel, a Teams channel or group chat, a Telegram group or
+            supergroup. True on all four.
           type: boolean
         media:
+          description: |-
+            Media is whether the transport renders an ATTACHMENT natively. False on all
+            four this pass, and a send is not refused for it: renderText flattens each
+            attachment to one `kind: url (mime)` line after the text rather than dropping
+            it.
           type: boolean
         thread:
+          description: |-
+            Thread is whether a reply can be threaded UNDER a specific message. True for
+            slack alone: it is the only transport whose ingress reports a thread
+            (thread_ts, published as the envelope's replyTo) and whose door posts back
+            into it. Discord's replyTo makes an inline reply rather than a thread,
+            Telegram's answers one message id, and Teams carries no reply target at all —
+            a replyTo sent to it is ignored.
           type: boolean
       type: object
     captableClassHolding:
@@ -12294,20 +12978,59 @@ components:
     channelView:
       properties:
         account:
+          description: |-
+            Account is the id-shaped fact about that connection: the lowercased external
+            id integrations custodies for it — a Discord guild id, a Slack team
+            (workspace) id, a Teams AAD tenant id, or the Telegram chat the org bound.
+            Empty when not connected. Informational: the access policy keys on
+            (org, channel), so exactly one account is representable per pair.
           type: string
         accountLabel:
+          description: |-
+            AccountLabel is the human label of that same account — the Discord guild
+            name, the Slack team name, the Teams tenant name (falling back to the tenant
+            id), the Telegram chat title. DISPLAY ONLY: never a key, and never swapped
+            with Account, on any surface.
           type: string
         capabilities:
           $ref: '#/components/schemas/capabilities'
+          description: |-
+            Capabilities is what this transport renders natively — read it before
+            composing a message that needs threading, media or interactive actions.
         connected:
+          description: |-
+            Connected is whether integrations holds a connection for (this org, this
+            transport) — whether someone finished its connect flow. False leaves Account
+            and AccountLabel empty, and a send is then refused downstream rather than
+            here: by the transport's own binding check (403 for a Telegram chat this org
+            has not bound, 409 for a Discord or Teams room with no inbound-learned
+            route), or on Slack by the absent per-org bot token, which surfaces as 502.
           type: boolean
         dmPolicy:
+          description: |-
+            DMPolicy is how this org admits direct messages here: "pairing", "allowlist"
+            or "open", defaulting to "pairing" when the org has never set one.
           type: string
         groupPolicy:
+          description: |-
+            GroupPolicy is how this org admits group and thread rooms here: "open",
+            "allowlist" or "disabled", defaulting to "open". Both policy fields come
+            back EMPTY — rather than the listing failing — when the policy cannot be
+            read; GET /v1/channels/allowlist carries the same two with the entries they
+            consult.
           type: string
         id:
+          description: |-
+            ID is the fixed transport identifier — discord, slack, teams or telegram —
+            and the value every route on this surface names a channel by, including the
+            `:channel` segment of the send path. The listing is always in that order.
           type: string
         pendingPairing:
+          description: |-
+            PendingPairing counts the org's UNEXPIRED pairing requests on this channel:
+            exactly the rows GET /v1/channels/pairing returns for it, one per person
+            waiting on an admin. It never exceeds three — the pending cap per
+            (org, channel) — and expired requests are not counted.
           type: integer
       type: object
     chatChannels:
@@ -12462,6 +13185,11 @@ components:
     clickCount:
       properties:
         counted:
+          description: |-
+            Counted says the in-memory buffer took the ping. It does NOT say the code
+            exists — this is deliberately not a code-existence oracle, and an unknown code
+            simply no-ops at flush time. false means the buffer was full and the ping was
+            dropped, which is harmless: clicks are vanity and move no money.
           type: boolean
       type: object
     clickRequest:
@@ -12673,18 +13401,42 @@ components:
     codeView:
       properties:
         clicks:
+          description: |-
+            Clicks is how many pings this code has taken. The one STORED counter here and
+            pure vanity: no accrual or payout reads it, pings are coalesced in memory and
+            flushed in batches, and a dropped tally is accepted rather than contending
+            with the money write path. Do not reconcile it against anything.
           type: integer
         code:
+          description: |-
+            Code is the link's slug — 3–32 chars of a–z, 0–9 and hyphen — unique across
+            the WHOLE directory, so any affiliate's code resolves an attribution.
           type: string
         conversions:
+          description: |-
+            Conversions is how many of those signups have actually produced positive
+            commission for the caller. Also derived, from the accrual rows, so it is
+            ≤ signups and lags a referral until the first sweep after it spends.
           type: integer
         createdAt:
+          description: CreatedAt is when the link was minted, Unix seconds UTC.
           type: integer
         label:
+          description: |-
+            Label is the caller's own note for the link ("twitter", "newsletter").
+            Cosmetic: trimmed, stripped of control characters, capped at 48 bytes, and
+            never part of the code. "primary" on the link mirrored at approval.
           type: string
         signups:
+          description: |-
+            Signups is how many orgs were attributed with this code — DERIVED by counting
+            attribution edges, never stored, so it cannot drift from the ledger.
           type: integer
         url:
+          description: |-
+            URL is the full shareable link, the brand host plus ?aff=<code>. The host is
+            the deployment's own brand, so a Lux or Zoo install never mints a hanzo.ai
+            link.
           type: string
       type: object
     collabPayload:
@@ -14507,16 +15259,23 @@ components:
     directoryData:
       properties:
         affiliates:
+          description: |-
+            Affiliates is one row per affiliate across the whole fleet, ORG EXPOSED,
+            oldest first and bounded by the request's limit.
           items:
             $ref: '#/components/schemas/adminAffiliateView'
           type: array
         summary:
           $ref: '#/components/schemas/totals'
+          description: |-
+            Summary tallies exactly the rows above — not the whole table — so a limit that
+            truncates the page truncates the tally with it.
       type: object
     directoryOut:
       properties:
         data:
           $ref: '#/components/schemas/directoryData'
+          description: Data is the affiliate directory and its tally.
         msg:
           type: string
         status:
@@ -15477,10 +16236,20 @@ components:
     funnel:
       properties:
         convertedOrgs:
+          description: |-
+            ConvertedOrgs is how many distinct referred orgs have produced positive
+            commission at least once — a referral that actually spent.
           type: integer
         ratePct:
+          description: |-
+            RatePct is convertedOrgs over referredOrgs as a PERCENTAGE, 0–100, and the one
+            non-integer figure on this board. It is 0 when nothing has been referred yet,
+            not undefined.
           type: number
         referredOrgs:
+          description: |-
+            ReferredOrgs is how many attribution edges exist fleet-wide — one per referred
+            org, first-touch, so it is also the count of distinct referred orgs.
           type: integer
       type: object
     fwdRule:
@@ -15920,6 +16689,10 @@ components:
     handleSet:
       properties:
         handle:
+          description: |-
+            Handle is the display name as STORED, echoed back after trimming. Empty means
+            the caller opted out: it keeps its rank and still sees its own row, it is just
+            no longer listed to anyone else.
           type: string
       type: object
     healthLens:
@@ -19469,24 +20242,77 @@ components:
     inboxView:
       properties:
         account:
+          description: |-
+            Account is the lowercased external id of the org's connected account on that
+            transport: the Discord guild id, the Slack team id, the Teams AAD tenant id,
+            or the bound Telegram chat id. Informational only — the gate keys on
+            (org, channel), never on the account.
           type: string
         channel:
+          description: |-
+            Channel is the transport this message arrived on — discord, slack, teams or
+            telegram — and the `:channel` segment to reply through.
           type: string
         createdAt:
+          description: |-
+            CreatedAt is Unix SECONDS, stamped by the ingest goroutine when the message
+            was accepted — not the transport's own send time. Rows are dropped 30 days
+            after it.
           type: integer
         id:
+          description: |-
+            ID is the store's row id, assigned on insert — SERVER-SET, and the cursor:
+            pass a page's last id back as `since`. It rises with arrival order but is
+            not contiguous, because one sequence is shared by every org in the store and
+            a caller reads only its own rows.
           type: integer
         replyTo:
+          description: |-
+            ReplyTo is the transport's reply target for this message: Slack's thread_ts,
+            or the Telegram message id it arrived as. Send it back as the body's
+            `replyTo` to answer in the SAME thread. Empty means the transport reported
+            none — a top-level Slack message, and every Discord and Teams message, since
+            neither carries one — and a reply then lands at the top level of the room.
           type: string
         roomId:
+          description: |-
+            RoomID is the conversation on the ORIGINATING transport, and the value to
+            send back as `room.id`: a Discord channel snowflake, a Slack conversation id
+            (D… IM, C… public channel, G… private or mpim), a Teams conversation id
+            (19:…@thread.… for a channel or group chat, a:… for a personal chat), or a
+            Telegram chat id in decimal (negative for a group, positive for a DM). It is
+            stable for the life of the room, so every message from one conversation
+            carries the same value.
           type: string
         roomKind:
+          description: |-
+            RoomKind is how ingest classified the room: "dm", "group" or "thread". It
+            decides which policy gated the message — dmPolicy for "dm", groupPolicy for
+            BOTH "group" and "thread". Only Slack ever reports "thread"; Telegram's
+            reply-to id becomes ReplyTo instead, and Discord's ingress is guild-scoped
+            so its rooms are always "group".
           type: string
         sender:
+          description: |-
+            Sender is the TRANSPORT-NATIVE user id of whoever wrote the message — a
+            Discord member.user.id, a Slack U… user id, a Teams aadObjectId (falling
+            back to from.id), a Telegram from.id in decimal. Stable per person per
+            transport, and the identity the gate keys on: an allow entry, an access-group
+            member and a pairing approval all name exactly this value.
           type: string
         senderUser:
+          description: |-
+            SenderUser is the HANZO account subject that chat identity is linked to,
+            resolved at ingest through the org's user link. Best-effort and omitted when
+            absent: a person who never linked their chat account — or a link store that
+            could not be read — leaves it empty and is never blocked for it.
           type: string
         text:
+          description: |-
+            Text is the body as the transport delivered it, with the bot mention already
+            stripped by the ingress adapter (on Discord it is the /hanzo prompt argument,
+            since that ingress is slash commands only), truncated to 8 KiB on store.
+            Inbound attachments are not stored — this is the whole of what was said.
           type: string
       type: object
     indexIn:
@@ -20205,14 +21031,32 @@ components:
     leaderboardRow:
       properties:
         accruedCents:
+          description: |-
+            AccruedCents is that affiliate's lifetime commission accrued, in cents, and
+            what the board is ordered by. An aggregate: no per-customer figure is exposed.
           type: integer
         handle:
+          description: |-
+            Handle is the affiliate's self-chosen display name — the only identity the
+            board ever carries. The org behind it is never disclosed.
           type: string
         isYou:
+          description: |-
+            IsYou marks the caller's own row, so a client can highlight it without
+            matching on a handle. Absent on every other row.
           type: boolean
         rank:
+          description: |-
+            Rank is the position in the GLOBAL approved set ordered by lifetime accrued
+            commission, 1-based. Affiliates that set no handle still occupy their rank and
+            are simply not listed, so the visible ranks have gaps and the board is not a
+            complete roster. On the caller's own row the rank is computed over the whole
+            set, so it is exact well outside the top page.
           type: integer
         referredCount:
+          description: |-
+            ReferredCount is how many orgs that affiliate directly referred — a count
+            only, never which orgs.
           type: integer
       type: object
     legalFiling:
@@ -20278,19 +21122,39 @@ components:
     levelSplit:
       properties:
         l1Cents:
+          description: L1Cents is lifetime commission accrued to DIRECT referrers,
+            in cents.
           type: integer
         l2Cents:
+          description: |-
+            L2Cents is lifetime commission accrued one step above the direct referrer, in
+            cents, at the platform-wide level-2 rate.
           type: integer
         l3Cents:
+          description: |-
+            L3Cents is lifetime commission accrued two steps above, in cents. Nothing
+            accrues past level 3, so l1+l2+l3 is the whole accrual.
           type: integer
       type: object
     levelView:
       properties:
         downlineCount:
+          description: |-
+            DownlineCount is how many orgs sit exactly this many hops below the caller. It
+            is 0 in the schedule quoted to a caller that has not applied, which has no
+            downline to count.
           type: integer
         level:
+          description: |-
+            Level is the upline distance from the org whose spend is being shared: 1 is
+            the direct referrer, 2 and 3 the referrers above it. Nothing accrues past 3.
           type: integer
         rateBps:
+          description: |-
+            RateBps is the commission paid at this level, in basis points OF Hanzo's
+            margin (2000 = 20% of margin, never of the customer's bill). Level 1 is the
+            affiliate's own negotiated rate; 2 and 3 are platform switches read live, so
+            this is the schedule actually in force, not one compiled in.
           type: integer
       type: object
     limitsBlock:
@@ -20353,6 +21217,9 @@ components:
       properties:
         link:
           $ref: '#/components/schemas/codeView'
+          description: |-
+            Link is the link just minted, with its full shareable URL. Its funnel counters
+            all start at zero — nothing has clicked or signed up through it yet.
       type: object
     linkView:
       properties:
@@ -20672,16 +21539,31 @@ components:
     metricRow:
       properties:
         createdAt:
+          description: CreatedAt is when version 1 was written, RFC 3339 UTC.
           type: string
         currentVersion:
+          description: |-
+            CurrentVer is the version number served as current. It always equals
+            `versions`: numbering is dense from 1, and deleting a prompt takes its whole
+            history with it rather than leaving a gap.
           type: integer
         lastUpdatedAt:
+          description: |-
+            LastUpdatedAt is when the newest version was appended, RFC 3339 UTC — the age
+            of the template you would get today.
           type: string
         name:
+          description: Name is the prompt this row is about — its org-unique handle.
           type: string
         type:
+          description: Type is the current version's kind.
           type: string
         versions:
+          description: |-
+            Versions is how many revisions the prompt has, COUNTED in the store and
+            uncapped — so it can exceed the 100 entries a list row or a detail response
+            carries. Note the type: here `versions` is a number, while on a list row it is
+            the list of version numbers.
           type: integer
       type: object
     metricsView:
@@ -33350,8 +34232,14 @@ components:
       properties:
         org:
           $ref: '#/components/schemas/orgOptinView'
+          description: |-
+            Org is the caller's org's listing preference on the cross-org board, and whether
+            this caller is allowed to change it. It is read for every caller — a member sees
+            where their org stands even though only an admin may edit it.
         user:
           $ref: '#/components/schemas/userOptinView'
+          description: User is the caller's OWN listing preference, and whether they
+            may change it.
       type: object
     oracleView:
       properties:
@@ -33392,8 +34280,15 @@ components:
     orgEarningView:
       properties:
         commissionCents:
+          description: |-
+            CommissionCents is what the caller earned from that org across ALL periods, in
+            cents. Deliberately the caller's own share and nothing else: that org's spend
+            and the margin on it are not restated here.
           type: integer
         referredOrg:
+          description: |-
+            ReferredOrg is the org slug this contribution came from — one the caller
+            referred, directly or up to three levels down.
           type: string
       type: object
     orgOptinReq:
@@ -33413,11 +34308,20 @@ components:
     orgOptinView:
       properties:
         canManage:
-          description: may the caller edit the org opt-in
+          description: |-
+            CanManage is true only for an admin of this org (or a platform SuperAdmin) — the
+            callers whose write of the org preference will be accepted.
           type: boolean
         display:
+          description: |-
+            Display is the name shown for the org on that board. Empty when none was chosen;
+            opting in without one defaults it to the org id.
           type: string
         listed:
+          description: |-
+            Listed is true when the org has opted onto the cross-org global board. False —
+            the default — keeps the org off it entirely; the org's own members still see
+            their own board. Listing consents to publishing usage VOLUME, never spend.
           type: boolean
       type: object
     orgRow:
@@ -33442,16 +34346,42 @@ components:
     orgView:
       properties:
         badgeMarkdown:
+          description: |-
+            BadgeMarkdown is the ready-to-paste README snippet, DERIVED for each response
+            from this deployment's badge host and never stored — here it deep-links the
+            OWNER's template import rather than one repository's.
           type: string
         createdAt:
+          description: |-
+            CreatedAt is unix seconds when the owner claim was first recorded — equal to
+            verifiedAt on the first proof, then fixed while verifiedAt moves.
           type: integer
         method:
+          description: |-
+            Method is HOW the owner was proven, always against its ".github" control
+            repository: "oauth" — an IAM-linked forge token showed admin or push on it; or
+            "file" — a hanzo.json on its default branch carried this author's verify code.
+            The "maintainer" shortcut is a per-repository attribution and never appears
+            here. Omitted on a row written before the method was recorded.
           type: string
         ownerUrl:
+          description: |-
+            OwnerURL is the claim key in canonical form — lowercased "host/owner" with NO
+            repository segment, host ∈ {github.com, gitlab.com}. It covers every repository
+            under that owner, so code with no claim of its own still earns; a per-repository
+            claim outranks it. UNIQUE across every author: first proven claim wins.
           type: string
         verified:
+          description: |-
+            Verified reports that ownership of the WHOLE owner was proven — against that
+            owner's ".github" control repository, which is exactly as strong as a
+            per-repository claim. Only a proven claim is written, so every row returned
+            here is true.
           type: boolean
         verifiedAt:
+          description: |-
+            VerifiedAt is unix seconds of the most recent successful proof of the owner;
+            re-verifying refreshes it, and the method beside it, in place.
           type: integer
       type: object
     orgsOut:
@@ -33543,14 +34473,41 @@ components:
     pairingView:
       properties:
         channel:
+          description: |-
+            Channel is the transport the request arrived on — discord, slack, teams or
+            telegram — and half of what approval names. The cap of three unapproved
+            requests applies per (org, channel); while it is full no further code is
+            minted until one is approved or expires.
           type: string
         code:
+          description: |-
+            Code is the CAPABILITY that authorises the approval: eight characters from a
+            32-symbol uppercase alphabet (A-Z0-9 minus the confusables 0, O, 1 and I),
+            minted with crypto/rand and also sent to the requester in chat. An org admin
+            passes it with the channel to POST /v1/channels/pairing/approve, which
+            CONSUMES it — the request row is deleted, so a code approves once — and which
+            takes org admin as well as the code. It lives ONE HOUR from CreatedAt;
+            expired requests are not listed here, and approving one is a 404. It is shown
+            on this admin surface and NEVER logged.
           type: string
         createdAt:
+          description: |-
+            CreatedAt is Unix SECONDS of FIRST contact: when the request was minted and
+            the code sent. Expiry is measured from here and from nowhere else.
           type: integer
         lastSeen:
+          description: |-
+            LastSeen is Unix SECONDS of the MOST RECENT message from this sender while
+            the request has been pending. It moves as they keep writing, which is how an
+            admin tells a live request from an abandoned one — but it does not extend the
+            hour and does not re-send the code, since one request sends exactly one chat
+            reply.
           type: integer
         sender:
+          description: |-
+            Sender is the transport-native user id waiting for access — the same
+            identity inbox messages carry. Approving mints a DM allow entry for exactly
+            this value and nothing wider: pairing never grants group access.
           type: string
       type: object
     patchApplicationIn:
@@ -33696,6 +34653,7 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/settlement'
+          description: Data is the recorded payout and the balances it left behind.
         msg:
           type: string
         status:
@@ -33737,14 +34695,32 @@ components:
     payoutView:
       properties:
         amountCents:
+          description: |-
+            AmountCents is the amount RESERVED against pending royalty, in integer USD
+            cents, always positive. The reservation is atomic and can never exceed
+            accrued − paid, so this is owed money moved out of pending — not money moved.
           type: integer
         createdAt:
+          description: |-
+            CreatedAt is unix seconds when the payout was RECORDED — the moment the amount
+            left pending, not the moment a human moved the money.
           type: integer
         id:
+          description: |-
+            ID is the payout row's server-minted handle, "apo_"-prefixed. A caller never
+            supplies it; it is what an operator quotes when reconciling a settlement.
           type: string
         method:
+          description: |-
+            Method is how the operator says this settles, lowercased as recorded.
+            "credits" is the one method that means the author's own wallet; anything else
+            — wire, paypal, check — is a cash disbursement a human performs. Recording it
+            pays nobody either way.
           type: string
         reference:
+          description: |-
+            Reference is the operator's external handle for the settlement: a wire
+            confirmation, a PayPal transaction id. Absent when none was given.
           type: string
         settlement:
           description: |-
@@ -33753,15 +34729,32 @@ components:
             settlement legible as internal accounting.
           type: string
         txn:
+          description: |-
+            Txn is the commerce ledger transaction id of a SETTLED credits payout, and it
+            is absent on every payout this service records. Recording moves no money, and
+            authors asks the money plane exactly one question — what has this org spent? —
+            with no write to answer it with, so there is no receipt to carry. It fills in
+            only when a settlement stamps its transaction back onto the row.
           type: string
       type: object
     periodEarningView:
       properties:
         commissionCents:
+          description: |-
+            CommissionCents is what the caller earned that period, in cents: the sum over
+            each referred org and upline level of margin × that level's rate. Always ≤
+            marginCents, by construction.
           type: integer
         marginCents:
+          description: |-
+            MarginCents is the margin Hanzo earned in that period on the spend of every
+            org the caller referred, in cents — the base commission is a rate OF. It is
+            the aggregate base, never any one customer's bill.
           type: integer
         period:
+          description: |-
+            Period is the accrual bucket: the UTC year-month, "YYYY-MM". Commission is
+            latched at most once per referred org per period, so one row is one month.
           type: string
       type: object
     pickOut:
@@ -35021,26 +36014,52 @@ components:
     promptDetail:
       properties:
         createdAt:
+          description: |-
+            CreatedAt is when version 1 was written, RFC 3339 UTC. Appending a version
+            does not move it.
           type: string
         labels:
+          description: |-
+            Labels is the current version's free-form taxonomy. `[]` when none, never
+            null.
           items:
             type: string
           type: array
         lastUpdatedAt:
+          description: |-
+            UpdatedAt is when the current version was appended, RFC 3339 UTC. Equal to
+            createdAt for a prompt that has only ever had one version.
           type: string
         name:
+          description: Name is the prompt's org-unique handle and the URL segment
+            it is addressed by.
           type: string
         prompt:
+          description: |-
+            Prompt is the CURRENT version's template body — the only content this service
+            returns. Earlier versions are listed in versionHistory by number and date, and
+            their bodies are not served in bulk.
           type: string
         tags:
+          description: Tags is the second free-form taxonomy, same rules as Labels.
           items:
             type: string
           type: array
         type:
+          description: |-
+            Type labels the current version's kind; "text" unless the creator said
+            otherwise.
           type: string
         version:
+          description: |-
+            Version is the current version number, starting at 1 and incremented by one on
+            every create against an existing name.
           type: integer
         versionHistory:
+          description: |-
+            Versions is the history METADATA, newest first, capped at the last 100 — no
+            bodies, so a long history cannot inflate this response. It always includes the
+            current version as its first entry.
           items:
             $ref: '#/components/schemas/versionView'
           type: array
@@ -35058,20 +36077,39 @@ components:
     promptMeta:
       properties:
         labels:
+          description: |-
+            Labels is the creator's free-form taxonomy, stored as given after trimming and
+            de-duplication. Always present, `[]` when none — never null.
           items:
             type: string
           type: array
         lastUpdatedAt:
+          description: |-
+            LastUpdatedAt is when the newest version was appended, RFC 3339 UTC. Empty
+            only if the record carries no timestamp at all.
           type: string
         name:
+          description: |-
+            Name is the prompt's org-unique handle and the URL segment it is fetched by:
+            GET /v1/prompts/<name>.
           type: string
         tags:
+          description: |-
+            Tags is the second free-form taxonomy under the same rules as Labels. Nothing
+            in this service interprets either; they are yours to organize by.
           items:
             type: string
           type: array
         type:
+          description: |-
+            Type labels the template's kind, "text" unless the creator said otherwise. It
+            is the CURRENT version's type; earlier versions may carry a different one.
           type: string
         versions:
+          description: |-
+            Versions lists every version NUMBER this prompt has, newest first, capped at
+            the last 100. The highest is the current one. (On a metrics row the same key
+            is a count, not a list.)
           items:
             type: integer
           type: array
@@ -35679,11 +36717,22 @@ components:
       properties:
         accrualByLevel:
           $ref: '#/components/schemas/levelSplit'
+          description: |-
+            AccrualByLevel splits the lifetime accrual across the three upline levels —
+            how much of the liability comes from direct referrals versus the chain above.
         conversion:
           $ref: '#/components/schemas/funnel'
+          description: 'Conversion is the funnel: referred orgs against those that
+            actually earned.'
         summary:
           $ref: '#/components/schemas/tally'
+          description: |-
+            Summary is the fleet tally — population by status, and lifetime accrued, paid
+            and still-owed commission.
         topReferrers:
+          description: |-
+            TopReferrers is the 25 affiliates with the most lifetime accrued commission,
+            descending, orgs named.
           items:
             $ref: '#/components/schemas/referrerRow'
           type: array
@@ -35692,6 +36741,8 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/referralBoard'
+          description: 'Data is the referral board: leaders, funnel, tally and per-level
+            liability.'
         msg:
           type: string
         status:
@@ -35700,16 +36751,31 @@ components:
     referrerRow:
       properties:
         accruedCents:
+          description: |-
+            AccruedCents is lifetime commission accrued, in cents. The board is sorted by
+            this, descending.
           type: integer
         code:
+          description: Code is that affiliate's minted referral code; empty if it
+            is not approved.
           type: string
         org:
+          description: |-
+            Org is the partner's own org slug. Named only here, on the SuperAdmin board —
+            the partner-facing leaderboard shows an opt-in handle and never an org.
           type: string
         pendingCents:
+          description: |-
+            PendingCents is accrued minus paid, in cents — what is still owed to this
+            affiliate. Never negative.
           type: integer
         referredCount:
+          description: |-
+            ReferredCount is how many orgs this affiliate is the DIRECT referrer of —
+            its level-1 downline, not the whole three-level chain.
           type: integer
         status:
+          description: Status is "applied", "approved" or "suspended".
           type: string
       type: object
     refreshOut:
@@ -36004,16 +37070,33 @@ components:
     remittance:
       properties:
         amountCents:
+          description: |-
+            AmountCents is the amount disbursed, in cents. It was reserved against pending
+            commission atomically when recorded, so it never exceeds what was owed.
           type: integer
         createdAt:
+          description: |-
+            CreatedAt is when the payout was recorded, Unix seconds UTC — when the balance
+            moved, not necessarily when the cash landed.
           type: integer
         id:
+          description: ID is the payout row's server-minted handle, "apo_"-prefixed.
           type: string
         method:
+          description: |-
+            Method is how it was settled. "credits" issued a commerce grant into the
+            affiliate org's own wallet; any other value (wire, paypal, check, …) is a
+            RECORD of cash a human moved out of band.
           type: string
         reference:
+          description: |-
+            Reference is the operator's settlement note — a bank id, a ledger ref. Free
+            text, absent when none was given.
           type: string
         txn:
+          description: |-
+            Txn is the commerce ledger transaction id, set ONLY where a "credits" payout
+            actually issued the grant. Absent for cash methods, which write no ledger row.
           type: string
       type: object
     replaceKitIn:
@@ -36805,6 +37888,14 @@ components:
     riskDisposeOut:
       properties:
         before:
+          description: |-
+            Before echoes the retention boundary that was applied, RFC 3339 in UTC, as
+            this plane parsed it from the request. What was disposed of is every record
+            WRITTEN strictly before it and not under litigation hold — written, measured
+            against the server clock at the write, and not against the event or
+            observation times the asserting caller supplies, because a tenant that could
+            back-date could delete a compliance record on demand. A boundary younger than
+            the platform floor of five years is refused before anything is removed.
           type: string
         disposed:
           description: |-
@@ -36818,6 +37909,12 @@ components:
             hold.
           type: integer
         oldest:
+          description: |-
+            Oldest is the WRITE time of the oldest assertion this tenant still holds after
+            the sweep, RFC 3339, and it is omitted exactly when nothing remains at all.
+            Still older than Before means records survived on purpose and says which
+            mechanism kept them: a litigation hold (Held), or the per-call bound with more
+            to sweep on the next call (Remaining).
           type: string
         remaining:
           description: |-
@@ -36944,6 +38041,12 @@ components:
             source.
           type: integer
         events:
+          description: |-
+            Events is how many DISTINCT judged events those assertions name, keyed on
+            (kind, subject, at). It counts only events something was ASSERTED about: what
+            share of the whole event stream carries a label is a question about the
+            feature plane's denominator and is not answerable here. Matured + Unmatured is
+            Events.
           type: integer
         explore:
           description: |-
@@ -36960,8 +38063,18 @@ components:
             the conflict in the plane.
           type: integer
         from:
+          description: |-
+            From is the INCLUSIVE start of the EVENT window these counts were folded over,
+            RFC 3339, echoed with the defaults filled in — the caller's, or 90 days before
+            To. An assertion is in the window when its event time satisfies at >= From.
           type: string
         horizon:
+          description: |-
+            Horizon is the maturity horizon these counts were measured under, IN DAYS —
+            the caller's, or 120. It decides Matured (an event is matured when its `at`
+            plus this many days is not after now), it sets each event's own as-of and so
+            which assertions were visible to it, and when the caller bounds nothing it
+            also places the default window's end.
           type: integer
         judged:
           description: |-
@@ -36988,6 +38101,12 @@ components:
             rather than costing a full scan on every read.
           type: integer
         productive:
+          description: |-
+            Productive is how many matured events resolve, at their own as-of, to a
+            WINNING assertion of `productive` — the event led somewhere: escalated,
+            reported, charged back. It is the positive class a supervised fit would train
+            on, and a near-zero count is the number that says the fit is not worth
+            running.
           type: integer
         sources:
           description: |-
@@ -36997,6 +38116,11 @@ components:
             $ref: '#/components/schemas/riskSourceCoverage'
           type: array
         to:
+          description: |-
+            To is the EXCLUSIVE end of that window (at < To). Unstated it is one horizon
+            before now, never now: a window running to now under a maturity horizon can
+            hold no matured event at all, so every count below would read zero however
+            much ground truth the tenant held.
           type: string
         unlabelled:
           description: |-
@@ -37014,15 +38138,36 @@ components:
             is Events.
           type: integer
         unproductive:
+          description: |-
+            Unproductive is every OTHER judged event: the winner claimed `unproductive`,
+            judged not suspicious. Productive + Unproductive is Judged exactly, because a
+            winner of the explicit unjudged is counted in neither — it is a matured event
+            somebody looked at and could not conclude about, and rolling it into the
+            negatives would hand a model a claim nobody made.
           type: integer
       type: object
     riskLabelEvent:
       properties:
         at:
+          description: |-
+            At is the event's own instant, RFC 3339. It is part of the event's IDENTITY
+            and not a filter: it is matched exactly, to the second, against the `at` the
+            assertions were filed under, so an instant a second off names a different
+            event and resolves to nothing. It is also what this event's as-of is measured
+            from — At plus the horizon.
           type: string
         kind:
+          description: |-
+            Kind is the judged entity's type, from the closed set: account, agent,
+            merchant, payout, person, session or transaction. One outside it is refused
+            rather than answered `unlabelled`, because it could only ever match nothing
+            and the caller would read a real absence into a typo.
           type: string
         subject:
+          description: |-
+            Subject is the entity id in the tenant's own namespace, at most 512 bytes. It
+            is matched EXACTLY against what was recorded — this is a lookup, not a search,
+            and no prefix, pattern or normalisation is applied.
           type: string
       type: object
     riskLabelFact:
@@ -37092,6 +38237,16 @@ components:
     riskLabelOut:
       properties:
         duplicate:
+          description: |-
+            Duplicate is how many members this tenant already held, byte for byte. The
+            idempotency key is the assertion's CONTENT digest — kind, subject, at, seen,
+            disposition, source, evidence, the asserting identity and confidence, folded
+            in length-prefixed — so a webhook redelivering one chargeback is a duplicate
+            and costs nothing, while an assertion differing in ANY of those fields is a
+            DIFFERENT assertion and is recorded beside the first. Nothing was written and
+            nothing was overwritten; it is an outcome, never an error. The asserting
+            identity is in the digest, so the same claim filed by a second credential is
+            two assertions and not a redelivery.
           type: integer
         mirror:
           description: |-
@@ -37110,8 +38265,20 @@ components:
             backlog to work through rather than an inventory to reconcile.
           type: integer
         recorded:
+          description: |-
+            Recorded is how many members became a NEW row in the tenant's record.
+            Recorded + Duplicate + Refused is exactly the number of labels sent, so a
+            caller reconciling a webhook delivery can do it on the counts alone.
           type: integer
         refused:
+          description: |-
+            Refused is how many members failed admission and were NOT recorded. Refusal
+            is per member and never discards the rest of the batch: an empty or
+            over-512-byte subject or evidence, a kind, disposition or source outside the
+            closed vocabulary, an `at` or `seen` that is not RFC 3339, a `seen` before the
+            `at` it judges, either instant more than five minutes past the server clock,
+            or a confidence outside [0,1]. Results names which member and why, so the
+            refused ones are exactly the ones to fix and resend.
           type: integer
         results:
           description: |-
@@ -37125,22 +38292,61 @@ components:
     riskLabelRecord:
       properties:
         at:
+          description: |-
+            At is when the judged EVENT happened, RFC 3339 in UTC, truncated to the
+            second. The filer supplies it, and it is what a maturity horizon measures
+            from: this event's as-of is At plus the horizon. A resolve names it back
+            exactly, to the second.
           type: string
         by:
           description: By is the identity that asserted, stamped server-side at the
             write.
           type: string
         confidence:
+          description: |-
+            Confidence is the filer's own confidence in [0,1] — 1 for a processor
+            chargeback, less for an analyst's hunch. Zero is the ordinary value for a
+            filer that stated none, and it means the weakest tie-break there is rather
+            than "unknown". It breaks a tie only WITHIN one precedence rank and can never
+            lift a weak source above a strong one.
           type: number
         disposition:
+          description: |-
+            Disposition is what was concluded, from the closed set: `productive` — the
+            event led somewhere, escalated, reported or charged back; `unproductive` —
+            judged not suspicious; or the empty string for an explicit UNJUDGED, which is
+            a real assertion ("we looked and could not say") and not the absence of one.
           type: string
         evidence:
+          description: |-
+            Evidence is the pointer to the record this conclusion came from: a dispute id,
+            a case id, a decision id. At most 512 bytes, required at the write, and opaque
+            to this plane — stored and returned verbatim, never resolved. It is what an
+            adverse action is defended with, which is why an assertion carrying none is
+            refused at the door.
           type: string
         hold:
+          description: |-
+            Hold is true while a litigation hold is on this record: retention will not
+            dispose of it, at any age. False — and it is omitted then — leaves the record
+            disposable once it is older than the boundary a sweep names. It is a fact
+            about the RECORD and not about the world, so it is not folded into ID, no
+            write path can set it, and the hold op is the one way it moves in either
+            direction.
           type: boolean
         id:
+          description: |-
+            ID is the assertion's content digest — SHA-256 over every semantic field,
+            rendered hex — computed server-side and never supplied. It is the key a
+            redelivery collapses onto, and it is the id the hold op names.
           type: string
         kind:
+          description: |-
+            Kind is what the subject IS, from the closed set: account, agent, merchant,
+            payout, person, session or transaction. With Subject and At it is the IDENTITY
+            of the judged event — the triple a resolve names and the triple assertions are
+            grouped by, so a typo in it would file a label against an event nobody asks
+            about.
           type: string
         knowable:
           description: |-
@@ -37156,8 +38362,19 @@ components:
             provenance: it is recorded and published, and it decides nothing.
           type: string
         source:
+          description: |-
+            Source is WHO asserted, from the closed set: chargeoff, dispute, case, refund,
+            review or sample. It is the primary term of the precedence rule — an unknown
+            source has no rank and a conflict with it could not be resolved — so it is
+            what decides which of two disagreeing assertions is in force.
           type: string
         subject:
+          description: |-
+            Subject is the entity that was judged, named in the TENANT'S OWN namespace and
+            at most 512 bytes. It is opaque here: stored, matched and returned verbatim,
+            never dereferenced. It has no meaning outside this tenant — the record is the
+            tenant's own file — so an id lifted from another tenant's response names
+            nothing.
           type: string
         wrote:
           description: |-
@@ -37182,6 +38399,14 @@ components:
     riskLabelVocabulary:
       properties:
         dispositions:
+          description: |-
+            Dispositions is the closed set a write's `disposition` must be drawn from,
+            published in full so a caller can validate a batch before filing it instead of
+            discovering a refusal per member: "productive", "unproductive", and "" — the
+            EMPTY STRING is a member and means an explicit unjudged, so a client that
+            filters empties out of this list drops a third of the vocabulary and can never
+            file "we looked and could not say". They are the AML engine's own spelling,
+            verbatim, which is what lets a replay there report against these values.
           items:
             type: string
           type: array
@@ -37668,8 +38893,20 @@ components:
     riskResolveOut:
       properties:
         horizon:
+          description: |-
+            Horizon is the maturity horizon this answer was computed under, IN DAYS — the
+            caller's, or 120 when it stated none. Each event's as-of is its own `at` plus
+            this many days, and that as-of is what decides which assertions were visible
+            to it; an event whose as-of falls after Now is not resolved at all and is
+            counted in Unmatured instead.
           type: integer
         labels:
+          description: |-
+            Labels is one entry per named event that BOTH matured and had at least one
+            assertion knowable by its own as-of, in the order the events were named. The
+            three outcomes partition the ask: len(labels) + Unmatured + Unlabelled is the
+            number of DISTINCT events named, an event named twice having been answered
+            once.
           items:
             $ref: '#/components/schemas/riskResolved'
           type: array
@@ -37700,10 +38937,24 @@ components:
             horizon. Nothing seen after it was visible to this resolution.
           type: string
         at:
+          description: |-
+            At is the event's instant, RFC 3339, echoed. It is what the horizon is
+            measured from, so At plus the horizon is AsOf.
           type: string
         by:
+          description: |-
+            By is the identity that filed the WINNING assertion, `<home org>/<user>`,
+            stamped server-side from the validated principal at the write and never taken
+            from a body — an attribution the caller chose is not attribution. It is the
+            winner's alone; every losing assertion keeps its own and is returned whole in
+            Conflicts.
           type: string
         confidence:
+          description: |-
+            Confidence is the winning assertion's own confidence in [0,1], zero when its
+            filer stated none. It is reported because it is a term of the rule that picked
+            the winner, and it is the weakest term but one: it breaks a tie inside one
+            rank and never lifts a weak source above a strong one.
           type: number
         conflicts:
           description: |-
@@ -37722,16 +38973,47 @@ components:
             Two sources agreeing is corroboration, not conflict.
           type: boolean
         disposition:
+          description: |-
+            Disposition is the claim IN FORCE at AsOf: productive, unproductive, or the
+            empty string for an explicit unjudged. It is the winning assertion's own
+            claim, never a vote or an average — an average of two adjudications is a third
+            claim nobody made. A matured event nobody judged is not answered here at all;
+            it is counted in Unlabelled, because manufacturing a negative there is how a
+            fraud model comes to describe the incumbent block list.
           type: string
         evidence:
+          description: |-
+            Evidence is the winning assertion's pointer to the record behind it — the
+            dispute, case or decision id it was filed with, opaque and verbatim. It
+            travels with the answer so an adverse action can name what judged the subject
+            without a second read.
           type: string
         id:
+          description: |-
+            ID is the winning assertion's content digest, so this answer traces to the
+            exact record it came from — and that record can be placed under litigation
+            hold by naming this id.
           type: string
         kind:
+          description: |-
+            Kind is the judged entity's type, echoed from the event that was named. With
+            Subject and At it is how a caller joins this answer back onto the training row
+            or the decision it asked about.
           type: string
         source:
+          description: |-
+            Source is who filed the winning assertion, and it is the PRIMARY term of the
+            rule that picked it. Sources rank by adjudication weight — chargeoff,
+            dispute, case, refund, review, sample, strongest first — and only inside one
+            rank do the tie-breaks run, in order: the assertion that became KNOWABLE
+            latest, then the higher confidence, then the lower id. The vocabulary op
+            publishes that order from the same declaration the resolver reads, so a caller
+            holding a contested answer can reproduce it.
           type: string
         subject:
+          description: |-
+            Subject is the entity id, echoed from the event that was named — the tenant's
+            own key, returned verbatim.
           type: string
       type: object
     riskScoreIn:
@@ -37916,8 +39198,21 @@ components:
             concluding it is wired correctly.
           type: integer
         source:
+          description: |-
+            Source is the asserter these two counts are for — chargeoff, dispute, case,
+            refund, review or sample. There is one entry per source that either filed in
+            the window or won in it, in precedence order, strongest first. A source no
+            longer in the vocabulary still has rows and is reported after the known ones
+            rather than dropped out of a total that is supposed to add up.
           type: string
         won:
+          description: |-
+            Won is how many JUDGED events this source's assertion was the one IN FORCE
+            for, at that event's own as-of — it beat every other visible claim under the
+            precedence rule. Summed over the sources it is Judged. Read against Facts it
+            is the ratio that matters: many filed and few won is a source being outranked,
+            not a source that is broken, and one source winning nearly everything is a
+            plane that looks labelled because one noisy filer dominates it.
           type: integer
       type: object
     riskSplitCounts:
@@ -39147,8 +40442,12 @@ components:
       properties:
         affiliate:
           $ref: '#/components/schemas/adminAffiliateView'
+          description: |-
+            Affiliate is the row re-read AFTER the payout, so its paidCents and
+            pendingCents already account for the row beside it.
         payout:
           $ref: '#/components/schemas/remittance'
+          description: Payout is the payout row just recorded.
       type: object
     shareView:
       properties:
@@ -40136,14 +41435,29 @@ components:
     tally:
       properties:
         accruedLifetimeCents:
+          description: |-
+            AccruedLifetimeCents is all commission ever accrued, summed across every
+            affiliate, in cents. It only grows; a payout does not reduce it.
           type: integer
         affiliates:
+          description: |-
+            Affiliates is how many affiliate rows the board read, at every status. The
+            read is bounded at 1000 rows, so a larger fleet reports the bound.
           type: integer
         approved:
+          description: |-
+            Approved is how many of those rows are approved — the only ones whose code
+            resolves for attribution and whose balance can grow.
           type: integer
         paidLifetimeCents:
+          description: |-
+            PaidLifetimeCents is all commission ever paid out, in cents: credits grants
+            plus record-only cash disbursements.
           type: integer
         pendingLiabilityCents:
+          description: |-
+            PendingLiabilityCents is accrued minus paid across every affiliate, in cents.
+            Read it as money OWED and not yet disbursed — a liability, not spend.
           type: integer
       type: object
     targetDeleted:
@@ -40373,18 +41687,38 @@ components:
     totals:
       properties:
         accruedCents:
+          description: AccruedCents is lifetime commission accrued summed over those
+            rows, in cents.
           type: integer
         applied:
+          description: |-
+            Applied is how many of those rows are still awaiting approval — no code, no
+            accrual yet.
           type: integer
         approved:
+          description: |-
+            Approved is how many are approved: the only rows whose code resolves for
+            attribution and whose balance can still grow.
           type: integer
         paidCents:
+          description: |-
+            PaidCents is lifetime commission already paid out summed over those rows, in
+            cents.
           type: integer
         pendingCents:
+          description: |-
+            PendingCents is accrued minus paid summed over those rows, in cents — the
+            outstanding liability across the page.
           type: integer
         suspended:
+          description: |-
+            Suspended is how many were suspended. What they already accrued stays accrued
+            and stays payable.
           type: integer
         total:
+          description: |-
+            Total is how many affiliate rows this page covered, at every status. It is the
+            page, not the table: a limit that truncates truncates this too.
           type: integer
       type: object
     trackerProject:
@@ -40902,11 +42236,21 @@ components:
     userOptinView:
       properties:
         canSet:
-          description: false when the caller's identity can't be resolved
+          description: |-
+            CanSet is false when the caller's ledger identity cannot be resolved (no user
+            name on the principal). Writing the preference would fail, so hide the control.
           type: boolean
         handle:
+          description: |-
+            Handle is the display name on the caller's listed row. Empty when they never
+            chose one; opting in without a handle sets it to their username, so a listed row
+            is never blank.
           type: string
         listed:
+          description: |-
+            Listed is true when the caller's board row is published under Handle to other
+            viewers. False — the default for anyone who never opted in — anonymizes the row;
+            the metric still counts, only the name is withheld.
           type: boolean
       type: object
     usersOut:
@@ -41183,10 +42527,17 @@ components:
     versionView:
       properties:
         createdAt:
+          description: CreatedAt is when this revision was appended, RFC 3339 UTC.
           type: string
         type:
+          description: |-
+            Type is the kind this revision was written with, which may differ from the
+            current one.
           type: string
         version:
+          description: |-
+            Version is this revision's number, 1 for the first. Numbers are dense and
+            never reused: deleting the prompt drops the whole history with it.
           type: integer
       type: object
     volumesOut:
@@ -65184,6 +66535,36 @@ paths:
       x-app: analytics
   /v1/exec:
     post:
+      description: |-
+        Executes a program in a throwaway sandbox and answers with what it printed
+        and what it left behind.
+
+        `lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,
+        php, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a
+        fragment: a compiled language is compiled and then run, an interpreted one is
+        interpreted, and `args` becomes the program's own argv either way. Nothing is
+        installed for you; the image is the environment.
+
+        A PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the
+        diagnostics on `stderr`, because "the code threw" and "the interpreter is down"
+        are different facts a caller renders differently. Only the second is an error
+        status.
+
+        Runs are stateful through `session_id`. Omit it and the run gets a fresh sandbox
+        whose id comes back on the answer; pass that id again and the next run sees the
+        same filesystem, so a program can write a file one call and read it the next.
+        `files` names bytes already uploaded to a session (POST /v1/upload), copied in
+        before the program starts. `files` on the ANSWER is what the program created or
+        changed, by comparison against a marker taken at start — so it is the run's real
+        output, not a listing of the directory — and each is fetched from
+        GET /v1/download/{session}/{name}.
+
+        The tenant is the caller's, never the body's, at every door. A typed op is also
+        an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
+        route and therefore no middleware, so nothing there could have checked a
+        credential. tenantOf refuses a context carrying neither a validated principal nor
+        exec's own admission marker, so those doors fail closed without a second gate to
+        keep in step.
       operationId: post_v1_exec
       requestBody:
         content:
@@ -91616,6 +92997,89 @@ paths:
       tags:
       - plans
       x-app: plan
+  /v1/platform/apps:
+    get:
+      description: |-
+        Returns the declarations in the caller's own org directory, each joined with the Hanzo CD Application reconciling it — sync verdict, health, the universe commit last applied. `cd` is null for a declaration the delivery plane has no Application for, which is the normal state of one that exists only on a branch.
+
+        If the delivery plane cannot be read, the declarations are still returned and `cdUnavailable` says why. An unreadable plane never renders as "nothing has been reconciled".
+      operationId: get_v1_platform_apps
+      summary: What this organization has declared, and what CD did with it
+      tags:
+      - platform
+      x-app: platform
+    post:
+      description: |-
+        Builds a git repository into an image and writes the declaration that names it — a values file in `hanzoai/universe` under `charts/app/values/<namespace>/<name>.yaml`, which the `fleet` ApplicationSet renders as one Application. That file IS the deployment: nothing else has to be applied.
+
+        `mode` decides whether anything can go live. The default, `branch`, pushes to `deploy/<namespace>/<name>/<tag>` and returns a review URL; the generator reads main, so a branch declaration deploys NOTHING and merging the review is the deliberate act. `commit` writes main, and proves the image is pullable first — a declaration naming an image the registry cannot serve is an ImagePullBackOff with no rollback path.
+
+        Omit `tag` to build; give it to declare an image an earlier call already built, which is how a green build is released without rebuilding it.
+
+        An org is its name: the values DIRECTORY, the destination NAMESPACE and the AppProject FENCE are all `<org>`, and the image is `<registry>/<org>/<app>`. None of them is a request field — the directory decides what CD admits the sync under and the repository decides what the cluster pulls, so a caller who could name either could reach outside its own org.
+
+        `org` is an ACT-AS, not a placement field: it defaults to the caller's own, and naming another requires SuperAdmin. So does naming a RESERVED org — the platform's own namespace family (the brands and their environments, the control and delivery planes, `admin`) — even when it is the caller's own, because an IAM org named `kube-system` does not own Kubernetes. Both refuse rather than downgrade, so an escape attempt is never indistinguishable from a normal request.
+
+        A host outside the caller's org subtree is refused: claim and verify a custom domain first.
+      operationId: post_v1_platform_apps
+      summary: Deploy an app through cd.hanzo.ai
+      tags:
+      - platform
+      x-app: platform
+  /v1/platform/apps/{app}:
+    get:
+      description: 'The values file for one app as git declares it: image repository
+        and tag, hosts, replicas, and whether CD is automated on it. 404 when this
+        organization declares no such app.'
+      operationId: get_v1_platform_apps_by_app
+      parameters:
+      - in: path
+        name: app
+        required: true
+        schema:
+          type: string
+      summary: One declaration
+      tags:
+      - platform
+      x-app: platform
+  /v1/platform/apps/{app}/cd:
+    get:
+      description: The Hanzo CD Application for one declaration, on its own — the
+        poll a deploy view makes while it waits, without re-reading the whole inventory.
+        404 while the declaration exists only on a branch, because the generator reads
+        main.
+      operationId: get_v1_platform_apps_by_app_cd
+      parameters:
+      - in: path
+        name: app
+        required: true
+        schema:
+          type: string
+      summary: One app's reconciliation
+      tags:
+      - platform
+      x-app: platform
+  /v1/platform/cd:
+    get:
+      description: |-
+        Every Hanzo CD Application this caller may observe, with its sync verdict, health, the universe revision last applied, and whether automation and self-heal are on. A SuperAdmin sees the fleet; an org admin sees only Applications whose destination namespace IS its own organization, and never a reserved one.
+
+        A cluster with no CD installed answers an empty plane. A plane that cannot be READ answers 503 and says why — the two are opposite facts and never share a shape.
+      operationId: get_v1_platform_cd
+      summary: The delivery plane
+      tags:
+      - platform
+      x-app: platform
+  /v1/platform/ci:
+    get:
+      description: Answers 501. The forge's Actions runs need a Forgejo API client
+        and this deployment has none; an empty run list would be indistinguishable
+        from a forge with no runs.
+      operationId: get_v1_platform_ci
+      summary: Continuous integration (not wired)
+      tags:
+      - platform
+      x-app: platform
   /v1/platform/fleet:
     get:
       description: |-

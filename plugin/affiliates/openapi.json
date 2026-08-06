@@ -575,9 +575,11 @@
       "accruals": {
         "properties": {
           "accrued": {
+            "description": "Accrued is how many NEW commission accruals this run created, counted across\nevery upline level. The accrual is latched at most once per (affiliate, source\norg, period), so a re-run inside the same month reports 0 having changed\nnothing — 0 means \"already accrued\", not \"failed\".",
             "type": "integer"
           },
           "royaltiesAccrued": {
+            "description": "RoyaltiesAccrued is how many OSS-author royalty accruals the SAME spend read\nproduced in the sibling authors program. One read drives both.",
             "type": "integer"
           },
           "royaltyFailures": {
@@ -585,6 +587,7 @@
             "type": "integer"
           },
           "swept": {
+            "description": "Swept is how many source (referred) orgs the run visited, bounded at 500 per\nrun. A source with no spend this period, or one whose spend could not be read,\nstill counts as swept.",
             "type": "integer"
           }
         },
@@ -593,7 +596,8 @@
       "accrualsOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/accruals"
+            "$ref": "#/components/schemas/accruals",
+            "description": "Data is what the run did: sources visited, new accruals, royalties alongside."
           },
           "msg": {
             "type": "string"
@@ -607,42 +611,55 @@
       "adminAffiliateView": {
         "properties": {
           "accruedCents": {
+            "description": "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout moves paidCents, never this.",
             "type": "integer"
           },
           "approvedAt": {
+            "description": "ApprovedAt is when staff approved, Unix seconds UTC. 0 means never approved.",
             "type": "integer"
           },
           "code": {
+            "description": "Code is the minted referral code, the slug the ?aff link carries. Empty until\napproval mints it. Codes are one global namespace across all affiliates.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the org applied, Unix seconds UTC.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the affiliate's server-minted handle, \"aff_\"-prefixed — the id the\napprove, suspend, rate and payout routes address.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the partner's own org slug. It appears ONLY on this cross-tenant admin\nview; no partner-facing read ever names another org.",
             "type": "string"
           },
           "paidCents": {
+            "description": "PaidCents is lifetime commission already paid out, in cents — credits grants\nand record-only cash disbursements alike.",
             "type": "integer"
           },
           "pendingCents": {
+            "description": "PendingCents is accrued minus paid, in cents: what is still owed, and the hard\nceiling the next payout is reserved against. Never negative.",
             "type": "integer"
           },
           "rateBps": {
+            "description": "RateBps is this affiliate's DIRECT (level 1) commission rate in basis points\nOF Hanzo's margin (2000 = 20% of margin, never of the customer's bill). Levels\n2 and 3 are platform-wide switches and are not carried per affiliate.",
             "type": "integer"
           },
           "referredCount": {
+            "description": "ReferredCount is how many orgs this affiliate is the DIRECT referrer of,\ncounted from the attribution edges. It is 0 on the single-affiliate answers\n(approve, suspend, rate, payout), which do not run the count.",
             "type": "integer"
           },
           "requestedCode": {
+            "description": "RequestedCode is the vanity code the applicant asked for. A request, not an\nallocation: approval mints a different slug if this one was taken. Absent when\nnone was asked for.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"applied\", \"approved\" or \"suspended\". Only \"approved\" resolves for\nattribution and accrues; \"suspended\" stops future earning and claws nothing\nback.",
             "type": "string"
           },
           "suspendedAt": {
+            "description": "SuspendedAt is when staff suspended, Unix seconds UTC. 0 means never\nsuspended; it is not cleared by a later re-approval.",
             "type": "integer"
           }
         },
@@ -671,7 +688,8 @@
       "affiliateData": {
         "properties": {
           "affiliate": {
-            "$ref": "#/components/schemas/adminAffiliateView"
+            "$ref": "#/components/schemas/adminAffiliateView",
+            "description": "Affiliate is the row as it stands AFTER the action that returned it. Its\nreferredCount is 0 here: these single-affiliate answers do not run the count."
           }
         },
         "type": "object"
@@ -697,6 +715,7 @@
             "type": "array"
           },
           "isAffiliate": {
+            "description": "IsAffiliate says whether the caller org has an affiliate record. On false it\nis the ONLY field present — there is no ledger to report, and the zeros you\nmight expect are absent rather than reported as earnings of nothing.",
             "type": "boolean"
           },
           "marginBps": {
@@ -717,6 +736,7 @@
       "affiliateLinks": {
         "properties": {
           "isAffiliate": {
+            "description": "IsAffiliate says whether the caller org has an affiliate record. On false only\nmaxLinks comes back — there are no links, and there is no link to mint until\nthe org applies and is approved.",
             "type": "boolean"
           },
           "links": {
@@ -731,6 +751,7 @@
             "type": "integer"
           },
           "status": {
+            "description": "Status is the caller's affiliate status: \"applied\", \"approved\" or\n\"suspended\"; absent for a non-affiliate. Minting a link requires \"approved\",\nbecause a link that cannot accrue quietly loses the referral.",
             "type": "string"
           }
         },
@@ -739,7 +760,8 @@
       "affiliateOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/affiliateData"
+            "$ref": "#/components/schemas/affiliateData",
+            "description": "Data carries the affiliate row the action just wrote."
           },
           "msg": {
             "type": "string"
@@ -753,12 +775,15 @@
       "affiliateSelf": {
         "properties": {
           "accruedCents": {
+            "description": "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout is recorded against paidCents and never reduces this.",
             "type": "integer"
           },
           "code": {
+            "description": "Code is the minted referral code, the slug the ?aff link carries. Absent until\nstaff approve; codes live in ONE global namespace across all affiliates.",
             "type": "string"
           },
           "defaultRateBps": {
+            "description": "DefaultRateBps is the direct rate a new affiliate starts at, in basis points\nof margin (2000 = 20%). Answered ONLY to a caller that has not applied, as the\nquote beside `schedule`.",
             "type": "integer"
           },
           "downlineTotal": {
@@ -766,12 +791,15 @@
             "type": "integer"
           },
           "handle": {
+            "description": "Handle is the opt-in public leaderboard name. Empty means opted out: the\ncaller keeps its rank and still sees its own row, it is just not listed.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the affiliate's server-minted handle, \"aff_\"-prefixed. Absent until the\norg applies.",
             "type": "string"
           },
           "isAffiliate": {
+            "description": "IsAffiliate says whether the caller org has an affiliate record. On false the\nanswer carries the rate SCHEDULE and the default rate instead of a downline,\nso the console can show what the caller would earn.",
             "type": "boolean"
           },
           "levels": {
@@ -782,24 +810,30 @@
             "type": "array"
           },
           "link": {
+            "description": "Link is the shareable ?aff URL built from the code. Empty until a code is\nminted, since there is nothing to share before approval.",
             "type": "string"
           },
           "marginBps": {
+            "description": "MarginBps is the platform gross-margin fraction, in basis points, that every\nrate here is a rate OF. Read live per request, so it is the value in force\nnow, not the one that applied to commission already accrued.",
             "type": "integer"
           },
           "paidCents": {
+            "description": "PaidCents is lifetime commission already paid out, in cents — credits grants\nand record-only cash disbursements alike.",
             "type": "integer"
           },
           "payouts": {
+            "description": "Payouts is the payout history, newest first, bounded to the last 100 rows.",
             "items": {
               "$ref": "#/components/schemas/remittance"
             },
             "type": "array"
           },
           "pendingCents": {
+            "description": "PendingCents is accrued minus paid, in cents — what the platform still owes\nand the ceiling on the next payout. Never negative.",
             "type": "integer"
           },
           "rateBps": {
+            "description": "RateBps is the caller's OWN direct (level 1) commission rate, in basis points\nof margin. Levels 2 and 3 are platform-wide and appear in `levels`.",
             "type": "integer"
           },
           "schedule": {
@@ -810,6 +844,7 @@
             "type": "array"
           },
           "status": {
+            "description": "Status is \"applied\", \"approved\" or \"suspended\"; absent for a caller that never\napplied. Only \"approved\" mints links and accrues.",
             "type": "string"
           }
         },
@@ -834,9 +869,11 @@
             "type": "string"
           },
           "id": {
+            "description": "ID is the affiliate's server-minted handle, \"aff_\"-prefixed — what staff\napprove, suspend, re-rate and pay against. Absent until the org applies.",
             "type": "string"
           },
           "isAffiliate": {
+            "description": "IsAffiliate says whether the caller org has an affiliate record at all. It is\nthe ONE field an org that never applied gets besides defaultRateBps: on false,\nread nothing else here — every other field is absent, not zero.",
             "type": "boolean"
           },
           "link": {
@@ -871,9 +908,11 @@
             "type": "integer"
           },
           "requestedCode": {
+            "description": "RequestedCode is the vanity code asked for at apply time — a request, not an\nallocation. Approval mints `code`, which may be a different slug if this one\nwas already taken.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"applied\", \"approved\" or \"suspended\". Only an approved affiliate has\na code that resolves for attribution and accrues commission; suspended keeps\nwhat it already earned but stops earning more.",
             "type": "string"
           }
         },
@@ -882,21 +921,27 @@
       "application": {
         "properties": {
           "code": {
+            "description": "Code is the minted referral code. Empty on a first apply — applying does not\nmint a code, approval does; a re-apply echoes whatever the row already holds.",
             "type": "string"
           },
           "created": {
+            "description": "Created says whether THIS call made the row. false means the org had already\napplied and nothing changed — no second row, no reset of an existing approval.\nThe HTTP status states the same fact: 201 when true, 200 when false.",
             "type": "boolean"
           },
           "id": {
+            "description": "ID is the affiliate's server-minted handle, \"aff_\"-prefixed — the id staff\napprove, suspend, re-rate and pay against.",
             "type": "string"
           },
           "rateBps": {
+            "description": "RateBps is the direct (level 1) commission rate the row carries, in basis\npoints OF Hanzo's margin (2000 = 20% of margin, never of the customer's bill).",
             "type": "integer"
           },
           "requestedCode": {
+            "description": "RequestedCode echoes the vanity code asked for, normalized to lower case. It\nis a request only: approval mints a different slug if this one is taken.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"applied\" for a row this call created. A re-apply echoes the\nexisting row's status, which may already be \"approved\" or \"suspended\".",
             "type": "string"
           }
         },
@@ -936,15 +981,19 @@
       "attribution": {
         "properties": {
           "code": {
+            "description": "Code is the affiliate code the edge was recorded under, normalized to lower\ncase. On a re-post it is the code of the STANDING edge, which may differ from\nthe one just sent — first touch wins.",
             "type": "string"
           },
           "created": {
+            "description": "Created says whether THIS call made the edge. false means the caller org was\nalready attributed and nothing moved. The HTTP status says the same: 201 when\ntrue, 200 when false.",
             "type": "boolean"
           },
           "createdAt": {
+            "description": "CreatedAt is when the edge was FIRST recorded, Unix seconds UTC. On a re-post\nit is the original time, not now.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the attribution edge's server-minted handle, \"afr_\"-prefixed.",
             "type": "string"
           }
         },
@@ -953,6 +1002,7 @@
       "clickCount": {
         "properties": {
           "counted": {
+            "description": "Counted says the in-memory buffer took the ping. It does NOT say the code\nexists — this is deliberately not a code-existence oracle, and an unknown code\nsimply no-ops at flush time. false means the buffer was full and the ping was\ndropped, which is harmless: clicks are vanity and move no money.",
             "type": "boolean"
           }
         },
@@ -970,24 +1020,31 @@
       "codeView": {
         "properties": {
           "clicks": {
+            "description": "Clicks is how many pings this code has taken. The one STORED counter here and\npure vanity: no accrual or payout reads it, pings are coalesced in memory and\nflushed in batches, and a dropped tally is accepted rather than contending\nwith the money write path. Do not reconcile it against anything.",
             "type": "integer"
           },
           "code": {
+            "description": "Code is the link's slug — 3–32 chars of a–z, 0–9 and hyphen — unique across\nthe WHOLE directory, so any affiliate's code resolves an attribution.",
             "type": "string"
           },
           "conversions": {
+            "description": "Conversions is how many of those signups have actually produced positive\ncommission for the caller. Also derived, from the accrual rows, so it is\n≤ signups and lags a referral until the first sweep after it spends.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is when the link was minted, Unix seconds UTC.",
             "type": "integer"
           },
           "label": {
+            "description": "Label is the caller's own note for the link (\"twitter\", \"newsletter\").\nCosmetic: trimmed, stripped of control characters, capped at 48 bytes, and\nnever part of the code. \"primary\" on the link mirrored at approval.",
             "type": "string"
           },
           "signups": {
+            "description": "Signups is how many orgs were attributed with this code — DERIVED by counting\nattribution edges, never stored, so it cannot drift from the ledger.",
             "type": "integer"
           },
           "url": {
+            "description": "URL is the full shareable link, the brand host plus ?aff=\u003ccode\u003e. The host is\nthe deployment's own brand, so a Lux or Zoo install never mints a hanzo.ai\nlink.",
             "type": "string"
           }
         },
@@ -1009,13 +1066,15 @@
       "directoryData": {
         "properties": {
           "affiliates": {
+            "description": "Affiliates is one row per affiliate across the whole fleet, ORG EXPOSED,\noldest first and bounded by the request's limit.",
             "items": {
               "$ref": "#/components/schemas/adminAffiliateView"
             },
             "type": "array"
           },
           "summary": {
-            "$ref": "#/components/schemas/totals"
+            "$ref": "#/components/schemas/totals",
+            "description": "Summary tallies exactly the rows above — not the whole table — so a limit that\ntruncates the page truncates the tally with it."
           }
         },
         "type": "object"
@@ -1023,7 +1082,8 @@
       "directoryOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/directoryData"
+            "$ref": "#/components/schemas/directoryData",
+            "description": "Data is the affiliate directory and its tally."
           },
           "msg": {
             "type": "string"
@@ -1058,12 +1118,15 @@
       "funnel": {
         "properties": {
           "convertedOrgs": {
+            "description": "ConvertedOrgs is how many distinct referred orgs have produced positive\ncommission at least once — a referral that actually spent.",
             "type": "integer"
           },
           "ratePct": {
+            "description": "RatePct is convertedOrgs over referredOrgs as a PERCENTAGE, 0–100, and the one\nnon-integer figure on this board. It is 0 when nothing has been referred yet,\nnot undefined.",
             "type": "number"
           },
           "referredOrgs": {
+            "description": "ReferredOrgs is how many attribution edges exist fleet-wide — one per referred\norg, first-touch, so it is also the count of distinct referred orgs.",
             "type": "integer"
           }
         },
@@ -1081,6 +1144,7 @@
       "handleSet": {
         "properties": {
           "handle": {
+            "description": "Handle is the display name as STORED, echoed back after trimming. Empty means\nthe caller opted out: it keeps its rank and still sees its own row, it is just\nno longer listed to anyone else.",
             "type": "string"
           }
         },
@@ -1089,18 +1153,23 @@
       "leaderboardRow": {
         "properties": {
           "accruedCents": {
+            "description": "AccruedCents is that affiliate's lifetime commission accrued, in cents, and\nwhat the board is ordered by. An aggregate: no per-customer figure is exposed.",
             "type": "integer"
           },
           "handle": {
+            "description": "Handle is the affiliate's self-chosen display name — the only identity the\nboard ever carries. The org behind it is never disclosed.",
             "type": "string"
           },
           "isYou": {
+            "description": "IsYou marks the caller's own row, so a client can highlight it without\nmatching on a handle. Absent on every other row.",
             "type": "boolean"
           },
           "rank": {
+            "description": "Rank is the position in the GLOBAL approved set ordered by lifetime accrued\ncommission, 1-based. Affiliates that set no handle still occupy their rank and\nare simply not listed, so the visible ranks have gaps and the board is not a\ncomplete roster. On the caller's own row the rank is computed over the whole\nset, so it is exact well outside the top page.",
             "type": "integer"
           },
           "referredCount": {
+            "description": "ReferredCount is how many orgs that affiliate directly referred — a count\nonly, never which orgs.",
             "type": "integer"
           }
         },
@@ -1109,12 +1178,15 @@
       "levelSplit": {
         "properties": {
           "l1Cents": {
+            "description": "L1Cents is lifetime commission accrued to DIRECT referrers, in cents.",
             "type": "integer"
           },
           "l2Cents": {
+            "description": "L2Cents is lifetime commission accrued one step above the direct referrer, in\ncents, at the platform-wide level-2 rate.",
             "type": "integer"
           },
           "l3Cents": {
+            "description": "L3Cents is lifetime commission accrued two steps above, in cents. Nothing\naccrues past level 3, so l1+l2+l3 is the whole accrual.",
             "type": "integer"
           }
         },
@@ -1123,12 +1195,15 @@
       "levelView": {
         "properties": {
           "downlineCount": {
+            "description": "DownlineCount is how many orgs sit exactly this many hops below the caller. It\nis 0 in the schedule quoted to a caller that has not applied, which has no\ndownline to count.",
             "type": "integer"
           },
           "level": {
+            "description": "Level is the upline distance from the org whose spend is being shared: 1 is\nthe direct referrer, 2 and 3 the referrers above it. Nothing accrues past 3.",
             "type": "integer"
           },
           "rateBps": {
+            "description": "RateBps is the commission paid at this level, in basis points OF Hanzo's\nmargin (2000 = 20% of margin, never of the customer's bill). Level 1 is the\naffiliate's own negotiated rate; 2 and 3 are platform switches read live, so\nthis is the schedule actually in force, not one compiled in.",
             "type": "integer"
           }
         },
@@ -1137,7 +1212,8 @@
       "linkMint": {
         "properties": {
           "link": {
-            "$ref": "#/components/schemas/codeView"
+            "$ref": "#/components/schemas/codeView",
+            "description": "Link is the link just minted, with its full shareable URL. Its funnel counters\nall start at zero — nothing has clicked or signed up through it yet."
           }
         },
         "type": "object"
@@ -1145,9 +1221,11 @@
       "orgEarningView": {
         "properties": {
           "commissionCents": {
+            "description": "CommissionCents is what the caller earned from that org across ALL periods, in\ncents. Deliberately the caller's own share and nothing else: that org's spend\nand the margin on it are not restated here.",
             "type": "integer"
           },
           "referredOrg": {
+            "description": "ReferredOrg is the org slug this contribution came from — one the caller\nreferred, directly or up to three levels down.",
             "type": "string"
           }
         },
@@ -1156,7 +1234,8 @@
       "payoutOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/settlement"
+            "$ref": "#/components/schemas/settlement",
+            "description": "Data is the recorded payout and the balances it left behind."
           },
           "msg": {
             "type": "string"
@@ -1170,12 +1249,15 @@
       "periodEarningView": {
         "properties": {
           "commissionCents": {
+            "description": "CommissionCents is what the caller earned that period, in cents: the sum over\neach referred org and upline level of margin × that level's rate. Always ≤\nmarginCents, by construction.",
             "type": "integer"
           },
           "marginCents": {
+            "description": "MarginCents is the margin Hanzo earned in that period on the spend of every\norg the caller referred, in cents — the base commission is a rate OF. It is\nthe aggregate base, never any one customer's bill.",
             "type": "integer"
           },
           "period": {
+            "description": "Period is the accrual bucket: the UTC year-month, \"YYYY-MM\". Commission is\nlatched at most once per referred org per period, so one row is one month.",
             "type": "string"
           }
         },
@@ -1197,15 +1279,19 @@
       "referralBoard": {
         "properties": {
           "accrualByLevel": {
-            "$ref": "#/components/schemas/levelSplit"
+            "$ref": "#/components/schemas/levelSplit",
+            "description": "AccrualByLevel splits the lifetime accrual across the three upline levels —\nhow much of the liability comes from direct referrals versus the chain above."
           },
           "conversion": {
-            "$ref": "#/components/schemas/funnel"
+            "$ref": "#/components/schemas/funnel",
+            "description": "Conversion is the funnel: referred orgs against those that actually earned."
           },
           "summary": {
-            "$ref": "#/components/schemas/tally"
+            "$ref": "#/components/schemas/tally",
+            "description": "Summary is the fleet tally — population by status, and lifetime accrued, paid\nand still-owed commission."
           },
           "topReferrers": {
+            "description": "TopReferrers is the 25 affiliates with the most lifetime accrued commission,\ndescending, orgs named.",
             "items": {
               "$ref": "#/components/schemas/referrerRow"
             },
@@ -1217,7 +1303,8 @@
       "referralsOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/referralBoard"
+            "$ref": "#/components/schemas/referralBoard",
+            "description": "Data is the referral board: leaders, funnel, tally and per-level liability."
           },
           "msg": {
             "type": "string"
@@ -1231,21 +1318,27 @@
       "referrerRow": {
         "properties": {
           "accruedCents": {
+            "description": "AccruedCents is lifetime commission accrued, in cents. The board is sorted by\nthis, descending.",
             "type": "integer"
           },
           "code": {
+            "description": "Code is that affiliate's minted referral code; empty if it is not approved.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the partner's own org slug. Named only here, on the SuperAdmin board —\nthe partner-facing leaderboard shows an opt-in handle and never an org.",
             "type": "string"
           },
           "pendingCents": {
+            "description": "PendingCents is accrued minus paid, in cents — what is still owed to this\naffiliate. Never negative.",
             "type": "integer"
           },
           "referredCount": {
+            "description": "ReferredCount is how many orgs this affiliate is the DIRECT referrer of —\nits level-1 downline, not the whole three-level chain.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is \"applied\", \"approved\" or \"suspended\".",
             "type": "string"
           }
         },
@@ -1254,21 +1347,27 @@
       "remittance": {
         "properties": {
           "amountCents": {
+            "description": "AmountCents is the amount disbursed, in cents. It was reserved against pending\ncommission atomically when recorded, so it never exceeds what was owed.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is when the payout was recorded, Unix seconds UTC — when the balance\nmoved, not necessarily when the cash landed.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the payout row's server-minted handle, \"apo_\"-prefixed.",
             "type": "string"
           },
           "method": {
+            "description": "Method is how it was settled. \"credits\" issued a commerce grant into the\naffiliate org's own wallet; any other value (wire, paypal, check, …) is a\nRECORD of cash a human moved out of band.",
             "type": "string"
           },
           "reference": {
+            "description": "Reference is the operator's settlement note — a bank id, a ledger ref. Free\ntext, absent when none was given.",
             "type": "string"
           },
           "txn": {
+            "description": "Txn is the commerce ledger transaction id, set ONLY where a \"credits\" payout\nactually issued the grant. Absent for cash methods, which write no ledger row.",
             "type": "string"
           }
         },
@@ -1277,10 +1376,12 @@
       "settlement": {
         "properties": {
           "affiliate": {
-            "$ref": "#/components/schemas/adminAffiliateView"
+            "$ref": "#/components/schemas/adminAffiliateView",
+            "description": "Affiliate is the row re-read AFTER the payout, so its paidCents and\npendingCents already account for the row beside it."
           },
           "payout": {
-            "$ref": "#/components/schemas/remittance"
+            "$ref": "#/components/schemas/remittance",
+            "description": "Payout is the payout row just recorded."
           }
         },
         "type": "object"
@@ -1288,18 +1389,23 @@
       "tally": {
         "properties": {
           "accruedLifetimeCents": {
+            "description": "AccruedLifetimeCents is all commission ever accrued, summed across every\naffiliate, in cents. It only grows; a payout does not reduce it.",
             "type": "integer"
           },
           "affiliates": {
+            "description": "Affiliates is how many affiliate rows the board read, at every status. The\nread is bounded at 1000 rows, so a larger fleet reports the bound.",
             "type": "integer"
           },
           "approved": {
+            "description": "Approved is how many of those rows are approved — the only ones whose code\nresolves for attribution and whose balance can grow.",
             "type": "integer"
           },
           "paidLifetimeCents": {
+            "description": "PaidLifetimeCents is all commission ever paid out, in cents: credits grants\nplus record-only cash disbursements.",
             "type": "integer"
           },
           "pendingLiabilityCents": {
+            "description": "PendingLiabilityCents is accrued minus paid across every affiliate, in cents.\nRead it as money OWED and not yet disbursed — a liability, not spend.",
             "type": "integer"
           }
         },
@@ -1308,24 +1414,31 @@
       "totals": {
         "properties": {
           "accruedCents": {
+            "description": "AccruedCents is lifetime commission accrued summed over those rows, in cents.",
             "type": "integer"
           },
           "applied": {
+            "description": "Applied is how many of those rows are still awaiting approval — no code, no\naccrual yet.",
             "type": "integer"
           },
           "approved": {
+            "description": "Approved is how many are approved: the only rows whose code resolves for\nattribution and whose balance can still grow.",
             "type": "integer"
           },
           "paidCents": {
+            "description": "PaidCents is lifetime commission already paid out summed over those rows, in\ncents.",
             "type": "integer"
           },
           "pendingCents": {
+            "description": "PendingCents is accrued minus paid summed over those rows, in cents — the\noutstanding liability across the page.",
             "type": "integer"
           },
           "suspended": {
+            "description": "Suspended is how many were suspended. What they already accrued stays accrued\nand stays payable.",
             "type": "integer"
           },
           "total": {
+            "description": "Total is how many affiliate rows this page covered, at every status. It is the\npage, not the table: a limit that truncates truncates this too.",
             "type": "integer"
           }
         },

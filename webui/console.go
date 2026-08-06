@@ -40,6 +40,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/brand"
+	zapmcp "github.com/zap-proto/mcp"
 	"github.com/zap-proto/zip"
 )
 
@@ -86,8 +87,14 @@ func consoleTitle(host string) string {
 // bytes of its own (see the package doc). A nil fsys means this process serves no
 // console: the catch-all still keeps the API namespaces honest and still answers
 // the agent door, and a console path gets a 503 that says so.
+//
+// app is not only where the catch-all is registered: it is also where this
+// process's AGENT DOOR comes from. zip.App.MCP is that door as a value — a frame
+// in, a frame out — and the terminal handler answers with it at the address the
+// door lives (see mcp.go). Nothing is configured and nothing is duplicated; the
+// console is simply handed the door the app already has.
 func Mount(app *zip.App, fsys fs.FS) error {
-	h, err := Handler(fsys)
+	h, err := Handler(fsys, app.MCP)
 	if err != nil {
 		return err
 	}
@@ -96,11 +103,11 @@ func Mount(app *zip.App, fsys fs.FS) error {
 }
 
 // Handler is the console as a stdlib http.Handler (correct Content-Type,
-// conditional GET, precompressed negotiation, SPA fallback) — the form Mount
-// adapts onto the zip router via zip.AdaptNetHTTP, and the form a test drives
-// directly.
-func Handler(fsys fs.FS) (http.Handler, error) {
-	return newConsoleHandler(fsys)
+// conditional GET, precompressed negotiation, SPA fallback) plus this process's
+// agent door — the form Mount adapts onto the zip router via zip.AdaptNetHTTP,
+// and the form a test drives directly.
+func Handler(fsys fs.FS, door zapmcp.Handler) (http.Handler, error) {
+	return newConsoleHandler(fsys, door)
 }
 
 // consoleHandler serves a single-page app out of fsys: exact-file when it exists,
@@ -115,6 +122,10 @@ func Handler(fsys fs.FS) (http.Handler, error) {
 // of ~10KB out of RAM and is always the release that is actually mounted.
 type consoleHandler struct {
 	fsys fs.FS
+	// door is this process's MCP door — zip's, handed in whole. The console does
+	// not implement MCP and holds no tool list; it holds the one address a machine
+	// door has and the value that answers there.
+	door zapmcp.Handler
 }
 
 // newConsoleHandler proves the source is a console before anything serves from
@@ -122,14 +133,22 @@ type consoleHandler struct {
 // client-side route would 404 and the failure would surface as a broken product
 // rather than as a bad source. nil is the separate, stated case of "no bundle in
 // this process" and is not an error.
-func newConsoleHandler(fsys fs.FS) (*consoleHandler, error) {
+//
+// The door is REQUIRED. A terminal handler with no door cannot answer the one
+// address in the process that is guaranteed not to be a console route, and the
+// SPA fallback is the wrong answer there in the most damaging possible way — the
+// bug this package was already carrying, pointing the other way.
+func newConsoleHandler(fsys fs.FS, door zapmcp.Handler) (*consoleHandler, error) {
+	if door == nil {
+		return nil, fmt.Errorf("webui: no MCP door: the terminal handler answers one and cannot invent it")
+	}
 	if fsys == nil {
-		return &consoleHandler{}, nil
+		return &consoleHandler{door: door}, nil
 	}
 	if _, err := fs.Stat(fsys, "index.html"); err != nil {
 		return nil, fmt.Errorf("webui: console source has no index.html: %w", err)
 	}
-	return &consoleHandler{fsys: fsys}, nil
+	return &consoleHandler{fsys: fsys, door: door}, nil
 }
 
 func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -141,11 +160,12 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// The agent door, BEFORE the static-console gate — an MCP client speaks POST,
 	// and the gate below would have answered it "method not allowed" in the
 	// console's own voice, which is how POST /mcp came to look like a door that
-	// exists but is misconfigured. Both rules are self-scoping: this handler is
-	// TERMINAL, so it only ever sees a path no route claimed in THIS process. A
-	// plugin that serves its own door at FrameworkMCPPath matches a real route and
-	// never reaches here; the host, which moved its door to MCPPath, does.
-	if mcpDoor(w, r, upath) {
+	// exists but is misconfigured. This handler is TERMINAL, so it only ever sees a
+	// path no route claimed in THIS process — which is why it is the right place to
+	// answer the door and the wrong place to guess where the door went. It answers
+	// with the process's OWN door, so a plugin whose route zip never mounted is
+	// served here and a host that claimed the path with a signpost never arrives.
+	if h.mcpDoor(w, r, upath) {
 		return
 	}
 

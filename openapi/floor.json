@@ -1,6 +1,6 @@
 {
-  "paths": 1759,
-  "operations": 2430,
+  "paths": 1764,
+  "operations": 2436,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -127,7 +127,7 @@
     "payments": 2,
     "pipelines": 1,
     "plans": 20,
-    "platform": 41,
+    "platform": 47,
     "plugins": 4,
     "prefs": 2,
     "pricing": 25,
