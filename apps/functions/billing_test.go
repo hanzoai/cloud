@@ -65,8 +65,14 @@ func (b *billServer) lastDebit() (string, []byte) {
 	return b.usageOrg, b.usageBody
 }
 
-// sandbox is a code-executor double speaking the LibreChat /exec contract. It
-// counts invocations and returns a fixed stdout so a funded invoke succeeds.
+// sandbox is a code-executor double speaking the LibreChat contract. It counts
+// invocations and returns a fixed stdout so a funded invoke succeeds.
+//
+// It serves /v1/exec and NOTHING else, deliberately: the other consumer of
+// CODE_EXEC_UPSTREAM (apps/exec) is a path-preserving proxy that asks the same
+// upstream for /v1/exec, so a double that also answered /exec would let the two
+// consumers drift apart again while every test stayed green. Anything that is
+// not /v1/exec lands on the mux's 404 and the invoke fails, which is the point.
 type sandbox struct {
 	calls int32
 }
@@ -74,7 +80,7 @@ type sandbox struct {
 func (s *sandbox) start(t *testing.T) string {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/exec", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/exec", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&s.calls, 1)
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, `{"stdout":"ok","stderr":""}`)

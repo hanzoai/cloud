@@ -299,6 +299,19 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /smoke ./plugin/smoke
+# THE BOX DAEMON (cmd/boxd) — the agent-facing half of apps/sandbox, and the only
+# binary here that does not run in THIS image. The box image (hanzo/bot's
+# Dockerfile.box) does `COPY --from=ghcr.io/hanzoai/cloud:<pin> /boxd`, so this
+# line is what puts it there; without it that COPY fails and no box image can be
+# built at all, which is exactly where the executor sat.
+#
+# It is built HERE rather than in hanzo/bot because boxd's types ARE
+# apps/sandbox/wire's types — the scheduler and the daemon agree because they
+# compile against one declaration, not because two repos were kept in sync by
+# hand. A boxd built anywhere else is a second copy of the contract.
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /boxd ./cmd/boxd
 # EVERY subsystem, each as its OWN binary in /plugins beside the host. The host
 # fork/execs a sibling <dir>/<name> (manifest.App.Plugin) on the first request that
 # reaches its prefix, so the binary must be in the image or the mount aborts:
@@ -412,6 +425,10 @@ COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
+# boxd rides along without ever being executed here. The box image copies it out
+# of this one, and a binary that is only in the build stage is not in the
+# published image — `COPY --from=<cloud pin> /boxd` reads the FINAL layer.
+COPY --from=build /boxd /boxd
 # The per-app plugin binaries, landing beside /cloud because that is where the host
 # looks: manifest.App.Plugin resolves dir(os.Executable())+"/<name>". Copying the
 # DIRECTORY's contents keeps this generic — a new app needs no line here, same as

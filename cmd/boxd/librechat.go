@@ -105,7 +105,7 @@ type sessions struct {
 
 func newSessions() *sessions {
 	root := envOr("BOX_SESSION_DIR", filepath.Join(os.TempDir(), "boxsess"))
-	_ = os.MkdirAll(root, 0o755)
+	_ = os.MkdirAll(root, dirMode)
 	s := &sessions{root: root, seen: map[string]time.Time{}}
 	go s.reap()
 	return s
@@ -122,7 +122,7 @@ func (s *sessions) dir(id string) (string, string, bool) {
 		return "", "", false
 	}
 	p := filepath.Join(s.root, id)
-	if err := os.MkdirAll(p, 0o755); err != nil {
+	if err := os.MkdirAll(p, dirMode); err != nil {
 		return "", "", false
 	}
 	s.mu.Lock()
@@ -205,7 +205,7 @@ func (b *box) lcExec(w http.ResponseWriter, r *http.Request) {
 	}
 	if argv[0] == "go" {
 		f := filepath.Join(dir, "main.go")
-		if err := os.WriteFile(f, []byte(req.Code), 0o644); err != nil {
+		if err := os.WriteFile(f, []byte(req.Code), fileMode); err != nil {
 			writeErr(w, http.StatusInternalServerError, "stage: "+err.Error())
 			return
 		}
@@ -279,7 +279,7 @@ func (b *box) lcUpload(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			_ = src.Close()
-			if os.WriteFile(filepath.Join(dir, name), data, 0o644) == nil {
+			if os.WriteFile(filepath.Join(dir, name), data, fileMode) == nil {
 				out = append(out, uploadFile{FileID: name, Filename: name})
 			}
 		}
