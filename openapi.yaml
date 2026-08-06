@@ -53130,6 +53130,34 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
+  /v1/billing/accounts:
+    get:
+      description: |-
+        Returns the billing accounts visible to the caller. One organisation is exactly one billing account here, so an authenticated caller sees precisely one: their own. The list shape is the honest one — it is what a caller with access to several would receive — rather than a promise that more will ever appear for a token scoped to a single org.
+
+        The account is derived from the validated org claim and from nothing the caller sends, so there is no account parameter and a cross-tenant read is not expressible. An unauthenticated call is 401.
+      operationId: get_v1_billing_accounts
+      summary: The billing account you are signed in to
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/accounts/{id}/members:
+    get:
+      description: |-
+        Returns the members of one billing account. The id must be the caller's OWN account — the handler compares it against the org resolved from the token and answers 403 when they differ, which is what guards this route: unlike its siblings it carries no subject key for the pin to overwrite, so it checks the path segment itself.
+
+        The roster it can answer is currently the requesting user alone. Membership lives in IAM, not in the ledger, and this operation reports what commerce actually holds rather than inventing a roster from a source it does not read. An unauthenticated call is 401.
+      operationId: get_v1_billing_accounts_by_id_members
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Who is on a billing account
+      tags:
+      - billing
+      x-app: commerce
   /v1/billing/alerts:
     get:
       description: Returns the caps and alerts keyed to the caller's own billing subject,
@@ -53230,6 +53258,17 @@ paths:
       tags:
       - billing
       x-app: billing
+  /v1/billing/credit-balance:
+    get:
+      description: |-
+        Returns the total credit still available to the caller's own subject — the sum of what the grants have left, which is the figure the console shows above the usage meter. It is the balance a metered act draws down, so it answers the one question a customer asks before spending: how much is there.
+
+        Like every read in this family the subject is pinned to the caller before the handler runs, so the userId parameter the handler reads can never name another tenant. For the grants BEHIND this number — each with its original amount and its expiry — read /v1/billing/credits. A subject with no credit is zero, which is an answer and not an error.
+      operationId: get_v1_billing_credit-balance
+      summary: What is left of your credit, as one number
+      tags:
+      - billing
+      x-app: commerce
   /v1/billing/credits:
     get:
       description: 'Returns the caller org''s credit grants — each with its original
@@ -53760,6 +53799,17 @@ paths:
         with 503 rather than risking a second real charge.'
       operationId: post_v1_billing_topup_token
       summary: Add credit to your balance by charging a tokenized card once
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/transactions:
+    get:
+      description: |-
+        Returns the caller's own ledger movements — every credit and debit against the subject the usage gate charges — newest first, with a count and the subject they belong to, so a customer can reconcile a bill against the acts that produced it. Paging is limit and offset, and the currency can be narrowed.
+
+        The subject is NOT the caller's to choose. The handler filters on a user parameter, and that parameter is overwritten with the caller's own billing subject before the handler runs — so naming another subject returns your own rows rather than theirs, and the read can never disagree with the wallet it describes. An unauthenticated call is 401 rather than 403, because a browser re-authenticates on the first and only reports the second. No movements is an empty list, not an error.
+      operationId: get_v1_billing_transactions
+      summary: List the movements on your own balance, newest first
       tags:
       - billing
       x-app: commerce
