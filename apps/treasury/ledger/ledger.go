@@ -153,7 +153,10 @@ type TreasuryReport struct {
 // native transaction; the engine composes the DOMAIN rules on top.
 type Tx interface {
 	// EntryByRef returns the existing entry for (kind, program, ref) if present —
-	// the idempotency lookup performed inside the same tx as the insert.
+	// the idempotency lookup performed inside the same tx as the insert. The entry
+	// comes back WITH its Postings: the key says which ref was reused and the legs
+	// say whose money it was, and a caller deciding whether a ref hit is its own
+	// replay or somebody else's payment needs both.
 	EntryByRef(kind, program, ref string) (JournalEntry, bool, error)
 	// Balance returns an account's signed balance as visible inside this tx.
 	Balance(account string) (money.Amount, error)
