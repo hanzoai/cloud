@@ -868,6 +868,16 @@
         ]
       }
     },
+    "/v1/integrations/slack/install": {
+      "get": {
+        "operationId": "get_v1_integrations_slack_install",
+        "summary": "Install the Hanzo app into a Slack workspace",
+        "description": "The address behind Slack's \"Add to Slack\" and Marketplace Install buttons. It answers a 302 to Slack's own consent screen and does nothing else — it is a redirector by design.\n\nIt exists because Slack refuses a slack.com URL in that field and requires one of ours that redirects there, which makes the field an ATTRIBUTION hook: routing the click through our own address is what lets an install be counted, and always answering the redirect is what keeps the counter from becoming a detour that never reaches consent. The destination is the same consent URL every time, built from the same scopes the console's Connect button asks for, so a workspace is asked to grant one thing however the install began.\n\nIt is PUBLIC and carries no principal, because whoever clicks Install in Slack's directory has no Hanzo session yet. It binds no org either, and that is deliberate rather than missing: the org is resolved at the shared provider callback, from the signed state a console connect minted or from the workspace's existing connection. Minting an org for an anonymous click is the one thing that would break tenant isolation, so an install begun here finishes under exactly the rules every other install obeys.",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/v1/integrations/slack/link": {
       "get": {
         "operationId": "get_v1_integrations_slack_link",

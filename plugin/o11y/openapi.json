@@ -12810,6 +12810,59 @@
         }
       }
     },
+    "/v1/o11y/traces": {
+      "get": {
+        "operationId": "get_v1_o11y_traces",
+        "summary": "Lists the caller org's recent traces — one row per trace with its span count and wall-clock duration, most recently active first.",
+        "description": "Lists the caller org's recent traces — one row per trace with\nits span count and wall-clock duration, most recently active first. This is\nthe trace SEARCH: it is where a trace id comes from, and the spans behind any\nrow are then read from GET /v1/o11y/traces/{traceId}. Every row belongs to the\ncaller's own org — the tenant is the validated principal, never an input, and\nthere is no administrator widening, because a trace list is a tenant's records\nrather than a rollup over them. An unreachable telemetry store answers 503\nrather than an empty page, because \"no traces\" and \"cannot see the traces\" are\ndifferent facts and only one of them is about the caller's system.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window in seconds, counted back from now over each trace's\nlast activity. Default 3600, capped at 604800 (7d).",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 3600
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many traces to return. Default 50, capped at 500.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          },
+          {
+            "name": "minDurationMs",
+            "in": "query",
+            "required": false,
+            "description": "MinDurationMs keeps only traces that lasted at least this many\nmilliseconds. Zero or absent keeps every trace in the window.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.tracesOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/o11y/traces/fields": {
       "get": {
         "operationId": "GetTraceFields",
@@ -31377,6 +31430,55 @@
           },
           "up": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "o11y.traceRow": {
+        "properties": {
+          "durationMs": {
+            "description": "DurationMs is End minus Start in milliseconds: the trace's wall clock,\nnot the sum of its spans, which double-counts everything concurrent.",
+            "type": "number"
+          },
+          "end": {
+            "description": "End is the latest span end, RFC3339 with nanoseconds, in UTC.",
+            "type": "string"
+          },
+          "numSpans": {
+            "description": "NumSpans is how many spans the trace carries.",
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start is the earliest span start, RFC3339 with nanoseconds, in UTC.",
+            "type": "string"
+          },
+          "traceId": {
+            "description": "TraceID is the trace's id — the {traceId} of the detail read.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "o11y.tracesOut": {
+        "properties": {
+          "count": {
+            "description": "Count is how many traces this page carries.",
+            "type": "integer"
+          },
+          "limit": {
+            "description": "Limit is the page cap actually applied, after clamping.",
+            "type": "integer"
+          },
+          "sinceSec": {
+            "description": "SinceSec is the window actually read, in seconds, after clamping.",
+            "type": "integer"
+          },
+          "traces": {
+            "description": "Traces are the caller org's traces, most recently active first.",
+            "items": {
+              "$ref": "#/components/schemas/o11y.traceRow"
+            },
+            "type": "array"
           }
         },
         "type": "object"

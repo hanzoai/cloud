@@ -459,6 +459,27 @@ func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, err
 
 // ---- Roles ----
 
+// RoleAssignment is one (user, role) grant on the wire.
+//
+// It is the engine's Role under a name that says which of the two role-shaped
+// things it is, and it exists because the fleet publishes ONE schema per name.
+// iam already publishes a Role: the role ENTITY, carrying a display name, its
+// members, its domains and the roles it includes. This is the far smaller thing —
+// the EDGE that joins one user to one role — and the two share nothing but the
+// word. The weave refuses that collision rather than pick a winner, and it is
+// right to: a generated SDK binds whichever shape it read last, so a client's
+// Role would silently mean an entity in one method and a grant in another.
+//
+// The engine type stays as it is and is still re-exported by alias.go for in-process
+// lanes; this is the name the HTTP surface publishes, converted at the handler
+// boundary, which is the only place the two need to agree.
+type RoleAssignment struct {
+	// User is the member the role is granted to.
+	User string `json:"user"`
+	// Role is the granted role's name.
+	Role string `json:"role"`
+}
+
 // roleRef addresses one role assignment by the (user, role) pair in the URL.
 type roleRef struct {
 	// User is the assignee whose grant is being revoked, from the path.
@@ -472,7 +493,7 @@ type roleRef struct {
 // roleList is a page of role assignments.
 type roleList struct {
 	// Data is every (user, role) assignment in the caller's org.
-	Data []Role `json:"data"`
+	Data []RoleAssignment `json:"data"`
 }
 
 // listRoles returns every (user, role) assignment in the caller's org. Roles are
@@ -483,7 +504,11 @@ func (o ops) listRoles(ctx context.Context, _ *noInput) (*roleList, error) {
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	return &roleList{Data: rows}, nil
+	out := make([]RoleAssignment, len(rows))
+	for i, r := range rows {
+		out[i] = RoleAssignment{User: r.User, Role: r.Role}
+	}
+	return &roleList{Data: out}, nil
 }
 
 // assignRole grants one user one role in the caller's org — how a member gains
@@ -491,12 +516,12 @@ func (o ops) listRoles(ctx context.Context, _ *noInput) (*roleList, error) {
 // Manager-only. Answers 201.
 //
 // Example: {"user": "u_alice", "role": "System Manager"}
-func (o ops) assignRole(ctx context.Context, in *Role) (*Role, error) {
+func (o ops) assignRole(ctx context.Context, in *RoleAssignment) (*RoleAssignment, error) {
 	saved, err := o.s.State.eng.AssignRole(ctx, callerOf(ctx), in.User, in.Role)
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	return &saved, nil
+	return &RoleAssignment{User: saved.User, Role: saved.Role}, nil
 }
 
 // revokeRole removes one (user, role) grant in the caller's org. Manager-only.

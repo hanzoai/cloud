@@ -29,7 +29,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\nvalue of the X-Payment-Response header a paid request answers with).",
+            "description": "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\n`transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid\nrequest answers with).",
             "schema": {
               "type": "string"
             }
@@ -63,6 +63,9 @@
             "type": "string"
           },
           "id": {
+            "type": "string"
+          },
+          "network": {
             "type": "string"
           },
           "nonce": {

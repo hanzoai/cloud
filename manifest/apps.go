@@ -236,7 +236,17 @@ var Apps = []App{
 	// aliases under it are retired — and /v1/errors, /v1/insights/events and
 	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:
 	// the tracker product owns that name (its row is above, and it wins the prefix).
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/events", "/v1/insights/health"}},
+	//
+	// "/v1/event.js" is its OWN prefix and cannot be folded into "/v1/event": a
+	// prefix owns segments, and ".js" is part of this one's single segment rather
+	// than a child of it, so the ingest door's claim stops short of the tag. It is
+	// the hosted tag — the script every instrumented surface loads before it can
+	// emit a single beacon — and unclaimed it fell to ai's bare "/v1", which answers
+	// a 404 that reads to a browser as a broken script tag rather than as a routing
+	// mistake. That was invisible for as long as plugin/analytics/openapi.json went
+	// unregenerated: the path was in the router and not in the artifact this table
+	// is checked against, so the check had nothing to disagree with.
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
