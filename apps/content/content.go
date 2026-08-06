@@ -144,6 +144,7 @@ var (
 	errIllegalTransition  = errors.New("content: illegal transition")
 	errModuleNotInstalled = errors.New("content: marketing module not installed for org")
 	errInvalidSource      = errors.New("content: invalid source_media")
+	errPublishBusy        = errors.New("content: another publisher holds this item")
 )
 
 // ---- typed ops ----
@@ -449,6 +450,40 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 		return TransitionResult{}, fmt.Errorf("%w: %q", errUnknownStatus, to)
 	}
 
+	// On the ONE edge that distributes, the item's publish lease covers this WHOLE
+	// function — read, edge-check, status write and fan-out — not just the fan-out.
+	//
+	// The status write below carries the entire document, external_ids included, and
+	// it cannot carry less: UpdateData replaces the document, so a field left out of
+	// the map is deleted rather than preserved. The snapshot it writes is read at the
+	// top of this function, BEFORE any fan-out. Two concurrent transitions to
+	// published therefore interleave as: both read an empty skip-set, A publishes and
+	// records its external_ids, B's stale snapshot writes that skip-set back to empty,
+	// and B's fan-out — itself correctly leased, correctly re-reading — finds nothing
+	// to skip and posts the item a second time. The lease inside Publish cannot see
+	// this, because the erasure happens outside it. Measured at ~7% of runs before
+	// this widened, which is a gate that reddens at random rather than a bug anyone
+	// could reproduce on demand.
+	//
+	// Holding it here makes the loser's read happen after the winner's record: it sees
+	// status=published (a legal no-op edge, CanTransition returns true for from==to),
+	// re-stamps the same status, and its fan-out skips every channel already on record.
+	// One post, both callers succeed.
+	if entersDistribution(to) {
+		lease, ok, err := framework.AcquireLease(ctx, org, publishLeaseKey(doctype, name), publishLeaseTTL, publishLeaseWait)
+		if err != nil {
+			return TransitionResult{}, err
+		}
+		if !ok {
+			// A live publisher held the item for the whole wait window. Refusing is the
+			// honest answer and the safe one: this call cannot write the document without
+			// erasing ids that publisher is still recording, so it writes nothing and says
+			// so. 409, retryable — the caller re-transitions and takes the no-op path.
+			return TransitionResult{}, errPublishBusy
+		}
+		defer func() { _ = lease.Release(ctx) }()
+	}
+
 	doc, err := framework.Get(ctx, org, doctype, name)
 	if err != nil {
 		return TransitionResult{}, err
@@ -474,7 +509,9 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 
 	res := TransitionResult{DocType: doctype, Name: name, From: from, To: to}
 	if entersDistribution(to) {
-		pr, perr := Publish(ctx, org, PublishInput{DocType: doctype, Name: name, ScheduleAt: scheduleAt})
+		// publishHeld, not Publish: this call already holds the item's publish lease
+		// (above), and the lease is not reentrant.
+		pr, perr := publishHeld(ctx, org, PublishInput{DocType: doctype, Name: name, ScheduleAt: scheduleAt})
 		if perr != nil {
 			// Never fatal — the status IS updated; distribution can be retried.
 			s.Log.Warn("distribution on transition failed (status updated)",
@@ -609,6 +646,11 @@ func opErr(err error) error {
 		// bad request — an honest 400 that never reaches the studio, never bills.
 		return zip.ErrBadRequest(err.Error())
 	case errors.Is(err, errIllegalTransition):
+		return zip.Errorf(http.StatusConflict, "%v", err)
+	case errors.Is(err, errPublishBusy):
+		// Same 409 the illegal edge answers with, for the same reason: the request
+		// conflicts with the item's current state. Nothing was written and nothing was
+		// posted, so retrying is safe and is the expected response.
 		return zip.Errorf(http.StatusConflict, "%v", err)
 	case errors.Is(err, framework.ErrNotFound):
 		return zip.ErrNotFound("content item not found")
