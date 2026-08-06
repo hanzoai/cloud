@@ -44,6 +44,8 @@ package metering
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -576,11 +578,64 @@ type Usage struct {
 	PromptTokens     int    `json:"promptTokens,omitempty"`
 	CompletionTokens int    `json:"completionTokens,omitempty"`
 	TotalTokens      int    `json:"totalTokens,omitempty"`
-	RequestID        string `json:"requestId,omitempty"`
-	Premium          bool   `json:"premium,omitempty"`
-	Stream           bool   `json:"stream,omitempty"`
-	Status           string `json:"status,omitempty"`
-	ClientIP         string `json:"clientIp,omitempty"`
+	// RequestID is the request's CORRELATION id — the X-Request-Id a caller sent or the
+	// edge minted, carried so a debit can be traced back to the call that made it. It is
+	// attribution and nothing else.
+	//
+	// It was also the ledger's idempotency key, and that was a live revenue leak: the
+	// edge propagates this header verbatim from the client and CORS-allows it from a
+	// browser, so pinning one value made every call after the first dedup into the first
+	// one's debit — free inference, and a spend cap that never moved. The key is now
+	// [Usage.Ref], which the server mints. See [Usage.Seal].
+	RequestID string `json:"requestId,omitempty"`
+	// Ref is the SERVER's name for the metered act this Usage records, and the ledger's
+	// idempotency key for its debit. It never crosses the wire inbound and no caller can
+	// choose it: [Usage.Seal] mints it, once, when the act is fixed for recording.
+	//
+	// A caller that already HOLDS a server-assigned identity for the act — a message
+	// row's id, an x402 settlement id, a domain registration ref — sets it instead, and
+	// that identity is what makes the act's own retry exactly-once.
+	Ref      string `json:"-"`
+	Premium  bool   `json:"premium,omitempty"`
+	Stream   bool   `json:"stream,omitempty"`
+	Status   string `json:"status,omitempty"`
+	ClientIP string `json:"clientIp,omitempty"`
+}
+
+// Seal fixes this usage event's identity, once.
+//
+// A metered act needs a name the SERVER chose, because the ledger dedups on that name
+// and the payer must not be the one who picks it. Seal is where the name is minted, and
+// it is IDEMPOTENT: sealing a Usage that already carries a Ref returns it unchanged.
+//
+// That is the whole of the exactly-once contract, and both halves matter:
+//
+//   - STABLE across a retry of ONE act. Seal before the hand-off and the sealed value IS
+//     the act; recording it again — a re-send after a lost reply, a re-run of a queued
+//     debit — finds the same ref and moves the money once.
+//   - DISTINCT across DIFFERENT acts. Two calls are two Usage values and two seals, so
+//     two inferences bill twice however identical their fields, and however hard a
+//     caller pins its X-Request-Id.
+//
+// [Client.Record] seals what it is given, so a caller that does not retry need not think
+// about it; a caller that DOES retry seals first and holds the sealed value.
+func (u Usage) Seal() Usage {
+	if u.Ref == "" {
+		u.Ref = mintRef()
+	}
+	return u
+}
+
+// mintRef is a fresh act name: 128 random bits, stdlib only — the same idiom the ledger
+// mints its own entry ids with, so a usage ref reads the same wherever it was born.
+// Exhausted entropy is not a reason to bill twice, so a failed read yields no name and
+// the ledger mints the entry's own (a single, additive debit).
+func mintRef() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
+	return "act_" + hex.EncodeToString(b[:])
 }
 
 // Clone returns a Usage that OWNS every string it carries.
@@ -606,6 +661,7 @@ func (u Usage) Clone() Usage {
 	u.Project = strings.Clone(u.Project)
 	u.Service = strings.Clone(u.Service)
 	u.RequestID = strings.Clone(u.RequestID)
+	u.Ref = strings.Clone(u.Ref)
 	u.Status = strings.Clone(u.Status)
 	u.ClientIP = strings.Clone(u.ClientIP)
 	return u
@@ -696,17 +752,21 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 	if u.Currency == "" {
 		u.Currency = "usd"
 	}
+	// NAME THE ACT BEFORE BILLING IT. The ledger dedups on this name, so it is the
+	// server's to choose — an unsealed Usage gets a fresh one here and bills on its own,
+	// a caller that must survive its own retry sealed it already and that seal stands.
+	u = u.Seal()
 
 	// Co-resident native ledger: post the usage debit DIRECTLY (no HTTP), the ONE
 	// money seam. finance is an exact 18-decimal USD ledger, so the typed Amount
 	// debits with NO rounding — a per-token cost priced at 18-dp is never floored to
-	// cents or micros. The debit is idempotent on RequestID inside finance, and a
+	// cents or micros. The debit is idempotent on the act's Ref inside finance, and a
 	// test-mode client hits the sandbox books.
 	if fin := finance.Current(); fin != nil {
 		if err := fin.RecordUsage(ctx, types.UsageInput{
 			Org: u.Org, Subject: u.User, Amount: amt, Currency: u.Currency,
 			Model: u.Model, Provider: u.Provider, Project: u.Project, Service: u.Service,
-			RequestID: u.RequestID, Test: c.test,
+			Ref: u.Ref, Test: c.test,
 		}); err != nil {
 			return nil, err
 		}

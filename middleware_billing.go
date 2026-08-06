@@ -110,9 +110,15 @@ func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
 			Provider:    meteringProvider,
 			Project:     in.Project, // scope attribution → the per-scope cap sums over it.
 			Service:     in.Service,
-			RequestID:   c.RequestID(),
-			Status:      "success",
-			ClientIP:    clientIP(c),
+			// CORRELATION, never the money key. This is the inbound X-Request-Id when
+			// the client sent one — zip propagates it verbatim and the gateway
+			// CORS-allows it from a browser — so a caller pinning it used to make every
+			// call after the first dedup into the first one's debit: free inference and
+			// a spend cap that never moved. The debit's key is minted inside the meter
+			// (metering.Usage.Seal), one per act, out of the caller's reach.
+			RequestID: c.RequestID(),
+			Status:    "success",
+			ClientIP:  clientIP(c),
 		}
 		// Contained: this fires on EVERY billable request, so it is the highest-
 		// frequency spawn in the binary. It is also fire-and-forget — nothing reads
