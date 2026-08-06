@@ -2,6 +2,8 @@ package agents
 
 import (
 	"testing"
+
+	"github.com/hanzoai/cloud"
 )
 
 // An org that connected Slack and did nothing else has NO agent rows, and the
@@ -18,13 +20,12 @@ func TestBuiltinResolvesTheConventionalRef(t *testing.T) {
 	if a.Model != "zen-70b" {
 		t.Errorf("the default must use the deployment's model, got %q", a.Model)
 	}
-	// The default is offered the fleet's WHOLE door, not an empty list. It used
-	// to carry none and let the tool loop decide, and the result was an
-	// assistant that reported it could not reach the cloud while the door served
-	// 88 tools one socket away — an empty offer reads to the model as "there is
-	// nothing here", not as "ask later".
+	// The default declares the fleet's whole door. The tool loop still decides what
+	// is OFFERED per run, but an agent that declares nothing is offered nothing —
+	// which is how the assistant came to report it could not reach a cloud that was
+	// one socket away.
 	if len(a.Tools) != 1 || a.Tools[0] != ToolsAll {
-		t.Errorf("the default must be offered the whole door (%q), got %v", ToolsAll, a.Tools)
+		t.Errorf("the default must declare the whole door (%q), got %v", ToolsAll, a.Tools)
 	}
 	if a.Instructions == "" {
 		t.Error("the default must know what it is")
@@ -55,23 +56,40 @@ func TestNoModelIsAMiss(t *testing.T) {
 	}
 }
 
-// The chat brain is enso — Hanzo's own auto-routing SKU — and explicitly NOT
-// cloud.FallbackModel ("best"), whose own doc says the interactive chat path
-// never uses it. A Slack turn IS the interactive chat path.
-func TestBuiltinModelIsEnso(t *testing.T) {
-	t.Setenv("BRIDGE_AGENT_MODEL", "")
-	if got := builtinAgentModel(); got != "enso" {
-		t.Errorf("the chat brain must default to enso, got %q", got)
+// The chat brain is cloud.ChatModel — one constant in the file that owns model
+// policy, not a literal here plus a BRIDGE_AGENT_MODEL knob beside it.
+//
+// The knob was never set in any deployment, and the literal was justified by the
+// claim that enso auto-routes per query, which it does not. This test is the guard
+// against a second place regrowing: there is exactly one line that names the tier
+// and it is not in this package.
+func TestBuiltinModelIsTheChatConstant(t *testing.T) {
+	a, ok := builtinAgent("acme", "hanzo", cloud.ChatModel)
+	if !ok {
+		t.Fatal("the conventional ref must resolve to the built-in")
 	}
-	if got := builtinAgentModel(); got == "best" {
+	if a.Model != cloud.ChatModel {
+		t.Errorf("the chat brain must be cloud.ChatModel (%q), got %q", cloud.ChatModel, a.Model)
+	}
+	if a.Model == cloud.FallbackModel {
 		t.Error(`"best" is the degraded fallback tier, never the interactive default`)
+	}
+	// The menu must be able to express the default, or a person who opens App Home
+	// sees a blank selector and their own model looks lost.
+	if !knownChatModel(cloud.ChatModel) {
+		t.Errorf("the App Home menu must offer the default tier %q", cloud.ChatModel)
 	}
 }
 
-// A deployment can name its own.
-func TestBuiltinModelOverride(t *testing.T) {
-	t.Setenv("BRIDGE_AGENT_MODEL", "enso-ultra")
-	if got := builtinAgentModel(); got != "enso-ultra" {
-		t.Errorf("BRIDGE_AGENT_MODEL must win, got %q", got)
+// The App Home pin still wins over the default — a person's explicit choice is
+// the one thing that may override it, and only for the built-in.
+func TestAppHomePinBeatsTheDefault(t *testing.T) {
+	for _, m := range []string{"enso", "enso-flash", "enso-ultra"} {
+		if !knownChatModel(m) {
+			t.Errorf("App Home offers %q, so the turn must accept it", m)
+		}
+	}
+	if knownChatModel("gpt-4o") || knownChatModel("best") {
+		t.Error("only the enso family may be pinned from a client")
 	}
 }
