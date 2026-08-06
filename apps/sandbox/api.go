@@ -1,0 +1,337 @@
+package sandbox
+
+// api.go — the sandbox as a VALUE you can call, not an address you can only POST to.
+//
+// Every operation here used to exist ONLY as `func X(s *Service, c *zip.Ctx) error`.
+// That braids two different things into one function: what a sandbox IS (lease it,
+// run in it, read from it) and how a request reaches it (bind a body, read a param,
+// pick a status). The consequence is not stylistic — it is that NOTHING ELSE IN THE
+// PROCESS CAN USE A SANDBOX. apps/exec needs exactly these five verbs and could not
+// have them, so it proxied to a workload nobody deployed instead.
+//
+// So the domain moves here and the handlers become adapters over it: bind, call,
+// JSON. The same functions back the internal plane (plane.go), which is how a peer
+// app composes over sandboxes without a router, a request or a socket in the way.
+//
+// It is functions-taking-*Service rather than methods for a reason the compiler
+// enforces: `Service = cloud.Service[state]` is an ALIAS for a generic type declared
+// in package cloud, and Go cannot define a method on a non-local type. apps/git's
+// core/adapter split (files.go) is the same shape for the same reason, so this is
+// the house form rather than a second one.
+//
+// ERRORS ARE zip ERRORS, in the core. Both adapters return them unchanged — the HTTP
+// one to a client, the plane one to a peer — so "this sandbox is not yours" is 404
+// once, decided where the fact is known, rather than twice in two vocabularies that
+// have to be kept in step.
+
+import (
+	"bytes"
+	"context"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/zap-proto/zip"
+)
+
+// Spec is what a lease asks for.
+//
+// ID is the RESUME: name a sandbox you already hold and Lease returns it instead of
+// minting one. That is what makes "a session" expressible without a session table —
+// the caller's session id IS the sandbox id, and the only store either needs is the
+// one this package already keeps.
+type Spec struct {
+	ID      string
+	Class   string
+	Project string
+	Image   string
+	TTLSec  int
+}
+
+// Cmd is one command to run inside a sandbox. Argv is the honest form; Command is
+// the convenience for a caller holding a shell line. Exactly one is required.
+type Cmd struct {
+	Argv       []string
+	Command    string
+	Stdin      string
+	Dir        string
+	TimeoutSec int
+}
+
+// Entry is what a path IS: a file's bytes, or a directory's entries. One read
+// answers both because one shell command answers both, and a caller that had to
+// stat first would pay two round trips through the apiserver to learn something
+// the same command already knew.
+type Entry struct {
+	Path    string   `json:"path"`
+	Dir     bool     `json:"dir,omitempty"`
+	Data    []byte   `json:"data,omitempty"`
+	Entries []string `json:"entries,omitempty"`
+}
+
+// dirExit is how the read below reports "that path is a directory" without putting
+// a single byte of its own in front of the payload. stdout carries the artifact —
+// a PNG, a parquet file — so a sentinel PREFIX would corrupt every binary read;
+// the exit code is a channel the stream already carries and nothing else uses it,
+// `sh` reserving only 0, 1, 2 and 126-255 for its own meanings.
+const dirExit = 10
+
+// Lease returns the org's sandbox named by spec.ID, or mints one.
+//
+// Resuming is checked against the STORE and against the row's status, so a session
+// whose pod the reaper already ended comes back as a fresh sandbox rather than as a
+// 502 from the first command sent into a pod that is gone.
+func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, error) {
+	if strings.TrimSpace(org) == "" {
+		return Sandbox{}, zip.ErrForbidden("org required")
+	}
+	store, err := storeFor(s, org)
+	if err != nil {
+		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	if id := strings.TrimSpace(spec.ID); id != "" {
+		m, err := store.Get(ctx, org, id)
+		if err == nil && m.Status == "running" {
+			return m, nil
+		}
+		if err != nil && err != errNotFound {
+			return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		}
+		// A named-but-gone session is a NEW sandbox, not an error. The caller is
+		// resuming a conversation whose lease expired while they were reading, and
+		// the honest answer to that is a working sandbox with a new id — which the
+		// contract already carries back on every reply.
+	}
+
+	class := strings.ToLower(strings.TrimSpace(spec.Class))
+	if class == "" {
+		class = "exec"
+	}
+	if !classes[class] {
+		return Sandbox{}, zip.ErrBadRequest("class must be one of exec, dev, desktop")
+	}
+	project := slug(spec.Project)
+	if class != "exec" && project == "" {
+		return Sandbox{}, zip.ErrBadRequest("project required for class " + class)
+	}
+
+	// One live sandbox per (org, project), and the refusal is deliberate: the
+	// project volume is single-attach, so a second concurrent sandbox would either
+	// fail to attach or silently get a cold empty disk. "Silently cold" is the worse
+	// of the two — the user sees a sandbox that works and reinstalls everything on
+	// every call — so it is refused in the open, naming the sandbox that already
+	// holds the volume.
+	if project != "" {
+		if live, err := store.Live(ctx, org, project); err == nil && live.ID != "" {
+			return Sandbox{}, zip.Errorf(http.StatusConflict,
+				"project %q already has a live sandbox (%s); delete it first", project, live.ID)
+		}
+	}
+
+	id, err := genID()
+	if err != nil {
+		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "id: %v", err)
+	}
+	now := time.Now().Unix()
+	m := Sandbox{
+		ID: id, Org: org, Kind: KindSandbox, Class: class, Project: project,
+		Image: firstNonEmpty(spec.Image, s.State.rt.imageFor(class)),
+		Pod:   podName(id), Status: "pending",
+		CreatedAt: now, LastUsedAt: now,
+	}
+	if project != "" {
+		m.Volume = volumeName(org, project)
+	}
+	// The lease. Unbounded is not an option for a sandbox running submitted code on
+	// our nodes, so an unset ttl takes the class default rather than forever.
+	ttl := spec.TTLSec
+	if ttl <= 0 {
+		ttl = defaultTTL[class]
+	}
+	if ttl > maxTTL {
+		ttl = maxTTL
+	}
+	m.ExpiresAt = now + int64(ttl)
+
+	if err := store.Put(ctx, m); err != nil {
+		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "put: %v", err)
+	}
+	// A failure to start is RECORDED on the row and answered 503 — the row stays so
+	// an operator can see what was asked for and why it did not happen, rather than
+	// the request vanishing with the evidence.
+	if err := s.State.rt.start(ctx, m); err != nil {
+		m.Status, m.Error = "error", err.Error()
+		_ = store.Put(ctx, m)
+		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
+	}
+	m.Status = "running"
+	if err := store.Put(ctx, m); err != nil {
+		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "put: %v", err)
+	}
+	return m, nil
+}
+
+// Get answers one sandbox THIS org owns. An id belonging to another org is 404 and
+// not 403, because a 403 would confirm the id exists and whether a given sandbox
+// exists is itself a cross-tenant fact.
+func Get(s *Service, ctx context.Context, org, id string) (Sandbox, error) {
+	m, _, err := find(s, ctx, org, id)
+	return m, err
+}
+
+// List answers the org's sandboxes, newest first.
+func List(s *Service, ctx context.Context, org, project, status string) ([]Sandbox, error) {
+	if strings.TrimSpace(org) == "" {
+		return nil, zip.ErrForbidden("org required")
+	}
+	store, err := storeFor(s, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	ms, err := store.List(ctx, org, slug(project), strings.TrimSpace(status))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return ms, nil
+}
+
+// Run runs a command inside the sandbox and answers its exit code and output.
+//
+// A non-zero exit is a SUCCESSFUL call carrying a failed program: no error is
+// returned, because "the tests failed" and "the sandbox is broken" are different
+// facts and a caller has to be able to tell them apart.
+func Run(s *Service, ctx context.Context, org, id string, cmd Cmd) (ExecResult, error) {
+	m, store, err := find(s, ctx, org, id)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	argv, err := argvOf(cmd.Argv, cmd.Command)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	if cmd.Dir != "" {
+		argv = append([]string{"sh", "-c", "cd " + shellQuote(cmd.Dir) + " && exec \"$@\"", "sh"}, argv...)
+	}
+	r, err := s.State.rt.exec(ctx, m, argv, strings.NewReader(cmd.Stdin), cmd.TimeoutSec)
+	if err != nil {
+		return ExecResult{}, zip.Errorf(http.StatusBadGateway, "exec: %v", err)
+	}
+	touched(ctx, store, m)
+	return r, nil
+}
+
+// Read reads one file, or lists a directory when the path names one. Both go through
+// the same exec channel — there is no second protocol and no daemon in the pod to
+// speak one.
+func Read(s *Service, ctx context.Context, org, id, path string) (Entry, error) {
+	m, store, err := find(s, ctx, org, id)
+	if err != nil {
+		return Entry{}, err
+	}
+	p, err := confine(m.Class, path)
+	if err != nil {
+		return Entry{}, err
+	}
+	q := shellQuote(p)
+	r, err := s.State.rt.exec(ctx, m, []string{"sh", "-c",
+		"if [ -d " + q + " ]; then ls -1A -- " + q + "; exit " + strconv.Itoa(dirExit) + "; fi; cat -- " + q}, nil, 0)
+	if err != nil {
+		return Entry{}, zip.Errorf(http.StatusBadGateway, "fs read: %v", err)
+	}
+	touched(ctx, store, m)
+	switch r.ExitCode {
+	case 0:
+		return Entry{Path: p, Data: []byte(r.Stdout)}, nil
+	case dirExit:
+		return Entry{Path: p, Dir: true, Entries: lines(r.Stdout)}, nil
+	}
+	return Entry{}, zip.ErrNotFound(strings.TrimSpace(firstNonEmpty(r.Stderr, "no such path")))
+}
+
+// Write writes data to one file, creating parent directories. It answers the
+// RESOLVED path, because the caller's path is relative far more often than not and
+// echoing back what it asked for would tell it nothing it did not already know.
+func Write(s *Service, ctx context.Context, org, id, path string, data []byte) (string, int, error) {
+	m, store, err := find(s, ctx, org, id)
+	if err != nil {
+		return "", 0, err
+	}
+	p, err := confine(m.Class, path)
+	if err != nil {
+		return "", 0, err
+	}
+	q := shellQuote(p)
+	r, err := s.State.rt.exec(ctx, m, []string{"sh", "-c",
+		"mkdir -p -- \"$(dirname -- " + q + ")\" && cat > " + q}, bytes.NewReader(data), 0)
+	if err != nil {
+		return "", 0, zip.Errorf(http.StatusBadGateway, "fs write: %v", err)
+	}
+	touched(ctx, store, m)
+	if r.ExitCode != 0 {
+		return "", 0, zip.Errorf(http.StatusBadRequest, "write %s: %s", p, strings.TrimSpace(r.Stderr))
+	}
+	return p, len(data), nil
+}
+
+// End ends the lease: the pod goes, the volume stays unless purge.
+//
+// purge drops the VOLUME as well, and it is opt-in because the volume holds the only
+// copy of the checkout and the caches. Ending a lease is cheap and reversible;
+// deleting someone's uncommitted work is neither.
+func End(s *Service, ctx context.Context, org, id string, purge bool) error {
+	m, store, err := find(s, ctx, org, id)
+	if err != nil {
+		return err
+	}
+	if serr := s.State.rt.stop(ctx, m); serr != nil {
+		s.Log.Warn("stop sandbox", "id", m.ID, "err", serr)
+	}
+	if purge && m.Volume != "" {
+		if perr := s.State.rt.purge(ctx, m); perr != nil {
+			s.Log.Warn("purge volume", "volume", m.Volume, "err", perr)
+		}
+	}
+	if err := store.Delete(ctx, m.Org, m.ID); err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+	}
+	return nil
+}
+
+// find resolves an id to a sandbox THIS org owns, beside the store it came from.
+// The query is scoped by the validated org, so a caller cannot address another org's
+// sandbox by guessing an id.
+func find(s *Service, ctx context.Context, org, id string) (Sandbox, *Store, error) {
+	if strings.TrimSpace(org) == "" {
+		return Sandbox{}, nil, zip.ErrForbidden("org required")
+	}
+	store, err := storeFor(s, org)
+	if err != nil {
+		return Sandbox{}, nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	m, err := store.Get(ctx, org, strings.TrimSpace(id))
+	if err == errNotFound {
+		return Sandbox{}, nil, zip.ErrNotFound("sandbox not found")
+	}
+	if err != nil {
+		return Sandbox{}, nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	return m, store, nil
+}
+
+// touched records use, so the idle reaper can tell an actively-worked sandbox from
+// one whose owner walked away.
+func touched(ctx context.Context, store *Store, m Sandbox) {
+	m.LastUsedAt = time.Now().Unix()
+	_ = store.Put(ctx, m)
+}
+
+func lines(s string) []string {
+	out := []string{}
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimRight(l, "\r"); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
