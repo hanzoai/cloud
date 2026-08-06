@@ -119,21 +119,45 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 		t.Errorf("FIX#2: admin must see the disabled model in the root blob")
 	}
 
+	// The single-segment id for the sections below is READ from the catalog
+	// this test just mounted, never written as a literal: a literal is a claim
+	// about the snapshot, and the snapshot retires models — these sections
+	// hardcoded zen4/zen5 and broke the day the catalog dropped the retired
+	// generation. Any single-segment id proves the route shapes; the slashed-id
+	// case is covered above.
+	_, mlb := do("GET", "/v1/pricing/models", "", admin)
+	var mlc struct {
+		Models []Model `json:"models"`
+	}
+	if err := json.Unmarshal(mlb, &mlc); err != nil {
+		t.Fatalf("decode /v1/pricing/models: %v", err)
+	}
+	single := ""
+	for _, m := range mlc.Models {
+		if id := modelID(m); id != "" && id != slashID && !strings.Contains(id, "/") {
+			single = id
+			break
+		}
+	}
+	if single == "" {
+		t.Fatal("catalog carries no single-segment model id to exercise the single-model gate")
+	}
+
 	// --- FIX #5: oversized / over-deep overrides are rejected at the boundary
 	deep := `{"betaOrgs":[],"overrides":` + strings.Repeat(`{"a":`, 40) + "1" + strings.Repeat("}", 40) + `}`
-	if resp, _ := do("PATCH", "/v1/admin/catalog/models/zen5", deep, admin); resp.StatusCode != http.StatusBadRequest {
+	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+single, deep, admin); resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("FIX#5: over-deep override must be 400, got %d", resp.StatusCode)
 	}
 
 	// --- single-model gate (single-segment id) 404s without an oracle ------
-	if resp, _ := do("PATCH", "/v1/admin/catalog/models/zen4", `{"enabled":false}`, admin); resp.StatusCode != http.StatusOK {
-		t.Fatalf("admin PATCH zen4 must be 200, got %d", resp.StatusCode)
+	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+single, `{"enabled":false}`, admin); resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin PATCH %s must be 200, got %d", single, resp.StatusCode)
 	}
-	if resp, _ := do("GET", "/v1/pricing/model/zen4", "", acme); resp.StatusCode != http.StatusNotFound {
-		t.Errorf("disabled zen4 single-lookup must 404 for public, got %d", resp.StatusCode)
+	if resp, _ := do("GET", "/v1/pricing/model/"+single, "", acme); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("disabled %s single-lookup must 404 for public, got %d", single, resp.StatusCode)
 	}
-	if resp, _ := do("GET", "/v1/pricing/model/zen4", "", admin); resp.StatusCode != http.StatusOK {
-		t.Errorf("admin single-lookup of disabled zen4 must be 200, got %d", resp.StatusCode)
+	if resp, _ := do("GET", "/v1/pricing/model/"+single, "", admin); resp.StatusCode != http.StatusOK {
+		t.Errorf("admin single-lookup of disabled %s must be 200, got %d", single, resp.StatusCode)
 	}
 
 	// --- admin catalog returns annotated entries ----------------------------
