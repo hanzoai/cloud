@@ -16,11 +16,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// This subsystem serves 56 operations and NOT ONE of them is a typed op, which
+// This subsystem publishes 40 operations and NOT ONE of them is a typed op, which
 // is the whole cost of being a transparent edge: an operation outside zip's
 // typed registry has no schema, no MCP tool, no CLI command and no generated SDK
 // method. (Its PROSE is recoverable — openapi.Describe declares that beside the
-// wire fact, and exec.go does, for all 56. What follows is the cost that is NOT
+// wire fact, and exec.go does, for all 40. What follows is the cost that is NOT
 // recoverable.) The refusal is deliberate and it is measured here rather than
 // promised in prose, because prose cannot go red.
 //
@@ -41,7 +41,7 @@ import (
 // each path below: on this surface it could only publish a guess about a contract
 // this repo does not own, or a content type the route does not accept.
 //
-// `openapi.Describe` is the bridge for the PROSE half and it is TAKEN, for all 56
+// `openapi.Describe` is the bridge for the PROSE half and it is TAKEN, for all 40
 // (exec.go's `surfaces` + init). Prose is a statement ABOUT the route rather than
 // a declaration of what the route carries, so it can be true of a wire this repo
 // does not own — which is exactly why the schema half stays refused while this
@@ -98,30 +98,23 @@ const (
 		"every subpath left out — a wire change, not a description. The greedy segment is `*1` " +
 		"to fiber and `{wildcard1}` to the document, so a bound field and the published " +
 		"parameter could not agree either. " + proxiedReason
-
-	methodReason = " On top of that, zip has no typed registrar for this method: typed.go " +
-		"exposes Get/Post/Put/Patch/Delete and nothing else, so the operation cannot be " +
-		"expressed as an op even where the body could be."
 )
 
-// servedMethods is the method set All() puts on each path, as the DOCUMENT counts
-// them — openapi.Live's filter drops HEAD and CONNECT from fiber's nine
-// (openapi/openapi.go:94). Written literally for the same reason the paths are:
-// a method appearing or disappearing has to be noticed.
-var servedMethods = []string{"DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"}
+// servedMethods is the method set the DOCUMENT publishes for each path. It is the
+// five zip has a typed registrar for; OPTIONS and TRACE are still SERVED — All()
+// registers every method and the executor answers them (see the proxy subtest
+// below) — but ceff43ac stopped publishing what was merely bound, and these two
+// were never declared. Written literally for the same reason the paths are: a
+// method appearing or disappearing has to be noticed.
+var servedMethods = []string{"DELETE", "GET", "PATCH", "POST", "PUT"}
 
-// untypedByDesign crosses the two closed lists into the 56 operation addresses
+// untypedByDesign crosses the two closed lists into the 40 operation addresses
 // the document publishes, appending the per-method fact where there is one.
 func untypedByDesign() map[string]string {
 	m := make(map[string]string, len(untypedPaths)*len(servedMethods))
 	for path, why := range untypedPaths {
 		for _, method := range servedMethods {
-			r := why
-			switch method {
-			case http.MethodOptions, http.MethodTrace:
-				r += methodReason
-			}
-			m[method+" "+path] = r
+			m[method+" "+path] = why
 		}
 	}
 	return m
@@ -205,14 +198,14 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // and the ledger above, the note at the registration site and the LLM.md entry get
 // updated together rather than drifting apart.
 //
-// 56 is 8 paths (4 prefixes, each exact and wildcard) x 7 published methods, and
-// it is the same 56 `bin/exec openapi` writes into plugin/exec/openapi.json. Every
+// 40 is 8 paths (4 prefixes, each exact and wildcard) x 5 published methods, and
+// it is the same 40 `bin/exec openapi` writes into plugin/exec/openapi.json. Every
 // one of them CARRIES PROSE (TestEveryOperationIsDescribed); none of them carries
 // a schema, a tool or an SDK method, which is the part that stays a cost.
 func TestTheSurfaceIsWhollyUntyped(t *testing.T) {
 	served, typed := execOps(t)
-	if len(served) != 56 {
-		t.Errorf("serves %d operations, want 56 — the surface moved; re-derive untypedPaths "+
+	if len(served) != 40 {
+		t.Errorf("publishes %d operations, want 40 — the surface moved; re-derive untypedPaths "+
 			"and servedMethods from the live router before touching anything else", len(served))
 	}
 	if len(typed) != 0 {
@@ -413,9 +406,11 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 	})
 
 	t.Run("OPTIONS and TRACE are served here and are proxied too", func(t *testing.T) {
-		// The two methods zip cannot express as ops at all. They are 16 of the 56
-		// published operations, so leaving them out of the ledger would understate
-		// the gap by nearly a third.
+		// The two methods zip cannot express as ops at all. They are SERVED — All()
+		// registers them and the executor answers them, which is what this asserts —
+		// but they are no longer PUBLISHED, so they are not in the ledger above. The
+		// wire and the document disagreeing here is the point ceff43ac settled: the
+		// document carries what was declared, not whatever the router happened to bind.
 		for _, method := range []string{http.MethodOptions, http.MethodTrace} {
 			up := &echoUpstream{respBody: `{}`}
 			app := up.mount(t)
