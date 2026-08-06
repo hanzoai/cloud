@@ -1,11 +1,11 @@
-package paas
+package platform
 
 // fleet.go — the in-process fleet-observation seam.
 //
 // The admin god-view (/v1/admin/products + the overview drift KPIs, clients/admin) needs the
-// SAME operator-App-CR + Deployment observation the /v1/paas/apps board already computes
+// SAME operator-App-CR + Deployment observation the /v1/platform/apps board already computes
 // (observeFleet → observeCR → drift.go). Rather than take a SECOND cluster client and fork a
-// SECOND drift model into the admin subsystem, paas PUBLISHES its observer here once at Mount
+// SECOND drift model into the admin subsystem, platform PUBLISHES its observer here once at Mount
 // and admin RESOLVES it at request time — the identical in-process-seam pattern
 // finance.Current() (the money plane) and commerceinproc.SetApp (the commerce plane) use for
 // a co-resident host handing a narrow capability to a sibling subsystem.
@@ -25,7 +25,7 @@ import (
 // Fleet is the read-only fleet observation a co-resident consumer folds over. Observe returns
 // the whole platform fleet (every scanned namespace: hanzo/-testnet/-devnet) as AppView drift
 // rows — declared vs running tag, operator-reconciled health/phase, and the drift verdict.
-// Ready reports whether the k8s client resolved (else reason is the init error the /v1/paas/
+// Ready reports whether the k8s client resolved (else reason is the init error the /v1/platform/
 // health route already surfaces).
 type Fleet interface {
 	Observe(ctx context.Context) ([]AppView, error)
@@ -53,9 +53,9 @@ func CurrentFleet() Fleet {
 	return publishedFleet
 }
 
-// fleetObserver binds the seam to the mounted paas state (its cloud.K8sClient). It is the
+// fleetObserver binds the seam to the mounted platform state (its cloud.K8sClient). It is the
 // ONLY implementation; it reuses observeFleet verbatim so the admin board and the
-// /v1/paas/apps board can never disagree about what the fleet is.
+// /v1/platform/apps board can never disagree about what the fleet is.
 type fleetObserver struct{ s *cloud.Service[state] }
 
 // Observe reads the whole platform fleet across scanOrder() (prod-first). An unusable

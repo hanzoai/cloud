@@ -31,7 +31,7 @@
 // (< provisioning's 120). Two independent concerns: (1) health — this subsystem
 // serves its OWN fail-closed /v1/s3/health (Mount); cloud.HealthOwner makes Serve
 // skip the generic always-ok /v1/<name>/health so it never shadows the real probe
-// with a fake 200 (the same flag clients/kms and clients/paas use). (2) routing —
+// with a fake 200 (the same flag clients/kms and clients/platform use). (2) routing —
 // Fiber v3 matches routes by an ORDERED scan and takes the first match, so the
 // static GET /v1/s3/buckets and GET /v1/s3/health must register BEFORE
 // provisioning's GET /v1/s3/:name (order 120) to win — hence order 118.

@@ -300,7 +300,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// GET /v1/<name>/health uniformly, registered at the compose root before
 	// MountAll so it precedes subsystem /v1/<n>/* wildcards.
 	//
-	// A subsystem that owns its health (OwnsHealth, e.g. kms/paas/s3) serves its
+	// A subsystem that owns its health (OwnsHealth, e.g. kms/platform/s3) serves its
 	// OWN fail-closed /v1/<name>/health in Mount; skip it here so this always-ok
 	// route never shadows the real probe.
 	for _, spec := range specs {

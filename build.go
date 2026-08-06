@@ -94,7 +94,7 @@ func BuildDeps(cfg *Config) Deps {
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
-	// The cluster control plane (paas, validators). Not a pick(): there is no ZAP
+	// The cluster control plane (platform, validators). Not a pick(): there is no ZAP
 	// hop to a Kubernetes API server — either an implementation is registered into
 	// the k8s.go seam (the private build) or there is none, and BuildK8sClient
 	// returns the unavailable default. Never nil, so a consumer holds a client that
@@ -265,31 +265,31 @@ type ServiceReleaseEvent struct {
 	SHA     string
 }
 
-// serviceReleaser is the registered first-party CR-rollout seam. clients/paas
+// serviceReleaser is the registered first-party CR-rollout seam. clients/platform
 // (the owner of the hanzo.ai/v1 Service CR control plane) installs it in Mount; a
 // proven build calls OnServiceRelease, which patches spec.image on the matching
-// CR. The inversion keeps package cloud from importing clients/paas (which imports
+// CR. The inversion keeps package cloud from importing clients/platform (which imports
 // cloud) — the same idiom as pushBuilder / kmsClientFactory. Exactly one
 // registration.
 var serviceReleaser func(ctx context.Context, ev ServiceReleaseEvent) error
 
-// RegisterServiceReleaser installs the first-party CR-rollout hook. clients/paas
+// RegisterServiceReleaser installs the first-party CR-rollout hook. clients/platform
 // calls this from its Mount when co-resident; it is the ONE inversion point that
 // lets a build-completion path roll a proven image onto its operator Service CR
-// with no cloud⇄paas import cycle.
+// with no cloud⇄platform import cycle.
 func RegisterServiceReleaser(f func(ctx context.Context, ev ServiceReleaseEvent) error) {
 	serviceReleaser = f
 }
 
 // ServiceReleaserRegistered reports whether a first-party CR-rollout hook is
-// installed (the paas control plane is co-resident). A caller uses it to know
+// installed (the platform control plane is co-resident). A caller uses it to know
 // whether OnServiceRelease actually patches a CR or is a no-op, so it can be
 // honest about which rollout path took effect.
 func ServiceReleaserRegistered() bool { return serviceReleaser != nil }
 
 // OnServiceRelease rolls a proven image live by patching the matching hanzo.ai/v1
 // Service CR's spec.image (the operator then reconciles the Deployment). It is a
-// no-op when no releaser is registered (a binary without the paas control plane
+// no-op when no releaser is registered (a binary without the platform control plane
 // co-resident). The releaser enforces the clean-semver gate and CR-name
 // resolution; this is only the dispatch seam.
 func OnServiceRelease(ctx context.Context, ev ServiceReleaseEvent) error {

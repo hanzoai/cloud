@@ -1,5 +1,5 @@
-// Package paas mounts the native, in-process Hanzo PaaS control plane at
-// /v1/paas/*: the "one and only one way to deploy" made native to the cloud
+// Package platform mounts the native, in-process Hanzo PaaS control plane at
+// /v1/platform/*: the "one and only one way to deploy" made native to the cloud
 // binary. It is the Go port of the standalone Dokploy-based platform's
 // build→deploy lifecycle (pkg/platform/src/services/ci/deploy-executor.ts +
 // services/apps/inventory.ts + db/schema/apps-drift.ts), collapsed into an
@@ -17,9 +17,9 @@
 // service row and performs no IO. It is a faithful port of
 // `pkg/platform/src/db/schema/apps-drift.ts` so the two implementations can never
 // disagree about what "drift" means (one way to compute drift, period). The
-// cluster reader (paas.go) owns observing the tags; this file only interprets
+// cluster reader (platform.go) owns observing the tags; this file only interprets
 // them.
-package paas
+package platform
 
 import "regexp"
 
@@ -91,7 +91,7 @@ type Drift struct {
 
 // Observed is the minimal set of already-observed tag fields the drift derivation
 // reads — mirrors the `Pick<App, …>` the TS `computeDrift` accepts. The reader
-// (paas.go) fills these from the cluster; the release fields are populated by the
+// (platform.go) fills these from the cluster; the release fields are populated by the
 // GH-release reader (a follow-up), so today they are the honest zero value
 // (ReleaseURL == "" ⇒ no-release, exactly like the un-populated TS columns).
 type Observed struct {

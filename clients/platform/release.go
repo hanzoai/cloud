@@ -1,6 +1,6 @@
 // release.go — the first-party release seam. build.go's RegisterServiceReleaser is
 // the inversion that lets a build-completion path (clients/platform/release.go, or
-// any package-cloud caller) request a rollout with no cloud⇄paas import cycle.
+// any package-cloud caller) request a rollout with no cloud⇄platform import cycle.
 //
 // The App CRs in the platform namespaces are declared in universe git
 // (infra/k8s/operator/crs/) and reconciled by Hanzo CD with selfHeal, so a direct
@@ -8,7 +8,7 @@
 // and names the one way to roll a tag: commit it to the manifest. The clean-semver
 // gate (splitReleaseImage) still validates the request so a caller gets an honest,
 // specific error.
-package paas
+package platform
 
 import (
 	"context"
@@ -72,10 +72,10 @@ func releaseService(s *cloud.Service[state], ctx context.Context, service, image
 }
 
 // registerReleaser wires the first-party release seam (build.go's
-// RegisterServiceReleaser inversion) to this mounted paas service. Called once
+// RegisterServiceReleaser inversion) to this mounted platform service. Called once
 // from routes, so a release requested anywhere in the binary (cloud's own
 // self-release, or a future in-process first-party builder) reaches the SAME
-// refusal with no cloud⇄paas import cycle.
+// refusal with no cloud⇄platform import cycle.
 func registerReleaser(s *cloud.Service[state]) {
 	cloud.RegisterServiceReleaser(func(ctx context.Context, ev cloud.ServiceReleaseEvent) error {
 		_, _, _, err := releaseService(s, ctx, ev.Service, ev.Image)
