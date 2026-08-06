@@ -35,6 +35,7 @@ const LibreChatExec = "/v1/exec"
 // Paths, named once so neither side spells one wrong. This is the surface we
 // OWN — unlike LibreChatExec above, which is fixed by a client we do not.
 const (
+	PathBind     = "/v1/box/bind"
 	PathHealth   = "/v1/box/health"
 	PathExec     = "/v1/box/proc/exec"
 	PathFsList   = "/v1/box/fs/list"
@@ -67,6 +68,39 @@ var QueryParams = []string{
 // so a box carries ONE credential, not one per surface. User identity is
 // terminated by IAM at the cloud edge and never re-derived here.
 const KeyHeader = "X-API-Key"
+
+// BoxHeader names WHICH box the caller believes it is talking to, and the box
+// refuses the call when that is not the id it was bound to.
+//
+// The key alone cannot do this: it is ONE SHARED KEY across the pool, so it
+// authenticates the caller as cloud and says nothing about the destination.
+// Address alone cannot either. A pod that dies on its own — evicted, OOM-killed,
+// drained — never runs release(), so its row keeps status=running and a Host
+// that the CNI has since handed to a REPLACEMENT POD BELONGING TO ANOTHER
+// TENANT. Reproduced: two orgs' rows held the same address and the first org's
+// fs/list answered 200 off the second org's box.
+//
+// So the destination has to be NAMED rather than inferred from where the packet
+// arrived, and the box has to be the one that checks — cloud believing its own
+// row is precisely what is wrong in that scenario. A misdirected call then fails
+// closed instead of reading a stranger's checkout.
+const BoxHeader = "X-Box-Id"
+
+// Bind is what cloud tells a freshly claimed box about itself.
+//
+// It cannot be an env var. Boxes come from a WARM POOL: the pods are already
+// running, identical, and started by a Deployment whose env was fixed long
+// before any tenant existed. A claim is a label patch on a live pod, so there is
+// no moment at which env could carry a per-box identity — a BOX_ID read at
+// startup is empty forever, and a guard that compares against an empty id is a
+// guard that never fires.
+//
+// Binding once per claim is the whole lifecycle: release() DELETES the pod
+// rather than returning it to the pool, so a box is bound at most once and a
+// second bind naming a different id is a genuine conflict, not a re-use.
+type Bind struct {
+	ID string `json:"id"`
+}
 
 // Health is what a box says about itself. `Boot` is unix seconds so a caller can
 // tell a warm pod that has been idle for an hour from one that just started.

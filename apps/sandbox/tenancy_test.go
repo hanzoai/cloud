@@ -62,6 +62,16 @@ func TestForgedOrgIsRefusedOnEveryRoute(t *testing.T) {
 	r := newRig(t)
 	victim := r.mkBox(t, "victim", "svc", "exec")
 
+	// A DELTA, not an absolute. Creating the victim's box legitimately reaches
+	// the box once — cloud binds it to its id at claim, which is the call that
+	// makes every X-Box-Id below checkable. What this test claims is that the
+	// FORGED requests reached it zero more times, and an absolute count would
+	// conflate the setup with the thing under test.
+	before := r.box.count()
+	if before != 1 {
+		t.Fatalf("claiming a box reached it %d time(s), want exactly the bind", before)
+	}
+
 	for _, rt := range collectionRoutes {
 		code, body := r.forge(t, rt.method, rt.path(""), "victim", map[string]any{})
 		if code != http.StatusForbidden {
@@ -75,7 +85,7 @@ func TestForgedOrgIsRefusedOnEveryRoute(t *testing.T) {
 			t.Errorf("%s %s with a forged org: want 403, got %d (%s)", rt.method, p, code, body)
 		}
 	}
-	if n := r.box.count(); n != 0 {
+	if n := r.box.count() - before; n != 0 {
 		t.Fatalf("a forged request reached a box %d time(s)", n)
 	}
 }
@@ -116,6 +126,7 @@ func TestNoOrgAtAllIsRefused(t *testing.T) {
 func TestOneOrgCannotReachAnothersBox(t *testing.T) {
 	r := newRig(t)
 	mine := r.mkBox(t, "acme", "app", "dev")
+	before := r.box.count() // the claim-time bind; see the note above
 
 	for _, rt := range boxRoutes {
 		p := rt.path(mine.ID)
@@ -124,7 +135,7 @@ func TestOneOrgCannotReachAnothersBox(t *testing.T) {
 			t.Errorf("evilcorp %s %s: want 404, got %d (%s)", rt.method, p, code, body)
 		}
 	}
-	if n := r.box.count(); n != 0 {
+	if n := r.box.count() - before; n != 0 {
 		t.Fatalf("a cross-org request reached a box %d time(s)", n)
 	}
 

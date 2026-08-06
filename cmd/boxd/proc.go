@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/sandbox/wire"
+
+	"github.com/zap-proto/zip"
 )
 
 const (
@@ -24,25 +26,19 @@ const (
 	maxCapture        = 4 << 20
 )
 
-func (b *box) exec(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "POST only")
-		return
-	}
+func (b *box) exec(c *zip.Ctx) error {
 	var req wire.ExecRequest
-	if err := bind(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "body: "+err.Error())
-		return
+	if err := c.Bind(&req); err != nil {
+		return zip.Errorf(http.StatusBadRequest, "%s", "body: "+err.Error())
 	}
-	res, err := b.runCmd(r.Context(), req)
+	res, err := b.runCmd(c.Context(), req)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
+		return zip.Errorf(http.StatusBadRequest, "%s", err.Error())
 	}
 	// 200 with a non-zero ExitCode, always. "Your tests failed" and "the box is
 	// broken" are different facts; a caller that cannot separate them retries
 	// the wrong one, forever.
-	writeJSON(w, http.StatusOK, res)
+	return c.JSON(http.StatusOK, res)
 }
 
 // runCmd is the HTTP-facing exec path: it resolves the caller's `Cwd` under the
