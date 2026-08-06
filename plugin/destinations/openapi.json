@@ -40,7 +40,7 @@
     },
     "/v1/destinations/{platform}": {
       "delete": {
-        "operationId": "delete_v1_destinations_platform",
+        "operationId": "delete_v1_destinations_by_platform",
         "summary": "Forgets a destination for the caller's org: every credential held in KMS, then the stored config.",
         "description": "Forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
         "tags": [
@@ -72,7 +72,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_destinations_platform",
+        "operationId": "get_v1_destinations_by_platform",
         "summary": "Reports one destination's card for the caller's org — its config fields, its connection state, and whether a credential resolves right now.",
         "description": "Reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
         "tags": [
@@ -146,7 +146,7 @@
     },
     "/v1/destinations/{platform}/test": {
       "post": {
-        "operationId": "post_v1_destinations_platform_test",
+        "operationId": "post_v1_destinations_by_platform_test",
         "summary": "Sends ONE synthetic pageview through the connected destination end to end and reports what the platform said.",
         "description": "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
         "tags": [

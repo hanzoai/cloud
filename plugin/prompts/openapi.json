@@ -121,7 +121,7 @@
     },
     "/v1/prompts/{name}": {
       "delete": {
-        "operationId": "delete_v1_prompts_name",
+        "operationId": "delete_v1_prompts_by_name",
         "summary": "Delete removes one of the caller org's prompts and every version of it, answering 204.",
         "description": "Delete removes one of the caller org's prompts and every version of it, answering\n204. It is scoped to the caller's org, so a name another tenant owns is the same\n404 an unknown name gives. There is no undo: the version history goes with it.",
         "tags": [
@@ -146,7 +146,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_prompts_name",
+        "operationId": "get_v1_prompts_by_name",
         "summary": "Get returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version it has had.",
         "description": "Get returns one of the caller org's prompts: its CURRENT template text plus the\nmetadata of every version it has had. The history carries version numbers, types\nand timestamps only — not each version's body — so a long history cannot inflate\nthis response. A name the caller's org does not own is 404, whoever owns it.",
         "tags": [
