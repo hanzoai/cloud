@@ -1,69 +1,75 @@
 // Package lsp is live semantic code intelligence — definitions, references,
-// types, hover and diagnostics — over a repository AND its resolved
-// dependencies, served from the cloud with no toolchain on the caller's machine.
+// types, hover, outline and diagnostics — over a repository AND its resolved
+// dependencies, with no toolchain on the caller's machine.
 //
-// # One value
+// # Where it sits
 //
-// An lsp query is a language server rooted at a workspace, asked about a
-// position. Everything on the wire is that value spelled out: WHICH workspace
-// (repo, rev), WHICH position (path, line, character), and WHICH question
-// (method). There is one door, POST /v1/lsp, because there is one value — eight
-// endpoints differing only in a verb would be eight spellings of it.
+// Under /v1/code, beside the static index. code and lsp are two reads of ONE
+// repository, not two products: code is lexical, symbolic and semantic search —
+// fast, approximate, always available — and lsp is a real language server —
+// exact, typed, and able to follow a symbol out of the repository and into a
+// dependency. An agent searches with code and is certain with lsp. One home, so
+// there is one place to look for "what does this code mean".
 //
-// lsp and apps/code are two reads of the SAME checkout, not two systems: code is
-// the static index (lexical, symbolic, semantic — fast, approximate, always
-// available), lsp is the live server (exact, typed, resolves through
-// dependencies, costs a cold start). An agent uses code to find candidates and
-// lsp to be certain.
+// # What this package is
+//
+// A PROXY. The language servers run in hanzoai/lsp, a jailed daemon on its own
+// deployment, because answering a cross-dependency question means running a
+// third-party toolchain over untrusted bytes (see daemon.go). This side owns the
+// three things the daemon must never hold: the tenant, the repository and the
+// ledger.
+//
+//   - TENANT. Every request resolves its org from the validated principal, and
+//     that org is the daemon's isolation key. A caller supplies a repo SLUG,
+//     never an owner and never a URL, so there is no input from which one tenant
+//     could name another tenant's repository.
+//   - REPOSITORY. The revision and the tree come from the git plane, over the
+//     socket, for the caller's own org. The daemon holds no git credential —
+//     one that could fetch any repository is exactly what must not exist next to
+//     an unjailed compiler — so the tree is pushed to it, never pulled by it.
+//   - LEDGER. The gate runs before the work and the debit after it (meter.go).
 //
 // # Positions are the LSP's, not a translation of them
 //
 // line and character are 0-BASED, and character counts UTF-16 code units, per the
 // LSP specification. That is deliberately not the 1-based line an editor shows a
-// human: this door's callers are agents and editors that already speak LSP, and a
+// human: these callers are agents and editors that already speak LSP, and a
 // service that silently re-based positions would corrupt every multi-byte line —
 // an emoji before the cursor is one UTF-16 unit in the protocol's arithmetic and
 // two in Go's. Positions pass through untouched, so the protocol's answer is the
 // answer.
-//
-// # Isolation
-//
-// Every request resolves its org from the validated principal, and that org is
-// BOTH the pool key and the owner segment of the git URL. A caller supplies a
-// repo slug, never a URL and never an owner. There is no input from which one
-// tenant could name another tenant's repository.
 package lsp
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"path/filepath"
+	"errors"
+	"regexp"
+	"slices"
 	"strings"
-	"time"
+	"unicode/utf8"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
+	gitplane "github.com/hanzoai/cloud/plane/git"
 	"github.com/zap-proto/zip"
 )
 
-// diagSettle is how long diagnostics must stay unchanged before the snapshot is
-// taken. See Conn.Diagnostics — LSP has no completion signal for them.
-const diagSettle = 400 * time.Millisecond
-
-// Query is one position question against one repository.
+// Query is one position in one file of one repository — the value every op here
+// takes, because every op here is one question about one position.
 type Query struct {
 	// Repo is the repository NAME within the caller's own org, e.g. "cloud".
 	// Not a URL and not an owner/name pair: the owner is the validated
 	// principal's org, so this names a repository the caller already owns.
 	Repo string `json:"repo"`
 
-	// Rev is a branch, tag or commit sha. Empty means the default branch. A
-	// workspace is keyed by revision, so pinning a sha is what makes an answer
-	// reproducible.
+	// Rev is a branch, tag or commit sha. Empty means the default branch. It is
+	// resolved to a commit before anything else happens, so an answer is always
+	// about one immutable tree.
 	Rev string `json:"rev,omitempty"`
 
-	// Path is the repo-relative file, e.g. "apps/lsp/server.go".
+	// Path is the repo-relative file, e.g. "apps/lsp/lsp.go".
 	Path string `json:"path"`
 
 	// Line is 0-based, per the LSP specification.
@@ -73,24 +79,24 @@ type Query struct {
 	// specification — not a byte offset and not a rune index.
 	Character int `json:"character"`
 
-	// Method is the question: hover, definition, references, typeDefinition,
-	// implementation, documentSymbol, completion or diagnostics.
-	Method string `json:"method"`
+	// Relation refines locate: definition, reference, type or implementation.
+	// Empty means definition. Every other op ignores it.
+	Relation string `json:"relation,omitempty"`
 }
 
-// Answer carries whichever result the method produces. Exactly one of the result
-// fields is populated; the rest are omitted, so a client reads the field its
-// method names and never has to discriminate a union.
+// Answer carries whichever result the op produces. Exactly one result field is
+// populated, so a client reads the field its op names and never discriminates a
+// union.
 type Answer struct {
-	Method string `json:"method"`
-	Repo   string `json:"repo"`
-	Rev    string `json:"rev,omitempty"`
-	Path   string `json:"path"`
-	Lang   string `json:"lang"`
+	Op   string `json:"op"`
+	Lang string `json:"lang"`
+	Repo string `json:"repo"`
+	Rev  string `json:"rev"`
+	Path string `json:"path"`
 
-	// Cold reports that this request paid for a workspace cold start — the
-	// checkout, the dependency fetch and the server's first index. It is the
-	// billed event, surfaced so a caller can see what it was charged for.
+	// Cold reports that this request paid to PREPARE the revision — the tree
+	// write, the dependency fetch and the language server's first index. It is
+	// the billed event, surfaced so a caller can see what it was charged for.
 	Cold bool `json:"cold"`
 
 	Locations   []Location   `json:"locations,omitempty"`
@@ -100,13 +106,14 @@ type Answer struct {
 	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
 }
 
-// Location is one place in the workspace. Path is repo-relative when the target
-// is inside the checkout; for a target in the dependency cache it is the absolute
-// path the server reported, which is what makes "definition in a dependency"
-// answerable at all.
+// Location is one place an answer resolved to. External false means Path is
+// repo-relative; true means the answer left the repository and Path is the module
+// coordinate it landed in ("golang.org/x/mod@v0.14.0/semver/semver.go"), which is
+// the whole reason this service exists.
 type Location struct {
-	Path  string `json:"path"`
-	Range Range  `json:"range"`
+	Path     string `json:"path"`
+	External bool   `json:"external,omitempty"`
+	Range    Range  `json:"range"`
 }
 
 // Position is the LSP's: 0-based line, 0-based UTF-16 character.
@@ -115,11 +122,13 @@ type Position struct {
 	Character int `json:"character"`
 }
 
+// Range is a half-open span between two positions.
 type Range struct {
 	Start Position `json:"start"`
 	End   Position `json:"end"`
 }
 
+// Symbol is one entry in a file's outline.
 type Symbol struct {
 	Name   string `json:"name"`
 	Kind   int    `json:"kind"`
@@ -127,6 +136,7 @@ type Symbol struct {
 	Range  Range  `json:"range"`
 }
 
+// Completion is one candidate at a position.
 type Completion struct {
 	Label  string `json:"label"`
 	Kind   int    `json:"kind,omitempty"`
@@ -143,52 +153,118 @@ type Diagnostic struct {
 	Message  string `json:"message"`
 }
 
-// zipdoc lifts the doc comment off the typed op and its In/Out fields into
+// The two shapes a caller may name, narrowed HERE so a malformed one costs no
+// socket. slug is a repository name under an owner; ref is a branch, tag or sha
+// whose leading character is alphanumeric, which is what stops it being read as a
+// flag by anything downstream that shells out.
+var (
+	slug = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$`)
+	ref  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,199}$`)
+)
+
+// relations is the CLOSED set locate refines by. The door names what it serves,
+// so an unknown string is a 400 here rather than an arbitrary method handed to a
+// language server.
+var relations = []string{"definition", "reference", "type", "implementation"}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
 // and the MCP tool list — Go drops comments at compile time. Run by
 // `make -C apps/lsp describe`.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// ask resolves one position in one repository through a live language server:
-// definition, references, type, implementation, hover, document symbols,
-// completion or diagnostics — over the repo AND its resolved dependencies, with
-// no toolchain on the caller's machine.
+// hover renders the type and documentation of the symbol at a position, as the
+// language server itself renders it.
 //
 // Positions are the LSP's: line and character are 0-BASED and character counts
 // UTF-16 code units, so an editor's 1-based line must have 1 subtracted before it
 // is sent. The repository is named by slug and is always one in the caller's own
-// org. rev pins a branch, tag or commit sha; empty means the default branch.
+// org; rev pins a branch, tag or commit sha, and empty means the default branch.
 //
-// The first query against a (repo, rev) pays a cold start — checkout, dependency
-// fetch and the server's first index — and is the billed event; later queries
-// against the same revision are served from the warm workspace and are free. The
-// answer says which it was.
+// Example: {"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18}
+func (s *state) hover(ctx context.Context, in *Query) (*Answer, error) {
+	return s.query(ctx, in, "hover")
+}
+
+// locate finds where a symbol lives: its definition, its references, its type or
+// its implementations, chosen by relation (definition, reference, type,
+// implementation — empty means definition).
 //
-// Example: {"repo":"cloud","path":"apps/lsp/server.go","line":120,"character":18,"method":"definition"}
-func (s *state) ask(ctx context.Context, in *Query) (*Answer, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("valid principal required")
-	}
-	method := strings.TrimSpace(in.Method)
-	if !known(method) {
-		return nil, zip.ErrBadRequest("method must be one of " + strings.Join(methods, ", "))
+// It resolves THROUGH dependencies. An answer whose external flag is set left the
+// repository, and its path is then the module coordinate it landed in — which is
+// the question a static index cannot answer and this service exists for.
+//
+// Example: {"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18,"relation":"definition"}
+func (s *state) locate(ctx context.Context, in *Query) (*Answer, error) {
+	return s.query(ctx, in, "locate")
+}
+
+// symbols outlines one file: every declaration in it, with its kind and its span.
+// The position is ignored — the answer is the whole file.
+//
+// Example: {"repo":"cloud","path":"apps/lsp/lsp.go"}
+func (s *state) symbols(ctx context.Context, in *Query) (*Answer, error) {
+	return s.query(ctx, in, "symbols")
+}
+
+// diagnostics reports every problem the language server finds in one file —
+// compile errors, type errors and lints, each with its span and its severity (1
+// error, 2 warning, 3 information, 4 hint). The position is ignored.
+//
+// Example: {"repo":"cloud","path":"apps/lsp/lsp.go"}
+func (s *state) diagnostics(ctx context.Context, in *Query) (*Answer, error) {
+	return s.query(ctx, in, "diagnostics")
+}
+
+// complete offers the candidates a language server has at a position, typed and
+// resolved through the repository's dependencies rather than guessed from text.
+//
+// Example: {"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18}
+func (s *state) complete(ctx context.Context, in *Query) (*Answer, error) {
+	return s.query(ctx, in, "complete")
+}
+
+// query is the ONE path every op takes, in the order that order matters:
+//
+//	principal → repository → price → resolve → ask → (prepare → ask) → debit
+//
+// The gate is before the resolve so an out-of-funds caller is refused rather than
+// served work nobody can be billed for; the debit is after the answer so nothing
+// is charged for work that failed.
+func (s *state) query(ctx context.Context, in *Query, op string) (*Answer, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	repo := strings.TrimSpace(in.Repo)
 	if !slug.MatchString(repo) {
 		return nil, zip.ErrBadRequest("repo must be a repository name in your org")
 	}
-	rev := strings.TrimSpace(in.Rev)
-	if rev != "" && !revision.MatchString(rev) {
+	want := strings.TrimSpace(in.Rev)
+	if want != "" && !ref.MatchString(want) {
 		return nil, zip.ErrBadRequest("rev must be a branch, tag or commit sha")
+	}
+	path := strings.TrimSpace(in.Path)
+	if path == "" {
+		return nil, zip.ErrBadRequest("path is required")
 	}
 	if in.Line < 0 || in.Character < 0 {
 		return nil, zip.ErrBadRequest("line and character are 0-based and cannot be negative")
 	}
+	relation := ""
+	if op == "locate" {
+		if relation = strings.TrimSpace(in.Relation); relation == "" {
+			relation = "definition"
+		}
+		if !slices.Contains(relations, relation) {
+			return nil, zip.ErrBadRequest("relation must be one of " + strings.Join(relations, ", "))
+		}
+	}
 
-	// MONEY GATE — before the checkout, so an out-of-funds caller is refused
-	// rather than served work nobody can be billed for.
+	// MONEY GATE — before the first byte of work, at the PREPARE price, because
+	// whether this revision is already prepared is not known until the daemon is
+	// asked and is not a fact about the caller.
 	c, onHTTP := cloud.Request(ctx)
 	if onHTTP {
 		if err := s.gate(ctx, c, org); err != nil {
@@ -196,261 +272,161 @@ func (s *state) ask(ctx context.Context, in *Query) (*Answer, error) {
 		}
 	}
 
-	tree, cold, err := s.pool.get(ctx, key{org: org, repo: repo, rev: rev}, in.Path)
+	// The commit, from the git plane, for the caller's own org. The daemon keys a
+	// root by a RESOLVED sha and refuses anything else — which is what makes a
+	// root immutable, and therefore what removes cache invalidation from the
+	// whole service: a branch moves, a commit never does.
+	sha, err := s.rev(ctx, c, org, repo, want)
 	if err != nil {
-		s.Log.Warn("lsp workspace failed", "org", org, "repo", repo, "err", err)
-		return nil, zip.ErrInternal("workspace unavailable")
+		return nil, err
 	}
 
-	abs, err := clean(tree.dir, in.Path)
-	if err != nil {
-		return nil, zip.ErrBadRequest(err.Error())
+	q := &question{
+		Org: org, Repo: repo, Rev: sha,
+		Op: op, Relation: relation,
+		Path: path, Line: in.Line, Character: in.Character,
 	}
-	uri, err := tree.conn.Open(tree.lang, abs)
-	if err != nil {
-		return nil, zip.ErrInternal("open document")
-	}
+	out := &Answer{Repo: repo, Rev: sha, Path: path}
 
-	out := &Answer{
-		Method: method, Repo: repo, Rev: rev,
-		Path: in.Path, Lang: tree.lang.Name, Cold: cold,
+	err = s.daemon.ask(ctx, q, out)
+	if errors.Is(err, errNeedTree) {
+		// The daemon holds no root for this commit and cannot go and get one. Send
+		// the tree, then ask again — ONCE. A second 409 is the daemon evicting a
+		// root as fast as this fills it, and retrying that is a loop, not a fix.
+		if err = s.prepare(ctx, c, org, repo, sha, out); err != nil {
+			return nil, err
+		}
+		err = s.daemon.ask(ctx, q, out)
 	}
-	if err := s.resolve(ctx, tree, out, uri, in); err != nil {
-		s.Log.Warn("lsp query failed", "org", org, "repo", repo, "method", method, "err", err)
+	if err != nil {
+		if decided(err) {
+			return nil, err
+		}
+		s.Log.Warn("lsp query failed", "org", org, "repo", repo, "op", op, "err", err)
 		return nil, zip.ErrInternal("language server did not answer")
 	}
+
 	if onHTTP {
-		s.charge(c, org, method, cold)
+		s.charge(c, org, out.Cold)
 	}
 	return out, nil
 }
 
-// resolve asks the server the one question and folds its reply into out.
-//
-// diagnostics is the outlier and is handled first: it is not a request at all in
-// LSP but an unsolicited notification the server publishes after didOpen, so it
-// is collected rather than called.
-func (s *state) resolve(ctx context.Context, t *Tree, out *Answer, uri string, in *Query) error {
-	ctx, cancel := context.WithTimeout(ctx, callWait)
-	defer cancel()
-
-	if in.Method == "diagnostics" {
-		out.Diagnostics = t.conn.Diagnostics(ctx, uri, diagSettle)
-		if out.Diagnostics == nil {
-			out.Diagnostics = []Diagnostic{}
-		}
-		return nil
-	}
-
-	doc := map[string]any{"uri": uri}
-	pos := map[string]any{"line": in.Line, "character": in.Character}
-	params := map[string]any{"textDocument": doc, "position": pos}
-
-	var call string
-	switch in.Method {
-	case "hover":
-		call = "textDocument/hover"
-	case "definition":
-		call = "textDocument/definition"
-	case "typeDefinition":
-		call = "textDocument/typeDefinition"
-	case "implementation":
-		call = "textDocument/implementation"
-	case "completion":
-		call = "textDocument/completion"
-	case "references":
-		call = "textDocument/references"
-		params["context"] = map[string]any{"includeDeclaration": true}
-	case "documentSymbol":
-		call = "textDocument/documentSymbol"
-		params = map[string]any{"textDocument": doc} // no position: the whole file
-	default:
-		return fmt.Errorf("unroutable method %q", in.Method) // known() already refused this
-	}
-
-	raw, err := t.conn.Call(ctx, call, params)
+// prepare hands the daemon the tree for one commit and records on out whether
+// that call actually built it.
+func (s *state) prepare(ctx context.Context, c *zip.Ctx, org, repo, sha string, out *Answer) error {
+	files, err := s.files(ctx, c, org, repo, sha)
 	if err != nil {
 		return err
 	}
-	fold(out, in.Method, raw, t.dir)
+	got, err := s.daemon.root(ctx, &tree{Org: org, Repo: repo, Rev: sha, Files: files})
+	if err != nil {
+		if decided(err) {
+			return err
+		}
+		s.Log.Warn("lsp prepare failed", "org", org, "repo", repo, "rev", sha, "err", err)
+		return zip.ErrInternal("language server did not accept the tree")
+	}
+	out.Cold = got.Cold
 	return nil
 }
 
-// fold decodes the server's result into the field the method names.
-//
-// A null result is not an error: "no definition here" is a real, useful answer,
-// and it arrives as JSON null. Every branch therefore leaves out's slice empty
-// rather than failing, so a caller distinguishes "nothing found" from "the server
-// broke" by status code and not by guesswork.
-func fold(out *Answer, method string, raw json.RawMessage, dir string) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return
-	}
-	switch method {
-	case "hover":
-		out.Hover = hover(raw)
-	case "documentSymbol":
-		out.Symbols = symbols(raw)
-	case "completion":
-		out.Completions = completions(raw)
-	default: // every location-shaped method
-		out.Locations = locations(raw, dir)
-	}
+// decided reports whether err already carries the status and message a client
+// should see. Anything else is this deployment's problem and not the caller's, so
+// it is logged where it happened and answered generically.
+func decided(err error) bool {
+	var he *zip.HTTPError
+	return errors.As(err, &he)
 }
 
-// locations decodes the three shapes a location-returning request may answer with
-// — a single Location, an array of them, or an array of LocationLink (the
-// linkSupport form, whose target range lives under a different key). All three
-// are in the specification and gopls, rust-analyzer and tsserver do not agree on
-// which to send, so all three are read.
-func locations(raw json.RawMessage, dir string) []Location {
-	var many []struct {
-		URI       string `json:"uri"`
-		Range     Range  `json:"range"`
-		TargetURI string `json:"targetUri"`
-		Target    Range  `json:"targetSelectionRange"`
-	}
-	if json.Unmarshal(raw, &many) != nil {
-		var one struct {
-			URI   string `json:"uri"`
-			Range Range  `json:"range"`
-		}
-		if json.Unmarshal(raw, &one) != nil || one.URI == "" {
-			return []Location{}
-		}
-		return []Location{{Path: rel(uriPath(one.URI), dir), Range: one.Range}}
-	}
+// ── the git plane ────────────────────────────────────────────────────────────
 
-	out := make([]Location, 0, len(many))
-	for _, m := range many {
-		uri, rng := m.URI, m.Range
-		if uri == "" { // a LocationLink
-			uri, rng = m.TargetURI, m.Target
-		}
-		p := uriPath(uri)
-		if p == "" {
-			continue // a jar:/zipfile: target names no path of ours
-		}
-		out = append(out, Location{Path: rel(p, dir), Range: rng})
+// The two calls this package makes to git, held in variables for the one thing a
+// variable buys here: a test can drive the real handler without standing up a
+// second process to answer it. Neither is ever reassigned in production — the
+// only writer is a test, and the compiler holds each signature to the generated
+// client's.
+//
+// They are two ops rather than one because they cost differently. resolveRev is a
+// ref lookup and runs on EVERY request; readTree is a walk of the whole
+// repository and runs only when the daemon says it holds no root. Folding them
+// into one call would drag a monorepo across a socket to answer a hover.
+var (
+	resolveRev = gitplane.GitRev
+	readTree   = gitplane.GitFiles
+)
+
+// rev resolves what the caller named to the commit it names, in the caller's own
+// org. An empty ref is the repository's default branch.
+func (s *state) rev(ctx context.Context, c *zip.Ctx, org, repo, want string) (string, error) {
+	got, err := resolveRev(as(ctx, c, org), &plane.RevIn{Repo: repo, Ref: want})
+	if err != nil || got == nil {
+		s.Log.Warn("lsp resolve failed", "org", org, "repo", repo, "ref", want, "err", err)
+		return "", zip.ErrNotFound("no such repository or revision in your org")
 	}
-	return out
+	return got.Rev, nil
 }
 
-// rel renders a path repo-relative when it is inside the checkout. A path OUTSIDE
-// it — a definition in the module cache — is returned as the server gave it,
-// because that is a real location and pretending otherwise would lose it.
+// files reads the repository's TEXT at one commit, through git's own object
+// plane — the read that replaced cloning for delivery, and the ONE read of a
+// repository this fleet has. Nothing here checks anything out: a language server
+// needs the bytes of some files at one revision, which is a tree read, not a
+// packfile.
 //
-// The checkout is matched in BOTH spellings, resolved and raw. A language server
-// reports paths as the OS handed them to it, and a data directory reached through
-// a symlink — /var → /private/var on a Mac, a mounted volume in the cluster —
-// gives one file two spellings. Comparing one resolved path against one raw one
-// puts every location "outside" the checkout, and the fallback then hands the
-// caller the worker's ABSOLUTE path for files that were in their own repo all
-// along.
-//
-// This is presentation, not the security boundary: [clean] is what proves a
-// requested path is inside the tree, and it resolves symlinks precisely because
-// it has to.
-func rel(abs, dir string) string {
-	if abs == "" {
-		return ""
+// Binary and truncated blobs are dropped rather than sent. A language server
+// parses source; a binary spends the daemon's tree budget on bytes no server will
+// read, and a truncated file is a HALF file, which type-checks to errors that are
+// not in the repository.
+func (s *state) files(ctx context.Context, c *zip.Ctx, org, repo, sha string) ([]file, error) {
+	got, err := readTree(as(ctx, c, org), &plane.FilesIn{Repo: repo, Ref: sha, Glob: whole})
+	if err != nil || got == nil {
+		s.Log.Warn("lsp tree read failed", "org", org, "repo", repo, "rev", sha, "err", err)
+		return nil, zip.ErrInternal("repository unavailable")
 	}
-	roots := []string{dir}
-	if resolved, err := filepath.EvalSymlinks(dir); err == nil && resolved != dir {
-		roots = append(roots, resolved)
-	}
-	for _, root := range roots {
-		if r, err := filepath.Rel(root, abs); err == nil && !strings.HasPrefix(r, "..") {
-			return filepath.ToSlash(r)
-		}
-	}
-	return abs
-}
-
-// hover decodes MarkupContent, a MarkedString, or an array of either.
-func hover(raw json.RawMessage) string {
-	var h struct {
-		Contents json.RawMessage `json:"contents"`
-	}
-	if json.Unmarshal(raw, &h) != nil || len(h.Contents) == 0 {
-		return ""
-	}
-	var markup struct {
-		Value string `json:"value"`
-	}
-	if json.Unmarshal(h.Contents, &markup) == nil && markup.Value != "" {
-		return markup.Value
-	}
-	var plain string
-	if json.Unmarshal(h.Contents, &plain) == nil {
-		return plain
-	}
-	var list []json.RawMessage
-	if json.Unmarshal(h.Contents, &list) != nil {
-		return ""
-	}
-	parts := make([]string, 0, len(list))
-	for _, item := range list {
-		if json.Unmarshal(item, &markup) == nil && markup.Value != "" {
-			parts = append(parts, markup.Value)
+	out := make([]file, 0, len(got.Files))
+	for _, f := range got.Files {
+		if f.Truncated || !text(f.Data) {
 			continue
 		}
-		if json.Unmarshal(item, &plain) == nil && plain != "" {
-			parts = append(parts, plain)
-		}
+		out = append(out, file{Path: f.Path, Content: string(f.Data)})
 	}
-	return strings.Join(parts, "\n\n")
+	if len(out) == 0 {
+		return nil, zip.ErrBadRequest("this revision holds no source the language servers read")
+	}
+	return out, nil
 }
 
-func symbols(raw json.RawMessage) []Symbol {
-	var list []struct {
-		Name     string `json:"name"`
-		Kind     int    `json:"kind"`
-		Detail   string `json:"detail"`
-		Range    Range  `json:"range"`
-		Location struct {
-			Range Range `json:"range"`
-		} `json:"location"`
-	}
-	if json.Unmarshal(raw, &list) != nil {
-		return []Symbol{}
-	}
-	out := make([]Symbol, 0, len(list))
-	for _, s := range list {
-		rng := s.Range
-		if rng == (Range{}) { // SymbolInformation carries it under location
-			rng = s.Location.Range
-		}
-		out = append(out, Symbol{Name: s.Name, Kind: s.Kind, Detail: s.Detail, Range: rng})
-	}
-	return out
+// whole is the glob for a whole tree: `**` matches zero or more whole segments,
+// so as the only segment it selects every file beneath the root.
+const whole = "**"
+
+// text reports whether a blob is source. NUL and invalid UTF-8 are what separate
+// a compiled object or an image from a file a parser can open.
+func text(b []byte) bool {
+	return len(b) > 0 && !bytes.ContainsRune(b, 0) && utf8.Valid(b)
 }
 
-// completions decodes CompletionList or a bare CompletionItem array, and bounds
-// the reply: a server offering every identifier in a large dependency tree can
-// answer with tens of thousands of items, which is not an answer anybody reads.
-func completions(raw json.RawMessage) []Completion {
-	const maxItems = 200
-	type item struct {
-		Label  string `json:"label"`
-		Kind   int    `json:"kind"`
-		Detail string `json:"detail"`
+// ── the identity seam ────────────────────────────────────────────────────────
+
+// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of Query. A Query field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself. Fails closed off the HTTP path.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid principal required")
 	}
-	var list struct {
-		Items []item `json:"items"`
+	return org, nil
+}
+
+// as is the context a git-plane call rides: THIS request's principal, delegated
+// unchanged, so git answers for the caller's own authority and this package can
+// never name another org. Off the HTTP path there is no request to delegate, so
+// the already-validated org is stated explicitly instead.
+func as(ctx context.Context, c *zip.Ctx, org string) context.Context {
+	if c == nil {
+		return cloud.For(ctx, org)
 	}
-	var items []item
-	if json.Unmarshal(raw, &list) == nil && list.Items != nil {
-		items = list.Items // CompletionList
-	} else if json.Unmarshal(raw, &items) != nil {
-		return []Completion{} // neither shape
-	}
-	if len(items) > maxItems {
-		items = items[:maxItems]
-	}
-	out := make([]Completion, 0, len(items))
-	for _, i := range items {
-		out = append(out, Completion{Label: i.Label, Kind: i.Kind, Detail: i.Detail})
-	}
-	return out
+	return cloud.As(c, "")
 }
