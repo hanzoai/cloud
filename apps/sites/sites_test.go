@@ -361,6 +361,73 @@ func TestIsFingerprinted(t *testing.T) {
 	}
 }
 
+// TestBuildOutputIsImmutableWhateverTheBasename is a measured regression, with
+// the real filenames.
+//
+// The basename rule requires a SEPARATOR before the hash run
+// ([.\-_][0-9a-fA-F]{8,}\.ext). Next.js does not emit one: its CSS and its
+// single-hash chunks are BARE hashes, so 5 of the 44 `_next/static` objects of
+// the console bundle were served `public, max-age=3600` at the origin and
+// re-fetched every hour, forever, for files whose whole design is that they can
+// never change. The embedded console handler never had this bug because it keyed
+// off the PATH (webui: `assets/` or `_next/`); the path is the right key, because
+// what makes those files immutable is the bundler's naming contract for that
+// DIRECTORY, not the shape of any one name.
+func TestBuildOutputIsImmutableWhateverTheBasename(t *testing.T) {
+	const immutable = "public, max-age=31536000, immutable"
+	for _, key := range []string{
+		// Bare-hash basenames — what Next.js actually writes, and what the
+		// basename rule misses.
+		"_next/static/css/bdec3a94ead6ad5f.css",
+		"_next/static/css/14a0d01599b56097.css",
+		// Separator forms from the same tree, which matched before and must still.
+		"_next/static/chunks/113-5543f1ec0e9ff9a3.js",
+		"_next/static/chunks/1a258343.a953edc46b595a62.js",
+		// The build id directory: a name with no hash shape at all, immutable
+		// because of WHERE it is.
+		"_next/static/O-3AmMBn6NpuJXn8kFZKF/_buildManifest.js",
+		// Vite's directory, same rule.
+		"assets/index.js",
+	} {
+		if got := CacheControlFor(key, ""); got != immutable {
+			t.Errorf("CacheControlFor(%q) = %q, want %q — build output is immutable by construction", key, got, immutable)
+		}
+	}
+
+	// The NEGATIVE set carries as much weight as the positive one, and it is why
+	// the prefixes are `_next/static/` and not the broader `_next/`.
+	//
+	// `_next/` holds more than build output: a real export also carries
+	// `_next/data/` and a build-id directory beside static. This function serves
+	// ARBITRARY TENANT SITES, so a prefix wider than the bundler's own
+	// content-addressed directory would hand a year of immutability to files that
+	// are not content-addressed — and the worst of those is a service worker, which
+	// would then outlive every deploy of that site with no way to reach the
+	// browsers holding it. (The console handler in webui keys on the broader
+	// `_next/`, which is correct THERE: it serves one known bundle that has no
+	// `_next/data`. That width must not be copied here.)
+	for _, key := range []string{
+		"sw.js",                    // a stale service worker outlives every deploy
+		"service-worker.js",        //
+		"config.json",              // runtime config, re-read on purpose
+		"_next/data/latest.json",   // not build output, despite the _next/ prefix
+		"_next/7e4e0526/page.json", // the build-id dir beside static — also not
+		"favicon.ico", "icon.svg",  // root icons a real export ships
+		"apple-icon.png", "index.txt",
+	} {
+		if got := CacheControlFor(key, ""); got == immutable {
+			t.Errorf("CacheControlFor(%q) = %q — only build output may be cached forever", key, got)
+		}
+	}
+
+	// HTML policy is untouched: a document is a document, wherever it sits.
+	for _, key := range []string{"index.html", "404.html", "docs/index.html"} {
+		if got := CacheControlFor(key, ""); got != "public, max-age=60, s-maxage=86400" {
+			t.Errorf("CacheControlFor(%q) = %q — the document policy must not move", key, got)
+		}
+	}
+}
+
 func TestCacheTag(t *testing.T) {
 	if got := CacheTag("acme", "blog"); got != "site-acme-blog" {
 		t.Errorf("CacheTag = %q, want site-acme-blog", got)

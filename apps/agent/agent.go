@@ -135,7 +135,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		Logger:  deps.Logger,
 		DataDir: deps.DataDir,
 		Brand:   deps.Brand,
-		Model:   deps.AIDefaultModel,
+		Model:   cloud.DefaultModel,
 		Principal: func(c *zip.Ctx) (hz.Principal, bool) {
 			p, ok := tools.PrincipalFrom(c)
 			if !ok {

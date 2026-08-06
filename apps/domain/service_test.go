@@ -71,7 +71,6 @@ type mockBill struct {
 type capture struct {
 	org   string
 	cents int64
-	ref   string
 }
 
 func (b *mockBill) Authorize(_ context.Context, _ string, cents int64) error {
@@ -81,8 +80,8 @@ func (b *mockBill) Authorize(_ context.Context, _ string, cents int64) error {
 	}
 	return nil
 }
-func (b *mockBill) Capture(org string, cents int64, ref string) {
-	b.captured = append(b.captured, capture{org, cents, ref})
+func (b *mockBill) Capture(org string, cents int64) {
+	b.captured = append(b.captured, capture{org, cents})
 	if b.balance >= 0 {
 		b.balance -= cents
 	}
@@ -170,8 +169,10 @@ func TestRegisterHappyPath_BillsAndPointsNameservers(t *testing.T) {
 	if c.PurchasePrice != 55.99 {
 		t.Fatalf("wholesale price cap = %v, want 55.99", c.PurchasePrice)
 	}
-	// Customer charged the SELL price exactly once, after the registrar succeeded.
-	if len(bill.captured) != 1 || bill.captured[0].cents != 6439 || bill.captured[0].ref != "domain:register:acme.ai" {
+	// Customer charged the SELL price exactly once, after the registrar succeeded, and to
+	// their OWN org. What is NOT asserted is a key: the debit carries none, so a second
+	// purchase of this name is a second charge (capture_ref_test.go bills the money).
+	if len(bill.captured) != 1 || bill.captured[0].cents != 6439 || bill.captured[0].org != "acme" {
 		t.Fatalf("unexpected capture: %+v", bill.captured)
 	}
 	if res.Record.Order != 1001 || res.Record.ExpiresAt != "2027-01-01T00:00:00Z" {

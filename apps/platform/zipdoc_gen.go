@@ -226,6 +226,20 @@ func init() {
 			"App.registry": "Registry is the image repository the workload actually runs, which is what\nthe board's tier classification reads — a real property of the deployment,\nnever an operator-typed label.",
 		},
 	})
+	zip.Describe("POST /platform/push", zip.Doc{
+		Fields: map[string]string{
+			"PushIn.cloneUrl": "CloneURL is the canonical clone URL of the repo, which is the exact value an\nApplication's RepoURL carries, so the builder can resolve which app tracks it.",
+			"PushIn.commit":   "Commit is the new tip.",
+			"PushIn.ref":      "Ref is the FULL ref that moved — refs/heads/<b> or refs/tags/<t>. Tags reach\nthe builder too: releases are cut by tag.",
+		},
+	})
+	zip.Describe("POST /platform/release", zip.Doc{
+		Fields: map[string]string{
+			"ReleaseIn.image":   "Image is the full registry ref; the tag MUST be clean semver (vX.Y.Z) and\nthe releaser refuses every mutable/sha/suffixed form.",
+			"ReleaseIn.service": "Service is the target CR metadata.name.",
+			"ReleaseIn.sha":     "SHA is the source commit, for provenance. Logged, never gated on.",
+		},
+	})
 	zip.Describe("POST /v1/platform/fleet/:app/deploy", zip.Doc{
 		Description: "Rolls a platform service's pods, in a named environment.\n\nIt triggers a rolling restart of one platform service's Deployment by stamping a\nfresh restart annotation, and answers 202 with the app, the namespace, the\nenvironment and the timestamp. It restarts pods; it does NOT change the image — a\nversion change is the release path, not this.\n\nSuperAdmin ONLY, and deliberately narrower than the read gate beside it. The only\nnamespaces this board touches are the platform's own tier, so a restart here\nrecycles a SHARED service every tenant depends on. A brand-org admin is a\ncustomer-org admin, not a platform operator: observing the board is bounded and\naudited, and restarting production identity is not.\n\n`?env=main|test|dev` is REQUIRED — a bare call does not default to production,\nwhich is what closes the fat-finger and confused-deputy hazard — and any other\nvalue is 400. A service with no Deployment to restart in that environment is 404.",
 		Fields: map[string]string{

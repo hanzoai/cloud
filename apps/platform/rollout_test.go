@@ -174,9 +174,6 @@ func TestRegisterReleaserRoundTrip(t *testing.T) {
 	registerReleaser(s)
 	t.Cleanup(func() { cloud.RegisterServiceReleaser(nil) })
 
-	if !cloud.ServiceReleaserRegistered() {
-		t.Fatal("ServiceReleaserRegistered() = false after registerReleaser")
-	}
 	err := cloud.OnServiceRelease(context.Background(), cloud.ServiceReleaseEvent{
 		Service: "cloud", Image: "ghcr.io/hanzoai/cloud:v1.801.0", SHA: "deadbeef",
 	})

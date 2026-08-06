@@ -35,7 +35,7 @@ func init() {
 	describePlans()
 	describeStore()
 	describeCheckout()
-	describeResources()
+	describeMerchant()
 }
 
 // ---- /_/commerce — the operator surface the ingress withholds publicly ----
@@ -56,18 +56,25 @@ func describeAdmin() {
 
 	openapi.Describe("/_/commerce/providers/:name", http.MethodPut,
 		"Turn one payment rail on or off for your own tenant",
-		"Flips the enabled flag on the named provider in the caller's own tenant row, so a rail "+
-			"can be taken out of service — or put back — without touching its credentials. The "+
-			"KMS paths are never read, written or echoed here; this verb owns exactly one bit.\n\n"+
-			"Disabling is what a checkout page sees immediately: only ENABLED providers are listed "+
-			"by the public tenant read, so a rail turned off here stops being offered rather than "+
-			"failing at authorization time. Re-enabling restores the same stored credential, which "+
-			"is why this is a switch and not a delete.\n\n"+
-			"The tenant is derived from the IAM owner claim and from nothing else — there is no "+
-			"tenant parameter to supply, so a cross-tenant write is not expressible. A tenant "+
-			"admin or a platform admin may call it; a plain authenticated user is refused 403 and "+
-			"an anonymous one 401. A provider name with no row on that tenant is 404, the same "+
-			"answer a cross-tenant probe gets.")
+		"Sets the enabled flag on ONE named rail — square, stripe, braintree, plaid, wire or crypto "+
+			"— for the tenant the caller's IAM owner claim resolves to, and answers the tenant name "+
+			"with the same name-and-enabled projection the provider list serves, so a console can "+
+			"render the result without a second read. One rail per call is a correctness requirement "+
+			"rather than a taste: a provider record also carries the KMS path naming where its "+
+			"credentials live, the list read deliberately strips that path, and a PUT that replaced "+
+			"the whole list from what a UI can see would write every rail back with an EMPTY path and "+
+			"silently disconnect each one from its credentials. Naming a single rail copies every "+
+			"other record forward byte for byte. The body must be an explicit enabled true or false — "+
+			"an absent field is 400, never a disable — and a name outside the known set is 400 that "+
+			"lists the names that mean something downstream, because a typo which reports success is "+
+			"worse than one that does not. A tenant admin or a platform admin may call it; anonymous "+
+			"is 401 and a signed-in non-admin 403. No tenant id is accepted from the client, so a "+
+			"cross-tenant write is not expressible, and a caller with no tenant row gets a 404 "+
+			"byte-identical to the one a probe for someone else's tenant would get. Setting a rail to "+
+			"the state it already holds succeeds and changes nothing; a rail the tenant has never "+
+			"carried is appended, which is how one is turned on for the first time — and it is "+
+			"appended with no credential path, so enabling a rail here does not by itself connect it "+
+			"to any credentials.")
 
 	openapi.Describe("/_/commerce/tenants", http.MethodPost,
 		"Create a checkout tenant: hostnames, brand, IAM, IDV, providers and backend",
@@ -406,6 +413,21 @@ func describeBilling() {
 			"the deployment pins the payment environment explicitly, that pin governs and this "+
 			"flag only marks the transactions.")
 
+	openapi.Describe("/v1/billing/topup", http.MethodPost,
+		"Add credit to your balance by charging one of your saved cards",
+		"Charges a card the caller already has on file, named by paymentMethodId, and credits "+
+			"the caller's own balance — the SAVED-card twin of topup/token, sharing the one "+
+			"charge-and-credit core the auto-recharge cron runs on. The credit lands on the "+
+			"caller's OWN billing subject: the request body's subject field is pinned to the "+
+			"caller before the handler sees it, so a top-up can never be redirected to another "+
+			"subject or outside the caller's org. It is screened for risk before any money "+
+			"moves, exactly as the token path is, because both credit the SPENDABLE wallet. "+
+			"The rule most callers get wrong is that paymentMethodId is NOT covered by that "+
+			"subject pin — it is a card id, not a subject key — so it is checked separately, "+
+			"and a card belonging to any other subject answers 404 rather than 403: a "+
+			"permission error would confirm the id exists, which is an ownership oracle over "+
+			"other people's cards.")
+
 	openapi.Describe("/v1/billing/topup/token", http.MethodPost,
 		"Add credit to your balance by charging a tokenized card once",
 		"Charges the single-use card token for the given amount and credits the caller's own "+
@@ -419,6 +441,19 @@ func describeBilling() {
 			"window, replays the first result, and if that guard store is unreachable the call is "+
 			"refused with 503 rather than risking a second real charge.")
 
+	// A duplicated block of eight billing Describes was removed here — wire,
+	// crypto/{options,deposit,deposit/:id}, methods (GET+POST), methods/:id and
+	// portal/methods were each already described above (lines ~222-315).
+	//
+	// openapi.Describe PANICS on a duplicate (openapi/register.go) and this package
+	// registers from an init(), so the second set made apps/commerce panic at INIT:
+	// every test in the package failed to RUN rather than fail, which is the worse
+	// failure — including the billing subject-pin guard, whose whole job is to stay
+	// red until a route pins its subject.
+	//
+	// The surviving descriptions are the earlier ones. The removed set was in places
+	// more detailed; if that wording is wanted, replace the earlier text rather than
+	// adding a second registration.
 	openapi.Describe("/v1/billing/webhooks/:provider", http.MethodPost,
 		"Payment-provider webhook intake for settlement and subscription lifecycle events",
 		"Accepts a payment provider's event, verifies it, records it for audit, and applies "+
@@ -936,168 +971,292 @@ func describeCheckout() {
 			"with the same outcome.")
 }
 
-// ---- the generated resource surface ----
-
-// resources are the CRUD families the commerce module registers wholesale
-// (hanzoai/commerce api/resources, bound onto the /v1/commerce group in
-// mount.go) — one collection route and one item route each, seven operations to
-// a family, 119 in all.
+// ---- /v1/commerce/<kind> — the merchant resource table ----
 //
-// So they are DERIVED, for the same reason openapi.DescribeSPA derives the two
-// SPA addresses: prose written 119 times is prose that drifts 119 ways, and the
-// next resource the module adds would arrive undescribed and stop the surface
-// gate again. Adding a family here is one line.
+// Seventeen kinds, seven operations each, and ONE handler behind all 119.
+// commerce's generic REST scaffold (util/rest) binds create, list, get, replace,
+// patch, delete and a method-override tunnel for every model handed to it, so
+// these are not seventeen behaviours that happen to resemble each other — they
+// are one behaviour, and the kind supplies what the row IS and who may touch it.
+// The mechanics are therefore written once and composed with the kind, because
+// the alternative is seventeen hand-copied paragraphs describing one generator,
+// which is the drift DescribeRest already exists to prevent one level down.
 //
-// WHAT THE TABLE CARRIES IS THE GATE, and that is the whole reason it is a table
-// of structs rather than a list of names. The seventeen are NOT uniform, and the
-// axis they differ on is the one a caller gets wrong: three are admin-only, six
-// sit behind the subscription paywall and answer 402, and five check a per-method
-// token permission on top of whichever of those applies. One sentence repeated
-// seventeen times is green and WRONG — it tells a reader that a plain member's
-// token can write a wallet, and that the only refusal on a product is 404. A
-// description that is confidently incorrect about a money path is worse than the
-// bare operationId it replaced, because nothing downstream can tell it is wrong.
+// Three facts hold for all 119, so they are stated here instead of seventeen
+// times below:
 //
-// The shape talk stays plain, though. These are generic store resources and a
-// caller learns what a `product` is from the product, so each sentence states the
-// address, what the method does to it, and what it refuses — then stops. A family
-// that outgrows this comes OUT of the table and gets an explicit Describe
-// instead — not as WELL: Describe panics on a duplicate key, so the hand-written
-// sentence and this loop cannot both claim one address, and leaving the family
-// here while adding prose above would abort the binary at init.
-type gate int
-
-const (
-	// gateToken is an IAM token and nothing more (commercemid.TokenRequired()).
-	gateToken gate = iota
-	// gateSubscribed additionally passes paywall.Require.
-	gateSubscribed
-	// gateAdmin additionally carries permission.Admin.
-	gateAdmin
-)
-
-type resource struct {
-	kind string
-	gate gate
-	// scope marks the kinds util/rest carries a DefaultPermissions table for,
-	// which CheckPermissions enforces per method. For every other kind that
-	// lookup MISSES, and the miss logs a warning and ALLOWS — so claiming a
-	// scope check on those would be prose the server does not honour.
-	scope bool
-	// why is the one fact about THIS family that outranks its shape. Only the
-	// money and credential families have one; the rest are plain store rows and
-	// inventing a distinction for them is how a table like this starts lying.
-	why string
+//   - EVERY ROW IS THE CALLER'S OWN. The scaffold builds each entity against the
+//     caller org's own namespaced store, keyed by the namespace resolved from
+//     the gateway-validated X-Org-Id. Reads and writes are both inside that
+//     store, so another tenant's row is not withheld by a policy check — it is
+//     not there at all. That is why every miss below is 404 and never 403.
+//   - EVERY JSON FIELD IS CLIENT-WRITABLE. Create, replace and patch decode the
+//     request body straight onto the model with no per-field allowlist. Where a
+//     field is derived, ignored or overwritten anyway, the kind says so.
+//   - THE PER-KIND PERMISSION TABLE IS NOT UNIVERSAL, and this is the one most
+//     worth knowing. util/rest carries scopes for collection, product, return,
+//     subscriber and variant only. For the other twelve the scaffold finds no
+//     entry, logs that it is skipping the check, and ALLOWS — so on those kinds
+//     the route's own gate is the entire authorization story. Each kind says
+//     which of the two it is.
+type merchantKind struct {
+	kind      string // URL segment; the id parameter is <kind>id
+	noun      string // singular, for the summaries
+	plural    string // plural, for the list summary
+	what      string // what the row IS — the sentence a caller needs before any verb
+	sortBy    string // the field the list orders by when sort is not given
+	scope     string // per-kind permission scope; "" when the table has no entry
+	admin     bool   // the route demands the ADMIN permission, not merely a valid token
+	paywalled bool   // the route also runs the commerce-admin entitlement gate
 }
 
-var resources = []resource{
-	{kind: "collection", gate: gateSubscribed, scope: true},
-	{kind: "disclosure", gate: gateToken},
-	{kind: "discount", gate: gateSubscribed},
-	{kind: "movie", gate: gateToken},
-	{kind: "note", gate: gateToken},
-	{kind: "product", gate: gateSubscribed, scope: true},
-	{kind: "return", gate: gateToken, scope: true},
-	{kind: "saleschannel", gate: gateSubscribed},
-	{kind: "stocklocation", gate: gateSubscribed},
-	{kind: "submission", gate: gateToken},
-	{kind: "subscriber", gate: gateToken, scope: true},
-	{kind: "tokentransaction", gate: gateToken},
-	{kind: "transfer", gate: gateAdmin,
-		why: "A transfer RECORDS that a payable was paid out-of-band; it does not move money. " +
-			"Commerce executes no payout, so writing one settles a debt in the books and nowhere " +
-			"else — which is why the family is admin-gated when the rest of the merchant CRUD is not."},
-	{kind: "variant", gate: gateSubscribed, scope: true},
-	{kind: "wallet", gate: gateAdmin,
-		why: "A wallet holds blockchain accounts and the keys generated for them, so it is " +
-			"admin-gated on reads as much as writes."},
-	{kind: "watchlist", gate: gateToken},
-	{kind: "webhook", gate: gateAdmin,
-		why: "A webhook carries the delivery endpoint and the access token sent with it, so it is " +
-			"admin-gated: this is outbound credential material, not catalogue."},
-}
-
-// refusals states what this family turns away and with what, in the order a
-// request meets the gates: the group's own IAM check, then the route's, then the
-// per-method permission.
-func (r resource) refusals() string {
-	s := "\n\nAn anonymous call is refused 401."
-	switch r.gate {
-	case gateAdmin:
-		s += " The token must carry the admin permission — a plain member's token is refused 403 " +
-			"here, on reads as well as writes."
-	case gateSubscribed:
-		s += " The org's subscription is checked on every call: with no active subscription, trial " +
-			"or redeemed invite the answer is 402 subscription_required, and a billing store this " +
-			"process cannot read fails closed with 503 billing_unavailable rather than serving. A " +
-			"platform service token or a superadmin passes without that check."
+// gate is the authorization sentence shared by all seven of a kind's operations:
+// who reaches the route at all, and — for the paywalled kinds — what the org must
+// hold to be admitted past it.
+func (m merchantKind) gate() string {
+	s := "Any valid access token reaches it."
+	if m.admin {
+		s = "The token must carry the ADMIN permission; an ordinary access token is refused."
 	}
-	if r.scope {
-		s += " This kind also carries a per-method token permission, so a token that authenticates " +
-			"but lacks the scope for this method is refused 403; the admin permission satisfies " +
-			"every one of them."
-	}
-	if r.why != "" {
-		s += "\n\n" + r.why
+	if m.paywalled {
+		s += " The org must also be entitled to the commerce admin: the paywall answers 402 " +
+			"subscription_required unless the org holds an active or trialing pro subscription, a live " +
+			"trial credit or a redeemed invite, and 503 when that entitlement cannot be read rather " +
+			"than admitting on an unknown. The internal service token and a platform superadmin pass " +
+			"straight through."
 	}
 	return s
 }
 
-func describeResources() {
-	for _, r := range resources {
-		k := r.kind
-		coll := "/v1/commerce/" + k + "/"
-		item := "/v1/commerce/" + k + "/:" + k + "id"
-		tail := "\n\nScoped to the caller's own tenant: the store is keyed by the org the edge " +
-			"resolves from the verified token, and a client-sent X-Org-Id is deleted before " +
-			"routing rather than trusted, so one tenant's " + k + " is not addressable by another " +
-			"even by exact id — an id outside the caller's tenant answers 404, the same as one " +
-			"that does not exist." + r.refusals()
+// also states the SECOND check — the per-kind scope the scaffold applies on top of
+// the route's gate — or says plainly that this kind has none, which is a fact about
+// the authorization a caller would otherwise have to assume.
+func (m merchantKind) also(need string) string {
+	if m.scope == "" {
+		return " The per-kind permission table has no entry for " + m.kind + ", so the scaffold skips " +
+			"that second check with a warning and the gate above is the whole authorization story."
+	}
+	return " The token must also carry " + need + "."
+}
 
-		openapi.Describe(coll, http.MethodGet,
-			"List "+k+" records",
-			"Returns this tenant's "+k+" records as a pagination envelope — page, display, count, "+
-				"models and facets — so the records are under `models` and not at the top level. "+
-				"`display` sets the page size and `page` the 1-based page (paging needs both; "+
-				"`display` alone just caps the result), and `sort` names the field to order by. "+
-				"When the request carries no resolvable org namespace this answers 200 with an "+
-				"EMPTY page rather than an error, so an empty `models` means nothing was readable "+
-				"for this tenant — not necessarily that no records exist."+tail)
-		openapi.Describe(coll, http.MethodPost,
-			"Create a "+k+" record",
-			"Creates one "+k+" from the request body and returns the stored record, including the "+
-				"id every other operation on this resource addresses it by."+tail)
+func (m merchantKind) describe() {
+	root := "/v1/commerce/" + m.kind + "/"
+	one := root + ":" + m.kind + "id"
+	write := "Admin or Write" + m.scope
+	edit := "Admin, or Read" + m.scope + " and Write" + m.scope + " together"
 
-		openapi.Describe(item, http.MethodGet,
-			"Read one "+k+" record",
-			"Returns the one "+k+" with this id."+tail)
-		openapi.Describe(item, http.MethodPut,
-			"Replace a "+k+" record",
-			"Replaces the "+k+" with this id: the body is decoded onto an EMPTY record that keeps "+
-				"only the existing key, so every field the body omits is reset to its zero value. "+
-				"That is the whole difference from PATCH, and it is how a partial PUT silently "+
-				"clears fields. An id that does not exist answers 404 — this verb never creates."+tail)
-		openapi.Describe(item, http.MethodPatch,
-			"Update part of a "+k+" record",
-			"Loads the stored "+k+", decodes the body over it and writes the result, so fields the "+
-				"body omits keep the values they already had. An id that does not exist answers "+
-				"404."+tail)
-		openapi.Describe(item, http.MethodDelete,
-			"Delete a "+k+" record",
-			"Removes the "+k+" with this id, after writing a copy aside under an internal deleted "+
-				"key — so the record stops answering here but is not erased from storage. An id "+
-				"that does not exist answers 404."+tail)
+	openapi.Describe(root, http.MethodGet,
+		"List your org's "+m.plural+", as a page",
+		m.what+" Answers a pagination envelope — the page and display echoed back, the rows under "+
+			"models, a total count and a facets array — read from the caller org's own namespaced "+
+			"store, so one tenant can never list another's. Sorting defaults to "+m.sortBy+" and is "+
+			"overridable with sort. display is the page size and page applies only alongside it; "+
+			"either one that is not a positive integer is refused with 500 rather than silently "+
+			"ignored, and the limit query overrides the reported COUNT only, never the rows returned. "+
+			"No search backend is wired, so the datastore is the one and only list path and facets is "+
+			"always empty. A request resolving no org namespace is served an EMPTY page rather than "+
+			"an unscoped scan: the namespace IS the tenant filter, so without one there is nothing "+
+			"safe to return. "+m.gate()+m.also("Admin or the "+m.scope+" list scope"))
 
-		// POST on the ITEM address is the method-override door. Describing it as
-		// "creation, but on an id" would be wrong twice: it does not create, and it
-		// is the one address where a POST can DELETE.
-		openapi.Describe(item, http.MethodPost,
-			"Update one "+k+" record, or tunnel another method at it",
-			"The method-override door, not a second create — creation is POST on the collection. "+
-				"With no override this does exactly what PATCH does: the fields present in the "+
-				"body are written and the rest are left alone. Set `_method` (form field or query "+
-				"parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it "+
-				"performs THAT method instead, so a POST to this address can replace or DELETE the "+
-				"record. Any other override value is ignored and the call stays a PATCH."+tail)
+	openapi.Describe(root, http.MethodPost,
+		"Create a "+m.noun,
+		m.what+" Decodes the body into a new row in the caller org's own namespaced store — isolated "+
+			"to that tenant from its first write — and answers the stored row at 201 with a Location "+
+			"header naming its id. The id is assigned by the store, not taken from the body. A body "+
+			"that fails to decode is 400 and a store that refuses the write is 500. "+
+			m.gate()+m.also(write))
+
+	openapi.Describe(one, http.MethodGet,
+		"Fetch one "+m.noun,
+		m.what+" Reads the addressed row from the caller org's own namespaced store. An id that is "+
+			"not there is 404 — and another tenant's id is not there by construction, so it reads "+
+			"exactly like a typo instead of confirming the row exists somewhere else. "+
+			m.gate()+m.also("Admin or Read"+m.scope))
+
+	openapi.Describe(one, http.MethodPut,
+		"Replace a "+m.noun+" outright",
+		m.what+" This is a true REPLACEMENT, not a merge: the stored row's key is preserved, but the "+
+			"body is decoded onto a FRESH entity, so every field the body omits is written back as "+
+			"its ZERO value. Patch is the verb for changing part of a row. The id is resolved inside "+
+			"the caller org's own namespace and an absent one is 404 before anything is written; a "+
+			"body that fails to decode is 400. Answers the stored result. "+m.gate()+m.also(edit))
+
+	openapi.Describe(one, http.MethodPatch,
+		"Change part of a "+m.noun,
+		m.what+" Loads the stored row and decodes the body OVER it, so only the fields the body names "+
+			"change and everything else keeps its stored value — the difference from the full "+
+			"replace, which clears what it is not told. Answers the merged row. An id absent from the "+
+			"caller org's namespace is 404 and a body that fails to decode is 400. "+
+			m.gate()+m.also(edit))
+
+	openapi.Describe(one, http.MethodPost,
+		"Method-override tunnel for a "+m.noun+" — for clients that cannot send PUT, PATCH or DELETE",
+		m.what+" Re-dispatches the request into the handler the intended verb would have reached, "+
+			"taking that verb from a _method form value or query parameter and then from the "+
+			"X-HTTP-Method-Override header. PUT replaces the row, PATCH changes part of it, DELETE "+
+			"removes it, and anything else is 405. The trap is the DEFAULT: naming no override at all "+
+			"leaves the method POST, which this tunnel maps to the PARTIAL UPDATE — it is never a "+
+			"create, and creating is the collection root's job. Behaviour and authorization are the "+
+			"underlying operation's, since the real handler runs. "+m.gate())
+
+	openapi.Describe(one, http.MethodDelete,
+		"Delete a "+m.noun+", keeping a recoverable copy",
+		m.what+" Removes the addressed row and answers 204 with no body. Before the live row goes it "+
+			"is written once more under a deleted tombstone kind, so a deletion leaves a recoverable "+
+			"copy rather than destroying the record outright — and a tombstone that cannot be written "+
+			"fails the call with 500 before anything is removed. The id is resolved inside the caller "+
+			"org's own namespace, so an absent or foreign id is 404. "+m.gate()+m.also(write))
+}
+
+func describeMerchant() {
+	for _, m := range merchantKinds {
+		m.describe()
 	}
 }
+
+var merchantKinds = []merchantKind{{
+	kind: "collection", noun: "collection", plural: "collections",
+	sortBy: "the slug", scope: "Collection", paywalled: true,
+	what: "A collection is a merchandising group a storefront renders — a slug and name, copy and " +
+		"media, flat lists of the product and variant ids it holds, published, preorder and " +
+		"out-of-stock flags, and an availability window. Membership lives on the collection as those " +
+		"id lists rather than as a join, so putting a product into a collection is a write here and " +
+		"not on the product.",
+}, {
+	kind: "discount", noun: "discount", plural: "discounts",
+	sortBy: "the last-updated time", paywalled: true,
+	what: "A discount is a price rule: a type (flat, percent, free-shipping, free-item or bulk), a " +
+		"window, a scope naming the store, collection, product or variant it applies to, a target, " +
+		"and rules pairing a trigger — a price or quantity threshold — with an action, an amount off " +
+		"or a percentage. It is ENABLED BY DEFAULT, so a bare create makes a live discount rather " +
+		"than a draft. The rule engine caches per replica for about thirty seconds, so a discount " +
+		"switched off here can keep applying briefly on other replicas.",
+}, {
+	kind: "disclosure", noun: "disclosure", plural: "disclosures",
+	sortBy: "the last-updated time",
+	what: "A disclosure is a published-document record — a publication body, a content hash, a type " +
+		"and a named receiver. The hash LOOKS like a field you set and is in fact derived, but only " +
+		"on update: a freshly created disclosure keeps whatever hash the caller sent until the first " +
+		"replace or patch recomputes it, so a new row's hash attests to nothing. This kind lives in " +
+		"commerce's demo tree — a live writable resource in your tenant's real store that nothing " +
+		"else in commerce reads.",
+}, {
+	kind: "movie", noun: "movie", plural: "movies",
+	sortBy: "the slug",
+	what: "A movie is a film catalog record — a slug plus EIDR and IMDB ids, all three required, with " +
+		"title and synopsis copy, artwork, screenshots, trailers, cast and crew, and available and " +
+		"hidden flags. It carries NO price: the money for a film lives on the product that sells it.",
+}, {
+	kind: "note", noun: "note", plural: "notes",
+	sortBy: "the last-updated time",
+	what: "A note is a timestamped free-text log line — a caller-supplied time, a source, a message " +
+		"and an enabled flag. That time is the caller's own field and is distinct from the row's " +
+		"creation stamp; the note search filters on it, so a note written without one is a zero-time " +
+		"note the ops log will never surface.",
+}, {
+	kind: "product", noun: "product", plural: "products",
+	sortBy: "the slug", scope: "Product", paywalled: true,
+	what: "A product is a sellable catalog item: slug, SKU and UPC, name and copy, media, " +
+		"availability and preorder flags, a reservation block, and its money — currency, price, " +
+		"MSRP, list price and inventory cost in minor units, inventory count, taxability, and the " +
+		"subscription interval when it is subscribeable. Its variants and options are carried as a " +
+		"denormalized JSON snapshot inside the product, separate from the standalone variant rows, " +
+		"and nothing keeps the two in step for you.",
+}, {
+	kind: "return", noun: "return", plural: "returns",
+	sortBy: "the last-updated time", scope: "Return",
+	what: "A return is an RMA — the store, user and order it belongs to, the line items coming back, " +
+		"a fulfillment block carrying its own type, status and pricing, a summary, and eight " +
+		"lifecycle timestamps from submitted through delivered and processed. Its status is a FREE " +
+		"STRING with no enumeration behind it, and there is no refund amount on the return itself: " +
+		"the money sits inside the line items and the fulfillment pricing.",
+}, {
+	kind: "saleschannel", noun: "sales channel", plural: "sales channels",
+	sortBy: "the last-updated time", paywalled: true,
+	what: "A sales channel is a named selling surface — a name, a description, a disabled flag and " +
+		"metadata. The flag is NEGATIVE, so a channel created from an empty body is enabled. Nothing " +
+		"on this row links products, prices or stock to the channel; here it is a label other " +
+		"surfaces scope themselves by.",
+}, {
+	kind: "stocklocation", noun: "stock location", plural: "stock locations",
+	sortBy: "the last-updated time", paywalled: true,
+	what: "A stock location is a physical address inventory can be held at — a name, street lines, " +
+		"city, province, country, postal code and a phone. None of it is validated, there are no " +
+		"coordinates, and the row carries no enabled flag and no inventory link, so deleting it is " +
+		"the only way to retire one.",
+}, {
+	kind: "submission", noun: "submission", plural: "submissions",
+	sortBy: "the last-updated time",
+	what: "A submission is one filled-in form from a site visitor — an email, an optional user id, the " +
+		"client details the server observed (user agent, referer, geography) and the form's own " +
+		"fields as free metadata. It carries no form id, so the link back to the form that produced " +
+		"it is not stored on the row.",
+}, {
+	kind: "subscriber", noun: "subscriber", plural: "subscribers",
+	sortBy: "the last-updated time", scope: "Subscriber",
+	what: "A subscriber is a mailing-list member — name, email, the form id that captured them, " +
+		"unsubscribed state and date, client details, tags and metadata. Writing one FIRES A " +
+		"WEBHOOK: subscriber.created on create and subscriber.updated on replace or patch, emitted " +
+		"BEFORE the write is known to have succeeded and carrying the row as sent, so the payload " +
+		"holds the raw email rather than the normalized one that gets stored.",
+}, {
+	kind: "tokentransaction", noun: "token transaction", plural: "token transactions",
+	sortBy: "the last-updated time",
+	what: "A token transaction records a transfer between two identified parties — amount and fees, a " +
+		"timestamp, sending and receiving addresses, names, user ids, states and countries, a flag " +
+		"per side, a protocol name and a transaction hash. Nothing here touches a chain: the hash is " +
+		"an unvalidated string and the flags are plain writable booleans with no screening behind " +
+		"them. Amounts are floating-point rather than the exact minor units every real money field " +
+		"in commerce uses, and there is no currency field at all — this kind lives in commerce's " +
+		"demo tree, so it is a live writable resource in your tenant's store that nothing else in " +
+		"commerce reads, and it must never carry real money.",
+}, {
+	kind: "transfer", noun: "transfer", plural: "transfers",
+	sortBy: "the last-updated time", admin: true,
+	what: "A transfer records that a payable WAS PAID — the annotation a human writes after paying " +
+		"out of band. Commerce executes no payout: creating one moves no money, and it marks the " +
+		"referenced payable settled. It carries the payable and payee ids, the amount it settles and " +
+		"the amount actually sent (which may be a different asset), a type of eth, wire or other, " +
+		"the transaction hash or wire reference, when it was paid and who recorded it; amounts are " +
+		"exact decimal strings with an asset, not cents. It is admin-gated because writing one " +
+		"settles money we owe, and nothing enforces uniqueness on the reference — so posting the " +
+		"same transfer twice settles the payable twice.",
+}, {
+	kind: "variant", noun: "variant", plural: "variants",
+	sortBy: "the SKU", scope: "Variant", paywalled: true,
+	what: "A variant is one purchasable SKU of a product — its product id, SKU and UPC, name, media, " +
+		"availability, the option name and value pairs that distinguish it, a sold counter, and its " +
+		"own money and stock: currency, price, MSRP, inventory cost, inventory count and taxability. " +
+		"Inventory and sold are plain writable numbers with no decrement logic behind them here. The " +
+		"same variant also exists as a JSON copy inside its product, and writing one does not update " +
+		"the other.",
+}, {
+	kind: "wallet", noun: "wallet", plural: "wallets",
+	sortBy: "the last-updated time", admin: true,
+	what: "A wallet is a container of custodial blockchain accounts, and its only field is that " +
+		"account list — each account carrying a name, an address, a chain type, and the ENCRYPTED " +
+		"private key with its salt. Creating a wallet through this table generates NO KEYS: key " +
+		"generation lives on the account routes, so a wallet made here is an empty shell and an " +
+		"account posted into one is stored exactly as sent, with no key generation and no validation " +
+		"behind it. Know what a read renders: the plaintext private key is never marshalled and " +
+		"never stored, but the encrypted blob and its salt ARE returned, so whoever can read a " +
+		"wallet can attack it offline down to the strength of the owner's passphrase. That is why " +
+		"this kind is admin-gated.",
+}, {
+	kind: "watchlist", noun: "watchlist", plural: "watchlists",
+	sortBy: "the last-updated time",
+	what: "A watchlist is a viewer's saved list of movies — a user id, an email, and the movies " +
+		"themselves. It stores WHOLE MOVIE SNAPSHOTS rather than movie ids, so a list goes stale the " +
+		"moment a film record changes and grows without bound as it fills.",
+}, {
+	kind: "webhook", noun: "webhook", plural: "webhooks",
+	sortBy: "the last-updated time", admin: true,
+	what: "A webhook is a merchant-registered endpoint that receives commerce event callbacks — a " +
+		"name, a URL, live and all flags, a per-event map, an enabled flag, and the shared access " +
+		"token each delivery posts IN THE BODY. Two things to know before registering one: that " +
+		"token is a plainly readable field, so anyone who may read webhooks reads every endpoint's " +
+		"secret, and delivery consults only the all flag and the event map — it does NOT consult " +
+		"enabled or live, so setting enabled false does not stop delivery and deleting the row is " +
+		"the only thing that does. Delivery is a single POST with a twenty-second timeout and no " +
+		"retry.",
+}}

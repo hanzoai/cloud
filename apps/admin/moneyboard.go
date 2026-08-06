@@ -197,7 +197,15 @@ func reserve(ctx context.Context, c *zip.Ctx) (money.Cents, error) {
 	if out == nil {
 		return 0, nil
 	}
-	cents, err := out.Amount.Minor()
+	// ROUND, because this is a DISPLAY and Minor() refuses a sub-cent amount.
+	//
+	// The treasury reserve carries the same eighteen-decimal tail every ledger
+	// amount does, so Minor() answers "is finer than its minor unit" and the board
+	// rendered that parse failure as SrcOf("treasury", err) — "could not reach the
+	// treasury" — for a treasury that was reachable and correct. Nothing is billed
+	// from this number; a half-cent either way in a headline figure is not a
+	// number anyone spends, and being unable to show the figure at all is worse.
+	cents, err := out.Amount.RoundMinor()
 	return money.Cents(cents), err
 }
 

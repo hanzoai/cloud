@@ -7,8 +7,8 @@
 // reachable in production. Three things break that and nothing else checks any
 // of them —
 //
-//	a stale subset      the binary serves /v1/billing/gpu/eligibility and
-//	                    publishes /v1/billing/gpu-eligibility, from ONE build
+//	a stale subset      ONE build serves a renamed route under its new name
+//	                    while still publishing the name it was renamed away from
 //	a missing mount     manifest/apps.go is a third, hand-maintained source of
 //	                    truth and must be a superset of what each app registers
 //	an edge interceptor a worker in front of the origin answering /v1/models*

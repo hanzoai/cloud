@@ -27,8 +27,8 @@ func init() {
 	zip.Describe("DELETE /v1/framework/roles/:user/:role", zip.Doc{
 		Description: "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
 		Fields: map[string]string{
-			"grant.role": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
-			"grant.user": "User is the assignee whose grant is being revoked, from the path.",
+			"roleRef.role": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
+			"roleRef.user": "User is the assignee whose grant is being revoked, from the path.",
 		},
 		Example: json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
 	})
@@ -81,7 +81,9 @@ func init() {
 	zip.Describe("GET /v1/framework/roles", zip.Doc{
 		Description: "Returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
 		Fields: map[string]string{
-			"roleList.data": "Data is every (user, role) assignment in the caller's org.",
+			"RoleAssignment.role": "Role is the granted role's name.",
+			"RoleAssignment.user": "User is the member the role is granted to.",
+			"roleList.data":       "Data is every (user, role) assignment in the caller's org.",
 		},
 	})
 	zip.Describe("GET /v1/framework/summary", zip.Doc{
@@ -123,7 +125,11 @@ func init() {
 	})
 	zip.Describe("POST /v1/framework/roles", zip.Doc{
 		Description: "Grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
-		Example:     json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
+		Fields: map[string]string{
+			"RoleAssignment.role": "Role is the granted role's name.",
+			"RoleAssignment.user": "User is the member the role is granted to.",
+		},
+		Example: json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
 	})
 	zip.Describe("PUT /v1/framework/:doctype/:name", zip.Doc{
 		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",

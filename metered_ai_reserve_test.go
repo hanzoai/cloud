@@ -12,7 +12,6 @@ package cloud
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -32,6 +32,8 @@ import (
 // the same instant — the simultaneity the TOCTOU needs to be deterministic
 // rather than a race the test wins by luck.
 type wallet struct {
+	peer planeDebits // the money peer the debit crosses to
+
 	mu      sync.Mutex
 	micros  int64 // available, micro-USD (1e6 = $1)
 	debited int64 // total debited, micro-USD
@@ -40,8 +42,24 @@ type wallet struct {
 	arrive func()
 }
 
+// server stands the whole money peer up: the balance READ over HTTP, and the DEBIT over
+// the plane — the split the metering client makes. The debit applies to the same running
+// balance the read serves, so a later gate sees what an earlier call actually spent.
+//
+// The debit's amount arrives as an EXACT decimal and is rescaled to micro-USD here. Over
+// the old HTTP body it arrived as one of two fields (amountMicros, else amount×10000) and
+// the reader had to guess which the sender had filled in.
 func (w *wallet) server(t *testing.T) *httptest.Server {
 	t.Helper()
+	w.peer.serveWith(t, func(_ string, in plane.RecordIn) {
+		amt := microsOf(in.Amount)
+		w.mu.Lock()
+		w.micros -= amt
+		w.debited += amt
+		w.debits++
+		w.mu.Unlock()
+	})
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(rw http.ResponseWriter, _ *http.Request) {
 		if w.arrive != nil {
@@ -52,24 +70,8 @@ func (w *wallet) server(t *testing.T) *httptest.Server {
 		w.mu.Unlock()
 		_, _ = rw.Write([]byte(`{"available":` + strconv.FormatInt(cents, 10) + `}`))
 	})
-	mux.HandleFunc("/v1/billing/usage", func(rw http.ResponseWriter, r *http.Request) {
-		var u struct {
-			AmountMicros int64 `json:"amountMicros"`
-			AmountCents  int64 `json:"amount"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&u)
-		amt := u.AmountMicros
-		if amt == 0 {
-			amt = u.AmountCents * 10000
-		}
-		w.mu.Lock()
-		w.micros -= amt
-		w.debited += amt
-		w.debits++
-		w.mu.Unlock()
-		rw.WriteHeader(http.StatusOK)
-		_, _ = rw.Write([]byte(`{"transactionId":"tx"}`))
-	})
+	// NO /v1/billing/usage route: a debit that still went over HTTP would 404 here
+	// rather than quietly moving the balance.
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv

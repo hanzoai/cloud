@@ -117,12 +117,6 @@ type state struct {
 	// tenancy.go for why that is the whole isolation argument.
 	stores *cloud.OrgStore[*Store]
 	ai     types.AIClient
-	// defaultModel is the deployment's configured default served model
-	// (deps.AIDefaultModel). An agent created without an explicit model is
-	// stored with it, so the ONE model default lives in config, never hardcoded
-	// per subsystem. Empty only on a deployment that configured no default, in
-	// which case create still requires an explicit model.
-	defaultModel string
 	// failoverModel is the reliable model a run falls over to when the agent's own
 	// model stays throttled (429/overloaded) after bounded retries
 	// (deps.AIFallbackModel, default "best"). It makes an autonomous bot reply
@@ -148,6 +142,13 @@ type state struct {
 }
 
 var mounted *cloud.Service[state]
+
+// Ready reports whether the session store is in THIS process, so a caller can
+// tell "no sessions" from "ask the process that owns them" before it reads a
+// count as a fact. It is the same question apps/projects.Ready answers for the
+// site catalog, and it exists here for the same reason: agents ships as its own
+// binary, so the honest answer for an in-process caller is usually "no".
+func Ready() bool { return mounted != nil }
 
 // ---- HTTP response shapes (the published contract) ----
 
@@ -307,14 +308,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{
 		Base: b,
 		State: state{
-			stores: cloud.NewOrgStore[*Store](b, "agents", openStore),
-			ai:     deps.AI,
-			// cloud.ZenModel guards the CONFIG boundary: an operator who points
-			// CLOUD_AI_DEFAULT_MODEL at an upstream name still gets the Hanzo name
-			// stamped on every agent seeded or created without one. The caller
-			// boundary is guarded separately, in create/update.
-			defaultModel:  cloud.ZenModel(deps.AIDefaultModel),
-			failoverModel: strings.TrimSpace(deps.AIFallbackModel),
+			stores:        cloud.NewOrgStore[*Store](b, "agents", openStore),
+			ai:            deps.AI,
+			failoverModel: cloud.FallbackModel,
 			bill:          cloud.NewResourceMeter(deps, meterKind),
 			bus:           newBus(),
 			// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
@@ -332,6 +328,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("agents.Mount: %w", err)
 	}
 	mounted = s
+	// The login-manager teardown, for the link process that has no session store
+	// in it — two doors onto the ONE StopSessions (sessions_rpc.go).
+	exposeSessions()
+	exposeRunOnBehalf()
 
 	o := agentOps{s: s}
 	// Bridge FIRST, and at the door this SUBSYSTEM is, not on one node inside it: a
@@ -506,9 +506,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 	// rather than a lie about what the agent runs on.
 	model := strings.TrimSpace(body.Model)
 	if model == "" {
-		if model = s.State.defaultModel; model == "" {
-			return nil, zip.ErrBadRequest("model is required")
-		}
+		model = cloud.DefaultModel
 	} else if err := validateModel(s, ctx, model); err != nil {
 		return nil, err
 	}

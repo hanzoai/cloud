@@ -83,12 +83,12 @@ type VerifiedIdentity struct {
 type TokenValidator struct{ v *identityValidator }
 
 // NewTokenValidator builds a validator bound to issuer, with the SAME JWKS endpoint
-// SanitizeIdentity uses — jwksURLFor is the single source for both, so a token this
+// SanitizeIdentity uses — JWKSURLFor is the single source for both, so a token this
 // accepts is a token the boundary accepts, and the two can never drift apart into a
 // mint-then-refuse loop.
 func NewTokenValidator(issuer string) *TokenValidator {
 	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
-	return &TokenValidator{v: newIdentityValidator(issuer, jwksURLFor(issuer), 0)}
+	return &TokenValidator{v: newIdentityValidator(issuer, JWKSURLFor(issuer), 0)}
 }
 
 // Validate verifies raw and returns what it proved. The error is the real reason
@@ -155,11 +155,19 @@ func (v VerifiedIdentity) Home() string {
 	return strings.TrimSpace(v.Orgs[0].Org)
 }
 
-// jwksURLFor resolves the JWKS endpoint for an issuer: the CLOUD_JWKS_URL override
-// when set, else the HIP-0111 convention {issuer}/v1/iam/.well-known/jwks. ONE
-// derivation, shared by Config load and NewTokenValidator, so a deployment that
-// pins a custom JWKS pins it for both.
-func jwksURLFor(issuer string) string {
+// JWKSURLFor resolves the JWKS endpoint for an issuer: the CLOUD_JWKS_URL
+// override when set, else the HIP-0111 convention
+// {issuer}/v1/iam/.well-known/jwks. ONE derivation — the whole binary reads it,
+// so a deployment that pins a custom JWKS pins it everywhere.
+//
+// It claimed to be that already while being unexported, so the two subsystems
+// that could not reach it rebuilt the URL inline instead — durable.go's gated
+// ZAP listener and apps/base's per-app pool. Both concatenated the suffix
+// themselves and therefore ignored CLOUD_JWKS_URL outright: an operator who
+// pinned a JWKS pinned it for the edge validator and NOT for the two planes
+// that verify the same tokens, which is a fleet validating one set of signing
+// keys at the front door and a different set behind it.
+func JWKSURLFor(issuer string) string {
 	if override := strings.TrimSpace(getenv("CLOUD_JWKS_URL", "")); override != "" {
 		return override
 	}
