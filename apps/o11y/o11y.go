@@ -493,6 +493,10 @@ func mountRuntime(deps cloud.Deps) error {
 		// metrics exist nowhere, because its single exit was a Prometheus
 		// scrape and Prometheus is gone (metricspush.go).
 		startNativeMetricsPush(embeddedRuntime.TelemetryStore, log)
+		// Project /v1/event errors onto the Sentry plane — fail-soft
+		// (errorsink.go). Requires the in-process runtime's Modules.Sentry, so
+		// it is installed only on this embed-up branch.
+		installErrorSink(log)
 		log.Info("o11y runtime handler installed (in-process runtime)")
 		return nil
 	}
@@ -734,6 +738,9 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 func ShutdownO11y(ctx context.Context) error {
 	stopProbes()
 	stopNativeMetricsPush()
+	// Detach the analytics error fan-out first so no in-flight ingest dispatches
+	// into a tearing-down runtime. Idempotent and nil-safe.
+	clearErrorSink()
 	var firstErr error
 	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {
 		firstErr = err
