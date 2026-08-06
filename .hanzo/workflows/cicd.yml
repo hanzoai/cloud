@@ -143,7 +143,19 @@ jobs:
     # `inputs.tests != 'false'`, so the `tests:` expression below finally means
     # what it says. Verified before moving: v1 (8e43277) CONTAINS v1.0.17
     # (81b3c18), so the set -u default this pin was taken for comes with it.
-    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
+    # v1.0.38, the immutable patch tag — NOT `@v1`. The paragraphs above already
+    # state this rule and something put the rolling alias back; every release
+    # since v1.801.490 has died here. `gate` is the one job in this file that is
+    # a reusable-workflow CALL rather than a literal `runs-on`, and it is the one
+    # job that never gets a runner: runner_id 0, zero steps, ~32 minutes, then
+    # failure — while `containment` on the same run succeeds against an idle
+    # 10/10 fleet. Runs 925, 926 and 928 all died this way.
+    #
+    # The alias is not merely stale (v1 -> f098b39e, v1.0.38 -> dfac7dc4); it is
+    # unpinnable BY DESIGN, because sync-from-github refuses to move a tag that
+    # already exists, so `v1` on the forge can never catch up. A new immutable
+    # tag is the only thing that syncs, which is why the rule is to name one.
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1.0.38
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
       # AND the image built AND it smoked, so a tag build re-tests a proven
