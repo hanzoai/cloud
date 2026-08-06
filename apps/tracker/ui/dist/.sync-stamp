@@ -2,11 +2,13 @@
 #
 # NOT embedded in the binary: `//go:embed dist` (no `all:`) omits dot-files, so
 # this names the source without publishing it at /tracker/.sync-stamp.
-app=@hanzo/tracker (admin-tracker)
+app=@hanzo/tracker (apps/tracker)
 base=/tracker/
 api_prefix=/v1/tracker
 auth=AuthGate (@hanzogui/admin) + @hanzo/iam@0.9.4 PKCE
-auth_server_url=<origin>/v1/iam   # polarity is version-bound; see src/auth.ts
+idp=https://hanzo.id/v1/iam   # the ONE identity provider, not the serving host
 callback=/tracker/callback
-source=hanzoai/admin:apps/admin-tracker@d44ed43 (blue/tracker-ui)
-built=tsc --noEmit (clean) + vitest (4/4) + vite build
+chrome=OrgSwitcher (left) + UserMenu (right); no nav rail, no env/version/clock/theme
+org_scope=X-Org-Id, selected from the token's signed `orgs` claim; cloud re-mints it
+source=hanzoai/admin:apps/tracker@e3d5672 (main)
+built=turbo typecheck 11/11 + vitest 311 pkg / 7 app + playwright 4/4 + vite build
