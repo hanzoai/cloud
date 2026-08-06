@@ -3,78 +3,105 @@
 package commerce
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
 	commerceresources "github.com/hanzoai/commerce/api/resources"
+	"github.com/hanzoai/cloud/manifest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// THE MERCHANT RESOURCES MUST REGISTER, AND THEY MUST REGISTER HERE.
+// boundLeaves is the set of first segments under /v1/commerce that the merchant
+// bundle actually binds, read from the live router rather than from a list.
 //
-// Three failures this guards, none of which a compiler or a status check sees:
-//
-//  1. REGISTRATION PANICS. This is a shared router: byte-identical patterns
-//     merge silently, but two equal-specificity params with different names
-//     panic at REGISTRATION — inside Mount, at boot, long after a green build.
-//     Nothing else in this package calls commerceresources.Route.
-//
-//  2. THE ROUTES GO MISSING. Every admin data view 404'd in production for
-//     exactly this reason: commerce is a PLUGIN of this binary, there is no
-//     commerce backend pod, and the embed carried no resource bundle.
-//
-//  3. STRICT ROUTING GETS TURNED ON. The bundle binds the collection path WITH
-//     a trailing slash (`/v1/commerce/product/`); every client calls it WITHOUT
-//     one. Those are the same route only because fiber's StrictRouting defaults
-//     to false and zip never sets it. Flip it and all of (2) comes back, from a
-//     change that has nothing to do with commerce.
-//
-// The absence assertion is proven to fire (a bogus kind fails it). The strict-
-// routing one is NOT falsifiable today — zip.Config exposes no StrictRouting
-// field, so it pins fiber's default rather than a setting we can flip.
-//
-// It reads the route TABLE rather than driving a request: a request would
-// exercise commerce's datastore and tenant resolution, which need a store this
-// test has no business standing up — and a panic in there reads as "the route
-// is missing" when the route is fine.
-func TestMerchantResourcesRegisterAtV1Commerce(t *testing.T) {
+// It trims the trailing slash because the bundle binds the collection path as
+// `/v1/commerce/product/` while every caller omits it — the same route only
+// because fiber's StrictRouting defaults false, which is pinned below.
+func boundLeaves(t *testing.T) []string {
+	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-
-	// The same call Mount makes, with the gates as pass-throughs: this asks
-	// whether the TABLE binds, which is orthogonal to who may write a product.
 	pass := func(c *zip.Ctx) error { return c.Next() }
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				t.Fatalf("commerceresources.Route panicked at registration: %v\n"+
-					"two equal-specificity params with different names collide in this shared router — "+
-					"this is a BOOT panic, and it passes every build check", r)
-			}
-		}()
-		commerceresources.Route(app.Group("/v1/commerce"), pass, pass, pass, nil)
-	}()
 
-	bound := map[string]bool{}
-	for _, r := range app.Fiber().GetRoutes() {
-		bound[strings.TrimSuffix(r.Path, "/")] = true
-	}
-
-	// The kinds the admin dashboard reads. Every one of these 404'd in production.
-	for _, kind := range []string{"product", "collection", "variant", "webhook", "saleschannel", "stocklocation"} {
-		if path := "/v1/commerce/" + kind; !bound[path] {
-			t.Errorf("%s is not bound — the merchant resource is ABSENT, not gated; "+
-				"api.hanzo.ai/v1/commerce is THE commerce endpoint and this binary is the only thing serving it", path)
+	// The same call Mount makes, with the gates as pass-throughs: this asks what
+	// the router BINDS, which is orthogonal to who may write a product.
+	//
+	// A shared router merges byte-identical patterns silently but PANICS on two
+	// equal-specificity params with different names — at registration, inside
+	// Mount, at boot, long after a green build. Nothing else here calls Route.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("commerceresources.Route panicked at registration: %v\n"+
+				"two equal-specificity params with different names collide in this shared router — "+
+				"this is a BOOT panic, and it passes every build check", r)
 		}
-	}
+	}()
+	commerceresources.Route(app.Group("/v1/commerce"), pass, pass, pass, nil)
 
-	// The trailing slash above is trimmed because the bundle binds the
-	// collection path as `/v1/commerce/product/` while every caller omits it.
-	// That equivalence is fiber's, not ours, and it is the whole reason the
-	// slash-less client call resolves — so it is pinned, not assumed.
 	if app.Fiber().Config().StrictRouting {
 		t.Error("StrictRouting is on: the bundle binds `/v1/commerce/<kind>/` and every client " +
 			"calls `/v1/commerce/<kind>` — under strict routing those stop being the same route " +
 			"and every admin data view 404s again")
+	}
+
+	seen := map[string]bool{}
+	for _, r := range app.Fiber().GetRoutes() {
+		p := strings.TrimSuffix(r.Path, "/")
+		rest, ok := strings.CutPrefix(p, "/v1/commerce/")
+		if !ok {
+			continue
+		}
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			rest = rest[:i]
+		}
+		// A leaf, not a wildcard — `:id` and `*` are the segment BELOW a leaf.
+		if rest != "" && !strings.HasPrefix(rest, ":") && !strings.HasPrefix(rest, "*") {
+			seen[rest] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestEveryBoundMerchantLeafIsRoutedToCommerce is the assertion that matters, and
+// it is NOT the one this file used to make.
+//
+// The earlier version proved the bundle BINDS /v1/commerce/product. It did, and
+// production still answered 404 — because binding a route inside commerce says
+// nothing about the host handing commerce the request. The light host routes by
+// manifest.Apps: commerce's row names its leaves explicitly, `ai` holds the bare
+// "/v1", and longest-prefix wins. So an unnamed leaf goes to ai's catch-all and
+// answers ai's 404 while commerce sits there serving it to nobody. That is
+// exactly what shipped: /v1/commerce/tenant (named) returned 200 from commerce
+// in the same breath /v1/commerce/product (unnamed) returned 404 from ai.
+//
+// Two lists is deliberate here — the host states what it ROUTES, the app states
+// what it SERVES, and manifest/apps.go explains why importing one into the other
+// would re-fatten the host. What was missing is the oracle between them for THIS
+// bundle: manifest/router_test.go compares against plugin/commerce/openapi.json,
+// a GENERATED file, so a bundle whose spec has not been regenerated is invisible
+// to it and it passes vacuously. This reads the live router instead, so a kind
+// the bundle adds upstream fails here the moment it is linked, with no
+// regeneration step in between.
+func TestEveryBoundMerchantLeafIsRoutedToCommerce(t *testing.T) {
+	claimed := map[string]bool{}
+	for _, p := range manifest.PrefixesFor("commerce") {
+		claimed[p] = true
+	}
+	if len(claimed) == 0 {
+		t.Fatal(`manifest.PrefixesFor("commerce") is empty — commerce is not a routed app at all`)
+	}
+
+	for _, leaf := range boundLeaves(t) {
+		if path := "/v1/commerce/" + leaf; !claimed[path] {
+			t.Errorf("%s is bound by the merchant bundle and NOT named on commerce's manifest row — "+
+				"the host gives it to ai's bare \"/v1\" and the caller gets ai's 404. "+
+				"Add it to the commerce row in manifest/apps.go.", path)
+		}
 	}
 }
