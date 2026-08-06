@@ -284,6 +284,7 @@ var meteredApps = []string{
 	"dataset",      // the scan that materialises a set, priced per source row read.
 	"flow",         // flow executions.
 	"functions",    // serverless invoke.
+	"lsp",          // code intelligence: a cold checkout+index is billed, a warm query is not.
 	"ml",           // predict + train (compute).
 	"platform",     // builds and runs (compute).
 	"projects",     // site hosting fee.
