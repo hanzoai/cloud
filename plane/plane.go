@@ -1581,3 +1581,212 @@ type RunOnBehalfOut struct {
 	RunID  string `json:"runId,omitempty"`
 }
 
+
+// ---- coding: every seam one autonomous coding run reaches across ------------
+//
+// A coding run (`@hanzo code: <repo> <task>`) is the most cross-app act in the
+// estate: it opens an agents SESSION, resolves and gates an agents TARGET, reads
+// git's CLONE URL, verifies in git that the pushed branch LANDED, and files the
+// PR row in tracker. Five apps, and since the fused monolith went away, five
+// PROCESSES.
+//
+// It was written as five direct Go calls. Each of those reads a package global
+// (`mounted`) that belongs to the OTHER process, so each answered the zero value
+// in the one deployment that exists: CloneURL returned "" ("git is not
+// available"), OpenSession returned "not mounted", VerifyRef reported the branch
+// absent and the run failed CLOSED with no PR. The same shape that killed every
+// @hanzo chat turn until the on-behalf-of run moved onto this plane.
+//
+// So the seams travel. The orchestration itself (apps/coding) is unchanged and
+// stays ONE library — it always spoke to its collaborators through injected
+// seams, which is exactly what made this a re-binding rather than a rewrite.
+const (
+	// AgentsSessionOpen / Event / Close are the live agent session a coding run
+	// streams into: the durable record mission-control renders and the stream the
+	// operator watches. Target, when set, tags the session with the MACHINE the
+	// run was routed to (agents.OpenSessionOn), so a routed run shows up where it
+	// is actually executing.
+	AgentsSessionOpen  = "agents_session_open"
+	AgentsSessionEvent = "agents_session_event"
+	AgentsSessionClose = "agents_session_close"
+
+	// AgentsResolveTarget turns a human's `on <machine>` reference — a target id
+	// or the friendly label the CLI registered — into a target id, org-scoped and
+	// fail-closed. The Slack front door parses the word; agents owns the registry
+	// that knows whether the org has such a machine.
+	AgentsResolveTarget = "agents_resolve_target"
+
+	// AgentsTargetGate is the liveness+existence check a routed run passes before
+	// it is enqueued: the target exists in this org, is online, and has a live
+	// runner. Fail-closed — an error here means the run does not dispatch, never
+	// that it quietly runs somewhere else.
+	AgentsTargetGate = "agents_target_gate"
+
+	// AgentsRouteRun enqueues a routed run on the durable engine.
+	//
+	// This one is not merely a store that lives elsewhere: the run is offered to
+	// an IN-MEMORY mailbox that the machine long-polls through agents' own HTTP
+	// surface. Enqueued in any other process, the delivery activity would offer
+	// the run to a mailbox nobody polls and the workflow would burn its whole
+	// budget before failing. The engine that owns the workflow and the mailbox
+	// that hands it out have to be the same process, and that process is agents.
+	AgentsRouteRun = "agents_route_run"
+
+	// GitCloneURL is the canonical clone URL for an org's native repo — the only
+	// thing the sandbox is ever pointed at, so the run cannot reach another
+	// tenant's namespace.
+	GitCloneURL = "git_clone_url"
+
+	// GitVerifyRef reports the tip of a branch by reading the bare repo on git's
+	// own storage. It is the INTEGRITY gate: cloud trusts the ref it can read,
+	// not the remote runner's claim to have pushed one. Found=false is
+	// fail-closed and costs the run its PR.
+	GitVerifyRef = "git_verify_ref"
+
+	// TrackerAgentPR opens the native PR work item for a finished run.
+	TrackerAgentPR = "tracker_agent_pr"
+)
+
+// The ORG rides in these arguments rather than on the caller's plane identity,
+// which is the exception [RunOnBehalfIn] documents and for the same reason: the
+// tenant is the one that connected the Slack workspace, resolved server-side
+// from the signature-VERIFIED team_id, and the calling plugin's own identity is
+// not it. A coding run only ever touches the named org's own session, its own
+// repo and its own board — it reads nothing across tenants — and the org it
+// names was never a field the human could set.
+//
+// No field below is a map. The encoder refuses one at this boundary (zapenc
+// layoutOf), and a refused encode is a call that dies before the socket.
+
+// SessionOpenIn opens the live session a coding run streams into.
+type SessionOpenIn struct {
+	Org   string `json:"org"`
+	Actor string `json:"actor,omitempty"` // the linked Hanzo subject the run is attributed to
+	Agent string `json:"agent"`           // agent label, e.g. "hanzo"
+	Title string `json:"title,omitempty"`
+	// Target tags the session with the machine a ROUTED run was sent to. Empty is
+	// the ordinary cloud-sandbox session.
+	Target string `json:"target,omitempty"`
+}
+
+// SessionOpened is the new session's id — the branch suffix, the PR body's link,
+// and the handle every later event carries.
+type SessionOpened struct {
+	SessionID string `json:"sessionId"`
+}
+
+// SessionEventIn appends one event to a live session. Payload is the event's
+// already-encoded JSON body, carried as bytes because its SHAPE belongs to the
+// event kind and not to this contract — and because the map it would otherwise
+// be cannot cross.
+type SessionEventIn struct {
+	Org       string `json:"org"`
+	SessionID string `json:"sessionId"`
+	Kind      string `json:"kind"` // "tool-call" | "log" | "status"
+	Actor     string `json:"actor,omitempty"`
+	Payload   []byte `json:"payload,omitempty"`
+}
+
+// SessionCloseIn transitions a session out of running. Status is "done" or
+// "error" — the two terminals a coding run has.
+type SessionCloseIn struct {
+	Org       string `json:"org"`
+	SessionID string `json:"sessionId"`
+	Status    string `json:"status"`
+}
+
+// CodingAck is the answer of a coding seam that either worked or returned an
+// error. It carries a field because a void op answers 204 and a caller cannot
+// tell 204 from "the op is not there".
+type CodingAck struct {
+	OK bool `json:"ok"`
+}
+
+// TargetRefIn names a machine the way a human did: an id, or the friendly label
+// the `hanzo code --serve` daemon registered.
+type TargetRefIn struct {
+	Org string `json:"org"`
+	Ref string `json:"ref"`
+}
+
+// TargetRef is the resolved machine. An id that resolves to no target IN THIS
+// ORG is an error, never another tenant's machine and never a silent fallback to
+// a local run.
+type TargetRef struct {
+	ID    string `json:"id"`
+	Label string `json:"label,omitempty"`
+}
+
+// TargetGateIn asks whether a run may be dispatched to a machine.
+type TargetGateIn struct {
+	Org      string `json:"org"`
+	TargetID string `json:"targetId"`
+}
+
+// RepoRefIn names one of an org's native repos.
+type RepoRefIn struct {
+	Org  string `json:"org"`
+	Repo string `json:"repo"`
+}
+
+// RepoCloneURL is the canonical clone URL. Empty means git could not answer,
+// which the run reads as "git is not available" and refuses to proceed.
+type RepoCloneURL struct {
+	URL string `json:"url"`
+}
+
+// RefIn names one branch of one repo.
+type RefIn struct {
+	Org    string `json:"org"`
+	Repo   string `json:"repo"`
+	Branch string `json:"branch"`
+}
+
+// RefTip is what git's own storage says about that branch. Found is EXPLICIT
+// rather than inferred from an empty SHA: "the branch is not there" and "the
+// read failed" both have to fail the integrity gate, and an absent tip that read
+// as a present-but-unknown one would file a PR for a branch nobody can fetch.
+type RefTip struct {
+	SHA   string `json:"sha,omitempty"`
+	Found bool   `json:"found"`
+}
+
+// AgentPRIn opens the native PR work item for a pushed branch.
+type AgentPRIn struct {
+	Org      string `json:"org"`
+	Project  string `json:"project,omitempty"`
+	Repo     string `json:"repo"`
+	Base     string `json:"base,omitempty"`
+	Head     string `json:"head"`
+	Title    string `json:"title,omitempty"`
+	Body     string `json:"body,omitempty"`
+	Assignee string `json:"assignee,omitempty"`
+}
+
+// AgentPROut is the created row's stable handle.
+type AgentPROut struct {
+	Identifier string `json:"identifier"`
+	ProjectKey string `json:"projectKey,omitempty"`
+	Number     int    `json:"number,omitempty"`
+}
+
+// RouteRunIn is the NON-SECRET spec of a run to be executed on a registered
+// machine. It carries no credential by design: the machine authenticates git
+// with its own already-held one, so nothing here is a secret and the run can be
+// durably persisted by the engine without holding a token.
+type RouteRunIn struct {
+	Org            string `json:"org"`
+	TargetID       string `json:"targetId"`
+	SessionID      string `json:"sessionId"`
+	Repo           string `json:"repo"`
+	Project        string `json:"project,omitempty"`
+	Base           string `json:"base,omitempty"`
+	Branch         string `json:"branch"`
+	Prompt         string `json:"prompt"`
+	CloneURL       string `json:"cloneUrl"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+	// Actor + AgentRef are cloud-side attribution for the completion path (the
+	// session close and the PR assignee). They never cross to the machine.
+	Actor    string `json:"actor,omitempty"`
+	AgentRef string `json:"agentRef,omitempty"`
+}
