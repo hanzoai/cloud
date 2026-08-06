@@ -60,6 +60,7 @@ var rawRoutes = map[string]string{
 	"GET /v1/integrations/discord/link":           "302",
 	"GET /v1/integrations/discord/link/callback":  "302",
 	"GET /v1/integrations/discord/link/discord":   "302",
+	"GET /v1/integrations/slack/install":          "302 to Slack's consent URL",
 	"GET /v1/integrations/slack/link":             "302",
 	"GET /v1/integrations/slack/link/callback":    "302",
 	"GET /v1/integrations/slack/link/slack":       "302",
