@@ -12,6 +12,14 @@ import (
 
 // UsageEvent mirrors the ai module's payload. Separate on purpose: sharing the
 // type would reintroduce the import.
+//
+// IT CARRIES NO REF, and the absence is load-bearing. It used to, on the reading that
+// the ai module filled it with a server-written message row id — but that id is
+// `Owner + "/" + Name` and both halves come off the JSON body the client posts, so the
+// field handed the ledger's idempotency key to the payer: one pinned owner/name and every
+// completion after the first deduped into the first one's entry. There is no other
+// candidate for it in that module, so the field is gone rather than guarded, and the
+// entry's own server-minted id is the key.
 type UsageEvent struct {
 	Subject   string
 	Namespace string
@@ -19,11 +27,6 @@ type UsageEvent struct {
 	Currency  string
 	Model     string
 	Provider  string
-	// Ref names the metered ACT — the ai module fills it with the MESSAGE ROW's id, one
-	// row per completion, written by the server. It is the ledger's idempotency key, so
-	// it is deliberately not the request's correlation header: a caller who could pick
-	// this could be billed once for every completion after the first.
-	Ref string
 }
 
 type (

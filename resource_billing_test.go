@@ -32,23 +32,23 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// recCommerce answers the metering client's balance + usage calls and records,
-// per endpoint, the X-Org-Id org header it saw plus the usage body — the
-// evidence for the per-org / cross-org assertions.
+// recCommerce is the money peer for these tests: it answers the balance READ over HTTP
+// and receives the usage DEBIT over the plane, recording the org each side acted for —
+// the evidence for the per-org / cross-org assertions.
 type recCommerce struct {
 	balanceAvailable int64 // returned as {"available":N} on GET /v1/billing/balance
 	balanceStatus    int   // 0 => 200
 
+	debits planeDebits
+
 	mu           sync.Mutex
 	balanceOrg   string // last X-Org-Id on a balance call
 	balanceCalls int32
-	usageOrg     string // last X-Org-Id on a usage call
-	usageCount   int32
-	usageBody    []byte
 }
 
 func (f *recCommerce) server(t *testing.T) *httptest.Server {
 	t.Helper()
+	f.debits.serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&f.balanceCalls, 1)
@@ -62,32 +62,25 @@ func (f *recCommerce) server(t *testing.T) *httptest.Server {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]any{"available": f.balanceAvailable})
 	})
-	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&f.usageCount, 1)
-		body, _ := io.ReadAll(r.Body)
-		f.mu.Lock()
-		f.usageOrg = r.Header.Get("X-Org-Id")
-		f.usageBody = body
-		f.mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, `{"transactionId":"tx_1","type":"usage"}`)
-	})
+	// NO /v1/billing/usage route: the debit crosses the plane now, and a debit that
+	// still went over HTTP would 404 here rather than quietly counting.
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-func (f *recCommerce) usages() int32   { return atomic.LoadInt32(&f.usageCount) }
+func (f *recCommerce) usages() int32   { return f.debits.count() }
 func (f *recCommerce) balances() int32 { return atomic.LoadInt32(&f.balanceCalls) }
 func (f *recCommerce) lastBalanceOrg() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.balanceOrg
 }
-func (f *recCommerce) lastUsage() (string, []byte) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.usageOrg, f.usageBody
+
+// lastUsage is the org the debit was written to and the debit itself.
+func (f *recCommerce) lastUsage() (string, plane.RecordIn) {
+	d, _ := f.debits.last()
+	return d.Org, d.In
 }
 
 // meterFor builds a ResourceMeter whose metering client has DEFAULT org "hanzo"
@@ -289,26 +282,18 @@ func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
 		t.Fatalf("usage records = %d, want 1 (Meter must debit on success)", fc.usages())
 	}
-	org, body := fc.lastUsage()
+	org, in := fc.lastUsage()
 	if org != "acme" {
 		t.Fatalf("usage billed org %q, want caller %q (must override client default 'hanzo')", org, "acme")
 	}
-	var u struct {
-		User     string `json:"user"`
-		Amount   int64  `json:"amount"`
-		Provider string `json:"provider"`
+	if in.Subject != "acme" {
+		t.Fatalf("usage subject = %q, want caller org %q (per-org billing keys on the org slug)", in.Subject, "acme")
 	}
-	if err := json.Unmarshal(body, &u); err != nil {
-		t.Fatalf("usage body decode: %v (body=%s)", err, body)
+	if cents, err := in.Amount.Minor(); err != nil || cents != 250 {
+		t.Fatalf("usage amount = %+v (%d¢, err %v), want 250¢", in.Amount, cents, err)
 	}
-	if u.User != "acme" {
-		t.Fatalf("usage user = %q, want caller org %q (per-org billing keys on the org slug)", u.User, "acme")
-	}
-	if u.Amount != 250 {
-		t.Fatalf("usage amount = %d, want 250", u.Amount)
-	}
-	if u.Provider != "provisioning" {
-		t.Fatalf("usage provider = %q, want %q", u.Provider, "provisioning")
+	if in.Usage.Provider != "provisioning" {
+		t.Fatalf("usage provider = %q, want %q", in.Usage.Provider, "provisioning")
 	}
 }
 
@@ -641,15 +626,10 @@ func TestResourceMeter_MeterOwnsTheStringsItRetains(t *testing.T) {
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
 		t.Fatalf("usage records = %d, want 1", fc.usages())
 	}
-	_, body := fc.lastUsage()
-	var u struct {
-		RequestID string `json:"requestId"`
-	}
-	if err := json.Unmarshal(body, &u); err != nil {
-		t.Fatalf("usage body decode: %v (body=%s)", err, body)
-	}
-	if u.RequestID != "req-mine" {
+	_, in := fc.lastUsage()
+	if in.Usage.RequestID != "req-mine" {
 		t.Fatalf("the debit recorded requestId %q, want %q — the meter retained a view into the "+
-			"caller's request arena, so the row quotes whoever used that connection next", u.RequestID, "req-mine")
+			"caller's request arena, so the row quotes whoever used that connection next",
+			in.Usage.RequestID, "req-mine")
 	}
 }
