@@ -65,6 +65,15 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 		}
 	}()
 
+	// THE SANDBOX'S OWN WORKDIR, asked for by class rather than assumed.
+	// workdirFor answers /mnt/data for an exec sandbox and /work for a dev one,
+	// and this proof runs an exec one — so the constant `workdir` names a
+	// directory this pod does not have. Kubernetes creates the pod's workingDir
+	// and nothing else, which is why writing under a hard-coded /work only
+	// worked here through the `mkdir -p` below: the edit was proven in a
+	// directory the product never reads.
+	wd := workdirFor(m.Class)
+
 	// 1. It runs code at all.
 	res, err := r.exec(ctx, m, []string{"node", "-e", "console.log('SANDBOX-RUNS-CODE', process.version)"}, nil, 60)
 	if err != nil {
@@ -79,11 +88,11 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	//    it back through a SEPARATE exec, because a write that only survives
 	//    inside one call is not a filesystem.
 	const src = "export const answer = 42; // edited by the agent\n"
-	if res, err = r.exec(ctx, m, []string{"sh", "-c", "mkdir -p " + workdir + "/src && cat > " + workdir + "/src/app.js"},
+	if res, err = r.exec(ctx, m, []string{"sh", "-c", "mkdir -p " + wd + "/src && cat > " + wd + "/src/app.js"},
 		strings.NewReader(src), 60); err != nil || res.ExitCode != 0 {
 		t.Fatalf("write: err=%v exit=%d stderr=%q", err, res.ExitCode, res.Stderr)
 	}
-	if res, err = r.exec(ctx, m, []string{"cat", workdir + "/src/app.js"}, nil, 60); err != nil {
+	if res, err = r.exec(ctx, m, []string{"cat", wd + "/src/app.js"}, nil, 60); err != nil {
 		t.Fatalf("read back: %v", err)
 	}
 	if res.Stdout != src {
@@ -95,7 +104,7 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	//    executing it proves the edit reached the same filesystem the runtime
 	//    uses, which is the thing an agent depends on.
 	if res, err = r.exec(ctx, m, []string{"node", "-e",
-		"import('" + workdir + "/src/app.js').then(m=>console.log('ANSWER='+m.answer))"}, nil, 60); err != nil {
+		"import('" + wd + "/src/app.js').then(m=>console.log('ANSWER='+m.answer))"}, nil, 60); err != nil {
 		t.Fatalf("run edited code: %v", err)
 	}
 	if !strings.Contains(res.Stdout, "ANSWER=42") {
@@ -147,8 +156,12 @@ func TestLiveSandboxDoesGit(t *testing.T) {
 	// A real commit over a real edit. Identity is set locally rather than
 	// globally: a sandbox is per-tenant, and a global identity would be one more
 	// thing to reset between leases.
+	// workdirFor, not the `workdir` constant: this sandbox is class exec, whose
+	// workdir is /mnt/data. A bare `cd /work` here died with "can't cd to /work"
+	// — the pod never had that directory — so the one test that proves an agent
+	// can COMMIT has been failing since exec's workdir split off from dev's.
 	script := `set -e
-cd ` + workdir + `
+cd ` + workdirFor(m.Class) + `
 git init -q .
 git config user.email agent@hanzo.ai
 git config user.name "Hanzo Agent"
