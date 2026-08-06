@@ -1,64 +1,92 @@
 package usage
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// fakeCommerce stands in for the commerce billing S2S surface. It records the
-// Authorization header and the trusted X-Org-Id/`user` selectors (so a test can
-// prove every read is pinned to the CALLER's own org) and answers a canned rollup +
-// a recent-timestamped ledger so the category/series roll-up has data in-window.
+// fakeCommerce stands in for the process that owns the ledger. It records the org
+// each op was invoked FOR — which is the whole of tenant isolation here, now that
+// the org rides the caller rather than a header the reader sets — and answers a
+// canned total plus a recent-timestamped movement list so the category/series
+// roll-up has data in-window.
 type fakeCommerce struct {
 	mu       sync.Mutex
-	gotAuth  string
-	gotOrg   map[string]string // path -> X-Org-Id seen
-	gotUser  map[string]string // path -> ?user seen
-	hitPaths []string
+	gotOrg   map[string]string // op -> the caller org it acted for
+	hitPaths []string          // ops invoked, in order
 }
 
-func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
+// serve stands the money plane up the way Mount does and records the org each op
+// was called FOR. The org is what tenant isolation turns on here, and it now
+// rides the CALL rather than a header the reader set — so this is where the
+// isolation is observed.
+func (f *fakeCommerce) serve(t *testing.T) {
 	t.Helper()
 	f.gotOrg = map[string]string{}
-	f.gotUser = map[string]string{}
-	recent := time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339)
-	mux := http.NewServeMux()
-	record := func(r *http.Request) {
+	recent := time.Now().Add(-1 * time.Hour).UTC().Unix()
+
+	sockDir, err := os.MkdirTemp("", "zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
+	plane.Unbind()
+	t.Cleanup(plane.Unbind)
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
+
+	record := func(ctx context.Context, op string) {
 		f.mu.Lock()
-		f.gotAuth = r.Header.Get("Authorization")
-		f.gotOrg[r.URL.Path] = r.Header.Get("X-Org-Id")
-		f.gotUser[r.URL.Path] = r.URL.Query().Get("user")
-		f.hitPaths = append(f.hitPaths, r.URL.Path)
+		f.gotOrg[op] = cloud.Who(ctx).Org
+		f.hitPaths = append(f.hitPaths, op)
 		f.mu.Unlock()
 	}
-	mux.HandleFunc("/v1/billing/usage/rollup", func(w http.ResponseWriter, r *http.Request) {
-		record(r)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"consumedCents":5000,"overageCents":100,"balance":{"balanceCents":20000,"availableCents":15000}}`)
-	})
-	mux.HandleFunc("/v1/billing/transactions", func(w http.ResponseWriter, r *http.Request) {
-		record(r)
-		w.Header().Set("Content-Type", "application/json")
-		body := fmt.Sprintf(`{"transactions":[`+
-			`{"id":"t1","type":"withdraw","amount":300,"tags":"gpu-h100","createdAt":%q},`+
-			`{"id":"t2","type":"withdraw","amount":200,"tags":"llm","createdAt":%q},`+
-			`{"id":"t3","type":"deposit","amount":9999,"tags":"","createdAt":%q}]}`, recent, recent, recent)
-		_, _ = io.WriteString(w, body)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return srv
+	p := cloud.Plane()
+	zip.Post[plane.SpendIn, plane.Spend](p, "/finance/spend",
+		func(ctx context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+			record(ctx, plane.FinanceSpend)
+			return &plane.Spend{
+				Consumed: plane.Money{Decimal: "50.00", Currency: "USD"},
+				Balance:  plane.Money{Decimal: "200.00", Currency: "USD"},
+			}, nil
+		}, zip.WithOperationID(plane.FinanceSpend))
+	zip.Post[plane.TxnsIn, plane.Txns](p, "/finance/txns",
+		func(ctx context.Context, _ *plane.TxnsIn) (*plane.Txns, error) {
+			record(ctx, plane.FinanceTxns)
+			return &plane.Txns{Rows: []plane.Txn{
+				{ID: "t1", Kind: string(finance.KindUsage), Ref: "gpu-h100", Amount: plane.Money{Decimal: "3.00", Currency: "USD"}, CreatedAt: recent},
+				{ID: "t2", Kind: string(finance.KindUsage), Ref: "llm", Amount: plane.Money{Decimal: "2.00", Currency: "USD"}, CreatedAt: recent},
+				{ID: "t3", Kind: string(finance.KindDeposit), Ref: "", Amount: plane.Money{Decimal: "99.99", Currency: "USD"}, CreatedAt: recent},
+			}}, nil
+		}, zip.WithOperationID(plane.FinanceTxns))
+
+	sock := zip.SocketPath("commerce")
+	go func() { _ = p.Listen(sock) }()
+	t.Cleanup(func() { _ = p.Shutdown() })
+	for i := 0; i < 300; i++ {
+		if c, derr := net.Dial("unix", sock); derr == nil {
+			_ = c.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the commerce plane socket never began listening")
 }
 
 // compose installs what a HOST installs. A subsystem never installs cloud.Bridge
@@ -70,10 +98,8 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 // for a reason that would never exist in production.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
-func mountApp(t *testing.T, base, token string) *zip.App {
+func mountApp(t *testing.T) *zip.App {
 	t.Helper()
-	t.Setenv("CLOUD_COMMERCE_HTTP_URL", base)
-	t.Setenv("COMMERCE_SERVICE_TOKEN", token)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
@@ -113,7 +139,8 @@ func decodeSummary(t *testing.T, b []byte) usageSummary {
 
 func TestSummary_ScopedToCallerOrg_RollsUpCommerce(t *testing.T) {
 	f := &fakeCommerce{}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	f.serve(t)
+	app := mountApp(t)
 
 	code, body := call(t, app, "/v1/usage/summary?range=30d", "maxpower/dave", "maxpower")
 	if code != 200 {
@@ -124,19 +151,20 @@ func TestSummary_ScopedToCallerOrg_RollsUpCommerce(t *testing.T) {
 	if s.Scope.Org != "maxpower" {
 		t.Fatalf("scope org: want maxpower, got %q", s.Scope.Org)
 	}
-	// commerce read scoped to the caller's OWN org on BOTH the S2S selector and subject.
-	if f.gotOrg["/v1/billing/usage/rollup"] != "maxpower" || f.gotUser["/v1/billing/usage/rollup"] != "maxpower" {
-		t.Fatalf("rollup not scoped to caller: org=%q user=%q", f.gotOrg["/v1/billing/usage/rollup"], f.gotUser["/v1/billing/usage/rollup"])
-	}
-	if f.gotAuth != "Bearer svc-token" {
-		t.Fatalf("commerce auth: want service token, got %q", f.gotAuth)
+	// Both reads acted for the caller's OWN org. The org rides the CALL now, so
+	// there is no header a reader sets and no query parameter a client could aim
+	// somewhere else — the callee reads the tenant off the caller and refuses an
+	// empty one.
+	if f.gotOrg[plane.FinanceSpend] != "maxpower" || f.gotOrg[plane.FinanceTxns] != "maxpower" {
+		t.Fatalf("the ledger reads were not scoped to the caller: spend=%q txns=%q",
+			f.gotOrg[plane.FinanceSpend], f.gotOrg[plane.FinanceTxns])
 	}
 	// Spend rolled up: rollup figures + windowed withdrawals (300+200=500; deposit excluded).
 	if !s.Spend.Available || !s.Sources.Commerce {
 		t.Fatalf("spend must be available when commerce answered: %+v", s.Sources)
 	}
-	if s.Spend.MTDCents != 5000 || s.Spend.AvailableCents != 15000 {
-		t.Fatalf("rollup figures not carried: mtd=%d avail=%d", s.Spend.MTDCents, s.Spend.AvailableCents)
+	if s.Spend.MTDCents != 5000 || s.Spend.AvailableCents != 20000 {
+		t.Fatalf("ledger figures not carried: mtd=%d avail=%d", s.Spend.MTDCents, s.Spend.AvailableCents)
 	}
 	if s.Spend.TotalCents != 500 {
 		t.Fatalf("windowed spend: want 500, got %d", s.Spend.TotalCents)
@@ -155,7 +183,8 @@ func TestSummary_ScopedToCallerOrg_RollsUpCommerce(t *testing.T) {
 
 func TestSummary_NoValidatedPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 	f := &fakeCommerce{}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	f.serve(t)
+	app := mountApp(t)
 	// Forged X-Org-Id with NO validated principal (no X-User-Id) → 401, commerce untouched.
 	code, _ := call(t, app, "/v1/usage/summary", "", "victim")
 	if code != http.StatusUnauthorized {
@@ -168,35 +197,49 @@ func TestSummary_NoValidatedPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 
 func TestSummary_ClientCannotWidenScope(t *testing.T) {
 	f := &fakeCommerce{}
-	app := mountApp(t, f.server(t).URL, "svc-token")
-	// A forged ?user=victim must be overwritten server-side with the caller's own org.
+	f.serve(t)
+	app := mountApp(t)
+	// A forged ?user=victim and ?org=other must reach the ledger as neither. The
+	// tenant is not an argument at all now: it rides the caller, which is the
+	// gateway's assertion, so widening the scope is not a thing this request can
+	// express.
 	q := url.Values{"user": {"victim"}, "org": {"other"}}.Encode()
 	code, _ := call(t, app, "/v1/usage/summary?"+q, "maxpower/dave", "maxpower")
 	if code != 200 {
 		t.Fatalf("want 200, got %d", code)
 	}
-	if f.gotUser["/v1/billing/usage/rollup"] != "maxpower" {
-		t.Fatalf("forged user must be overwritten with caller org, got %q", f.gotUser["/v1/billing/usage/rollup"])
-	}
-	if f.gotOrg["/v1/billing/transactions"] != "maxpower" {
-		t.Fatalf("commerce X-Org-Id must be caller org, got %q", f.gotOrg["/v1/billing/transactions"])
+	if f.gotOrg[plane.FinanceSpend] != "maxpower" || f.gotOrg[plane.FinanceTxns] != "maxpower" {
+		t.Fatalf("a forged user/org reached the ledger: spend=%q txns=%q",
+			f.gotOrg[plane.FinanceSpend], f.gotOrg[plane.FinanceTxns])
 	}
 }
 
-func TestSummary_CommerceUnconfigured_HonestZeros(t *testing.T) {
-	// No commerce base/token: the summary degrades to honest zeros (200), NOT a 501 —
-	// a partial deploy still renders the screen; the source marker says "not connected".
-	app := mountApp(t, "", "")
+func TestSummary_NoCommerceInTheFleet_HonestZeros(t *testing.T) {
+	// No commerce peer at all: the summary degrades to honest zeros (200), NOT a
+	// 501 — a partial deploy still renders the screen; the source marker says
+	// "not connected". There is no "unconfigured" shape any more, because there is
+	// nothing to configure: this is a fleet that runs no commerce.
+	dir, err := os.MkdirTemp("", "zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("ZIP_RUNTIME_DIR", dir)
+	plane.Unbind()
+	t.Cleanup(plane.Unbind)
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
+	app := mountApp(t)
 	code, body := call(t, app, "/v1/usage/summary", "maxpower/dave", "maxpower")
 	if code != 200 {
 		t.Fatalf("unconfigured: want 200 honest zeros, got %d (%s)", code, body)
 	}
 	s := decodeSummary(t, body)
 	if s.Spend.Available || s.Sources.Commerce {
-		t.Fatalf("spend must be honest-empty when commerce is unconfigured: %+v", s.Sources)
+		t.Fatalf("spend must be honest-empty when no commerce runs here: %+v", s.Sources)
 	}
 	if s.Spend.TotalCents != 0 || s.Spend.MTDCents != 0 {
-		t.Fatalf("unconfigured spend must be zero, got total=%d mtd=%d", s.Spend.TotalCents, s.Spend.MTDCents)
+		t.Fatalf("spend with no ledger must be zero, got total=%d mtd=%d", s.Spend.TotalCents, s.Spend.MTDCents)
 	}
 	if s.Spend.ByCategory == nil || s.Spend.Series == nil {
 		t.Fatal("slices must serialize as [] (non-nil) even when unconfigured")
@@ -204,7 +247,7 @@ func TestSummary_CommerceUnconfigured_HonestZeros(t *testing.T) {
 }
 
 func TestSummary_BadRange_400(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t)
 	code, _ := call(t, app, "/v1/usage/summary?range=bogus", "maxpower/dave", "maxpower")
 	// ResolveCloudUsageWindow rejects an unknown range enum with a 400.
 	if code != http.StatusBadRequest {
