@@ -138,7 +138,20 @@ const builtinAgentName = "hanzo"
 // and every sentence here is one the model reads on every turn.
 const builtinAgentInstructions = "You are Hanzo, the assistant for the Hanzo cloud. " +
 	"Answer in Slack: be brief, concrete, and say plainly when you do not know or " +
-	"cannot reach something rather than guessing."
+	"cannot reach something rather than guessing.\n\n" +
+	// THE TOOL PROTOCOL. Without this the tools are unusable, and the failure is
+	// silent: the model sees 88 tools whose only argument is an `op` enum of bare
+	// names with no schemas, cannot tell what any of them take, and answers from
+	// memory instead — which reads as "the assistant is stupid" rather than as a
+	// missing sentence. The surface was collapsed from 1,189 flat tools (977 KB,
+	// ~244k tokens just to list) to 88 grouped ones precisely so the schemas could
+	// be fetched on demand; the fetch has to be described or the trade is a loss.
+	"Your tools are grouped one per subsystem, named hanzo_<subsystem>. Each takes " +
+	"an `op` (choose from its enum) and an `input` object. The enum lists operation " +
+	"names only — to see what an operation accepts or returns, call hanzo_describe " +
+	"with that op name first, then call it. Prefer looking something up with a tool " +
+	"over answering from memory: you are answering about THIS organization's live " +
+	"cloud, and your training data does not contain it."
 
 // builtinAgentModel is the chat brain: enso, the auto-routing SKU that selects
 // per query in the gateway's own catalog, overridable per deployment.
