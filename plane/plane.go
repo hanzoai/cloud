@@ -2092,8 +2092,14 @@ type RefTip struct {
 }
 
 // AgentPRIn opens the native PR work item for a pushed branch.
+//
+// IT CARRIES NO ORG, deliberately, and for the same reason [IssueIn] carries
+// none: the org is the CALLER's plane identity (cloud.Who), and a field here
+// would let a caller state the tenant it is filing into — which is a
+// cross-tenant WRITE the caller asserted for itself. Two ops share this socket
+// and they must not disagree about where tenancy comes from; the one that reads
+// it off the wire is the one that is wrong.
 type AgentPRIn struct {
-	Org      string `json:"org"`
 	Project  string `json:"project,omitempty"`
 	Repo     string `json:"repo"`
 	Base     string `json:"base,omitempty"`
