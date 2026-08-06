@@ -31,7 +31,7 @@ type fakeFinance struct {
 // ListUsage satisfies the optional co-resident usage-read capability coResidentUsage
 // resolves; returns the seeded rows so a test can prove the usage view answers from the
 // ledger instead of the self-dispatching commerce hop.
-func (f *fakeFinance) ListUsage(context.Context, string, int) ([]finance.UsageRow, error) {
+func (f *fakeFinance) ListUsage(context.Context, string, bool, int) ([]finance.UsageRow, error) {
 	return f.usageRows, f.err
 }
 
