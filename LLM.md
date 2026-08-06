@@ -3977,6 +3977,55 @@ then falls through to the network and DNS-resolves the in-process placeholder. T
 the failure `apps/commerce/transport` documents: balance reads that answer
 "Insufficient balance" on funded accounts, with DNS named as the cause.
 
+**The commerce transport is being DELETED, and here is exactly how far that got.**
+`apps/commerce/transport` exists so a co-resident caller can reach commerce's S2S
+billing surface. It does that by building an `*http.Request` and dispatching it
+into the whole shared fiber app — every edge middleware — which is why it carries
+`maxDepth = 8` counted in a map keyed on a goroutine id parsed out of
+`runtime.Stack`: a middleware that read commerce while serving a commerce read
+re-entered the app without bound. The counter is a description of the defect, not
+a fix. The fix is to call the OPERATION instead of re-entering the router.
+
+Worse than the recursion: most of those paths are not registered in this binary at
+all. commerce's own `api.Route()` bundle is behind `//go:build cloud` and is never
+compiled here, so `/v1/billing/usage/rollup` and `/v1/billing/transactions`
+dispatch to a 404 and `/v1/billing/balance` re-enters cloud's OWN customer handler
+and 401s. Split into per-app binaries — the real deployment, ~25 processes — the
+base URL is empty everywhere but commerce's process, so each reader reported itself
+"not configured" and answered a silent zero. That is not a degraded path; it is a
+path that has never worked in either shape.
+
+CONVERTED (they ask the ledger by name, over `plane/commerce`): `apps/books`,
+`apps/usage`, `apps/payout` (and with it `apps/referrals`, `apps/affiliates`,
+`apps/authors`). `plane.FinanceSpend` is the op that answers "what has this org
+consumed" — the ledger's own windowed sum, the same figure the rolling spend cap
+reads. `plane.FinanceTxns` now takes a `TxnsIn` naming the books (`test`) and the
+page size, because sandbox money and real money are physically separate files and a
+reader that posts test rows into real revenue restates the company's income.
+
+STILL ON THE TRANSPORT, and why: `apps/metering` (`/v1/billing/tier`,
+`/v1/billing/alerts/authorize`), `apps/admin/commerce` (`/v1/billing/subscriptions`,
+`/v1/costs`), `apps/content/storefront` (`/v1/store/current`, `/v1/product/{handle}`),
+`apps/billing` (the `gpu/eligibility` and `portal/methods` proxies). Each of these
+answers from commerce's OWN datastore through a handler in the `hanzoai/commerce`
+module whose logic lives in unexported helpers — so a plane op for them means the
+payments.go pattern (export a value-taking core from the module, declare the op on
+it here), NOT a second implementation in cloud. Writing the verdict twice is how a
+spend cap and a rate limit come to disagree about which requests they bind. Until
+those land, `maxDepth`, the goroutine-id parsing and `CLOUD_COMMERCE_HTTP_URL`
+stay — the conversion is not done, and nothing should pretend otherwise.
+
+**A co-resident peer call does not touch a socket.** `plane.Ask` asks
+`zip.Serving(app)` first (zip v1.26.1+): when this process serves that app's
+canonical socket, the op runs through `zip.Here` — the op's own invoke seam, the
+same validate/authorize core REST and MCP land on — with no dial, no encode and no
+router. Measured under `strace` with `connect()` traced: six op handlers ran, and
+the only four `connect()` syscalls in the binary were the test harness's own
+readiness probes. The decision is made once, inside the one dispatcher, so a caller
+names the op and never learns where it ran. See `apps/commerce/here_test.go`, which
+proves it by UNLINKING the socket and showing the nested read still answers, with a
+mutation that breaks the direct path and shows the call fail.
+
 **The gate only enforces on a kind that costs something.** `ResourceMeter.Gate`
 short-circuits to allow for `costCents <= 0`, and most per-kind fees default to 0, so a
 suite that does not price a kind proves nothing about billing. `e2e/run.sh` prices one
