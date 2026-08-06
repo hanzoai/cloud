@@ -97,6 +97,13 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 		plane.ScopeRules{},
 		plane.SlackSendIn{},
 		plane.StartIn{}, plane.Started{},
+		// The coding door's contract. It crosses on every run started from chat,
+		// and a map added to either half would fail the call INSIDE zip.Call,
+		// before the socket, with a healthy-looking peer and a shut door.
+		plane.CodingStartIn{}, plane.CodingStarted{},
+		// SlackSendIn grew a field (Update) and SlackSent is new — both are on the
+		// path a run narrates itself down.
+		plane.SlackSendIn{}, plane.SlackSent{},
 	}
 	for _, v := range types {
 		walkEncodable(t, reflect.TypeOf(v), reflect.TypeOf(v).Name())

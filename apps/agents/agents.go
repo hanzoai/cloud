@@ -196,6 +196,21 @@ type agentRunView struct {
 	Error      string `json:"error,omitempty"`
 	DurationMs int64  `json:"durationMs"`
 	CreatedAt  string `json:"createdAt"`
+
+	// What an operator needs to answer "what ran, for whom, and what did it do" —
+	// and, through traceId, to leave this record for the waterfall of the very
+	// same run rather than a search that hopefully lands near it.
+	//
+	// Agent is on the row because the org-wide feed lists runs across agents, and
+	// a run that cannot name its agent is an orphan in exactly the view built to
+	// make sense of many of them. Every field is omitempty: a run recorded before
+	// these columns existed reports absence rather than a zero it never measured.
+	Agent            string `json:"agent,omitempty"`
+	Actor            string `json:"actor,omitempty"`
+	TraceID          string `json:"traceId,omitempty"`
+	PromptTokens     int    `json:"promptTokens,omitempty"`
+	CompletionTokens int    `json:"completionTokens,omitempty"`
+	ToolCalls        int    `json:"toolCalls,omitempty"`
 }
 
 // ---- overview shapes (console Agents dashboard: metrics + activity) ----
@@ -270,6 +285,8 @@ func toRunView(r Run) agentRunView {
 	return agentRunView{
 		ID: r.ID, Status: r.Status, Model: cloud.ZenModel(r.Model), Input: r.Input, Output: r.Output,
 		Error: r.Error, DurationMs: r.DurationMs, CreatedAt: rfc3339(r.CreatedAt),
+		Agent: r.AgentName, Actor: r.Actor, TraceID: r.TraceID,
+		PromptTokens: r.PromptTokens, CompletionTokens: r.CompletionTokens, ToolCalls: r.ToolCalls,
 	}
 }
 
@@ -368,6 +385,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// collision, not a precedence.
 	zip.Get(g, "/metrics", o.metrics)
 	zip.Get(g, "/activity", o.activity)
+	zip.Get(g, "/runs", o.orgRuns)
 	// Live agent-session control plane: /v1/agents/sessions[/...].
 	mountSessions(s, app)
 	// Agent targets: /v1/agents/targets[/...] — the #48 dispatch destinations a
@@ -443,6 +461,18 @@ type runsQuery struct {
 type runList struct {
 	// Runs is the agent's executions, newest first.
 	Runs []agentRunView `json:"runs"`
+}
+
+// orgRunsQuery pages the org's runs across every agent.
+type orgRunsQuery struct {
+	// Limit caps how many runs come back, newest first. Absent, zero or out of
+	// range (1..200) reads as 50.
+	Limit int `json:"limit"`
+	// Status keeps only runs with this outcome ("ok" or "error"). Empty keeps
+	// both. It is the filter an operator reaches for first — "show me what broke"
+	// — and answering it here rather than by paging the whole history client-side
+	// is the difference between a usable feed and a download.
+	Status string `json:"status"`
 }
 
 // metricsQuery selects the dashboard window.
@@ -876,11 +906,32 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 	// nests under it, shipped over ZAP to o11y.
 	ctx, span := agentTracer.Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
+
+	// The run's NAME, minted before the work rather than after it.
+	//
+	// It used to be minted at the end of executeRun, beside the row it fills in,
+	// which reads naturally and made the run unobservable: every span the run
+	// produced — the step, each tool call, each LLM call — was already finished
+	// and exported by the time the run had a name, so none of them could carry
+	// it, and neither could the per-token debits the metering decorator makes
+	// round by round. The id existed only on the record of a thing that was
+	// already over. Minting it here is what lets one value be on the span, on the
+	// row and on the money, which is the whole of "drill into this run".
+	id, _ := genID("run")
+
 	span.SetAttributes(
 		attribute.String("hanzo.agent.name", a.Name),
 		attribute.String("hanzo.agent.org", a.Org),
 		attribute.String("gen_ai.request.model", a.Model),
+		attribute.String("hanzo.agent.run_id", id),
 	)
+	// WHO, not just which tenant. org answers "whose ledger"; actor answers "which
+	// person", and an operator asking why a run happened needs the second. A
+	// scheduled run has no person and says so by carrying no attribute, rather
+	// than by naming one that does not exist.
+	if sub := actorSub(a.Org, actor); sub != "" {
+		span.SetAttributes(attribute.String("hanzo.user", sub))
+	}
 
 	fee := cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind)
 	// Gate the AGENT's own org — never a caller default, never another tenant.
@@ -892,12 +943,25 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 		return Run{}, err
 	}
 
-	r := executeRun(ctx, s.State.ai, a.Org, actor, a, input, s.State.failoverModel)
+	r := executeRun(ctx, s.State.ai, a.Org, actor, a, input, s.State.failoverModel, id)
+	// The trace this run IS, written onto the run itself. Without it the console
+	// has a run with no way to reach its spans and a trace with no way to name its
+	// run: two records of one event that cannot be joined. It is read off the live
+	// span context, so it is the real id o11y stored, never a second one minted here.
+	if sc := span.SpanContext(); sc.HasTraceID() {
+		r.TraceID = sc.TraceID().String()
+	}
 	span.SetAttributes(
-		attribute.String("hanzo.agent.run_id", r.ID),
 		attribute.String("hanzo.agent.run_status", r.Status),
 		attribute.Int64("hanzo.agent.duration_ms", r.DurationMs),
 		attribute.String("gen_ai.response.model", r.Model),
+		// The run's own token account, on the run's own span. The per-call gen_ai
+		// spans carry each round's usage; a run is the sum of its rounds, and an
+		// operator asking "how many tokens did this run cost" should not have to
+		// add up a waterfall to find out.
+		attribute.Int("gen_ai.usage.input_tokens", r.PromptTokens),
+		attribute.Int("gen_ai.usage.output_tokens", r.CompletionTokens),
+		attribute.Int("hanzo.agent.tool_calls", r.ToolCalls),
 	)
 	if r.Status == "error" {
 		span.SetStatus(codes.Error, r.Error)
@@ -966,11 +1030,19 @@ const (
 //
 // actor is the run's billing identity (billingActor's "org/sub"), threaded so a
 // tool dispatch runs as the principal the run is charged to.
-func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Agent, input, fallback string) Run {
+func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Agent, input, fallback, runID string) Run {
 	// Child step span; the AI client opens its own GenAI span nested under this.
 	ctx, span := agentTracer.Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
-	span.SetAttributes(attribute.String("gen_ai.request.model", a.Model))
+	// The run's name on every span it produces, not only on the root. A trace
+	// query that finds a slow LLM call or a failing tool should answer "which run"
+	// from the row it already has, rather than by walking parents up a waterfall —
+	// and a step whose parent was dropped (a sampled or truncated trace) is still
+	// attributable rather than orphaned.
+	span.SetAttributes(
+		attribute.String("gen_ai.request.model", a.Model),
+		attribute.String("hanzo.agent.run_id", runID),
+	)
 
 	prompt := a.Instructions
 	if in := strings.TrimSpace(input); in != "" {
@@ -1001,17 +1073,17 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 		attribute.Int("hanzo.agent.tools_declared", len(a.Tools)),
 		attribute.Int("hanzo.agent.tools", len(defs)),
 	)
+	var tools int
 	if len(defs) > 0 {
-		resp, used, aiErr = completeWithTools(ctx, ai, org, actor, prompt, a.Model, fallback, defs)
+		resp, used, aiErr, tools = completeWithTools(ctx, ai, org, actor, prompt, a.Model, fallback, defs, runID)
 	} else {
 		resp, used, aiErr = completeWithFailover(ctx, ai,
-			&types.ChatRequest{Model: a.Model, Org: org, Prompt: prompt}, fallback)
+			&types.ChatRequest{Model: a.Model, Org: org, Prompt: prompt, RunID: runID}, fallback)
 	}
 	dur := time.Since(start).Milliseconds()
-	id, _ := genID("run")
 	r := Run{
-		ID: id, Org: org, AgentName: a.Name, Model: used, Input: input,
-		DurationMs: dur, CreatedAt: time.Now().Unix(),
+		ID: runID, Org: org, AgentName: a.Name, Model: used, Input: input, Actor: actor,
+		DurationMs: dur, CreatedAt: time.Now().Unix(), ToolCalls: tools,
 	}
 	if aiErr != nil {
 		span.RecordError(aiErr)
@@ -1022,6 +1094,10 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 		r.Status = "ok"
 		if resp != nil {
 			r.Output = resp.Content
+			// The tokens the gateway actually reported. They were already in hand
+			// here and thrown away, which is why a run could be billed for an
+			// amount nothing on the run could explain.
+			r.PromptTokens, r.CompletionTokens = resp.PromptTokens, resp.CompletionTokens
 		}
 	}
 	return r
@@ -1133,6 +1209,58 @@ func (o agentOps) runs(ctx context.Context, in *runsQuery) (*runList, error) {
 	}
 	out := make([]agentRunView, 0, len(runs))
 	for _, r := range runs {
+		out = append(out, toRunView(r))
+	}
+	return &runList{Runs: out}, nil
+}
+
+// ListOrgRuns returns the org's agent runs across EVERY agent, newest first —
+// what ran here, for whom, on which model, how long it took, and why it failed.
+//
+// It is the feed the per-agent history could not be: an operator asking "what is
+// this tenant's agent plane doing" does not start out knowing an agent ref, and
+// answering by listing the agents and then paging each one's history is N+1 round
+// trips to reconstruct one ordering the database already has (RunsSince, ordered
+// by created_at over the org index).
+//
+// The org is the CALLER's, resolved from identity by tenantStore — never a
+// parameter. There is deliberately no org field on orgRunsQuery to forge: run
+// history is the tenant's own record, and the only tenant this can answer for is
+// the one asking.
+//
+// Example: {"limit": 20, "status": "error"}
+func (o agentOps) orgRuns(ctx context.Context, in *orgRunsQuery) (*runList, error) {
+	s := o.s
+	sto, org, err := tenantStore(ctx, &s.State)
+	if err != nil {
+		return nil, err
+	}
+	limit := in.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	// since=0 is "no lower bound" — the newest runs regardless of age, which is
+	// what a feed means. A status filter reads more rows than it returns, so it
+	// asks for a bounded multiple rather than scanning the whole history: the cap
+	// keeps a tenant with a million clean runs from paying a full scan to find no
+	// failures, and the page it returns is still exactly `limit` when they exist.
+	scan := limit
+	if strings.TrimSpace(in.Status) != "" {
+		scan = limit * 20
+	}
+	runs, err := sto.RunsSince(ctx, org, 0, scan)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
+	}
+	want := strings.TrimSpace(in.Status)
+	out := make([]agentRunView, 0, limit)
+	for _, r := range runs {
+		if want != "" && r.Status != want {
+			continue
+		}
+		if len(out) == limit {
+			break
+		}
 		out = append(out, toRunView(r))
 	}
 	return &runList{Runs: out}, nil
