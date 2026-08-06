@@ -580,6 +580,10 @@
           "royaltiesAccrued": {
             "type": "integer"
           },
+          "royaltyFailures": {
+            "description": "RoyaltyFailures is reported, not swallowed: a sweep that could not reach\nthe royalty store must not read as one that found nothing owed. The count\nwas already computed and then dropped on the floor, which is the same\nsilence the typed leg was added to end.",
+            "type": "integer"
+          },
           "swept": {
             "type": "integer"
           }
