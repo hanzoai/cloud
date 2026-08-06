@@ -271,16 +271,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // is the served one by construction.
 const searchPath = "/v1/websearch/search"
 
-// allMethods are the methods the document publishes for an `All` route, and
-// therefore the methods search's prose has to cover. SEVEN, not the five a REST
-// reader counts — OPTIONS and TRACE are published too, and describing five would
-// leave two operations carrying an operationId and nothing else, which is the exact
-// hole this prose closes.
-var allMethods = []string{
-	http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch,
-	http.MethodDelete, http.MethodOptions, http.MethodTrace,
-}
-
 // The prose for both surfaces, declared beside the wire facts that keep them
 // untyped (see the package doc for why neither can be a typed op). zipdoc lifts an
 // op's prose from its handler's doc comment and there is no typed op here to lift
@@ -288,10 +278,17 @@ var allMethods = []string{
 // else: eight SDK methods that cannot explain themselves and eight CLI commands
 // with no help text.
 //
-// Search states ONE fact seven times because it IS one handler answering every
-// method, and saying it seven different ways would be seven chances to be wrong.
+// Search states ONE fact once per published method because it IS one handler
+// answering every method, and saying it several different ways would be several
+// chances to be wrong.
+//
+// The method set comes from [openapi.Methods] — the projection's OWN set — and
+// not from a list here. A local copy is a second place to be right: this file
+// held one, it said seven methods including OPTIONS and TRACE, and the day the
+// document stopped publishing those two the copy went on describing operations
+// that no longer existed. Reading the projection's set moves both halves at once.
 func init() {
-	for _, method := range allMethods {
+	for _, method := range openapi.Methods() {
 		openapi.Describe(searchPath, method,
 			"Keyless web meta-search, in the SearXNG JSON envelope.",
 			"Answers {query, number_of_results, results:[{url, title, content, engine}]} — the "+

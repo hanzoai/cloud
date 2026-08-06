@@ -184,12 +184,14 @@ const (
 )
 
 // Dispatcher wires the seams. The two git functions are injected (not an
-// interface) because they are pure reads with no cloud-side state.
+// interface) because they are pure reads with no cloud-side state. Both take a
+// ctx: git is another PROCESS, so both are calls that can be slow, refused, or
+// cancelled with the run.
 type Dispatcher struct {
 	Sessions  Sessions
 	Tracker   Tracker
 	Runner    Runner
-	CloneURL  func(org, repo string) string
+	CloneURL  func(ctx context.Context, org, repo string) string
 	VerifyRef func(ctx context.Context, org, repo, branch string) (string, bool)
 	// Log is an optional structured log seam for best-effort mirror failures; nil
 	// is fine (mirror failures are non-fatal and simply dropped).
@@ -241,7 +243,7 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	}
 	cloneURL := ""
 	if d.CloneURL != nil {
-		cloneURL = d.CloneURL(org, repo)
+		cloneURL = d.CloneURL(ctx, org, repo)
 	}
 	if cloneURL == "" {
 		res.Error = "git is not available"
@@ -452,7 +454,7 @@ func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt strin
 	// clone URL (non-secret) to hand it.
 	cloneURL := ""
 	if d.CloneURL != nil {
-		cloneURL = d.CloneURL(org, repo)
+		cloneURL = d.CloneURL(ctx, org, repo)
 	}
 	if cloneURL == "" {
 		res.Error = "git is not available"

@@ -33,7 +33,7 @@ func storePath(t *testing.T, dir string, ns namespace.Namespace, subsystem strin
 // cache returns a stable per-tenant handle.
 func TestManager_PerTenantIsolation(t *testing.T) {
 	dir := t.TempDir()
-	m, err := NewManager(dir)
+	m, err := NewManager(dir, kindUsage)
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -121,7 +121,7 @@ func tenantNS(tenant string) (ns namespace.Namespace, ok bool) {
 // to it however it is spelled.
 func TestManager_HouseUnreachableByTenantName(t *testing.T) {
 	dir := t.TempDir()
-	m, err := NewManager(dir)
+	m, err := NewManager(dir, kindUsage)
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestManager_HouseUnreachableByTenantName(t *testing.T) {
 // break this layer exists to prevent.
 func TestManager_DistinctTenantsDistinctFiles(t *testing.T) {
 	dir := t.TempDir()
-	m, err := NewManager(dir)
+	m, err := NewManager(dir, kindUsage)
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestManager_DistinctTenantsDistinctFiles(t *testing.T) {
 // rather than rejects, so the property is "cannot escape", not "errors".
 func TestManager_TraversalStaysInDir(t *testing.T) {
 	dir := t.TempDir()
-	m, err := NewManager(dir)
+	m, err := NewManager(dir, kindUsage)
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}

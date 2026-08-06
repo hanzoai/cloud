@@ -133,15 +133,30 @@ func TestGuard_NonAdminMember_403(t *testing.T) {
 
 // ── listApps: tenant confinement ─────────────────────────────────────────────
 
-// An OrgAdmin of the platform org sees its own org's whole board (all hanzo* ns).
-func TestListApps_OrgAdmin_SeesOwnOrg(t *testing.T) {
+// The ORG ADMIN of the brand org sees NOTHING here. It is a customer-org admin,
+// not a platform operator.
+//
+// This test asserted the opposite — "an OrgAdmin of the platform org sees its
+// own org's whole board (all hanzo* ns)" — and that expectation WAS the
+// privilege bug, found by red on the third pass. `hanzo` is an IAM org like any
+// other, and the namespaces it appeared to "own" are the platform tier every
+// tenant runs on: iam, kms, gateway. A per-org isAdmin is never
+// platform-privileged (HIP-0519, and the CTO rule at the top of CLAUDE.md), and
+// this file's own deploy tests below already apply exactly that reasoning to
+// RESTARTING one of these services. Observing them is the same class of act,
+// only quieter — which is why it survived here while the mutation route was
+// gated correctly.
+//
+// The board is not lost: a SuperAdmin sees the whole fleet
+// (TestListApps_SuperAdmin_SeesFleet), which is who should.
+func TestListApps_BrandOrgAdmin_SeesNothing(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
 	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/platform/fleet", "z-uuid", "hanzo", true, false)
 	if code != http.StatusOK {
 		t.Fatalf("hanzo org-admin: want 200, got %d (%s)", code, body)
 	}
-	if n := appsTotal(t, body); n != 3 {
-		t.Fatalf("hanzo org-admin: want 3 apps (2 prod + 1 test), got %d (%s)", n, body)
+	if n := appsTotal(t, body); n != 0 {
+		t.Fatalf("PRIVILEGE: the brand org's admin was handed %d platform apps (%s)", n, body)
 	}
 }
 
@@ -195,12 +210,18 @@ func TestGetApp_ForeignOrgAdmin_404(t *testing.T) {
 	}
 }
 
-// The platform OrgAdmin reads its own app row.
-func TestGetApp_OrgAdmin_200(t *testing.T) {
+// The brand org's admin cannot read a platform service either — a clean 404,
+// the same answer any other customer-org admin gets, with no existence leak. It
+// asserted 200 before; see TestListApps_BrandOrgAdmin_SeesNothing for why that
+// expectation was the bug rather than the contract.
+func TestGetApp_BrandOrgAdmin_404(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/platform/fleet/iam", "z-uuid", "hanzo", true, false)
-	if code != http.StatusOK {
-		t.Fatalf("hanzo admin reading iam: want 200, got %d (%s)", code, body)
+	if code, _ := fleetDoAs(t, app, http.MethodGet, "/v1/platform/fleet/iam", "z-uuid", "hanzo", true, false); code != http.StatusNotFound {
+		t.Fatalf("PRIVILEGE: the brand org's admin read a platform service: want 404, got %d", code)
+	}
+	// A SuperAdmin still reads it.
+	if code, _ := fleetDoAs(t, app, http.MethodGet, "/v1/platform/fleet/iam", "root", "admin", false, true); code != http.StatusOK {
+		t.Fatalf("superadmin reading iam: want 200, got %d", code)
 	}
 }
 

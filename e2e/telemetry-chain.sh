@@ -38,12 +38,16 @@ done
 echo "== 3. telemetry is arriving, not just accepted =="
 # The load-bearing check. Stage 1 can pass while nothing is stored: the door
 # 200s, the collector is dead, and the write never happens.
-for probe in "traces:o11y_traces.o11y_index_v3:timestamp" "logs:o11y_logs.logs_v2:toDateTime(max(timestamp)/1e9)"; do
-  name="${probe%%:*}"; rest="${probe#*:}"; tbl="${rest%%:*}"; expr="${rest#*:}"
-  [ "$name" = "traces" ] && expr="max(timestamp)"
+# Both signals live in the one event plane and date themselves with the same
+# `time` column, so there is no per-probe expression left to carry. They used to
+# be o11y_traces.o11y_index_v3 and o11y_logs.logs_v2; those databases are gone,
+# which made this stage report the chain BROKEN unconditionally -- a check that
+# always fails tells you nothing, and hides the outage it exists to catch.
+for probe in "traces:event.span" "logs:event.log"; do
+  name="${probe%%:*}"; tbl="${probe#*:}"
   mins=$(kubectl exec -n "$NS" "$POD" -- bash -lc \
     "hanzo-datastore client --host 127.0.0.1 --port 9000 --user \"\$DATASTORE_USER\" --password \"\$DATASTORE_PASSWORD\" \
-     -q \"SELECT dateDiff('minute', $expr, now()) FROM $tbl\"" 2>/dev/null | tr -d '[:space:]')
+     -q \"SELECT dateDiff('minute', max(time), now()) FROM $tbl\"" 2>/dev/null | tr -d '[:space:]')
   if [ -n "$mins" ] && [ "$mins" -lt 30 ] 2>/dev/null; then
     ok "$name last written ${mins}m ago"
   else

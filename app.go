@@ -1,6 +1,10 @@
 package cloud
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -29,16 +33,18 @@ import (
 // the kernel answers which process is calling, and the boundary's findings travel
 // with the request.
 //
-// name is what the program calls itself in a diagnostic. tools is the MCP surface,
-// which only a program holding a subsystem list can project — everyone else passes
-// nil and serves none.
+// name is what the program calls itself in a diagnostic. tools is the per-caller
+// half of this program's agent door — the tools that exist because of WHO is
+// asking, which only a program holding a subsystem list can declare; everyone
+// else passes nil and offers none. The door itself is not optional either way:
+// see [callerTools].
 func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	app := zip.New(zip.Config{
 		AppName:        name,
 		Logger:         deps.Logger,
 		ReadBufferSize: cfg.ReadBufferSize,
 		BodyLimit:      cfg.BodyLimit,
-		MCP:            zip.MCPConfig{Source: tools},
+		MCP:            zip.MCPConfig{Source: callerTools(tools)},
 		// Cloud's refusal renderer, in place of zip's default — which reads only a
 		// *zip.HTTPError and answers 500 for everything else, so a propagated 402
 		// or 403 reached the console as a dead card. See errmap.go.
@@ -135,11 +141,69 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	//     public client IP; in-cluster direct callers (no X-Forwarded-For) are
 	//     exempt, matching the standalone gateway's public-only scope. See
 	//     middleware_edge.go.
-	app.Use(EdgeCORS(deps.GatewayPolicy))
+	//
+	// RATE LIMIT FIRST. EdgeCORS now resolves an unknown origin against the site-host
+	// store, which in production is a plane hop, and the Origin header is chosen by
+	// the caller — so an attacker rotating a fresh hostname per request would defeat
+	// the answer cache and turn each inbound request into an internal one. The
+	// per-IP counter is a map increment and bounds that structurally, with no second
+	// mechanism to tune. The cost is that a flood of PREFLIGHTS is capped too, which
+	// is the correct answer to a flood of preflights.
 	app.Use(EdgeRateLimit(deps.GatewayPolicy))
+	app.Use(EdgeCORS(deps.GatewayPolicy))
 
 	Identify(app, cfg)
 	return app
+}
+
+// callerTools is this program's per-caller tool half — and stating it, rather
+// than leaving it nil, is what makes the agent door UNCONDITIONAL.
+//
+// zip mounts the door only for an app that has something to project: a typed op,
+// a composed plugin's catalogue, or a per-caller Source. With all three absent it
+// returns before registering the route at all (zip@v1.25.1 mcp.go:99). That is
+// the right default for a program nobody interrogates, and the wrong one for
+// every program built here, because the fleet's door ASKS EVERY COMPOSED
+// SUBSYSTEM on each tools/list (fleet.Ask). A subsystem whose routes are all raw
+// — a reverse proxy, or a surface owned by another module — projects no typed op,
+// so nothing claimed POST /mcp in its process, so the ask fell through to the
+// console's terminal handler and was answered with the signpost that is correct
+// only on the front door: 308 → /v1/mcp, an address a child does not serve
+// (webui/mcp.go:44). Thirty of the fleet's subsystems — the whole of exec, tasks,
+// agent, ask, websearch, crawl, index, kms, billing, platform and twenty more —
+// were reported UNREACHABLE that way while every one of them was up, healthy and
+// serving its REST surface.
+//
+// A door whose registry is empty answers {"tools":[]}, and that is a REAL answer:
+// "asked, and serves nothing" is a different fact from "could not be asked", and
+// keeping those two apart is the whole of package fleet. Its hanzo.ai/unavailable
+// list means nothing while a healthy subsystem has no way to say the first one.
+//
+// nil in, empty out. A program that declares no Plugin.Door still HAS a
+// per-caller half; it simply holds no tools. It is consulted once per tools/list
+// that names an org, answers nothing, and zip then returns the same pre-rendered
+// bytes it always did — the memcpy that makes tools/list free is untouched (zip
+// listTools: len(mine) == 0 ⇒ the build-time array, verbatim).
+func callerTools(declared zip.Source) zip.Source {
+	if declared != nil {
+		return declared
+	}
+	return noCallerTools{}
+}
+
+// noCallerTools is the per-caller half of a program that declares none: no tools
+// exist because of who is asking, and a name nobody projected is nobody's.
+//
+// Its Call is reached only for a name the build-time catalogue did not claim, and
+// it answers with the same sentence zip's own miss does — the fleet's door never
+// routes one here (it refuses an unlisted name itself, fleet/mcp.go), so this is
+// the reply to a client that guessed.
+type noCallerTools struct{}
+
+func (noCallerTools) Tools(context.Context) []map[string]any { return nil }
+
+func (noCallerTools) Call(_ context.Context, name string, _ json.RawMessage) (any, error) {
+	return nil, fmt.Errorf("unknown tool: %s", name)
 }
 
 // Identify gives an app a trustworthy answer to who is calling, and makes that
