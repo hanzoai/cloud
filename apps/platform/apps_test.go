@@ -278,3 +278,19 @@ func newJSONRequest(t *testing.T, method, path string, body any) *http.Request {
 	req.Header.Set("Content-Type", "application/json")
 	return req
 }
+
+// Building and committing in one call can never succeed — the image the build
+// would produce does not exist when the commit proves pullability — so it is
+// refused BEFORE a privileged build is spent on it.
+func TestBuildAndCommitInOneCallIsRefusedBeforeTheBuild(t *testing.T) {
+	app := mountDelivery(t)
+	code, body := doAdmin(t, app, http.MethodPost, "/v1/platform/apps", "acme", map[string]any{
+		"repo": "https://github.com/acme/web", "mode": "commit",
+	})
+	if code != http.StatusBadRequest {
+		t.Fatalf("want 400 for build+commit, got %d %s", code, body)
+	}
+	if !strings.Contains(string(body), "then commit that tag") {
+		t.Errorf("the refusal must name the two-step flow: %s", body)
+	}
+}
