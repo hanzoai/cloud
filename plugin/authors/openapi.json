@@ -423,45 +423,59 @@
       "adminAuthorView": {
         "properties": {
           "accruedCents": {
+            "description": "AccruedCents is lifetime royalty accrued, in integer USD cents: the sum of\nevery latched accrual (spend × shareBps / 10000). It only ever rises — a\npayout is recorded against paidCents and never reduces this.",
             "type": "integer"
           },
           "approvedAt": {
+            "description": "ApprovedAt is unix seconds of the first approval, and 0 means never approved —\nwhich is also \"has never been able to accrue\". Re-approving to renegotiate the\nshare leaves it at the original date.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is unix seconds at the FIRST connect. Re-connecting re-links the\nlogin and leaves this alone, so it dates the enrolment, not the latest link.",
             "type": "integer"
           },
           "deployCount": {
+            "description": "DeployCount is how many attribution edges point at this author — one per\n(repository, project, deploying org), so re-deploying the same project adds\nnone. It includes self-deploys, which are recorded for provenance and excluded\nfrom accrual, so it measures reach, not the earning set.",
             "type": "integer"
           },
           "githubLogin": {
+            "description": "GithubLogin is the linked forge account, lowercased. It comes from IAM's\nlinked account when the connect had one — which is also what sets verified —\nand otherwise from the login the caller declared. The treasury author carries\n\"\u003cbrand\u003e-maintainers\".",
             "type": "string"
           },
           "id": {
+            "description": "ID is the author record's server-minted handle, \"aut_\"-prefixed. It is the id\nthe approve, suspend, payout and admin-basis routes address.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant org that owns this author record — UNIQUE, one author per\norg. It is exposed HERE and nowhere else (Author.Org is json:\"-\" on the tenant\nsurface), and it is the org excluded from this author's own accrual: deploying\nyour own repo earns you nothing.",
             "type": "string"
           },
           "paidCents": {
+            "description": "PaidCents is lifetime royalty RECORDED as paid, in integer USD cents. It rises\nthe moment a payout reserves against pending — recording, not settling; a human\nmoves the money out of band — and falls back only when a payout is voided.",
             "type": "integer"
           },
           "pendingCents": {
+            "description": "PendingCents is what a payout may still draw against — accrued − paid, floored\nat zero. It is derived for each response, never stored, and it is the exact\nfigure the atomic payout guard refuses to exceed.",
             "type": "integer"
           },
           "repoCount": {
+            "description": "RepoCount is how many of this author's repository claims are VERIFIED, counted\nfor this response in one GROUP BY over the whole table rather than a query per\nrow. The single-author replies from approve, suspend and payout report 0: they\ncarry the mutated row, not a re-listing.",
             "type": "integer"
           },
           "shareBps": {
+            "description": "ShareBps is the royalty rate accrual applies, in basis points of a deploying\norg's metered spend for the period: 2000 (the platform default) is 20%, 10000\nwould be the entire spend. The platform keeps 10000 − shareBps. Changing it\nnever rewrites history — each ledger row keeps the rate it was written with.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is connected, approved or suspended. Only an approved author accrues;\na connected one may verify repos and collect deploy edges but earns nothing\nuntil a reviewer admits it.",
             "type": "string"
           },
           "suspendedAt": {
+            "description": "SuspendedAt is unix seconds of the most recent suspension. 0 means the author\nis not suspended: either never was, or was and has since been approved again,\nwhich clears this back to 0.",
             "type": "integer"
           },
           "verified": {
+            "description": "Verified is IDENTITY proof of the login, NOT proof of any repository: true\nwhen the connect took the login from IAM's linked forge account (and for the\nseeded treasury author), false when the caller merely declared it. A false\nhere still earns — repository ownership is proven separately, per claim.",
             "type": "boolean"
           }
         },
@@ -525,24 +539,31 @@
       "authorProgramSummary": {
         "properties": {
           "accruedCents": {
+            "description": "AccruedCents is the page's lifetime royalty accrued, in integer USD cents.",
             "type": "integer"
           },
           "approved": {
+            "description": "Approved is how many are admitted and accruing.",
             "type": "integer"
           },
           "connected": {
+            "description": "Connected is how many of those are enrolled but not yet admitted to earning.",
             "type": "integer"
           },
           "paidCents": {
+            "description": "PaidCents is what has been RECORDED as paid across the page, in integer USD\ncents. Recorded, not settled: the money leaves in a human's hands.",
             "type": "integer"
           },
           "pendingCents": {
+            "description": "PendingCents is what the platform still owes across the page, in integer USD\ncents — the sum of each author's own accrued − paid, each floored at zero.",
             "type": "integer"
           },
           "suspended": {
+            "description": "Suspended is how many have been stopped from accruing further. An author holds\nexactly one status, so the three buckets never overlap and connected +\napproved + suspended = total.",
             "type": "integer"
           },
           "total": {
+            "description": "Total is how many author records this response actually carried. The roll-up\nis folded over the SAME page as authors — newest first, bounded by limit\n(default 500, ceiling 1000) — so on a program larger than the page it\nsummarizes that page, not the fleet.",
             "type": "integer"
           }
         },
@@ -551,21 +572,27 @@
       "authorRepo": {
         "properties": {
           "badgeMarkdown": {
+            "description": "BadgeMarkdown is the ready-to-paste README snippet, DERIVED for each response\nfrom this deployment's badge host and never stored: a \"Deploy on Hanzo\" image\nlinking to the one-click import of this repository. Re-hosting the builder\nchanges every badge without touching a row.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is unix seconds when the claim was first recorded. It equals\nverifiedAt on the first proof and then stays put while verifiedAt moves, so the\npair reads as \"claimed since / last proven\".",
             "type": "integer"
           },
           "method": {
+            "description": "Method is HOW ownership was proven: \"oauth\" — an IAM-linked forge token showed\nadmin or push on the repository; \"file\" — a hanzo.json on the default branch\ncarried this author's verify code; or \"maintainer\" — the repository sits in a\nfirst-party namespace, where ownership is intrinsic and the treasury author\nholds it with no proof step. Omitted on a row written before the method was\nrecorded.",
             "type": "string"
           },
           "repoUrl": {
+            "description": "RepoURL is the claim key in canonical form — lowercased \"host/owner/name\",\nno scheme, no .git, host ∈ {github.com, gitlab.com}. A deploy's source repo is\nnormalized through the same function before attribution, so the two sides can\nnever miss on a cosmetic difference. UNIQUE across every author: first proven\nclaim wins.",
             "type": "string"
           },
           "verified": {
+            "description": "Verified reports that ownership was proven. Only a proven claim is ever\nwritten, so it is true on every row this surface returns; the deploy path\nre-reads it regardless, because an unverified claim attributes nothing.",
             "type": "boolean"
           },
           "verifiedAt": {
+            "description": "VerifiedAt is unix seconds of the most recent successful proof. Re-verifying\nrefreshes it, and the method beside it, in place.",
             "type": "integer"
           }
         },
@@ -745,21 +772,27 @@
       "orgView": {
         "properties": {
           "badgeMarkdown": {
+            "description": "BadgeMarkdown is the ready-to-paste README snippet, DERIVED for each response\nfrom this deployment's badge host and never stored — here it deep-links the\nOWNER's template import rather than one repository's.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is unix seconds when the owner claim was first recorded — equal to\nverifiedAt on the first proof, then fixed while verifiedAt moves.",
             "type": "integer"
           },
           "method": {
+            "description": "Method is HOW the owner was proven, always against its \".github\" control\nrepository: \"oauth\" — an IAM-linked forge token showed admin or push on it; or\n\"file\" — a hanzo.json on its default branch carried this author's verify code.\nThe \"maintainer\" shortcut is a per-repository attribution and never appears\nhere. Omitted on a row written before the method was recorded.",
             "type": "string"
           },
           "ownerUrl": {
+            "description": "OwnerURL is the claim key in canonical form — lowercased \"host/owner\" with NO\nrepository segment, host ∈ {github.com, gitlab.com}. It covers every repository\nunder that owner, so code with no claim of its own still earns; a per-repository\nclaim outranks it. UNIQUE across every author: first proven claim wins.",
             "type": "string"
           },
           "verified": {
+            "description": "Verified reports that ownership of the WHOLE owner was proven — against that\nowner's \".github\" control repository, which is exactly as strong as a\nper-repository claim. Only a proven claim is written, so every row returned\nhere is true.",
             "type": "boolean"
           },
           "verifiedAt": {
+            "description": "VerifiedAt is unix seconds of the most recent successful proof of the owner;\nre-verifying refreshes it, and the method beside it, in place.",
             "type": "integer"
           }
         },
@@ -819,18 +852,23 @@
       "payoutView": {
         "properties": {
           "amountCents": {
+            "description": "AmountCents is the amount RESERVED against pending royalty, in integer USD\ncents, always positive. The reservation is atomic and can never exceed\naccrued − paid, so this is owed money moved out of pending — not money moved.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is unix seconds when the payout was RECORDED — the moment the amount\nleft pending, not the moment a human moved the money.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the payout row's server-minted handle, \"apo_\"-prefixed. A caller never\nsupplies it; it is what an operator quotes when reconciling a settlement.",
             "type": "string"
           },
           "method": {
+            "description": "Method is how the operator says this settles, lowercased as recorded.\n\"credits\" is the one method that means the author's own wallet; anything else\n— wire, paypal, check — is a cash disbursement a human performs. Recording it\npays nobody either way.",
             "type": "string"
           },
           "reference": {
+            "description": "Reference is the operator's external handle for the settlement: a wire\nconfirmation, a PayPal transaction id. Absent when none was given.",
             "type": "string"
           },
           "settlement": {
@@ -838,6 +876,7 @@
             "type": "string"
           },
           "txn": {
+            "description": "Txn is the commerce ledger transaction id of a SETTLED credits payout, and it\nis absent on every payout this service records. Recording moves no money, and\nauthors asks the money plane exactly one question — what has this org spent? —\nwith no write to answer it with, so there is no receipt to carry. It fills in\nonly when a settlement stamps its transaction back onto the row.",
             "type": "string"
           }
         },

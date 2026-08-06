@@ -28,13 +28,22 @@
 APPDIR := $(patsubst %/,%,$(dir $(abspath $(firstword $(MAKEFILE_LIST)))))
 ROOT   ?= $(abspath $(APPDIR)/../..)
 
+# Where the binary lands and what it is called. Two seams with one caller —
+# mk/fleet.mk's `dist`, which builds each app for every platform into one flat
+# directory, and a flat directory cannot hold two `billing`s. There is no second
+# naming rule: SUFFIX is empty for every other caller, so `build` still writes
+# exactly $(BIN)/<app>, and the publishable layout is this same recipe with the
+# platform spelled into the name (hanzoai/ci's Go lane writes <name>-<os>-<arch>
+# too, and manifest/release.go keys on that triple).
+SUFFIX ?=
+
 ifeq ($(strip $(APPS)),)
 $(error APPS is unset — a Makefile including mk/plugin.mk must name the app(s) it backs)
 endif
 
 include $(ROOT)/mk/go.mk
 
-BIN := $(ROOT)/bin
+BIN ?= $(ROOT)/bin
 
 .DEFAULT_GOAL := help
 .PHONY: help generate build test vet describe clean
@@ -56,18 +65,27 @@ help: ## Show this help.
 #
 # An external app's source is another module: nothing here to lift, and nothing
 # writable to lift it into.
+#
+# GOOS/GOARCH are CLEARED for it. The directive is `go run
+# github.com/zap-proto/zip/cmd/zipdoc` — a HOST tool — so inheriting a
+# cross-compilation target builds an amd64 zipdoc on an arm64 box and then tries
+# to exec it. A generator runs where make runs, always; the target platform is a
+# property of the artifact, never of the tool that writes its source.
 generate: ## Lift this app's typed-handler doc comments into zipdoc_gen.go.
 	@ls $(APPDIR)/*.go >/dev/null 2>&1 || exit 0; \
-	 $(GO) generate -run zipdoc $(APPDIR)/...
+	 GOOS= GOARCH= $(GO) generate -run zipdoc $(APPDIR)/...
 
 # One binary per app, into the shared ./bin the host resolves plugins from
-# (manifest.App.Plugin looks for a file beside the host). Sequential: each link
-# peaks in the GiBs.
+# (manifest.App.Plugin looks for a file beside the host). Sequential over $(APPS)
+# because that list is at most two long — the fleet's parallelism is one level
+# up, where the apps are (mk/fleet.mk), which is the level that can actually
+# bound how many links run at once. Measured, the heaviest link in this repo is
+# o11y at 1.67 GB resident; that number is what mk/fleet.mk divides the box by.
 build: generate ## Build this app's binary into <root>/bin.
 	@mkdir -p $(BIN) $(TMPDIR)
 	@for a in $(APPS); do \
-	  echo ">> build $$a"; \
-	  CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN)/$$a $(ROOT)/plugin/$$a || exit 1; \
+	  echo ">> build $$a$(SUFFIX)"; \
+	  CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN)/$$a$(SUFFIX) $(ROOT)/plugin/$$a || exit 1; \
 	done
 
 test: ## Run this app's tests.
