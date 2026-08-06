@@ -33,7 +33,12 @@ type Deps struct {
 	Logger luxlog.Logger
 
 	// Brand is the white-label brand identifier for this deployment.
-	// Values: "hanzo", "lux", "zoo", "osage", "pars", or any customer brand.
+	// Values: exactly the ids in the brand registry (brand/brand.go) — "hanzo",
+	// "lux", "zoo", "pars", "bootnode". It is NOT open: brand.For folds an
+	// unregistered id to hanzo, silently, so an unlisted brand does not get its
+	// own issuer or domain — it gets Hanzo's. This said `"osage", ... or any
+	// customer brand`, which was wrong in both directions; brand.Registered is
+	// the fallible check for anything that must actually know.
 	Brand string
 
 	// Version is the API contract/build version emitted as the X-Api-Version
@@ -45,15 +50,25 @@ type Deps struct {
 	// bypasses billing (every env bills against its own commerce ledger).
 	Env string
 
-	// Self is THIS process's stable id — the StatefulSet ordinal (CLOUD_POD_NAME /
-	// POD_NAME) or the OS hostname. It is the SAME id the durability membership
-	// elects on (selfID), so a status a subsystem reports names the replica the ring
-	// already knows by that name. Any read that is one replica's answer rather than
-	// the fleet's must say WHICH replica, or "restarts: 3" is unactionable.
-	Self string
+	// Self is not here. It was — THIS process's stable id, the StatefulSet ordinal
+	// or the OS hostname — with a doc comment describing how a subsystem would
+	// name the replica a status came from. No subsystem ever did: it had ZERO
+	// readers. The id itself is real and still resolved by selfID(cfg), which the
+	// durability membership elects on; what was dead was the copy on Deps. A field
+	// whose justification is written entirely in the future tense is a plan, not a
+	// dependency.
 
-	// Domain is the deployment's primary domain (e.g. "api.hanzo.ai",
-	// "api.osage.cloud"). Subsystems use this to scope URLs in responses.
+	// Domain is the deployment's OWN public API host (api.hanzo.ai, api.lux.network)
+	// — the host this process answers on, used to build absolute URLs back to
+	// itself: an OAuth redirect_uri, an avatar URL, a git clone URL.
+	//
+	// It is the HOST and never the apex. Those are two facts, and reading one for
+	// the other is what made every native build fail: apps/platform took this
+	// value as the git apex it trusts, but a deployment's forge (git.hanzo.ai) is
+	// a SIBLING of its API (api.hanzo.ai), not a child, so the allowance could
+	// never match. Anything that needs the apex — a sibling host, a trust root,
+	// a self-domain floor — calls brand.Apex/brand.Sibling, which is the one
+	// derivation of it. Do not re-derive it from this field.
 	Domain string
 
 	// IAMIssuer is the canonical OIDC issuer (JWKS source) for this brand,
@@ -87,19 +102,15 @@ type Deps struct {
 	// reattaches its PVC across a restart). One field gates the whole live-routing path.
 	LiveMembers func() []ha.Member
 
-	// AIDefaultModel is the served model a subsystem uses when a caller supplies
-	// none (CLOUD_AI_DEFAULT_MODEL, default DefaultModel = "enso"). It is the ONE
-	// cloud-side model default, sourced from config so no subsystem hardcodes a
-	// model id. The agents subsystem stores it on an agent created without an
-	// explicit model, so a bot launched without a model still runs on a valid
-	// catalog model. Model routing itself stays the gateway's job.
-	AIDefaultModel string
-
-	// AIFallbackModel is the reliable model the agent runner fails over to when an
-	// agent's own model stays throttled after retries (CLOUD_AI_FALLBACK_MODEL,
-	// default "best"). Only the autonomous agent/bot run path uses it; interactive
-	// chat is untouched. Empty disables failover.
-	AIFallbackModel string
+	// The default and failover MODELS are not here. They were, as
+	// AIDefaultModel/AIFallbackModel sourced from CLOUD_AI_DEFAULT_MODEL /
+	// CLOUD_AI_FALLBACK_MODEL, and they were not dependencies: a subsystem cannot
+	// fail to connect to a model name. They are a routing and pricing DECISION,
+	// and the eight subsystems that read them did the identical thing — copy the
+	// string onto their own state, never branching on it — which is a constant
+	// wearing a struct field's clothes. They are cloud.DefaultModel and
+	// cloud.FallbackModel in model.go now, one literal each. See model.go for the
+	// two incidents the env knob caused.
 
 	// Subsystem clients — populated by BuildDeps based on enabled subsystems.
 	// Each is an interface with both in-process and ZAP-RPC implementations.

@@ -95,7 +95,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		defBlueprint: fixtureBlueprint(deps.Brand),
 		signals:      boundSignals, // installed by the composition root before Mount; zero value honest-degrades
 		ai:           deps.AI,
-		model:        strings.TrimSpace(deps.AIDefaultModel),
+		model:        cloud.DefaultModel,
 		audit:        deps.Audit,
 		invoke:       automations.InvokeTool,
 		toolOK:       automations.ToolExists,

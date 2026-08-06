@@ -62,6 +62,14 @@ var allowedRequestUses = map[string]string{
 		"attributed with. None of those are the org and none can be an In field — a caller that could " +
 		"name its own ledger would bill another org. ONE function, which every op asks; it fails closed " +
 		"off the HTTP path, where there is no principal and so no tenant to act for.",
+	"apps/commerce/risk.go": "the credit screen's payer resolver. The op is served over BOTH the " +
+		"browser's REST call and an agent's tools/call, and the PAYER, the billing ADDRESS and the " +
+		"JURISDICTION are read off the request it is being served over — parked by the app-wide Bridge, " +
+		"which runs for /mcp and the op path alike. None of the three can be an In field, for the same " +
+		"reason apps/dataset is allowed here: a caller that could name its own payer would charge another " +
+		"org. On the MCP leg no HTTP response exists yet when this returns, so a response reader would " +
+		"watch an agent's payment settle and learn nothing. The screen fails closed when the request is " +
+		"absent.",
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
