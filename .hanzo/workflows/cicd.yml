@@ -534,9 +534,24 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: true
           provenance: false
           tags: ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}
+          # `outputs:` in place of `push: true` — the only way to reach buildkit's
+          # exporter attributes through this action, and `push: true` cannot be set
+          # alongside it because both ask for an image exporter.
+          #
+          # zstd because this image is ONE 1.63GB layer (the per-app plugin
+          # binaries, 98.8% of it) and gzip writes a layer as a single stream on a
+          # single core: 175.0s to export, seven of eight CPUs idle. Measured on the
+          # same bytes, both orderings, 2026-08-06: gzip 245.5s/256.1s against zstd
+          # 58.1s/53.3s, and the zstd image is 1.2% smaller.
+          #
+          # This lane matches apps/platform/k8s.go deliberately. The two build the
+          # SAME Dockerfile into the SAME repository, and a compression setting that
+          # differs between them is not a preference — it decides the manifest media
+          # type, which decides whether imagePullable's Accept negotiation gets a
+          # 200 or a 404 (see the note in apps/platform/pin.go).
+          outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
           # VERSION is what the binary reports as X-Api-Version. Without it the
           # ldflag falls back to the `dev` default and a released image cannot
           # say which release it is — and every car below keys off that header.

@@ -303,9 +303,24 @@ func imagePullable(ctx context.Context, repository, tag string) error {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	// Every media type an image of ours can be, because ghcr honours Accept
+	// STRICTLY: ask for a manifest whose type you did not offer and it answers 404
+	// — the identical status a tag that was never pushed returns. A probe that
+	// cannot tell those apart reports a present image as a phantom tag and refuses
+	// to pin it, which is the failure this function exists to prevent.
+	//
+	// The OCI image manifest is the one that used to be missing, and its absence
+	// was invisible only because every image here was gzip: buildkit writes Docker
+	// schema2 for a gzip layer and application/vnd.oci.image.manifest.v1+json for a
+	// zstd one. So this list was coupled to the BUILDER'S COMPRESSION SETTING
+	// without saying so, and the day that setting changed, every release pin would
+	// have failed while truthfully insisting the registry did not have the image.
+	// Measured against ghcr 2026-08-06 with a real zstd image: without the OCI type
+	// 404, with it 200, and a nonexistent tag 404 either way.
 	req.Header.Set("Accept", strings.Join([]string{
 		"application/vnd.oci.image.index.v1+json",
 		"application/vnd.docker.distribution.manifest.list.v2+json",
+		"application/vnd.oci.image.manifest.v1+json",
 		"application/vnd.docker.distribution.manifest.v2+json",
 	}, ","))
 	resp, err := releaseHTTP.Do(req)
