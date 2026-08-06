@@ -384,19 +384,30 @@ func accrueOne(s *cloud.Service[state], ctx context.Context, a Author, deploying
 // AccrueForOrg is the seam the unified affiliate accrual walk calls once per source
 // org (with the spend it already read): it accrues royalty to EVERY approved author
 // whose verified repo that org deployed (excluding the author's own org), latched
-// at-most-once per (author, org, period). It resolves the mounted authors singleton;
-// when authors is NOT mounted (a partial deploy, or an affiliates unit test that does
-// not wire authors) it is a no-op returning 0 — the same degrade-gracefully contract
-// treasury.Reserve uses. Returns the number of NEW royalty accruals latched.
-func AccrueForOrg(ctx context.Context, deployingOrg string, spend int64, period string, now int64) int {
+// at-most-once per (author, org, period). Returns the number of NEW royalty
+// accruals latched.
+//
+// It returned a bare int and no error, so "nothing was owed" and "authors is not
+// in this process" were the same value: 0. authors ships as its own binary and
+// the walk runs in affiliates, so the second case is the one that happens — the
+// royalty leg of every sweep has been latching nothing, reporting it as a
+// completed accrual of zero, with no error anywhere to see. On a money path a
+// silent zero is the one outcome that must not be expressible, so absence is now
+// ErrNoPeer and the caller decides what to do about it.
+//
+// A lookup failure is likewise returned rather than logged-and-zeroed: a sweep
+// that could not read the authors is not a sweep that found none.
+func AccrueForOrg(ctx context.Context, deployingOrg string, spend int64, period string, now int64) (int, error) {
 	s := mounted
-	if s == nil || s.State.store == nil || spend <= 0 {
-		return 0
+	if s == nil || s.State.store == nil {
+		return 0, fmt.Errorf("%w: authors (this process does not own the royalty store)", cloud.ErrNoPeer)
+	}
+	if spend <= 0 {
+		return 0, nil // nothing metered this period is a real answer
 	}
 	authors, err := s.State.store.AuthorsDeployedBy(ctx, deployingOrg, sweepLimit)
 	if err != nil {
-		s.Log.Warn("authors: AccrueForOrg lookup failed", "deployingOrg", deployingOrg, "err", err)
-		return 0
+		return 0, fmt.Errorf("authors: deployed-by lookup for %q: %w", deployingOrg, err)
 	}
 	created := 0
 	for _, a := range authors {
@@ -404,7 +415,7 @@ func AccrueForOrg(ctx context.Context, deployingOrg string, spend int64, period 
 			created++
 		}
 	}
-	return created
+	return created, nil
 }
 
 // ── Hanzo-fork attribution → treasury ("pay ourselves") ────────────────────────

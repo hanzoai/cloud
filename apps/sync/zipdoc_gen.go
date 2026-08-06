@@ -42,6 +42,22 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sync_1","direction":"pull"}`),
 	})
+	zip.Describe("POST /sync/run", zip.Doc{
+		Description: "Reconciles every sync of the CALLER's org whose source matches the\nevent, answering how many changed and how many were skipped.\n\nThe org is the caller's plane identity and never the argument — plane.SyncIn has\nno org field, deliberately, because a trigger able to state the org could\nreconcile another tenant's repositories. Anonymous is refused rather than\ndefaulted: an event arriving with no principal must fail, not sync somebody's\nrepos.\n\nIt calls reconcileEvent, never cloud.Sync. cloud.Sync now falls through to THIS\nop when the local one is nil, so a process serving it that dispatched through\nit would dial its own socket and answer itself, forever.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"SyncIn.actor":    "Actor is who made the upstream push; the engine's loop guard compares it to\nthe sync's own actor.",
+			"SyncIn.hop":      "Hop is the chained-propagation depth, bounded by the engine's hop limit.",
+			"SyncIn.kind":     "Kind is the sync kind, e.g. \"git\".",
+			"SyncIn.locator":  "Locator is the source repo locator — a clone URL, or \"<owner>/<repo>\".",
+			"SyncIn.manual":   "Manual marks a /run or an initial reconcile rather than a specific push.",
+			"SyncIn.provider": "Provider is the endpoint the event came from: github | gitlab | hanzo-git.",
+			"SyncIn.ref":      "Ref is the FULL ref that moved.",
+			"SyncIn.repo":     "Repo is the short repo name.",
+			"SyncIn.token":    "Token is an OPTIONAL short-lived credential the trigger already minted. It\nrides the internal socket only and is never logged.",
+			"SyncRan.ran":     "Ran is the number of syncs that reconciled a change.",
+			"SyncRan.skipped": "Skipped is the number resolved but skipped — loop guard, idempotent, or\ndirection off.",
+		},
+	})
 	zip.Describe("POST /v1/sync", zip.Doc{
 		Description: "Create declares a sync between two endpoints and returns it. It is an UPSERT:\nre-declaring the same source and target updates that link rather than piling up\nduplicates, so a console that re-submits is safe. The org comes from the validated\nprincipal, never from the request, so a sync can only ever bind endpoints inside\nthe caller's own org. A git source must be an https clone URL on the provider's own\nhost with no embedded credentials; a target left empty is derived as a native\nrepository named after the source. With run=true the first reconcile is queued in\nthe background, so a large initial import never blocks this response.",
 		Fields: map[string]string{

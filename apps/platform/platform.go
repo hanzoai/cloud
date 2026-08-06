@@ -52,6 +52,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
@@ -169,12 +170,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// ("hanzo.ai") admits every sibling the deployment owns — git., ci., cd. —
 	// for hanzo.ai, lux.network, zoo.network and any white-label domain alike,
 	// with no list to maintain per brand.
-	selfGitHost = apexOf(deps.Domain)
+	selfGitHost = brand.Apex(deps.Domain)
 
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
 	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
 	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error { return buildFromPush(mounted, ctx, ev) })
+
+	// The same trigger on the plane. git and platform are separate processes, so
+	// the registration above is nil in the process where pushes actually land —
+	// which made OnGitPush's nil-when-unregistered a silent no-op for every push
+	// the fleet has ever served.
+	exposePush()
 
 	// Own the git build→deploy handoff: a background reconciler that applies the
 	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads

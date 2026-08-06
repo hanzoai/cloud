@@ -58,6 +58,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/brand"
 	"github.com/zap-proto/zip"
 )
 
@@ -158,8 +159,8 @@ func rfc3339(unix int64) string {
 // only place the scope can travel.
 func cloneURL(s *cloud.Service[state], org, project, name string) string {
 	host := s.Domain
-	if host == "" {
-		host = "api.hanzo.ai"
+	if host == "" { // only a hand-built Deps; Config.Validate requires a domain
+		host = brand.APIHost(brand.Default)
 	}
 	if project == "" {
 		return fmt.Sprintf("https://%s/v1/git/%s/%s.git", host, org, name)
@@ -252,7 +253,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish the delivery inventory read on the internal plane, so apps/deploy
 	// renders from a tree read instead of cloning (files.go).
 	exposeFiles()
+	// Import, inbound sync AND repo status — one seam, three ops (import_plane.go).
 	exposeImport()
+	// The sync engine decides a mirror should exist; this app owns the repos and
+	// the reactor that pushes them. Registered above for the co-resident case, and
+	// published here for the split one (mirror_control.go).
+	exposeMirror()
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
