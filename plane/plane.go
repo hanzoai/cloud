@@ -517,6 +517,18 @@ type Usage struct {
 	// that made it. Attribution only: it is NOT the idempotency key (see Ref).
 	RequestID string `json:"requestId,omitempty"`
 	ClientIP  string `json:"clientIp,omitempty"`
+	// Actor is WHO acted, when that is not the wallet being billed — an admin or an
+	// agent running on behalf of the payer. The subject says whose money moved; this
+	// says whose hand moved it, and a ledger entry without it cannot answer the only
+	// question an audit asks. It crossed on the old HTTP body (`actor`) and had no
+	// field here, so the split-deploy debit landed unattributed.
+	Actor string `json:"actor,omitempty"`
+	// The token counts the charge was computed from. They are the WORK the amount
+	// prices, so a debit without them can be re-read but not re-derived — and they
+	// likewise had no field here.
+	PromptTokens     int `json:"promptTokens,omitempty"`
+	CompletionTokens int `json:"completionTokens,omitempty"`
+	TotalTokens      int `json:"totalTokens,omitempty"`
 }
 
 // RecordIn debits one metered act.
