@@ -221,12 +221,6 @@ type Config struct {
 	// their defaults cannot drift apart again. Domain (above) is the only field of
 	// this struct that feeds it.
 
-	// Endpoints for out-of-process subsystems (payments, vault). Empty
-	// means the subsystem is disabled OR the deployment expects a default
-	// service-discovery resolution.
-	PaymentsZAPAddr string
-	VaultZAPAddr    string
-
 	// Billing gate (commerce metering) — the request-edge balance gate.
 	//
 	// CommerceHTTPURL is the commerce service base over HTTP (the metering
@@ -298,20 +292,6 @@ type Config struct {
 	AIAuthClientID     string
 	AIAuthClientSecret string
 
-	// ZAP RPC endpoints for subsystems that are NOT enabled in this
-	// process but are still needed by an enabled subsystem. Empty
-	// means "no remote endpoint" — the client falls back to the
-	// disabled stub which fails closed with a clear error.
-	//
-	// Convention: <subsystem>.<env>.<deployment>.svc:9653 — the same
-	// inter-subsystem listener port the unified binary exposes. The
-	// transport is hanzoai/zap, never JSON.
-	IAMZAPAddr      string
-	BaseZAPAddr     string
-	CommerceZAPAddr string
-	O11yZAPAddr     string
-	VFSZAPAddr      string
-	MQZAPAddr       string
 }
 
 // flagsOnce guards the ONE registration of the CLI overrides on the process-global
@@ -351,8 +331,6 @@ func LoadConfig() *Config {
 		ShardPeers:        getenv("CLOUD_PEERS", ""),
 		ShardSelf:         firstNonEmptyStr(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
 		PeerSelector:      getenv("CLOUD_PEER_SELECTOR", ""),
-		PaymentsZAPAddr:   getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
-		VaultZAPAddr:      getenv("CLOUD_VAULT_ZAP_ADDR", ""),
 		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
 		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),
 		CommerceServiceToken: getenv("COMMERCE_SERVICE_TOKEN", ""),
@@ -367,12 +345,6 @@ func LoadConfig() *Config {
 		AIFallbackModel:    getenv("CLOUD_AI_FALLBACK_MODEL", "best"),
 		AIAuthClientID:     getenv("IAM_CLIENT_ID", ""),
 		AIAuthClientSecret: getenv("IAM_CLIENT_SECRET", ""),
-		IAMZAPAddr:         getenv("CLOUD_IAM_ZAP_ADDR", ""),
-		BaseZAPAddr:        getenv("CLOUD_BASE_ZAP_ADDR", ""),
-		CommerceZAPAddr:    getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
-		O11yZAPAddr:        getenv("CLOUD_O11Y_ZAP_ADDR", ""),
-		VFSZAPAddr:         getenv("CLOUD_VFS_ZAP_ADDR", ""),
-		MQZAPAddr:          getenv("CLOUD_MQ_ZAP_ADDR", ""),
 	}
 
 	// THE BINARY KNOWS WHICH APP IT IS; a deployment does not restate it.
