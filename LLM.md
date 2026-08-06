@@ -1087,6 +1087,100 @@ one before it.
   by the same run — one value in two places, not two sources of truth. It is
   named `hanzo`, not `cloud`, because the binary serves the WHOLE /v1 surface.
 
+### What the projections MEASURE, asked of the running deployment
+
+Every number below was taken by making the request, not by reading the code. Two
+of them refuted a claim that had been repeated confidently for weeks.
+
+- **The published document IS the committed one.** `GET api.hanzo.ai/v1/openapi.json`
+  serves 1735 paths / 2474 operations, and the `openapi.yaml` committed at the
+  revision the deployment reports (`x-api-version: sha-8465354e`) has the SAME
+  1735 / 2474 — identical operation sets, not merely similar counts. The
+  lazy-host fallthrough that once made this address answer with 8 paths is gone.
+  Take the version off the header and diff against THAT commit's golden; diffing
+  against your branch's golden measures the deploy lag, not the defect.
+- **`GET /v1/commands` is live**: 2448 commands over 194 services, under a strong
+  ETag that answers 304 to a matching `If-None-Match`.
+- **`POST /v1/mcp` works end to end**: `tools/list` returns 88 tools —
+  `hanzo_describe` plus ONE tool per subsystem, each carrying its operations in an
+  `op` enum — and `tools/call` on `hanzo_describe` returns the prose zipdoc lifted
+  off the Go handler. 0 of the 88 have an empty description or a missing input
+  schema.
+- **HALF the surface is not reachable as a tool, and only a tenth of that gap is
+  declared.** Those 88 tools address **1189 of the deployment's 2422 operations
+  (49%)**. The `_meta` names 134 as refused by the projection rule (a name that
+  discloses a bearer secret; a mutating verb on an identity or authority object)
+  and exactly ONE subsystem as unavailable (`x402`) — so roughly 1,100 operations
+  are absent with no stated reason. `hanzo_ai` is the extreme: **1 op in its enum
+  against ~300 in the document.** An untyped route earns no tool by construction,
+  so most of this is the typed migration's remaining tail showing up in the one
+  projection where it is countable — but it is NOT all of it, and nothing today
+  tells the two apart. Count it per app before believing any "MCP is complete".
+
+### zipdoc needs a router it can RESOLVE, and the gate accepts the gap
+
+`zipdoc` resolves a typed op's path STATICALLY. Register on the `cloud.Router`
+parameter and it cannot follow the interface to a prefix, so it refuses to lift —
+and the refusal is silent in every gate downstream, because `openapi.Complete`
+passes an operation carrying EITHER a summary or a description. `zip.WithSummary`
+alone is therefore enough to be green and empty.
+
+`POST /v1/exec` shipped exactly that way: a real doc comment on the handler, no
+`//go:generate` directive in the package, no `zipdoc_gen.go`, and an operation
+that reached the document, the SDKs and the tool list with a summary and no
+prose. The fix is two lines — the directive, and `reg := cloud.ZipApp(app)` so the
+registration is spelled where the generator can read it (the pattern `apps/meet`
+and `apps/blueprint` already use). ROUTES move to the `*zip.App`; middleware stays
+on the scoped router, where the prefix guard applies to it.
+
+**The chain is countable end to end**: 51 operations carry no description →
+51 of the 2448 commands at `/v1/commands` have an empty `Description` (49 `ai`,
+2 `router`, all owned by `apps/ai`). One hole, three surfaces.
+
+### The field surface is a different fact, counted in a different place
+
+An app can be 100% typed and publish a wholly undescribed shape, because op prose
+and FIELD prose are lifted from different comments. Measured on this commit:
+**5110 of 11043 published properties (46%) carry no description, and 643 schemas
+are 100% undescribed, across 51 of 121 apps.** Only 20 apps carry
+`TestEveryPublishedFieldIsDescribed`, which is precisely why the number is that
+large — the gate exists and does not run in 101 places.
+
+One tranche closed here (343 properties): `authors` 39→0, `label` 37→0,
+`channels` 34→0, `prompts` 29→0, `leaderboard` 40→0, `campaign` 42→6,
+`affiliates` 123→10, `exec` 15→0.
+
+- **A field reached through an EMBEDDED struct cannot be described today, and it is
+  a zip defect, not an app one.** zipdoc files a field's prose under the type that
+  DECLARES it; zip's schema builder inlines the embedding and looks the prose up
+  under the type that PROMOTES it (`zip@v1.27.0/openapi.go:701` keys
+  `fields[t.Name()+"."+name]`). The two never meet. Found twice, independently:
+  `envelope.msg` vs `directoryOut.msg` — every enveloped `*Out` in the fleet
+  publishes its `msg` and `status` bare, **167 properties, 3% of the backlog** —
+  and `campaignWrite.audience` vs `campaignUpdate.audience`, where
+  `internal/zipdoc/extract.go:634` additionally skips the embedded field outright
+  because `campaignWrite` is unexported. Write the comment on the embedded struct
+  anyway; do NOT unroll it into hand-copied field pairs, which would duplicate the
+  shape the type exists to share AND break the embedding that keeps create and
+  update in step. The fix is one change in zip: `structFields` must recurse into an
+  embedded struct and re-emit under the OUTER type's name.
+- **A defined type over another struct publishes NOTHING.** `type campaignRecord
+  Campaign` has no struct literal of its own, so zipdoc emitted nothing for it and
+  all 30 of its properties published bare. Declare the struct under its published
+  name and make the domain name an ALIAS (`type Campaign = campaignRecord`) — same
+  type, one shape, and the prose lands.
+
+### There is no hand-authored copy of the surface left
+
+`docs/automations-openapi.yaml` was a 25 KB hand-written OpenAPI document
+describing 17 operations of `/v1/automations`. Nothing referenced it and no gate
+compared it, so it had drifted exactly as a second copy always does: it claimed
+two operations the fleet does not serve (`GET /v1/automations/health`,
+`POST /v1/automations/mcp`) and omitted three it does (`POST
+/v1/automations/connectors/{id}/run`, `/flows/{id}/versions`,
+`/hooks/{source}/{event}`). Deleted. The reference pages at docs.hanzo.ai are
+generated per product from this document; nothing else here describes an endpoint.
+
 ## The typed migration: THE PLAYBOOK (start here before typing anything)
 
 Worked end to end on `apps/agents/targets.go` (5 ops). Follow it and a partition
