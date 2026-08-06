@@ -43,9 +43,46 @@ func TestSitesEdgeIsMountedInTheRouter(t *testing.T) {
 		t.Fatal("run() does not call mountSites — every published site would fall through to the console SPA, and /v1 would answer on the customer's hostname")
 	}
 	// ...and BEFORE the console, which owns "/" for every unclaimed path.
-	console := strings.Index(run, "webui.Mount(app)")
-	if console >= 0 && console < mount {
+	//
+	// Matched on the CALL, not on its full text: the console takes its bytes as an
+	// argument now (webui.Mount(app, release.FS(…))), and a pattern pinned to the
+	// old spelling would have gone quietly to -1 and asserted nothing — a test that
+	// passes because it stopped looking. The ordering it guards is the same, and it
+	// matters twice over now: mountSites installs the resolver the console reads
+	// its OWN release through, so mounting the console first would find no resolver
+	// at all.
+	console := strings.Index(run, "webui.Mount(app")
+	if console < 0 {
+		t.Fatal("run() does not mount the console — the front door owns \"/\" and nothing would serve it")
+	}
+	if console < mount {
 		t.Fatal("the console is mounted before the site edge — it owns \"/\" and would answer first for every site host")
+	}
+}
+
+// The console's own release is read through the site resolver, so the same call
+// order carries a second requirement: the load must come AFTER mountSites too.
+// Pinned here rather than left to the reader, because the failure it prevents is
+// a boot that dies with "no site resolver installed" and looks like a bad deploy.
+func TestTheConsoleReleaseIsLoadedAfterTheResolverIsInstalled(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	body := string(src)
+	i := strings.Index(body, "func run(")
+	if i < 0 {
+		t.Fatal("run() not found — this test is pinned to the router's entrypoint")
+	}
+	run := body[i:]
+
+	mount := strings.Index(run, "mountSites(app)")
+	load := strings.Index(run, "release.Load(")
+	if load < 0 {
+		t.Fatal("run() does not load the console release — the front door would serve no console")
+	}
+	if load < mount {
+		t.Fatal("the console release is loaded before mountSites installs the resolver — the load can only fail")
 	}
 }
 

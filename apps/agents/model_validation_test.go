@@ -34,9 +34,8 @@ func (c *catalogAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32
 // the model is omitted — stores the deployment default so the agent is still
 // runnable. Update is guarded identically.
 func TestHTTPCreateModelValidation(t *testing.T) {
-	const defaultModel = "deepseek-v4-flash"
-	ai := &catalogAI{content: "pong", ids: []string{"zen-flash", "deepseek-v4-flash"}}
-	app := mountAppModel(t, ai, defaultModel)
+	ai := &catalogAI{content: "pong", ids: []string{"zen-flash", "deepseek-v4-flash", cloud.DefaultModel}}
+	app := mountAppModel(t, ai)
 
 	// A model this gateway never serves → a clean 400 at create (was a run-time 502).
 	code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
@@ -51,10 +50,11 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 		t.Fatalf("catalog model want 201, got %d (%s)", code, body)
 	}
 
-	// An OMITTED model falls back to the deployment default, so the agent is
-	// created AND runnable — not a 400. This deployment's default is an UPSTREAM
-	// name, so what actually lands is cloud.DefaultModel: the brand boundary holds
-	// even against an operator who misconfigured CLOUD_AI_DEFAULT_MODEL.
+	// An OMITTED model falls back to cloud.DefaultModel, so the agent is created
+	// AND runnable — not a 400. An operator can no longer misconfigure this: the
+	// deployment knob that used to supply it (CLOUD_AI_DEFAULT_MODEL) is gone, so
+	// "the default is an upstream name" is now unrepresentable rather than merely
+	// defended against.
 	code, body = do(t, app, http.MethodPost, "/v1/agents", "acme",
 		map[string]any{"name": "defaulted", "instructions": "be terse"})
 	if code != http.StatusCreated {

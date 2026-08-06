@@ -3,7 +3,16 @@
 #
 # NO images: lane HERE, and the reason changed. The cloud MAIN image and its v*
 # tags still have exactly ONE owner, and the tag-is-a-receipt invariant still
-# holds (main push → build → smoke → tag → pin → prove live). But that owner is
+# holds (main push → claim → build → smoke → RECORD → pin → prove live). But that owner is
+#
+# RECORD is not decoration in that list. A resume used to read "have these bytes
+# been published" and answer "then skip the smoke too" — so a run that pushed and
+# then failed the smoke came back, found its own image, and handed rollout bytes
+# nothing had ever booted. Smoking is now a FACT, written when it happens:
+# refs/smoked/sha256-<digest> at the commit, in the same compare-and-swap
+# namespace the version claim uses. Resume reads that fact. An artifact existing
+# proves it was built and never that it was tested, and the two questions are now
+# asked of the two systems that know — the registry, and git.
 # now the `image` job of .hanzo/workflows/cicd.yml, not apps/platform/release.go.
 #
 # release.go held it until a release could be shown to reliably kill itself: it
