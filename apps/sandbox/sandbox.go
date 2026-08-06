@@ -511,6 +511,35 @@ func atoiOr(s string, def int) int {
 // zip.Ctx rather than being typed ops, so zipdoc has no comment to lift and the
 // document would otherwise publish operationIds and nothing else.
 func init() {
+	openapi.Describe("/v1/sandboxes", http.MethodGet,
+		"The sandboxes this org holds",
+		"Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, "+
+			"and both are read from the QUERY STRING.\n\n"+
+			"It answers from the org's own store rather than from the cluster, so a sandbox "+
+			"whose pod has since died still appears, carrying the status it was last known to "+
+			"have. That is deliberate: a lease you are being charged for should not vanish "+
+			"from the list because the thing behind it fell over.")
+	openapi.Describe("/v1/sandboxes", http.MethodPost,
+		"Lease a sandbox",
+		"Creates a sandbox and returns it. `class` is one of `exec`, `dev` or `desktop`; "+
+			"`dev` and `desktop` are attached to a `project`, which is required for them and "+
+			"names the volume the work persists on. `ttlSec` bounds the lease, and `image` "+
+			"overrides the class default.\n\n"+
+			"This is the ONLY path that creates cluster objects. The isolation boundary is the "+
+			"pod's runtime class, one field, so what a sandbox is confined by is a deployment "+
+			"decision rather than anything this operation negotiates.")
+	openapi.Describe("/v1/sandboxes/:id", http.MethodGet,
+		"One sandbox",
+		"Returns one of the caller org's sandboxes. An id belonging to another org answers "+
+			"404 and not 403 — a 403 would confirm the id exists, and whether a given sandbox "+
+			"exists is itself a cross-tenant fact.")
+	openapi.Describe("/v1/sandboxes/:id", http.MethodDelete,
+		"End a sandbox",
+		"Stops the sandbox's pod and drops the lease. The VOLUME survives by default, so a "+
+			"`dev` or `desktop` sandbox can be leased again over the same project and find its "+
+			"checkout where it left it.\n\n"+
+			"`purge=1` deletes the volume too. It is opt-in because it is the one part of this "+
+			"that cannot be undone.")
 	openapi.Describe("/v1/sandboxes/:id/exec", http.MethodPost,
 		"Run a command in a sandbox",
 		"Runs a command inside the sandbox and returns its exit code, stdout and stderr. "+
