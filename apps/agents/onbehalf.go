@@ -37,6 +37,18 @@ func RunOnBehalf(ctx context.Context, org, userSub, ref, input string) (Run, err
 }
 
 func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref, input string) (Run, error) {
+	return runOnBehalfModel(s, ctx, org, userSub, ref, input, "")
+}
+
+// runOnBehalfModel is runOnBehalf with the ASKER's model preference.
+//
+// It overrides the agent's own Model only when the caller named one AND the
+// agent is the built-in default — a person's Slack preference must not silently
+// re-point an agent their org deliberately configured. An unrecognised value is
+// ignored rather than forwarded: the menu came from us, so anything else is a
+// stale client or a forged payload, and it would bill this org for a model it
+// never offered.
+func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub, ref, input, model string) (Run, error) {
 	org = strings.TrimSpace(org)
 	if org == "" || len(org) > principal.MaxOrgLen {
 		return Run{}, fmt.Errorf("agents: invalid org")
@@ -76,6 +88,9 @@ func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref
 	// audit trail; the BALANCE gated + debited is always a.Org (== org), never the
 	// caller. Synthetic request id: in-process, there is no HTTP X-Request-Id; the
 	// client IP is empty (no socket).
+	if m := strings.TrimSpace(model); m != "" && strings.HasPrefix(a.ID, "builtin-") && knownChatModel(m) {
+		a.Model = m
+	}
 	actor := billingActor(org, userSub)
 	reqID, _ := genID("obh")
 	return runAgent(s, ctx, a, input, actor, reqID, "")
@@ -136,5 +151,18 @@ func builtinAgentModel() string {
 		return v
 	}
 	return "enso"
+}
+
+// knownChatModel accepts only a model this deployment offers for chat.
+//
+// The enso family is the auto-routing SKU set the App Home menu is built from.
+// Anything else is refused rather than forwarded — an arbitrary string from a
+// client would let a caller pick what their org pays for.
+func knownChatModel(m string) bool {
+	switch m {
+	case "enso", "enso-flash", "enso-ultra":
+		return true
+	}
+	return false
 }
 

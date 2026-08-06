@@ -228,8 +228,12 @@ func bridgeReply(s *cloud.Service[state], ctx context.Context, org, provider, ex
 	// requirement and answered ErrNoPeer for every deployment that separates them —
 	// which is every real one. It failed the same way for every chat bridge, so the
 	// door belongs on the plane where the boundary is explicit.
+	// Model is the person's OWN choice from the App Home tab, empty when they have
+	// not chosen — the answering side then uses the deployment default. Carried
+	// per turn rather than baked into an agent row, because it is a preference of
+	// the PERSON asking and not a property of the agent.
 	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agents", plane.AgentsRunOnBehalf,
-		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: bridgeAgentRef(provider), Input: text})
+		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: bridgeAgentRef(provider), Input: text, Model: link.Model})
 	run := plane.RunOnBehalfOut{}
 	if out != nil {
 		run = *out
@@ -288,6 +292,12 @@ type userLink struct {
 	Subject string `json:"subject"`
 	Org     string `json:"org"`
 	Refresh string `json:"refresh"`
+	// Model and Routing are what the person chose on the App Home tab. Both are
+	// OMITEMPTY and both have a working default, so a link written before the Home
+	// tab existed decodes fine and behaves exactly as it did — a preference that
+	// breaks an existing link is not a preference, it is an outage.
+	Model   string `json:"model,omitempty"`
+	Routing string `json:"routing,omitempty"`
 }
 
 func putUserLink(s *cloud.Service[state], org, provider, extUser string, link userLink) error {
