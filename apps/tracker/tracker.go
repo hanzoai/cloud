@@ -108,6 +108,11 @@ var sources = map[string]bool{
 // CLOUD_TRACKER_FEE_CENTS[_PROJECT|_ISSUE].
 type state struct {
 	stores *cloud.OrgStore[*Store] // per-(org,project) tracker DBs, opened once each
+
+	// forge is the SOURCE OF TRUTH for the board (source.go). The reads below are
+	// reads OF the forge; nothing here caches or mirrors its rows, because a
+	// second copy of a work item is a second answer to what its state is.
+	forge *forgeSource
 }
 
 // mounted is the active service so Shutdown can release the stores.
@@ -153,6 +158,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "tracker")
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores: cloud.NewOrgStore(b, "tracker", openStore),
+		forge:  &forgeSource{},
 	}}
 	mounted = s
 	routes(app, s)
@@ -180,56 +186,33 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // routes below register, so a description whose route moved stops rendering rather
 // than drifting.
 func init() {
-	openapi.Describe("/v1/tracker/projects", http.MethodPost,
-		"Open a tracker board in your org",
-		"Creates a board and returns it, including the KEY that will prefix every issue "+
-			"identifier filed under it — the same key GET, PATCH and DELETE address the board by, and "+
-			"the ENG in ENG-14.\n\n"+
-			"`name` is required. `key` is optional and is UPPERCASED: omit it and one is derived from "+
-			"the name — its first four letters and digits, or PRJ when that yields nothing usable. A "+
-			"key that is not 2-8 characters starting with a letter is 400.\n\n"+
-			"THE KEY IS UNIQUE PER ORG AND A COLLISION IS REFUSED, NOT MERGED: a second board on a key "+
-			"already taken is 409, and the derived key is not made unique for you, so two similarly "+
-			"named boards collide and the second caller must name a key. Re-POSTing is therefore not "+
-			"idempotent — it fails rather than returning the existing board.\n\n"+
-			"The org is the validated bearer's own, never a client header, and the board is stored "+
-			"under the caller's selected IAM PROJECT: the same key in two IAM projects is two "+
-			"unrelated boards. 403 without a validated org.\n\n"+
-			"Free by default. The create runs the shared per-org balance gate at a fee of zero unless "+
-			"a deployment prices it, and a priced deployment out of balance refuses with the nested "+
-			"{\"error\":{\"code\",\"message\"}} body at 402/503 rather than a flat error.")
+	// The three repository-lifecycle routes. They are raw handlers answering ONE
+	// refusal (projectLifecycle in source.go), so there is no doc comment for
+	// zipdoc to lift and the prose is written here — the same reason the creates
+	// used to be described here, for a route that now does the opposite.
+	//
+	// Every OTHER operation on this surface is a typed op whose description zipdoc
+	// lifts from its doc comment. POST .../issues USED to be described here too;
+	// it is a typed op now (ops.forgeCreateIssue), so its prose comes from its
+	// comment and a second copy here could only drift from it.
+	for _, m := range []struct{ path, method string }{
+		{"/v1/tracker/projects", http.MethodPost},
+		{"/v1/tracker/projects/:key", http.MethodPatch},
+		{"/v1/tracker/projects/:key", http.MethodDelete},
+	} {
+		openapi.Describe(m.path, m.method,
+			"Refused — a board is a repository on the forge",
+			"Answers 405. A tracker board IS a repository on this deployment's forge, so creating, "+
+				"renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\n"+
+				"Offering it here would put a second door on the same object, guarded by this surface "+
+				"instead of by the forge — a weaker guard on the same thing. So the route exists and "+
+				"refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are "+
+				"different facts, and the body names the forge so a caller knows where the job IS done.\n\n"+
+				"What this surface DOES own is the work on a board: list the boards you can see, read "+
+				"and file their issues, move a card between columns, and roll milestones up across the "+
+				"org. Those are the routes beside this one.")
+	}
 
-	openapi.Describe("/v1/tracker/projects/:key/issues", http.MethodPost,
-		"File an issue on a tracker board",
-		"Files a work item on one board and returns it, carrying the `identifier` — KEY-<number> — "+
-			"it will be known by everywhere else.\n\n"+
-			"THE NUMBER IS THE SERVER'S TO ASSIGN and is not accepted from the caller: it is the "+
-			"board's highest plus one, taken inside the insert's own transaction, and it counts PER "+
-			"BOARD — ENG-1 and OPS-1 are different issues.\n\n"+
-			"`title` is required; everything else is optional and defaults. `kind` (issue, pr, epic) "+
-			"says what the item IS, `source` (team, git, crm, helpdesk, cms, agent) says which surface "+
-			"OPENED it, and the two are orthogonal — an issue escalated from support is "+
-			"kind=issue&source=helpdesk. `status` defaults to backlog, `priority` to none. A value "+
-			"outside one of these closed sets is 400, never silently defaulted. `labels` may not "+
-			"contain a comma, the storage separator.\n\n"+
-			"`startAt` and `dueAt` place the item on the TIMELINE, in unix seconds, and both "+
-			"default to unset. A due date on its own is a milestone — an interval of zero length "+
-			"— and the two together are a bar; a start with no due date is work under way with no "+
-			"deadline. There is no separate milestone resource: a milestone is this row, dated. A "+
-			"negative bound, or a due date before its start, is 400 rather than a silently "+
-			"reordered interval.\n\n"+
-			"`repo` and `extRef` RECORD an external binding; they do not create one. Filing here "+
-			"writes to your tracker and reaches no external system — nothing is pushed to GitHub. The "+
-			"GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n"+
-			"404 when the caller's org has no board under that key. The org is the validated bearer's "+
-			"own and the board is resolved within the caller's selected IAM project; 403 without a "+
-			"validated org. Free by default, on the same balance gate as the board create — an epic, "+
-			"a pull request and an issue are priced identically, since the fee is per work item rather "+
-			"than per kind.")
-
-	// The board's two addresses. Bound with All(), so they publish every method
-	// the generator knows and none of them can lift prose from a handler — a
-	// static bundle has no typed op. The ONE helper every embedded SPA uses.
 	openapi.DescribeSPA("/tracker", "tracker board")
 }
 
@@ -250,21 +233,31 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// subsystem registers a route — an order only the whole program can assert.
 	// The ops below read what it parks off the context.
 
-	// UNTYPED BY DESIGN — the pre-create balance gate renders its denial with
-	// cloud.DenyResource, the fleet's nested {"error":{"code","message"}} at
-	// 402/503, which a typed op's returned error cannot carry. See typed.go.
-	g.Post("/projects", cloud.Handle(s, createProject))
-	zip.Get(g, "/projects", o.listProjects)
-	zip.Get(g, "/projects/:key", o.getProject)
-	zip.Patch(g, "/projects/:key", o.updateProject)
-	zip.Delete(g, "/projects/:key", o.deleteProject)
+	// THE FORGE IS THE STORE (source.go). Every route below reads and writes
+	// git.hanzo.ai; none of them touches a local table. That is not a preference —
+	// two stores under one prefix would be two answers to "what is the state of
+	// this work", and they would disagree the first time anyone used the forge
+	// directly, which is every day.
+	//
+	// A BOARD IS A REPOSITORY, so the repository lifecycle is NOT on this surface:
+	// creating, renaming and deleting a board are forge operations with forge
+	// permissions, and re-exposing them here would be a second door onto the same
+	// object with its own weaker guard. Those four routes answer 405 naming the
+	// forge (projectLifecycle), rather than 404 — the distinction between "no such
+	// route" and "not this service's job" is the whole point.
+	zip.Get(g, "/projects", o.forgeProjects)
+	zip.Get(g, "/projects/:key", o.forgeProject)
+	g.Post("/projects", projectLifecycle)
+	g.Patch("/projects/:key", projectLifecycle)
+	g.Delete("/projects/:key", projectLifecycle)
 
-	// UNTYPED BY DESIGN — same balance gate, same nested denial. See typed.go.
-	g.Post("/projects/:key/issues", cloud.Handle(s, createIssue))
-	zip.Get(g, "/projects/:key/issues", o.listIssues)
-	zip.Get(g, "/projects/:key/issues/:num", o.getIssue)
-	zip.Patch(g, "/projects/:key/issues/:num", o.updateIssue)
-	zip.Delete(g, "/projects/:key/issues/:num", o.deleteIssue)
+	zip.Get(g, "/projects/:key/issues", o.forgeIssues)
+	zip.Post(g, "/projects/:key/issues", o.forgeCreateIssue)
+	zip.Patch(g, "/projects/:key/issues/:num", o.forgePatchIssue)
+
+	// The org rollup the forge does not offer: milestones are repo-scoped
+	// upstream, so the org view is a server-side fan-out (forge.Client.Milestones).
+	zip.Get(g, "/milestones", o.forgeMilestones)
 
 	// The UI is a static asset bundle embedded in THIS binary (ui/) — the board
 	// and timeline over the surface above. Serving it here is what lets cloud

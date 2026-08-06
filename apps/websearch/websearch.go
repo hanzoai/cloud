@@ -47,10 +47,19 @@
 // with a validated principal never needs the key. So neither surface is ever an
 // open proxy, and the signed-in console user reaches search without the shared key.
 //
-// WHY NOTHING HERE IS A TYPED OP (re-verified at zip v1.18.12), so the next sweep does not
-// re-litigate it. Both surfaces exist to be BYTE-COMPATIBLE with a client this repo
-// does not own — LibreChat's frozen searxng and firecrawl contracts — and each is
-// compatible in a way a typed op structurally cannot be:
+// THE NATIVE DOOR IS A TYPED OP; THE TWO COMPAT DOORS CANNOT BE.
+//
+//   - POST /v1/websearch is Hanzo's own address for this capability, and it is a
+//     typed op — so it is an MCP tool, a CLI command, an SDK method and a
+//     described operation, which is what the assistant reaches for when it is
+//     asked what the weather is. It runs the SAME metaSearch over the SAME
+//     engines and answers the SAME envelope as the SearXNG door; there is one
+//     search here, offered at the address each caller can actually speak.
+//
+// WHY THE OTHER TWO ARE NOT TYPED OPS (re-verified at zip v1.27.0), so the next
+// sweep does not re-litigate it. Both exist to be BYTE-COMPATIBLE with a client
+// this repo does not own — LibreChat's frozen searxng and firecrawl contracts —
+// and each is compatible in a way a typed op structurally cannot be:
 //
 //   - /v1/websearch/search is registered with All (Mount, below), so it answers
 //     every method in the router's set — today delete, get, options, patch, post,
@@ -66,13 +75,17 @@
 //     400 is raised before the handler runs, and the cap is invisible to it.
 //
 // The route that unblocks the first is a typed `All` in zip; the second needs a
-// body-TOLERANT op. Until then this subsystem is honestly untyped: eight operations,
-// no MCP tool, no SDK method. Their PROSE is not part of that cost — it is declared
-// through openapi.Describe beside the route table (Mount, below), which is the seam
-// for exactly the operations the wire refuses to type.
+// body-TOLERANT op. Neither is a reason to leave the CAPABILITY unreachable, which
+// is what the previous version of this note concluded: it read the two adapters'
+// wire constraints as a property of web search itself, and so this subsystem
+// served the fleet's only path to the live internet while projecting no tool at
+// all. An adapter's frozen contract binds the adapter. Their PROSE is declared
+// through openapi.Describe beside the route table (Mount, below), which is the
+// seam for exactly the operations the wire refuses to type.
 package websearch
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -127,6 +140,73 @@ func searchGuard(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ── The native door: POST /v1/websearch, a typed op ─────────────────────────
+
+// Go drops comments at compile time, so cmd/zipdoc is the ONLY path from the
+// handler's prose to the published document, the SDKs and the MCP tool
+// description. Its output is committed; `make zipdoc-check` fails on drift.
+//
+// Without this directive the package builds, the tests pass, and the typed op
+// below publishes a summary with no description — openapi.Complete accepts
+// either, so the gap is invisible to every gate and visible in every SDK. A
+// search tool a model cannot read is a search tool it will not reach for.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// Path is the address the native search answers at, spelled once so the
+// registration and the prose cannot disagree.
+const Path = "/v1/websearch"
+
+// webSearchQuery is the POST /v1/websearch body. It carries the SAME two inputs
+// the SearXNG door reads off its query string, so the two doors are one search
+// asked two ways rather than two searches.
+type webSearchQuery struct {
+	// Q is the query. Required — an empty one is refused rather than answered
+	// with the whole web.
+	Q string `json:"q"`
+	// Language narrows the engines to a locale, BCP-47-ish ("en", "ja", "de").
+	// Empty means no narrowing.
+	Language string `json:"language,omitempty"`
+}
+
+// webSearch searches the live web and answers with ranked results.
+//
+// This is the fleet's path to what is happening RIGHT NOW — today's weather, an
+// outage, a release that postdates any model's training. `q` is the query and
+// `language` narrows it to a locale. The answer is `{query, number_of_results,
+// results:[{url, title, content, engine}]}`, where `content` is the ENGINE's
+// snippet and not the page: read a page with POST /v1/crawl.
+//
+// It is served in-process by a Go meta-search over keyless public engines — never
+// a third-party search API and never a search key. The enabled engines run
+// concurrently and their hits are merged, deduplicated by normalised URL (host
+// and path, trailing slash and fragment dropped, query kept, so distinct queries
+// stay distinct results) and capped at 20. Ranking is deterministic rather than
+// scored: the first configured engine's hits lead.
+//
+// It fails SOFT on the engines. One that errors, times out or is served a
+// bot-challenge page contributes zero results and never fails the call, so an
+// empty `results` is a real answer — nothing was found — and not an outage. The
+// array is always present, never null.
+//
+// A VALIDATED PRINCIPAL IS REQUIRED, and there is no tenant beyond that: the
+// results are public web pages, identical for every caller, so nothing here is
+// scoped and nothing here can leak across orgs. A typed op is also an MCP tool
+// and a CLI command, and tools/call invokes it with no route and therefore no
+// middleware — so the gate is in the handler, where every door reaches it, rather
+// than in a middleware only one door passes through.
+func webSearch(ctx context.Context, in *webSearchQuery) (*webSearchResults, error) {
+	if !principal.ValidatedFrom(ctx) {
+		return nil, zip.ErrUnauthorized("sign in to search the web")
+	}
+	q := strings.TrimSpace(in.Q)
+	if q == "" {
+		return nil, zip.ErrBadRequest("q required")
+	}
+	out := metaSearch(ctx, q, strings.TrimSpace(in.Language))
+	return &out, nil
 }
 
 // ── Firecrawl scrape: adapt Hanzo Crawl → the firecrawl response shape ──────
@@ -231,6 +311,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//      unset, 401 on a missing/wrong key.
 	// A caller with NEITHER a validated principal NOR a valid key is refused (401/503),
 	// so the anonymous-forge / open-surface path stays closed.
+	// The NATIVE door, registered on the *zip.App rather than on the cloud.Router,
+	// and that is what makes the prose reach the document: zipdoc resolves a typed
+	// op's path STATICALLY, and a cloud.Router parameter is an interface it cannot
+	// follow to a prefix. The path below is absolute and the subsystem scope adds no
+	// prefix, so this is the same registration spelled where the generator can read
+	// it (the same move apps/exec made, for the same reason).
+	reg := cloud.ZipApp(app)
+	if reg == nil {
+		return fmt.Errorf("websearch.Mount: router carries no typed-op registry")
+	}
+	zip.Post(reg, Path, webSearch, zip.WithSummary("Search the live web"))
+
 	native := http.HandlerFunc(searchNative)
 	searchDirect := zip.AdaptNetHTTP(native)
 	searchKeyed := zip.AdaptNetHTTP(searchGuard(native))

@@ -212,7 +212,7 @@ func TestAnUnroutableToolIsAnErrorNotAnEmptyResult(t *testing.T) {
 		t.Fatalf("an unroutable tool answered %q with no error", out)
 	}
 	if got := dispatchOne(context.Background(), "acme", "acme/u-1",
-		types.ToolCall{ID: "c1", Name: "nobody_serves_this", Arguments: `{}`}); !strings.Contains(got, "error:") {
+		types.ToolCall{ID: "c1", Name: "nobody_serves_this", Arguments: `{}`}, "run_test", 0); !strings.Contains(got, "error:") {
 		t.Fatalf("the model was handed %q for a tool that cannot run", got)
 	}
 }

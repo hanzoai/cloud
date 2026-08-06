@@ -144,6 +144,13 @@ var allowedRequestUses = map[string]string{
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
 		"and tenant() has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/tracker/source.go": "scopeForge. The forge-backed board needs the caller's IAM USERNAME " +
+		"(X-User-Name) as well as their org: the org says WHICH tenant's work to ask the forge for, and the " +
+		"username is who the forge is asked AS (Forgejo Sudo), which drops privilege to that user so the " +
+		"forge's own ACL re-checks the answer. principal.OrgFrom carries the org and nothing else, so an op " +
+		"without the request could not name an actor — and an actorless forge call would fall back to the " +
+		"deployment's machine credential, reading every repository that token can see. Fails closed off the " +
+		"HTTP path with the same 403.",
 	"apps/tracker/typed.go": "scope / requireBody. scope needs the IAM PROJECT (X-Project-Id), which " +
 		"picks the physical per-(org,project) store a tracker read opens — principal.OrgFrom carries the org " +
 		"and nothing else, so an op without it would open a different file than the create wrote. requireBody " +

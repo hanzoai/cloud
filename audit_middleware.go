@@ -67,8 +67,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -250,11 +251,23 @@ func actorFromCtx(c *zip.Ctx, home string) audit.Actor {
 //
 // WHY THE TWO ORGS DIFFER AT ALL. SanitizeIdentity mints X-User-Owner (the home
 // org, from the validated membership claim) DISTINCTLY from X-Org-Id (the
-// effective org). For every ordinary caller the two are equal. They diverge in
-// exactly one case: a HUMAN principal whose home org is the reserved admin org
-// switching into another tenant (middleware_identity.go, `effOrg = cliOrg`).
-// That divergence IS the impersonation, so comparing the two detects it without
-// inventing a new signal or a new header.
+// effective org). For every single-org caller the two are equal.
+//
+// DIVERGENCE ALONE IS NO LONGER IMPERSONATION. It once was: the only principal
+// who could act under an org that was not their home org was a SuperAdmin
+// switching in, so `home != eff` was exactly the impersonation signal. Since
+// membership-based org switching landed, ANY ordinary member of two orgs
+// diverges the moment they work in their second one — which is a normal Tuesday,
+// not an impersonation. Reading divergence as impersonation therefore did two
+// harmful things: it told auditors that routine multi-org work was a platform
+// admin acting inside a tenant, and it wrote a Home-bearing row for every
+// switched request including plain 200 GETs, burying the real events in volume.
+//
+// So the predicate is the SPECIFIC fact it always meant to capture: the actor's
+// home is the RESERVED ADMIN ORG (authz.AdminOrg — the issuer's constant, the
+// same one IAM's store.IsSuperAdmin reads, never a local knob that could
+// disagree with the token contract). A non-empty Home is once again, by
+// construction, a platform SuperAdmin acting inside another tenant.
 //
 // UNFORGEABLE BY CONSTRUCTION. Both values are authorityHeaders: stripped from
 // every inbound request and re-minted only from validated claims. So an attacker
@@ -270,6 +283,10 @@ func crossOrgHome(c *zip.Ctx) string {
 	home := principal.Owner(c)
 	eff := strings.TrimSpace(c.Org())
 	if home == "" || eff == "" || home == eff {
+		return ""
+	}
+	// The divergence must be a SuperAdmin's, not an ordinary multi-org member's.
+	if home != authz.AdminOrg {
 		return ""
 	}
 	return home
