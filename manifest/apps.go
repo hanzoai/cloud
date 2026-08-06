@@ -281,11 +281,16 @@ var Apps = []App{
 	{Name: "venue", Prefixes: []string{"/v1/cloud"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
-	// lsp sits next to code because they are two reads of one checkout: code is
-	// the static index, lsp the live language server. Adjacency is documentation,
-	// not routing — /v1/lsp is a deeper static prefix than ai's "/v1", so it wins
-	// on specificity wherever it registers.
-	{Name: "lsp", Prefixes: []string{"/v1/lsp"}},
+	// lsp lives UNDER code, at /v1/code/lsp, because they are two reads of one
+	// repository: code is the static index, lsp the live language server that
+	// resolves through dependencies. One home for code intelligence means one
+	// place to look for it, in the document and in the MCP tool list alike.
+	//
+	// The nesting is not a routing hazard, it is how routing works: nested static
+	// prefixes resolve by SPECIFICITY, so /v1/code/lsp beats code's /v1/code and
+	// both beat ai's bare "/v1" — the same relation storage's /v1/s3/buckets has
+	// to provisioning's /v1/s3. Adjacency in this list is documentation.
+	{Name: "lsp", Prefixes: []string{"/v1/code/lsp"}},
 	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud

@@ -18,19 +18,18 @@ import (
 // Scaffolded by plugin/gen-app-cmds from the manifest.Apps row; now hand-owned.
 //
 // Metered, not Free: a query's cost is not a property of the door but of whether
-// it had to check the repository out and index it, which only the app knows. The
-// edge therefore charges nothing and apps/lsp/meter.go owns the debit — a cold
-// start is billed, a warm point query is not.
+// the revision had to be prepared — fetched and indexed — which only the app
+// knows. The edge therefore charges nothing and apps/lsp/meter.go owns the debit:
+// a prepare is billed, a query against a prepared revision is not.
 //
-// Shutdown is not optional here. A warm workspace is a LIVE language-server
-// subprocess and a checkout on disk; neither is reclaimed by this process exiting,
-// so without the hook a rolling deploy leaves orphaned gopls processes behind.
+// There is no Shutdown. The language servers and the checkouts run in the
+// hanzoai/lsp daemon on its own deployment, not here; this app holds an
+// http.Client, which the process exiting reclaims.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:     "lsp",
-		Price:    cloud.Metered,
-		Mount:    lsp.Mount,
-		Shutdown: lsp.Shutdown,
+		Name:  "lsp",
+		Price: cloud.Metered,
+		Mount: lsp.Mount,
 	}}, []string{"lsp"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
