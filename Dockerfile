@@ -213,19 +213,31 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" \
       -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
       github.com/hanzoai/sqlite
-# Go drops comments at compile time, so this pass is the ONLY way a typed handler's
-# prose reaches the document: zipdoc lifts it into zipdoc_gen.go, which registers it
-# with zip.Describe at init. It must run BEFORE every build below, because the
-# generated file is compiled INTO each binary — running it after would be too late.
+# NO `go generate -run zipdoc` HERE, DELIBERATELY — and the reason is not that the
+# lifted prose stopped mattering. It still is the only way a typed handler's words
+# reach /v1/openapi.json: Go drops comments at compile time, zipdoc lifts them into
+# zipdoc_gen.go, and that file is compiled INTO each binary below. An image whose
+# binaries lack it serves the 1441 description-less operations this step was added
+# to fix, and the SDK repos and the CLI read that document.
 #
-# mk/plugin.mk makes this a prerequisite of the per-app `build`, so the per-app path
-# has always had it. This path did not, and the omission is measurable in production:
-# api.hanzo.ai/v1/openapi.json serves 1441 operations with ZERO descriptions, which
-# is exactly the binary mk/plugin.mk warns about. The SDK repos and the CLI read that
-# document, so the prose never reached any of them either.
-RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    go generate -run zipdoc ./...
+# The fix for that was never "regenerate during the build". All 99 zipdoc_gen.go
+# files are COMMITTED — they are source, the way generated Go is source everywhere
+# else — so the tree `COPY . .` just brought in already contains them, and every
+# `go build` below compiles the real prose in whether or not anything regenerates.
+# Running the generator here re-derived those 99 files from the same inputs to
+# produce the same bytes, for 355.9s of a 17-minute build: 35% of the wall clock
+# spent proving a file equals itself.
+#
+# Freshness is the real requirement, and it is a property of the COMMIT, not of the
+# image. So it is enforced where commits are: `make zipdoc-check` regenerates from
+# source and fails on any diff (hanzo.yml, step `zipdoc-current`), which runs in
+# the test lane every later job already declares `needs:` on. A stale lift now
+# cannot be merged — which is strictly stronger than this step, because this step
+# would happily build a correct image from a stale commit and leave main wrong.
+# That is not hypothetical: main carried a stale apps/agents lift while this ran.
+#
+# It must stay out. Re-adding it buys nothing a green `zipdoc-current` has not
+# already proven, and costs the 355.9s back.
 # The commit this image is built FROM, handed in by the SAME builder that already
 # feeds it to the OCI label in the final stage (apps/platform buildFrontendCmdRev,
 # `--opt build-arg:REVISION=<sha>`; the other lane passes github.sha).
