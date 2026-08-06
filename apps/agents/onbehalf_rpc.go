@@ -58,7 +58,25 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	if strings.TrimSpace(in.Subject) == "" {
 		return nil, fmt.Errorf("agents: run-on-behalf requires a linked subject")
 	}
-	run, err := runOnBehalf(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input)
+	// The tenant this run bills is NOT stated here, and the reason is worth writing
+	// down because the obvious fix is wrong and was shipped once.
+	//
+	// A run bills: the balance gate is a plane call to commerce, which takes the org
+	// from the CALLER's identity and never from an argument (balance_rpc.go:36), so
+	// no caller can name the books it charges. It is tempting to satisfy that with
+	// cloud.For(ctx, in.Org) right here. That is a NO-OP. This op is reached over the
+	// plane, which is a real request, and zip reads a STATED caller only where there
+	// is NO request (caller.go:352-356) — otherwise CallerOf reads the request's own
+	// headers. The statement is silently discarded and the gate still answers
+	// `authorize: no org on the call`. That is exactly what production did.
+	//
+	// The org must therefore be on the WIRE, stated by the dispatcher on a detached
+	// context before the hop (Caller.headers renders it, caller.go:302). The bridge
+	// does that — see the cloud.For(context.Background(), org) at the plane.Ask in
+	// apps/integrations/bridge.go. By the time we are here it has already arrived as
+	// a header and rides onward for free. in.Org remains in the payload because the
+	// run RECORD needs it; it is not what authorizes the spend.
+	run, err := runOnBehalfModel(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input, in.Model)
 	if err != nil {
 		return nil, err
 	}

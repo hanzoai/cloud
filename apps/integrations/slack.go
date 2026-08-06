@@ -69,6 +69,16 @@ var slackDefaultScopes = []string{
 	"app_mentions:read", "chat:write",
 	"channels:history", "groups:history",
 	"im:history", "im:read", "im:write", "users:read",
+	// The three below are what the app MANIFEST declares, and this list is the
+	// other half of the same install. Slack grants exactly the scopes the consent
+	// URL asks for, so a scope declared in the manifest but omitted here is simply
+	// not granted to anyone who installs through this URL — and the failure is
+	// silent and late: `commands` missing means /hanzo returns dispatch_failed at
+	// first use, long after the install looked successful. Keep this set equal to
+	// the manifest's `oauth_config.scopes.bot`.
+	"channels:read", // resolve channel names for the agent's context
+	"commands",      // the /hanzo slash command
+	"team:read",     // resolve the workspace this install belongs to
 	// assistant:write is what makes @hanzo a NATIVE agent rather than a plain bot.
 	// Slack's "Add Agents" picker lists only apps that declare the Agents & AI Apps
 	// surface, and that declaration is three parts, all required: this scope, the

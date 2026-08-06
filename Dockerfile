@@ -213,19 +213,31 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" \
       -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
       github.com/hanzoai/sqlite
-# Go drops comments at compile time, so this pass is the ONLY way a typed handler's
-# prose reaches the document: zipdoc lifts it into zipdoc_gen.go, which registers it
-# with zip.Describe at init. It must run BEFORE every build below, because the
-# generated file is compiled INTO each binary — running it after would be too late.
+# NO `go generate -run zipdoc` HERE, DELIBERATELY — and the reason is not that the
+# lifted prose stopped mattering. It still is the only way a typed handler's words
+# reach /v1/openapi.json: Go drops comments at compile time, zipdoc lifts them into
+# zipdoc_gen.go, and that file is compiled INTO each binary below. An image whose
+# binaries lack it serves the 1441 description-less operations this step was added
+# to fix, and the SDK repos and the CLI read that document.
 #
-# mk/plugin.mk makes this a prerequisite of the per-app `build`, so the per-app path
-# has always had it. This path did not, and the omission is measurable in production:
-# api.hanzo.ai/v1/openapi.json serves 1441 operations with ZERO descriptions, which
-# is exactly the binary mk/plugin.mk warns about. The SDK repos and the CLI read that
-# document, so the prose never reached any of them either.
-RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    go generate -run zipdoc ./...
+# The fix for that was never "regenerate during the build". All 99 zipdoc_gen.go
+# files are COMMITTED — they are source, the way generated Go is source everywhere
+# else — so the tree `COPY . .` just brought in already contains them, and every
+# `go build` below compiles the real prose in whether or not anything regenerates.
+# Running the generator here re-derived those 99 files from the same inputs to
+# produce the same bytes, for 355.9s of a 17-minute build: 35% of the wall clock
+# spent proving a file equals itself.
+#
+# Freshness is the real requirement, and it is a property of the COMMIT, not of the
+# image. So it is enforced where commits are: `make zipdoc-check` regenerates from
+# source and fails on any diff (hanzo.yml, step `zipdoc-current`), which runs in
+# the test lane every later job already declares `needs:` on. A stale lift now
+# cannot be merged — which is strictly stronger than this step, because this step
+# would happily build a correct image from a stale commit and leave main wrong.
+# That is not hypothetical: main carried a stale apps/agents lift while this ran.
+#
+# It must stay out. Re-adding it buys nothing a green `zipdoc-current` has not
+# already proven, and costs the 355.9s back.
 # The commit this image is built FROM, handed in by the SAME builder that already
 # feeds it to the OCI label in the final stage (apps/platform buildFrontendCmdRev,
 # `--opt build-arg:REVISION=<sha>`; the other lane passes github.sha).
@@ -301,6 +313,20 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # one-line manifest edit and this Dockerfile does not change. An app with no
 # plugin/<app> fails HERE (the generator's bijection would have caught it first).
 #
+# EXCEPT the CORESIDENT ones, which get no binary. Coresident means the app is not
+# prefix-routed: it mounts as middleware on a sibling's router, and cmd/cloud's
+# mount() returns before it can ever resolve a path or spawn a child. So its binary
+# is linked, copied and pulled on every deploy to be executed never. zen is the one:
+# 164.7 MB, 3.9% of this image, for a process that cannot start. Its behaviour ships
+# in /ai, which links apps/zen and mounts the Claim ahead of ai's catch-all.
+#
+# TWO lists, because they answer two questions. `names` is every manifest app and
+# still guards the bijection above — a coresident app must STILL have a plugin/<app>
+# (gen-app-cmds requires it, and it is what runs standalone in dev). `spawned` is
+# what the host can actually load, and that is what earns a binary. Flip
+# Coresident:false in the manifest and the binary comes back on the next build,
+# because both lists read the same source the host does.
+#
 # Each link is the ONE app's own graph (~600–2200 packages), NEVER the ~3040-pkg
 # fleet union the fused binary was. 112 lean links, sequential, none of them mega —
 # which is the whole point of this change.
@@ -332,9 +358,12 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     [ -n "$names" ] || { echo "FATAL: no apps parsed from manifest/apps.go — the derivation broke, not the app list"; exit 1; }; \
     for p in $names; do \
       [ -d "./plugin/$p" ] || { echo "FATAL: manifest app '$p' has no plugin/$p — run 'make generate' and commit"; exit 1; }; \
-      echo "building plugin $p"; \
-      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$p" "./plugin/$p"; \
-    done
+    done; \
+    coresident="$(sed -n '/Coresident: *true/{s/.*{Name: "\([^"]*\)".*/\1/p;}' manifest/apps.go)"; \
+    spawned="$(sed -n '/Coresident: *true/d; s/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)"; \
+    echo "building $(echo "$spawned" | wc -w) of $(echo "$names" | wc -w) plugins, $(nproc) at a time (coresident, never spawned: ${coresident:-none})"; \
+    printf '%s\n' $spawned | xargs -P "$(nproc)" -I{} sh -c \
+      'CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$1" "./plugin/$1" || { echo "FATAL: plugin $1 failed to build" >&2; exit 255; }' _ {}
 # THE STAMP LANDED — asked of the ARTIFACT, not of the flag string.
 #
 # `-X` naming a path or symbol the linker cannot resolve is not an error: it is
