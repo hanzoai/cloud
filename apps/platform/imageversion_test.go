@@ -59,7 +59,7 @@ func TestBuildFrontendCmdCarriesASharedCache(t *testing.T) {
 	got := join(buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/studio:v1.2.3"))
 	for _, want := range []string{
 		"--import-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache",
-		"--export-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache,mode=max",
+		"--export-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache,mode=min,compression=zstd",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("build command missing %q\ngot:%s", want, got)
@@ -68,5 +68,35 @@ func TestBuildFrontendCmdCarriesASharedCache(t *testing.T) {
 	// A digest-pinned ref names no tag to hang a cache off — no cache flags, no crash.
 	if d := join(buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/studio@sha256:abc")); strings.Contains(d, "-cache") {
 		t.Errorf("digest ref must carry no cache flags, got:%s", d)
+	}
+}
+
+// The layer compression is three settings that only work together, and each one
+// fails QUIETLY on its own — which is why they are asserted rather than trusted.
+// Measured on cloud's 1.63GB layer: gzip 245.5s/256.1s against zstd 58.1s/53.3s.
+//
+//   - compression=zstd alone: buildkit reuses any blob it already has in the
+//     requested-or-not format, so it can publish gzip layers having done no work,
+//     and the only symptom is that the build is as slow as it was before.
+//   - without oci-mediatypes: a zstd layer has no Docker schema2 media type to be
+//     named by, so the manifest cannot describe what was pushed.
+//   - and the cache export must agree with the image, or mode=min re-compresses
+//     the very layers the image export just wrote and hands the saving back.
+func TestTheImageAndItsCacheAgreeOnCompression(t *testing.T) {
+	got := ""
+	for _, a := range buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/studio:v1.2.3") {
+		got += " " + a.(string)
+	}
+	for _, want := range []string{
+		"compression=zstd",
+		"force-compression=true",
+		"oci-mediatypes=true",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("image output missing %q — the layer export silently falls back to single-core gzip\ngot:%s", want, got)
+		}
+	}
+	if !strings.Contains(got, "--export-cache") || !strings.Contains(got, "mode=min,compression=zstd") {
+		t.Errorf("the cache export must be min and must match the image's compression\ngot:%s", got)
 	}
 }

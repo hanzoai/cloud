@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud/apps/automations"
-	"github.com/hanzoai/cloud/apps/coding"
-	"github.com/hanzoai/cloud/apps/git"
 	"github.com/hanzoai/cloud/apps/integrations"
 )
 
@@ -20,13 +18,13 @@ import (
 // wiring lives at a composition root that imports all of them and none of them
 // imports it. init() runs once at load, before cloud.Listen.
 func init() {
-	// The coding orchestrator needs git's CloneURL + VerifyRef, but clients/git
-	// imports clients/integrations, so coding -> git would cycle. This root
-	// imports all three and assembles the Dispatcher, injecting it into the Slack
-	// trigger surface. The git functions are plain reads that resolve their state
-	// at call time, so no mount ordering is required. The mirror-failure logger is
-	// nil (those failures are non-fatal and dropped).
-	integrations.SetCodingDispatcher(coding.NewDispatcher(git.CloneURL, git.VerifyRef, nil))
+	// The coding orchestrator is NOT wired here any more. It was, because coding
+	// could not import git (git imports integrations, integrations called coding)
+	// and so its clone-url/verify-ref seams had to arrive from a root that imports
+	// both. Those seams are peer calls now — git is another PROCESS, and the
+	// in-process functions this root passed answered ""/false there, which the
+	// dispatcher reads as "git is not available". With no cycle left to dodge,
+	// integrations builds its own Dispatcher at the trigger (slack_coding.go).
 
 	// Inbound-event seam: a verified provider webhook (or chat channel) fires the
 	// automations engine's Deliver here — the ONE place that imports both, so
