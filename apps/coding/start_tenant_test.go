@@ -85,12 +85,14 @@ func TestRunContextIsBoundedAndNotAlreadyDone(t *testing.T) {
 // bad request cannot consume capacity.
 func TestStartRefusesWhatItMustRefuse(t *testing.T) {
 	for name, tc := range map[string]struct{ org, subject, repo, prompt string }{
-		"no tenant":      {"", "u", "api", "do a thing"},
-		"no subject":     {"acme", "", "api", "do a thing"},
-		"no repo":        {"acme", "u", "", "do a thing"},
-		"no task":        {"acme", "u", "api", ""},
-		"repo is a path": {"acme", "u", "../other-org/api", "do a thing"},
-		"repo escapes":   {"acme", "u", "a/b", "do a thing"},
+		"no tenant":                {"", "u", "api", "do a thing"},
+		"tenant is a path":         {"../other", "u", "api", "do a thing"},
+		"tenant has a dot segment": {"a/../b", "u", "api", "do a thing"},
+		"no subject":               {"acme", "", "api", "do a thing"},
+		"no repo":                  {"acme", "u", "", "do a thing"},
+		"no task":                  {"acme", "u", "api", ""},
+		"repo is a path":           {"acme", "u", "../other-org/api", "do a thing"},
+		"repo escapes":             {"acme", "u", "a/b", "do a thing"},
 	} {
 		_, err := Start(context.Background(), tc.org, startIn(tc.subject, tc.repo, tc.prompt), nil)
 		if err == nil {
