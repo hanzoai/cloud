@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"errors"
+	"os"
 	"time"
 	"fmt"
 	"strings"
@@ -63,7 +64,7 @@ func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref
 		// persisted: writing a row here would fork the definition per org and make
 		// a later product change unable to reach the orgs that had already been
 		// seeded. A row the org DOES create wins, because Resolve is tried first.
-		if def, ok := builtinAgent(org, ref, s.State.failoverModel); ok {
+		if def, ok := builtinAgent(org, ref, builtinAgentModel()); ok {
 			a = def
 		} else {
 			return Run{}, err
@@ -88,9 +89,12 @@ func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref
 // not silently become the default agent, or a typo in `code: repo` would run the
 // chat agent and look like it worked.
 //
-// The model is the deployment's own failover model — the same one every other
-// run falls back to — so a deployment configures its chat brain exactly where it
-// configures inference, and this carries no second source of truth.
+// The model is enso, Hanzo's own auto-routing SKU, which picks the right model
+// per query server-side. NOT cloud.FallbackModel ("best"): that constant's own
+// doc says it "keeps a bot's reply landing when the flash tier is saturated; the
+// interactive chat path never uses it" — it is the degraded path, and a Slack
+// turn IS the interactive chat path. Studio names the same default for the same
+// reason (middleware/studio_home.py: STUDIO_CHAT_MODEL or "enso").
 //
 // Tools is deliberately EMPTY. The tool-calling loop is what decides what an
 // agent may reach, and handing the default agent a tool set here would be
@@ -120,4 +124,17 @@ const builtinAgentName = "hanzo"
 const builtinAgentInstructions = "You are Hanzo, the assistant for the Hanzo cloud. " +
 	"Answer in Slack: be brief, concrete, and say plainly when you do not know or " +
 	"cannot reach something rather than guessing."
+
+// builtinAgentModel is the chat brain: enso, the auto-routing SKU that selects
+// per query in the gateway's own catalog, overridable per deployment.
+//
+// Forwarded verbatim and never validated here — the catalog (hanzoai/ai
+// conf/models.yaml) is what resolves and routes it, and a check in cloud could
+// only ever disagree with the thing that actually decides.
+func builtinAgentModel() string {
+	if v := strings.TrimSpace(os.Getenv("BRIDGE_AGENT_MODEL")); v != "" {
+		return v
+	}
+	return "enso"
+}
 

@@ -41,7 +41,9 @@ package agents
 // also why the existing typed callTool — apps/tools/http.go:78, Arguments
 // map[string]any — cannot simply be lifted onto the plane). Until that op is
 // served, catalog answers empty in the split fleet and a run takes the plain
-// completion: the honest degradation, not a silent one — it is logged.
+// completion. That degradation is honest and it is VISIBLE: every run's step span
+// carries both hanzo.agent.tools_declared and hanzo.agent.tools, so "declared 3,
+// offered 0" is a number in o11y rather than a silence.
 
 import (
 	"context"
@@ -79,7 +81,47 @@ const (
 	// maxToolArgs bounds the arguments a model may emit for one call, before they
 	// are ever parsed.
 	maxToolArgs = 32 * 1024
+	// maxAgentDepth bounds how deep AGENTS may nest, which is a different bound
+	// from maxToolRounds and is not covered by it: an agent is itself a tool
+	// (agentToolProvider, agents.go:399), so A calling B calling A is a cycle in
+	// which every level gets a FRESH round cap and a fresh fee. Three levels is
+	// an agent delegating to a specialist that delegates once more; deeper than
+	// that is a loop, and at the bottom an agent is simply offered no tools and
+	// has to answer for itself.
+	maxAgentDepth = 3
 )
+
+// depthKey carries how many agents deep this run is. Unexported zero-size type,
+// so nothing outside this package can forge a shallower depth.
+type depthKey struct{}
+
+// agentDepth reads the nesting depth off the context; a top-level run is 0.
+func agentDepth(ctx context.Context) int {
+	d, _ := ctx.Value(depthKey{}).(int)
+	return d
+}
+
+// deeper marks the context one agent deeper. It is applied at the DISPATCH, so
+// the depth travels with the call that creates the nesting — a nested run reads
+// it from the context its parent's tool call handed it.
+func deeper(ctx context.Context) context.Context {
+	return context.WithValue(ctx, depthKey{}, agentDepth(ctx)+1)
+}
+
+// callableTools is what an agent may actually be offered: its declared names,
+// minus the one that would call the agent ITSELF. A self-call is a recursion no
+// round cap bounds, because each level starts its cap over.
+func callableTools(a Agent) []string {
+	self := "agent_" + a.Name
+	out := make([]string, 0, len(a.Tools))
+	for _, n := range a.Tools {
+		if strings.TrimSpace(n) == self {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
 
 // toolPlane is where a run's callable tools come from: what may be offered to
 // the model, and what happens when it asks for one.
@@ -274,7 +316,7 @@ func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall) stri
 		span.SetStatus(codes.Error, "arguments too large")
 		return "error: the arguments for this call were too large to run"
 	}
-	ctx, cancel := context.WithTimeout(ctx, toolCallTimeout)
+	ctx, cancel := context.WithTimeout(deeper(ctx), toolCallTimeout)
 	defer cancel()
 
 	out, err := runTools.call(ctx, org, actor, tc.Name, tc.Arguments)

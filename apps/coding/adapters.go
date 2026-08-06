@@ -32,9 +32,16 @@ import (
 // seamTimeout bounds ONE seam call. Every seam here is a small read or write —
 // open a row, append an event, resolve a name — so a call that has not answered
 // in this long is a wedged peer, not a slow one, and the run gets an honest
-// error instead of hanging inside a step. It is well under the plane transport's
-// own 30s response-read ceiling, so the deadline that fires is always this one,
-// which is the one whose message names the seam.
+// error instead of hanging inside a step.
+//
+// It sits UNDER the plane transport's own response-read ceiling, which in a
+// plugin process is zaphttp's 30s default (zap-proto/http client.go: readTimeout
+// 30s; only the cmd/cloud host re-registers the zap scheme with a longer one,
+// and a plugin does not link the host). Under it, the deadline that fires is
+// always this one — the one whose error names the seam — instead of a bare 502
+// from the wire. It is also why the RUN itself is not a plane call: a 25-minute
+// coding run cannot be a request, so it stays a bounded goroutine on the trigger
+// side and only its seams cross.
 const seamTimeout = 20 * time.Second
 
 // NewDispatcher assembles the production Dispatcher: every seam a peer call over

@@ -240,6 +240,81 @@ func TestActorSub(t *testing.T) {
 	}
 }
 
+// An agent is itself a tool, so an agent that declares ITSELF would recurse with
+// a fresh round cap at every level. It is never offered to itself.
+func TestAgentIsNeverOfferedItself(t *testing.T) {
+	a := mk("maxpower", "greeter")
+	a.Tools = []string{"agent_greeter", "weather"}
+	got := callableTools(a)
+	if len(got) != 1 || got[0] != "weather" {
+		t.Fatalf("an agent must not be offered itself, got %v", got)
+	}
+}
+
+// A cycle of agents-as-tools (A → B → A) is bounded by DEPTH, which the round cap
+// cannot bound: each nested run starts its own. At the limit an agent is offered
+// no tools at all and has to answer for itself.
+func TestNestedAgentsAreBoundedByDepth(t *testing.T) {
+	plane := &fakePlane{offer: []types.ToolDef{toolDef("weather")}, out: "ok"}
+	withPlane(t, plane)
+	ai := &scriptAI{replies: []types.ChatResponse{{Content: "at the bottom"}}}
+
+	ctx := context.Background()
+	for i := 0; i < maxAgentDepth; i++ {
+		ctx = deeper(ctx)
+	}
+	a := mk("maxpower", "greeter")
+	a.Tools = []string{"weather"}
+	r := executeRun(ctx, ai, "maxpower", "maxpower/u1", a, "go", "")
+
+	if r.Status != "ok" || r.Output != "at the bottom" {
+		t.Fatalf("a run at the depth limit must still answer, got %+v", r)
+	}
+	if len(ai.seen) != 1 || len(ai.seen[0].Tools) != 0 {
+		t.Fatalf("at the depth limit no tools may be offered, got %d completions %+v", len(ai.seen), ai.seen[0].Tools)
+	}
+	if len(plane.calls) != 0 {
+		t.Fatalf("nothing may be dispatched at the depth limit, got %+v", plane.calls)
+	}
+}
+
+// A dispatch carries the run one level deeper, which is what makes the depth
+// bound reachable at all: the nested run reads it off the context it was handed.
+func TestDispatchDeepensTheContext(t *testing.T) {
+	var saw int
+	withPlane(t, &depthProbe{seen: &saw, offer: []types.ToolDef{toolDef("weather")}})
+	ai := &scriptAI{replies: []types.ChatResponse{
+		{ToolCalls: []types.ToolCall{{ID: "c1", Name: "weather", Arguments: `{}`}}},
+		{Content: "done"},
+	}}
+	a := mk("maxpower", "greeter")
+	a.Tools = []string{"weather"}
+	if r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", ""); r.Status != "ok" {
+		t.Fatalf("run failed: %+v", r)
+	}
+	if saw != 1 {
+		t.Fatalf("a dispatch from a top-level run must be at depth 1, got %d", saw)
+	}
+}
+
+// depthProbe records the nesting depth the dispatch context carries.
+type depthProbe struct {
+	seen  *int
+	offer []types.ToolDef
+}
+
+func (d *depthProbe) catalog(_ context.Context, org, _ string, want []string) []types.ToolDef {
+	if org == "" || len(want) == 0 {
+		return nil
+	}
+	return d.offer
+}
+
+func (d *depthProbe) call(ctx context.Context, _, _, _, _ string) (string, error) {
+	*d.seen = agentDepth(ctx)
+	return "ok", nil
+}
+
 // A tool result longer than the transcript budget is clipped AND SAID to be
 // clipped — a silently truncated result is one the model believes it read whole.
 func TestToolResultTruncationIsStated(t *testing.T) {
