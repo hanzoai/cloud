@@ -60,6 +60,11 @@ var rawRoutes = map[string]string{
 	"GET /v1/integrations/discord/link":           "302",
 	"GET /v1/integrations/discord/link/callback":  "302",
 	"GET /v1/integrations/discord/link/discord":   "302",
+	// The Marketplace / "Add to Slack" entry point. Unauthenticated BY DESIGN —
+	// the person clicking Install in Slack's directory has no Hanzo session — and
+	// it reveals nothing: the consent URL it 302s to carries only the PUBLIC
+	// client_id and the scopes we would ask for anyway.
+	"GET /v1/integrations/slack/install":          "public — 302 to Slack consent",
 	"GET /v1/integrations/slack/link":             "302",
 	"GET /v1/integrations/slack/link/callback":    "302",
 	"GET /v1/integrations/slack/link/slack":       "302",
