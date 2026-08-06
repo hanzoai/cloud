@@ -814,6 +814,27 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		screen.route(commercebilling.TopupWithToken),
 	)
 
+	// POST /v1/billing/topup — the SAVED-card top-up: charge a card the subject
+	// already has on file (paymentMethodId) and credit the same canonical balance.
+	// It is topup/token's card-on-file twin and the ONE saved-card top-up door
+	// (the auto-recharge cron shares its chargeAndCredit core). Until now it had
+	// NO co-resident route, so the four vaulted cards a customer could SEE were
+	// cards nothing could CHARGE — saving a card worked, spending it did not.
+	//
+	// Chain is topup/token's byte-for-byte, the risk screen included: both
+	// credit the SPENDABLE wallet, so both are screened before the charge.
+	// PinBillingSubject pins the body's userId to the caller's own subject; the
+	// handler itself refuses a paymentMethodId owned by any OTHER subject (404,
+	// no oracle) — paymentMethodId is not a subject key, so the pin cannot
+	// cover it.
+	app.Post("/v1/billing/topup",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		screen.route(commercebilling.Topup),
+	)
+
 	// POST /v1/billing/subscribe/card — the card-on-file MONTHLY subscription: vault a
 	// Square nonce as a reusable card, charge the first period at the SERVER-AUTHORITATIVE
 	// plan price, create the subscription. It is the paid path's front door, and it had NO
