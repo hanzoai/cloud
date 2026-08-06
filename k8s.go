@@ -14,7 +14,7 @@ import (
 // get right.
 //
 // The private build calls RegisterK8sClientFactory with a dynamic-client
-// implementation. Nothing else changes: paas and validators already ask deps.K8s
+// implementation. Nothing else changes: platform and validators already ask deps.K8s
 // for what they need and already fail closed when it is not ready.
 
 var (
@@ -41,7 +41,7 @@ func BuildK8sClient(cfg *Config) K8sClient {
 	k8sFactoryMu.RUnlock()
 	if f == nil {
 		return unavailableK8s{reason: "kubernetes support is not linked into this build (OSS core); " +
-			"paas and validators are cluster-facing and stay disabled"}
+			"platform and validators are cluster-facing and stay disabled"}
 	}
 	c, err := f(cfg)
 	if err != nil {

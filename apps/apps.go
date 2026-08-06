@@ -35,7 +35,7 @@ import (
 	"github.com/hanzoai/cloud/clients/gateway"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/kms"
-	"github.com/hanzoai/cloud/clients/paas"
+	"github.com/hanzoai/cloud/clients/platform"
 	"github.com/hanzoai/cloud/clients/plugin"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/share"
@@ -67,7 +67,7 @@ func Wire() []cloud.MountSpec {
 		// The /v1/dns forward head: relays the console DNS dashboard to the DNS
 		// control plane under the caller's own validated bearer.
 		{Name: "dns", Mount: dns.Mount},
-		{Name: "paas", Mount: paas.Mount, OwnsHealth: true},
+		{Name: "platform", Mount: platform.Mount, OwnsHealth: true},
 		// GDA/SDM validator onboarding /v1/validators/*. Owns a DB handle.
 		{Name: "validators", Mount: validators.Mount, Shutdown: ctxShutdown(validators.Shutdown)},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},

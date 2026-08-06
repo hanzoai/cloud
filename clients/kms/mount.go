@@ -17,7 +17,7 @@
 // ORG SCOPING — {org} must equal the caller's validated org (c.Org()); a global
 // admin (c.IsAdmin()) may act on any org. The org is folded into the store PATH
 // as /orgs/{org}{subpath}, so one org can never address another org's records.
-// This mirrors clients/paas and clients/admin.
+// This mirrors clients/platform and clients/admin.
 package kms
 
 import (

@@ -2,7 +2,7 @@
 
 The open-source core of Hanzo Cloud — the single Go binary that runs the
 compute/backend control plane (KMS secrets, object storage, DNS/provisioning,
-PaaS, code + exec, zero-trust sharing, audit, gateway edge, feature flags,
+platform, code + exec, zero-trust sharing, audit, gateway edge, feature flags,
 security, and the plugin runtime). Every subsystem mounts from one composition
 root (`apps.Wire()`).
 

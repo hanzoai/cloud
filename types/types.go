@@ -319,7 +319,7 @@ type VaultClient interface {
 //
 // K8sClient is the OSS seam for the cluster control plane, and it exists so this
 // binary links no Kubernetes client at all. Two subsystems talk to a cluster —
-// paas (reconciles App CRs) and validators (writes node CRs) — and both used to
+// platform (reconciles App CRs) and validators (writes node CRs) — and both used to
 // import k8s.io/client-go directly. That made "runs anywhere, no Kubernetes" a
 // claim about configuration rather than a property of the build: the dependency
 // was linked whether or not a cluster existed.
@@ -350,7 +350,7 @@ type K8sClient interface {
 	// MergePatch applies an RFC-7386 JSON merge patch.
 	MergePatch(ctx context.Context, group, version, resource, namespace, name string, patch []byte) error
 	// Ready reports cluster reachability and, when false, WHY. The reason is
-	// surfaced verbatim to operators (the paas health route reports it), so
+	// surfaced verbatim to operators (the platform health route reports it), so
 	// "unavailable" is never silent — the whole point of failing closed here is
 	// that somebody can find out what is missing.
 	Ready() (ok bool, reason string)

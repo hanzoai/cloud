@@ -1,22 +1,22 @@
-// paas.go — the cluster-facing half of the native Hanzo PaaS control plane.
+// platform.go — the cluster-facing half of the native Hanzo PaaS control plane.
 //
-// It mounts /v1/paas/* on the unified cloud binary and reads the operator's
+// It mounts /v1/platform/* on the unified cloud binary and reads the operator's
 // `hanzo.ai/v1` `App` CustomResource — the one workload kind the fleet runs on:
 //
-//	GET  /v1/paas/apps            — the fleet drift board (inventory.ts): list every
+//	GET  /v1/platform/apps            — the fleet drift board (inventory.ts): list every
 //	                                operator App CR across the platform namespaces,
 //	                                read declared vs running tag + health from the CR
 //	                                (+ its status), and attach the drift verdict
 //	                                (drift.go / apps-drift.ts).
-//	GET  /v1/paas/apps/:app       — one app row by CR name.
-//	POST /v1/paas/apps/:app/deploy— zero-downtime ROLLING RESTART of the app's
+//	GET  /v1/platform/apps/:app       — one app row by CR name.
+//	POST /v1/platform/apps/:app/deploy— zero-downtime ROLLING RESTART of the app's
 //	                                Deployment (the `kubectl rollout restart`
 //	                                mechanism): re-pulls the DECLARED image, recreates
 //	                                pods gracefully. It never changes the declared
 //	                                TAG (that stays a git commit, the one thing Hanzo
 //	                                CD's selfHeal reconciles), so there is no drift to
 //	                                revert. This is `hanzo deploy`.
-//	GET  /v1/paas/health          — real k8s reachability + App CRD presence.
+//	GET  /v1/platform/health          — real k8s reachability + App CRD presence.
 //
 // SECURITY — every route is authorized off ONE IAM identity, exactly like the
 // /v1/runner build path (clients/platform/runner.go): the guard admits a validated
@@ -40,7 +40,7 @@
 // Either way the subsystem MOUNTS: when the client is not ready every endpoint
 // fails closed (503 + the reason Ready() reports; the health route says
 // "degraded"), never status-theater.
-package paas
+package platform
 
 import (
 	"context"
@@ -101,7 +101,7 @@ var appNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // to a floating tag is possible, but the drift board then flags it loudly).
 var imageRepoRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*[a-z0-9]$`)
 
-// state is paas's own data; shared deps live in the embedded cloud.Base. The
+// state is platform's own data; shared deps live in the embedded cloud.Base. The
 // cluster seam is the ONE thing this subsystem holds: never nil (deps hands over
 // the unavailable default when no cluster implementation is linked), so no call
 // site nil-checks it — an unusable client answers with the reason instead.
@@ -109,12 +109,12 @@ type state struct {
 	k8s cloud.K8sClient
 }
 
-// Mount wires the /v1/paas/* surface onto app. Every handler is behind the IAM
+// Mount wires the /v1/platform/* surface onto app. Every handler is behind the IAM
 // guard (SuperAdmin or OrgAdmin, org-confined), then reads/patches the operator
 // App CRs + their Deployments. The cluster client comes from deps — this package
 // never constructs one, which is what keeps client-go out of the build.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "paas", func(b cloud.Base) (state, error) {
+	return cloud.Mount(app, deps, "platform", func(b cloud.Base) (state, error) {
 		return build(b, deps.K8s)
 	}, routes)
 }
@@ -126,18 +126,18 @@ func build(b cloud.Base, k8s cloud.K8sClient) (state, error) {
 	st := state{k8s: k8s}
 	ok, reason := k8s.Ready()
 	if !ok {
-		b.Log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", reason)
+		b.Log.Warn("kubernetes client unavailable; /v1/platform endpoints will fail closed", "err", reason)
 	}
-	b.Log.Info("paas control plane mounted",
-		"prefix", "/v1/paas", "k8s", ok, "brand", b.Brand, "env", b.Env)
+	b.Log.Info("platform control plane mounted",
+		"prefix", "/v1/platform", "k8s", ok, "brand", b.Brand, "env", b.Env)
 	return st, nil
 }
 
-// routes registers the /v1/paas/* surface. Every mutating/observing route is behind
+// routes registers the /v1/platform/* surface. Every mutating/observing route is behind
 // the IAM guard (SuperAdmin or org-confined OrgAdmin); the health probe is public
 // (real k8s reachability).
 func routes(app *zip.App, s *cloud.Service[state]) {
-	g := app.Group("/v1/paas")
+	g := app.Group("/v1/platform")
 	g.Get("/apps", guard(s, cloud.Handle(s, listApps)))
 	g.Get("/apps/:app", guard(s, cloud.Handle(s, getApp)))
 	// MUTATION is superadmin-only (operatorGuard), NOT the broader read guard: the
@@ -466,7 +466,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return k8sErr(s, "restart", err)
 	}
-	s.Log.Info("paas rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
+	s.Log.Info("platform rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
 	return c.JSON(http.StatusAccepted, map[string]any{
 		"ok": true, "app": name, "namespace": ns, "env": nsEnv[ns], "restartedAt": restartedAt,
 	})
@@ -504,7 +504,7 @@ func resolveTargetIn(s *cloud.Service[state], ctx context.Context, name string, 
 // + the real reason otherwise (never status-theater). Not admin-gated — liveness
 // must be probe-able by the platform/operator without a JWT.
 func health(s *cloud.Service[state], c *zip.Ctx) error {
-	res := map[string]any{"service": "paas", "status": "ok"}
+	res := map[string]any{"service": "platform", "status": "ok"}
 	if ok, reason := s.State.k8s.Ready(); !ok {
 		res["status"], res["k8s"], res["error"] = "degraded", false, reason
 		return c.JSON(http.StatusServiceUnavailable, res)
@@ -525,7 +525,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 // an unreachable API server — rather than a generic "not configured".
 func ready(s *cloud.Service[state]) error {
 	if ok, reason := s.State.k8s.Ready(); !ok {
-		return zip.Errorf(http.StatusServiceUnavailable, "paas: kubernetes client not configured: %s", reason)
+		return zip.Errorf(http.StatusServiceUnavailable, "platform: kubernetes client not configured: %s", reason)
 	}
 	return nil
 }

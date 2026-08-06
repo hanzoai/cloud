@@ -80,7 +80,7 @@ type Deps struct {
 	// Each is an interface with both in-process and ZAP-RPC implementations.
 	IAM      IAMClient
 	KMS      KMSClient
-	// K8s is the cluster control plane, absent by default. paas and validators
+	// K8s is the cluster control plane, absent by default. platform and validators
 	// are the only consumers; both fail closed with the reason from Ready().
 	K8s      K8sClient
 	Base     BaseClient
