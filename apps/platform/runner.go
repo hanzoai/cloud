@@ -414,7 +414,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 
-	jobName, err := s.State.k8s.launchDirectBuild(ctx, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID)
+	jobName, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID)
 	if err != nil {
 		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
 	}

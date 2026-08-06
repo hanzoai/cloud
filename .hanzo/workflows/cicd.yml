@@ -17,8 +17,8 @@ name: CI/CD
 # `gate` was still running — or after it had gone red. That is not a
 # hypothetical: the drift gate (`make -f mk/fleet.mk check`) was RED on
 # main while 87 commits and 6 releases went out in 24 hours, and what shipped was
-# a binary serving /v1/billing/gpu/eligibility and publishing
-# /v1/billing/gpu-eligibility. One build, two answers, both signed off.
+# a binary serving a renamed billing route under its new name while still
+# publishing the old one. One build, two answers, both signed off.
 #
 # So deploy.yml is GONE and its jobs are here, behind `needs:`. The gate was
 # always correct; it simply had no edge to the thing it was meant to stop.
@@ -66,8 +66,40 @@ concurrency:
   # them between v1.801.335 and v1.801.350. Pull requests are a different ref, so
   # they neither queue behind a release nor hold one up, and a new push to a PR
   # cancels its own stale run.
+  #
+  # cancel-in-progress is a LITERAL false, and the evidence for that is a run
+  # whose gate had already PASSED. Run 895 (41a0e5a3, event push, branch main):
+  # gate, cicd and containment all completed `success` at 09:46:45Z after 39
+  # minutes, and image, rollout, reach, fanout and receipt were then `cancelled`
+  # at 10:25:26Z having never started. The run's own conclusion is `cancelled`.
+  # On a push this expression is supposed to be false, so nothing should have
+  # cancelled anything — the forge does not evaluate it to a boolean, and a
+  # non-empty string is truthy.
+  #
+  # This was landed once as 2f9ffc2d and reverted by 0d7011e2, which argued the
+  # cancelled runs "were superseded while still QUEUED, not killed mid-gate, so
+  # cancel-in-progress was never the thing acting on them". That is true of the
+  # runs it measured (889-892, which never received a runner) and false of run
+  # 895: a run that never started cannot contain a job that completed
+  # successfully. Both failure modes are real; only this one is a line in this
+  # file, and it is the one that throws away work the gate already did.
+  #
+  # Measured over runs 891-909, every one of them a push to main: 16 cancelled,
+  # 3 failure, 0 success. The one run that earned a release lost it 39 minutes
+  # after the gate went green. That is the whole of "the gate is green and
+  # nothing ships".
+  #
+  # This does not queue without bound. One run holds the group and the rest
+  # collapse into a single pending run, so pushes arriving during a release are
+  # coalesced rather than accumulated — which is what the paragraph above always
+  # meant by "queued, not cancelled".
+  #
+  # The cost, stated plainly: a stale PR run is no longer cancelled by its own
+  # next push, because the setting can no longer ask what event it is. A PR that
+  # is pushed to repeatedly holds more than one run. That is cheap next to a
+  # release lane that cannot finish.
   group: cicd-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
@@ -566,9 +598,24 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: true
           provenance: false
           tags: ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}
+          # `outputs:` in place of `push: true` — the only way to reach buildkit's
+          # exporter attributes through this action, and `push: true` cannot be set
+          # alongside it because both ask for an image exporter.
+          #
+          # zstd because this image is ONE 1.63GB layer (the per-app plugin
+          # binaries, 98.8% of it) and gzip writes a layer as a single stream on a
+          # single core: 175.0s to export, seven of eight CPUs idle. Measured on the
+          # same bytes, both orderings, 2026-08-06: gzip 245.5s/256.1s against zstd
+          # 58.1s/53.3s, and the zstd image is 1.2% smaller.
+          #
+          # This lane matches apps/platform/k8s.go deliberately. The two build the
+          # SAME Dockerfile into the SAME repository, and a compression setting that
+          # differs between them is not a preference — it decides the manifest media
+          # type, which decides whether imagePullable's Accept negotiation gets a
+          # 200 or a 404 (see the note in apps/platform/pin.go).
+          outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
           # VERSION is what the binary reports as X-Api-Version. Without it the
           # ldflag falls back to the `dev` default and a released image cannot
           # say which release it is — and every car below keys off that header.

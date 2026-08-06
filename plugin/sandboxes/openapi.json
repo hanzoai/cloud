@@ -1,0 +1,134 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package sandbox is the ONE compute primitive: a sandbox is a gVisor pod that runs somebody else's code, and every lifetime is the same object.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "sandboxes"
+    }
+  ],
+  "paths": {
+    "/v1/sandboxes": {
+      "get": {
+        "operationId": "get_v1_sandboxes",
+        "summary": "The sandboxes this org holds",
+        "description": "Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, and both are read from the QUERY STRING.\n\nIt answers from the org's own store rather than from the cluster, so a sandbox whose pod has since died still appears, carrying the status it was last known to have. That is deliberate: a lease you are being charged for should not vanish from the list because the thing behind it fell over.",
+        "tags": [
+          "sandboxes"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sandboxes",
+        "summary": "Lease a sandbox",
+        "description": "Creates a sandbox and returns it. `class` is one of `exec`, `dev` or `desktop`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.\n\nThis is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.",
+        "tags": [
+          "sandboxes"
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}": {
+      "delete": {
+        "operationId": "delete_v1_sandboxes_by_id",
+        "summary": "End a sandbox",
+        "description": "Stops the sandbox's pod and drops the lease. The VOLUME survives by default, so a `dev` or `desktop` sandbox can be leased again over the same project and find its checkout where it left it.\n\n`purge=1` deletes the volume too. It is opt-in because it is the one part of this that cannot be undone.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sandboxes_by_id",
+        "summary": "One sandbox",
+        "description": "Returns one of the caller org's sandboxes. An id belonging to another org answers 404 and not 403 — a 403 would confirm the id exists, and whether a given sandbox exists is itself a cross-tenant fact.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/exec": {
+      "post": {
+        "operationId": "post_v1_sandboxes_by_id_exec",
+        "summary": "Run a command in a sandbox",
+        "description": "Runs a command inside the sandbox and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because \"the tests failed\" and \"the sandbox is broken\" are different facts.\n\nNOTHING RUNS IN cloud. The command is streamed to the Kubernetes exec subresource of the sandbox's pod, which runs under the gVisor runtime class. The sandbox is addressed by pod NAME through the apiserver, never by address.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/fs": {
+      "get": {
+        "operationId": "get_v1_sandboxes_by_id_fs",
+        "summary": "Read a file, or list a directory",
+        "description": "Reads one file from the sandbox's project directory as text, or lists the entries when the path names a directory. Paths resolve under the project root and a path that climbs out is refused rather than rewritten.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sandboxes_by_id_fs",
+        "summary": "Write a file",
+        "description": "Writes the request body to one file in the sandbox's project directory, creating parent directories. Same confinement as the read above.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
