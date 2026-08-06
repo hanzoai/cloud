@@ -184,24 +184,29 @@
       "CatalogEntry": {
         "properties": {
           "labels": {
+            "description": "Labels is the starter's second suggested taxonomy, same treatment as Tags.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "name": {
+            "description": "Name is the starter's suggested handle. It is NOT taken in your org: the\ncatalog is shared reference content, so this name is free until you import it,\nand posting it under a name you already use appends a version to yours.",
             "type": "string"
           },
           "prompt": {
+            "description": "Prompt is the starter's full template body, ready to POST as-is. Entries too\nlarge to create (over 64 KiB) are dropped from this list rather than offered.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags is the starter's suggested taxonomy, carried through unchanged if you\nimport it.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "type": {
+            "description": "Type labels the template's kind, defaulted to \"text\" for entries that declare\nnone.",
             "type": "string"
           }
         },
@@ -234,21 +239,27 @@
       "metricRow": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is when version 1 was written, RFC 3339 UTC.",
             "type": "string"
           },
           "currentVersion": {
+            "description": "CurrentVer is the version number served as current. It always equals\n`versions`: numbering is dense from 1, and deleting a prompt takes its whole\nhistory with it rather than leaving a gap.",
             "type": "integer"
           },
           "lastUpdatedAt": {
+            "description": "LastUpdatedAt is when the newest version was appended, RFC 3339 UTC — the age\nof the template you would get today.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the prompt this row is about — its org-unique handle.",
             "type": "string"
           },
           "type": {
+            "description": "Type is the current version's kind.",
             "type": "string"
           },
           "versions": {
+            "description": "Versions is how many revisions the prompt has, COUNTED in the store and\nuncapped — so it can exceed the 100 entries a list row or a detail response\ncarries. Note the type: here `versions` is a number, while on a list row it is\nthe list of version numbers.",
             "type": "integer"
           }
         },
@@ -257,36 +268,45 @@
       "promptDetail": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is when version 1 was written, RFC 3339 UTC. Appending a version\ndoes not move it.",
             "type": "string"
           },
           "labels": {
+            "description": "Labels is the current version's free-form taxonomy. `[]` when none, never\nnull.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "lastUpdatedAt": {
+            "description": "UpdatedAt is when the current version was appended, RFC 3339 UTC. Equal to\ncreatedAt for a prompt that has only ever had one version.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the prompt's org-unique handle and the URL segment it is addressed by.",
             "type": "string"
           },
           "prompt": {
+            "description": "Prompt is the CURRENT version's template body — the only content this service\nreturns. Earlier versions are listed in versionHistory by number and date, and\ntheir bodies are not served in bulk.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags is the second free-form taxonomy, same rules as Labels.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "type": {
+            "description": "Type labels the current version's kind; \"text\" unless the creator said\notherwise.",
             "type": "string"
           },
           "version": {
+            "description": "Version is the current version number, starting at 1 and incremented by one on\nevery create against an existing name.",
             "type": "integer"
           },
           "versionHistory": {
+            "description": "Versions is the history METADATA, newest first, capped at the last 100 — no\nbodies, so a long history cannot inflate this response. It always includes the\ncurrent version as its first entry.",
             "items": {
               "$ref": "#/components/schemas/versionView"
             },
@@ -310,27 +330,33 @@
       "promptMeta": {
         "properties": {
           "labels": {
+            "description": "Labels is the creator's free-form taxonomy, stored as given after trimming and\nde-duplication. Always present, `[]` when none — never null.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "lastUpdatedAt": {
+            "description": "LastUpdatedAt is when the newest version was appended, RFC 3339 UTC. Empty\nonly if the record carries no timestamp at all.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the prompt's org-unique handle and the URL segment it is fetched by:\nGET /v1/prompts/\u003cname\u003e.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags is the second free-form taxonomy under the same rules as Labels. Nothing\nin this service interprets either; they are yours to organize by.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "type": {
+            "description": "Type labels the template's kind, \"text\" unless the creator said otherwise. It\nis the CURRENT version's type; earlier versions may carry a different one.",
             "type": "string"
           },
           "versions": {
+            "description": "Versions lists every version NUMBER this prompt has, newest first, capped at\nthe last 100. The highest is the current one. (On a metrics row the same key\nis a count, not a list.)",
             "items": {
               "type": "integer"
             },
@@ -373,12 +399,15 @@
       "versionView": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is when this revision was appended, RFC 3339 UTC.",
             "type": "string"
           },
           "type": {
+            "description": "Type is the kind this revision was written with, which may differ from the\ncurrent one.",
             "type": "string"
           },
           "version": {
+            "description": "Version is this revision's number, 1 for the first. Numbers are dense and\nnever reused: deleting the prompt drops the whole history with it.",
             "type": "integer"
           }
         },
