@@ -55,3 +55,36 @@ func TestImageForResolvesTheTagThePublisherWrote(t *testing.T) {
 		})
 	}
 }
+
+// The bare tag can never come back, for ANY class, pinned or not.
+//
+// The table above proves the `dev` case with no tag. This is the same rule
+// stated as an invariant over every combination, because the bare form is not
+// one bad answer among many — it is the ONE spelling in this whole function
+// that resolves to something in the registry which is not ours, and it can be
+// reached by three different roads: an empty SANDBOX_IMAGE_TAG, an empty
+// SANDBOX_IMAGE_TAG_<CLASS>, or a future edit that reorders the concatenation
+// and drops a separator. A table checks the roads someone thought of.
+//
+// It has to be an assertion rather than a comment because the failure is
+// SILENT. `<repo>:<class>` resolves today, so the wrong answer is a running pod
+// rather than an ImagePullBackOff: a stock node:22 answers every exec by
+// reading EOF and exiting 0, which is byte-for-byte what a command that
+// succeeded and printed nothing looks like.
+//
+// bot's imageFor asserts the same invariant on its own side
+// (src/gateway/coding-task.test.ts). Two consumers, one rule, written twice
+// because a Go service and a TypeScript one share no code — only a registry.
+func TestImageForNeverComposesTheBareClassTag(t *testing.T) {
+	const repo = "oci.hanzo.ai/hanzoai/sandbox"
+	for _, tag := range []string{"", "2026.6.7", "1.0.0"} {
+		for _, class := range []string{"exec", "dev", "desktop"} {
+			r := &runtime{image: repo, tag: tag}
+			if got := r.imageFor(class); got == repo+":"+class {
+				t.Fatalf("imageFor(%q) with tag %q = %q — nothing in the fleet "+
+					"publishes that tag, so whatever answers it was written by hand",
+					class, tag, got)
+			}
+		}
+	}
+}
