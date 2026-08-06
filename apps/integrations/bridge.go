@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/apps/kms"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // bridge.go is the ONE ChatBridge core: the platform-agnostic @hanzo front-door
@@ -188,7 +188,7 @@ func (l *orgLimiter) release(org string) {
 func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
 	defer cancel()
-	text, ephemeral := bridgeReply(s, ctx, org, in.Provider, in.ExternalID, in.User, in.Text)
+	text, ephemeral := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Text)
 	if text == "" {
 		return
 	}
@@ -204,7 +204,35 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 // URL. ephemeral reports whether the reply is the (sensitive) link prompt — the
 // caller MUST deliver those to the user only. Every returned string is safe to
 // post; internal errors are logged (never a token) and surfaced as a terse message.
-func bridgeReply(s *cloud.Service[state], ctx context.Context, org, provider, externalID, user, text string) (reply string, ephemeral bool) {
+// bridgeRunContext is the context ONE agent turn runs on: detached from any
+// request, carrying the tenant it bills, bounded by the turn budget.
+//
+// context.Background() is not an accident and is not merely about cancellation.
+// zip reads a STATED caller only when NO request sits behind the context
+// (caller.go:352-356) — deliberately, so that stating an identity can never
+// override an authenticated one. Hand cloud.For the inbound webhook's ctx and the
+// org is silently dropped: Slack's POST is a request, it carries no Hanzo identity,
+// and CallerOf reads those empty headers instead. Downstream then answers
+// `authorize: no org on the call`, which is precisely how this failed in
+// production. Detaching is what makes the statement readable at all.
+//
+// It is not a laundering hole: For supplies a tenant where there is none and cannot
+// override one, and this org came from OrgForExternalID on a signature-VERIFIED
+// payload — never a client-supplied field.
+//
+// Detaching is independently required: the turn runs in bridgeSpawn's goroutine
+// while the webhook handler has already answered Slack 200, so on the request ctx
+// the model call would be cancelled the instant we reply.
+func bridgeRunContext(org string) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(cloud.For(context.Background(), org), bridgeAgentTimeout)
+}
+
+// It takes NO context on purpose. The turn it dispatches must run on a detached,
+// tenant-stated one (see the call below), and a ctx parameter here is an invitation
+// to pass the webhook's — which both cancels the run when we answer Slack and
+// silently discards the org. Removing the parameter is what makes that unavailable
+// rather than merely discouraged.
+func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text string) (reply string, ephemeral bool) {
 	link, linked, err := getUserLink(s, org, provider, user)
 	if err != nil {
 		s.Log.Warn("bridge: user link lookup", "provider", provider, "org", org, "err", err)
@@ -232,7 +260,33 @@ func bridgeReply(s *cloud.Service[state], ctx context.Context, org, provider, ex
 	// not chosen — the answering side then uses the deployment default. Carried
 	// per turn rather than baked into an agent row, because it is a preference of
 	// the PERSON asking and not a property of the agent.
-	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agents", plane.AgentsRunOnBehalf,
+	// STATE THE TENANT, on a context with NO REQUEST BEHIND IT. Both halves matter
+	// and both are load-bearing.
+	//
+	// A run bills, and the balance gate is a plane call to commerce, which takes the
+	// org from the CALLER's identity and never from an argument (balance_rpc.go:36)
+	// so that no caller can name the books it charges. The org therefore has to ride
+	// the caller. cloud.For states it — but zip reads a STATED caller only where
+	// there is no request (caller.go:352-356), deliberately, so that stating an
+	// identity can never override an authenticated one. Applied to the inbound
+	// webhook's ctx it is a silent no-op: Slack's POST is a request, it carries no
+	// Hanzo identity, and CallerOf reads those empty headers instead. That is
+	// exactly how this failed in production with `authorize: no org on the call`
+	// AFTER the tenant was supposedly stated one hop later.
+	//
+	// context.Background() is what makes the statement readable, and it is the same
+	// pairing every other background caller uses (commerce/risk.go:190,
+	// x402/peer.go:71). It is not a laundering hole: For cannot override an
+	// authenticated caller, only supply one where none exists, and this org was
+	// resolved from the Slack-verified team_id through the install→org map — never
+	// from a payload field.
+	//
+	// Detaching is independently REQUIRED anyway: the turn runs in bridgeSpawn's
+	// goroutine, and the webhook handler returns 200 to Slack immediately. On the
+	// request ctx the model call would be cancelled the moment we answer Slack.
+	runCtx, cancel := bridgeRunContext(org)
+	defer cancel()
+	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](runCtx, "agents", plane.AgentsRunOnBehalf,
 		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: bridgeAgentRef(provider), Input: text, Model: link.Model})
 	run := plane.RunOnBehalfOut{}
 	if out != nil {

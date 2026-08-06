@@ -58,23 +58,24 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	if strings.TrimSpace(in.Subject) == "" {
 		return nil, fmt.Errorf("agents: run-on-behalf requires a linked subject")
 	}
-	// STATE THE TENANT for everything this run goes on to call.
+	// The tenant this run bills is NOT stated here, and the reason is worth writing
+	// down because the obvious fix is wrong and was shipped once.
 	//
-	// A run bills: the balance gate is a plane call to commerce, and commerce takes
-	// the org from the CALLER's identity and never from an argument — deliberately,
-	// so no caller can name the books it charges (apps/commerce/balance_rpc.go:36).
-	// A turn dispatched over the plane has no inbound request to carry that
-	// identity, so the gate answered `authorize: no org on the call` and every
-	// Slack message failed after the agent had already resolved.
+	// A run bills: the balance gate is a plane call to commerce, which takes the org
+	// from the CALLER's identity and never from an argument (balance_rpc.go:36), so
+	// no caller can name the books it charges. It is tempting to satisfy that with
+	// cloud.For(ctx, in.Org) right here. That is a NO-OP. This op is reached over the
+	// plane, which is a real request, and zip reads a STATED caller only where there
+	// is NO request (caller.go:352-356) — otherwise CallerOf reads the request's own
+	// headers. The statement is silently discarded and the gate still answers
+	// `authorize: no org on the call`. That is exactly what production did.
 	//
-	// cloud.For is the sanctioned way to say it: it supplies a tenant where there
-	// is none and CANNOT launder one, because zip prefers a gateway assertion over
-	// it whenever a request exists (plane/ask.go:236-242). This is the background
-	// case that function names — a call acting for a tenant with no request behind
-	// it — and the org is trustworthy for the same reason every other Slack path
-	// trusts it: the bridge resolved it from the Slack-verified team_id through the
-	// install→org map, never from a payload field.
-	ctx = cloud.For(ctx, in.Org)
+	// The org must therefore be on the WIRE, stated by the dispatcher on a detached
+	// context before the hop (Caller.headers renders it, caller.go:302). The bridge
+	// does that — see the cloud.For(context.Background(), org) at the plane.Ask in
+	// apps/integrations/bridge.go. By the time we are here it has already arrived as
+	// a header and rides onward for free. in.Org remains in the payload because the
+	// run RECORD needs it; it is not what authorizes the spend.
 	run, err := runOnBehalfModel(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input, in.Model)
 	if err != nil {
 		return nil, err

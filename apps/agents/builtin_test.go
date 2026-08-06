@@ -1,10 +1,7 @@
 package agents
 
 import (
-	"context"
 	"testing"
-
-	"github.com/hanzoai/cloud"
 )
 
 // An org that connected Slack and did nothing else has NO agent rows, and the
@@ -71,24 +68,5 @@ func TestBuiltinModelOverride(t *testing.T) {
 	t.Setenv("BRIDGE_AGENT_MODEL", "enso-ultra")
 	if got := builtinAgentModel(); got != "enso-ultra" {
 		t.Errorf("BRIDGE_AGENT_MODEL must win, got %q", got)
-	}
-}
-
-// A turn dispatched over the plane has no inbound request, so nothing carries
-// the tenant — and commerce takes the org from the CALLER's identity, never from
-// an argument. Without a stated tenant the balance gate answers "authorize: no
-// org on the call" and every Slack message fails AFTER the agent resolved.
-func TestPlaneRunStatesTheTenant(t *testing.T) {
-	ctx := cloud.For(context.Background(), "acme")
-	if got := cloud.Who(ctx).Org; got != "acme" {
-		t.Fatalf("the run must act for a named tenant, got %q", got)
-	}
-}
-
-// An empty org states nothing rather than a blank tenant: downstream must refuse
-// on "no org" rather than bill an account named "".
-func TestEmptyTenantIsNotStated(t *testing.T) {
-	if got := cloud.Who(cloud.For(context.Background(), "")).Org; got != "" {
-		t.Errorf("an empty org must not become a tenant, got %q", got)
 	}
 }
