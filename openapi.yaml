@@ -51846,40 +51846,6 @@ paths:
       tags:
       - billing
       x-app: commerce
-  /v1/billing/gpu/charge:
-    post:
-      description: |-
-        Records a gpu-tagged debit against the caller's own org and answers 201 with the transaction id and the prepaid balance left. This is the ONE endpoint on the customer billing surface that moves an org's ledger.
-
-        `requestId` IS THE IDEMPOTENCY KEY. Two posts carrying the same one are ONE debit: the ledger recognizes the ref inside the same transaction as the insert, so the replay moves no money and answers the ORIGINAL transaction id — a retry, a proxy replay and a double-clicked launch button all cost one GPU. Send it. OMITTED, the debit takes a fresh ref and is additive, which is the same rule every other write on this ledger states for a missing key: without one there is nothing to recognize a repeat by, and two posts are two charges.
-
-        THE PAYER IS NOT A FIELD. Every billing-subject key in the body — `user`, `userId`, `customerId` — is ignored and the wallet is resolved server-side from the caller's own validated org, so a forged body can never charge another tenant. `amountCents`, `currency`, `requestId`, `notes` and `tag` are the request, and `tag` is FORCED into the gpu bucket so this can never mint a credit-eligible debit.
-
-        Two gates, both fail-closed: a chargeable card on file (402 `card_required`) and prepaid alone covering the amount (402 `insufficient_prepaid`) — credits are never consulted, so a GPU cannot draw on a grant. The prepaid gate reads the SAME wallet the debit posts to, so the gate and the charge can never address two wallets. A gate that cannot be READ is 502 and the charge does not happen: unknown is never permission, and a money verdict is never 500-masked.
-
-        `amountCents` is whole USD cents and debits EXACTLY, with no rounding — the ledger holds 18-decimal USD, so the cents asked for are the cents taken.
-
-        401 without a validated principal — a customer charging its OWN wallet, so an absent identity is not signed in, never not authorized.
-      operationId: post_v1_billing_gpu_charge
-      summary: Debit the caller's org prepaid balance for a GPU
-      tags:
-      - billing
-      x-app: billing
-  /v1/billing/gpu/eligibility:
-    get:
-      description: |-
-        Answers `eligible` plus the exact `reason` — `ok`, `card_required` or `insufficient_prepaid` — with the org's prepaid available, whether a card is on file, and the cents required. It answers 200 in EVERY case: a no is data the launch UI renders as a remedy, never a 402.
-
-        Eligibility is prepaid REAL money and a chargeable card, both. `creditsRemaining` is reported and is NOT usable — a GPU debit is gpu-tagged and drawn from the prepaid bucket — so an org sitting on grant credit with zero prepaid is refused, deliberately.
-
-        `amountCents` is the immediate charge and `minPrepaidCents` the 24h floor GPU policy requires; the gate needs prepaid available >= the larger of the two. Both default to 0, so asking with neither answers whether a card exists, not whether a launch is affordable.
-
-        The wallet is pinned server-side to the caller's own org, so this reads exactly the wallet a charge debits — the gate and the debit can never address two wallets. 401 without a validated principal.
-      operationId: get_v1_billing_gpu_eligibility
-      summary: Whether the caller's org may launch a GPU right now, and what is missing
-      tags:
-      - billing
-      x-app: billing
   /v1/billing/invoices:
     get:
       description: Returns the caller org's invoices with a count, read from that

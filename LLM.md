@@ -3466,8 +3466,8 @@ they were two files with the SAME TRIGGER. Actions cannot express `needs:` acros
 workflow files, so deploy built, smoked, tagged and pinned while the gate was
 still running — or after it had gone red. That is measured, not hypothetical: the
 drift gate was RED on main while 87 commits and 6 releases shipped in 24 hours,
-and what went out was one binary serving `/v1/billing/gpu/eligibility` and
-publishing `/v1/billing/gpu-eligibility`. `deploy.yml` is deleted; its jobs are
+and what went out was one binary serving a renamed billing route under its new
+name while still publishing the old one. `deploy.yml` is deleted; its jobs are
 here, behind `needs:`.
 
 **The coupler is the document, passed BY VALUE at a pinned sha.** Every car
@@ -4030,7 +4030,7 @@ reader that posts test rows into real revenue restates the company's income.
 STILL ON THE TRANSPORT, and why: `apps/metering` (`/v1/billing/tier`,
 `/v1/billing/alerts/authorize`), `apps/admin/commerce` (`/v1/billing/subscriptions`,
 `/v1/costs`), `apps/content/storefront` (`/v1/store/current`, `/v1/product/{handle}`),
-`apps/billing` (the `gpu/eligibility` and `portal/methods` proxies). Each of these
+`apps/billing` (the `portal/methods` proxy). Each of these
 answers from commerce's OWN datastore through a handler in the `hanzoai/commerce`
 module whose logic lives in unexported helpers — so a plane op for them means the
 payments.go pattern (export a value-taking core from the module, declare the op on
