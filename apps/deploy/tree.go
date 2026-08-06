@@ -15,10 +15,8 @@ package deploy
 import (
 	"context"
 	"github.com/hanzoai/cloud/apps/k8s"
-	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -47,30 +45,6 @@ type Node struct {
 	Sync          string        `json:"sync,omitempty"`
 	Version       string        `json:"version,omitempty"` // image tag for a workload node
 	ParentRefs    []ResourceRef `json:"parentRefs,omitempty"`
-}
-
-// appTree returns the flat node tree for one Application.
-func appTree(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := ready(s); err != nil {
-		return err
-	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
-	}
-	ns, err := resolveNamespace(s, c, name)
-	if err != nil {
-		return err
-	}
-	cr, _, err := getAppCR(s, c.Context(), ns, name)
-	if err != nil {
-		return k8sErr(s, "get", err)
-	}
-	nodes := buildTree(s, c.Context(), ns, name, cr)
-	return c.JSON(http.StatusOK, map[string]any{
-		"application": observeApplication(cr, ns, ""),
-		"nodes":       nodes,
-	})
 }
 
 // depth1GVRs are the operator-owned kinds scanned directly under the Service CR.
