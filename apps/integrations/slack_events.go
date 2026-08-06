@@ -369,6 +369,23 @@ func routeSlackEvent(raw []byte) slackRoute {
 		return slackRoute{Kind: slackRouteAck}
 	}
 	switch ev.Type {
+	// The Agents & AI Apps surface. Slack sends assistant_thread_started when a
+	// user opens the agent's thread and assistant_thread_context_changed when they
+	// navigate; SUBSCRIBING to them is one of the three things that make the app
+	// eligible for the "Add Agents" picker (with the assistant:write scope in
+	// slack.go and the toggle in the app config).
+	//
+	// Named explicitly rather than left to `default` even though both merely ack.
+	// The default arm acks every unknown event, so the wire behaviour is identical —
+	// but a reader looking for "does this app support agents" needs to find the
+	// answer here, and a silent default cannot say yes. It also gives the greeting /
+	// setSuggestedPrompts call an obvious home when we want one.
+	//
+	// No reply is needed to open the thread: the user's first message arrives as a
+	// normal `message` event with channel_type=="im", which the arm below already
+	// routes to the agent. So the conversation works the moment the app is listed.
+	case "assistant_thread_started", "assistant_thread_context_changed":
+		return slackRoute{Kind: slackRouteAck}
 	case "app_mention":
 		if ev.BotID != "" || ev.User == "" || ev.Text == "" {
 			return slackRoute{Kind: slackRouteAck}
