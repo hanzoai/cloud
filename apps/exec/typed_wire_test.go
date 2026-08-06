@@ -16,11 +16,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// This subsystem serves 56 operations and NOT ONE of them is a typed op, which
+// This subsystem publishes 40 operations and NOT ONE of them is a typed op, which
 // is the whole cost of being a transparent edge: an operation outside zip's
 // typed registry has no schema, no MCP tool, no CLI command and no generated SDK
 // method. (Its PROSE is recoverable — openapi.Describe declares that beside the
-// wire fact, and exec.go does, for all 56. What follows is the cost that is NOT
+// wire fact, and exec.go does, for all 40. What follows is the cost that is NOT
 // recoverable.) The refusal is deliberate and it is measured here rather than
 // promised in prose, because prose cannot go red.
 //
@@ -41,7 +41,7 @@ import (
 // each path below: on this surface it could only publish a guess about a contract
 // this repo does not own, or a content type the route does not accept.
 //
-// `openapi.Describe` is the bridge for the PROSE half and it is TAKEN, for all 56
+// `openapi.Describe` is the bridge for the PROSE half and it is TAKEN, for all 40
 // (exec.go's `surfaces` + init). Prose is a statement ABOUT the route rather than
 // a declaration of what the route carries, so it can be true of a wire this repo
 // does not own — which is exactly why the schema half stays refused while this
@@ -98,36 +98,30 @@ const (
 		"every subpath left out — a wire change, not a description. The greedy segment is `*1` " +
 		"to fiber and `{wildcard1}` to the document, so a bound field and the published " +
 		"parameter could not agree either. " + proxiedReason
-
-	methodReason = " On top of that, zip has no typed registrar for this method: typed.go " +
-		"exposes Get/Post/Put/Patch/Delete and nothing else, so the operation cannot be " +
-		"expressed as an op even where the body could be."
 )
 
-// servedMethods is the method set All() puts on each path, as the DOCUMENT counts
-// them.
+// servedMethods is the method set the DOCUMENT publishes for each path. It is the
+// five zip has a typed registrar for; OPTIONS and TRACE are still SERVED — All()
+// registers every method and the executor answers them (see the proxy subtest
+// below) — but ceff43ac stopped publishing what was merely bound, and these two
+// were never declared.
 //
-// It comes from [openapi.Methods] — the projection's OWN set — rather than a
-// literal list here. It WAS a literal, on the reasoning that a method appearing
-// or disappearing has to be noticed. It was noticed, in the worst way: the
-// document stopped publishing TRACE and OPTIONS and this copy went on asserting
-// them, so a change to what we publish surfaced as eight unrelated-looking test
-// failures across four apps. Reading the projection's set moves both halves at
-// once, which is what openapi.Methods exists for.
+// It READS that set from [openapi.Methods] rather than restating it. The reason
+// is the eight test failures ceff43ac caused: four apps each held their own copy
+// of this list, so a change to what the document publishes surfaced as ledgers
+// naming routes their subsystem "no longer serves" — the copies were right when
+// written and there was no way for them to learn otherwise. A method appearing
+// or disappearing still has to be noticed, and it is: the counts below move, and
+// they are what fails. What must not happen twice is noticing it in four places.
 var servedMethods = openapi.Methods()
 
-// untypedByDesign crosses the two closed lists into the 56 operation addresses
+// untypedByDesign crosses the two closed lists into the 40 operation addresses
 // the document publishes, appending the per-method fact where there is one.
 func untypedByDesign() map[string]string {
 	m := make(map[string]string, len(untypedPaths)*len(servedMethods))
 	for path, why := range untypedPaths {
 		for _, method := range servedMethods {
-			r := why
-			switch method {
-			case http.MethodOptions, http.MethodTrace:
-				r += methodReason
-			}
-			m[method+" "+path] = r
+			m[method+" "+path] = why
 		}
 	}
 	return m
@@ -215,15 +209,10 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // it is the same 40 `bin/exec openapi` writes into plugin/exec/openapi.json. Every
 // one of them CARRIES PROSE (TestEveryOperationIsDescribed); none of them carries
 // a schema, a tool or an SDK method, which is the part that stays a cost.
-//
-// It read 56 while the projection published seven methods per path. TRACE and
-// OPTIONS came out: All() still binds them and the executor still answers them —
-// see the subtest below, which is why they are still exercised — but they are
-// transport, not operations anyone is offered, so they are no longer published.
 func TestTheSurfaceIsWhollyUntyped(t *testing.T) {
 	served, typed := execOps(t)
 	if len(served) != 40 {
-		t.Errorf("serves %d operations, want 40 — the surface moved; re-derive untypedPaths "+
+		t.Errorf("publishes %d operations, want 40 — the surface moved; re-derive untypedPaths "+
 			"and servedMethods from the live router before touching anything else", len(served))
 	}
 	if len(typed) != 0 {
@@ -424,10 +413,11 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 	})
 
 	t.Run("OPTIONS and TRACE are served here and are proxied too", func(t *testing.T) {
-		// The two methods zip cannot express as ops at all, and which the document
-		// no longer publishes — they are transport. The ROUTER still binds them and
-		// the executor still answers them, which is what this proves: dropping them
-		// from the projection must not change what the wire does.
+		// The two methods zip cannot express as ops at all. They are SERVED — All()
+		// registers them and the executor answers them, which is what this asserts —
+		// but they are no longer PUBLISHED, so they are not in the ledger above. The
+		// wire and the document disagreeing here is the point ceff43ac settled: the
+		// document carries what was declared, not whatever the router happened to bind.
 		for _, method := range []string{http.MethodOptions, http.MethodTrace} {
 			up := &echoUpstream{respBody: `{}`}
 			app := up.mount(t)
