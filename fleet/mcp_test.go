@@ -137,17 +137,52 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 	return env.Result
 }
 
-// listed is the tool NAMES the door reports, sorted.
-func listed(t *testing.T, h *zip.App) []string {
-	t.Helper()
-	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+// offered is every OPERATION the door offers, in the order it offers them.
+//
+// The door publishes one tool per subsystem and carries the operations in that
+// tool's `op` enum (fleet/grouped.go), so the operations are read out of the
+// enums rather than off the tool names. That is the same question these tests
+// always asked — "what can be called through this door" — put to the surface
+// that now answers it. hanzo_describe has no enum and contributes nothing.
+func offered(res map[string]any) []string {
+	var out []string
+	for _, tl := range published(res) {
+		m, _ := tl.(map[string]any)
+		schema, _ := m["inputSchema"].(map[string]any)
+		props, _ := schema["properties"].(map[string]any)
+		op, _ := props["op"].(map[string]any)
+		enum, _ := op["enum"].([]any)
+		for _, n := range enum {
+			s, _ := n.(string)
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// published is the TOOLS the door publishes — the hanzo_<app> envelopes
+// themselves, not the operations inside them.
+func published(res map[string]any) []any {
 	tools, _ := res["tools"].([]any)
+	return tools
+}
+
+// names lifts the tool names out of published().
+func names(res map[string]any) []string {
+	tools := published(res)
 	out := make([]string, 0, len(tools))
 	for _, tl := range tools {
 		m, _ := tl.(map[string]any)
 		n, _ := m["name"].(string)
 		out = append(out, n)
 	}
+	return out
+}
+
+// listed is the operation names the door offers, sorted.
+func listed(t *testing.T, h *zip.App) []string {
+	t.Helper()
+	out := offered(rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	sort.Strings(out)
 	return out
 }

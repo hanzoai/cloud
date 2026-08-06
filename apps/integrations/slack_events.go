@@ -90,6 +90,14 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		c.Header("X-Slack-Signature"), c.Header("X-Slack-Request-Timestamp"), string(raw), 0) {
 		return zip.ErrUnauthorized("bad slack signature")
 	}
+	// Slack posts INTERACTIVITY to the same request URL as events, form-encoded
+	// rather than JSON. It is past the same signature check, so it is equally
+	// trusted; it just is not an Events envelope and routeSlackEvent would ignore
+	// it. Handled here, before routing, because that is where the two encodings
+	// actually diverge.
+	if slackInteractionBody(raw) {
+		return slackHandleInteraction(s, c, raw)
+	}
 	d := routeSlackEvent(raw)
 	switch d.Kind {
 	case slackRouteChallenge:
@@ -106,7 +114,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 			s.Log.Warn("slack home: no bot token", "org", org, "err", err)
 			return c.NoContent(http.StatusOK)
 		}
-		if err := slackPublishHome(c.Context(), string(tok), d.User); err != nil {
+		if err := slackPublishHome(s, c.Context(), string(tok), org, d.User); err != nil {
 			// A Home that fails to render is cosmetic — never fail the event, or
 			// Slack retries a view publish it will render identically next open.
 			s.Log.Warn("slack home: publish failed", "org", org, "err", err)
@@ -169,7 +177,24 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		emitIngress(org, in, "")
 		reply := slackReplier(s, org, route.Channel, route.ThreadTS, route.User)
-		bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+		bridgeSpawn(s, org, func() {
+			// SAY SOMETHING IMMEDIATELY. A turn is a real model completion and
+			// measured 9,955 / 35,893 / 52,985 ms in production — the plumbing is
+			// ~25ms of it. Until this, the person saw an empty thread for the whole
+			// of that, which is indistinguishable from the bot being broken; the
+			// day's actual bug reports were "it does nothing" for a system that was
+			// working and slow.
+			//
+			// setStatus is Slack's own affordance for exactly this and it is the
+			// only one available: there is NO SSE to a Slack client, so "streaming"
+			// here means a status and then a message, never a token stream.
+			//
+			// Best-effort by construction: a failed status must never cost the
+			// answer, so the error is dropped rather than returned. Slack clears it
+			// when the reply lands.
+			slackThinking(s, org, route.Channel, route.ThreadTS)
+			runBridgeTurn(s, org, in, reply)
+		})
 		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)
@@ -301,7 +326,7 @@ func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL
 			return
 		}
 	}
-	text, ephemeral := bridgeReply(s, ctx, org, in.Provider, in.ExternalID, in.User, in.Text)
+	text, ephemeral := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Text)
 	slackSlashReply(s, ctx, in, responseURL, text, ephemeral)
 }
 
@@ -639,41 +664,41 @@ func slackReadBody(c *zip.Ctx) []byte {
 	return b
 }
 
-// slackPublishHome renders the App Home tab for one user.
+// slackThinking shows Slack's native "is thinking…" indicator on a thread while
+// a turn runs.
 //
-// Slack fills an unpublished Home with its own "this is still a work in
-// progress" placeholder, so the choice is not between a Home and no Home — it is
-// between OUR page and Slack's apology. Any app that turns on home_tab_enabled
-// and stops there looks half-built to everyone who clicks it.
+// It exists because the wait is REAL and long: a turn is a model completion,
+// measured 9,955–52,985 ms in production against ~25 ms of plumbing. Perceived
+// latency is the only kind we can fix without changing the model, and an empty
+// thread for fifty seconds reads as a dead bot.
 //
-// Published per user on app_home_opened rather than once at install: the view is
-// per-user state in Slack's model, and rendering at open means the page reflects
-// what is true now instead of what was true when the workspace connected.
+// assistant.threads.setStatus is the ONE mechanism Slack offers here. There is no
+// SSE to a Slack client, so the honest vocabulary is: a status, then a message.
+// Anything else would be a second message to edit, which is worse — it occupies
+// the thread with a placeholder the reader has to skip past.
 //
-// The content deliberately answers the two questions someone clicking Home
-// actually has — what can this do, and what do I type — rather than describing
-// the product. A Home that reads like a landing page teaches nothing.
-func slackPublishHome(ctx context.Context, botToken, user string) error {
-	section := func(text string) map[string]any {
-		return map[string]any{"type": "section", "text": map[string]any{"type": "mrkdwn", "text": text}}
+// It requires the assistant:write scope and a thread; a channel mention without a
+// thread has nowhere to hang a status, so that case is skipped rather than faked.
+// Every failure is swallowed: a status that did not render must never cost the
+// answer that follows it.
+func slackThinking(s *cloud.Service[state], org, channel, threadTS string) {
+	if strings.TrimSpace(threadTS) == "" || strings.TrimSpace(channel) == "" {
+		return // no thread to decorate; the reply itself is the only signal
 	}
-	view := map[string]any{
-		"type": "home",
-		"blocks": []map[string]any{
-			{"type": "header", "text": map[string]any{"type": "plain_text", "text": "Hanzo AI", "emoji": true}},
-			section("The Open AI Cloud, in Slack. Ask a question, write and ship code, or query your own infrastructure — in a channel with `@Hanzo`, or right here in a DM."),
-			{"type": "divider"},
-			section("*Try asking*\n• `@Hanzo what changed on main today?`\n• `@Hanzo why is my service returning 500s?`\n• `@Hanzo deploy my app and give me the URL`\n• `@Hanzo add a health check to my Go service`"),
-			{"type": "divider"},
-			section("*Two ways to reach it*\n• `@Hanzo` in any channel it has been invited to\n• `/hanzo <your question>` anywhere, without inviting it"),
-			section("_Hanzo only posts in channels it is a member of — invite it with_ `/invite @Hanzo`_. That is deliberate: it holds no permission to post anywhere uninvited._"),
-			{"type": "context", "elements": []map[string]any{
-				{"type": "mrkdwn", "text": "<https://hanzo.ai|hanzo.ai>  ·  <https://docs.hanzo.ai|Docs>  ·  <https://cloud.hanzo.ai|Console>"},
-			}},
-		},
+	ctx, cancel := context.WithTimeout(context.Background(), slackStatusBudget)
+	defer cancel()
+	tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)
+	if err != nil {
+		return
 	}
-	return slackChatPost(ctx, botToken, "/views.publish", map[string]any{
-		"user_id": user,
-		"view":    view,
+	_ = slackChatPost(ctx, string(tok), "/assistant.threads.setStatus", map[string]any{
+		"channel_id": channel,
+		"thread_ts":  threadTS,
+		"status":     "is thinking…",
 	})
 }
+
+// slackStatusBudget bounds the status call. It is deliberately tiny: the status
+// is a courtesy that runs BEFORE the work, so a slow Slack must not delay the
+// answer it is announcing.
+const slackStatusBudget = 3 * time.Second

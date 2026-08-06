@@ -100,6 +100,84 @@
         }
       }
     },
+    "/v1/platform/apps": {
+      "get": {
+        "operationId": "get_v1_platform_apps",
+        "summary": "What this organization has declared, and what CD did with it",
+        "description": "Returns the declarations in the caller's own org directory, each joined with the Hanzo CD Application reconciling it — sync verdict, health, the universe commit last applied. `cd` is null for a declaration the delivery plane has no Application for, which is the normal state of one that exists only on a branch.\n\nIf the delivery plane cannot be read, the declarations are still returned and `cdUnavailable` says why. An unreadable plane never renders as \"nothing has been reconciled\".",
+        "tags": [
+          "platform"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_platform_apps",
+        "summary": "Deploy an app through cd.hanzo.ai",
+        "description": "Builds a git repository into an image and writes the declaration that names it — a values file in `hanzoai/universe` under `charts/app/values/\u003cnamespace\u003e/\u003cname\u003e.yaml`, which the `fleet` ApplicationSet renders as one Application. That file IS the deployment: nothing else has to be applied.\n\n`mode` decides whether anything can go live. The default, `branch`, pushes to `deploy/\u003cnamespace\u003e/\u003cname\u003e/\u003ctag\u003e` and returns a review URL; the generator reads main, so a branch declaration deploys NOTHING and merging the review is the deliberate act. `commit` writes main, and proves the image is pullable first — a declaration naming an image the registry cannot serve is an ImagePullBackOff with no rollback path.\n\nOmit `tag` to build; give it to declare an image an earlier call already built, which is how a green build is released without rebuilding it.\n\nAn org is its name: the values DIRECTORY, the destination NAMESPACE and the AppProject FENCE are all `\u003corg\u003e`, and the image is `\u003cregistry\u003e/\u003corg\u003e/\u003capp\u003e`. None of them is a request field — the directory decides what CD admits the sync under and the repository decides what the cluster pulls, so a caller who could name either could reach outside its own org.\n\n`org` is an ACT-AS, not a placement field: it defaults to the caller's own, and naming another requires SuperAdmin. So does naming a RESERVED org — the platform's own namespace family (the brands and their environments, the control and delivery planes, `admin`) — even when it is the caller's own, because an IAM org named `kube-system` does not own Kubernetes. Both refuse rather than downgrade, so an escape attempt is never indistinguishable from a normal request.\n\nA host outside the caller's org subtree is refused: claim and verify a custom domain first.",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/apps/{app}": {
+      "get": {
+        "operationId": "get_v1_platform_apps_by_app",
+        "summary": "One declaration",
+        "description": "The values file for one app as git declares it: image repository and tag, hosts, replicas, and whether CD is automated on it. 404 when this organization declares no such app.",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/apps/{app}/cd": {
+      "get": {
+        "operationId": "get_v1_platform_apps_by_app_cd",
+        "summary": "One app's reconciliation",
+        "description": "The Hanzo CD Application for one declaration, on its own — the poll a deploy view makes while it waits, without re-reading the whole inventory. 404 while the declaration exists only on a branch, because the generator reads main.",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/cd": {
+      "get": {
+        "operationId": "get_v1_platform_cd",
+        "summary": "The delivery plane",
+        "description": "Every Hanzo CD Application this caller may observe, with its sync verdict, health, the universe revision last applied, and whether automation and self-heal are on. A SuperAdmin sees the fleet; an org admin sees only Applications whose destination namespace IS its own organization, and never a reserved one.\n\nA cluster with no CD installed answers an empty plane. A plane that cannot be READ answers 503 and says why — the two are opposite facts and never share a shape.",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/ci": {
+      "get": {
+        "operationId": "get_v1_platform_ci",
+        "summary": "Continuous integration (not wired)",
+        "description": "Answers 501. The forge's Actions runs need a Forgejo API client and this deployment has none; an empty run list would be indistinguishable from a forge with no runs.",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
     "/v1/platform/fleet": {
       "get": {
         "operationId": "get_v1_platform_fleet",

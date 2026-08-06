@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -31,6 +33,22 @@ import (
 // reaching for cloud.Plane() — which would pull the entire fleet's package graph
 // into a router that deliberately links none of it. One op, one socket, one
 // import of the leaf both halves already share.
+//
+// # The AGENT DOOR is on this socket too, and for the same reason
+//
+// A subsystem cannot enumerate its siblings — a plugin is a process, and
+// MCPTools() is in-process — so an agent run inside `agents` could resolve its
+// declared tool names against nothing but its own registry, which in the split
+// fleet holds what `agents` itself registered and no more. The thing that DOES
+// aggregate already exists and is already mounted: fleet.Door, at
+// api.hanzo.ai/v1/mcp. The only part it was missing was an address reachable
+// from inside.
+//
+// It is the SAME Door object, not a second one. So an agent gets the same union
+// its external MCP clients get, ordered by the same rank and — the part that
+// matters — narrowed by the same [fleet] curation rule, which is applied inside
+// gather where the routing table is written. A tool the door will not project to
+// Slack is not routable for an agent either, and both hear the same -32602.
 
 // serveWake opens the router's start door at plane.HostApp's socket.
 //
@@ -46,8 +64,15 @@ import (
 // logged where the socket is named, so the degradation is visible rather than
 // inferred — and it does not return until the socket ACCEPTS, so "listening" in the
 // log is a fact rather than an intention.
-func serveWake(app *zip.App) {
+func serveWake(app *zip.App, mcp *fleet.Door) {
 	door := zip.New(zip.Config{AppName: "plane", Logger: app.Logger()})
+
+	// The fleet's agent door, at its OWN address (manifest.MCPPath) on this
+	// socket. One name for one door across both transports: over HTTP it is the
+	// edge's /v1/mcp, over ZAP it is the fleet's own. Nothing here re-aggregates
+	// and nothing here filters — [fleet.Door.Serve] publishes the object main.go
+	// already built.
+	mcp.Serve(door, manifest.MCPPath)
 
 	zip.Post[plane.StartIn, plane.Started](door, "/host/start",
 		func(_ context.Context, in *plane.StartIn) (*plane.Started, error) {

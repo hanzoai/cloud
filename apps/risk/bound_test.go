@@ -429,9 +429,21 @@ func (l *ledger) screens() int64 {
 // await waits for n debits. They are posted on a background context by design —
 // a debit must not add latency to a decision — so a test that read immediately
 // would be measuring the scheduler.
+//
+// The bound is GENEROUS, and that is what makes the assertion mean something. The
+// question this helper asks is "does the debit reach the ledger" — a money question,
+// with a yes/no answer that does not depend on the clock. A tight bound answers a
+// SECOND question nobody asked, "does it get there within 2 seconds on this machine",
+// and on the gate that machine is running the whole fleet's suite at once. Measured:
+// TestFeatures_IsPricedFromItsWindow passes 20/20 alone and failed the release gate
+// at "only 0 of 1 debits reached the ledger" — a red money gate that proved nothing
+// about the money, and the kind of red that teaches people to re-run rather than read.
+// The happy path still returns in milliseconds (the poll is unchanged), so nothing
+// here gets slower; only the failure takes longer to declare, and a metering
+// regression is worth thirty seconds of certainty.
 func (l *ledger) await(t *testing.T, n int) []debit {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		l.mu.Lock()
 		got := append([]debit(nil), l.posted...)
