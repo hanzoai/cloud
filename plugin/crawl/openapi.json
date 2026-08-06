@@ -20,7 +20,7 @@
       "post": {
         "operationId": "post_v1_crawl",
         "summary": "Fetch one URL and read it back as markdown",
-        "description": "Fetches a single URL from inside the cluster and answers with the page's title, its content rendered to markdown, and whatever metadata the document carried.\n\nA page that could not be fetched is a NORMAL outcome, not a fault: an unreachable host, a refused address or a non-document content type all answer 200 with `success:false` and the reason in `error`. Non-2xx is reserved for a caller problem — 401 for a bad key, 400 for a missing url, 503 when the surface is unconfigured — so error handling can trust the status.\n\nAdmission is either a validated principal or the shared service key, presented as X-API-Key or a Bearer; neither is refused, and an unset key fails closed rather than opening the fetcher to the private network. Crawled pages are archived under the scope of the VERIFIED principal, never a scope named in the body; a service caller has no org and its pages land in the shared corpus. One URL per call, and the request body is bounded at 1 MiB.",
+        "description": "Reads one URL and answers with the page as markdown.\n\nIt fetches a single URL from inside the cluster and answers with the address it\nactually landed on, the document's title, its content rendered to MARKDOWN, and\nwhatever the page said about itself. One URL per call: batching would make the\nanswer a partial-failure envelope every caller then has to unpack.\n\nA PAGE THAT COULD NOT BE FETCHED IS A NORMAL ANSWER, not a fault. An\nunreachable host, a refused address and a content type that is not a document\nall answer 200 with `success:false` and the reason in `error`, because the\ncaller sent a well-formed ask and gets a well-formed answer. Non-2xx is reserved\nfor a caller problem — 400 with the same body when there is no url, 401 for a\nbad key, 503 when the surface is unconfigured — so error handling can trust the\nstatus. Check `success` before reading `data`.\n\nAdmission is either a validated principal or the shared service key, presented\nas X-API-Key or a Bearer; neither is refused, and an unset key fails closed\nrather than opening the fetcher to the private network. Pages are archived under\nthe scope of the VERIFIED principal and NEVER a scope named in the body, so a\nURL already read under that scope is answered from the archive without touching\nthe network; a service caller has no org and its pages land in the shared\ncorpus.\n\nThe URL is caller-supplied and dialled from INSIDE the cluster, which makes this\na request-forgery primitive by construction. Only http and https are accepted,\nand every address actually dialled must be public unicast — loopback,\nlink-local, private and multicast are refused. The check lives in the DIALER\nrather than on the hostname, because resolving a name to validate it and then\nletting the transport resolve it again is a gap DNS rebinding walks straight\nthrough; redirects re-enter the same dialer.",
         "tags": [
           "crawl"
         ],
@@ -31,18 +31,29 @@
                 "$ref": "#/components/schemas/crawlRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/crawlResult"
                 }
               }
-            }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/crawlResult"
+                }
+              }
+            },
+            "description": "bad request"
           }
         }
       }
@@ -51,44 +62,49 @@
   "components": {
     "schemas": {
       "crawlDocument": {
-        "type": "object",
         "properties": {
           "markdown": {
+            "description": "Markdown is the page's content, extracted and rendered to markdown. This is\nthe field to read.",
             "type": "string"
           },
           "metadata": {
-            "type": "object",
-            "additionalProperties": {}
+            "description": "Metadata is whatever the document said about itself — description, og:*,\nlanguage — plus the response status, the final URL and the content type. It\nis an OPEN key space, so it is carried as raw JSON: `map[string]any`\npublishes `additionalProperties:{\"type\":\"object\"}`, which the integer\n`status` inside it refutes, while raw JSON publishes `{}` — \"any JSON\",\nwhich is true. The bytes are identical either way (encoding/json writes a\nmap's keys sorted, and this IS that marshalling)."
           },
           "title": {
+            "description": "Title is the document's title, when it carried one.",
             "type": "string"
           },
           "url": {
+            "description": "URL is the address actually read, after redirects.",
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "crawlRequest": {
-        "type": "object",
         "properties": {
           "url": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "crawlResult": {
-        "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/crawlDocument"
+            "$ref": "#/components/schemas/crawlDocument",
+            "description": "Data is the page, present exactly when Success."
           },
           "error": {
+            "description": "Error says what stopped the fetch: the host was refused, unreachable, or\nserved something that is not a document.",
             "type": "string"
           },
           "success": {
+            "description": "Success is whether the page was fetched and read. FALSE with an Error is a\ncomplete answer, not a fault — check this before reading Data.",
             "type": "boolean"
           }
-        }
+        },
+        "type": "object"
       }
     }
   }

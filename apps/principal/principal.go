@@ -418,6 +418,41 @@ func Project(c *zip.Ctx) string {
 	return strings.Clone(project)
 }
 
+// projectKey names the slot the NARROWING crosses the typed-op seam in.
+// Unexported zero-size type, exactly like orgKey.
+type projectKey struct{}
+
+// WithProject parks the caller's project on ctx so a TYPED op — which receives a
+// context.Context and nothing else — can resolve it. It IS Project, carried to
+// the one seam that cannot call it, exactly as WithOrg is Org.
+//
+// It parks UNCONDITIONALLY, and that is the difference from WithOrg. Org is an
+// AUTHORITY, so an unvalidated request must park nothing rather than an empty
+// tenant a query would then honour. The project is a NARROWING — Project's own
+// doc says it does not gate on Validated, because every consumer AND-s it with an
+// org that does. Gating it here would state the authority twice and let the two
+// statements disagree.
+func WithProject(ctx context.Context, c *zip.Ctx) context.Context {
+	return context.WithValue(ctx, projectKey{}, Project(c))
+}
+
+// ProjectFrom resolves what WithProject parked — the typed-op counterpart of
+// Project, and the same value, with the SAME signature for the same reason the
+// others share theirs: one fact, read from either side of the seam.
+//
+// A ctx with no request behind it answers DefaultProject, which is what Project
+// answers for a request that names no project: "no narrowing". Neither is an
+// authority — off the HTTP path OrgFrom reports no tenant and ValidatedFrom
+// reports no principal, so the caller is already refused at the org boundary
+// before a project is ever consulted.
+func ProjectFrom(ctx context.Context) string {
+	project, ok := ctx.Value(projectKey{}).(string)
+	if !ok || project == "" {
+		return DefaultProject
+	}
+	return project
+}
+
 // ProjectScope resolves the caller's project as a storage/filter KEY: "" for the
 // org's DEFAULT project (which denotes the whole-org view — the default project ==
 // the org's entire dataset), else the server-minted project slug. It is the ONE
