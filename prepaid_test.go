@@ -75,7 +75,7 @@ type ledgerReader struct {
 	fin interface {
 		Balance(ctx context.Context, org, subject, currency string, test bool) (money.Amount, error)
 		Deposit(ctx context.Context, in types.DepositInput) (string, error)
-		ListEntries(ctx context.Context, org string, limit int) ([]finance.TxnRow, error)
+		ListEntries(ctx context.Context, org string, test bool, limit int) ([]finance.TxnRow, error)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestPrepaidLoop_TopUpSpendExhaustRefuse(t *testing.T) {
 
 	// ── the books ───────────────────────────────────────────────────────────────
 	// One movement, one balanced entry. Five movements: the top up and four debits.
-	entries, err := led.fin.ListEntries(context.Background(), ledgerOrg, 0)
+	entries, err := led.fin.ListEntries(context.Background(), ledgerOrg, false, 0)
 	if err != nil {
 		t.Fatalf("read entries: %v", err)
 	}
