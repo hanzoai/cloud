@@ -296,6 +296,12 @@ func wakeScorer(lg log.Logger) {
 // one value doing both jobs read the receipt out of a namespace it was never in.
 // They are named the way [principal] names them: `org` is the data namespace, and
 // `ledger` is the billing key.
+//
+// TWO NAMES IS FOR READING, NOT FOR MINTING. Every read here is right to hold both —
+// the receipt comes out of `org` and the model judges `ledger` — but a CREDIT has one
+// address and both names claim it, so [screen.settle] refuses a mint whose two names
+// differ rather than picking one. A card charged on one org's merchant account cannot
+// fund another org's wallet whichever way round it is spelled.
 type payment struct {
 	// org is the organisation the charge is WRITTEN under — the commerce namespace
 	// holding the receipt the money core produced ([chargedOrg], the EFFECTIVE org).
