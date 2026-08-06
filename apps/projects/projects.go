@@ -299,6 +299,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	cloud.RegisterOrgScopeResolver(projectScopeResolver{store: store})
 	setScopeResolverForPlane(projectScopeResolver{store: store})
 	exposeOwnership()
+	// What the org has built and what of it is serving — the tenant-scoped
+	// rollup, which sites_live deliberately is not (figures_rpc.go).
+	exposeFigures()
 
 	routes(app, s)
 

@@ -14,10 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
-	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/zip"
 )
 
 // webAI answers the engine's synthesis prompt with a fixed string; the plan and
@@ -49,11 +46,8 @@ func noNetworkSearch(t *testing.T) {
 // UNTOUCHED (a no-mode financial question still routes to books).
 func TestAskWebModeDispatch(t *testing.T) {
 	noNetworkSearch(t)
-	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	fakeBooks(app, map[string]string{"acme": "$4,200"})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: &webAI{answer: "Clojure was created by Rich Hickey."}}); err != nil {
-		t.Fatalf("Mount: %v", err)
-	}
+	app := newAskApp(t, &webAI{answer: "Clojure was created by Rich Hickey."},
+		byOrg{"acme": money("$4,200")}, nil, nil)
 
 	// web mode → the answer engine
 	body, _ := json.Marshal(askRequest{Q: "who created clojure and why", Mode: "search"})
