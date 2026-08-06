@@ -156,7 +156,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// its own dynamic client because it observes the whole platform tier, not one
 	// tenant namespace; the routes are siblings under the one /v1/platform prefix.
 	fb := cloud.NewBase(deps, "platform")
-	fleetRoutes(zapp, &cloud.Service[fleetState]{Base: fb, State: buildFleet(fb)})
+	fs := &cloud.Service[fleetState]{Base: fb, State: buildFleet(fb)}
+	fleetRoutes(zapp, fs)
+
+	// The delivery surface (/v1/platform/apps, /v1/platform/cd) — declarations in
+	// universe git reconciled by cd.hanzo.ai, which is the ONE deploy plane. It
+	// takes both services because it joins two planes: the declaration comes from
+	// git (s holds the KMS client the universe token is read with) and the
+	// reconciliation from the cluster (fs holds the dynamic client). Handed both
+	// here rather than reaching a package global at request time — see apps.go.
+	appsRoutes(zapp, s, fs)
 
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
 	// serves repos at this host), so a self-hosted-git app builds with no env.

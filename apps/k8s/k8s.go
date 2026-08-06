@@ -29,6 +29,13 @@ var Deployments = schema.GroupVersionResource{Group: "apps", Version: "v1", Reso
 // fleet is found, rather than hardcoding a list that goes stale on the next tenant.
 var Namespaces = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
 
+// Pods is the running pod itself. Read almost nowhere — an App CR is the right
+// altitude for a workload — but the sandbox warm pool addresses pods DIRECTLY,
+// because claiming a box is a label patch on one specific already-running pod
+// and there is no CR whose desired state expresses "that one, now, for this
+// tenant".
+var Pods = schema.GroupVersionResource{Version: "v1", Resource: "pods"}
+
 // Volumes is the PersistentVolumeClaim an app declares storage against. A claim
 // is a DIFFERENT lifetime from the workload that mounts it: the App CR is desired
 // state and can be deleted and recreated freely, while the claim holds the only

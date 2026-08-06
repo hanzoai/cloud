@@ -1,48 +1,41 @@
 package functions
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
-// execClient delegates function execution to the sandboxed code executor. This
-// binary NEVER runs org code in-process (mirrors clients/exec): it POSTs the
-// function's runtime + source + input to CODE_EXEC_UPSTREAM with the KMS-sourced
-// service key on X-API-Key. When the upstream is unset, invoke fails closed —
-// no execution, no fabricated output.
+// execClient runs a function's code in a SANDBOX, through apps/exec.
 //
-// The upstream + key are the SAME operator-set, KMS-synced env the exec
-// subsystem uses (CODE_EXEC_UPSTREAM / CODE_EXEC_API_KEY), so there is one
-// sandbox and one service credential across the binary. The target URL is
-// operator-controlled (never derived from org input), so invoke cannot be
-// steered at internal hosts (no SSRF from the function name or payload).
-type execClient struct {
-	upstream string
-	apiKey   string
-	http     *http.Client
-}
+// "A function invoke is a sandbox with a seconds-long lease" — the sandbox package
+// doc says so, and this is that sentence in code. What it replaces is an HTTP client
+// to CODE_EXEC_UPSTREAM, whose Service (code-exec.hanzo) had zero endpoints: every
+// non-fleet invoke in production was a 502 against a workload nobody deployed.
+//
+// It composes over apps/exec rather than over apps/sandbox directly, and that is
+// deliberate. "Run this snippet in this language and tell me what it printed" is one
+// operation, and exec already owns it — the language table, the artifact sweep, the
+// session rule. A second copy here would be a second table to keep in step with the
+// image, which is precisely how the two consumers of CODE_EXEC_UPSTREAM ended up
+// asking the same executor for two different paths.
+//
+// The lease ENDS with the call. A code-interpreter session outlives its run because
+// the reply hands back an id the caller addresses next; a function invoke is over
+// the moment it answers, so holding the pod until the reaper notices would be
+// fifteen idle minutes of a node per invocation.
+type execClient struct{}
 
-func newExecClient() *execClient {
-	return &execClient{
-		upstream: strings.TrimRight(strings.TrimSpace(os.Getenv("CODE_EXEC_UPSTREAM")), "/"),
-		apiKey:   strings.TrimSpace(os.Getenv("CODE_EXEC_API_KEY")),
-		http:     &http.Client{},
-	}
-}
-
-func (e *execClient) configured() bool { return e.upstream != "" }
+func newExecClient() *execClient { return &execClient{} }
 
 // langFor maps a registry runtime to the executor's language id.
 func langFor(runtime string) string {
@@ -65,84 +58,50 @@ type execResult struct {
 	Ok         bool
 }
 
-// run executes one function on the sandbox and returns the outcome. Errors are
-// returned as (result, err) with result carrying whatever the sandbox produced;
-// the caller records the invocation regardless.
+// run executes one function in a sandbox and returns the outcome. Errors are
+// returned as (result, err) with result carrying whatever the sandbox produced; the
+// caller records the invocation regardless.
+//
+// A deployment with no sandboxes app answers 503 rather than pretending: plane.Ask
+// distinguishes "not deployed here" from "deployed and failing", and only the first
+// is a configuration fact.
 func (e *execClient) run(ctx context.Context, f Function, input string, timeoutSec int) (execResult, error) {
-	if !e.configured() {
-		return execResult{}, errExecUnconfigured
-	}
 	if timeoutSec <= 0 {
 		timeoutSec = 30
 	} else if timeoutSec > 900 {
 		timeoutSec = 900
 	}
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		org = f.Org
+	}
 	rctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	// LibreChat code-interpreter shape (the contract clients/exec proxies). args
-	// carries the caller input on stdin; env NAMES are declared but values are
-	// resolved sandbox-side from the mounted secret refs — never sent from here.
-	payload := map[string]any{
-		"lang": langFor(f.Runtime),
-		"code": f.Code,
-		"args": []string{input},
-	}
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(rctx, http.MethodPost, e.upstream+"/exec", bytes.NewReader(body))
+	// The caller's input rides as the program's first argument, which is the shape
+	// the code-interpreter contract already carries it in (`args`). Nothing about the
+	// function's environment is sent from here: env NAMES are declared on the
+	// registry row and their VALUES are resolved sandbox-side from mounted refs.
+	res, err := exec.Run(rctx, org, &exec.CodeRun{
+		Lang: langFor(f.Runtime), Code: f.Code, Args: []string{input}})
 	if err != nil {
+		if errors.Is(err, plane.ErrNoPeer) {
+			return execResult{}, errExecUnconfigured
+		}
 		return execResult{}, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if e.apiKey != "" {
-		req.Header.Set("X-API-Key", e.apiKey)
+	// End the lease on the context that OUTLIVES the run's timeout. Using rctx would
+	// mean a function that ran to its own deadline leaves its pod behind, which is
+	// the exact leak this call exists to prevent.
+	if derr := exec.End(ctx, org, res.SessionID); derr != nil {
+		mounted.Log.Warn("end function sandbox", "org", org, "fn", f.Name, "err", derr)
 	}
-	resp, err := e.http.Do(req)
-	if err != nil {
-		return execResult{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-
-	res := execResult{StatusCode: resp.StatusCode, Ok: resp.StatusCode >= 200 && resp.StatusCode < 300}
-	res.Output, res.Errout = parseExecBody(raw)
-	if res.Errout != "" {
-		res.Ok = false
-	}
-	return res, nil
+	out := execResult{StatusCode: http.StatusOK, Output: res.Stdout, Errout: res.Stderr}
+	out.Ok = strings.TrimSpace(res.Stderr) == ""
+	return out, nil
 }
 
-// parseExecBody defensively pulls stdout/stderr from the executor response
-// across the shape variants (stdout/output/result, stderr/error). A rename
-// upstream degrades to the raw body, never a throw.
-func parseExecBody(raw []byte) (out, errout string) {
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return strings.TrimSpace(string(raw)), ""
-	}
-	// Some executors nest under "run".
-	if run, ok := m["run"].(map[string]any); ok {
-		out = firstStr(run, "stdout", "output", "result")
-		errout = firstStr(run, "stderr", "error")
-		if out != "" || errout != "" {
-			return out, errout
-		}
-	}
-	out = firstStr(m, "stdout", "output", "result", "logs")
-	errout = firstStr(m, "stderr", "error")
-	return out, errout
-}
-
-func firstStr(m map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := m[k].(string); ok && strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-var errExecUnconfigured = errors.New("code execution runtime not configured")
+var errExecUnconfigured = errors.New("code execution runtime not deployed here")
 
 // invoke runs a function and records a REAL invocation. Fail-closed when the
 // sandbox is unconfigured (503, nothing recorded, nothing fabricated).
@@ -162,9 +121,6 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	if f.Target != "fleet" && !s.State.exec.configured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "code execution runtime not configured on this deployment")
 	}
 	var body struct {
 		Input string `json:"input"`
@@ -243,7 +199,14 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 		})
 	}
 	code := http.StatusOK
-	if iv.Status != "ok" {
+	switch {
+	case errors.Is(runErr, errExecUnconfigured):
+		// "This deployment cannot run code" is not "the run failed" — it is a
+		// deployment fact, and 503 is the status a caller retries against a healthy
+		// replica on. 502 would say the sandbox answered badly, which it did not: it
+		// is not here.
+		code = http.StatusServiceUnavailable
+	case iv.Status != "ok":
 		code = http.StatusBadGateway
 	}
 	return c.JSON(code, invocationView{

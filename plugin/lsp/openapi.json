@@ -1,0 +1,378 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package lsp is live semantic code intelligence — definitions, references, types, hover, outline and diagnostics — over a repository AND its resolved dependencies, with no toolchain on the caller's machine.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "code"
+    }
+  ],
+  "paths": {
+    "/v1/code/lsp/complete": {
+      "post": {
+        "operationId": "post_v1_code_lsp_complete",
+        "summary": "Offers the candidates a language server has at a position, typed and resolved through the repository's dependencies rather than guessed from text.",
+        "description": "Offers the candidates a language server has at a position, typed and\nresolved through the repository's dependencies rather than guessed from text.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "character": 18,
+                "line": 120,
+                "path": "apps/lsp/lsp.go",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/code/lsp/diagnostics": {
+      "post": {
+        "operationId": "post_v1_code_lsp_diagnostics",
+        "summary": "Reports every problem the language server finds in one file — compile errors, type errors and lints, each with its span and its severity (1 error, 2 warning, 3 information, 4 hint).",
+        "description": "Reports every problem the language server finds in one file —\ncompile errors, type errors and lints, each with its span and its severity (1\nerror, 2 warning, 3 information, 4 hint). The position is ignored.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "path": "apps/lsp/lsp.go",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/code/lsp/hover": {
+      "post": {
+        "operationId": "post_v1_code_lsp_hover",
+        "summary": "Renders the type and documentation of the symbol at a position, as the language server itself renders it.",
+        "description": "Renders the type and documentation of the symbol at a position, as the\nlanguage server itself renders it.\n\nPositions are the LSP's: line and character are 0-BASED and character counts\nUTF-16 code units, so an editor's 1-based line must have 1 subtracted before it\nis sent. The repository is named by slug and is always one in the caller's own\norg; rev pins a branch, tag or commit sha, and empty means the default branch.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "character": 18,
+                "line": 120,
+                "path": "apps/lsp/lsp.go",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/code/lsp/locate": {
+      "post": {
+        "operationId": "post_v1_code_lsp_locate",
+        "summary": "Finds where a symbol lives: its definition, its references, its type or its implementations, chosen by relation (definition, reference, type, implementation — empty means definition).",
+        "description": "Finds where a symbol lives: its definition, its references, its type or\nits implementations, chosen by relation (definition, reference, type,\nimplementation — empty means definition).\n\nIt resolves THROUGH dependencies. An answer whose external flag is set left the\nrepository, and its path is then the module coordinate it landed in — which is\nthe question a static index cannot answer and this service exists for.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "character": 18,
+                "line": 120,
+                "path": "apps/lsp/lsp.go",
+                "relation": "definition",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/code/lsp/symbols": {
+      "post": {
+        "operationId": "post_v1_code_lsp_symbols",
+        "summary": "Outlines one file: every declaration in it, with its kind and its span.",
+        "description": "Outlines one file: every declaration in it, with its kind and its span.\nThe position is ignored — the answer is the whole file.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "path": "apps/lsp/lsp.go",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Answer": {
+        "properties": {
+          "cold": {
+            "description": "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
+            "type": "boolean"
+          },
+          "completions": {
+            "items": {
+              "$ref": "#/components/schemas/Completion"
+            },
+            "type": "array"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array"
+          },
+          "hover": {
+            "type": "string"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/Location"
+            },
+            "type": "array"
+          },
+          "op": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "rev": {
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/Symbol"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Completion": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Diagnostic": {
+        "properties": {
+          "code": {
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Range"
+          },
+          "severity": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Location": {
+        "properties": {
+          "external": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Range"
+          }
+        },
+        "type": "object"
+      },
+      "Position": {
+        "properties": {
+          "character": {
+            "type": "integer"
+          },
+          "line": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Query": {
+        "properties": {
+          "character": {
+            "description": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
+            "type": "integer"
+          },
+          "line": {
+            "description": "Line is 0-based, per the LSP specification.",
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path is the repo-relative file, e.g. \"apps/lsp/lsp.go\".",
+            "type": "string"
+          },
+          "relation": {
+            "description": "Relation refines locate: definition, reference, type or implementation.\nEmpty means definition. Every other op ignores it.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository NAME within the caller's own org, e.g. \"cloud\".\nNot a URL and not an owner/name pair: the owner is the validated\nprincipal's org, so this names a repository the caller already owns.",
+            "type": "string"
+          },
+          "rev": {
+            "description": "Rev is a branch, tag or commit sha. Empty means the default branch. It is\nresolved to a commit before anything else happens, so an answer is always\nabout one immutable tree.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Range": {
+        "properties": {
+          "end": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "start": {
+            "$ref": "#/components/schemas/Position"
+          }
+        },
+        "type": "object"
+      },
+      "Symbol": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Range"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

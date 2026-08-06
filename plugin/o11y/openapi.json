@@ -14753,24 +14753,6 @@
           }
         ]
       },
-      "options": {
-        "operationId": "options_v1_sentry_by_wildcard1",
-        "summary": "Not served by the Sentry face",
-        "description": "Published because this address accepts every method, but the Sentry face routes nothing here: the request reaches the runtime as an unrouted path and no issue, event or trace is touched.",
-        "tags": [
-          "sentry"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
       "patch": {
         "operationId": "patch_v1_sentry_by_wildcard1",
         "summary": "Not served — the Sentry surface has no partial update",
@@ -14811,24 +14793,6 @@
         "operationId": "put_v1_sentry_by_wildcard1",
         "summary": "Move an error issue through its lifecycle",
         "description": "The one replace on the Sentry surface: updating an error ISSUE — resolving it, ignoring it, or assigning it — and answering the updated issue.\n\nNothing else here takes a replace. A project is created and deleted but never replaced, and the event and trace planes are append-only telemetry, so an issue's lifecycle is the only mutable state this face exposes.\n\nRequires a validated, org-scoped principal with edit rights; a viewer is refused. The write is confined to the org minted from that principal's claim, so an issue id belonging to another tenant is simply not found. Before the runtime is initialized, 503.",
-        "tags": [
-          "sentry"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "trace": {
-        "operationId": "trace_v1_sentry_by_wildcard1",
-        "summary": "Not served by the Sentry face",
-        "description": "Published because this address accepts every method, but the Sentry face routes nothing here: the request reaches the runtime as an unrouted path and no issue, event or trace is touched.",
         "tags": [
           "sentry"
         ],

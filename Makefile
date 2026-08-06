@@ -90,7 +90,7 @@ APP_BINS := $(addprefix bin/,$(APPS))
 # gate (check) sat behind a door with no handle.
 include mk/fleet.mk
 
-.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke zipdoc-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -262,10 +262,25 @@ TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)
 # the shipped build carries, so the suite exercises the same schema surface.
 TEST_TAGS := sqlite_fts5
 
-test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
-	# The lifted prose is COMMITTED (zipdoc_gen.go) because bare `go build` cannot
-	# regenerate it; -check writes nothing and goes red when a lift no longer
-	# matches its source, which is the drift being committed makes possible.
+# Go drops comments at compile time, so cmd/zipdoc is the ONLY path from a typed
+# handler's prose to /v1/openapi.json — the document the SDK repos and the CLI
+# read. Its output is COMMITTED, and that is what lets a bare `go build` (and the
+# release image) produce a binary that still describes itself without anyone
+# paying to lift the prose again. The image used to pay: `go generate -run zipdoc
+# ./...` ran on the build's critical path for 355.9s of a 17-minute build, to
+# reproduce 99 files that were already in the tree.
+#
+# Committed means it can go STALE, so exactly one thing has to stay true:
+# regenerating from source changes nothing. This asserts it by running THE
+# GENERATOR and diffing, rather than asking a -check mode for a second opinion —
+# a gate must never be able to disagree with the tool it polices. It is also the
+# only form that catches the case below.
+#
+# `git status --porcelain`, not `git diff`: a NEW package's zipdoc_gen.go is
+# untracked and therefore invisible to a diff, which is the failure that matters
+# most. The pathspec scopes it to the generator's own files, so an unrelated
+# dirty tree neither hides a stale lift nor invents one.
+zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# Per PACKAGE, not ./...: the checker must load exactly the way `go generate`
 	# does, one package at a time — whole-module loading extracts differently
 	# (zap-proto/zip zipdoc: single-vs-module load divergence) and a gate must
@@ -273,9 +288,13 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 	# A dot-directory is not this module's source. An agent worktree at
 	# .claude/worktrees/<id>/ is a whole second checkout of this repository, and
 	# the walk read it: 203 packages where there are 104, and it went red on a
-	# copy's o11y while nothing here had changed. Same rule the source-walking
-	# gates in Go state (typed_request_gate_test.go, orgns_test.go).
-	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; 	done
+	# copy's o11y while nothing here had changed.
+	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
+	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
+	done
+
+test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
+	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 	# The drift gate: regenerate the document FROM SOURCE and fail on any diff.
 	# The weave above proves the subsets compose; this proves they are still the
@@ -293,9 +312,7 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
 	@echo ">>            a route added without regenerating will pass here and fail CI."
 	@echo ">>            the real gate:  make -f mk/fleet.mk check"
-	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
-	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
-	done
+	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
 # THE spec, in three steps, in the only order they work in:

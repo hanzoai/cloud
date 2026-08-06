@@ -331,6 +331,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The login-manager teardown, for the link process that has no session store
 	// in it — two doors onto the ONE StopSessions (sessions_rpc.go).
 	exposeSessions()
+	exposeRunOnBehalf()
 
 	o := agentOps{s: s}
 	// Bridge FIRST, and at the door this SUBSYSTEM is, not on one node inside it: a
@@ -891,7 +892,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 		return Run{}, err
 	}
 
-	r := executeRun(ctx, s.State.ai, a.Org, a, input, s.State.failoverModel)
+	r := executeRun(ctx, s.State.ai, a.Org, actor, a, input, s.State.failoverModel)
 	span.SetAttributes(
 		attribute.String("hanzo.agent.run_id", r.ID),
 		attribute.String("hanzo.agent.run_status", r.Status),
@@ -949,15 +950,23 @@ const (
 )
 
 // executeRun composes the agent's instructions with the caller input and runs
-// one chat completion through the AI client — with a bounded retry on transient
-// upstream overload and, if the agent's own model stays throttled, ONE failover
-// to the deployment's reliable model (fallback) so an autonomous bot reply still
-// lands. It returns the resulting Run — status "ok" with output and Model set to
-// the model that ACTUALLY answered (so metering bills that model), or "error"
-// with the final upstream failure. Pure of HTTP and persistence so it is directly
-// testable; the caller records + responds. This reliability policy is the agent
-// runner's ALONE — the interactive user-facing chat path is untouched.
-func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, input, fallback string) Run {
+// the agent — with a bounded retry on transient upstream overload and, if the
+// agent's own model stays throttled, ONE failover to the deployment's reliable
+// model (fallback) so an autonomous bot reply still lands. It returns the
+// resulting Run — status "ok" with output and Model set to the model that
+// ACTUALLY answered (so metering bills that model), or "error" with the final
+// upstream failure. Pure of HTTP and persistence so it is directly testable; the
+// caller records + responds. This reliability policy is the agent runner's ALONE
+// — the interactive user-facing chat path is untouched.
+//
+// An agent that declares TOOLS and whose tools the plane actually offers runs the
+// bounded tool loop instead of a single completion (tools.go). One with none —
+// or one whose declared names resolve to nothing — takes the single completion
+// this has always been, unchanged.
+//
+// actor is the run's billing identity (billingActor's "org/sub"), threaded so a
+// tool dispatch runs as the principal the run is charged to.
+func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Agent, input, fallback string) Run {
 	// Child step span; the AI client opens its own GenAI span nested under this.
 	ctx, span := agentTracer.Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
@@ -971,7 +980,33 @@ func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, inp
 		prompt += in
 	}
 	start := time.Now()
-	resp, used, aiErr := completeWithFailover(ctx, ai, org, prompt, a.Model, fallback)
+	var (
+		resp  *types.ChatResponse
+		used  string
+		aiErr error
+	)
+	// An agent nested at the depth limit is offered nothing and has to answer for
+	// itself — the one thing that stops a cycle of agents-as-tools, since each
+	// level would otherwise start its round cap over (tools.go).
+	var offer []string
+	if agentDepth(ctx) < maxAgentDepth {
+		offer = callableTools(a)
+	}
+	defs := runTools.catalog(ctx, org, actor, offer)
+	// BOTH numbers, always. An agent that declares tools and is offered none is
+	// the exact shape of the split-fleet gap tools.go describes, and it is only
+	// diagnosable if the span says "declared 3, offered 0" rather than staying
+	// silent about a run that quietly had no hands.
+	span.SetAttributes(
+		attribute.Int("hanzo.agent.tools_declared", len(a.Tools)),
+		attribute.Int("hanzo.agent.tools", len(defs)),
+	)
+	if len(defs) > 0 {
+		resp, used, aiErr = completeWithTools(ctx, ai, org, actor, prompt, a.Model, fallback, defs)
+	} else {
+		resp, used, aiErr = completeWithFailover(ctx, ai,
+			&types.ChatRequest{Model: a.Model, Org: org, Prompt: prompt}, fallback)
+	}
 	dur := time.Since(start).Milliseconds()
 	id, _ := genID("run")
 	r := Run{
@@ -992,20 +1027,28 @@ func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, inp
 	return r
 }
 
-// completeWithFailover runs the completion on the agent's model with a bounded
+// completeWithFailover runs one completion on req's own model with a bounded
 // retry (completeWithRetry), then — only if that model is STILL throttled after
 // its retries — fails over ONCE to fallback, a reliable model. It returns the
 // response, the model that actually produced it (for honest metering), and the
 // final error. A non-transient failure on either model returns immediately (the
 // next model would fail identically). ONE ordered mechanism, no config sprawl.
-func completeWithFailover(ctx context.Context, ai types.AIClient, org, prompt, model, fallback string) (*types.ChatResponse, string, error) {
+//
+// It takes the whole request rather than a prompt string because a tool round IS
+// the request: the transcript so far and the tools on offer are part of what is
+// being retried, and a helper that only knew a prompt would have to grow a second
+// copy of this policy for the loop to reuse (tools.go). req.Model is set per
+// attempt; everything else is the caller's.
+func completeWithFailover(ctx context.Context, ai types.AIClient, req *types.ChatRequest, fallback string) (*types.ChatResponse, string, error) {
+	model := req.Model
 	models := []string{model}
 	if f := strings.TrimSpace(fallback); f != "" && f != model {
 		models = append(models, f)
 	}
 	var lastErr error
 	for _, m := range models {
-		resp, err := completeWithRetry(ctx, ai, org, prompt, m)
+		req.Model = m
+		resp, err := completeWithRetry(ctx, ai, req)
 		if err == nil {
 			return resp, m, nil
 		}
@@ -1022,10 +1065,10 @@ func completeWithFailover(ctx context.Context, ai types.AIClient, org, prompt, m
 // completeWithRetry calls the completion up to maxAttempts times, retrying ONLY a
 // transient upstream overload (types.ErrUpstreamBusy) with jittered backoff and
 // respecting context cancellation. A non-transient error returns immediately.
-func completeWithRetry(ctx context.Context, ai types.AIClient, org, prompt, model string) (*types.ChatResponse, error) {
+func completeWithRetry(ctx context.Context, ai types.AIClient, req *types.ChatRequest) (*types.ChatResponse, error) {
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		resp, err := ai.ChatCompletion(ctx, &types.ChatRequest{Model: model, Prompt: prompt, Org: org})
+		resp, err := ai.ChatCompletion(ctx, req)
 		if err == nil {
 			return resp, nil
 		}

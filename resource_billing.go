@@ -247,6 +247,15 @@ func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted f
 	// One clone here, rather than every caller of a fire-and-forget meter having
 	// to remember. See [metering.Usage.Clone].
 	u = u.Clone()
+	// NAME THE ACT BEFORE CHOOSING WHO BILLS IT. Both branches below record this
+	// usage, and the ledger dedups on its ref whichever one carries it — so the name
+	// must be fixed HERE, above the topology, or the two paths key the same act
+	// differently. Sealing below the branch is what let a split deploy re-mint a ref
+	// per call and charge one act twice. Seal is idempotent, so a caller that already
+	// holds the act's own name (a formation ref, a registration ref) keeps it, and the
+	// co-resident path — where [metering.Client.Record] seals what it is given — is
+	// unchanged by having been sealed one step earlier.
+	u = u.Seal()
 	if !rm.Enabled() {
 		rm.meterPeer(org, kind, u, posted)
 		return

@@ -42,7 +42,6 @@
 package metering
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -59,16 +58,20 @@ import (
 
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/money"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/cloud/types"
 )
 
-// Canonical commerce billing paths (mounted under /v1). Keep in lockstep with
+// Canonical commerce billing READS (mounted under /v1). Keep in lockstep with
 // commerce/api/billing/handlers.go — a wrong prefix 404s and, fail-closed,
 // denies every request.
+//
+// They are all reads. The WRITE — the usage debit — crosses the internal plane instead,
+// because the act's name is `json:"-"` and could not survive a JSON body; see [Client.Record].
 const (
 	pathBalance         = "/v1/billing/balance"
 	pathTier            = "/v1/billing/tier"
-	pathUsage           = "/v1/billing/usage"
 	pathLimitsAuthorize = "/v1/billing/alerts/authorize"
 )
 
@@ -773,31 +776,53 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 		return &RecordResult{User: u.User, Amount: amt.Cents(), Currency: u.Currency, Type: "withdraw"}, nil
 	}
 
-	// HTTP path to commerce: serialize the wire fields. A typed Amount is folded to
-	// micros (sub-cent) when it carries sub-cent precision, else cents — commerce
-	// preserves the exact micros in metadata (usage.go: effMicros). When commerce
-	// grows an 18-dp wire field, the typed Amount flows there unrounded too.
-	if u.AmountMicros == 0 && u.AmountCents == 0 {
-		u.AmountCents = amt.Cents()
+	// SPLIT DEPLOY: the ledger is in another PROCESS, so the debit goes to the process
+	// that owns it over the internal PLANE — the same crossing the gate, the balance read
+	// and every other in-tree money call make.
+	//
+	// It used to POST the wire fields to commerce's /v1/billing/usage, and the act's name
+	// did not survive: Ref is `json:"-"` — deliberately, so no JSON body anywhere can set
+	// the ledger's idempotency key — so json.Marshal dropped it and every debit arrived
+	// anonymous. A caller that SEALED its usage precisely because it intends to re-send
+	// (the contract [Usage.Seal] states, and the one this client's own tests hold on the
+	// co-resident path) was therefore charged again on the retry. plane.Usage.Ref carries
+	// the same value as a FIELD OF ITS OWN, so the crossing keeps the key without putting
+	// it on a client-facing document.
+	//
+	// The HTTP path was not a second deployment to preserve, either. COMMERCE_URL resolves
+	// to the in-cluster commerce Service, which selects THESE pods — there is no separate
+	// commerce backend in prod — so the debit left the binary only to re-enter it through
+	// the public edge, which is the self-dispatch that has already surfaced as a 502 loop
+	// on the read side (apps/commerce/mount.go). The peer is a socket away; ask it.
+	//
+	// The amount crosses as the EXACT decimal, never a folded cent or micro figure: the
+	// receiver parses it and debits it verbatim, so an 18-decimal per-token charge arrives
+	// unrounded. plane.Amount is the ONE conversion, so an amount cannot be packed by one
+	// rule here and read by another there.
+	if _, err := commerce.FinanceRecord(plane.For(ctx, u.Org), &plane.RecordIn{
+		Subject: u.User,
+		Amount:  plane.Amount(amt.Unwrap()),
+		Usage: plane.Usage{
+			Model: u.Model, Provider: u.Provider, Project: u.Project, Service: u.Service,
+			// The act's name and the correlation id cross as two different things,
+			// which is the whole distinction this key exists on.
+			Ref: u.Ref, RequestID: u.RequestID, ClientIP: u.ClientIP,
+			// WHO acted and WHAT WORK was priced. Both rode the old HTTP body and had
+			// no field on the crossing, so every split-deploy debit arrived without an
+			// actor and without the counts its own amount was computed from — the same
+			// class of silent field loss as the anonymous Ref this crossing exists to
+			// fix, and invisible for the same reason: a dropped field is not an error.
+			Actor:        u.Actor,
+			PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens,
+			TotalTokens: u.TotalTokens,
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("metering: plane usage debit: %w", err)
 	}
-
-	payload, err := json.Marshal(u)
-	if err != nil {
-		return nil, fmt.Errorf("metering: encode usage: %w", err)
-	}
-
-	body, err := c.post(ctx, pathUsage, payload, u.Org)
-	if err != nil {
-		return nil, err
-	}
-
-	var res RecordResult
-	if err := json.Unmarshal(body, &res); err != nil {
-		// Commerce returned 2xx but an unexpected shape; the debit still
-		// happened, so don't treat decode failure as a hard error.
-		return nil, nil
-	}
-	return &res, nil
+	// The debit's own figure, exactly as the co-resident branch reports it. No transaction
+	// id: the peer answers the amount it wrote and nothing else, and inventing one here
+	// would hand a caller an identifier that names nothing.
+	return &RecordResult{User: u.User, Amount: amt.Cents(), Currency: u.Currency, Type: "withdraw"}, nil
 }
 
 // ---- HTTP plumbing -------------------------------------------------------
@@ -811,15 +836,6 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, org string)
 	if err != nil {
 		return nil, err
 	}
-	return c.do(req, org)
-}
-
-func (c *Client) post(ctx context.Context, path string, body []byte, org string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
 	return c.do(req, org)
 }
 

@@ -314,7 +314,7 @@
                 "user": "u_alice"
               },
               "schema": {
-                "$ref": "#/components/schemas/Role"
+                "$ref": "#/components/schemas/RoleAssignment"
               }
             }
           },
@@ -325,7 +325,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Role"
+                  "$ref": "#/components/schemas/RoleAssignment"
                 }
               }
             },
@@ -848,12 +848,14 @@
         },
         "type": "object"
       },
-      "Role": {
+      "RoleAssignment": {
         "properties": {
           "role": {
+            "description": "Role is the granted role's name.",
             "type": "string"
           },
           "user": {
+            "description": "User is the member the role is granted to.",
             "type": "string"
           }
         },
@@ -903,7 +905,7 @@
           "data": {
             "description": "Data is every (user, role) assignment in the caller's org.",
             "items": {
-              "$ref": "#/components/schemas/Role"
+              "$ref": "#/components/schemas/RoleAssignment"
             },
             "type": "array"
           }

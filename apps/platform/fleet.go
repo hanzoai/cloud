@@ -59,6 +59,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -361,12 +362,34 @@ func scopeNamespaces(all []string, p fleetPrincipal) []string {
 	if p.Super {
 		return all
 	}
-	if p.org == "" {
+	// ★ BOTH SIDES CANONICALISED. nsOrg returns a namespace's org key, which the
+	// namespace was BUILT from with namespace.Sanitize; p.org is the RAW `owner`
+	// claim. Comparing them directly applied the slugger to one side of an
+	// authorization test: an org named "Acme" owns namespace "…acme-<hash>" and
+	// so never matched its OWN rows, while any org whose raw name is the literal
+	// "acme-<hash>" matched them instead — and the slugger is public code, so
+	// that value is offline-computable. Sanitize is injective, so canonicalising
+	// both sides is collision-free rather than merely symmetric. Found by red
+	// alongside the identical bug on the delivery board (cd.go owns).
+	slug := namespace.Sanitize(p.org)
+	if slug == "" {
 		return nil
 	}
 	out := make([]string, 0, len(all))
 	for _, ns := range all {
-		if nsOrg(ns) == p.org {
+		// owner() IS THE PREDICATE THE DELIVERY BOARD ASKS (cd.go owns). This read
+		// used nsOrg, which maps the brand namespaces onto org "hanzo" — so the
+		// ORG ADMIN of the brand org was handed the platform tier here while the
+		// delivery board refused the identical caller. One question answered two
+		// ways is two policies, and this one is the CTO rule that a per-org
+		// isAdmin is NEVER platform-privileged (HIP-0519): observing the tier
+		// every tenant runs on is a platform-operator act, which is exactly what
+		// the deploy route below already says about restarting one.
+		//
+		// A SuperAdmin returned above, so nothing narrows for them; and a legacy
+		// `tenant-<org>` namespace still resolves to its own org, so no tenant
+		// loses its own board.
+		if owner(ns) == slug {
 			out = append(out, ns)
 		}
 	}
