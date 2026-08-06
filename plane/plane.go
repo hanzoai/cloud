@@ -915,6 +915,26 @@ type SlackSendIn struct {
 	Channel string `json:"channel" validate:"required"`
 	Thread  string `json:"thread,omitempty"`
 	Text    string `json:"text" validate:"required"`
+	// Update, when set, EDITS the message with that timestamp instead of posting a
+	// new one. It is a field of the same op rather than a second op because
+	// "post" and "edit" are the same act — put this text at this address — and
+	// the address is simply more specific in one case.
+	//
+	// It exists for the coding run. Slack has no server-sent stream and a long
+	// run reporting each phase as a new message would bury a channel under a
+	// dozen of them; editing ONE message in the thread is the progress indicator
+	// the platform actually offers. APPENDED at the end: the wire is field
+	// ORDER, so a field inserted anywhere else changes what every existing peer
+	// reads.
+	Update string `json:"update,omitempty"`
+}
+
+// SlackSent is the posted (or edited) message's timestamp — Slack's message id,
+// and the handle a later edit addresses. The op used to answer struct{}, which
+// made a progress message unaddressable: the caller could post a placeholder and
+// then had no way to say which message it meant.
+type SlackSent struct {
+	TS string `json:"ts,omitempty"`
 }
 
 // CreditIn credits one subject's ledger.
@@ -1650,6 +1670,23 @@ const (
 
 	// TrackerAgentPR opens the native PR work item for a finished run.
 	TrackerAgentPR = "tracker_agent_pr"
+
+	// CodingStart is the ONE door onto a coding run, for a caller in another
+	// process.
+	//
+	// The engine has to live in exactly one process and that process is agents:
+	// it already holds the live session store the run streams into, the durable
+	// tasks engine, and the in-memory mailbox a routed run is handed through.
+	// A second process assembling its own Dispatcher would be a second engine —
+	// same orchestration, different pool, different in-flight set, a run started
+	// from chat unobservable from the app. So the ENGINE stays put and the START
+	// travels, exactly as AgentsRunOnBehalf made one brain reachable from every
+	// chat platform.
+	//
+	// The chat adapter and the /v1/coding route are then two DOORS onto the same
+	// coding.Start, which is what makes "one engine, two adapters" a fact about
+	// the code rather than a claim about it.
+	CodingStart = "coding_start"
 )
 
 // The ORG rides in these arguments rather than on the caller's plane identity,
@@ -1794,4 +1831,60 @@ type RouteRunIn struct {
 	// session close and the PR assignee). They never cross to the machine.
 	Actor    string `json:"actor,omitempty"`
 	AgentRef string `json:"agentRef,omitempty"`
+}
+
+// CodingStartIn asks the engine to begin one coding run.
+//
+// IT CARRIES NO CREDENTIAL, and that absence is the point. The org's agent git
+// secret used to be read by the Slack surface and handed down through the
+// request, so a token with write access to every repo in the org existed in the
+// chat process, crossed a socket, and sat in a struct that three packages
+// touched. None of them needed it. The ENGINE needs it, at the one moment it
+// dispatches a sandbox, so the engine now reads it from KMS itself in the org
+// the run belongs to. Custody shrinks from three processes to one, and a door
+// onto this op can no longer be a door onto the secret.
+//
+// Subject is the linked Hanzo identity the run is attributed to, already proved
+// by the door (a Slack account link, or the authenticated caller of /v1/coding).
+// It is refused when empty rather than defaulted: a run that lost its human must
+// not execute AS THE ORG.
+//
+// The tenant is NOT here. It rides the caller — stated on a detached context
+// before the hop — because a run spends the org's balance and reaches the org's
+// repos, and a field the caller can set is not an identity.
+type CodingStartIn struct {
+	Subject        string `json:"subject"`
+	Repo           string `json:"repo"`
+	Prompt         string `json:"prompt"`
+	Project        string `json:"project,omitempty"`
+	Base           string `json:"base,omitempty"`
+	AgentRef       string `json:"agentRef,omitempty"`
+	TargetID       string `json:"targetId,omitempty"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
+	// that started it has somewhere for it to talk. Empty means nobody is
+	// listening and the run simply does not narrate — which is the app door's
+	// case, because /v1/coding hands back a session id and the session stream is
+	// a better progress feed than any message could be.
+	//
+	// It is an ADDRESS and not a token: the engine says "put this text there",
+	// and the process that owns the workspace's bot credential is the one that
+	// actually posts. So a run reports into a Slack thread without the engine
+	// ever holding the token that could post anywhere else in that workspace.
+	ReplyChannel string `json:"replyChannel,omitempty"`
+	ReplyThread  string `json:"replyThread,omitempty"`
+}
+
+// CodingStarted is the ACCEPTED run's handle. A coding run takes minutes, so the
+// op answers when the run is admitted, not when it is finished: the session id is
+// the handle every later question about the run is asked with, and the branch is
+// the ref the run is permitted to write (nothing else — see the forge's ref
+// policy). Progress streams at /v1/agents/sessions/{sessionId}/stream for every
+// door equally, which is why neither door grew a progress endpoint of its own.
+type CodingStarted struct {
+	SessionID string `json:"sessionId"`
+	Branch    string `json:"branch"`
+	Repo      string `json:"repo"`
+	Routed    bool   `json:"routed,omitempty"`
+	TargetID  string `json:"targetId,omitempty"`
 }

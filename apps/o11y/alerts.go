@@ -349,7 +349,7 @@ func reason(failures []failure) string {
 // cloud.For stamps the org so integrations' handler reads it as the caller's,
 // never an argument.
 func slackSend(ctx context.Context, org, channel, text string) error {
-	_, err := cloud.Ask[plane.SlackSendIn, struct{}](cloud.For(ctx, org), peerIntegrations,
+	_, err := cloud.Ask[plane.SlackSendIn, plane.SlackSent](cloud.For(ctx, org), peerIntegrations,
 		plane.IntegrationsSlackSend, &plane.SlackSendIn{Channel: channel, Text: text})
 	return err
 }
