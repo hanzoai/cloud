@@ -56,11 +56,17 @@
 # about tags, not about tag SHAPE: a cut tag is never re-pointed. Cut the next
 # patch instead — that is cheap, and it keeps "which console is in v1.801.N"
 # answerable from git alone.
-# 8.5.58 is the LAUNCH console: the sidebar carries only chat, the builder,
-# models, keys, usage, billing and settings, and every other product moved
-# behind the beta flag; the playground offers only models the gateway actually
-# routes and holds frontier prices behind a plan; an org can wear its own logo;
-# search reaches the whole catalog, not just the favourites.
+# 8.5.61 adds the agent quickstart — describe an agent or take a template, then
+# configure, run and integrate, with a real endpoint behind every one of those
+# four steps — wires the builder's tool field to the live `/v1/tools` plane, and
+# stops the rail drilling: a product's sub-pages now expand beneath its own row
+# instead of swapping the whole sidebar for one product.
+#
+# It carries the LAUNCH console forward: the sidebar shows only chat, the builder,
+# models, keys, usage, billing and settings, and every other product — the agent
+# surface included — stays behind the beta flag; the playground offers only models
+# the gateway actually routes and holds frontier prices behind a plan; an org can
+# wear its own logo; search reaches the whole catalog, not just the favourites.
 #
 # console.hanzo.ai IS THIS BINARY, and that is the fact this pin exists to make
 # operational. The host routes to `service: cloud` (universe hanzo-domains.yaml)
@@ -68,7 +74,7 @@
 # release reaches users only when this line moves and a cloud image is cut.
 # Learned the expensive way: console:v8.5.59 was built, pinned and rolled to
 # Ready, and served no one.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.58
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.61
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
