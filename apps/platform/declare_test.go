@@ -235,7 +235,7 @@ func TestRenderedKeysAreAllInTheChartSchema(t *testing.T) {
 	}
 	// The four the generator and the chart actually act on.
 	if top["cd"] == nil || top["image"] == nil || top["ingress"] == nil || top["ports"] == nil {
-		t.Fatalf("a declaration must carry cd, image, ingress and ports; got %v", keysOf(top))
+		t.Fatalf("a declaration must carry cd, image, ingress and ports; got %v", mapKeys(top))
 	}
 }
 
@@ -590,7 +590,7 @@ func gitTry(dir string, args ...string) (string, error) {
 	return runGit(context.Background(), dir, pinGitEnv(""), args...)
 }
 
-func keysOf(m map[string]any) []string {
+func mapKeys(m map[string]any) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
