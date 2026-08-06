@@ -22,40 +22,27 @@
     },
     {
       "name": "insights"
-    },
-    {
-      "name": "replay"
     }
   ],
   "paths": {
     "/v1/analytics/health": {
       "get": {
         "operationId": "get_v1_analytics_health",
-        "summary": "Health reports whether the event plane can take a write and the warehouse can answer a read.",
-        "description": "Health reports whether the event plane can take a write and the warehouse can\nanswer a read.\n\nIt reports the analytics subsystem's own liveness in BOTH directions: plane is\nthe event plane it WRITES (the bus and the JetStream stream every accepted\nevent is published to, both named in the report), and datastore is the\nwarehouse it READS, with each read lens's table reported as it is provisioned\n(the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed\nindependently and never collapse into a single bit. This endpoint used to\nreport the read half only, and answered 200/ok while every POST /v1/event\nfailed on a stream that could not bind: a total ingest outage behind a green\nprobe. A readiness gate here now gates on the write path too.\n\nplane.ready IS A REAL PROBE and walks the ingest path itself — the same\nconnection and the same stream a publish uses — so it cannot answer ready while\na publish would 503. plane.reason carries the plane's own error text when it is\nfalse.\n\ndatastore IS NOT PROBED WITH A QUERY. It is the state of the process's own\nshared client — established, and not since closed — so a warehouse accepting\nconnections and failing reads still reports true. Degraded CARRIES the report\n(status, the failing half, reason) as its body rather than an error envelope,\nso a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens\nreported available:false answers honest-empty rather than erroring, so a fresh\ndeployment whose collector has not emitted yet is legitimately 200 with the\nproduct-event lens unavailable. The lens block is reported whenever the\nwarehouse is REACHABLE — including on a report degraded by the plane, where the\ntables genuinely were probed — and is absent only when the warehouse is not,\nhaving nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO\ntenant data: table existence and stream presence only, never a row and never an\nevent.",
+        "summary": "Whether the event plane can take a write and the warehouse can answer a read",
+        "description": "Reports the analytics subsystem's own liveness in BOTH directions: `plane` is the event plane it WRITES (the bus and the JetStream stream every accepted event is published to, both named in the report), and `datastore` is the warehouse it READS, with each read lens's table reported as it is provisioned (the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed independently and never collapse into a single bit. This endpoint used to report the read half only, and answered 200/ok while every POST /v1/event failed on a stream that could not bind: a total ingest outage behind a green probe. A readiness gate wired here now gates on the write path too.\n\n`plane.ready` IS A REAL PROBE and walks the ingest path itself — the same connection and the same stream a publish uses — so it cannot answer ready while a publish would 503. `plane.reason` carries the plane's own error text when it is false.\n\n`datastore` IS NOT PROBED WITH A QUERY. It is the state of the process's own shared client — established, and not since closed — so a warehouse accepting connections and failing reads still reports true. Degraded CARRIES the report (status, the failing half, reason) as its body rather than an error envelope, so a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens reported available:false answers honest-empty rather than erroring, so a fresh deployment whose collector has not emitted yet is legitimately 200 with the product-event lens unavailable. The lens block is reported whenever the warehouse is REACHABLE — including on a report degraded by the plane, where the tables genuinely were probed — and is absent only when the warehouse is not, having nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant data: table existence and stream presence only, never a row and never an event.",
         "tags": [
           "analytics"
         ],
         "responses": {
-          "200": {
+          "2XX": {
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/healthReport"
                 }
               }
-            },
-            "description": "ok"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/healthReport"
-                }
-              }
-            },
-            "description": "service unavailable"
+            }
           }
         }
       }
@@ -439,37 +426,6 @@
               }
             },
             "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/replay": {
-      "post": {
-        "operationId": "post_v1_replay",
-        "summary": "Record a session-replay snapshot batch",
-        "description": "Accepts a batch of rrweb events from a browser recorder and hands it to the session-replay pipeline, which stores the recording and derives the session summary a player reads back.\n\nONE REQUEST IS ONE BATCH, and it is all-or-nothing: the recording is made durable before this answers, so a 200 {\"accepted\":1} means stored and never \"buffered somewhere\". There is no partial count, because a half-written recording is not a recording.\n\n`sessionId` is REQUIRED and bounded — at most 70 characters of ASCII letters, digits or '-'. It is the key every batch of one visit is grouped and ordered by, so an id outside that grammar is refused 400 here rather than accepted and dropped further down. `windowId` separates two tabs of one session and `distinctId` attributes the recording to a person; both are optional. `events` is the rrweb batch, each element a raw eventWithTime object, carried VERBATIM — the summary (click, keypress and mouse-activity counts, size) is derived downstream from exactly these bytes, so nothing is re-encoded or dropped.\n\nTHE CALLER'S CREDENTIAL DECIDES THE TENANT, and the body never does: the recording lands in the org the presented credential resolves to. It takes the SAME credentials as /v1/event — a validated bearer, an org API key, or a publishable pk- key on Authorization: Bearer, x-hanzo-ingest-key or ?ingest_key= — so a browser bundle already holding a pk- for events needs nothing new to record. A caller that presents nothing is 401 `ingest_key_required`; one whose key resolves to no project is 403 `ingest_key_unknown`; a reduced principal (a Hanzo Team workspace token) is 403 `insufficient_capability`, because a full-fidelity screen recording has no projected form that is safe for a guest to write into a host org.\n\nBOUNDS: 413 over 512 KiB of body, and that is the only bound on one batch — a recorder is expected to chunk a long session rather than send it whole, and the cap is the size one message can carry rather than an arbitrary number. 503 when the pipeline cannot take the batch: honest unavailability the caller can retry, never a 200 over a discarded recording.",
-        "tags": [
-          "replay"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/replayBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "2XX": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CaptureResult"
-                }
-              }
-            }
           }
         }
       }
@@ -1241,88 +1197,72 @@
         "type": "object"
       },
       "healthLens": {
+        "type": "object",
         "properties": {
           "available": {
-            "description": "Available reports whether that table exists in the warehouse right now.",
             "type": "boolean"
           },
           "table": {
-            "description": "Table is the fully-qualified warehouse table the lens reads.",
             "type": "string"
           }
-        },
-        "type": "object"
+        }
       },
       "healthLenses": {
+        "type": "object",
         "properties": {
           "events": {
-            "$ref": "#/components/schemas/healthLens",
-            "description": "Events is the web/commerce lens (event.fact, signal='act'), honest-empty until the\ncollector emits."
+            "$ref": "#/components/schemas/healthLens"
           },
           "llm": {
-            "$ref": "#/components/schemas/healthLens",
-            "description": "LLM is the live per-org usage ledger lens (hanzo.cloud_usage)."
+            "$ref": "#/components/schemas/healthLens"
           }
-        },
-        "type": "object"
+        }
       },
       "healthPlane": {
+        "type": "object",
         "properties": {
           "bus": {
-            "description": "Bus is the address this process reaches the plane at.",
             "type": "string"
           },
           "ready": {
-            "description": "Ready reports whether an ingest would succeed right now. False is a 503.",
             "type": "boolean"
           },
           "reason": {
-            "description": "Reason is the plane's own failure text, present only when Ready is false.",
             "type": "string"
           },
           "stream": {
-            "description": "Stream is the JetStream stream every signal lands on.",
             "type": "string"
           }
-        },
-        "type": "object"
+        }
       },
       "healthReport": {
+        "type": "object",
         "properties": {
           "datastore": {
-            "description": "Datastore reports whether the shared warehouse client has a live connection.\nIt is load-bearing for the READ path: false is one of the two ways this\nanswers 503.",
             "type": "boolean"
           },
           "lenses": {
-            "$ref": "#/components/schemas/healthLenses",
-            "description": "Lenses is per-lens table availability, probed only when connected — so it is\nabsent from a degraded report, which has nothing to say about tables it could\nnot reach."
+            "$ref": "#/components/schemas/healthLenses"
           },
           "lost": {
-            "$ref": "#/components/schemas/loss",
-            "description": "Lost is the count of facts the sink irrecoverably dropped since boot\n(warehouse.go). It is reported on the DEGRADED report too, and deliberately: a\nwarehouse that is unreachable is exactly when facts start failing their\ndeliveries, so suppressing the number here would hide it precisely when it\nmoves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the door already\nanswered 200 for."
+            "$ref": "#/components/schemas/loss"
           },
           "plane": {
-            "$ref": "#/components/schemas/healthPlane",
-            "description": "Plane reports the event plane — the bus and the stream every accepted event is\npublished to BEFORE any of it reaches the warehouse. It is load-bearing for the\nWRITE path, and it is here because its absence was a real outage: this endpoint\nanswered 200/ok on warehouse connectivity alone while every POST /v1/event 503'd\non a stream that could not bind, so 100% ingest loss was invisible to monitoring.\nA probe that cannot see the write path cannot report the write path."
+            "$ref": "#/components/schemas/healthPlane"
           },
           "reason": {
-            "description": "Reason is the human-readable cause, present only on a degraded report.",
             "type": "string"
           },
           "service": {
-            "description": "Service names the subsystem answering, so a probe aggregating several health\nendpoints can attribute a degraded one.",
             "type": "string"
           },
           "status": {
-            "description": "Status is ok or degraded. Degraded is the 503 and means EITHER load-bearing\ndependency is down — the warehouse this subsystem reads, or the event plane it\nwrites. It is not moved by a missing lens table, which is honest-empty.",
             "type": "string"
           },
           "warehouse": {
-            "description": "Warehouse names the datastore database every lens reads.",
             "type": "string"
           }
-        },
-        "type": "object"
+        }
       },
       "insightsBody": {
         "type": "object",
@@ -1390,17 +1330,15 @@
         "type": "object"
       },
       "loss": {
+        "type": "object",
         "properties": {
           "exhausted": {
-            "description": "Exhausted counts facts the bus abandoned after maxDeliver failed inserts.",
             "type": "integer"
           },
           "undecodable": {
-            "description": "Undecodable counts messages acked without landing because they did not parse.",
             "type": "integer"
           }
-        },
-        "type": "object"
+        }
       },
       "productEvent": {
         "properties": {
@@ -1445,24 +1383,6 @@
           }
         },
         "type": "object"
-      },
-      "replayBody": {
-        "type": "object",
-        "properties": {
-          "distinctId": {
-            "type": "string"
-          },
-          "events": {
-            "type": "array",
-            "items": {}
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "windowId": {
-            "type": "string"
-          }
-        }
       }
     }
   }

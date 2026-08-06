@@ -172,7 +172,7 @@ func TestEnablement_FullFlow(t *testing.T) {
 	acme := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}
 	other := map[string]string{"X-Org-Id": "other", "X-User-Id": "u_other"}
 
-	const model = "anthropic/claude-opus-4.6" // a real bundle model id (see admin_http_test)
+	model := modelFrom(t, do, slashed) // whatever the mounted catalog carries, never a literal
 
 	sees := func(hdr map[string]string) bool {
 		_, b := do("GET", "/v1/pricing/models", "", hdr)

@@ -180,6 +180,49 @@ func currentResolver() Resolver {
 	return fb
 }
 
+// CurrentResolver is the resolver in force for this process — the in-process
+// store when projects is co-resident, else the cross-process fallback. nil means
+// nothing can answer "which release does this site serve", which is a wiring
+// fault, not a miss.
+//
+// It is exported because the site edge is no longer the only reader: the CONSOLE
+// is a published site too (webui/release), and it must read the active-release
+// pointer through this ONE registry. A second lookup path would be a second
+// answer to "where do a site's bytes live", and the two would drift the first
+// time one of them learned something — which is the defect SetFallbackResolver
+// was added to close, one layer down.
+func CurrentResolver() Resolver { return currentResolver() }
+
+// VerifiedHost reports the org that owns host as a VERIFIED public site host.
+//
+// It is the SAME read the site edge serves from — Resolver.Resolve, which is
+// Store.ResolveHost, which filters `status='verified'` — asked for the one fact a
+// caller outside this package can need about a hostname: whose is it, and has the
+// owner PROVED it. A host with only a pending claim resolves to nothing here,
+// because a pending row holds its name against the PK but never routes; that
+// filter is the hostname-hijack boundary, and asking through this function is what
+// keeps every caller on the right side of it instead of growing a second lookup
+// that could forget the status.
+//
+// found=false on a miss AND on a resolver error, which is deliberate and is the
+// difference between this and Resolve: the serve path must tell "no such site"
+// (404) from "could not ask" (503), because serving a 404 for a live customer site
+// during a transient failure looks exactly like deletion. A caller asking "is this
+// host proven" has no such distinction to make — an answer we could not obtain is
+// not a proof — so the error collapses into "no", and a caller cannot forget to
+// check a second return.
+func VerifiedHost(ctx context.Context, host string) (string, bool) {
+	r := currentResolver()
+	if r == nil {
+		return "", false
+	}
+	site, ok, err := r.Resolve(ctx, host)
+	if err != nil || !ok || site.Org == "" {
+		return "", false
+	}
+	return site.Org, true
+}
+
 // Config configures the site host-router. Apex is the zone whose subdomains are
 // site hosts (hanzo.app). Reserved is the set of subdomain labels that are NOT
 // sites (they belong to real app hosts) and must fall through to the normal
@@ -232,7 +275,7 @@ type Server struct {
 // (ADDING to the baked-in defaults, never removing them), so createProject and
 // BindHost enforce the exact same set the serve gate does.
 func New(cfg Config, log luxlog.Logger) *Server {
-	apex := apexOf(cfg.Apex)
+	apex := siteZone(cfg.Apex)
 	// Publish the COMPLETE policy — the reserved labels AND the domains we run — so
 	// the claim gate refuses what the serve gate would refuse. selfOf folds the
 	// first-party apex in itself, so the published set does not depend on where in
@@ -863,12 +906,37 @@ func CacheControlFor(key, htmlOverride string) string {
 	}
 }
 
-// fingerprintRE matches a content-hash segment in a filename (Vite/Next/webpack
-// emit e.g. `app.4f3a9c21.js` or `chunk-AB12CD34.css`). Such names are immutable:
-// a new build changes the hash, so the old URL is safe to cache forever.
+// buildOutputPrefixes are the directories a bundler writes its CONTENT-ADDRESSED
+// output to. Everything under one is immutable by construction — the bundler
+// renames the file whenever its bytes change — so the PATH answers the question
+// and the basename does not have to.
+//
+// This is the primary signal, and it has to be, because the basename test below
+// gets Next.js wrong. Next emits BARE-hash names (`_next/static/css/
+// bdec3a94ead6ad5f.css`, `_next/static/chunks/1a258343.a953edc46b595a62.js`) with
+// no separator before the hash run, which fingerprintRE requires — so 5 of the 44
+// `_next/static` objects of the console bundle were served
+// `public, max-age=3600` and re-fetched hourly forever. The embedded console
+// handler always keyed off the prefix (webui: `assets/` or `_next/`) and was
+// right; this is the site edge learning the same rule.
+var buildOutputPrefixes = []string{"_next/static/", "assets/"}
+
+// fingerprintRE matches a content-hash segment in a filename (Vite/webpack emit
+// e.g. `app.4f3a9c21.js` or `chunk-AB12CD34.css`). Such names are immutable: a new
+// build changes the hash, so the old URL is safe to cache forever. It is kept as
+// an ADDITIONAL signal, for the bundlers that fingerprint outside the two
+// directories above.
 var fingerprintRE = regexp.MustCompile(`[.\-_][0-9a-fA-F]{8,}\.[a-z0-9]+$`)
 
-func isFingerprinted(key string) bool { return fingerprintRE.MatchString(path.Base(key)) }
+func isFingerprinted(key string) bool {
+	k := strings.TrimPrefix(key, "/")
+	for _, p := range buildOutputPrefixes {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return fingerprintRE.MatchString(path.Base(key))
+}
 
 func htmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")

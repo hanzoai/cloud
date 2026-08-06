@@ -79,6 +79,7 @@ func (f *k8sFake) server(t *testing.T) *httptest.Server {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})
+	// Nodes is Visor's TYPED op, so it answers its Out directly — no envelope.
 	mux.HandleFunc("/v1/k8s/nodes", func(w http.ResponseWriter, r *http.Request) {
 		f.lastOwner = r.URL.Query().Get("owner")
 		var out []map[string]any
@@ -89,7 +90,7 @@ func (f *k8sFake) server(t *testing.T) *httptest.Server {
 				"state": "running", "tag": "doks-cluster:prod",
 			}}
 		}
-		envelope200(w, out)
+		op200(w, nodesOut(out))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -217,6 +218,42 @@ func TestK8sNodesTenantScoped(t *testing.T) {
 	}
 	if len(out.Nodes) != 1 || out.Nodes[0].ID != "worker-1" || out.Nodes[0].Type != "s-4vcpu-8gb" {
 		t.Fatalf("node view mismatch: %+v", out.Nodes)
+	}
+}
+
+// A Visor that answers the OLD envelope for /v1/k8s/nodes must be REPORTED, not
+// read as an org with no workers.
+//
+// This is the deploy-skew case, and it is the one this endpoint has actually been
+// in: an un-upgraded Visor sends {status,msg,data} where the typed op's Out is
+// expected. Decoding that into visorNodes succeeds — every key is simply unknown
+// — and leaves Nodes nil, so without the arrived-or-not check an operator running
+// eight clusters is told, with a 200, that they have no worker nodes.
+func TestK8sNodesRefusesTheOldEnvelope(t *testing.T) {
+	// One route, spelled the pre-typed way, so nothing else about the fake can
+	// account for the result.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/k8s/nodes", func(w http.ResponseWriter, r *http.Request) {
+		envelope200(w, []map[string]any{{"owner": "acme", "name": "worker-1", "id": "555"}})
+	})
+	old := httptest.NewServer(mux)
+	t.Cleanup(old.Close)
+
+	t.Setenv("VISOR_URL", old.URL)
+	t.Setenv("VISOR_CLIENT_ID", "")
+	t.Setenv("VISOR_CLIENT_SECRET", "")
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Use(cloud.Bridge())
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+
+	code, body := reqK8s(t, app, http.MethodGet, "/v1/k8s/nodes", "acme", false, nil)
+	if code == http.StatusOK {
+		t.Fatalf("an enveloped answer was served as success: %d %s", code, body)
+	}
+	if code != http.StatusBadGateway {
+		t.Fatalf("want 502 for an upstream that does not serve the op, got %d (%s)", code, body)
 	}
 }
 

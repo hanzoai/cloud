@@ -291,7 +291,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// boundary (cloud.SanitizeIdentity), so a forged cross-org X-Project-Id is
 	// refused before any subsystem reads it. Same inversion as sites.SetResolver —
 	// cloud does not import projects.
+	//
+	// On BOTH paths, for the same reason as the key and site resolvers above: the
+	// boundary runs as edge middleware in every process and this store lives in
+	// one, so the in-process registration alone left the guard consulting an empty
+	// list — and reading "nobody owns it" as "not foreign" — everywhere it ran.
 	cloud.RegisterOrgScopeResolver(projectScopeResolver{store: store})
+	setScopeResolverForPlane(projectScopeResolver{store: store})
+	exposeOwnership()
 
 	routes(app, s)
 

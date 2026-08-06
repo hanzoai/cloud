@@ -46,11 +46,13 @@ import (
 	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/internal/datadir"
+	"github.com/hanzoai/cloud/internal/edge"
 	"github.com/hanzoai/cloud/internal/writerlease"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plugin"
 	"github.com/hanzoai/cloud/webui"
+	"github.com/hanzoai/cloud/webui/release"
 	"github.com/zap-proto/zip"
 )
 
@@ -102,6 +104,26 @@ func forward(kv map[string]string) {
 	}
 }
 
+// doorConfig is the front door's transport posture. The door installs no
+// middleware -- that is the program's job behind it -- but it still TERMINATES
+// public HTTP, so the transport ceilings are its to set. They were not set: this
+// app was built with the framework defaults while cloud.App() configured the
+// program behind it correctly, and the door refuses a body before the program
+// ever sees it. GATEWAY_BODY_LIMIT read 100 MiB in the pod's environment and
+// 4,194,305 bytes still answered 400, because 4 MiB is the fasthttp default and
+// nothing here had ever asked.
+//
+// The numbers come from cloud, not from literals here. A literal is what made
+// the two disagree in the first place.
+func doorConfig() zip.Config {
+	return zip.Config{
+		AppName:        "cloud",
+		MCP:            zip.MCPConfig{Disabled: true},
+		ReadBufferSize: edge.ReadBufferSize(),
+		BodyLimit:      edge.BodyLimit(),
+	}
+}
+
 func run(addr, zapAddr string) error {
 	// THE FLEET'S ONE AGENT DOOR is served BY THIS HOST, at POST /v1/mcp, and
 	// zip's is switched off so that exactly one handler holds the address.
@@ -120,7 +142,7 @@ func run(addr, zapAddr string) error {
 	// the SPA shell, and to send an agent that guessed zip's default to the real
 	// one), and when those two were written down separately the second one was
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
-	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Disabled: true}})
+	app := zip.New(doorConfig())
 
 	// THE POD'S WRITER LEASE, and this is the only process that may take it.
 	//
@@ -243,16 +265,64 @@ func run(addr, zapAddr string) error {
 	// SPA route (/, /signin, /dashboard, …) is under no app prefix, so it reaches
 	// the host's catch-all rather than a plugin. Registered LAST — after every app
 	// prefix — so a real /v1 route always wins and only unmatched paths fall
-	// through to the white-labelled shell. The embed is the light webui leaf
-	// (stdlib + the brand registry), so owning "/" costs the host the console
-	// bytes, not the fleet's package graph.
+	// through to the white-labelled shell. webui is a light leaf (stdlib + the
+	// brand registry), so owning "/" costs the host a handler, not the fleet's
+	// package graph.
 	// The published-site edge goes BEFORE the console: <slug>.hanzo.app must serve
 	// the customer's site, and webui owns "/" for every path no app prefix claims,
 	// so mounting it after would let the console answer first — which is exactly
-	// the defect. See sites.go.
+	// the defect. See sites.go. It also installs the resolver the console reads its
+	// own release through, so this order is load-bearing twice over.
 	mountSites(app)
 
-	if err := webui.Mount(app); err != nil {
+	// The console's BYTES are a published site release now, not an embed, so the
+	// app that owns the release pointer has to be running before the front door can
+	// read one. `projects` is lazy — its trigger is a request reaching /v1/projects,
+	// and none has arrived — and the resolver the edge just installed dials its
+	// socket directly rather than waking it. Without this, the host's first act
+	// after mounting is to ask a process that does not exist. Start is idempotent
+	// and goes through the SAME single-flighted path a prefix request takes, so this
+	// is the ordinary start, made explicit rather than left to whoever happens to
+	// call first. Same argument as the broker above: a dependency is cheaper stated
+	// than discovered.
+	//
+	// This moves BOOT ORDER, so both properties that makes it safe are stated here
+	// rather than assumed, and both are read off zip v1.25.1 load.go:
+	//
+	//   - IDEMPOTENT. Start goes through target(), which returns the running
+	//     instance when p.cur is already set — so if anything started projects
+	//     first this returns its address and spawns no second child. The on-demand
+	//     path is single-flighted under p.mu and re-checks p.cur inside the lock,
+	//     so a burst of first callers still produces exactly one process.
+	//   - IT REFUSES, IT DOES NOT HANG. waitListening is bounded by spec.Start
+	//     (p.Start = startTimeout(), 90s, CLOUD_PLUGIN_START) and ALSO returns the
+	//     moment the child's process exits, so a broken projects fails in the time
+	//     it takes to die rather than in the timeout. An unknown app name fails
+	//     immediately ("no plugin named"). A boot that blocks forever on a socket
+	//     is worse than one that refuses with a reason; this one refuses.
+	if _, err := app.Start(projectsApp); err != nil {
+		return fmt.Errorf("console: %s owns the console release and would not start: %w", projectsApp, err)
+	}
+
+	// REQUIRED here, unlike in a per-app child (cloud.Listen explains why a child
+	// cannot bootstrap this). console.hanzo.ai is this process; a front door that
+	// came up with no console would serve the API perfectly while every human who
+	// opened the product got a blank page, and it would do it silently. Failing
+	// with the reason is the difference between an alert and a mystery.
+	//
+	// The watcher's lifetime is this function's: run returns only after app.Listen
+	// has drained, so cancelling on the way out stops the poll with the process.
+	consoleCtx, stopConsole := context.WithCancel(context.Background())
+	defer stopConsole()
+	consoleSrc, err := release.Load(consoleCtx, release.ConfigFromEnv(), app.Logger())
+	if err != nil {
+		return fmt.Errorf("console: %w", err)
+	}
+	// A publish reaches users through this loop, in one poll interval — the whole
+	// point of taking the console out of the binary. Stopped when run returns.
+	go consoleSrc.Watch(consoleCtx)
+
+	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 

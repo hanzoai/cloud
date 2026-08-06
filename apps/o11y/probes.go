@@ -95,7 +95,7 @@ var fleetTargets = []prober.Target{
 	{Name: "billing", URL: "http://billing.hanzo.svc:80/health"},
 	{Name: "flow", URL: "http://flow.hanzo.svc:80/health"},
 	{Name: "cloud", URL: "http://cloud.hanzo.svc:8000/v1/health"},
-	{Name: "visor", URL: "http://visor.hanzo.svc:19000/health"},
+	{Name: "visor", URL: "http://visor.hanzo.svc:19000/v1/health"},
 	{Name: "base", URL: "http://base.hanzo.svc:80/healthz"},
 	{Name: "console", URL: "http://console.hanzo.svc:4000/api/public/health"},
 	{Name: "studio", URL: "http://studio.hanzo.svc:80/metrics"},

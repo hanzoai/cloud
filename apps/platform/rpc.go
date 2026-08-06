@@ -79,3 +79,77 @@ func exposeFleet(s *cloud.Service[fleetState]) {
 		zip.WithOperationID(plane.PlatformFleet),
 		zip.WithSummary("Every app this org can observe"))
 }
+
+// exposePush publishes the git-push-to-deploy trigger, bound to the service that
+// owns the application store.
+//
+// It is the plane half of build.go's RegisterPushBuilder, and the sharpest case
+// of the whole class. The push lands on
+// GIT's embedded server; the builder is PLATFORM's. Those are two apps and
+// therefore two processes, so the in-process registration was nil in the only
+// process that ever fires it — and OnGitPush's contract was to return nil when
+// unregistered. Every push in the split fleet triggered no build and reported
+// success. Nothing logged it, because from the git side nothing had failed.
+//
+// The org is the CALLER's, never the argument: a push event able to name the org
+// could enqueue a build against another tenant's applications, and the build it
+// enqueues spends that tenant's compute.
+// It reads the `mounted` global at CALL time rather than capturing the service at
+// registration, which is what the push builder registered directly above it does.
+// Shutdown sets that global back to nil, and a captured pointer would go on
+// serving builds out of a torn-down store.
+func exposePush() {
+	zip.Post[plane.PushIn, plane.Built](cloud.Plane(), "/platform/push",
+		func(ctx context.Context, in *plane.PushIn) (*plane.Built, error) {
+			who := cloud.Who(ctx)
+			if who.Org == "" {
+				return nil, zip.ErrForbidden("platform push: org required")
+			}
+			s := mounted
+			if s == nil {
+				return nil, zip.Errorf(503, "platform push: platform not mounted")
+			}
+			if err := buildFromPush(s, ctx, cloud.GitPushEvent{
+				Org: who.Org, Project: in.Project, Repo: in.Repo,
+				Ref: in.Ref, Commit: in.Commit, CloneURL: in.CloneURL,
+			}); err != nil {
+				return nil, err
+			}
+			return &plane.Built{Repo: in.Repo}, nil
+		},
+		zip.WithOperationID(plane.PlatformPush),
+		zip.WithSummary("Turn a landed push into a build for every app tracking it"))
+}
+
+// exposeRelease publishes the first-party CR rollout, bound to the fleet service
+// that owns the k8s client.
+//
+// Plane half of RegisterServiceReleaser, same story as exposePush: the
+// build that PROVES an image and the control plane that PATCHES the CR are
+// different apps, so OnServiceRelease's nil-when-unregistered meant every release
+// reported a rollout that never touched a CR.
+//
+// Patched carries releaseService's own `changed`, so a caller learns whether the
+// CR actually moved. That distinction is real here: a service declared in git is
+// reconciled by Hanzo CD with selfHeal, and releaseService REFUSES to patch it —
+// an error, which stays an error. Reporting a refusal as a rollout is the failure
+// mode this op exists to end, so it is not smoothed over into a success.
+func exposeRelease(s *cloud.Service[fleetState]) {
+	zip.Post[plane.ReleaseIn, plane.Released](cloud.Plane(), "/platform/release",
+		func(ctx context.Context, in *plane.ReleaseIn) (*plane.Released, error) {
+			p := capPrincipal(cloud.Who(ctx))
+			if !p.Validated {
+				return nil, zip.ErrForbidden("platform release: authentication required")
+			}
+			if s == nil {
+				return nil, zip.Errorf(503, "platform release: platform not mounted")
+			}
+			_, _, changed, err := releaseService(s, ctx, in.Service, in.Image)
+			if err != nil {
+				return nil, err
+			}
+			return &plane.Released{Patched: changed}, nil
+		},
+		zip.WithOperationID(plane.PlatformRelease),
+		zip.WithSummary("Roll a proven, clean-semver image onto its operator Service CR"))
+}
